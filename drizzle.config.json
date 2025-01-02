@@ -1,0 +1,13 @@
+{
+  "schema": "./src/lib/schema.ts",
+  "out": "./drizzle",
+  "dialect": "postgresql",
+  "dbCredentials": {
+    "host": "postgres",
+    "user": "postgres",
+    "password": "postgres",
+    "database": "postgres"
+  },
+  "verbose": true,
+  "strict": true
+}

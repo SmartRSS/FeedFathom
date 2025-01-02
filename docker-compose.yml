@@ -1,0 +1,111 @@
+services:
+  redis:
+    image: "redis"
+    restart: always
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: "redis-cli ping | grep PONG || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_storage:/data
+
+  postgres:
+    image: "postgres:17"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    healthcheck:
+      test: 'pg_isready --username=${POSTGRES_USER:-postgres} && psql --username=${POSTGRES_USER:-postgres} -c "SELECT * FROM postgres.pg_catalog.pg_database;"'
+      interval: 1s
+      timeout: 1s
+      retries: 25
+      start_period: 1s
+    volumes:
+      - postgres_storage_17:/var/lib/postgresql/data
+
+  migrator:
+    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    environment:
+      INTEGRATION: "migrator"
+    command:
+      - "/app/build/worker-entrypoint.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  server:
+    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    command:
+      - "/app/build/index.js"
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      replicas: ${APP_REPLICAS:-1}
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: "curl -f http://localhost:3000/health || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "3456:3000"
+    environment:
+      ORIGIN: ${ORIGIN:-http://localhost:3456}
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  worker:
+    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    command:
+      - "/app/build/worker-entrypoint.js"
+    restart: always
+    environment:
+      DEBUG: bull:*
+      INTEGRATION: worker
+    deploy:
+      replicas: ${WORKER_REPLICAS:-3}
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  mail:
+    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    command:
+      - "/app/build/worker-entrypoint.js"
+    ports:
+      - "25:25"
+    restart: always
+    environment:
+      DEBUG: bull:*
+      INTEGRATION: "mail"
+    deploy:
+      mode: global
+      replicas: ${MAIL_REPLICAS:-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  redis_storage:
+    driver: local
+  postgres_storage_17:
+    driver: local

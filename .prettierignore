@@ -1,0 +1,6 @@
+.svelte-kit
+node-modules
+.github
+.idea
+drizzle
+*.md

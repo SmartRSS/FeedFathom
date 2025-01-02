@@ -1,0 +1,17 @@
+**/build
+**/dist
+**/ext
+**/node_modules/
+*.md
+*.sh
+*.yml
+.github
+.gitignore
+.git
+.idea
+.npmrc
+.prettierignore
+.prettierrc
+.svelte_kit
+bin
+Dockerfile-*
