@@ -95,7 +95,7 @@ To run the production version of the project, use Docker Compose to start the ne
 docker compose up -d
 ```
 
-This command will start the application in production mode along with any required additional services.
+This command will start the application in production mode along with any required additional services. By default the registration is disabled and there's no account set up so you need to set the `ENABLE_REGISTRATION` environment variable to the `true` value, I recommend setting it back to false after creating your desired accounts unless you intend to make the instance public or have other means of protecting it in place.
 
 > **Note**: While it is technically possible to run the project without Docker, no ready-to-use commands are provided. To run the project manually, you would need to set up the required environment, which includes services like **Redis** and **Postgres**, and configure the necessary **environment variables** for the application to function correctly. Refer to the official [Redis Documentation](https://redis.io/) and [Postgres Documentation](https://www.postgresql.org/) for help.
 ---
