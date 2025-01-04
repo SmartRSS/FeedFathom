@@ -6,7 +6,12 @@
   import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
   import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
   import type { DisplayMode } from "$lib/settings";
-  import type { ArticlesRemovedFunction, DisplayModeChangedFunction, FocusChangedFunction, FocusTarget } from "../types";
+  import type {
+    ArticlesRemovedFunction,
+    DisplayModeChangedFunction,
+    FocusChangedFunction,
+    FocusTarget,
+  } from "../types";
   import { err } from "../util/log";
 
   type ArticleComponentProps = {
@@ -132,8 +137,6 @@
       return;
     }
     iframeDoc.body.innerHTML = "Loading...";
-
-
 
     try {
       const res = await fetch(

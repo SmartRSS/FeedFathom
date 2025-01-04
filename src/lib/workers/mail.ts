@@ -14,7 +14,7 @@ import type { ArticleRepository } from "$lib/db/article-repository";
 
 export interface MailWorkerConfig {
   port: number;
-  maxSize?: number | undefined;  // in bytes
+  maxSize?: number | undefined; // in bytes
   hostname?: string | undefined;
   allowedDomains?: string[] | undefined;
 }
@@ -26,10 +26,13 @@ export class MailWorker {
   constructor(
     private readonly sourcesRepository: SourcesRepository,
     private readonly articlesRepository: ArticleRepository,
-    config: Partial<MailWorkerConfig> = {}
+    config: Partial<MailWorkerConfig> = {},
   ) {
     this.config = {
-      port: typeof config.port === 'string' ? parseInt(config.port, 10) : (config.port ?? 25),
+      port:
+        typeof config.port === "string"
+          ? parseInt(config.port, 10)
+          : (config.port ?? 25),
       maxSize: config.maxSize ?? 10 * 1024 * 1024,
       hostname: config.hostname,
       allowedDomains: config.allowedDomains,
@@ -51,13 +54,13 @@ export class MailWorker {
       onData: async (emailStream, session, callback) => {
         try {
           if (emailStream.sizeExceeded) {
-            err('Email size limit exceeded');
-            callback(new Error('Email size limit exceeded'));
+            err("Email size limit exceeded");
+            callback(new Error("Email size limit exceeded"));
             return;
           }
 
           const email = await mailParser.simpleParser(emailStream);
-          
+
           const senderAddress = session.envelope.mailFrom as SMTPServerAddress;
           console.log(`Processing email from: ${senderAddress.address}`);
 
@@ -76,11 +79,15 @@ export class MailWorker {
             return;
           }
           for (const feed of sources) {
-            const art = this.createArticleFromEmail(email, feed.id, senderAddress.address);
+            const art = this.createArticleFromEmail(
+              email,
+              feed.id,
+              senderAddress.address,
+            );
             await this.articlesRepository.batchUpsertArticles([art]);
           }
         } catch (error: unknown) {
-          err('Failed to process incoming email:', error);
+          err("Failed to process incoming email:", error);
           callback(error instanceof Error ? error : new Error(String(error)));
           return;
         } finally {
@@ -90,16 +97,18 @@ export class MailWorker {
         }
       },
     });
-    
+
     this.server.listen(this.config.port, () => {
       console.log(`Mail server listening on port ${this.config.port}`);
     });
   }
 
-  private async extractRecipientAddresses(email: mailParser.ParsedMail): Promise<string[]> {
+  private async extractRecipientAddresses(
+    email: mailParser.ParsedMail,
+  ): Promise<string[]> {
     const recipients = Array.isArray(email.to) ? email.to : [email.to];
     const recipientMails: string[] = [];
-    
+
     recipients.forEach((addressObject) => {
       addressObject?.value.forEach((value) => {
         if (value.address) {
@@ -107,14 +116,14 @@ export class MailWorker {
         }
       });
     });
-    
+
     return recipientMails;
   }
 
   private createArticleFromEmail(
-    email: mailParser.ParsedMail, 
+    email: mailParser.ParsedMail,
     sourceId: number,
-    senderAddress: string
+    senderAddress: string,
   ): Omit<Article, "id"> {
     const guid = crypto.randomUUID();
     return {
@@ -141,5 +150,4 @@ export class MailWorker {
       });
     }
   }
-
 }

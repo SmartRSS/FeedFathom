@@ -7,6 +7,14 @@ import {
   type StorageValue,
 } from "axios-cache-interceptor";
 import Redis from "ioredis";
+import fs from "node:fs";
+
+const browserUserAgent =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
+
+const browserUasOrigins: string[] = [];
+
+const cachedBuildTimestamp = fs.readFileSync("/app/BUILD_TIME", "utf-8").trim();
 
 export const buildAxios = (redis: Redis) => {
   const axiosInstance: AxiosInstance = Axios.create({
@@ -22,13 +30,14 @@ export const buildAxios = (redis: Redis) => {
     }
     try {
       const url = new URL(config.url);
-      if (url.origin.includes("openrss.org")) {
-        config.headers?.setUserAgent("SmartRSS/FeedFathom");
+      if (browserUasOrigins.includes(url.origin)) {
+        config.headers?.setUserAgent(browserUserAgent);
       } else {
         config.headers?.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+          `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
         );
       }
+
       return config;
     } catch {
       return config;

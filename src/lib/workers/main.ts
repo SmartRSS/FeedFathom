@@ -5,7 +5,7 @@ import type { UserSourceRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import { SingletonJobHandler} from "./singleton";
+import { SingletonJobHandler } from "./singleton";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
@@ -72,14 +72,18 @@ export class MainWorker {
   private setupWorker() {
     const config = {
       connection: this.redis,
-      concurrency: parseNumber(process.env["WORKER_CONCURRENCY"], DEFAULT_WORKER_CONCURRENCY),
+      concurrency: parseNumber(
+        process.env["WORKER_CONCURRENCY"],
+        DEFAULT_WORKER_CONCURRENCY,
+      ),
       removeOnComplete: { count: 0 },
       removeOnFail: { count: 0 },
-      lockDuration: parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) * 1000,
+      lockDuration:
+        parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) * 1000,
     };
 
     const worker = new Worker(this.bullmqQueue.name, this.processJob, config);
-    
+
     worker.on("error", this.handleWorkerError);
     return worker;
   }
@@ -98,13 +102,25 @@ export class MainWorker {
   private async setupScheduledTasks() {
     await this.bullmqQueue.upsertJobScheduler(
       JobName.CLEANUP,
-      { every: parseNumber(process.env["CLEANUP_INTERVAL"], DEFAULT_CLEANUP_INTERVAL) * 1000 },
+      {
+        every:
+          parseNumber(
+            process.env["CLEANUP_INTERVAL"],
+            DEFAULT_CLEANUP_INTERVAL,
+          ) * 1000,
+      },
       { name: JobName.CLEANUP },
     );
-    
+
     await this.bullmqQueue.upsertJobScheduler(
       JobName.GATHER_JOBS,
-      { every: parseNumber(process.env["GATHER_JOBS_INTERVAL"], DEFAULT_GATHER_INTERVAL) * 1000 },
+      {
+        every:
+          parseNumber(
+            process.env["GATHER_JOBS_INTERVAL"],
+            DEFAULT_GATHER_INTERVAL,
+          ) * 1000,
+      },
       { name: JobName.GATHER_JOBS },
     );
 
@@ -113,7 +129,7 @@ export class MainWorker {
       await this.bullmqQueue.upsertJobScheduler(
         job.name,
         { every: Math.floor(job.delayMs / 2) },
-        { name: job.name, data: { jobName: job.name } }
+        { name: job.name, data: { jobName: job.name } },
       );
     }
   }
@@ -129,28 +145,28 @@ export class MainWorker {
 
   private async processSingletonJob(job: Job) {
     const jobName = job.data.jobName as JobName;
-    const jobConfig = SINGLETON_JOBS.find(job => job.name === jobName);
+    const jobConfig = SINGLETON_JOBS.find((job) => job.name === jobName);
     if (!jobConfig) {
       throw new Error(`Unknown singleton job configuration: ${jobName}`);
     }
 
     await this.singletonHandler.runSingleton(
       { key: jobName, delayMs: jobConfig.delayMs },
-      () => this.executeSingletonJob(jobName)
+      () => this.executeSingletonJob(jobName),
     );
-    
+
     return true;
   }
 
   private async executeSingletonJob(jobName: JobName) {
     switch (jobName) {
       case JobName.SINGLETON_TEST_JOB:
-        console.log('Running test job');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log("Running test job");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         break;
       case JobName.SINGLETON_ANOTHER_TEST:
-        console.log('Running another test');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log("Running another test");
+        await new Promise((resolve) => setTimeout(resolve, 500));
         break;
       default:
         throw new Error(`No handler for singleton job: ${jobName}`);
@@ -177,12 +193,12 @@ export class MainWorker {
 
   private processJob = async (job: Job) => {
     try {
-      if (job.name.startsWith('SINGLETON:')) {
+      if (job.name.startsWith("SINGLETON:")) {
         await this.processSingletonJob(job);
       } else {
         await this.processRegularJob(job);
       }
-      
+
       llog("finished processing ", job.name, job.id);
       llog(await this.bullmqQueue.count(), "jobs left on queue");
       return true;
