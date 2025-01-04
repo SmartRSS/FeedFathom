@@ -98,6 +98,27 @@ docker compose up -d
 This command will start the application in production mode along with any required additional services. By default the registration is disabled and there's no account set up so you need to set the `ENABLE_REGISTRATION` environment variable to the `true` value, I recommend setting it back to false after creating your desired accounts unless you intend to make the instance public or have other means of protecting it in place.
 
 > **Note**: While it is technically possible to run the project without Docker, no ready-to-use commands are provided. To run the project manually, you would need to set up the required environment, which includes services like **Redis** and **Postgres**, and configure the necessary **environment variables** for the application to function correctly. Refer to the official [Redis Documentation](https://redis.io/) and [Postgres Documentation](https://www.postgresql.org/) for help.
+
+## Environment Variables
+
+FeedFathom supports the following environment variables for configuration:
+
+### Core Configuration
+- `ENABLE_REGISTRATION`: Enable new user registrations (default: false)
+- `ALLOWED_EMAILS`: Comma-separated list of emails allowed to register (optional, if empty all emails are allowed)
+
+### Worker Configuration
+- `WORKER_CONCURRENCY`: Number of concurrent jobs (default: 25)
+- `LOCK_DURATION`: Lock duration in seconds for jobs (default: 60)
+- `CLEANUP_INTERVAL`: Interval in seconds between cleanup jobs (default: 60)
+- `GATHER_JOBS_INTERVAL`: Interval in seconds between job gathering cycles (default: 20)
+
+### Scaling Configuration
+- `WORKER_REPLICAS`: Number of worker instances to run (default: 3)
+
+
+> **Note**: When running with Docker Compose, database and Redis connection settings are automatically configured. If running without Docker, you'll need to set up these services separately and configure their connection details.
+
 ---
 
 ## Packing the Extension
