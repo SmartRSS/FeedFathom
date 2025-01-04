@@ -11,17 +11,19 @@ export class SingletonJobHandler {
 
   async runSingleton<T>(
     config: SingletonJobConfig,
-    job: () => Promise<T>
+    job: () => Promise<T>,
   ): Promise<T | null> {
     const lock = await this.redis.set(
       `singleton-job-lock:${config.key}`,
-      'locked',
-      'EX',
-      Math.floor(config.delayMs / 1000)
+      "locked",
+      "EX",
+      Math.floor(config.delayMs / 1000),
     );
 
     if (!lock) {
-      llog(`Singleton job ${config.key} skipped - another instance is running or cooldown period`);
+      llog(
+        `Singleton job ${config.key} skipped - another instance is running or cooldown period`,
+      );
       return null;
     }
 
@@ -30,7 +32,7 @@ export class SingletonJobHandler {
       return result;
     } finally {
       // Ensure minimum delay between jobs
-      await new Promise(resolve => setTimeout(resolve, config.delayMs));
+      await new Promise((resolve) => setTimeout(resolve, config.delayMs));
     }
   }
 }
