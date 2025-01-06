@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
     
     steps:
       - uses: actions/checkout@v4
@@ -27,4 +28,37 @@ jobs:
         run: bun install --frozen-lockfile
         
       - name: Run Lint
-        run: bun run lint 
+        id: lint
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await exec.exec('bun run lint')
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'lint',
+                head_sha: context.sha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: 'Lint Results',
+                  summary: 'All lint checks passed successfully'
+                }
+              })
+            } catch (error) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'lint',
+                head_sha: context.sha,
+                status: 'completed',
+                conclusion: 'failure',
+                output: {
+                  title: 'Lint Results',
+                  summary: 'Lint checks failed',
+                  text: error.message
+                }
+              })
+              throw error
+            } 
