@@ -17,7 +17,7 @@ export const registerHandler = async ({
 
   if (process.env["ALLOWED_EMAILS"]) {
     const allowedEmails = process.env["ALLOWED_EMAILS"].split(",");
-    if (!allowedEmails.includes(request.body.email)) {
+    if (!allowedEmails.includes(request.body.email) && allowedEmails.length > 0) {
       return json(
         {
           error: "Email not allowed",
