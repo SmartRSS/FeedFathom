@@ -23,7 +23,11 @@ jobs:
 
       - name: Set repository name in lowercase
         id: prep
-        run: echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        run: |
+          echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          # Sanitize branch name for docker tag
+          BRANCH_TAG=$(echo ${{ github.ref_name }} | sed -e 's/[^a-zA-Z0-9.]/-/g')
+          echo "BRANCH_TAG=$BRANCH_TAG" >> $GITHUB_ENV
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -33,7 +37,7 @@ jobs:
             ghcr.io/${{ env.REPO_NAME }}
           tags: |
             latest
-            {{ sha }}
+            type=sha
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,6 +50,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.REPO_NAME }}:latest
             ghcr.io/${{ env.REPO_NAME }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}:${{ env.BRANCH_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Log out from GitHub Container Registry
