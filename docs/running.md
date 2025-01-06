@@ -24,7 +24,12 @@ For production deployment using Docker:
 docker compose up -d
 ```
 
-This command starts the application and all required services in production mode.
+This command starts the application and all required services in production mode. By default, registration is disabled for security reasons, with two exceptions:
+
+1. The first account can always be created regardless of the registration setting
+2. When `ENABLE_REGISTRATION` is set to `true`
+
+After creating the first account, it's recommended to keep registration disabled unless you intend to make the instance public or have other security measures in place.
 
 ## Building the Project
 

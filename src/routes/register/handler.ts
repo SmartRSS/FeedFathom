@@ -6,7 +6,11 @@ export const registerHandler = async ({
   request,
   locals,
 }: UnauthenticatedRequestEvent) => {
-  if (process.env["ENABLE_REGISTRATION"] !== "true") {
+  // Check if there are any existing users
+  const userCount = await locals.dependencies.usersRepository.getUserCount();
+  
+  // Only enforce registration restrictions if there are existing users
+  if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
     return json(
       {
         error: "disabled",

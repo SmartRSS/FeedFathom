@@ -36,7 +36,7 @@ bun install --frozen-lockfile
 FeedFathom uses several environment variables for configuration:
 
 ### Core Configuration
-- `ENABLE_REGISTRATION`: Enable new user registrations (default: false)
+- `ENABLE_REGISTRATION`: Enable new user registrations (default: false). Note: The first account can always be created regardless of this setting
 - `ALLOWED_EMAILS`: Comma-separated list of emails allowed to register
 
 ### Worker Configuration
