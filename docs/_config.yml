@@ -1,0 +1,21 @@
+remote_theme: just-the-docs/just-the-docs
+title: FeedFathom
+description: An efficient RSS feed reader with browser extensions
+baseurl: "/FeedFathom"
+url: "https://smartrss.github.io"
+
+# Theme settings
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+
+# Aux links for the upper right navigation
+aux_links:
+  "FeedFathom on GitHub":
+    - "https://github.com/SmartRSS/FeedFathom"
+
+# Makes Aux links open in a new tab
+aux_links_new_tab: true
+
+# Footer content
+footer_content: "Copyright &copy; 2024 FeedFathom. Distributed under an MIT license." 
