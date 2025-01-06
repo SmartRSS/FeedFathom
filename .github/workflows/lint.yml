@@ -2,7 +2,10 @@ name: Lint
 
 on:
   pull_request:
-    branches: [ main ]
+    types: [opened, synchronize]
+  push:
+    branches:
+      - main
 
 jobs:
   lint:
