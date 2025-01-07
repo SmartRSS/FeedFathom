@@ -9,13 +9,13 @@ export const registerHandler = async ({
   // Check if there are any existing users
   const userCount = await locals.dependencies.usersRepository.getUserCount();
   
-  // Only enforce registration restrictions if there are existing users
   if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
     return json(
       {
-        error: "disabled",
+        success: false,
+        error: "Registration is currently disabled",
       },
-      { status: 400 },
+      { status: 403 },
     );
   }
 
@@ -24,9 +24,10 @@ export const registerHandler = async ({
     if (!allowedEmails.includes(request.body.email) && allowedEmails.length > 0) {
       return json(
         {
-          error: "Email not allowed",
+          success: false,
+          error: "This email address is not allowed to register",
         },
-        { status: 400 },
+        { status: 403 },
       );
     }
   }
@@ -39,14 +40,15 @@ export const registerHandler = async ({
       passwordHash: hash,
     });
 
-    return json({ ok: true });
+    return json({ success: true });
   } catch (e) {
     llog(e);
     return json(
       {
-        error: "User already exists",
+        success: false,
+        error: "An account with this email already exists",
       },
-      { status: 400 },
+      { status: 409 },
     );
   }
 };
