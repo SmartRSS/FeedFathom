@@ -1,34 +1,59 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { z } from "zod";
+
+  const RegisterResponse = z.object({
+    success: z.boolean(),
+    error: z.string().optional().nullable(),
+  });
 
   let username = "";
   let email = "";
   let password = "";
   let passwordConfirm = "";
   let validationMessage = "";
+  let isSubmitting = false;
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
-
+    
     if (password !== passwordConfirm) {
       validationMessage = "Passwords do not match!";
       return;
     }
 
-    const res = await fetch("/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, passwordConfirm }),
-    });
-    if (res.ok) {
-      await goto("/login");
+    try {
+      isSubmitting = true;
+      const res = await fetch("/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password, passwordConfirm }),
+      });
+      
+      const result = RegisterResponse.safeParse(await res.json());
+      
+      if (!result.success) {
+        validationMessage = "Unexpected server response";
+        return;
+      }
+
+      if (res.ok) {
+        await goto("/login");
+      } else {
+        validationMessage = result.data.error || "Registration failed. Please try again.";
+      }
+    } catch (error) {
+      validationMessage = "An error occurred. Please try again later.";
+    } finally {
+      isSubmitting = false;
     }
   };
 
   $: {
     if (password && passwordConfirm && password !== passwordConfirm) {
       validationMessage = "Passwords do not match!";
-    } else {
+    } else if (!validationMessage.includes("Registration")) {
+      // Only clear validation if it's not a server error
       validationMessage = "";
     }
   }
@@ -68,9 +93,10 @@
           {validationMessage}
         </div>
 
-        <!-- Submit block for registration -->
         <div class="button-block">
-          <button type="submit">Register</button>
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Registering...' : 'Register'}
+          </button>
         </div>
 
         <a href="/login" class="login-link">Login</a>
@@ -127,8 +153,20 @@
   }
 
   .validation-message {
-    color: red;
+    color: #d32f2f;
     margin-bottom: 15px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .validation-message.show {
+    opacity: 1;
+  }
+
+  button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
   }
 
   .button-block {
