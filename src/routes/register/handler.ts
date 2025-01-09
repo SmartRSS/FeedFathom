@@ -8,7 +8,7 @@ export const registerHandler = async ({
 }: UnauthenticatedRequestEvent) => {
   // Check if there are any existing users
   const userCount = await locals.dependencies.usersRepository.getUserCount();
-  
+
   if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
     return json(
       {
@@ -21,7 +21,10 @@ export const registerHandler = async ({
 
   if (process.env["ALLOWED_EMAILS"]) {
     const allowedEmails = process.env["ALLOWED_EMAILS"].split(",");
-    if (!allowedEmails.includes(request.body.email) && allowedEmails.length > 0) {
+    if (
+      !allowedEmails.includes(request.body.email) &&
+      allowedEmails.length > 0
+    ) {
       return json(
         {
           success: false,

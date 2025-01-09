@@ -3,7 +3,6 @@ import {
   type TreeNode,
   type TreeSource,
 } from "../types/source-types";
-import { llog } from "../util/log";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -22,7 +21,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   const sourcesWithoutFolder: TreeSource[] = [];
 
   userSources.forEach((source) => {
-    llog("dupa2", source.unreadArticlesCount);
     const sourceData: TreeSource = {
       type: NodeType.SOURCE,
       name: source.name,
