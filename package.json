@@ -62,7 +62,7 @@
     "cheerio": "^1.0.0",
     "drizzle-orm": "^0.38.3",
     "ioredis": "^5.4.2",
-    "jsdom": "^25.0.1",
+    "jsdom": "^26.0.0",
     "mailparser": "^3.7.2",
     "opml": "^0.5.7",
     "postgres": "^3.4.5",
