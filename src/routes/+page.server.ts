@@ -22,7 +22,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   const sourcesWithoutFolder: TreeSource[] = [];
 
   userSources.forEach((source) => {
-    llog("dupa2", source.unreadArticlesCount);
     const sourceData: TreeSource = {
       type: NodeType.SOURCE,
       name: source.name,

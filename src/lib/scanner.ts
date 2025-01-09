@@ -9,6 +9,7 @@ import { SteemitScanner } from "./scanners/steemit-scanner";
 import { VimeoScanner } from "./scanners/vimeo-scanner";
 import { YoutubeScanner } from "./scanners/youtube-scanner";
 import { GeneratorScanner } from "./scanners/generator-scanner";
+import { LinkFeedScanner } from "./scanners/link-feed.scanner";
 import { type FeedData } from "../types";
 
 const scanners: Scanner[] = [
@@ -22,11 +23,13 @@ const scanners: Scanner[] = [
   new VimeoScanner(),
   new YoutubeScanner(),
   new GeneratorScanner(),
+  new LinkFeedScanner(),
 ];
 
 export async function scan(address: string, document: Document) {
   const feedDataList: FeedData[] = [];
   const addressUrl = new URL(address);
+  const seenUrls = new Set<string>();
 
   const results = await Promise.all(
     scanners.map((scanner) => {
@@ -37,15 +40,22 @@ export async function scan(address: string, document: Document) {
       // or network requests. This ensures efficient resource usage and scalability as more scanners are added.
     }),
   );
+
   for (const result of results) {
-    feedDataList.push(
-      ...result.map((feedData) => {
-        return {
-          title: feedData.title,
-          url: new URL(feedData.url, address).href,
-        };
-      }),
-    );
+    for (const feedData of result) {
+      const normalizedUrl = new URL(feedData.url, address).href;
+      
+      // Skip if we've already seen this URL
+      if (seenUrls.has(normalizedUrl)) {
+        continue;
+      }
+      
+      seenUrls.add(normalizedUrl);
+      feedDataList.push({
+        title: feedData.title,
+        url: normalizedUrl,
+      });
+    }
   }
 
   if (feedDataList.length === 0) {
