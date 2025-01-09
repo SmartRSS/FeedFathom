@@ -36,7 +36,7 @@ export class LinkFeedScanner implements Scanner {
             url: feedUrl.href,
           });
         }
-      } catch (error) {
+      } catch {
         console.warn(`Invalid URL: ${href}`);
       }
     }
