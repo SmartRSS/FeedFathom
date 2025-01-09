@@ -16,7 +16,7 @@
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
-    
+
     if (password !== passwordConfirm) {
       validationMessage = "Passwords do not match!";
       return;
@@ -29,9 +29,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email, password, passwordConfirm }),
       });
-      
+
       const result = RegisterResponse.safeParse(await res.json());
-      
+
       if (!result.success) {
         validationMessage = "Unexpected server response";
         return;
@@ -40,7 +40,8 @@
       if (res.ok) {
         await goto("/login");
       } else {
-        validationMessage = result.data.error || "Registration failed. Please try again.";
+        validationMessage =
+          result.data.error || "Registration failed. Please try again.";
       }
     } catch (error) {
       validationMessage = "An error occurred. Please try again later.";
@@ -95,7 +96,7 @@
 
         <div class="button-block">
           <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Registering...' : 'Register'}
+            {isSubmitting ? "Registering..." : "Register"}
           </button>
         </div>
 

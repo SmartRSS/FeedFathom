@@ -44,12 +44,12 @@ export async function scan(address: string, document: Document) {
   for (const result of results) {
     for (const feedData of result) {
       const normalizedUrl = new URL(feedData.url, address).href;
-      
+
       // Skip if we've already seen this URL
       if (seenUrls.has(normalizedUrl)) {
         continue;
       }
-      
+
       seenUrls.add(normalizedUrl);
       feedDataList.push({
         title: feedData.title,
