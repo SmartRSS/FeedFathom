@@ -3,7 +3,6 @@ import {
   type TreeNode,
   type TreeSource,
 } from "../types/source-types";
-import { llog } from "../util/log";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals }) => {
