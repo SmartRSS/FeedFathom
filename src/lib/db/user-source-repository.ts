@@ -1,14 +1,5 @@
 import * as schema from "$lib/schema";
-import {
-  and,
-  eq,
-  inArray,
-  isNotNull,
-  lt,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { TreeNode } from "../../types/source-types";
 
 import type { OpmlNode } from "../../types/opml-types";
@@ -30,10 +21,17 @@ export class UserSourceRepository {
         id: schema.sources.id,
         name: schema.userSources.name,
         parentId: schema.userSources.parentId,
-        favicon: schema.sources.favicon, // COALESCE can be used here in SQL if supported
+        favicon: schema.sources.favicon,
         url: schema.sources.url,
         homeUrl: schema.sources.homeUrl,
-        unreadArticlesCount: sql<number>`(coalesce(count(articles.id), 0) - coalesce(count(user_articles.article_id), 0))::int`,
+        unreadArticlesCount: sql<number>`(
+          coalesce(count(articles.id), 0) - 
+          coalesce(count(CASE 
+            WHEN user_articles.deleted_at IS NOT NULL 
+            OR user_articles.read_at >= articles.updated_at 
+            THEN 1 
+          END), 0)
+        )::int`,
       })
       .from(schema.userSources)
       .where(eq(schema.userSources.userId, userId))
@@ -50,10 +48,6 @@ export class UserSourceRepository {
         and(
           eq(schema.userArticles.userId, userId),
           eq(schema.userArticles.articleId, schema.articles.id),
-          or(
-            isNotNull(schema.userArticles.deletedAt),
-            lt(schema.articles.updatedAt, schema.userArticles.readAt),
-          ),
         ),
       )
       .groupBy(
