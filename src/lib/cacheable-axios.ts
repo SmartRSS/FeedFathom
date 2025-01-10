@@ -8,13 +8,30 @@ import {
 } from "axios-cache-interceptor";
 import Redis from "ioredis";
 import fs from "node:fs";
+import path from "path";
+import { err } from "../util/log";
 
 const browserUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
 
 const browserUasOrigins: string[] = [];
 
-const cachedBuildTimestamp = fs.readFileSync("/app/BUILD_TIME", "utf-8").trim();
+function getBuildTime(): string {
+  const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
+
+  try {
+    if (fs.existsSync(buildTimePath)) {
+      return fs.readFileSync(buildTimePath, "utf-8").trim();
+    }
+    // If file doesn't exist, return current timestamp for development
+    return Date.now().toString();
+  } catch (error) {
+    err("Error reading BUILD_TIME, using current timestamp:", error);
+    return Date.now().toString();
+  }
+}
+
+const cachedBuildTimestamp = getBuildTime();
 
 export const buildAxios = (redis: Redis) => {
   const axiosInstance: AxiosInstance = Axios.create({

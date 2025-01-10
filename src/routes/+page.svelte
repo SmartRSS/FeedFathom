@@ -21,7 +21,6 @@
     FocusChangedFunction,
     FocusTarget,
   } from "../types";
-  import { llog } from "../util/log";
 
   const STALE_TIME = 5 * 1000;
   let selectedSourcesList: string[] = $state([]);
@@ -213,20 +212,18 @@
   }
 
   const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
-    llog("articles loaded");
     tree = tree.map((node) => {
       if (node.type === "folder") {
         node.children = node.children?.map((source) => {
           if (source.type === NodeType.SOURCE) {
             source.unreadCount =
-              sourcesArticlesMap.get(node.uid) || source.unreadCount;
+              sourcesArticlesMap.get(source.uid) ?? source.unreadCount;
           }
           return source;
         });
       }
       if (node.type === NodeType.SOURCE) {
-        node.unreadCount = sourcesArticlesMap.get(node.uid) || node.unreadCount;
-        return node;
+        node.unreadCount = sourcesArticlesMap.get(node.uid) ?? node.unreadCount;
       }
       return node;
     });
