@@ -21,7 +21,6 @@
     FocusChangedFunction,
     FocusTarget,
   } from "../types";
-  import { llog } from "../util/log";
 
   const STALE_TIME = 5 * 1000;
   let selectedSourcesList: string[] = $state([]);
