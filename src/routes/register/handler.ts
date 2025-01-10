@@ -6,14 +6,14 @@ export const registerHandler = async ({
   request,
   locals,
 }: UnauthenticatedRequestEvent) => {
-  console.log("test")
+  console.log("test");
   // Check if there are any existing users
   const userCount = await locals.dependencies.usersRepository.getUserCount();
 
   console.log("Environment variables:", {
     ALLOWED_EMAILS: process.env["ALLOWED_EMAILS"],
     ENABLE_REGISTRATION: process.env["ENABLE_REGISTRATION"],
-    NODE_ENV: process.env["NODE_ENV"]
+    NODE_ENV: process.env["NODE_ENV"],
   });
 
   if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
@@ -25,10 +25,16 @@ export const registerHandler = async ({
       { status: 403 },
     );
   }
-console.log(process.env["ALLOWED_EMAILS"], "asdf");
+  console.log(process.env["ALLOWED_EMAILS"], "asdf");
   // Only check allowed emails if the list exists and isn't empty
-  const allowedEmails = process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean);
-  if (allowedEmails && allowedEmails.length > 0 && !allowedEmails.includes(request.body.email)) {
+  const allowedEmails = process.env["ALLOWED_EMAILS"]
+    ?.split(",")
+    .filter(Boolean);
+  if (
+    allowedEmails &&
+    allowedEmails.length > 0 &&
+    !allowedEmails.includes(request.body.email)
+  ) {
     return json(
       {
         success: false,

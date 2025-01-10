@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-const allowedEmails = process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
+const allowedEmails =
+  process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
 export const registerRequestValidator = z
   .object({
     username: z.string(),

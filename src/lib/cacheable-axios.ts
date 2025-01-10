@@ -17,8 +17,8 @@ const browserUserAgent =
 const browserUasOrigins: string[] = [];
 
 function getBuildTime(): string {
-  const buildTimePath = path.join(process.cwd(), 'BUILD_TIME');
-  
+  const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
+
   try {
     if (fs.existsSync(buildTimePath)) {
       return fs.readFileSync(buildTimePath, "utf-8").trim();

@@ -16,7 +16,7 @@
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
-    
+
     console.log("Submitting registration form");
 
     if (password !== passwordConfirm) {

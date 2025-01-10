@@ -9,10 +9,10 @@ export class UserRepository {
   public async getUserCount(): Promise<number> {
     const result = await this.drizzleConnection
       .select({
-        count: sql`count(${schema.users.id})`
+        count: sql`count(${schema.users.id})`,
       })
       .from(schema.users);
-    
+
     return Number(result[0]?.count ?? 0);
   }
 

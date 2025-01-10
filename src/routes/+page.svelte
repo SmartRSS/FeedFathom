@@ -217,7 +217,8 @@
       if (node.type === "folder") {
         node.children = node.children?.map((source) => {
           if (source.type === NodeType.SOURCE) {
-            source.unreadCount = sourcesArticlesMap.get(source.uid) ?? source.unreadCount;
+            source.unreadCount =
+              sourcesArticlesMap.get(source.uid) ?? source.unreadCount;
           }
           return source;
         });
