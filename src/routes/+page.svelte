@@ -24,7 +24,7 @@
 
   const STALE_TIME = 5 * 1000;
   const promisesMap: ArticlePromisesMap = new Map();
-  
+
   let selectedSourcesList: string[] = $state([]);
   let sourceProperties: HTMLDialogElement | null = $state(null);
   let selectedNode: TreeNode | null = $state(null);
