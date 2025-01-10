@@ -1,10 +1,20 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../schema";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 
 export class UserRepository {
   constructor(private readonly drizzleConnection: PostgresJsDatabase) {}
+
+  public async getUserCount(): Promise<number> {
+    const result = await this.drizzleConnection
+      .select({
+        count: sql`count(${schema.users.id})`
+      })
+      .from(schema.users);
+    
+    return Number(result[0]?.count ?? 0);
+  }
 
   public async findUser(email: string) {
     return (

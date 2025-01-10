@@ -16,6 +16,8 @@
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
+    
+    console.log("Submitting registration form");
 
     if (password !== passwordConfirm) {
       validationMessage = "Passwords do not match!";
@@ -30,7 +32,9 @@
         body: JSON.stringify({ username, email, password, passwordConfirm }),
       });
 
+      console.log("Response status:", res.status);
       const result = RegisterResponse.safeParse(await res.json());
+      console.log("Response data:", result);
 
       if (!result.success) {
         validationMessage = "Unexpected server response";
