@@ -121,7 +121,7 @@
 
   .form-container {
     width: 100%;
-    max-width: 600px; /* Increase the max-width to make the form wider */
+    max-width: 768px; /* Increase the max-width to make the form wider */
     margin: auto;
     padding: 20px;
     border: 1px solid #ddd;

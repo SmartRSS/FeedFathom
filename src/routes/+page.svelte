@@ -56,18 +56,17 @@
 
   const isMobile = () => {
     if (typeof window === "undefined") {
-      return false;
+      return false; // Not in a browser environment
     }
-    return true;
-    // return window?.matchMedia("only screen and (max-width: 600px)").matches;
+    return window.matchMedia("only screen and (max-width: 768px)").matches;
   };
 
-  onMount(async () => {
-    if (typeof window !== "undefined") {
-      if (isMobile()) {
-        history.pushState({}, "", new URL(window.location.href));
-        window.addEventListener("popstate", handleBackButton);
-      }
+  onMount(() => {
+    console.log("onMount executed");
+    if (isMobile()) {
+      history.pushState({}, "", new URL(window.location.href));
+      console.log("pushState executed");
+      window.addEventListener("popstate", handleBackButton);
     }
   });
 
@@ -268,6 +267,9 @@
   onDestroy(() => {
     promisesMap.clear();
     clearInterval(cleanupInterval);
+    if (isMobile()) {
+      window.removeEventListener("popstate", handleBackButton);
+    }
   });
 
   function clearStalePromises() {

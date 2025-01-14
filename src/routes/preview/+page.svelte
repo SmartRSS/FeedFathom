@@ -286,7 +286,7 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-width: 600px;
+    max-width: 768px;
     margin: auto;
     padding: 20px;
     border: 1px solid #ddd;
