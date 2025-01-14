@@ -44,11 +44,6 @@
         font-size: 100%;
         font-family: sans-serif;
       }
-      @media (max-width: 600px) {
-        html {
-          font-size: 130%;
-        }
-      }
 
       html,
       body,
@@ -107,18 +102,6 @@
         flex-grow: 1;
       }
 
-      @media (max-width: 600px) {
-        .column-wrapper {
-          min-width: 100%;
-          width: 100%;
-          max-width: 100%;
-        }
-
-        .column-wrapper:not(.focused-column) {
-          display: none !important;
-        }
-      }
-
       .toolbar button,
       .toolbar input,
       .toolbar select {
@@ -133,11 +116,6 @@
         display: none;
       }
 
-      @media (max-width: 600px) {
-        .toolbar button.only-mobile {
-          display: flex;
-        }
-      }
       .form-container {
         display: flex;
         justify-content: center;
@@ -156,6 +134,24 @@
         padding: 20px;
         border: 1px solid #ddd;
         border-radius: 8px;
+      }
+
+      @media (max-width: 768px) {
+        html {
+          font-size: 150%;
+        }
+        .column-wrapper {
+          min-width: 100%;
+          width: 100%;
+          max-width: 100%;
+        }
+
+        .column-wrapper:not(.focused-column) {
+          display: none !important;
+        }
+        .toolbar button.only-mobile {
+          display: flex;
+        }
       }
     </style>
   </head>
