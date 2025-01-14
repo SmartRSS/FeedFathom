@@ -6,10 +6,14 @@ const pathsNotRequiringLogin = [
   "/register",
   "/login",
   "/manifest.webmanifest",
-  "service-worker.js",
+  "/service-worker.js",
+  "/favicon.ico",
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
+  if (pathsNotRequiringLogin.includes(event.url.pathname)) {
+    return resolve(event);
+  }
   event.locals.dependencies = container.cradle;
   const sid = event.cookies.get("sid");
   const user = sid
@@ -18,9 +22,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   if (!sid || !user) {
     event.cookies.delete("sid", { path: "/" });
-    if (pathsNotRequiringLogin.includes(event.url.pathname)) {
-      return resolve(event);
-    }
+
     return redirect(302, "/login");
   }
 
@@ -29,5 +31,5 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (user && !pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
-  return redirect(302, "/");
+  return redirect(302, "/login");
 };
