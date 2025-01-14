@@ -2,10 +2,7 @@ import { type Handle, redirect } from "@sveltejs/kit";
 import container from "./container";
 import { cookiesConfig } from "./util/cookies-config";
 
-const pathsNotRequiringLogin = [
-  "/register",
-  "/login"
-];
+const pathsNotRequiringLogin = ["/register", "/login"];
 
 export const handle: Handle = async ({ event, resolve }) => {
   console.log(event.url);
