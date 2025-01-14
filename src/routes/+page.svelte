@@ -38,19 +38,27 @@
   let tree = $state(data.tree);
 
   function handleBackButton() {
+    console.log("Back button pressed");
+    console.log("Is mobile:", isMobile());
+    console.log("Current focused column:", focusedColumn);
+
     if (!isMobile()) {
+      console.log("Not a mobile device, returning true");
       return true;
     }
     if (focusedColumn === ".sources-column") {
+      console.log("Navigating back in history");
       history.back();
       return true;
     }
     history.pushState({}, "", new URL(window.location.href));
     if (focusedColumn === ".articles-column") {
       focusedColumn = ".sources-column";
+      console.log("Switched to sources column");
       return false;
     }
     focusedColumn = ".articles-column";
+    console.log("Switched to articles column");
     return false;
   }
 
@@ -62,9 +70,17 @@
   };
 
   onMount(() => {
+    console.log("onMount executed");
+    console.log("Is mobile:", isMobile());
+
     if (isMobile()) {
       history.pushState({}, "", new URL(window.location.href));
+      console.log(
+        "pushState executed with URL:",
+        new URL(window.location.href),
+      );
       window.addEventListener("popstate", handleBackButton);
+      console.log("popstate event listener added");
     }
   });
 
