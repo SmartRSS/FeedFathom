@@ -14,7 +14,6 @@ RUN export NODE_ENV=production && bun run build-server && bun run build-worker
 FROM oven/bun:alpine AS release
 RUN apk add curl --no-cache
 WORKDIR /app
-COPY static/ /app/static/
 COPY drizzle/ /app/drizzle/
 COPY --from=build /app/build/ /app/build/
 COPY --from=base /app/BUILD_TIME /app/BUILD_TIME

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "docker build -t feedfathom . -f Dockerfile && docker compose -f docker-compose.yml -f dev-server.yml up -d",
     "build-server": "vite build",
-    "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=/app/build/ --target=bun --sourcemap",
+    "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
     "preview": "vite preview",
     "preview:build": "vite build && vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
