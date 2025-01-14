@@ -70,9 +70,8 @@
   };
 
   onMount(() => {
+    // for some unknown reason this doesn't work right when I remove logs
     console.log("onMount executed");
-    console.log("Is mobile:", isMobile());
-
     if (isMobile()) {
       history.pushState({}, "", new URL(window.location.href));
       console.log(
