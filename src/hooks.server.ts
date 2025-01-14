@@ -4,10 +4,7 @@ import { cookiesConfig } from "./util/cookies-config";
 
 const pathsNotRequiringLogin = [
   "/register",
-  "/login",
-  "/manifest.webmanifest",
-  "/service-worker.js",
-  "/favicon.ico",
+  "/login"
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
