@@ -3,6 +3,7 @@ WORKDIR /app
 COPY bunfile-docker.toml bunfile.toml
 COPY *.js *.json *.ts bun.lock drizzle /app/
 RUN bun install
+COPY static /app/static
 COPY src/ /app/src/
 RUN timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
     echo "Build timestamp: $timestamp" && \
