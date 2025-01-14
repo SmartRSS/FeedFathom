@@ -11,6 +11,7 @@ const pathsNotRequiringLogin = [
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
+  console.log(event.url);
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
