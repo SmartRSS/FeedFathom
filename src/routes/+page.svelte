@@ -72,10 +72,13 @@
   onMount(() => {
     console.log("onMount executed");
     console.log("Is mobile:", isMobile());
-    
+
     if (isMobile()) {
       history.pushState({}, "", new URL(window.location.href));
-      console.log("pushState executed with URL:", new URL(window.location.href));
+      console.log(
+        "pushState executed with URL:",
+        new URL(window.location.href),
+      );
       window.addEventListener("popstate", handleBackButton);
       console.log("popstate event listener added");
     }
