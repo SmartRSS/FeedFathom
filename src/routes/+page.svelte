@@ -62,10 +62,8 @@
   };
 
   onMount(() => {
-    console.log("onMount executed");
     if (isMobile()) {
       history.pushState({}, "", new URL(window.location.href));
-      console.log("pushState executed");
       window.addEventListener("popstate", handleBackButton);
     }
   });
