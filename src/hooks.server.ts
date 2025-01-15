@@ -2,20 +2,13 @@ import { type Handle, redirect } from "@sveltejs/kit";
 import container from "./container";
 import { cookiesConfig } from "./util/cookies-config";
 
-const pathsNotRequiringLogin = [
-  "/register",
-  "/login",
-  "/manifest.webmanifest",
-  "/service-worker.js",
-  "/favicon.ico",
-];
+const pathsNotRequiringLogin = ["/register", "/login"];
 
 export const handle: Handle = async ({ event, resolve }) => {
-  console.log(event.url);
+  event.locals.dependencies = container.cradle;
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
-  event.locals.dependencies = container.cradle;
   const sid = event.cookies.get("sid");
   const user = sid
     ? await event.locals.dependencies.usersRepository.getUserBySid(sid)
