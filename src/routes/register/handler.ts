@@ -6,8 +6,6 @@ export const registerHandler = async ({
   request,
   locals,
 }: UnauthenticatedRequestEvent) => {
-  console.log("test");
-  // Check if there are any existing users
   const userCount = await locals.dependencies.usersRepository.getUserCount();
 
   console.log("Environment variables:", {
