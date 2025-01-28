@@ -1,10 +1,10 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../schema";
 import { eq, getTableColumns, sql } from "drizzle-orm";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import crypto from "node:crypto";
 
 export class UserRepository {
-  constructor(private readonly drizzleConnection: PostgresJsDatabase) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async getUserCount(): Promise<number> {
     const result = await this.drizzleConnection

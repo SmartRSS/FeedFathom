@@ -1,7 +1,7 @@
 import * as schema from "$lib/schema";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { Article } from "../../types/article.type";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export class ArticleRepository {
   private boundaryMemory:
@@ -16,7 +16,7 @@ export class ArticleRepository {
       }
     | undefined;
 
-  public constructor(private readonly drizzleConnection: PostgresJsDatabase) {}
+  public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async removeUserArticles(articleIdList: number[], userId: number) {
     const now = new Date();

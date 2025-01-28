@@ -1,9 +1,8 @@
 import * as schema from "$lib/schema";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 export class FolderRepository {
-  public constructor(private readonly drizzleConnection: PostgresJsDatabase) {}
+  public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async getUserFolders(userId: number) {
     return this.drizzleConnection
