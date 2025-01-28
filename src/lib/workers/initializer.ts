@@ -1,14 +1,14 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type { MainWorker } from "$lib/workers/main";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { MailWorker } from "$lib/workers/mail";
 import { err, llog } from "../../util/log";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 // Schedule the next task function definition with a config object
 export class Initializer {
   constructor(
     private readonly mainWorker: MainWorker,
-    private readonly drizzleConnection: PostgresJsDatabase,
+    private readonly drizzleConnection: BunSQLDatabase,
     private readonly mailWorker: MailWorker,
   ) {}
 

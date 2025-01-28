@@ -2,12 +2,12 @@ import * as schema from "../schema";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { err } from "../../util/log";
 import { ulid } from "ulid";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Queue } from "bullmq";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export class SourcesRepository {
   constructor(
-    private readonly drizzleConnection: PostgresJsDatabase,
+    private readonly drizzleConnection: BunSQLDatabase,
     private readonly bullmqQueue: Queue,
   ) {}
 

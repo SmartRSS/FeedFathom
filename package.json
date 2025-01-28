@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build",
     "build-server": "vite build",
-    "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --minify",
+    "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
     "watch-server": "vite dev --host",
     "watch-worker": "bun --watch ./src/worker-entrypoint.ts",
     "lint": "svelte-kit sync && tsc && eslint ./src && prettier --check ./src && svelte-check --tsconfig ./tsconfig.json",

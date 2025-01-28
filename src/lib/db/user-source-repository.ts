@@ -4,13 +4,13 @@ import type { TreeNode } from "../../types/source-types";
 
 import type { OpmlNode } from "../../types/opml-types";
 import { err, llog } from "../../util/log";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { FolderRepository } from "$lib/db/folder-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export class UserSourceRepository {
   public constructor(
-    private readonly drizzleConnection: PostgresJsDatabase,
+    private readonly drizzleConnection: BunSQLDatabase,
     private readonly foldersRepository: FolderRepository,
     private readonly sourcesRepository: SourcesRepository,
   ) {}
