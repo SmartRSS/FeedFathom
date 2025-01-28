@@ -1,9 +1,0 @@
-services:
-  server:
-    volumes:
-      - ./:/app/
-    command: ["run", "vite:dev"]
-    environment:
-      - ENABLE_REGISTRATION=true
-    ports:
-      - 5173:5173

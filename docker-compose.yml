@@ -31,7 +31,7 @@ services:
     environment:
       INTEGRATION: "migrator"
     command:
-      - "/app/build/worker-entrypoint.js"
+      - "/app/worker-entrypoint.js"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,7 +39,7 @@ services:
   server:
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
-      - "/app/build/index.js"
+      - "/app/index.js"
     deploy:
       update_config:
         parallelism: 1
@@ -71,12 +71,12 @@ services:
   worker:
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
-      - "/app/build/worker-entrypoint.js"
+      - "/app/worker-entrypoint.js"
     restart: always
     environment:
       DEBUG: bull:*
       INTEGRATION: worker
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-15}
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-60}
       GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
@@ -95,7 +95,7 @@ services:
   mail:
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
-      - "/app/build/worker-entrypoint.js"
+      - "/app/worker-entrypoint.js"
     ports:
       - "25:25"
     restart: always
