@@ -1,0 +1,41 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./:/app/
+    command: ["run", "watch-server"]
+    environment:
+      - ENABLE_REGISTRATION=true
+    ports:
+      - 5173:5173
+
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./:/app/
+    command: ["run", "watch-worker"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./:/app/
+    command: ["run", "watch-worker"]
+
+
+  mail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./:/app/
+    command: ["run", "watch-worker"]

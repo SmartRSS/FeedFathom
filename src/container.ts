@@ -10,9 +10,8 @@ import { UserRepository } from "$lib/db/user-repository";
 import { OpmlParser } from "$lib/opml-parser";
 import { FeedParser } from "$lib/feed-parser";
 import { Queue } from "bullmq";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { drizzle, BunSQLDatabase } from "drizzle-orm/bun-sql";
 import * as schema from "$lib/schema";
-import postgres from "postgres";
 import { UserSourceRepository } from "$lib/db/user-source-repository";
 import { ArticleRepository } from "$lib/db/article-repository";
 import { FolderRepository } from "$lib/db/folder-repository";
@@ -33,7 +32,7 @@ export interface Dependencies {
   opmlParser: OpmlParser;
   feedParser: FeedParser;
   bullmqQueue: Queue;
-  drizzleConnection: PostgresJsDatabase<typeof schema>;
+  drizzleConnection: BunSQLDatabase<typeof schema>;
   mainWorker: MainWorker;
   mailWorker: MailWorker;
   initializer: Initializer;
@@ -66,9 +65,7 @@ container.register({
   feedParser: asClass(FeedParser).singleton(),
   bullmqQueue: asValue(bullmq),
   drizzleConnection: asValue(
-    drizzle(postgres("postgresql://postgres:postgres@postgres:5432/postgres"), {
-      schema,
-    }),
+    drizzle("postgresql://postgres:postgres@postgres:5432/postgres"),
   ),
   mainWorker: asClass(MainWorker).singleton(),
   mailWorker: asClass(MailWorker).singleton(),

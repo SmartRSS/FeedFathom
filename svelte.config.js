@@ -6,12 +6,12 @@ const config = {
   optimizeDeps: { exclude: ["@sveltejs/kit"] },
   csrf: { checkOrigin: false },
   kit: {
-    adapter: adapter({ precompress: true }),
+    adapter: adapter({ precompress: false }),
   },
   vite: {
     svelte: {
       compilerOptions: {
-        sourcemap: true,
+        sourcemap: false,
       },
     },
   },
