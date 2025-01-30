@@ -1,7 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import { isXml } from "../../util/is-xml";
   import { err } from "../../util/log";
   import { isMimeText } from "../../util/is-mime-text";
   import { isPlainText } from "../../util/is-plain-text";

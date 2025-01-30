@@ -2,20 +2,9 @@ import * as schema from "$lib/schema";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { Article } from "../../types/article.type";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
 
 export class ArticleRepository {
-  private boundaryMemory:
-    | {
-        [key: string]: {
-          today: Date;
-          oneWeekAgo: Date;
-          oneMonthAgo: Date;
-          twoMonthsAgo: Date;
-          lastYear: Date;
-        };
-      }
-    | undefined;
-
   public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async removeUserArticles(articleIdList: number[], userId: number) {
@@ -86,8 +75,9 @@ export class ArticleRepository {
       .orderBy(desc(schema.articles.publishedAt));
     console.log("query time", new Date().valueOf() - startTime);
 
+    const boundaryDates = getBoundaryDates();
     return articles.map((item) => ({
-      group: this.dateGroup(item.publishedAt || new Date()),
+      group: getDateGroup(boundaryDates, item.publishedAt || new Date()),
       ...item,
     }));
   }
@@ -120,57 +110,6 @@ export class ArticleRepository {
           content: sql`excluded.content`,
         },
       });
-  }
-
-  private generateBoundaryDates() {
-    const now = new Date();
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(now.getDate() - 6);
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(now.getMonth() - 1);
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(now.getMonth() - 2);
-    const lastYear = new Date();
-    lastYear.setFullYear(now.getFullYear() - 1);
-    return {
-      today: midnight,
-      oneWeekAgo,
-      oneMonthAgo,
-      twoMonthsAgo,
-      lastYear,
-    };
-  }
-
-  private getBoundaryDates() {
-    const today = new Date().getDate();
-    if (this.boundaryMemory && today in this.boundaryMemory) {
-      return this.boundaryMemory[today]!;
-    }
-
-    const boundaryDates = this.generateBoundaryDates();
-    this.boundaryMemory = {};
-    this.boundaryMemory[today] = boundaryDates;
-    return boundaryDates;
-  }
-
-  private dateGroup(pubDate: Date) {
-    const boundaryDates = this.getBoundaryDates();
-
-    if (pubDate > boundaryDates.today) {
-      return "Today";
-    }
-    if (pubDate > boundaryDates.oneWeekAgo) {
-      return "This Week";
-    }
-    if (pubDate > boundaryDates.oneMonthAgo) {
-      return "This Month";
-    }
-    if (pubDate > boundaryDates.lastYear) {
-      return "This Year";
-    }
-    return "Older";
   }
 
   async getArticleByGuid(guid: string): Promise<Article | undefined> {
