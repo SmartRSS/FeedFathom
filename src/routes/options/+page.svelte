@@ -34,11 +34,6 @@
       alert("Invalid file contents 1");
       return;
     }
-    if (!isXml(fileContents)) {
-      cancel();
-      alert("Invalid file contents");
-      return;
-    }
   };
   let passwordForm: HTMLFormElement;
 
