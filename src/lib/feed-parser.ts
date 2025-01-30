@@ -10,90 +10,7 @@ import type { ArticleRepository } from "$lib/db/article-repository";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import container from "../container";
 import type Redis from "ioredis";
-import * as cheerio from "cheerio";
-
-const tagAttributePairs = [
-  ["a", "href"],
-  ["audio", "src"],
-  ["video", "src"],
-  ["video", "poster"],
-  ["img", "src"],
-  ["img", "srcset"],
-  ["link", "href"],
-  ["source", "src"],
-  ["source", "srcset"],
-  ["picture", "srcset"],
-] as const;
-
-const fixupLinks = (content: string, articleUrl: string) => {
-  const $ = cheerio.load(content); // Load HTML content
-
-  // Iterate through tag-attribute pairs
-  tagAttributePairs.forEach(([tagName, attrName]) => {
-    $(tagName).each((_index, element) => {
-      const $elem = $(element);
-
-      // Handle anchors <a> to add target="_blank"
-      if (tagName === "a") {
-        const hrefAttribute = $elem.attr(attrName);
-        if (hrefAttribute) {
-          try {
-            const hrefUrl = new URL(hrefAttribute);
-            // Ensure the protocol is valid
-            if (["http:", "https:", "ftp:"].includes(hrefUrl.protocol)) {
-              $elem.attr("target", "_blank");
-            }
-          } catch {
-            // Ignore invalid URLs
-          }
-        }
-      }
-
-      // Process other attributes
-      const attrValue = $elem.attr(attrName);
-      if (attrValue) {
-        if (attrName === "srcset") {
-          // Special handling for "srcset"
-          const processedSrcset = processSrcset(attrValue, articleUrl);
-          $elem.attr(attrName, processedSrcset);
-        } else {
-          // General handling for src, href, etc.
-          try {
-            const absoluteUrl = new URL(attrValue, articleUrl).href;
-            $elem.attr(attrName, absoluteUrl);
-          } catch {
-            console.error(
-              `Invalid URL for ${tagName} (${attrName}): ${attrValue}`,
-            );
-          }
-        }
-      }
-    });
-  });
-
-  // Serialize back the modified HTML
-  return $.html();
-};
-
-// Helper to process "srcset" attributes
-const processSrcset = (srcsetValue: string, baseUrl: string): string => {
-  const paths = srcsetValue.split(",");
-  const processedPaths = paths.map((path) => {
-    const [url, width] = path.trim().split(/\s+/);
-    if (!url) {
-      return path; // Fall back to the original value if the URL is invalid
-    }
-    try {
-      // Convert relative to absolute URL
-      const absoluteUrl = new URL(url, baseUrl).href;
-      return width ? `${absoluteUrl} ${width}` : absoluteUrl;
-    } catch {
-      console.error(`Invalid URL in srcset: ${url}`);
-      return path;
-    }
-  });
-  return processedPaths.join(", ");
-};
+import { rewriteLinks } from "./rewrite-links";
 
 export class FeedParser {
   private domainDelaySettings: Record<string, number> = {
@@ -167,7 +84,7 @@ export class FeedParser {
             source.url,
           publishedAt: new Date(item.published || Date.now()),
           updatedAt: new Date(item.updated || item.published || Date.now()),
-          content: fixupLinks(
+          content: rewriteLinks(
             item.content ?? item.description ?? "",
             item.url ?? "",
           ),
