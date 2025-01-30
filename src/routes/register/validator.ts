@@ -1,28 +1,18 @@
-import { z } from "zod";
+import * as v from "valibot";
 
 const allowedEmails =
   process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
-export const registerRequestValidator = z
-  .object({
-    username: z.string(),
-    email: z.string().email(),
-    password: z.string(),
-    passwordConfirm: z.string(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.password !== data.passwordConfirm) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Passwords don't match",
-        path: ["passwordConfirm"],
-      });
-    }
 
-    if (allowedEmails.length > 0 && !allowedEmails.includes(data.email)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Email not allowed",
-        path: ["email"],
-      });
-    }
-  });
+export const registerRequestValidator = v.pipe(
+  v.strictObject({
+    username: v.string(),
+    email: v.pipe(
+      v.string(),
+      v.email(),
+      allowedEmails.length > 0 ? v.picklist(allowedEmails) : v.trim(),
+    ),
+    password: v.string(),
+    passwordConfirm: v.string(),
+  }),
+  v.check((input) => input.password === input.passwordConfirm),
+);

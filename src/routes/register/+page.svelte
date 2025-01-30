@@ -1,10 +1,10 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { z } from "zod";
+  import * as v from "valibot";
 
-  const RegisterResponse = z.object({
-    success: z.boolean(),
-    error: z.string().optional().nullable(),
+  const RegisterResponse = v.strictObject({
+    success: v.boolean(),
+    error: v.optional(v.nullable(v.string())),
   });
 
   let username = "";
@@ -33,7 +33,7 @@
       });
 
       console.log("Response status:", res.status);
-      const result = RegisterResponse.safeParse(await res.json());
+      const result = v.safeParse(RegisterResponse, await res.json());
       console.log("Response data:", result);
 
       if (!result.success) {
@@ -45,7 +45,7 @@
         await goto("/login");
       } else {
         validationMessage =
-          result.data.error || "Registration failed. Please try again.";
+          result.issues || "Registration failed. Please try again.";
       }
     } catch (error) {
       validationMessage = "An error occurred. Please try again later.";

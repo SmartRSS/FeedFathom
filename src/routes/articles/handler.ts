@@ -1,11 +1,11 @@
 import { json } from "@sveltejs/kit";
 import type { ValidatedRequestEvent } from "../../app";
-import type { DeleteArticlesBody } from "./delete-validator";
+import type { DeleteArticles } from "./validator";
 
 export const deleteArticlesHandler = async ({
   locals,
   request,
-}: ValidatedRequestEvent<DeleteArticlesBody>) => {
+}: ValidatedRequestEvent<DeleteArticles>) => {
   await locals.dependencies.articlesRepository.removeUserArticles(
     request.body.removedArticleIdList,
     locals.user.id,

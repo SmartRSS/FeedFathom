@@ -1,11 +1,11 @@
 import { json } from "@sveltejs/kit";
 import type { ValidatedRequestEvent } from "../../app";
-import type { DeleteFolderBody } from "./delete-validator";
+import type { DeleteFolder } from "./validator";
 
 export const deleteFolderHandler = async ({
   locals,
   request,
-}: ValidatedRequestEvent<DeleteFolderBody>) => {
+}: ValidatedRequestEvent<DeleteFolder>) => {
   await locals.dependencies.foldersRepository.removeUserFolder(
     locals.user.id,
     request.body.removeFolderId,

@@ -1,7 +1,7 @@
 import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 import { createRequestHandler } from "$lib/create-request-handler";
-import { deleteArticlesValidator } from "./delete-validator";
-import { deleteArticlesHandler } from "./delete-handler";
+import { DeleteArticles } from "./validator";
+import { deleteArticlesHandler } from "./handler";
 
 function isValidSourcesArray(sources: unknown): sources is number[] {
   return (
@@ -27,6 +27,6 @@ export const GET: RequestHandler = async ({ url, locals }: RequestEvent) => {
 };
 
 export const DELETE: RequestHandler = createRequestHandler(
-  deleteArticlesValidator,
+  DeleteArticles,
   deleteArticlesHandler,
 );

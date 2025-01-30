@@ -1,7 +1,9 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-export const subscribeRequestBodyValidator = z.object({
-  sourceUrl: z.string(),
-  sourceName: z.string(),
-  sourceFolder: z.union([z.number(), z.null()]),
+export const SubscribeRequest = v.strictObject({
+  sourceUrl: v.string(),
+  sourceName: v.string(),
+  sourceFolder: v.union([v.number(), v.null()]),
 });
+
+export type SubscribeRequest = v.InferOutput<typeof SubscribeRequest>;
