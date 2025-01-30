@@ -1,7 +1,7 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-export const deleteSourceValidator = z.object({
-  removeSourceId: z.number(),
+export const DeleteSource = v.strictObject({
+  removeSourceId: v.number(),
 });
 
-export type DeleteSourceBody = z.infer<typeof deleteSourceValidator>;
+export type DeleteSource = v.InferOutput<typeof DeleteSource>;

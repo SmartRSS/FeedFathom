@@ -1,12 +1,11 @@
 import { json } from "@sveltejs/kit";
 import type { ValidatedRequestEvent } from "../../app";
-import type { subscribeRequestBodyValidator } from "./validator";
-import { z } from "zod";
+import { SubscribeRequest } from "./validator";
 
 export const subscribeHandler = async ({
   request,
   locals,
-}: ValidatedRequestEvent<z.infer<typeof subscribeRequestBodyValidator>>) => {
+}: ValidatedRequestEvent<SubscribeRequest>) => {
   const { sourceUrl, sourceName, sourceFolder } = request.body;
   const preview = sourceUrl.includes("@")
     ? null

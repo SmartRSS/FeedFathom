@@ -1,11 +1,11 @@
 import { json } from "@sveltejs/kit";
 import type { ValidatedRequestEvent } from "../../app";
-import type { DeleteSourceBody } from "./validator";
+import { DeleteSource } from "./validator";
 
 export const deleteSourceHandler = async ({
   locals,
   request,
-}: ValidatedRequestEvent<DeleteSourceBody>) => {
+}: ValidatedRequestEvent<DeleteSource>) => {
   if (!locals.user) {
     return json([]);
   }

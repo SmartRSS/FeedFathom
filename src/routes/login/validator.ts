@@ -1,6 +1,7 @@
-import { z } from "zod";
-
-export const loginRequestValidator = z.object({
-  email: z.string().email(),
-  password: z.string(),
+import * as v from "valibot";
+export const LoginRequest = v.strictObject({
+  email: v.pipe(v.string(), v.email()),
+  password: v.string(),
 });
+
+export type LoginRequest = v.InferOutput<typeof LoginRequest>;

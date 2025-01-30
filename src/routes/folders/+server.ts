@@ -1,7 +1,7 @@
 import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 import { createRequestHandler } from "$lib/create-request-handler";
-import { deleteFolderValidator } from "./delete-validator";
-import { deleteFolderHandler } from "./delete-handler";
+import { DeleteFolder } from "./validator";
+import { deleteFolderHandler } from "./handler";
 
 export const GET: RequestHandler = async ({ locals }: RequestEvent) => {
   try {
@@ -20,6 +20,6 @@ export const GET: RequestHandler = async ({ locals }: RequestEvent) => {
 };
 
 export const DELETE: RequestHandler = createRequestHandler(
-  deleteFolderValidator,
+  DeleteFolder,
   deleteFolderHandler,
 );
