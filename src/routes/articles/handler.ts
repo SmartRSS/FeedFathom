@@ -4,12 +4,12 @@ import type { DeleteArticles } from "./validator";
 
 export const deleteArticlesHandler = async ({
   locals,
-  request,
+  body,
 }: ValidatedRequestEvent<DeleteArticles>) => {
   await locals.dependencies.articlesRepository.removeUserArticles(
-    request.body.removedArticleIdList,
+    body.removedArticleIdList,
     locals.user.id,
   );
 
-  return json(request.body.removedArticleIdList);
+  return json(body.removedArticleIdList);
 };
