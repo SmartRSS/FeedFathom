@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    user: "${_UID}:${_GID}"
     volumes:
       - ./:/app/
     command: ["run", "watch-server"]
@@ -17,6 +18,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    user: "${_UID}:${_GID}"
     volumes:
       - ./:/app/
     command: ["run", "watch-worker"]
@@ -26,6 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    user: "${_UID}:${_GID}"
     volumes:
       - ./:/app/
     command: ["run", "watch-worker"]
@@ -36,6 +39,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    user: "${_UID}:${_GID}"
     volumes:
       - ./:/app/
     command: ["run", "watch-worker"]
