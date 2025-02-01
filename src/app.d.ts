@@ -19,7 +19,7 @@ declare global {
 }
 
 export interface ValidatedRequestEvent<T> extends RequestEvent {
-  request: Omit<Request, "body"> & { body: T };
+  body: T;
 }
 
 export type UnauthenticatedRequestEvent = ValidatedRequestEvent & {

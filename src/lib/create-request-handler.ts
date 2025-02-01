@@ -10,6 +10,8 @@ export function createRequestHandler<T extends v.GenericSchema>(
 ): (event: RequestEvent) => Promise<Response> {
   return async (event: RequestEvent) => {
     const request = event.request;
+    console.log(request);
+    console.log("!!!!!!!!!!");
 
     const parseResult = v.safeParse(schema, await request.json());
     if (!parseResult.success) {
@@ -18,9 +20,10 @@ export function createRequestHandler<T extends v.GenericSchema>(
         { status: 400 },
       );
     }
+
     return handler({
       ...event,
-      request: { ...event.request, body: parseResult.output },
+      body: parseResult.output,
     } as ValidatedRequestEvent<v.InferOutput<T>>);
   };
 }

@@ -3,22 +3,22 @@ import type { ValidatedRequestEvent } from "../../app";
 import { SubscribeRequest } from "./validator";
 
 export const subscribeHandler = async ({
-  request,
+  body,
   locals,
+  url,
 }: ValidatedRequestEvent<SubscribeRequest>) => {
-  const { sourceUrl, sourceName, sourceFolder } = request.body;
+  const { sourceUrl, sourceName, sourceFolder } = body;
   const preview = sourceUrl.includes("@")
     ? null
     : await locals.dependencies.feedParser.preview(sourceUrl);
   if (!preview && !sourceUrl.includes("@")) {
     return json(false);
   }
-
   await locals.dependencies.userSourcesRepository.addSourceToUser(
     locals.user.id,
     {
       url: sourceUrl,
-      homeUrl: preview?.link ?? new URL(request.url).origin,
+      homeUrl: preview?.link ?? url.origin,
       parentId: sourceFolder,
       name: sourceName,
     },

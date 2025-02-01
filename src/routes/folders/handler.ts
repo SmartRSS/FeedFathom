@@ -4,12 +4,12 @@ import type { DeleteFolder } from "./validator";
 
 export const deleteFolderHandler = async ({
   locals,
-  request,
+  body,
 }: ValidatedRequestEvent<DeleteFolder>) => {
   await locals.dependencies.foldersRepository.removeUserFolder(
     locals.user.id,
-    request.body.removeFolderId,
+    body.removeFolderId,
   );
 
-  return json(request.body.removeFolderId);
+  return json(body.removeFolderId);
 };
