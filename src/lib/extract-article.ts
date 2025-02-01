@@ -17,9 +17,11 @@ const displayModeToExtractor = {
 const window = new JSDOM("").window;
 const purify = DOMPurify(window);
 
-const getContent = async (content: string | null | undefined,
+const getContent = async (
+  content: string | null | undefined,
   articleUrl: string,
-  displayMode: DisplayMode,) => {
+  displayMode: DisplayMode,
+) => {
   if (displayMode === DisplayMode.FEED) {
     return purify.sanitize(content ?? "");
   }
@@ -29,7 +31,7 @@ const getContent = async (content: string | null | undefined,
   }
   const originalContent = response.data;
   return purify.sanitize(originalContent);
-}
+};
 
 export const extractArticle = async (
   content: string | null | undefined,
