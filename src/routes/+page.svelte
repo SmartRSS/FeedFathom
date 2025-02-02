@@ -45,13 +45,13 @@
       history.back();
       return true;
     }
-    // history.pushState({}, "", new URL(window.location.href));
+
     if (focusedColumn === ".articles-column") {
-      focusedColumn = ".sources-column";
-      return false;
+      setFocusTo(".sources-column");
+      return;
     }
-    focusedColumn = ".articles-column";
-    return false;
+    setFocusTo(".articles-column");
+    return;
   }
 
   const isMobile = () => {
@@ -62,10 +62,7 @@
   };
 
   onMount(() => {
-    if (isMobile()) {
-      history.pushState({}, "", new URL(window.location.href));
-      window.addEventListener("popstate", handleBackButton);
-    }
+    window.addEventListener("popstate", handleBackButton);
   });
 
   function setFocusTo(selector: FocusTarget) {
