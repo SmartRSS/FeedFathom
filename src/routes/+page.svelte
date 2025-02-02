@@ -38,27 +38,19 @@
   let tree = $state(data.tree);
 
   function handleBackButton() {
-    console.log("Back button pressed");
-    console.log("Is mobile:", isMobile());
-    console.log("Current focused column:", focusedColumn);
-
     if (!isMobile()) {
-      console.log("Not a mobile device, returning true");
       return true;
     }
     if (focusedColumn === ".sources-column") {
-      console.log("Navigating back in history");
       history.back();
       return true;
     }
-    history.pushState({}, "", new URL(window.location.href));
+    // history.pushState({}, "", new URL(window.location.href));
     if (focusedColumn === ".articles-column") {
       focusedColumn = ".sources-column";
-      console.log("Switched to sources column");
       return false;
     }
     focusedColumn = ".articles-column";
-    console.log("Switched to articles column");
     return false;
   }
 
@@ -70,20 +62,16 @@
   };
 
   onMount(() => {
-    // for some unknown reason this doesn't work right when I remove logs
-    console.log("onMount executed");
     if (isMobile()) {
       history.pushState({}, "", new URL(window.location.href));
-      console.log(
-        "pushState executed with URL:",
-        new URL(window.location.href),
-      );
       window.addEventListener("popstate", handleBackButton);
-      console.log("popstate event listener added");
     }
   });
 
   function setFocusTo(selector: FocusTarget) {
+    if (focusedColumn !== ".content-column") {
+      history.pushState({}, "", new URL(window.location.href));
+    }
     focusedColumn = selector;
   }
 
