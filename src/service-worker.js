@@ -17,6 +17,8 @@ self.addEventListener("install", (event) => {
   }
 
   event.waitUntil(addFilesToCache());
+  console.log("Cache saved");
+  console.log(ASSETS);
 });
 
 self.addEventListener("activate", (event) => {
@@ -28,6 +30,7 @@ self.addEventListener("activate", (event) => {
   }
 
   event.waitUntil(deleteOldCaches());
+  console.log("Old cache pruned");
 });
 
 self.addEventListener("fetch", (event) => {
@@ -58,7 +61,7 @@ self.addEventListener("fetch", (event) => {
         throw new Error("invalid response from fetch");
       }
 
-      if (response.status === 200) {
+      if (response.ok) {
         cache.put(event.request, response.clone());
       }
 
