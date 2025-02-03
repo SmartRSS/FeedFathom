@@ -6,14 +6,12 @@ import {
 import * as mailParser from "mailparser";
 import type { Source } from "../../types/source-types";
 import type { Article } from "../../types/article.type";
-import crypto from "node:crypto";
 import stream from "node:stream/promises";
 import { err } from "../../util/log";
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { ArticleRepository } from "$lib/db/article-repository";
 
 export interface MailWorkerConfig {
-  port: number;
   maxSize?: number | undefined; // in bytes
   hostname?: string | undefined;
   allowedDomains?: string[] | undefined;
@@ -29,10 +27,6 @@ export class MailWorker {
     config: Partial<MailWorkerConfig> = {},
   ) {
     this.config = {
-      port:
-        typeof config.port === "string"
-          ? parseInt(config.port, 10)
-          : (config.port ?? 25),
       maxSize: config.maxSize ?? 10 * 1024 * 1024,
       hostname: config.hostname,
       allowedDomains: config.allowedDomains,
@@ -43,63 +37,80 @@ export class MailWorker {
     this.server = new SMTPServer({
       size: this.config.maxSize,
       disabledCommands: ["AUTH"],
-      onRcptTo(
+      onRcptTo: async (
         _address: SMTPServerAddress,
         _session: SMTPServerSession,
         callback: (err?: Error) => void,
-      ) {
-        // Accept all recipient addresses
-        callback();
+      ) => {
+        try {
+          const source = await this.sourcesRepository.getSourceByAddress(
+            _address.address,
+          );
+          if (!source) {
+            return callback(new Error("Unknown recipient"));
+          }
+          return callback();
+        } catch (error: unknown) {
+          return callback(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
       },
       onData: async (emailStream, session, callback) => {
         try {
           if (emailStream.sizeExceeded) {
             err("Email size limit exceeded");
-            callback(new Error("Email size limit exceeded"));
-            return;
+            return callback(new Error("Email size limit exceeded"));
           }
 
           const email = await mailParser.simpleParser(emailStream);
 
-          const senderAddress = session.envelope.mailFrom as SMTPServerAddress;
-          console.log(`Processing email from: ${senderAddress.address}`);
-
+          const senderAddress = session.envelope.mailFrom;
+          if (!senderAddress) {
+            return callback(new Error("Unknown sender"));
+          }
           const recipientMails = await this.extractRecipientAddresses(email);
+          if (recipientMails.length > 10) {
+            return callback(new Error("Too many recipients"));
+          }
 
           const sources = (
             await Promise.all(
               recipientMails.map(async (address) => {
-                // const [_feedExternalId, _hostname] = address.split("@");
-                // if (hostname !== application.configuration.hostname) return [];
                 return await this.sourcesRepository.getSourceByAddress(address);
               }),
             )
           ).filter((source): source is Source => source !== undefined);
           if (sources.length === 0) {
-            return;
+            return callback(new Error("No recipients known"));
           }
+          const articles = [];
+
           for (const feed of sources) {
-            const art = this.createArticleFromEmail(
+            const article = this.createArticleFromEmail(
               email,
               feed.id,
               senderAddress.address,
             );
-            await this.articlesRepository.batchUpsertArticles([art]);
+            articles.push(article);
           }
-        } catch (error: unknown) {
-          err("Failed to process incoming email:", error);
-          callback(error instanceof Error ? error : new Error(String(error)));
-          return;
-        } finally {
+          await this.articlesRepository.batchUpsertArticles(articles);
           emailStream.resume();
           await stream.finished(emailStream);
-          callback();
+          return callback();
+        } catch (error: unknown) {
+          err("Failed to process incoming email:", error);
+          emailStream.resume();
+          await stream.finished(emailStream);
+          return callback(
+            error instanceof Error ? error : new Error(String(error)),
+          );
         }
       },
     });
 
-    this.server.listen(this.config.port, () => {
-      console.log(`Mail server listening on port ${this.config.port}`);
+    this.server.listen(25, () => {
+      console.log(`Mail server listening on port 25`);
     });
   }
 
@@ -125,21 +136,25 @@ export class MailWorker {
     sourceId: number,
     senderAddress: string,
   ): Omit<Article, "id"> {
-    const guid = crypto.randomUUID();
+    const guid = Bun.randomUUIDv7();
     return {
       url: `/article/${guid}`,
       sourceId,
       guid,
       title: email.subject ?? "Untitled",
       author: senderAddress,
-      publishedAt: new Date(),
+      publishedAt: email.date ?? new Date(),
       content: this.getEmailContent(email),
     };
   }
 
   private getEmailContent(email: mailParser.ParsedMail): string {
-    if (typeof email.html === "string") return email.html;
-    if (typeof email.textAsHtml === "string") return email.textAsHtml;
+    if (typeof email.html === "string") {
+      return email.html;
+    }
+    if (typeof email.textAsHtml === "string") {
+      return email.textAsHtml;
+    }
     return "No content.";
   }
 
