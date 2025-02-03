@@ -10,7 +10,7 @@ COPY *.js *.json *.ts bun.lock drizzle /app/
 RUN bun install --omit=dev --frozen-lockfile
 COPY static /app/static
 COPY src/ /app/src/
-RUN bun run build-server && bun run build-worker && \
+RUN bun --bun run build-server && bun --bun run build-worker && \
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
     echo "Build timestamp: $timestamp" && \
     echo "$timestamp" > /app/build/BUILD_TIME
