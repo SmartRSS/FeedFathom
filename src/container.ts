@@ -10,7 +10,7 @@ import { UserRepository } from "$lib/db/user-repository";
 import { OpmlParser } from "$lib/opml-parser";
 import { FeedParser } from "$lib/feed-parser";
 import { Queue } from "bullmq";
-import { drizzle, BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { drizzle, type BunSQLDatabase } from "drizzle-orm/bun-sql";
 import * as schema from "$lib/schema";
 import { UserSourceRepository } from "$lib/db/user-source-repository";
 import { ArticleRepository } from "$lib/db/article-repository";
