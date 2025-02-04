@@ -50,7 +50,7 @@
     }
   };
 
-  let valid = true;
+  let valid = $state(true);
 
   function isValid() {
     if (!passwordForm["password1"].value) {
@@ -101,7 +101,7 @@
       <input
         id="password1"
         name="password1"
-        on:change={isValid}
+        onchange={isValid}
         required
         type="password"
       />
@@ -111,7 +111,7 @@
       <input
         id="password2"
         name="password2"
-        on:change={isValid}
+        onchange={isValid}
         required
         type="password"
       />

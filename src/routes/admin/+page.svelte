@@ -9,7 +9,6 @@
 
   const { data } = $props();
   let sources: Source[] = $state(data.sources) as Source[]; // Define the type of sources
-  let sortBy = "created_at";
   let order = "asc";
 
   const fetchSortedSources = async (field: string) => {
@@ -22,7 +21,6 @@
   };
 
   const sortSources = (field: string) => {
-    sortBy = field;
     order = order === "asc" ? "desc" : "asc"; // Toggle order
     fetchSortedSources(field);
   };

@@ -1,4 +1,4 @@
-import { json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 
 type SortField =
   | "url"
@@ -7,7 +7,7 @@ type SortField =
   | "last_attempt"
   | "last_success";
 
-export const GET = async ({ locals, url }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
   const sortBy: SortField =
     (url.searchParams.get("sortBy") as SortField) || "created_at"; // Default sort field
   const order: "asc" | "desc" =

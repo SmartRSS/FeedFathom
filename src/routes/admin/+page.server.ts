@@ -1,6 +1,7 @@
 import { error, redirect } from "@sveltejs/kit";
+import type { PageServerLoad } from "../$types";
 
-export const load = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   const user = locals.user; // Assuming user info is stored in locals
   if (!user.isAdmin) {
     return redirect(302, "/");
