@@ -10,7 +10,8 @@ type SortField =
   | "subscriber_count"
   | "created_at"
   | "last_attempt"
-  | "last_success";
+  | "last_success"
+  | "recent_failures";
 
 export class SourcesRepository {
   constructor(

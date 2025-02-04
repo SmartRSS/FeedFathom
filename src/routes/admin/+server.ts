@@ -5,7 +5,8 @@ type SortField =
   | "subscriber_count"
   | "created_at"
   | "last_attempt"
-  | "last_success";
+  | "last_success"
+  | "recent_failures";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const sortBy: SortField =
