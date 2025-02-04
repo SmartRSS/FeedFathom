@@ -19,7 +19,7 @@ export const GET = async ({ locals, url }) => {
       order,
     );
     return json(sources);
-  } catch (error) {
+  } catch {
     return json({ error: "Failed to fetch sources" }, { status: 500 });
   }
 };

@@ -5,7 +5,7 @@ export class Cli {
 
   async execute(command: string, arg: string[]) {
     switch (command) {
-      case "make-admin":
+      case "make-admin": {
         const email = arg[0];
         if (!email) {
           throw new Error("No email provided");
@@ -13,6 +13,7 @@ export class Cli {
         await this.usersRepository.makeAdmin(email);
         console.log(`User ${email} made admin`);
         break;
+      }
       default:
         process.exit(1);
     }
