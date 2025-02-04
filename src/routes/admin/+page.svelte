@@ -38,9 +38,9 @@
         <th onclick={() => sortSources("created_at")}>Created At</th>
         <th onclick={() => sortSources("last_attempt")}>Last Attempt</th>
         <th onclick={() => sortSources("last_success")}>Last Success</th>
-        <th onclick={() => sortSources("recent_failures")}>Failures</th>
         <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th
         >
+        <th onclick={() => sortSources("recent_failures")}>Failures</th>
         <th>Details</th>
       </tr>
     </thead>
