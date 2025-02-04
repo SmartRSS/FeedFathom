@@ -32,6 +32,8 @@ services:
     volumes:
       - ./:/app/
     command: ["run", "watch-worker"]
+    deploy:
+      replicas: 1
 
 
   mail:
