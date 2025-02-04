@@ -15,18 +15,46 @@
   const fetchSortedSources = async (field: string) => {
     const response = await fetch(`/admin?sortBy=${field}&order=${order}`);
     if (response.ok) {
-      sources = await response.json() as Source[]; // Update sources with the new data
+      sources = (await response.json()) as Source[]; // Update sources with the new data
     } else {
-      console.error('Failed to fetch sorted sources');
+      console.error("Failed to fetch sorted sources");
     }
   };
 
   const sortSources = (field: string) => {
     sortBy = field;
-    order = order === 'asc' ? 'desc' : 'asc'; // Toggle order
+    order = order === "asc" ? "desc" : "asc"; // Toggle order
     fetchSortedSources(field);
   };
 </script>
+
+<div class="table-container">
+  <h1>Admin Panel</h1>
+  <h2>Sources</h2>
+  <table>
+    <thead>
+      <tr>
+        <th onclick={() => sortSources("url")}>URL</th>
+        <th onclick={() => sortSources("created_at")}>Created At</th>
+        <th onclick={() => sortSources("last_attempt")}>Last Attempt</th>
+        <th onclick={() => sortSources("last_success")}>Last Success</th>
+        <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th
+        >
+      </tr>
+    </thead>
+    <tbody>
+      {#each sources as source}
+        <tr>
+          <td>{source["url"]}</td>
+          <td>{new Date(source["created_at"]).toISOString()}</td>
+          <td>{new Date(source["last_attempt"]).toISOString()}</td>
+          <td>{new Date(source["last_success"]).toISOString()}</td>
+          <td>{source["subscriber_count"]}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+</div>
 
 <style>
   h1 {
@@ -46,7 +74,8 @@
     max-width: 800px; /* Limit the width */
   }
 
-  th, td {
+  th,
+  td {
     padding: 12px 15px; /* Add padding */
     text-align: left;
     border: 1px solid #ddd; /* Add border */
@@ -77,30 +106,3 @@
     background-color: #fff; /* Background color */
   }
 </style>
-
-<div class="table-container">
-  <h1>Admin Panel</h1>
-  <h2>Sources</h2>
-  <table>
-    <thead>
-      <tr>
-        <th onclick={() => sortSources("url")}>URL</th>
-        <th onclick={() => sortSources("created_at")}>Created At</th>
-        <th onclick={() => sortSources("last_attempt")}>Last Attempt</th>
-        <th onclick={() => sortSources("last_success")}>Last Success</th>
-        <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each sources as source}
-        <tr>
-          <td>{source['url']}</td>
-          <td>{new Date(source['created_at']).toISOString()}</td>
-          <td>{new Date(source['last_attempt']).toISOString()}</td>
-          <td>{new Date(source['last_success']).toISOString()}</td>
-          <td>{source['subscriber_count']}</td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-</div>

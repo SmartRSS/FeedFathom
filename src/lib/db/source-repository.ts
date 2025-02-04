@@ -5,7 +5,12 @@ import { ulid } from "ulid";
 import type { Queue } from "bullmq";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-type SortField = 'url' | 'subscriber_count' | 'created_at' | 'last_attempt' | 'last_success';
+type SortField =
+  | "url"
+  | "subscriber_count"
+  | "created_at"
+  | "last_attempt"
+  | "last_success";
 
 export class SourcesRepository {
   constructor(
@@ -134,13 +139,18 @@ export class SourcesRepository {
     });
   }
 
-  public async listAllSources(
-    sortBy: SortField,
-    order: 'asc' | 'desc'
-  ) {
+  public async listAllSources(sortBy: SortField, order: "asc" | "desc") {
     // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
-    const validSortBy = ['subscriber_count', 'created_at', 'last_attempt', 'last_success', 'url'].includes(sortBy) ? sortBy : 'created_at';
-    const validOrder = order === 'asc' || order === 'desc' ? order : 'asc';
+    const validSortBy = [
+      "subscriber_count",
+      "created_at",
+      "last_attempt",
+      "last_success",
+      "url",
+    ].includes(sortBy)
+      ? sortBy
+      : "created_at";
+    const validOrder = order === "asc" || order === "desc" ? order : "asc";
 
     const query = `
         WITH subscriber_counts AS (

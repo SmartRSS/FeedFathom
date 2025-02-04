@@ -4,7 +4,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import crypto from "node:crypto";
 
 export class UserRepository {
-  constructor(private readonly drizzleConnection: BunSQLDatabase) { }
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async getUserCount(): Promise<number> {
     const result = await this.drizzleConnection

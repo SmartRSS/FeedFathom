@@ -11,8 +11,8 @@ export class Initializer {
     private readonly mainWorker: MainWorker,
     private readonly drizzleConnection: BunSQLDatabase,
     private readonly mailWorker: MailWorker,
-    private readonly cli: Cli
-  ) { }
+    private readonly cli: Cli,
+  ) {}
 
   public async initialize() {
     llog("init worker", process.env["INTEGRATION"]);

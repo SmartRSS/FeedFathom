@@ -103,7 +103,7 @@ export const load = async ({ locals }) => {
   const user = locals.user; // Assuming user info is stored in locals
 
   if (!user) {
-    throw error(401, 'Unauthorized');
+    throw error(401, "Unauthorized");
   }
 
   return {
