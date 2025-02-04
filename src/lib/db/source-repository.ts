@@ -97,13 +97,17 @@ export class SourcesRepository {
     return source;
   }
 
-  public async failSource(sourceId: number): Promise<void> {
+  public async failSource(
+    sourceId: number,
+    reason: string = "",
+  ): Promise<void> {
     try {
       await this.drizzleConnection
         .update(schema.sources)
         .set({
           lastAttempt: new Date(),
           recentFailures: sql`${schema.sources.recentFailures} + 1`,
+          recentFailureDetails: reason,
         })
         .where(eq(schema.sources.id, sourceId));
     } catch (e) {
@@ -119,6 +123,7 @@ export class SourcesRepository {
         lastAttempt: now,
         lastSuccess: now,
         recentFailures: 0,
+        recentFailureDetails: "",
       })
       .where(eq(schema.sources.id, sourceId));
   }
@@ -168,7 +173,8 @@ export class SourcesRepository {
             s.last_attempt,
             s.last_success,
             s.recent_failures,
-            COALESCE(sc.count, 0) AS subscriber_count
+            COALESCE(sc.count, 0) AS subscriber_count,
+            s.recent_failure_details
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
         ORDER BY ${validSortBy} ${validOrder}
