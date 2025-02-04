@@ -21,6 +21,7 @@ import { Initializer } from "$lib/workers/initializer";
 import { buildAxios } from "$lib/cacheable-axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import Redis from "ioredis";
+import { Cli } from "$lib/workers/cli";
 
 export interface Dependencies {
   axiosInstance: AxiosCacheInstance;
@@ -37,6 +38,7 @@ export interface Dependencies {
   mailWorker: MailWorker;
   initializer: Initializer;
   redis: Redis;
+  cli: Cli;
 }
 
 const ioRedisConnection = new Redis({
@@ -70,6 +72,7 @@ container.register({
   mainWorker: asClass(MainWorker).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
+  cli: asClass(Cli).singleton(),
   redis: asValue(ioRedisConnection),
 });
 

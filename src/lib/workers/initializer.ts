@@ -3,6 +3,7 @@ import type { MainWorker } from "$lib/workers/main";
 import type { MailWorker } from "$lib/workers/mail";
 import { err, llog } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { Cli } from "./cli";
 
 // Schedule the next task function definition with a config object
 export class Initializer {
@@ -10,10 +11,16 @@ export class Initializer {
     private readonly mainWorker: MainWorker,
     private readonly drizzleConnection: BunSQLDatabase,
     private readonly mailWorker: MailWorker,
-  ) {}
+    private readonly cli: Cli
+  ) { }
 
   public async initialize() {
     llog("init worker", process.env["INTEGRATION"]);
+    const [_, ___, command, ...arg] = process.argv;
+    if (command) {
+      await this.cli.execute(command, arg);
+      process.exit(0);
+    }
     switch (process.env["INTEGRATION"]) {
       case "migrator": {
         await this.runMigrator();
@@ -23,16 +30,12 @@ export class Initializer {
         this.mailWorker.initialize();
         break;
       }
-      case "singleton": {
-        // Singleton logic
-        break;
-      }
       case "worker": {
         await this.mainWorker.initialize();
         break;
       }
       default: {
-        err(`unknown integration: ${process.env["INTEGRATION"]}`);
+        console.error("Wrong integration");
         process.exit(1);
       }
     }
