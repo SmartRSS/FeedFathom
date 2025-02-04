@@ -11,6 +11,7 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import container from "../container";
 import type Redis from "ioredis";
 import { rewriteLinks } from "./rewrite-links";
+import { AxiosError } from "axios";
 
 export class FeedParser {
   private domainDelaySettings: Record<string, number> = {
@@ -133,10 +134,17 @@ export class FeedParser {
         err("parseSource", e);
       }
       llog("fail source");
-      await this.sourcesRepository.failSource(
-        source.id,
-        e instanceof Error ? e.message : String(e),
-      );
+      let message = "";
+      if (e instanceof AxiosError) {
+        message += e.cause + "\n";
+        message += e.code + "\n";
+        message += e.message + "\n";
+        message += e.response?.status + "\n";
+        message += e.response?.data;
+      } else {
+        message = e instanceof Error ? e.message : String(e);
+      }
+      await this.sourcesRepository.failSource(source.id, message);
       err(source.url + " failed");
       return;
     }
