@@ -5,6 +5,13 @@ import { ulid } from "ulid";
 import type { Queue } from "bullmq";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
+type SortField =
+  | "url"
+  | "subscriber_count"
+  | "created_at"
+  | "last_attempt"
+  | "last_success";
+
 export class SourcesRepository {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase,
@@ -130,5 +137,43 @@ export class SourcesRepository {
       url: url,
       homeUrl: payload.home_url,
     });
+  }
+
+  public async listAllSources(sortBy: SortField, order: "asc" | "desc") {
+    // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
+    const validSortBy = [
+      "subscriber_count",
+      "created_at",
+      "last_attempt",
+      "last_success",
+      "url",
+    ].includes(sortBy)
+      ? sortBy
+      : "created_at";
+    const validOrder = order === "asc" || order === "desc" ? order : "asc";
+
+    const query = `
+        WITH subscriber_counts AS (
+            SELECT
+                us.source_id,
+                COUNT(us.user_id) AS count
+            FROM user_sources AS us
+            GROUP BY us.source_id
+        )
+        SELECT
+            s.id,
+            s.url,
+            s.home_url,
+            s.created_at,
+            s.last_attempt,
+            s.last_success,
+            s.recent_failures,
+            COALESCE(sc.count, 0) AS subscriber_count
+        FROM sources AS s
+        LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
+        ORDER BY ${validSortBy} ${validOrder}
+    `;
+
+    return this.drizzleConnection.execute(query);
   }
 }

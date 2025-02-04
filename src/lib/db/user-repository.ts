@@ -34,6 +34,14 @@ export class UserRepository {
       .execute();
   }
 
+  public async makeAdmin(email: string) {
+    return await this.drizzleConnection
+      .update(schema.users)
+      .set({ isAdmin: true })
+      .where(eq(schema.users.email, email))
+      .execute();
+  }
+
   public async createSession(userId: number, userAgent?: string | null) {
     const uuid = crypto.randomUUID();
     await this.drizzleConnection.insert(schema.sessions).values({

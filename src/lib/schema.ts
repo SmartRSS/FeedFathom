@@ -7,6 +7,7 @@ import {
   timestamp,
   unique,
   varchar,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -17,6 +18,7 @@ export const users = pgTable("users", {
   password: varchar("password").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
 export const sources = pgTable("sources", {

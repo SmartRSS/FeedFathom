@@ -1,6 +1,7 @@
-import { type Actions, json } from "@sveltejs/kit";
+import { type Actions, json, error } from "@sveltejs/kit";
 import { isPlainText } from "../../util/is-plain-text";
 import { err } from "../../util/log";
+import type { PageServerLoad } from "../$types";
 
 export const actions: Actions = {
   importOpml: async ({ request, locals }) => {
@@ -97,4 +98,16 @@ export const actions: Actions = {
       return json(e, { status: 500 });
     }
   },
+};
+
+export const load: PageServerLoad = async ({ locals }) => {
+  const user = locals.user; // Assuming user info is stored in locals
+
+  if (!user) {
+    throw error(401, "Unauthorized");
+  }
+
+  return {
+    user,
+  };
 };

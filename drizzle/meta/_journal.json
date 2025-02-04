@@ -29,6 +29,13 @@
       "when": 1734355683869,
       "tag": "0004_wet_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1738666361881,
+      "tag": "0005_dark_black_bolt",
+      "breakpoints": true
     }
   ]
 }
