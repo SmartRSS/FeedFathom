@@ -4,7 +4,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import crypto from "node:crypto";
 
 export class UserRepository {
-  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase) { }
 
   public async getUserCount(): Promise<number> {
     const result = await this.drizzleConnection
@@ -31,6 +31,14 @@ export class UserRepository {
       .update(schema.users)
       .set({ password: passwordHash })
       .where(eq(schema.users.id, userId))
+      .execute();
+  }
+
+  public async makeAdmin(email: string) {
+    return await this.drizzleConnection
+      .update(schema.users)
+      .set({ isAdmin: true })
+      .where(eq(schema.users.email, email))
       .execute();
   }
 

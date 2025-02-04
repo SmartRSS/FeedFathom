@@ -5,6 +5,10 @@
   import { isMimeText } from "../../util/is-mime-text";
   import { isPlainText } from "../../util/is-plain-text";
 
+  // Access props directly
+  const { data } = $props();
+  const { user } = data;
+
   const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
     const file = (formData as FormData).get("opml") as File;
     if (!file) {
@@ -63,6 +67,9 @@
 
 <div class="form-container">
   <a class="close-button" href="/">X</a>
+  {#if user.isAdmin}
+    <a href="/admin">Admin Panel</a> <!-- Link to the admin panel -->
+  {/if}
   <form
     action="?/importOpml"
     class="import-form"

@@ -5,6 +5,8 @@ import { ulid } from "ulid";
 import type { Queue } from "bullmq";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
+type SortField = 'url' | 'subscriber_count' | 'created_at' | 'last_attempt' | 'last_success';
+
 export class SourcesRepository {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase,
@@ -133,11 +135,11 @@ export class SourcesRepository {
   }
 
   public async listAllSources(
-    sortBy: 'subscriberCount' | 'createdAt' | 'lastAttempt' | 'lastSuccess' | 'url' = 'createdAt',
-    order: 'asc' | 'desc' = 'asc'
+    sortBy: SortField,
+    order: 'asc' | 'desc'
   ) {
     // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
-    const validSortBy = ['subscriberCount', 'createdAt', 'lastAttempt', 'lastSuccess', 'url'].includes(sortBy) ? sortBy : 'createdAt';
+    const validSortBy = ['subscriber_count', 'created_at', 'last_attempt', 'last_success', 'url'].includes(sortBy) ? sortBy : 'created_at';
     const validOrder = order === 'asc' || order === 'desc' ? order : 'asc';
 
     const query = `
@@ -151,12 +153,12 @@ export class SourcesRepository {
         SELECT
             s.id,
             s.url,
-            s.home_url AS homeUrl,
-            s.created_at AS createdAt,
-            s.last_attempt AS lastAttempt,
-            s.last_success AS lastSuccess,
-            s.recent_failures AS recentFailures,
-            COALESCE(sc.count, 0) AS subscriberCount
+            s.home_url,
+            s.created_at,
+            s.last_attempt,
+            s.last_success,
+            s.recent_failures,
+            COALESCE(sc.count, 0) AS subscriber_count
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
         ORDER BY ${validSortBy} ${validOrder}
