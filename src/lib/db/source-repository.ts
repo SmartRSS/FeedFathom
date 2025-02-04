@@ -131,4 +131,37 @@ export class SourcesRepository {
       homeUrl: payload.home_url,
     });
   }
+
+  public async listAllSources(
+    sortBy: 'subscriberCount' | 'createdAt' | 'lastAttempt' | 'lastSuccess' | 'url' = 'createdAt',
+    order: 'asc' | 'desc' = 'asc'
+  ) {
+    // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
+    const validSortBy = ['subscriberCount', 'createdAt', 'lastAttempt', 'lastSuccess', 'url'].includes(sortBy) ? sortBy : 'createdAt';
+    const validOrder = order === 'asc' || order === 'desc' ? order : 'asc';
+
+    const query = `
+        WITH subscriber_counts AS (
+            SELECT
+                us.source_id,
+                COUNT(us.user_id) AS count
+            FROM user_sources AS us
+            GROUP BY us.source_id
+        )
+        SELECT
+            s.id,
+            s.url,
+            s.home_url AS homeUrl,
+            s.created_at AS createdAt,
+            s.last_attempt AS lastAttempt,
+            s.last_success AS lastSuccess,
+            s.recent_failures AS recentFailures,
+            COALESCE(sc.count, 0) AS subscriberCount
+        FROM sources AS s
+        LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
+        ORDER BY ${validSortBy} ${validOrder}
+    `;
+
+    return this.drizzleConnection.execute(query);
+  }
 }
