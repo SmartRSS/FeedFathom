@@ -6,7 +6,7 @@
     last_success: string; // or Date
     subscriber_count: number;
     recent_failure_details: string;
-    recent_failures: number;
+    failures: number;
   }
 
   const { data } = $props();
@@ -40,7 +40,7 @@
         <th onclick={() => sortSources("last_success")}>Last Success</th>
         <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th
         >
-        <th onclick={() => sortSources("recent_failures")}>Failures</th>
+        <th onclick={() => sortSources("failures")}>Failures</th>
         <th>Details</th>
       </tr>
     </thead>
@@ -52,7 +52,7 @@
           <td>{new Date(source["last_attempt"]).toISOString()}</td>
           <td>{new Date(source["last_success"]).toISOString()}</td>
           <td>{source["subscriber_count"]}</td>
-          <td>{source["recent_failures"]}</td>
+          <td>{source["failures"]}</td>
           <td>{source["recent_failure_details"]}</td>
         </tr>
       {/each}

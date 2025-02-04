@@ -11,7 +11,7 @@ type SortField =
   | "created_at"
   | "last_attempt"
   | "last_success"
-  | "recent_failures";
+  | "failures";
 
 export class SourcesRepository {
   constructor(
@@ -173,7 +173,7 @@ export class SourcesRepository {
             s.created_at,
             s.last_attempt,
             s.last_success,
-            s.recent_failures,
+            COALESCE(s.recent_failures, 0) as failures,
             COALESCE(sc.count, 0) AS subscriber_count,
             s.recent_failure_details
         FROM sources AS s

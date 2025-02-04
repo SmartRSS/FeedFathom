@@ -6,7 +6,7 @@ type SortField =
   | "created_at"
   | "last_attempt"
   | "last_success"
-  | "recent_failures";
+  | "failures";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const sortBy: SortField =
