@@ -36,6 +36,13 @@
       "when": 1738666361881,
       "tag": "0005_dark_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1738702222777,
+      "tag": "0006_early_roughhouse",
+      "breakpoints": true
     }
   ]
 }

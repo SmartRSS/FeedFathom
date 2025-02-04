@@ -5,6 +5,7 @@
     last_attempt: string; // or Date
     last_success: string; // or Date
     subscriber_count: number;
+    recent_failure_details: string;
   }
 
   const { data } = $props();
@@ -38,6 +39,7 @@
         <th onclick={() => sortSources("last_success")}>Last Success</th>
         <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th
         >
+        <th>Details</th>
       </tr>
     </thead>
     <tbody>
@@ -48,6 +50,7 @@
           <td>{new Date(source["last_attempt"]).toISOString()}</td>
           <td>{new Date(source["last_success"]).toISOString()}</td>
           <td>{source["subscriber_count"]}</td>
+          <td>{source["recent_failure_details"]}</td>
         </tr>
       {/each}
     </tbody>
@@ -99,8 +102,9 @@
 
   .table-container {
     padding: 20px; /* Add padding around the table */
-    border-radius: 8px; /* Rounded corners */
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
-    background-color: #fff; /* Background color */
+    min-height: 100%;
+    height: 100%;
+    max-height: 100%;
+    overflow: auto;
   }
 </style>

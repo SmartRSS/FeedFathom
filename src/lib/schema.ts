@@ -31,6 +31,7 @@ export const sources = pgTable("sources", {
   lastSuccess: timestamp("last_success"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  recentFailureDetails: varchar("recent_failure_details").notNull().default(""),
 });
 
 export const userFolders = pgTable("user_folders", {

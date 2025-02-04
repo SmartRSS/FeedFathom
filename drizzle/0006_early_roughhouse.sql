@@ -1,0 +1,1 @@
+ALTER TABLE "sources" ADD COLUMN "recent_failure_details" varchar DEFAULT '' NOT NULL;

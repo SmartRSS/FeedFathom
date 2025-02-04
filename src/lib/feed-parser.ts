@@ -65,7 +65,10 @@ export class FeedParser {
       const parsedFeed = await this.parseUrl(source.url);
       if (!parsedFeed) {
         llog("fail source");
-        await this.sourcesRepository.failSource(source.id);
+        await this.sourcesRepository.failSource(
+          source.id,
+          "Unknown parsing error",
+        );
         return;
       }
 
@@ -130,7 +133,10 @@ export class FeedParser {
         err("parseSource", e);
       }
       llog("fail source");
-      await this.sourcesRepository.failSource(source.id);
+      await this.sourcesRepository.failSource(
+        source.id,
+        e instanceof Error ? e.message : String(e),
+      );
       err(source.url + " failed");
       return;
     }
