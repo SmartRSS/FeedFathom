@@ -153,6 +153,7 @@ export class SourcesRepository {
       "last_attempt",
       "last_success",
       "url",
+      "failures",
     ].includes(sortBy)
       ? sortBy
       : "created_at";
