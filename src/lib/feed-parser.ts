@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as dns from "node:dns";
 
 import { parseFeed } from "@rowanmanning/feed-parser";
 import type { Feed } from "@rowanmanning/feed-parser/lib/feed/base";
@@ -66,10 +67,6 @@ export class FeedParser {
       const parsedFeed = await this.parseUrl(source.url);
       if (!parsedFeed) {
         llog("fail source");
-        await this.sourcesRepository.failSource(
-          source.id,
-          "Unknown parsing error",
-        );
         return;
       }
 
@@ -196,11 +193,21 @@ export class FeedParser {
   }
 
   private async parseGenericFeed(url: string) {
+    const urlObject = new URL(url);
+    const addrs = await dns.promises.resolve4(urlObject.hostname, {
+      ttl: true,
+    });
+    if (!addrs.length) {
+      throw new Error(`Failed to resolve ${urlObject.hostname}`);
+    }
+
     const response = await this.axiosInstance.get(url);
 
     if (response.status !== 200) {
       err(`failed to load data for ${url}`);
-      return;
+      throw new Error(
+        `Failed to load data for ${url}, received status ${response.status}`,
+      );
     }
     return parseFeed(response.data);
   }

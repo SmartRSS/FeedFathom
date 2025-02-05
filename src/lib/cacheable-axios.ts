@@ -33,6 +33,9 @@ function getBuildTime(): string {
 
 const cachedBuildTimestamp = getBuildTime();
 
+// Add a constant for maximum retries
+const MAX_RETRIES = 1;
+
 export const buildAxios = (redis: Redis) => {
   const axiosInstance: AxiosInstance = Axios.create({
     headers: { "Accept-Encoding": "gzip, deflate" },
@@ -41,25 +44,60 @@ export const buildAxios = (redis: Redis) => {
     }),
   });
 
-  axiosInstance.interceptors.request.use((config) => {
-    if (!config.url) {
-      return config;
-    }
-    try {
-      const url = new URL(config.url);
-      if (browserUasOrigins.includes(url.origin)) {
-        config.headers?.setUserAgent(browserUserAgent);
-      } else {
-        config.headers?.setUserAgent(
-          `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
-        );
+  axiosInstance.interceptors.request.use(
+    async (config) => {
+      if (!config.url) {
+        return config;
       }
+      try {
+        const url = new URL(config.url);
+        if (browserUasOrigins.includes(url.origin)) {
+          config.headers["User-Agent"] = browserUserAgent; // Set User-Agent
+        } else {
+          config.headers["User-Agent"] =
+            `SmartRSS/FeedFathom ${cachedBuildTimestamp}`;
+        }
 
-      return config;
-    } catch {
-      return config;
-    }
-  });
+        return config;
+      } catch {
+        return config;
+      }
+    },
+    async (error) => {
+      const config = error.config;
+      const originalUserAgent = config.headers["User-Agent"];
+
+      // Check if the request was not already using the browser User-Agent
+      if (
+        error.code === "ECONNREFUSED" &&
+        originalUserAgent !== browserUserAgent &&
+        config.__retryCount < MAX_RETRIES
+      ) {
+        config.__retryCount = config.__retryCount || 0;
+        config.__retryCount += 1;
+
+        await Bun.sleep(2000); // Wait for 2 seconds before retrying
+        config.headers["User-Agent"] = browserUserAgent; // Set to browser User-Agent
+
+        const response = await axiosInstance.request(config); // Retry the request
+
+        // Check the response status
+        if (response.status >= 200 && response.status < 400) {
+          // Update the browserUasOrigins array if the request succeeds
+          const url = new URL(config.url);
+          if (!browserUasOrigins.includes(url.origin)) {
+            browserUasOrigins.push(url.origin);
+          }
+          return response; // Return the successful response
+        } else {
+          return Promise.reject(
+            new Error(`Request failed with status ${response.status}`),
+          );
+        }
+      }
+      return Promise.reject(error);
+    },
+  );
 
   const redisStorage = buildStorage({
     async find(key) {
@@ -70,9 +108,10 @@ export const buildAxios = (redis: Redis) => {
       return JSON.parse(cachedValue) as StorageValue;
     },
     async set(key, value, req) {
+      const currentTime = Date.now();
       const ttl =
         value.state === "loading"
-          ? Date.now() +
+          ? currentTime +
             (req?.cache && typeof req.cache.ttl === "number"
               ? req.cache.ttl
               : 60000)
@@ -81,16 +120,14 @@ export const buildAxios = (redis: Redis) => {
             ? value.createdAt + value.ttl!
             : undefined;
 
-      if (ttl) {
-        await redis.set(
-          `axios-cache-${key}`,
-          JSON.stringify(value),
-          "PX",
-          ttl - Date.now(),
-        );
-      } else {
-        await redis.set(`axios-cache-${key}`, JSON.stringify(value));
-      }
+      const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1800000;
+
+      await redis.set(
+        `axios-cache-${key}`,
+        JSON.stringify(value),
+        "PX",
+        validTtl,
+      );
     },
     async remove(key) {
       await redis.del(`axios-cache-${key}`);
