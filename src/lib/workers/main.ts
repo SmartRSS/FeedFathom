@@ -26,7 +26,7 @@ const SINGLETON_JOBS: readonly SingletonJobConfig[] = [
   {
     name: JobName.SINGLETON_TEST_JOB,
     delayMs: 10000,
-  }
+  },
 ] as const;
 
 export class MainWorker {
