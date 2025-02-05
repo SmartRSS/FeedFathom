@@ -194,10 +194,8 @@ export class FeedParser {
 
   private async parseGenericFeed(url: string) {
     const urlObject = new URL(url);
-    const addrs = await dns.promises.resolve4(urlObject.hostname, {
-      ttl: true,
-    });
-    if (!addrs.length) {
+    const lookupResult = await dns.promises.lookup(urlObject.hostname);
+    if (!lookupResult.address) {
       throw new Error(`Failed to resolve ${urlObject.hostname}`);
     }
 
