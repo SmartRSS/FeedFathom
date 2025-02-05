@@ -27,10 +27,6 @@ const SINGLETON_JOBS: readonly SingletonJobConfig[] = [
     name: JobName.SINGLETON_TEST_JOB,
     delayMs: 10000,
   },
-  {
-    name: JobName.SINGLETON_ANOTHER_TEST,
-    delayMs: 5000,
-  },
 ] as const;
 
 export class MainWorker {
@@ -161,12 +157,6 @@ export class MainWorker {
   private async executeSingletonJob(jobName: JobName) {
     switch (jobName) {
       case JobName.SINGLETON_TEST_JOB:
-        console.log("Running test job");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        break;
-      case JobName.SINGLETON_ANOTHER_TEST:
-        console.log("Running another test");
-        await new Promise((resolve) => setTimeout(resolve, 500));
         break;
       default:
         throw new Error(`No handler for singleton job: ${jobName}`);
@@ -200,7 +190,6 @@ export class MainWorker {
       }
 
       llog("finished processing ", job.name, job.id);
-      llog(await this.bullmqQueue.count(), "jobs left on queue");
       return true;
     } catch (error: unknown) {
       this.handleJobError(error, job);

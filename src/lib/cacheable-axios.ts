@@ -9,7 +9,7 @@ import {
 import Redis from "ioredis";
 import fs from "node:fs";
 import path from "path";
-import { err } from "../util/log";
+import { err, llog } from "../util/log";
 
 const browserUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
@@ -78,7 +78,7 @@ export const buildAxios = (redis: Redis) => {
 
         await Bun.sleep(2000); // Wait for 2 seconds before retrying
         config.headers["User-Agent"] = browserUserAgent; // Set to browser User-Agent
-
+        llog(`retrying request to ${config.url} with browser UAS`);
         const response = await axiosInstance.request(config); // Retry the request
 
         // Check the response status
@@ -88,13 +88,16 @@ export const buildAxios = (redis: Redis) => {
           if (!browserUasOrigins.includes(url.origin)) {
             browserUasOrigins.push(url.origin);
           }
+          llog("succeeded");
           return response; // Return the successful response
         } else {
+          llog("failed");
           return Promise.reject(
             new Error(`Request failed with status ${response.status}`),
           );
         }
       }
+      llog("failed");
       return Promise.reject(error);
     },
   );
