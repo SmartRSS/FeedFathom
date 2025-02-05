@@ -3,7 +3,7 @@ import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { TreeNode } from "../../types/source-types";
 
 import type { OpmlNode } from "../../types/opml-types";
-import { err, llog } from "../../util/log";
+import { err } from "../../util/log";
 import type { FolderRepository } from "$lib/db/folder-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -25,11 +25,11 @@ export class UserSourceRepository {
         url: schema.sources.url,
         homeUrl: schema.sources.homeUrl,
         unreadArticlesCount: sql<number>`(
-          coalesce(count(articles.id), 0) - 
-          coalesce(count(CASE 
-            WHEN user_articles.deleted_at IS NOT NULL 
-            OR user_articles.read_at >= articles.updated_at 
-            THEN 1 
+          coalesce(count(articles.id), 0) -
+          coalesce(count(CASE
+            WHEN user_articles.deleted_at IS NOT NULL
+            OR user_articles.read_at >= articles.updated_at
+            THEN 1
           END), 0)
         )::int`,
       })
@@ -147,8 +147,6 @@ export class UserSourceRepository {
   }
 
   public async cleanup() {
-    llog("attempting cleanup");
-    const startTime = new Date().valueOf();
     try {
       // Step 1: Clean up orphaned userArticles that belong to a user not subscribing their source anymore
       const subscribedSourceIds = this.drizzleConnection
@@ -202,7 +200,6 @@ export class UserSourceRepository {
               .from(schema.articles),
           ),
         );
-      llog("cleanup took ", new Date().valueOf() - startTime);
     } catch (e) {
       err("cleanup", e);
     }
