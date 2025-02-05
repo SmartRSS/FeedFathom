@@ -96,6 +96,19 @@ export class MainWorker {
   };
 
   private async setupScheduledTasks() {
+    // Retrieve existing scheduled jobs
+    const existingJobs = await this.bullmqQueue.getJobs();
+
+    // Define valid job names
+    const validJobNames = Object.values(JobName);
+
+    // Remove jobs that don't match the valid job names
+    for (const job of existingJobs) {
+      if (!validJobNames.includes(job.name)) {
+        await this.bullmqQueue.remove(job.id);
+      }
+    }
+
     await this.bullmqQueue.upsertJobScheduler(
       JobName.CLEANUP,
       {
