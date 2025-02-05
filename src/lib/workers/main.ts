@@ -202,7 +202,6 @@ export class MainWorker {
         await this.processRegularJob(job);
       }
 
-      llog("finished processing ", job.name, job.id);
       return true;
     } catch (error: unknown) {
       this.handleJobError(error, job);
