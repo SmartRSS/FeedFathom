@@ -3,5 +3,4 @@ export enum JobName {
   GATHER_JOBS = "gatherJobs",
   CLEANUP = "cleanup",
   SINGLETON_TEST_JOB = "SINGLETON:TEST_JOB",
-  SINGLETON_ANOTHER_TEST = "SINGLETON:ANOTHER_TEST",
 }
