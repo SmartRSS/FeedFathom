@@ -70,9 +70,10 @@ export const buildAxios = (redis: Redis) => {
       return JSON.parse(cachedValue) as StorageValue;
     },
     async set(key, value, req) {
+      const currentTime = Date.now();
       const ttl =
         value.state === "loading"
-          ? Date.now() +
+          ? currentTime +
             (req?.cache && typeof req.cache.ttl === "number"
               ? req.cache.ttl
               : 60000)
@@ -81,16 +82,14 @@ export const buildAxios = (redis: Redis) => {
             ? value.createdAt + value.ttl!
             : undefined;
 
-      if (ttl) {
-        await redis.set(
-          `axios-cache-${key}`,
-          JSON.stringify(value),
-          "PX",
-          ttl - Date.now(),
-        );
-      } else {
-        await redis.set(`axios-cache-${key}`, JSON.stringify(value));
-      }
+      const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1800000;
+
+      await redis.set(
+        `axios-cache-${key}`,
+        JSON.stringify(value),
+        "PX",
+        validTtl,
+      );
     },
     async remove(key) {
       await redis.del(`axios-cache-${key}`);
