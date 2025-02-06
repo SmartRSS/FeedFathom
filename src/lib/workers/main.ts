@@ -47,22 +47,26 @@ export class MainWorker {
     this.setSignalHandlers();
     this.worker = this.setupWorker();
     await this.setupScheduledTasks();
-
     llog("Worker initialized and tasks scheduled");
   }
 
   private async gatherParseSourceJobs() {
     const sourcesToProcess = await this.sourcesRepository.getSourcesToProcess();
-    return sourcesToProcess.map((source) => ({
+    const jobs = sourcesToProcess.map((source) => ({
       name: JobName.PARSE_SOURCE,
       jobId: JobName.PARSE_SOURCE + ":" + source.url,
       data: source,
       opts: {
         jobId: JobName.PARSE_SOURCE + ":" + source.url,
-        removeOnComplete: true, // remove all completed jobs, no need to store them
-        removeOnFail: true, // Intentional: Avoid retrying failed jobs. Failures are temporary and jobs are rescheduled by external task logic.
+        removeOnComplete: { count: 0 },
+        removeOnFail: { count: 0 },
       },
     }));
+
+    // Clear the sourcesToProcess array if it's no longer needed
+    sourcesToProcess.length = 0;
+
+    return jobs;
   }
 
   private setupWorker() {
@@ -96,18 +100,15 @@ export class MainWorker {
   };
 
   private async setupScheduledTasks() {
-    // Retrieve existing scheduled jobs
+    // cleanup legacy jobs that may still be present on the queue
     const existingJobs = await this.bullmqQueue.getJobs();
-
-    // Define valid job names
     const validJobNames = Object.values(JobName);
-
-    // Remove jobs that don't match the valid job names
     for (const job of existingJobs) {
       if (!validJobNames.includes(job.name)) {
         await this.bullmqQueue.remove(job.id);
       }
     }
+    existingJobs.length = 0;
 
     await this.bullmqQueue.upsertJobScheduler(
       JobName.CLEANUP,
@@ -207,6 +208,7 @@ export class MainWorker {
       return true;
     } catch (error: unknown) {
       this.handleJobError(error, job);
+      // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
       return true;
     }
   };
