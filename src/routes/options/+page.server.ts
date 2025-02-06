@@ -5,15 +5,15 @@ import type { PageServerLoad } from "../$types";
 
 export const actions: Actions = {
   importOpml: async ({ request, locals }) => {
+    if (!locals.user) {
+      return {
+        success: false,
+        status: 400,
+        error: "",
+      };
+    }
     try {
       const formData = Object.fromEntries(await request.formData());
-      if (!formData) {
-        return {
-          success: false,
-          status: 400,
-          error: "No file uploaded",
-        };
-      }
       if ("opml"! in formData) {
         return {
           success: false,
@@ -53,6 +53,13 @@ export const actions: Actions = {
     }
   },
   changePassword: async ({ request, locals }) => {
+    if (!locals.user) {
+      return {
+        success: false,
+        status: 400,
+        error: "",
+      };
+    }
     try {
       const formData = await request.formData();
       const oldPassword = formData.get("oldPassword");
@@ -100,7 +107,7 @@ export const actions: Actions = {
   },
 };
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = ({ locals }) => {
   const user = locals.user; // Assuming user info is stored in locals
 
   if (!user) {

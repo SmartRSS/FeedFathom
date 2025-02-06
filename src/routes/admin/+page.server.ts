@@ -1,9 +1,9 @@
-import { error, redirect } from "@sveltejs/kit";
+import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "../$types";
 
 export const load: PageServerLoad = async ({ locals }) => {
   const user = locals.user; // Assuming user info is stored in locals
-  if (!user.isAdmin) {
+  if (!user?.isAdmin) {
     return redirect(302, "/");
   }
 
@@ -13,10 +13,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     "desc",
   );
   console.table(sources);
-
-  if (!sources) {
-    throw error(404, "Sources not found");
-  }
 
   return {
     user,

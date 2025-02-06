@@ -1,4 +1,4 @@
-(async () => {
+void (async () => {
   const storedInstance = await browser.storage.sync.get("instance");
   const instanceInput = document.getElementById(
     "instance",
@@ -7,7 +7,7 @@
     return;
   }
   instanceInput.value = storedInstance["instance"] ?? "";
-  instanceInput.addEventListener("change", async function (event: Event) {
+  instanceInput.addEventListener("change", function (event: Event) {
     try {
       if (!event.target) {
         return;
@@ -16,7 +16,7 @@
       if (instanceAddress) {
         new URL(instanceAddress);
       }
-      await browser.storage.sync.set({ instance: instanceAddress });
+      void browser.storage.sync.set({ instance: instanceAddress });
     } catch {
       alert("bad URL");
     }

@@ -11,6 +11,13 @@ function isValidSourcesArray(sources: unknown): sources is number[] {
 }
 
 export const GET: RequestHandler = async ({ url, locals }: RequestEvent) => {
+  if (!locals.user) {
+    return json({
+      success: false,
+      status: 400,
+      error: "",
+    });
+  }
   const startTime = new Date().valueOf();
   const sourcesList =
     url.searchParams.get("sources")?.split(",").map(Number) ?? [];

@@ -157,7 +157,7 @@ export class SourcesRepository {
     ].includes(sortBy)
       ? sortBy
       : "created_at";
-    const validOrder = order === "asc" || order === "desc" ? order : "asc";
+    const validOrder = ["asc", "desc"].includes(order) ? order : "asc";
 
     const query = `
         WITH subscriber_counts AS (

@@ -6,9 +6,6 @@ export const deleteSourceHandler = async ({
   locals,
   body,
 }: ValidatedRequestEvent<DeleteSource>) => {
-  if (!locals.user) {
-    return json([]);
-  }
   await locals.dependencies.userSourcesRepository.removeSourceFromUser(
     locals.user.id,
     body.removeSourceId,

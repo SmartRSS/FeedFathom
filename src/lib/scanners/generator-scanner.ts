@@ -2,7 +2,7 @@ import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
 
 export class GeneratorScanner implements Scanner {
-  async scan(currentUrl: URL, document: Document): Promise<FeedData[]> {
+  scan(currentUrl: URL, document: Document): FeedData[] {
     const generator = document.querySelector('meta[name="generator"]');
     if (!generator) {
       return [];

@@ -9,10 +9,8 @@ type SortField =
   | "failures";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-  const sortBy: SortField =
-    (url.searchParams.get("sortBy") as SortField) || "created_at"; // Default sort field
-  const order: "asc" | "desc" =
-    (url.searchParams.get("order") as "asc" | "desc") || "asc"; // Default order
+  const sortBy = (url.searchParams.get("sortBy") || "created_at") as SortField; // Default sort field
+  const order = (url.searchParams.get("order") || "asc") as "asc" | "desc"; // Default order
 
   try {
     const sources = await locals.dependencies.sourcesRepository.listAllSources(

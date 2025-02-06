@@ -4,7 +4,7 @@ import type { Message } from "./extensionTypes";
 const previewSource = async (address: string) => {
   const instance = (await browser.storage.sync.get("instance"))["instance"];
   const fixedAddress = address.replace(/^feed:/i, "https:");
-  browser.tabs.create({
+  void browser.tabs.create({
     url: new URL(`/preview?feedUrl=${fixedAddress}`, instance).href,
   });
 };
@@ -28,9 +28,9 @@ browser.contextMenus.onClicked.addListener(async (info) => {
   }
 });
 
-const messageHandler = async (message: Message) => {
+const messageHandler = (message: Message) => {
   if (message.action === "list-feeds") {
-    browser.contextMenus.removeAll();
+    void browser.contextMenus.removeAll();
     browser.contextMenus.create({
       id: "FeedFathom_newsletter",
       contexts: ["action"],
@@ -55,7 +55,7 @@ const messageHandler = async (message: Message) => {
     );
   }
   if (message.action === "visibility-lost") {
-    browser.contextMenus.removeAll();
+    void browser.contextMenus.removeAll();
   }
 };
 
@@ -67,7 +67,7 @@ browser.action.onClicked.addListener(async () => {
     await browser.runtime.openOptionsPage();
     return;
   }
-  browser.tabs.create({
+  void browser.tabs.create({
     active: true,
     url: instance,
   });

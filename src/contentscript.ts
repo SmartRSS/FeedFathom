@@ -12,7 +12,7 @@ import { scan } from "$lib/scanner";
     if (isYouTubeDomain(currentHref)) {
       setupMutationObserver(feedsData, currentHref);
     }
-    await updateAvailableSourcesList(feedsData);
+    updateAvailableSourcesList(feedsData);
   }
 
   function setupEventListeners(feedsData: FeedData[]) {
@@ -58,7 +58,7 @@ import { scan } from "$lib/scanner";
     mutationObserver.observe(bodyList, observerConfig);
   }
 
-  async function updateAvailableSourcesList(feedsData: FeedData[]) {
+  function updateAvailableSourcesList(feedsData: FeedData[]) {
     if (document.hidden) {
       void browser.runtime.sendMessage({ action: "visibility-lost" });
       return;
@@ -67,7 +67,7 @@ import { scan } from "$lib/scanner";
       clearTimeout(visibilityTimeoutRef);
     }
 
-    visibilityTimeoutRef = setTimeout(async () => {
+    visibilityTimeoutRef = setTimeout(() => {
       void browser.runtime.sendMessage({
         action: "list-feeds",
         feedsData: feedsData,

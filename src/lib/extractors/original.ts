@@ -1,7 +1,7 @@
 import type { Extractor } from "./extractor.interface";
 
 export class Original implements Extractor {
-  async extract(content: string): Promise<string> {
+  extract(content: string): string {
     return content;
   }
 }

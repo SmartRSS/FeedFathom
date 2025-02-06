@@ -25,7 +25,7 @@ export class OpmlParser {
     if (["rss", "atom", "rdf", "jsonfeed"].includes(type) || xmlUrl) {
       return {
         type: "source",
-        xmlUrl: xmlUrl ?? "",
+        xmlUrl,
         name: title,
         homeUrl: (() => {
           if (homeUrl) {

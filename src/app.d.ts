@@ -8,7 +8,7 @@ declare global {
   namespace App {
     // interface Error {}
     interface Locals {
-      user: User;
+      user?: User;
       dependencies: Dependencies;
     }
 
@@ -20,6 +20,7 @@ declare global {
 
 export interface ValidatedRequestEvent<T> extends RequestEvent {
   body: T;
+  locals: Locals & { user: User };
 }
 
 export type UnauthenticatedRequestEvent = ValidatedRequestEvent & {

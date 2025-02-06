@@ -161,7 +161,7 @@ export class MainWorker {
 
     await this.singletonHandler.runSingleton(
       { key: jobName, delayMs: jobConfig.delayMs },
-      () => this.executeSingletonJob(jobName),
+      async () => await this.executeSingletonJob(jobName),
     );
 
     return true;
@@ -170,6 +170,7 @@ export class MainWorker {
   private async executeSingletonJob(jobName: JobName) {
     switch (jobName) {
       case JobName.SINGLETON_TEST_JOB:
+        await Bun.sleep(1);
         break;
       default:
         throw new Error(`No handler for singleton job: ${jobName}`);

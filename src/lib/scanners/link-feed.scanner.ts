@@ -9,7 +9,7 @@ export class LinkFeedScanner implements Scanner {
     /\/syndication\/?$/i,
   ];
 
-  async scan(currentUrl: URL, document: Document): Promise<FeedData[]> {
+  scan(currentUrl: URL, document: Document): FeedData[] {
     const feeds: FeedData[] = [];
 
     // Search for anchor elements

@@ -77,7 +77,7 @@ export class ArticleRepository {
 
     const boundaryDates = getBoundaryDates();
     return articles.map((item) => ({
-      group: getDateGroup(boundaryDates, item.publishedAt || new Date()),
+      group: getDateGroup(boundaryDates, item.publishedAt),
       ...item,
     }));
   }
@@ -86,18 +86,16 @@ export class ArticleRepository {
     if (payloads.length === 0) {
       return;
     }
-    const values = await Promise.all(
-      payloads.map(async (payload) => ({
-        content: payload.content ?? "",
-        guid: payload.guid,
-        sourceId: payload.sourceId,
-        title: payload.title ?? "",
-        url: payload.url ?? "",
-        author: payload.author ?? "",
-        publishedAt: payload.publishedAt!,
-        updatedAt: payload.updatedAt!,
-      })),
-    );
+    const values = payloads.map((payload) => ({
+      content: payload.content ?? "",
+      guid: payload.guid,
+      sourceId: payload.sourceId,
+      title: payload.title,
+      url: payload.url,
+      author: payload.author,
+      publishedAt: payload.publishedAt!,
+      updatedAt: payload.updatedAt!,
+    }));
 
     await this.drizzleConnection
       .insert(schema.articles)

@@ -69,7 +69,7 @@ export class MailWorker {
           if (!senderAddress) {
             return callback(new Error("Unknown sender"));
           }
-          const recipientMails = await this.extractRecipientAddresses(email);
+          const recipientMails = this.extractRecipientAddresses(email);
           if (recipientMails.length > 10) {
             return callback(new Error("Too many recipients"));
           }
@@ -114,9 +114,7 @@ export class MailWorker {
     });
   }
 
-  private async extractRecipientAddresses(
-    email: mailParser.ParsedMail,
-  ): Promise<string[]> {
+  private extractRecipientAddresses(email: mailParser.ParsedMail): string[] {
     const recipients = Array.isArray(email.to) ? email.to : [email.to];
     const recipientMails: string[] = [];
 

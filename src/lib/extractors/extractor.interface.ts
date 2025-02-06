@@ -1,3 +1,3 @@
 export interface Extractor {
-  extract: (content: string, articleUrl: string) => Promise<string>;
+  extract: (content: string, articleUrl: string) => Promise<string> | string;
 }
