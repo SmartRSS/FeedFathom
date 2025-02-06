@@ -156,7 +156,8 @@ export class MainWorker {
     const jobName = job.data.jobName as JobName;
     const jobConfig = SINGLETON_JOBS.find((job) => job.name === jobName);
     if (!jobConfig) {
-      throw new Error(`Unknown singleton job configuration: ${jobName}`);
+      err(`Unknown singleton job configuration: ${jobName}`);
+      return true;
     }
 
     await this.singletonHandler.runSingleton(
