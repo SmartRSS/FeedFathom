@@ -32,7 +32,7 @@ export async function scan(address: string, document: Document) {
   const seenUrls = new Set<string>();
 
   const results = await Promise.all(
-    scanners.map(async (scanner) => {
+    scanners.map((scanner) => {
       return scanner.scan(addressUrl, document);
       // Each scanner is expected to check applicability for the given address or document.
       // If the address is not relevant (e.g., wrong platform or unsupported content),
