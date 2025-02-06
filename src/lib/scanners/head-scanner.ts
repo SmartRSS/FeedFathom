@@ -25,7 +25,7 @@ function* getFeeds(document: Document): Generator<FeedData> {
 }
 
 export class HeadScanner implements Scanner {
-  async scan(_currentUrl: URL, document: Document): Promise<FeedData[]> {
+  scan(_currentUrl: URL, document: Document): FeedData[] {
     if (!document.baseURI) {
       err("Document does not have a valid baseURI.");
       return [];

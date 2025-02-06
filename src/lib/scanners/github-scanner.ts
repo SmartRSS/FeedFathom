@@ -7,7 +7,7 @@ export class GithubScanner implements Scanner {
     `^${GithubScanner.BASE_URL}(.+/.+)$`,
   );
 
-  async scan(currentUrl: URL, _document: Document): Promise<FeedData[]> {
+  scan(currentUrl: URL, _document: Document): FeedData[] {
     const address = currentUrl.href;
 
     if (!GithubScanner.isGithubRepoUrl(address)) {

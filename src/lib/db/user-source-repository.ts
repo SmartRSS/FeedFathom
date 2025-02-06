@@ -83,10 +83,6 @@ export class UserSourceRepository {
         home_url: sourcePayload.homeUrl,
       },
     );
-    if (!source) {
-      err("no source");
-      return;
-    }
 
     const userSource = (
       await this.drizzleConnection
@@ -121,7 +117,7 @@ export class UserSourceRepository {
           userId,
           node.name,
         );
-        if ("children" in node && node.children !== undefined)
+        if ("children" in node)
           await this.insertTree(userId, node.children, folder.id);
       }
       if (node.type === "source") {

@@ -45,7 +45,7 @@ export const buildAxios = (redis: Redis) => {
   });
 
   axiosInstance.interceptors.request.use(
-    async (config) => {
+    (config) => {
       if (!config.url) {
         return config;
       }

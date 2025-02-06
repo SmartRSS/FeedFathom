@@ -18,6 +18,7 @@ export class SingletonJobHandler {
       "locked",
       "EX",
       Math.floor(config.delayMs / 1000),
+      "NX",
     );
 
     if (!lock) {

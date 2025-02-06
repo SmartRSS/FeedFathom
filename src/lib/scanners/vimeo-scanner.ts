@@ -2,7 +2,7 @@ import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
 
 export class VimeoScanner implements Scanner {
-  async scan(currentUrl: URL, document: Document): Promise<FeedData[]> {
+  scan(currentUrl: URL, document: Document): FeedData[] {
     if (!currentUrl.hostname.endsWith("vimeo.com")) {
       return [];
     }

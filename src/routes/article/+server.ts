@@ -5,7 +5,7 @@ import { extractArticle } from "$lib/extract-article";
 export const GET: RequestHandler = async ({ url, locals }) => {
   const articlesRepository = locals.dependencies.articlesRepository;
 
-  const articleIdParameter = url?.searchParams?.get("article");
+  const articleIdParameter = url.searchParams.get("article");
   if (!articleIdParameter) {
     return json({}, { status: 404 });
   }
@@ -16,8 +16,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     return json({}, { status: 404 });
   }
 
-  const displayMode =
-    (url?.searchParams?.get("displayMode") as DisplayMode) || DisplayMode.FEED;
+  const displayMode = (url.searchParams.get("displayMode") ||
+    DisplayMode.FEED) as DisplayMode;
 
   const extractedArticle = await extractArticle(
     article.content,

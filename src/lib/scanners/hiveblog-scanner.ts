@@ -2,7 +2,7 @@ import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
 
 export class HiveblogScanner implements Scanner {
-  async scan(currentUrl: URL, _document: Document): Promise<FeedData[]> {
+  scan(currentUrl: URL, _document: Document): FeedData[] {
     if (!currentUrl.hostname.endsWith("hive.blog")) {
       return [];
     }

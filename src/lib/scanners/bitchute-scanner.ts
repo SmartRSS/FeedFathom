@@ -5,7 +5,7 @@ export class BitchuteScanner implements Scanner {
   private readonly feedBase: string =
     "https://www.bitchute.com/feeds/rss/channel/";
 
-  async scan(currentPage: URL, document: Document): Promise<FeedData[]> {
+  scan(currentPage: URL, document: Document): FeedData[] {
     const hostname = currentPage.hostname.toLowerCase();
     if (hostname !== "www.bitchute.com" && hostname !== "bitchute.com") {
       return [];

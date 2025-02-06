@@ -20,9 +20,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     return redirect(302, "/login");
   }
 
-  event.locals.user = user ?? undefined;
+  event.locals.user = user;
   event.cookies.set("sid", sid, cookiesConfig);
-  if (user && !pathsNotRequiringLogin.includes(event.url.pathname)) {
+  if (!pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
   return redirect(302, "/login");
