@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { type Job, type Queue, Worker } from "bullmq";
 import { err, llog } from "../../util/log";
 import type { FeedParser } from "$lib/feed-parser";

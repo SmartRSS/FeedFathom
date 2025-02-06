@@ -34,6 +34,8 @@ const tsEslintConfigs = tseslint.configs.recommended.map((config) => ({
     "@typescript-eslint/no-unused-expressions": "error",
     "@typescript-eslint/no-unsafe-return": "error",
     "@typescript-eslint/no-unsafe-assignment": "error",
+    "@typescript-eslint/no-unsafe-call": "error",
+    "@typescript-eslint/no-unsafe-member-access": "error",
     "no-loop-func": "error",
     "no-inner-declarations": "error",
     "@typescript-eslint/no-unused-vars": [
