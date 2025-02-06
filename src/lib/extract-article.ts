@@ -29,6 +29,9 @@ const getContent = async (
   if (response.status !== 200) {
     return "";
   }
+  if (typeof response.data !== "string") {
+    return "";
+  }
   const originalContent = response.data;
   return purify.sanitize(originalContent);
 };

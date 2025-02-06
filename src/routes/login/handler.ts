@@ -1,19 +1,18 @@
 import type { UnauthenticatedRequestEvent } from "../../app";
 import { json } from "@sveltejs/kit";
 import { cookiesConfig } from "../../util/cookies-config";
+import type { LoginRequest } from "./validator";
 
 const message = "Wrong login data";
 
 export const loginHandler = async ({
-  request,
   locals,
   cookies,
-}: UnauthenticatedRequestEvent) => {
-  const user = await locals.dependencies.usersRepository.findUser(
-    request.body.email,
-  );
+  body,
+}: UnauthenticatedRequestEvent<LoginRequest>) => {
+  const user = await locals.dependencies.usersRepository.findUser(body.email);
   if (!user) {
-    await Bun.password.hash(request.body.password);
+    await Bun.password.hash(body.password);
     return json(
       {
         error: message,
@@ -23,10 +22,7 @@ export const loginHandler = async ({
       },
     );
   }
-  const result = await Bun.password.verify(
-    request.body.password,
-    user.password,
-  );
+  const result = await Bun.password.verify(body.password, user.password);
   if (!result) {
     return json(
       {

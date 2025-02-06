@@ -2,7 +2,11 @@ import { ulid } from "ulid";
 import type { Message } from "./extensionTypes";
 
 const previewSource = async (address: string) => {
-  const instance = (await browser.storage.sync.get("instance"))["instance"];
+  const instanceObject = await browser.storage.sync.get("instance");
+  if (typeof instanceObject["instance"] !== "string") {
+    return;
+  }
+  const instance = instanceObject["instance"];
   const fixedAddress = address.replace(/^feed:/i, "https:");
   void browser.tabs.create({
     url: new URL(`/preview?feedUrl=${fixedAddress}`, instance).href,
@@ -10,7 +14,11 @@ const previewSource = async (address: string) => {
 };
 
 browser.contextMenus.onClicked.addListener(async (info) => {
-  const instance = (await browser.storage.sync.get("instance"))["instance"];
+  const instanceObject = await browser.storage.sync.get("instance");
+  if (typeof instanceObject["instance"] !== "string") {
+    return;
+  }
+  const instance = instanceObject["instance"];
 
   if (info.menuItemId === "FeedFathom_newsletter") {
     const uuid = ulid();
@@ -62,7 +70,11 @@ const messageHandler = (message: Message) => {
 browser.runtime.onMessage.addListener(messageHandler);
 
 browser.action.onClicked.addListener(async () => {
-  const instance = (await browser.storage.sync.get("instance"))["instance"];
+  const instanceObject = await browser.storage.sync.get("instance");
+  if (typeof instanceObject["instance"] !== "string") {
+    return;
+  }
+  const instance = instanceObject["instance"];
   if (!instance) {
     await browser.runtime.openOptionsPage();
     return;

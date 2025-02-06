@@ -12,41 +12,53 @@ const tagAttributePairs = [
 ] as const;
 
 export const rewriteLinks = (content: string, articleUrl: string) => {
-  const rewriter = new HTMLRewriter();
+  let rewriter: HTMLRewriter | null = new HTMLRewriter();
   for (const [tagName, attributeName] of tagAttributePairs) {
     rewriter.on(`${tagName}[${attributeName}]`, {
-      element(element) {
-        const attributeValue = element.getAttribute(attributeName);
-        if (!attributeValue) {
-          return;
-        }
-
-        if (attributeName === "srcset") {
-          // Special handling for "srcset"
-          const processedSrcset = processSrcset(attributeValue, articleUrl);
-          element.setAttribute(attributeName, processedSrcset);
-          return; // Early return after processing srcset
-        }
-
-        // General handling for src, href, etc.
-        if (isAbsoluteUrl(attributeValue)) {
-          if (tagName === "a") {
-            element.setAttribute("target", "_blank");
-          }
-          return; // no need to change anything
-        }
-        if (URL.canParse(attributeValue, articleUrl)) {
-          const absoluteUrl = new URL(attributeValue, articleUrl).href;
-          element.setAttribute(attributeName, absoluteUrl);
-          if (tagName === "a") {
-            element.setAttribute("target", "_blank");
-          }
-        }
-      },
+      element: (element) =>
+        handleElement(element, tagName, attributeName, articleUrl),
     });
   }
-  return rewriter.transform(content);
+  const result = rewriter.transform(content);
+  rewriter = null;
+  return result;
 };
+
+// New function to handle element processing
+const handleElement = (
+  element: HTMLRewriterTypes.Element,
+  tagName: string,
+  attributeName: string,
+  articleUrl: string,
+) => {
+  const attributeValue = element.getAttribute(attributeName);
+  if (!attributeValue) {
+    return;
+  }
+
+  if (attributeName === "srcset") {
+    // Special handling for "srcset"
+    const processedSrcset = processSrcset(attributeValue, articleUrl);
+    element.setAttribute(attributeName, processedSrcset);
+    return; // Early return after processing srcset
+  }
+
+  // General handling for src, href, etc.
+  if (isAbsoluteUrl(attributeValue)) {
+    if (tagName === "a") {
+      element.setAttribute("target", "_blank");
+    }
+    return; // no need to change anything
+  }
+  if (URL.canParse(attributeValue, articleUrl)) {
+    const absoluteUrl = new URL(attributeValue, articleUrl).href;
+    element.setAttribute(attributeName, absoluteUrl);
+    if (tagName === "a") {
+      element.setAttribute("target", "_blank");
+    }
+  }
+};
+
 // Helper to process "srcset" attributes
 const processSrcset = (srcsetValue: string, baseUrl: string): string => {
   return srcsetValue

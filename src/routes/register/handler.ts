@@ -1,11 +1,12 @@
 import type { UnauthenticatedRequestEvent } from "../../app";
 import { json } from "@sveltejs/kit";
 import { llog } from "../../util/log";
+import type { RegisterRequest } from "./validator";
 
 export const registerHandler = async ({
-  request,
+  body,
   locals,
-}: UnauthenticatedRequestEvent) => {
+}: UnauthenticatedRequestEvent<RegisterRequest>) => {
   const userCount = await locals.dependencies.usersRepository.getUserCount();
 
   console.log("Environment variables:", {
@@ -31,7 +32,7 @@ export const registerHandler = async ({
   if (
     allowedEmails &&
     allowedEmails.length > 0 &&
-    !allowedEmails.includes(request.body.email)
+    !allowedEmails.includes(body.email)
   ) {
     return json(
       {
@@ -43,10 +44,10 @@ export const registerHandler = async ({
   }
 
   try {
-    const hash = await Bun.password.hash(request.body.password);
+    const hash = await Bun.password.hash(body.password);
     await locals.dependencies.usersRepository.createUser({
-      name: request.body.username,
-      email: request.body.email,
+      name: body.username,
+      email: body.email,
       passwordHash: hash,
     });
 
