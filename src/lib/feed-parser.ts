@@ -93,6 +93,7 @@ export class FeedParser {
       });
 
       await this.articlesRepository.batchUpsertArticles(articlePayloads);
+      articlePayloads.length = 0;
 
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       if (
