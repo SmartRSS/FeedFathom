@@ -71,6 +71,7 @@ services:
   worker:
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
+      - "--smol"
       - "/app/worker-entrypoint.js"
     restart: always
     environment:
