@@ -84,14 +84,14 @@ export class ArticlesRepository {
 
   public async batchUpsertArticles(
     payloads: {
+      author: string;
       content: string;
       guid: string;
+      publishedAt: Date;
       sourceId: number;
       title: string;
-      url: string;
-      author: string;
-      publishedAt: Date;
       updatedAt: Date;
+      url: string;
     }[],
   ) {
     if (payloads.length === 0) {

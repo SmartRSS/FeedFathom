@@ -11,9 +11,9 @@ import type { SourcesRepository } from "$lib/db/source-repository";
 import type { ArticlesRepository } from "$lib/db/article-repository";
 
 export interface MailWorkerConfig {
-  maxSize?: number | undefined; // in bytes
-  hostname?: string | undefined;
   allowedDomains?: string[] | undefined;
+  hostname?: string | undefined;
+  maxSize?: number | undefined; // in bytes
 }
 
 export class MailWorker {
@@ -26,9 +26,9 @@ export class MailWorker {
     config: Partial<MailWorkerConfig> = {},
   ) {
     this.config = {
-      maxSize: config.maxSize ?? 10 * 1024 * 1024,
-      hostname: config.hostname,
       allowedDomains: config.allowedDomains,
+      hostname: config.hostname,
+      maxSize: config.maxSize ?? 10 * 1024 * 1024,
     };
   }
 
@@ -135,14 +135,14 @@ export class MailWorker {
     const guid = Bun.randomUUIDv7();
     const date = email.date ?? new Date();
     return {
+      author: senderAddress,
       content: this.getEmailContent(email),
       guid: guid,
+      publishedAt: date,
       sourceId: sourceId,
       title: email.subject ?? "Untitled",
-      url: `/article/${guid}`,
-      author: senderAddress,
-      publishedAt: date,
       updatedAt: date,
+      url: `/article/${guid}`,
     };
   }
 
