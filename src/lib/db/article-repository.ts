@@ -4,7 +4,7 @@ import { Article } from "../../types/article.type";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
 
-export class ArticleRepository {
+export class ArticlesRepository {
   public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async removeUserArticles(articleIdList: number[], userId: number) {

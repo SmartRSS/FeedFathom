@@ -8,7 +8,7 @@ import type { Source } from "../../types/source-types";
 import stream from "node:stream/promises";
 import { err } from "../../util/log";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import type { ArticleRepository } from "$lib/db/article-repository";
+import type { ArticlesRepository } from "$lib/db/article-repository";
 
 export interface MailWorkerConfig {
   maxSize?: number | undefined; // in bytes
@@ -22,7 +22,7 @@ export class MailWorker {
 
   constructor(
     private readonly sourcesRepository: SourcesRepository,
-    private readonly articlesRepository: ArticleRepository,
+    private readonly articlesRepository: ArticlesRepository,
     config: Partial<MailWorkerConfig> = {},
   ) {
     this.config = {

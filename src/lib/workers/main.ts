@@ -2,7 +2,7 @@
 import { type Job, type Queue, Worker } from "bullmq";
 import { err, llog } from "../../util/log";
 import type { FeedParser } from "$lib/feed-parser";
-import type { UserSourceRepository } from "$lib/db/user-source-repository";
+import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
@@ -31,7 +31,7 @@ export class MainWorker {
 
   constructor(
     private readonly feedParser: FeedParser,
-    private readonly userSourcesRepository: UserSourceRepository,
+    private readonly userSourcesRepository: UserSourcesRepository,
     private readonly redis: Redis,
     private readonly bullmqQueue: Queue,
     private readonly sourcesRepository: SourcesRepository,

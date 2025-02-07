@@ -6,7 +6,7 @@ import type { Source } from "../types/source-types";
 import { err, llog } from "../util/log";
 import type { FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import type { ArticleRepository } from "$lib/db/article-repository";
+import type { ArticlesRepository } from "$lib/db/article-repository";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import container from "../container";
 import type Redis from "ioredis";
@@ -25,7 +25,7 @@ export class FeedParser {
 
   constructor(
     private readonly sourcesRepository: SourcesRepository,
-    private readonly articlesRepository: ArticleRepository,
+    private readonly articlesRepository: ArticlesRepository,
     private readonly axiosInstance: AxiosCacheInstance,
     private readonly redis: Redis,
   ) {}
