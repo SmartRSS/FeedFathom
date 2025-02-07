@@ -23,12 +23,7 @@ const DEFAULT_LOCK_DURATION = 60;
 const DEFAULT_CLEANUP_INTERVAL = 60;
 const DEFAULT_GATHER_INTERVAL = 20;
 
-const SINGLETON_JOBS: readonly SingletonJobConfig[] = [
-  {
-    name: JobName.SINGLETON_TEST_JOB,
-    delayMs: 10000,
-  },
-] as const;
+const SINGLETON_JOBS: readonly SingletonJobConfig[] = [] as const;
 
 export class MainWorker {
   private worker: Worker | undefined;
@@ -64,9 +59,8 @@ export class MainWorker {
       },
     }));
 
-    // Clear the sourcesToProcess array if it's no longer needed
+    // explicitly clear the array
     sourcesToProcess.length = 0;
-
     return jobs;
   }
 
@@ -172,10 +166,8 @@ export class MainWorker {
 
   private async executeSingletonJob(jobName: JobName) {
     switch (jobName) {
-      case JobName.SINGLETON_TEST_JOB:
-        await Bun.sleep(1);
-        break;
       default:
+        await Bun.sleep(1);
         throw new Error(`No handler for singleton job: ${jobName}`);
     }
   }
