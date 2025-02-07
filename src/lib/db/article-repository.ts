@@ -82,24 +82,25 @@ export class ArticleRepository {
     }));
   }
 
-  public async batchUpsertArticles(payloads: Omit<Article, "id">[]) {
+  public async batchUpsertArticles(
+    payloads: {
+      content: string;
+      guid: string;
+      sourceId: number;
+      title: string;
+      url: string;
+      author: string;
+      publishedAt: Date;
+      updatedAt: Date;
+    }[],
+  ) {
     if (payloads.length === 0) {
       return;
     }
-    const values = payloads.map((payload) => ({
-      content: payload.content ?? "",
-      guid: payload.guid,
-      sourceId: payload.sourceId,
-      title: payload.title,
-      url: payload.url,
-      author: payload.author,
-      publishedAt: payload.publishedAt!,
-      updatedAt: payload.updatedAt!,
-    }));
 
     await this.drizzleConnection
       .insert(schema.articles)
-      .values(values)
+      .values(payloads)
       .onConflictDoUpdate({
         target: schema.articles.guid,
         set: {
@@ -108,6 +109,7 @@ export class ArticleRepository {
           content: sql`excluded.content`,
         },
       });
+    payloads.length = 0;
   }
 
   async getArticleByGuid(guid: string): Promise<Article | undefined> {

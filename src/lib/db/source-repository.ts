@@ -1,8 +1,6 @@
 import * as schema from "../schema";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { err } from "../../util/log";
-import { ulid } from "ulid";
-import type { Queue } from "bullmq";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 type SortField =
@@ -14,26 +12,13 @@ type SortField =
   | "failures";
 
 export class SourcesRepository {
-  constructor(
-    private readonly drizzleConnection: BunSQLDatabase,
-    private readonly bullmqQueue: Queue,
-  ) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async updateFavicon(sourceId: number, favicon: Buffer): Promise<void> {
     await this.drizzleConnection
       .update(schema.sources)
       .set({ favicon: favicon.toString("base64") })
       .where(eq(schema.sources.id, sourceId));
-  }
-
-  public async getSourceByAddress(address: string) {
-    return (
-      await this.drizzleConnection
-        .select()
-        .from(schema.sources)
-        .where(eq(schema.sources.url, address))
-        .limit(1)
-    ).at(0);
   }
 
   public async getSourcesToProcess() {
@@ -90,11 +75,6 @@ export class SourcesRepository {
     if (!source) {
       throw new Error("failed");
     }
-    await this.bullmqQueue.add("tasks", source, {
-      jobId: `updateSource:${source.id.toString()}` + ulid(),
-      removeOnComplete: true,
-      removeOnFail: true,
-    });
     return source;
   }
 

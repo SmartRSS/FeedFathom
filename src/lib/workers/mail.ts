@@ -5,7 +5,6 @@ import {
 } from "smtp-server";
 import * as mailParser from "mailparser";
 import type { Source } from "../../types/source-types";
-import type { Article } from "../../types/article.type";
 import stream from "node:stream/promises";
 import { err } from "../../util/log";
 import type { SourcesRepository } from "$lib/db/source-repository";
@@ -43,7 +42,7 @@ export class MailWorker {
         callback: (err?: Error) => void,
       ) => {
         try {
-          const source = await this.sourcesRepository.getSourceByAddress(
+          const source = await this.sourcesRepository.findSourceByUrl(
             _address.address,
           );
           if (!source) {
@@ -77,23 +76,22 @@ export class MailWorker {
           const sources = (
             await Promise.all(
               recipientMails.map(async (address) => {
-                return await this.sourcesRepository.getSourceByAddress(address);
+                return await this.sourcesRepository.findSourceByUrl(address);
               }),
             )
           ).filter((source): source is Source => source !== undefined);
           if (sources.length === 0) {
             return callback(new Error("No recipients known"));
           }
-          const articles = [];
 
-          for (const feed of sources) {
-            const article = this.createArticleFromEmail(
+          const articles = sources.map((feed) => {
+            return this.createArticleFromEmail(
               email,
               feed.id,
               senderAddress.address,
             );
-            articles.push(article);
-          }
+          });
+
           await this.articlesRepository.batchUpsertArticles(articles);
           emailStream.resume();
           await stream.finished(emailStream);
@@ -133,16 +131,18 @@ export class MailWorker {
     email: mailParser.ParsedMail,
     sourceId: number,
     senderAddress: string,
-  ): Omit<Article, "id"> {
+  ) {
     const guid = Bun.randomUUIDv7();
+    const date = email.date ?? new Date();
     return {
-      url: `/article/${guid}`,
-      sourceId,
-      guid,
-      title: email.subject ?? "Untitled",
-      author: senderAddress,
-      publishedAt: email.date ?? new Date(),
       content: this.getEmailContent(email),
+      guid: guid,
+      sourceId: sourceId,
+      title: email.subject ?? "Untitled",
+      url: `/article/${guid}`,
+      author: senderAddress,
+      publishedAt: date,
+      updatedAt: date,
     };
   }
 

@@ -74,9 +74,12 @@ export class FeedParser {
 
       const articlePayloads = parsedFeed.items.map((item) => {
         const guid = this.generateGuid(item, parsedFeed, source.url);
-
         return {
-          guid,
+          content: rewriteLinks(
+            item.content ?? item.description ?? "",
+            item.url ?? "",
+          ),
+          guid: guid,
           sourceId: source.id,
           title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
           url: item.url ?? "",
@@ -87,10 +90,6 @@ export class FeedParser {
             source.url,
           publishedAt: new Date(item.published || Date.now()),
           updatedAt: new Date(item.updated || item.published || Date.now()),
-          content: rewriteLinks(
-            item.content ?? item.description ?? "",
-            item.url ?? "",
-          ),
         };
       });
 
