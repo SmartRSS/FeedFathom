@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import * as dns from "node:dns";
 
 import { parseFeed } from "@rowanmanning/feed-parser";
@@ -14,10 +13,13 @@ import type Redis from "ioredis";
 import { rewriteLinks } from "./rewrite-links";
 import { AxiosError } from "axios";
 
+const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
+  {};
+
 export class FeedParser {
   private domainDelaySettings: Record<string, number> = {
     "openrss.org": 2500,
-    "youtube.com": 500,
+    "youtube.com": 2500,
     "feeds.feedburner.com": 5000,
   };
 
@@ -46,14 +48,14 @@ export class FeedParser {
   }
 
   public async parseUrl(url: string): Promise<Feed | void> {
-    const parserStrategies: Record<
-      string,
-      (url: string) => Promise<Feed | void>
-    > = {};
+    const urlObject = new URL(url);
+    const lookupResult = await dns.promises.lookup(urlObject.hostname);
+    if (!lookupResult.address) {
+      throw new Error(`Failed to resolve ${urlObject.hostname}`);
+    }
 
-    const sourceOrigin = new URL(url).origin;
     const chosenParser =
-      parserStrategies[sourceOrigin] || this.parseGenericFeed;
+      parserStrategies[urlObject.origin] || this.parseGenericFeed;
     return await chosenParser.bind(this)(url);
   }
 
@@ -167,8 +169,7 @@ export class FeedParser {
     ]
       .filter(Boolean)
       .join("_");
-
-    return crypto.createHash("md5").update(hashInput).digest("hex");
+    return Bun.hash(hashInput).toString(36);
   }
 
   private async canDomainBeProcessedAlready(domain: string): Promise<boolean> {
@@ -194,12 +195,6 @@ export class FeedParser {
   }
 
   private async parseGenericFeed(url: string) {
-    const urlObject = new URL(url);
-    const lookupResult = await dns.promises.lookup(urlObject.hostname);
-    if (!lookupResult.address) {
-      throw new Error(`Failed to resolve ${urlObject.hostname}`);
-    }
-
     const response = await this.axiosInstance.get(url);
 
     if (response.status !== 200) {

@@ -8,20 +8,34 @@ export const subscribeHandler = async ({
   url,
 }: ValidatedRequestEvent<SubscribeRequest>) => {
   const { sourceUrl, sourceName, sourceFolder } = body;
-  const preview = sourceUrl.includes("@")
-    ? null
-    : await locals.dependencies.feedParser.preview(sourceUrl);
-  if (!preview && !sourceUrl.includes("@")) {
+  if (sourceUrl.includes("@")) {
+    await locals.dependencies.userSourcesRepository.addSourceToUser(
+      locals.user.id,
+      {
+        url: sourceUrl,
+        homeUrl: url.origin,
+        parentId: sourceFolder,
+        name: sourceName,
+      },
+    );
+    return json(true);
+  }
+  try {
+    const preview = await locals.dependencies.feedParser.preview(sourceUrl);
+    if (!preview) {
+      return json(false);
+    }
+    await locals.dependencies.userSourcesRepository.addSourceToUser(
+      locals.user.id,
+      {
+        url: sourceUrl,
+        homeUrl: preview.link ?? url.origin,
+        parentId: sourceFolder,
+        name: sourceName,
+      },
+    );
+    return json(true);
+  } catch {
     return json(false);
   }
-  await locals.dependencies.userSourcesRepository.addSourceToUser(
-    locals.user.id,
-    {
-      url: sourceUrl,
-      homeUrl: preview?.link ?? url.origin,
-      parentId: sourceFolder,
-      name: sourceName,
-    },
-  );
-  return json(true);
 };

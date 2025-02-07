@@ -9,12 +9,7 @@ import {
 import Redis from "ioredis";
 import fs from "node:fs";
 import path from "path";
-import { err, llog } from "../util/log";
-
-const browserUserAgent =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
-
-const browserUasOrigins: string[] = [];
+import { err } from "../util/log";
 
 function getBuildTime(): string {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
@@ -33,74 +28,17 @@ function getBuildTime(): string {
 
 const cachedBuildTimestamp = getBuildTime();
 
-// Add a constant for maximum retries
-const MAX_RETRIES = 1;
-
 export const buildAxios = (redis: Redis) => {
   const axiosInstance: AxiosInstance = Axios.create({
-    headers: { "Accept-Encoding": "gzip, deflate" },
+    headers: {
+      "Accept-Encoding": "gzip, deflate",
+      "User-Agent": `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
+    },
     httpsAgent: new https.Agent({
-      rejectUnauthorized: false, // increases reliability of data loading from misconfigured servers
+      // increases reliability of data loading from misconfigured servers
+      rejectUnauthorized: false,
     }),
   });
-
-  axiosInstance.interceptors.request.use(
-    (config) => {
-      if (!config.url) {
-        return config;
-      }
-      try {
-        const url = new URL(config.url);
-        if (browserUasOrigins.includes(url.origin)) {
-          config.headers["User-Agent"] = browserUserAgent; // Set User-Agent
-        } else {
-          config.headers["User-Agent"] =
-            `SmartRSS/FeedFathom ${cachedBuildTimestamp}`;
-        }
-
-        return config;
-      } catch {
-        return config;
-      }
-    },
-    async (error) => {
-      const config = error.config;
-      const originalUserAgent = config.headers["User-Agent"];
-
-      // Check if the request was not already using the browser User-Agent
-      if (
-        error.code === "ECONNREFUSED" &&
-        originalUserAgent !== browserUserAgent &&
-        config.__retryCount < MAX_RETRIES
-      ) {
-        config.__retryCount = config.__retryCount || 0;
-        config.__retryCount += 1;
-
-        await Bun.sleep(2000); // Wait for 2 seconds before retrying
-        config.headers["User-Agent"] = browserUserAgent; // Set to browser User-Agent
-        llog(`retrying request to ${config.url} with browser UAS`);
-        const response = await axiosInstance.request(config); // Retry the request
-
-        // Check the response status
-        if (response.status >= 200 && response.status < 400) {
-          // Update the browserUasOrigins array if the request succeeds
-          const url = new URL(config.url);
-          if (!browserUasOrigins.includes(url.origin)) {
-            browserUasOrigins.push(url.origin);
-          }
-          llog("succeeded");
-          return response; // Return the successful response
-        } else {
-          llog("failed");
-          return Promise.reject(
-            new Error(`Request failed with status ${response.status}`),
-          );
-        }
-      }
-      llog("failed");
-      return Promise.reject(error);
-    },
-  );
 
   const redisStorage = buildStorage({
     async find(key) {

@@ -3,7 +3,7 @@ import * as v from "valibot";
 const allowedEmails =
   process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
 
-export const registerRequestValidator = v.pipe(
+export const RegisterRequest = v.pipe(
   v.strictObject({
     username: v.string(),
     email: v.pipe(
@@ -16,3 +16,5 @@ export const registerRequestValidator = v.pipe(
   }),
   v.check((input) => input.password === input.passwordConfirm),
 );
+
+export type RegisterRequest = v.InferOutput<typeof RegisterRequest>;

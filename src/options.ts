@@ -6,7 +6,10 @@ void (async () => {
   if (!instanceInput) {
     return;
   }
-  instanceInput.value = storedInstance["instance"] ?? "";
+  instanceInput.value =
+    typeof storedInstance["instance"] === "string"
+      ? storedInstance["instance"]
+      : "";
   instanceInput.addEventListener("change", function (event: Event) {
     try {
       if (!event.target) {

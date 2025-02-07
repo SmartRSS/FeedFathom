@@ -20,9 +20,10 @@ declare global {
 
 export interface ValidatedRequestEvent<T> extends RequestEvent {
   body: T;
-  locals: Locals & { user: User };
+  locals: App.Locals & { user: User };
 }
 
-export type UnauthenticatedRequestEvent = ValidatedRequestEvent & {
+export type UnauthenticatedRequestEvent<T> = ValidatedRequestEvent<T> & {
+  body: T;
   locals: Omit<App.Locals, "user">;
 };

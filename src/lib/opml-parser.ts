@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import xml2js from "xml2js";
 import type { OpmlFolder, OpmlSource, Outline } from "../types/opml-types";
 import { err } from "../util/log";

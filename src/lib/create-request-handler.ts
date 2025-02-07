@@ -10,8 +10,6 @@ export function createRequestHandler<T extends v.GenericSchema>(
 ): (event: RequestEvent) => Promise<Response> {
   return async (event: RequestEvent) => {
     const request = event.request;
-    console.log(request);
-    console.log("!!!!!!!!!!");
 
     const parseResult = v.safeParse(schema, await request.json());
     if (!parseResult.success) {
