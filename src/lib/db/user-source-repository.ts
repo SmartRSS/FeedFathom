@@ -4,14 +4,14 @@ import type { TreeNode } from "../../types/source-types";
 
 import type { OpmlNode } from "../../types/opml-types";
 import { err } from "../../util/log";
-import type { FolderRepository } from "$lib/db/folder-repository";
+import type { FoldersRepository } from "$lib/db/folder-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export class UserSourceRepository {
+export class UserSourcesRepository {
   public constructor(
     private readonly drizzleConnection: BunSQLDatabase,
-    private readonly foldersRepository: FolderRepository,
+    private readonly foldersRepository: FoldersRepository,
     private readonly sourcesRepository: SourcesRepository,
   ) {}
 

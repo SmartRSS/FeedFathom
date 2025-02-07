@@ -2,7 +2,7 @@
 import { type Job, type Queue, Worker } from "bullmq";
 import { err, llog } from "../../util/log";
 import type { FeedParser } from "$lib/feed-parser";
-import type { UserSourceRepository } from "$lib/db/user-source-repository";
+import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
@@ -14,27 +14,27 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
 };
 
 type SingletonJobConfig = {
-  name: JobName;
   delayMs: number;
+  name: JobName;
 };
 
-const DEFAULT_WORKER_CONCURRENCY = 25;
-const DEFAULT_LOCK_DURATION = 60;
 const DEFAULT_CLEANUP_INTERVAL = 60;
 const DEFAULT_GATHER_INTERVAL = 20;
+const DEFAULT_LOCK_DURATION = 60;
+const DEFAULT_WORKER_CONCURRENCY = 25;
 
 const SINGLETON_JOBS: readonly SingletonJobConfig[] = [] as const;
 
 export class MainWorker {
-  private worker: Worker | undefined;
   private singletonHandler: SingletonJobHandler;
+  private worker: Worker | undefined;
 
   constructor(
-    private readonly feedParser: FeedParser,
-    private readonly userSourcesRepository: UserSourceRepository,
-    private readonly redis: Redis,
     private readonly bullmqQueue: Queue,
+    private readonly feedParser: FeedParser,
+    private readonly redis: Redis,
     private readonly sourcesRepository: SourcesRepository,
+    private readonly userSourcesRepository: UserSourcesRepository,
   ) {
     this.singletonHandler = new SingletonJobHandler(redis);
   }
@@ -49,9 +49,9 @@ export class MainWorker {
   private async gatherParseSourceJobs() {
     const sourcesToProcess = await this.sourcesRepository.getSourcesToProcess();
     const jobs = sourcesToProcess.map((source) => ({
-      name: JobName.PARSE_SOURCE,
-      jobId: JobName.PARSE_SOURCE + ":" + source.url,
       data: source,
+      jobId: JobName.PARSE_SOURCE + ":" + source.url,
+      name: JobName.PARSE_SOURCE,
       opts: {
         jobId: JobName.PARSE_SOURCE + ":" + source.url,
         removeOnComplete: { count: 0 },
@@ -66,15 +66,15 @@ export class MainWorker {
 
   private setupWorker() {
     const config = {
-      connection: this.redis,
       concurrency: parseNumber(
         process.env["WORKER_CONCURRENCY"],
         DEFAULT_WORKER_CONCURRENCY,
       ),
-      removeOnComplete: { count: 0 },
-      removeOnFail: { count: 0 },
+      connection: this.redis,
       lockDuration:
         parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) * 1000,
+      removeOnComplete: { count: 0 },
+      removeOnFail: { count: 0 },
     };
 
     const worker = new Worker(this.bullmqQueue.name, this.processJob, config);

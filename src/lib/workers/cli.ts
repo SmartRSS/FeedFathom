@@ -1,7 +1,7 @@
-import type { UserRepository } from "$lib/db/user-repository";
+import type { UsersRepository } from "$lib/db/user-repository";
 
 export class Cli {
-  constructor(private readonly usersRepository: UserRepository) {}
+  constructor(private readonly usersRepository: UsersRepository) {}
 
   async execute(command: string, arg: string[]) {
     switch (command) {

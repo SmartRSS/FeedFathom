@@ -6,7 +6,7 @@ import type { Source } from "../types/source-types";
 import { err, llog } from "../util/log";
 import type { FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import type { ArticleRepository } from "$lib/db/article-repository";
+import type { ArticlesRepository } from "$lib/db/article-repository";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import container from "../container";
 import type Redis from "ioredis";
@@ -17,17 +17,18 @@ const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
   {};
 
 export class FeedParser {
+  private readonly defaultDelay = 10_000;
   private domainDelaySettings: Record<string, number> = {
+    "feeds.feedburner.com": 5000,
     "openrss.org": 2500,
     "youtube.com": 2500,
-    "feeds.feedburner.com": 5000,
   };
 
   constructor(
-    private readonly sourcesRepository: SourcesRepository,
-    private readonly articlesRepository: ArticleRepository,
+    private readonly articlesRepository: ArticlesRepository,
     private readonly axiosInstance: AxiosCacheInstance,
     private readonly redis: Redis,
+    private readonly sourcesRepository: SourcesRepository,
   ) {}
 
   public async preview(sourceUrl: string) {
@@ -37,10 +38,10 @@ export class FeedParser {
         return;
       }
       return {
-        title: parsedFeed.title,
-        link: parsedFeed.url,
         description: parsedFeed.description,
         feedUrl: sourceUrl,
+        link: parsedFeed.url,
+        title: parsedFeed.title,
       };
     } catch {
       return;
@@ -74,23 +75,22 @@ export class FeedParser {
 
       const articlePayloads = parsedFeed.items.map((item) => {
         const guid = this.generateGuid(item, parsedFeed, source.url);
-
         return {
-          guid,
-          sourceId: source.id,
-          title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-          url: item.url ?? "",
           author:
             item.authors[0]?.name ??
             parsedFeed.title ??
             parsedFeed.url ??
             source.url,
-          publishedAt: new Date(item.published || Date.now()),
-          updatedAt: new Date(item.updated || item.published || Date.now()),
           content: rewriteLinks(
             item.content ?? item.description ?? "",
             item.url ?? "",
           ),
+          guid: guid,
+          publishedAt: new Date(item.published || Date.now()),
+          sourceId: source.id,
+          title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
+          updatedAt: new Date(item.updated || item.published || Date.now()),
+          url: item.url ?? "",
         };
       });
 
@@ -181,8 +181,7 @@ export class FeedParser {
       10,
     );
 
-    const defaultDelay = 10_000;
-    const delaySetting = this.domainDelaySettings[domain] || defaultDelay;
+    const delaySetting = this.domainDelaySettings[domain] || this.defaultDelay;
     const remainingDelay = Math.max(
       0,
       delaySetting - (now - lastFetchTimestamp),
@@ -198,6 +197,12 @@ export class FeedParser {
     const response = await this.axiosInstance.get(url);
 
     if (response.status !== 200) {
+      err(`failed to load data for ${url}`);
+      throw new Error(
+        `Failed to load data for ${url}, received status ${response.status}`,
+      );
+    }
+    if (typeof response.data !== "string") {
       err(`failed to load data for ${url}`);
       throw new Error(
         `Failed to load data for ${url}, received status ${response.status}`,

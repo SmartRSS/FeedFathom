@@ -3,7 +3,7 @@ import { eq, getTableColumns, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import crypto from "node:crypto";
 
-export class UserRepository {
+export class UsersRepository {
   constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async getUserCount(): Promise<number> {

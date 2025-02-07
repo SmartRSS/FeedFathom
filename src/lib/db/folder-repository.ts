@@ -1,7 +1,7 @@
 import * as schema from "$lib/schema";
 import { and, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-export class FolderRepository {
+export class FoldersRepository {
   public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async getUserFolders(userId: number) {

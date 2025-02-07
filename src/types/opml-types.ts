@@ -1,9 +1,9 @@
 export type Outline = {
+  [key: string]: unknown;
   $: {
     [key: string]: string;
   };
   outline?: Outline[];
-  [key: string]: unknown;
 };
 export type OpmlSource = {
   type: "source";
