@@ -11,11 +11,6 @@ import fs from "node:fs";
 import path from "path";
 import { err } from "../util/log";
 
-const browserUserAgent =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
-
-const browserUasOrigins: string[] = [];
-
 function getBuildTime(): string {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
 
@@ -35,29 +30,14 @@ const cachedBuildTimestamp = getBuildTime();
 
 export const buildAxios = (redis: Redis) => {
   const axiosInstance: AxiosInstance = Axios.create({
-    headers: { "Accept-Encoding": "gzip, deflate" },
+    headers: {
+      "Accept-Encoding": "gzip, deflate",
+      "User-Agent": `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
+    },
     httpsAgent: new https.Agent({
-      rejectUnauthorized: false, // increases reliability of data loading from misconfigured servers
+      // increases reliability of data loading from misconfigured servers
+      rejectUnauthorized: false,
     }),
-  });
-
-  axiosInstance.interceptors.request.use((config) => {
-    if (!config.url) {
-      return config;
-    }
-    try {
-      const url = new URL(config.url);
-      if (browserUasOrigins.includes(url.origin)) {
-        config.headers["User-Agent"] = browserUserAgent; // Set User-Agent
-      } else {
-        config.headers["User-Agent"] =
-          `SmartRSS/FeedFathom ${cachedBuildTimestamp}`;
-      }
-
-      return config;
-    } catch {
-      return config;
-    }
   });
 
   const redisStorage = buildStorage({
