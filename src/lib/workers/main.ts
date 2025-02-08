@@ -128,6 +128,14 @@ export class MainWorker {
       { name: JobName.GATHER_JOBS },
     );
 
+    await this.bullmqQueue.upsertJobScheduler(
+      JobName.GATHER_FAVICON_JOBS,
+      {
+        every: 1000 * 60 * 60,
+      },
+      { name: JobName.GATHER_FAVICON_JOBS },
+    );
+
     // Schedule all singleton jobs
     // for (const job of SINGLETON_JOBS) {
     //   await this.bullmqQueue.upsertJobScheduler(
