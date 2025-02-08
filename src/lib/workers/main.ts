@@ -6,27 +6,27 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import { SingletonJobHandler } from "./singleton";
+// import { SingletonJobHandler } from "./singleton";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
 };
 
-type SingletonJobConfig = {
-  delayMs: number;
-  name: JobName;
-};
+// type SingletonJobConfig = {
+//   delayMs: number;
+//   name: JobName;
+// };
 
 const DEFAULT_CLEANUP_INTERVAL = 60;
 const DEFAULT_GATHER_INTERVAL = 20;
 const DEFAULT_LOCK_DURATION = 60;
 const DEFAULT_WORKER_CONCURRENCY = 25;
 
-const SINGLETON_JOBS: readonly SingletonJobConfig[] = [] as const;
+// const SINGLETON_JOBS: readonly SingletonJobConfig[] = [] as const;
 
 export class MainWorker {
-  private singletonHandler: SingletonJobHandler;
+  // private singletonHandler: SingletonJobHandler;
   private worker: Worker | undefined;
 
   constructor(
@@ -36,12 +36,12 @@ export class MainWorker {
     private readonly sourcesRepository: SourcesRepository,
     private readonly userSourcesRepository: UserSourcesRepository,
   ) {
-    this.singletonHandler = new SingletonJobHandler(redis);
+    // this.singletonHandler = new SingletonJobHandler(redis);
   }
 
   async initialize() {
     this.setSignalHandlers();
-    this.worker = this.setupWorker();
+    this.setupWorker();
     await this.setupScheduledTasks();
     llog("Worker initialized and tasks scheduled");
   }
@@ -77,10 +77,9 @@ export class MainWorker {
       removeOnFail: { count: 0 },
     };
 
-    const worker = new Worker(this.bullmqQueue.name, this.processJob, config);
+    this.worker = new Worker(this.bullmqQueue.name, this.processJob, config);
 
-    worker.on("error", this.handleWorkerError);
-    return worker;
+    this.worker.on("error", this.handleWorkerError);
   }
 
   private handleWorkerError = (error: unknown, jobId?: string) => {
@@ -130,13 +129,13 @@ export class MainWorker {
     );
 
     // Schedule all singleton jobs
-    for (const job of SINGLETON_JOBS) {
-      await this.bullmqQueue.upsertJobScheduler(
-        job.name,
-        { every: Math.floor(job.delayMs / 2) },
-        { name: job.name, data: { jobName: job.name } },
-      );
-    }
+    // for (const job of SINGLETON_JOBS) {
+    //   await this.bullmqQueue.upsertJobScheduler(
+    //     job.name,
+    //     { every: Math.floor(job.delayMs / 2) },
+    //     { name: job.name, data: { jobName: job.name } },
+    //   );
+    // }
   }
 
   private setSignalHandlers() {
@@ -148,29 +147,29 @@ export class MainWorker {
     });
   }
 
-  private async processSingletonJob(job: Job) {
-    const jobName = job.data.jobName as JobName;
-    const jobConfig = SINGLETON_JOBS.find((job) => job.name === jobName);
-    if (!jobConfig) {
-      err(`Unknown singleton job configuration: ${jobName}`);
-      return true;
-    }
+  // private async processSingletonJob(job: Job) {
+  //   const jobName = job.data.jobName as JobName;
+  //   const jobConfig = SINGLETON_JOBS.find((job) => job.name === jobName);
+  //   if (!jobConfig) {
+  //     err(`Unknown singleton job configuration: ${jobName}`);
+  //     return true;
+  //   }
 
-    await this.singletonHandler.runSingleton(
-      { key: jobName, delayMs: jobConfig.delayMs },
-      async () => await this.executeSingletonJob(jobName),
-    );
+  //   await this.singletonHandler.runSingleton(
+  //     { key: jobName, delayMs: jobConfig.delayMs },
+  //     async () => await this.executeSingletonJob(jobName),
+  //   );
 
-    return true;
-  }
+  //   return true;
+  // }
 
-  private async executeSingletonJob(jobName: JobName) {
-    switch (jobName) {
-      default:
-        await Bun.sleep(1);
-        throw new Error(`No handler for singleton job: ${jobName}`);
-    }
-  }
+  // private async executeSingletonJob(jobName: JobName) {
+  //   switch (jobName) {
+  //     default:
+  //       await Bun.sleep(1);
+  //       throw new Error(`No handler for singleton job: ${jobName}`);
+  //   }
+  // }
 
   private async processRegularJob(job: Job) {
     switch (job.name) {
@@ -185,6 +184,25 @@ export class MainWorker {
       case JobName.PARSE_SOURCE:
         await this.feedParser.parseSource(job.data);
         break;
+      case JobName.GATHER_FAVICON_JOBS: {
+        const successfullSources =
+          await this.sourcesRepository.getRecentlySuccessfulSources();
+        const tasks = successfullSources.map((source) => ({
+          data: source,
+          jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
+          name: JobName.REFRESH_FAVICON,
+          opts: {
+            jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
+            removeOnComplete: { count: 0 },
+            removeOnFail: { count: 0 },
+          },
+        }));
+        await this.bullmqQueue.addBulk(tasks);
+        break;
+      }
+      case JobName.REFRESH_FAVICON:
+        await this.feedParser.refreshFavicon(job.data);
+        break;
       default:
         throw new Error(`Unknown job type: ${job.name}`);
     }
@@ -192,11 +210,11 @@ export class MainWorker {
 
   private processJob = async (job: Job) => {
     try {
-      if (job.name.startsWith("SINGLETON:")) {
-        await this.processSingletonJob(job);
-      } else {
-        await this.processRegularJob(job);
-      }
+      // if (job.name.startsWith("SINGLETON:")) {
+      //   await this.processSingletonJob(job);
+      // } else {
+      await this.processRegularJob(job);
+      // }
 
       return true;
     } catch (error: unknown) {

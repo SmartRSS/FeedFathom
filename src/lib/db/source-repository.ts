@@ -1,5 +1,5 @@
 import * as schema from "../schema";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -40,7 +40,13 @@ export class SourcesRepository {
     const isWebSource = () => sql`${schema.sources.url} LIKE 'http%'`;
 
     return this.drizzleConnection
-      .select()
+      .select({
+        id: schema.sources.id,
+        url: schema.sources.url,
+        homeUrl: schema.sources.homeUrl,
+        lastSuccess: schema.sources.lastSuccess,
+        favicon: schema.sources.favicon,
+      })
       .from(schema.sources)
       .where(
         and(
@@ -163,5 +169,15 @@ export class SourcesRepository {
     `;
 
     return this.drizzleConnection.execute(query);
+  }
+
+  public async getRecentlySuccessfulSources() {
+    return this.drizzleConnection
+      .select({
+        id: schema.sources.id,
+        homeUrl: schema.sources.homeUrl,
+      })
+      .from(schema.sources)
+      .where(gt(schema.sources.lastSuccess, new Date()));
   }
 }

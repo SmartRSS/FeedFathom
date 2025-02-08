@@ -2,7 +2,6 @@ import * as dns from "node:dns";
 
 import { parseFeed } from "@rowanmanning/feed-parser";
 import type { Feed } from "@rowanmanning/feed-parser/lib/feed/base";
-import type { Source } from "../types/source-types";
 import { err, llog } from "../util/log";
 import type { FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
 import type { SourcesRepository } from "$lib/db/source-repository";
@@ -60,7 +59,13 @@ export class FeedParser {
     return await chosenParser.bind(this)(url);
   }
 
-  public async parseSource(source: Source) {
+  public async parseSource(source: {
+    id: number;
+    url: string;
+    homeUrl: string;
+    lastSuccess: Date | null;
+    favicon: string | null;
+  }) {
     try {
       if (
         !(await this.canDomainBeProcessedAlready(new URL(source.url).hostname))
@@ -97,35 +102,6 @@ export class FeedParser {
       await this.articlesRepository.batchUpsertArticles(articlePayloads);
       articlePayloads.length = 0;
 
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      if (
-        (source.lastSuccess !== null && source.lastSuccess < oneHourAgo) ||
-        source.favicon === null
-      ) {
-        const urls = [
-          `https://icons.duckduckgo.com/ip3/${source.homeUrl}.ico`,
-          `https://unavatar.io/${source.homeUrl}`,
-          `https://favicon.im/${source.homeUrl}`,
-          `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=64`,
-        ];
-
-        for (const url of urls) {
-          try {
-            const response = await container.cradle.axiosInstance.get(url, {
-              responseType: "arraybuffer",
-            });
-            if (response.status !== 200) {
-              continue;
-            }
-            await this.sourcesRepository.updateFavicon(
-              source.id,
-              response.data,
-            );
-          } catch {
-            // nop
-          }
-        }
-      }
       await this.sourcesRepository.successSource(source.id);
     } catch (e: unknown) {
       if (e instanceof Error) {
@@ -209,5 +185,29 @@ export class FeedParser {
       );
     }
     return parseFeed(response.data);
+  }
+
+  public async refreshFavicon(source: { id: number; homeUrl: string }) {
+    const urls = [
+      `https://icons.duckduckgo.com/ip3/${source.homeUrl}.ico`,
+      `https://unavatar.io/${source.homeUrl}`,
+      `https://favicon.im/${source.homeUrl}`,
+      `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=64`,
+    ];
+
+    for (const url of urls) {
+      try {
+        const response = await container.cradle.axiosInstance.get(url, {
+          responseType: "arraybuffer",
+        });
+        if (response.status !== 200) {
+          continue;
+        }
+        await this.sourcesRepository.updateFavicon(source.id, response.data);
+        break; // Exit loop after successful update
+      } catch {
+        // nop
+      }
+    }
   }
 }
