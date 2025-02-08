@@ -8,6 +8,8 @@ import type { FoldersRepository } from "$lib/db/folder-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
+import { heapStats } from "bun:jsc";
+
 export class UserSourcesRepository {
   public constructor(
     private readonly drizzleConnection: BunSQLDatabase,
@@ -144,6 +146,9 @@ export class UserSourcesRepository {
 
   public async cleanup() {
     try {
+      console.log(heapStats());
+      Bun.gc(true);
+      console.log(heapStats());
       // Step 1: Clean up orphaned userArticles that belong to a user not subscribing their source anymore
       const subscribedSourceIds = this.drizzleConnection
         .select({ sourceId: schema.userSources.sourceId })
