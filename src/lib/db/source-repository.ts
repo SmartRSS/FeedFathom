@@ -43,9 +43,6 @@ export class SourcesRepository {
       .select({
         id: schema.sources.id,
         url: schema.sources.url,
-        homeUrl: schema.sources.homeUrl,
-        lastSuccess: schema.sources.lastSuccess,
-        favicon: schema.sources.favicon,
       })
       .from(schema.sources)
       .where(

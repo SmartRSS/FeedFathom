@@ -6,6 +6,8 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
+import { heapStats } from "bun:jsc";
+
 // import { SingletonJobHandler } from "./singleton";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -78,20 +80,7 @@ export class MainWorker {
     };
 
     this.worker = new Worker(this.bullmqQueue.name, this.processJob, config);
-
-    this.worker.on("error", this.handleWorkerError);
   }
-
-  private handleWorkerError = (error: unknown, jobId?: string) => {
-    if (error instanceof Error) {
-      err(`Worker error for job ${jobId ?? "unknown"}: ${error.message}`, {
-        stack: error.stack,
-        jobId,
-      });
-    } else {
-      err("workerError", { error, jobId });
-    }
-  };
 
   private async setupScheduledTasks() {
     // cleanup legacy jobs that may still be present on the queue
@@ -187,10 +176,14 @@ export class MainWorker {
         break;
       }
       case JobName.CLEANUP:
+        Bun.gc(true);
+        Bun.gc(false);
+        console.log("#########################################");
+        console.log(heapStats());
+        await this.bullmqQueue.trimEvents(100);
         await this.userSourcesRepository.cleanup();
         break;
       case JobName.PARSE_SOURCE:
-        Bun.gc(true);
         await this.feedParser.parseSource(job.data);
         break;
       case JobName.GATHER_FAVICON_JOBS: {

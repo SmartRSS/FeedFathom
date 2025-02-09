@@ -12,8 +12,8 @@ import type Redis from "ioredis";
 import { rewriteLinks } from "./rewrite-links";
 import { AxiosError } from "axios";
 
-const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
-  {};
+// const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
+//   {};
 
 export class FeedParser {
   private readonly defaultDelay = 10_000;
@@ -54,18 +54,13 @@ export class FeedParser {
       throw new Error(`Failed to resolve ${urlObject.hostname}`);
     }
 
-    const chosenParser =
-      parserStrategies[urlObject.origin] || this.parseGenericFeed;
-    return await chosenParser.bind(this)(url);
+    // const chosenParser =
+    //   parserStrategies[urlObject.origin] || this.parseGenericFeed;
+    // return await chosenParser.bind(this)(url);
+    return await this.parseGenericFeed(url);
   }
 
-  public async parseSource(source: {
-    id: number;
-    url: string;
-    homeUrl: string;
-    lastSuccess: Date | null;
-    favicon: string | null;
-  }) {
+  public async parseSource(source: { id: number; url: string }) {
     try {
       if (
         !(await this.canDomainBeProcessedAlready(new URL(source.url).hostname))
