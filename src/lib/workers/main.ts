@@ -190,6 +190,7 @@ export class MainWorker {
         await this.userSourcesRepository.cleanup();
         break;
       case JobName.PARSE_SOURCE:
+        Bun.gc(true);
         await this.feedParser.parseSource(job.data);
         break;
       case JobName.GATHER_FAVICON_JOBS: {
