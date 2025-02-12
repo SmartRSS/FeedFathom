@@ -57,7 +57,10 @@ export class FeedParser {
     return await this.parseGenericFeed(url);
   }
 
-  public async parseSource(source: { id: number; url: string }) {
+  public async parseSource(
+    source: { id: number; url: string },
+    skipCache: boolean = false,
+  ) {
     try {
       if (
         !(await this.canDomainBeProcessedAlready(new URL(source.url).hostname))
@@ -67,7 +70,7 @@ export class FeedParser {
       const { feed: parsedFeed, cached: cached } = await this.parseUrl(
         source.url,
       );
-      if (cached) {
+      if (cached && !skipCache) {
         llog(`${source.url} was cached`);
         await this.sourcesRepository.successSource(source.id);
         return;
