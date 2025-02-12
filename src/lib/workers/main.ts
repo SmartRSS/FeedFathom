@@ -49,6 +49,7 @@ export class MainWorker {
 
   private async gatherParseSourceJobs() {
     const sourcesToProcess = await this.sourcesRepository.getSourcesToProcess();
+    llog(`number of sources to process found: ${sourcesToProcess.length}`);
     const jobs = sourcesToProcess.map((source) => ({
       data: source,
       jobId: JobName.PARSE_SOURCE + ":" + source.url,
