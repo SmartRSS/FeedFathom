@@ -6,7 +6,6 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import { heapStats } from "bun:jsc";
 
 // import { SingletonJobHandler } from "./singleton";
 
