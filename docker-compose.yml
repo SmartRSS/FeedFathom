@@ -27,6 +27,7 @@ services:
       - postgres_storage_17:/var/lib/postgresql/data
 
   migrator:
+    init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     environment:
       INTEGRATION: "migrator"
@@ -37,6 +38,7 @@ services:
         condition: service_healthy
 
   server:
+    init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
       - "/app/index.js"
@@ -69,6 +71,7 @@ services:
         condition: service_completed_successfully
 
   worker:
+    init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
       - "--smol"
@@ -95,6 +98,7 @@ services:
         condition: service_completed_successfully
 
   mail:
+    init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
       - "/app/worker-entrypoint.js"
