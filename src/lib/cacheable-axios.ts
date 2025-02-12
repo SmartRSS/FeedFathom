@@ -64,7 +64,7 @@ export const buildAxios = (redis: Redis) => {
 
       const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1800000;
 
-      llog(`saving value for ${key}`);
+      llog(`saving value for ${key} for ${validTtl}`);
       await redis.set(
         `axios-cache-${key}`,
         JSON.stringify(value),
