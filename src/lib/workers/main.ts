@@ -172,7 +172,14 @@ export class MainWorker {
     switch (job.name) {
       case JobName.GATHER_JOBS: {
         const parseSourceJobs = await this.gatherParseSourceJobs();
+        const num = await this.bullmqQueue.getJobCounts();
         await this.bullmqQueue.addBulk(parseSourceJobs);
+        llog(
+          "jobs before",
+          num,
+          "jobs after",
+          await this.bullmqQueue.getJobCounts(),
+        );
         break;
       }
       case JobName.CLEANUP:
