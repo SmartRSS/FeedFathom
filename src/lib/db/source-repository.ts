@@ -107,7 +107,10 @@ export class SourcesRepository {
     }
   }
 
-  public async successSource(sourceId: number, cached: boolean = false): Promise<void> {
+  public async successSource(
+    sourceId: number,
+    cached: boolean = false,
+  ): Promise<void> {
     const now = new Date();
     await this.drizzleConnection
       .update(schema.sources)
