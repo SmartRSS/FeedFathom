@@ -9,7 +9,7 @@ import {
 import Redis from "ioredis";
 import fs from "node:fs";
 import path from "path";
-import { err, llog } from "../util/log";
+import { err } from "../util/log";
 
 function getBuildTime(): string {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
