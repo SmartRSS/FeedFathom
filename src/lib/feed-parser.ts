@@ -32,10 +32,7 @@ export class FeedParser {
 
   public async preview(sourceUrl: string) {
     try {
-      const parsedFeed = await this.parseUrl(sourceUrl);
-      if (!parsedFeed) {
-        return;
-      }
+      const { feed: parsedFeed } = await this.parseUrl(sourceUrl);
       return {
         description: parsedFeed.description,
         feedUrl: sourceUrl,
@@ -47,7 +44,7 @@ export class FeedParser {
     }
   }
 
-  public async parseUrl(url: string): Promise<Feed | void> {
+  public async parseUrl(url: string) {
     const urlObject = new URL(url);
     const lookupResult = await dns.promises.lookup(urlObject.hostname);
     if (!lookupResult.address) {
@@ -67,9 +64,10 @@ export class FeedParser {
       ) {
         return;
       }
-      const parsedFeed = await this.parseUrl(source.url);
-      if (!parsedFeed) {
-        llog("fail source");
+      const { feed: parsedFeed, cached: cached } = await this.parseUrl(
+        source.url,
+      );
+      if (cached) {
         return;
       }
 
@@ -179,7 +177,7 @@ export class FeedParser {
         `Failed to load data for ${url}, received status ${response.status}`,
       );
     }
-    return parseFeed(response.data);
+    return { feed: parseFeed(response.data), cached: response.cached };
   }
 
   public async refreshFavicon(source: { id: number; homeUrl: string }) {
