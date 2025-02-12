@@ -176,10 +176,6 @@ export class MainWorker {
         break;
       }
       case JobName.CLEANUP:
-        Bun.gc(true);
-        Bun.gc(false);
-        console.log("#########################################");
-        console.log(heapStats());
         await this.bullmqQueue.trimEvents(100);
         await this.userSourcesRepository.cleanup();
         break;
