@@ -46,6 +46,7 @@ export const buildAxios = (redis: Redis) => {
       if (!cachedValue) {
         return undefined;
       }
+      console.log(`found cached value for ${key}`);
       return JSON.parse(cachedValue) as StorageValue;
     },
     async set(key, value, req) {
