@@ -73,7 +73,7 @@ export class FeedParser {
       );
       if (cached && !source.skipCache) {
         llog(`${source.url} was cached`);
-        await this.sourcesRepository.successSource(source.id);
+        await this.sourcesRepository.successSource(source.id, true);
         return;
       }
       llog(`${source.url} was not cached`);

@@ -107,7 +107,10 @@ export class SourcesRepository {
     }
   }
 
-  public async successSource(sourceId: number): Promise<void> {
+  public async successSource(
+    sourceId: number,
+    cached: boolean = false,
+  ): Promise<void> {
     const now = new Date();
     await this.drizzleConnection
       .update(schema.sources)
@@ -115,7 +118,7 @@ export class SourcesRepository {
         lastAttempt: now,
         lastSuccess: now,
         recentFailures: 0,
-        recentFailureDetails: "",
+        recentFailureDetails: cached ? "cached" : "not cached",
       })
       .where(eq(schema.sources.id, sourceId));
   }
