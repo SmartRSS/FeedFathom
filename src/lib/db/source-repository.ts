@@ -33,12 +33,7 @@ export class SourcesRepository {
       sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
 
     const lastAttemptTimeout = () =>
-      lt(
-        schema.sources.lastAttempt,
-        new Date(
-          Date.now() - Math.floor(Math.random() * (360 - 220) + 220) * 1000,
-        ),
-      );
+      lt(schema.sources.lastAttempt, new Date(Date.now() - 30 * 60 * 1000));
 
     const isLastAttemptNull = () => isNull(schema.sources.lastAttempt);
 
@@ -53,9 +48,9 @@ export class SourcesRepository {
       .where(
         and(
           or(
-            and(
-              or(noRecentFailures(), failedAttemptTimeout()),
-              lastAttemptTimeout(),
+            or(
+              and(noRecentFailures(), lastAttemptTimeout()),
+              failedAttemptTimeout(),
             ),
             isLastAttemptNull(),
           ),
