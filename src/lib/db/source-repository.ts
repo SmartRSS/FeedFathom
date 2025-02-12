@@ -35,7 +35,7 @@ export class SourcesRepository {
     const lastAttemptTimeout = () =>
       lt(
         schema.sources.lastAttempt,
-        sql`NOW() - INTERVAL '8 minutes' - INTERVAL FLOOR(RANDOM() * 5) * INTERVAL '1 minute'`,
+        sql`NOW() - INTERVAL '8 minutes' - INTERVAL (RANDOM()::int * 5) * INTERVAL '1 minute'`,
       );
 
     const isLastAttemptNull = () => isNull(schema.sources.lastAttempt);
