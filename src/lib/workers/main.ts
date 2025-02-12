@@ -6,7 +6,6 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type Redis from "ioredis";
 import { JobName } from "../../types/job-name.enum";
 import type { SourcesRepository } from "$lib/db/source-repository";
-import { heapStats } from "bun:jsc";
 
 // import { SingletonJobHandler } from "./singleton";
 
@@ -176,10 +175,6 @@ export class MainWorker {
         break;
       }
       case JobName.CLEANUP:
-        Bun.gc(true);
-        Bun.gc(false);
-        console.log("#########################################");
-        console.log(heapStats());
         await this.bullmqQueue.trimEvents(100);
         await this.userSourcesRepository.cleanup();
         break;
