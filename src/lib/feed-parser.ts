@@ -68,9 +68,11 @@ export class FeedParser {
         source.url,
       );
       if (cached) {
+        llog(`${source.url} was cached`);
         await this.sourcesRepository.successSource(source.id);
         return;
       }
+      llog(`${source.url} was not cached`);
 
       const articlePayloads = parsedFeed.items.map((item) => {
         const guid = this.generateGuid(item, parsedFeed, source.url);

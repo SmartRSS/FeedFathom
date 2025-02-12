@@ -46,7 +46,6 @@ export const buildAxios = (redis: Redis) => {
       if (!cachedValue) {
         return undefined;
       }
-      llog(`found cached value for ${key}`);
       return JSON.parse(cachedValue) as StorageValue;
     },
     async set(key, value, req) {
@@ -64,7 +63,6 @@ export const buildAxios = (redis: Redis) => {
 
       const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1800000;
 
-      llog(`saving value for ${key} for ${validTtl}`);
       await redis.set(
         `axios-cache-${key}`,
         JSON.stringify(value),
