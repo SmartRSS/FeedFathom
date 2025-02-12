@@ -77,13 +77,13 @@ services:
     environment:
       DEBUG: bull:*
       INTEGRATION: worker
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-60}
       GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
     mem_limit: "350M"
     deploy:
-      replicas: ${WORKER_REPLICAS:-8}
+      replicas: ${WORKER_REPLICAS:-3}
       restart_policy:
         condition: on-failure
     depends_on:
