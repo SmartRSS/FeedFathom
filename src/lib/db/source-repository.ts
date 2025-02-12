@@ -2,6 +2,7 @@ import * as schema from "../schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { FeedParser } from "$lib/feed-parser";
 
 type SortField =
   | "url"
@@ -12,7 +13,10 @@ type SortField =
   | "failures";
 
 export class SourcesRepository {
-  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(
+    private readonly drizzleConnection: BunSQLDatabase,
+    private readonly feedParser: FeedParser,
+  ) {}
 
   public async updateFavicon(sourceId: number, favicon: Buffer): Promise<void> {
     await this.drizzleConnection
@@ -78,6 +82,7 @@ export class SourcesRepository {
     if (!source) {
       throw new Error("failed");
     }
+    void this.feedParser.parseSource({ id: source.id, url: source.url }, true);
     return source;
   }
 
