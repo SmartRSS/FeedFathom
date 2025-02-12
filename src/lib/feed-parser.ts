@@ -68,6 +68,7 @@ export class FeedParser {
         source.url,
       );
       if (cached) {
+        await this.sourcesRepository.successSource(source.id);
         return;
       }
 
