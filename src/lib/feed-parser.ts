@@ -156,11 +156,8 @@ export class FeedParser {
     );
 
     const delaySetting = this.domainDelaySettings[domain] || this.defaultDelay;
-    const remainingDelay = Math.max(
-      0,
-      delaySetting - (now - lastFetchTimestamp),
-    );
-    if (remainingDelay > 0) {
+    if (now < lastFetchTimestamp + delaySetting) {
+      llog(`can't process ${domain} yet`);
       return false;
     }
     await this.redis.set(lastFetchKey, now.toString());
