@@ -192,7 +192,7 @@ export class SourcesRepository {
   public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
     await this.drizzleConnection
       .update(schema.sources)
-      .set({ url: newUrl, recentFailures: 0 })
+      .set({ url: newUrl, recentFailures: 0, recentFailureDetails: "" })
       .where(eq(schema.sources.url, oldUrl));
   }
 }
