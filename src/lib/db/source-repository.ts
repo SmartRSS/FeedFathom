@@ -190,7 +190,7 @@ export class SourcesRepository {
         homeUrl: schema.sources.homeUrl,
       })
       .from(schema.sources)
-      .where(gt(schema.sources.lastSuccess, new Date()));
+      .where(gt(schema.sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
   }
 
   public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
