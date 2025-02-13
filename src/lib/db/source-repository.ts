@@ -4,7 +4,6 @@ import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { Queue } from "bullmq";
 import { JobName } from "../../types/job-name.enum";
-import { isBufferPlaintext } from "../../util/is-buffer-plaintext";
 
 type SortField =
   | "url"
