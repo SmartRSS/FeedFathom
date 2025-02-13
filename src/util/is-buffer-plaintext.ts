@@ -1,4 +1,7 @@
-export function isBufferPlaintext(buffer: Buffer) {
+export function isBufferPlaintext(buffer: Buffer | string): buffer is string {
+  if (typeof buffer === "string") {
+    return true;
+  }
   // Check if the buffer contains only printable characters
   for (let i = 0; i < buffer.length; i++) {
     const byte = buffer[i];
