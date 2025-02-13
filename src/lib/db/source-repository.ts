@@ -1,5 +1,5 @@
 import * as schema from "../schema";
-import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql, asc } from "drizzle-orm";
 import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { Queue } from "bullmq";
@@ -34,14 +34,20 @@ export class SourcesRepository {
       sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
 
     const lastAttemptTimeout = () =>
-      lt(
-        schema.sources.lastAttempt,
-        sql`NOW() - (INTERVAL '1 minute' * RANDOM() * 15) - INTERVAL '15 minutes'`,
-      );
+      lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
 
     const isLastAttemptNull = () => isNull(schema.sources.lastAttempt);
 
     const isWebSource = () => sql`${schema.sources.url} LIKE 'http%'`;
+
+    const shouldProcessSource = () =>
+      or(
+        or(
+          and(noRecentFailures(), lastAttemptTimeout()),
+          and(failedRecently(), failedAttemptTimeout()),
+        ),
+        isLastAttemptNull(),
+      );
 
     return this.drizzleConnection
       .select({
@@ -49,17 +55,10 @@ export class SourcesRepository {
         url: schema.sources.url,
       })
       .from(schema.sources)
-      .where(
-        and(
-          or(
-            or(
-              and(noRecentFailures(), lastAttemptTimeout()),
-              and(failedRecently(), failedAttemptTimeout()),
-            ),
-            isLastAttemptNull(),
-          ),
-          isWebSource(),
-        ),
+      .where(and(shouldProcessSource(), isWebSource()))
+      .orderBy(asc(schema.sources.lastAttempt))
+      .limit(
+        sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${schema.sources})::int;` as unknown as number,
       );
   }
 
