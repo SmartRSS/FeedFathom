@@ -28,6 +28,7 @@ export class SourcesRepository {
 
   public async getSourcesToProcess() {
     const noRecentFailures = () => eq(schema.sources.recentFailures, 0);
+    const failedRecently = () => gt(schema.sources.recentFailures, 0);
 
     const failedAttemptTimeout = () =>
       sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
@@ -53,7 +54,7 @@ export class SourcesRepository {
           or(
             or(
               and(noRecentFailures(), lastAttemptTimeout()),
-              failedAttemptTimeout(),
+              and(failedRecently(), failedAttemptTimeout()),
             ),
             isLastAttemptNull(),
           ),
