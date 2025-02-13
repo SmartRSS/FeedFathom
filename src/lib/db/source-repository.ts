@@ -20,12 +20,19 @@ export class SourcesRepository {
     private readonly bullmqQueue: Queue,
   ) {}
 
-  public async updateFavicon(sourceId: number, favicon: Buffer): Promise<void> {
-    const type = isBufferPlaintext(favicon) ? "svg+xml" : "png";
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer | string,
+  ): Promise<void> {
+    const isSVG = isBufferPlaintext(favicon);
+    const type = isSVG ? "svg+xml" : "png";
+    const encoded = isSVG
+      ? Buffer.from(favicon, "utf-8").toString("base64")
+      : favicon.toString("base64");
     await this.drizzleConnection
       .update(schema.sources)
       .set({
-        favicon: `data:image/${type};base64,${favicon.toString("base64")}`,
+        favicon: `data:image/${type};base64,${encoded}`,
       })
       .where(eq(schema.sources.id, sourceId));
   }
