@@ -4,7 +4,6 @@ import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { Queue } from "bullmq";
 import { JobName } from "../../types/job-name.enum";
-import { isBufferPlaintext } from "../../util/is-buffer-plaintext";
 
 type SortField =
   | "url"
@@ -24,11 +23,17 @@ export class SourcesRepository {
     sourceId: number,
     favicon: Buffer | string,
   ): Promise<void> {
-    const isSVG = isBufferPlaintext(favicon);
-    const type = isSVG ? "svg+xml" : "png";
-    const encoded = isSVG
-      ? Buffer.from(favicon, "utf-8").toString("base64")
-      : favicon.toString("base64");
+    let type: string;
+    let encoded: string;
+
+    if (Buffer.isBuffer(favicon)) {
+      type = "png";
+      encoded = favicon.toString("base64");
+    } else {
+      type = "svg+xml";
+      encoded = Buffer.from(favicon, "utf-8").toString("base64");
+    }
+
     await this.drizzleConnection
       .update(schema.sources)
       .set({
