@@ -70,7 +70,8 @@
         <th onclick={() => sortSources("created_at")}>Created At</th>
         <th onclick={() => sortSources("last_attempt")}>Last Attempt</th>
         <th onclick={() => sortSources("last_success")}>Last Success</th>
-        <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th>
+        <th onclick={() => sortSources("subscriber_count")}>Subscriber Count</th
+        >
         <th onclick={() => sortSources("failures")}>Failures</th>
         <th>Details</th>
         <th>Action</th>
@@ -99,11 +100,15 @@
 
 <dialog id="edit-dialog">
   <div class="modal-content">
-    <button class="close" onclick={closeModal} aria-label="Close modal">&times;</button>
+    <button class="close" onclick={closeModal} aria-label="Close modal"
+      >&times;</button
+    >
     <h2>Edit Source URL</h2>
     <label for="new-url">New URL:</label>
     <input type="text" id="new-url" bind:value={newSourceUrl} />
-    <button onclick={() => updateSource(currentSourceUrl, newSourceUrl)}>Update</button>
+    <button onclick={() => updateSource(currentSourceUrl, newSourceUrl)}
+      >Update</button
+    >
     <button onclick={closeModal}>Cancel</button>
   </div>
 </dialog>
