@@ -8,6 +8,7 @@ import {
   unique,
   varchar,
   boolean,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -21,18 +22,27 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
 });
 
-export const sources = pgTable("sources", {
-  id: serial("id").primaryKey(),
-  url: varchar("url").notNull(),
-  homeUrl: varchar("home_url").notNull(),
-  favicon: varchar("favicon"),
-  recentFailures: integer("recent_failures").notNull().default(0),
-  lastAttempt: timestamp("last_attempt"),
-  lastSuccess: timestamp("last_success"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  recentFailureDetails: varchar("recent_failure_details").notNull().default(""),
-});
+export const sources = pgTable(
+  "sources",
+  {
+    id: serial("id").primaryKey(),
+    url: varchar("url").notNull(),
+    homeUrl: varchar("home_url").notNull(),
+    favicon: varchar("favicon"),
+    recentFailures: integer("recent_failures").notNull().default(0),
+    lastAttempt: timestamp("last_attempt"),
+    lastSuccess: timestamp("last_success"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    recentFailureDetails: varchar("recent_failure_details")
+      .notNull()
+      .default(""),
+  },
+  (table) => [
+    index("last_attempt_idx").on(table.lastAttempt),
+    index("recent_failures_idx").on(table.recentFailures),
+  ],
+);
 
 export const userFolders = pgTable("user_folders", {
   id: serial("id").primaryKey(),
