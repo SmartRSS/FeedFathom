@@ -1,6 +1,6 @@
 import * as schema from "../schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
-import { err, llog } from "../../util/log";
+import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { Queue } from "bullmq";
 import { JobName } from "../../types/job-name.enum";
