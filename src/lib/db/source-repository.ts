@@ -188,4 +188,11 @@ export class SourcesRepository {
       .from(schema.sources)
       .where(gt(schema.sources.lastSuccess, new Date()));
   }
+
+  public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
+    await this.drizzleConnection
+      .update(schema.sources)
+      .set({ url: newUrl })
+      .where(eq(schema.sources.url, oldUrl));
+  }
 }

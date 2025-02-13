@@ -1,4 +1,7 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
+import { updateSourceHandler } from "./update-source.handler";
+import { createRequestHandler } from "$lib/create-request-handler";
+import { UpdateSourceRequest } from "./update-source.validator";
 
 type SortField =
   | "url"
@@ -22,3 +25,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     return json({ error: "Failed to fetch sources" }, { status: 500 });
   }
 };
+
+// Add the POST handler for updating the source
+export const POST = createRequestHandler(
+  UpdateSourceRequest,
+  updateSourceHandler,
+);
