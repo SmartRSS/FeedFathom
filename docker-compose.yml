@@ -40,6 +40,7 @@ services:
   server:
     init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    restart: always
     command:
       - "/app/index.js"
     deploy:
@@ -48,8 +49,6 @@ services:
         delay: 10s
         order: start-first
       replicas: ${APP_REPLICAS:-1}
-      restart_policy:
-        condition: on-failure
     healthcheck:
       test: "curl -f http://localhost:3000/health || exit 1"
       interval: 5s
@@ -74,7 +73,6 @@ services:
     init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     command:
-      - "--smol"
       - "/app/worker-entrypoint.js"
     restart: always
     environment:
@@ -84,11 +82,9 @@ services:
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-60}
       GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-    mem_limit: "350M"
+    mem_limit: "800M"
     deploy:
       replicas: ${WORKER_REPLICAS:-3}
-      restart_policy:
-        condition: on-failure
     depends_on:
       redis:
         condition: service_healthy
