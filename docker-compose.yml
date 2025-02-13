@@ -78,13 +78,13 @@ services:
     environment:
       DEBUG: bull:*
       INTEGRATION: worker
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-20}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-60}
       GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-    mem_limit: "800M"
+    mem_limit: "1500M"
     deploy:
-      replicas: ${WORKER_REPLICAS:-1}
+      replicas: ${WORKER_REPLICAS:-2}
     depends_on:
       redis:
         condition: service_healthy
