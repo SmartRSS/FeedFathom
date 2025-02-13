@@ -4,6 +4,7 @@ import { err } from "../../util/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { Queue } from "bullmq";
 import { JobName } from "../../types/job-name.enum";
+import { isBufferPlaintext } from "../../util/is-buffer-plaintext";
 
 type SortField =
   | "url"
@@ -20,9 +21,12 @@ export class SourcesRepository {
   ) {}
 
   public async updateFavicon(sourceId: number, favicon: Buffer): Promise<void> {
+    const type = isBufferPlaintext(favicon) ? "svg+xml" : "png";
     await this.drizzleConnection
       .update(schema.sources)
-      .set({ favicon: favicon.toString("base64") })
+      .set({
+        favicon: `data:image/${type};base64,${favicon.toString("base64")}`,
+      })
       .where(eq(schema.sources.id, sourceId));
   }
 

@@ -63,7 +63,7 @@
     if (node.type === NodeType.FOLDER) {
       return isOpen ? folder_opened : folder;
     }
-    return node.favicon ? `data:image/png;base64,${node.favicon}` : feed;
+    return node.favicon ? node.favicon : feed;
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
