@@ -66,6 +66,7 @@
   <table>
     <thead>
       <tr>
+        <th>Action</th>
         <th onclick={() => sortSources("url")}>URL</th>
         <th onclick={() => sortSources("created_at")}>Created At</th>
         <th onclick={() => sortSources("last_attempt")}>Last Attempt</th>
@@ -74,14 +75,16 @@
         >
         <th onclick={() => sortSources("failures")}>Failures</th>
         <th>Details</th>
-        <th>Action</th>
       </tr>
     </thead>
     <tbody>
       {#each sources as source}
         <tr>
           <td>
-            <input type="text" value={source.url} readonly />
+            <button onclick={() => openModal(source.url)}>Edit</button>
+          </td>
+          <td>
+            {source.url}
           </td>
           <td>{new Date(source["created_at"]).toISOString()}</td>
           <td>{new Date(source["last_attempt"]).toISOString()}</td>
@@ -89,9 +92,6 @@
           <td>{source["subscriber_count"]}</td>
           <td>{source["failures"]}</td>
           <td>{source["recent_failure_details"]}</td>
-          <td>
-            <button onclick={() => openModal(source.url)}>Edit</button>
-          </td>
         </tr>
       {/each}
     </tbody>
