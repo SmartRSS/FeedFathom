@@ -58,9 +58,10 @@ services:
     ports:
       - "3456:3000"
     environment:
-      ORIGIN: ${ORIGIN:-http://localhost:3456}
-      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
+      MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
+      ORIGIN: ${ORIGIN:-http://localhost:3456}
     depends_on:
       redis:
         condition: service_healthy
@@ -106,7 +107,7 @@ services:
       INTEGRATION: "mail"
     deploy:
       mode: global
-      replicas: 1
+      replicas: ${MAIL_REPLICAS:-0}
     depends_on:
       postgres:
         condition: service_healthy

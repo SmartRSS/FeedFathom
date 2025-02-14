@@ -84,6 +84,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             export FEEDFATHOM_TAG=${{ github.sha }}
             export DEPLOY_PATH=${{ env.DEPLOY_PATH }}
+            export MAIL_REPLICAS=1
             echo ${{ github.sha }}
             cd $DEPLOY_PATH
             docker compose pull
