@@ -1,6 +1,6 @@
 import { type MailWorker } from "$lib/workers/mail";
 import { type MainWorker } from "$lib/workers/main";
-import { err as error_, llog } from "../../util/log";
+import { logError as error_, llog } from "../../util/log";
 import { type Cli } from "./cli";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/node-postgres/migrator";

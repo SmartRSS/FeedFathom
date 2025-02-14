@@ -3,7 +3,7 @@ import { type SourcesRepository } from "$lib/db/source-repository";
 import * as schema from "$lib/schema";
 import { type OpmlNode } from "../../types/opml-types";
 import { type TreeNode } from "../../types/source-types";
-import { err as error } from "../../util/log";
+import { logError as error } from "../../util/log";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 

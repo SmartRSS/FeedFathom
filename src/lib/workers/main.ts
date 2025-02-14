@@ -1,9 +1,9 @@
- 
+
 import { type SourcesRepository } from "$lib/db/source-repository";
 import { type UserSourcesRepository } from "$lib/db/user-source-repository";
 import { type FeedParser } from "$lib/feed-parser";
 import { JobName } from "../../types/job-name.enum";
-import { err as error_, llog } from "../../util/log";
+import { logError as error_, llog } from "../../util/log";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
 

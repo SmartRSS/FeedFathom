@@ -1,7 +1,7 @@
 import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import { type Source } from "../../types/source-types";
-import { err as error_ } from "../../util/log";
+import { logError as error_ } from "../../util/log";
 import * as mailParser from "mailparser";
 import stream from "node:stream/promises";
 import {

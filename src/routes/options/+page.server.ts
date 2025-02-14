@@ -1,6 +1,6 @@
 import { type PageServerLoad } from "../$types";
 import { isPlainText } from "../../util/is-plain-text";
-import { err as error_ } from "../../util/log";
+import { logError as error_ } from "../../util/log";
 import { type Actions, error, json } from "@sveltejs/kit";
 
 export const actions: Actions = {

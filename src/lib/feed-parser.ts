@@ -1,7 +1,7 @@
 import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import container from "../container";
-import { err as error, llog } from "../util/log";
+import { logError as error, llog } from "../util/log";
 import { rewriteLinks } from "./rewrite-links";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { type Feed } from "@rowanmanning/feed-parser/lib/feed/base";
@@ -96,7 +96,7 @@ export class FeedParser {
 
       await this.sourcesRepository.failSource(source.id, message);
       error(source.url + " failed");
-      
+
     }
   }
 
@@ -123,7 +123,7 @@ export class FeedParser {
         title: parsedFeed.title,
       };
     } catch {
-      
+
     }
   }
 

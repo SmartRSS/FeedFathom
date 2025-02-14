@@ -1,5 +1,5 @@
 import { type FeedData } from "../../types";
-import { err as error } from "../../util/log";
+import { logError as error } from "../../util/log";
 import { type Scanner } from "./scanner.interface";
 
 const selector = [

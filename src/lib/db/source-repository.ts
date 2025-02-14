@@ -1,5 +1,5 @@
 import { JobName } from "../../types/job-name.enum";
-import { err as error } from "../../util/log";
+import { logError as error } from "../../util/log";
 import * as schema from "../schema";
 import { type Queue } from "bullmq";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";

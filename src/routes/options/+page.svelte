@@ -1,7 +1,7 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import { err } from "../../util/log";
+  import { logError } from "../../util/log";
   import { isMimeText } from "../../util/is-mime-text";
   import { isPlainText } from "../../util/is-plain-text";
 
@@ -43,7 +43,7 @@
   const changePassword: SubmitFunction = async ({ formData, cancel }) => {
     for (const field of ["oldPassword", "password1", "password2"]) {
       if (!formData.get(field)) {
-        err("no " + field);
+        logError("no " + field);
         cancel();
         return;
       }

@@ -1,5 +1,5 @@
 import { scan } from "$lib/scanner";
-import { err as error_ } from "../../util/log";
+import { logError as error_ } from "../../util/log";
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { JSDOM } from "jsdom";
 

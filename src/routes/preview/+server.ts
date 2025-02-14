@@ -1,4 +1,4 @@
-import { err as error_ } from "../../util/log";
+import { logError as error_ } from "../../util/log";
 import { json, type RequestHandler } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, url }) => {

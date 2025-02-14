@@ -1,4 +1,4 @@
-import { err as error_ } from "../util/log";
+import { logError as error_ } from "../util/log";
 import Axios, { type AxiosInstance } from "axios";
 import {
   buildStorage,

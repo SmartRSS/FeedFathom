@@ -1,9 +1,9 @@
- 
- 
- 
- 
+
+
+
+
 import { type OpmlFolder, type OpmlSource, type Outline } from "../types/opml-types";
-import { err as error_ } from "../util/log";
+import { logError as error_ } from "../util/log";
 import xml2js from "xml2js";
 
 export class OpmlParser {
