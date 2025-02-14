@@ -18,16 +18,19 @@
     feedUrl: string;
   }
 
-  let title = "";
-  let link = "";
-  let feedUrl = "";
-  let isLoading = false;
-  let folders: Folder[] = [];
-  let folder = "";
-  let foundFeeds: FoundFeed[] = [];
-  let selectingFeed = false;
-  let errorMessage = "";
-  let clipboardMessage = "";
+  const { data } = $props();
+  const { isMailEnabled } = data;
+
+  let title = $state("");
+  let link = $state("");
+  let feedUrl = $state("");
+  let isLoading = $state(false);
+  let folders: Folder[] = $state([]);
+  let folder = $state("");
+  let foundFeeds: FoundFeed[] = $state([]);
+  let selectingFeed = $state(false);
+  let errorMessage = $state("");
+  let clipboardMessage = $state("");
 
   onMount(async () => {
     feedUrl = $page.url.searchParams.get("feedUrl") ?? "";
@@ -49,11 +52,15 @@
     feedUrl ? await loadFeedPreview() : await findFeeds();
   });
 
-  $: isFormFilled = title && link && feedUrl;
+  let isFormFilled = $derived(title && link && feedUrl);
 
   function isValidUrl(url: string): boolean {
     try {
       new URL(url);
+      // Check if isMailEnabled is false and the URL looks like an email
+      if (!isMailEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) {
+        return false; // Invalid if it looks like an email
+      }
       return true;
     } catch (_) {
       return false;
@@ -74,6 +81,13 @@
     if (!isValidUrl(feedUrl)) {
       llog("Invalid Feed URL");
       displayError("Invalid Feed URL");
+      return;
+    }
+
+    // New validation for feedUrl against email format
+    if (!isMailEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feedUrl)) {
+      llog("Feed URL cannot be an email when mail is not enabled");
+      displayError("Feed URL cannot be an email when mail is not enabled");
       return;
     }
 
@@ -186,7 +200,7 @@
     <div class="clipboard-message">{clipboardMessage}</div>
   {/if}
 
-  <form on:submit|preventDefault={save}>
+  <form onsubmit={save}>
     <fieldset>
       <legend>Feed Information</legend>
       <div class="input-block">
@@ -201,7 +215,15 @@
 
       <div class="input-block">
         <label for="feedUrl">Feed URL:</label>
-        <input bind:value={feedUrl} id="feedUrl" type="text" />
+        <input
+          bind:value={feedUrl}
+          id="feedUrl"
+          type="text"
+          pattern={isMailEnabled ? "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$|^(https?://.+)$" : "^(https?://.+)$"}
+          title={isMailEnabled
+            ? "Enter a valid email or feed URL."
+            : "Enter a valid feed URL."}
+        />
       </div>
     </fieldset>
 
@@ -222,22 +244,23 @@
     <div class="button-row">
       <button
         disabled={isLoading || !link || !isValidUrl(link)}
-        on:click={findFeeds}
+        onclick={findFeeds}
         type="button"
       >
         Find Feeds
       </button>
       <button
         disabled={isLoading || !feedUrl || !isValidUrl(feedUrl)}
-        on:click={loadFeedPreview}
+        onclick={loadFeedPreview}
         type="button"
       >
         Load Preview
       </button>
       <button
-        disabled={isLoading}
-        on:click={generateAndCopyUlidEmail}
+        disabled={isLoading || !isMailEnabled}
+        onclick={generateAndCopyUlidEmail}
         type="button"
+        hidden={!isMailEnabled}
       >
         Generate and Copy ULID Email
       </button>
@@ -245,7 +268,7 @@
 
     <div class="button-row">
       <button disabled={isLoading || !isFormFilled} type="submit">Save</button>
-      <button disabled={isLoading} on:click={cancel} type="button"
+      <button disabled={isLoading} onclick={cancel} type="button"
         >Cancel
       </button>
     </div>
@@ -254,7 +277,7 @@
   {#if selectingFeed}
     <dialog id="feed-dialog" class="modal">
       <div class="modal-content">
-        <button class="close-button" on:click={() => closeDialog()}
+        <button class="close-button" onclick={() => closeDialog()}
           >&times;
         </button>
         <h3>Select a Feed</h3>
@@ -263,7 +286,7 @@
         {/if}
         {#each foundFeeds as feed}
           <div>
-            <button type="button" on:click={() => selectFeed(feed.url)}>
+            <button type="button" onclick={() => selectFeed(feed.url)}>
               {feed.title} - {feed.url}
             </button>
           </div>
@@ -311,6 +334,9 @@
     width: calc(100% - 22px);
     border: 1px solid #ccc;
     border-radius: 4px;
+  }
+  input:user-invalid {
+    border-color: red;
   }
 
   .button-row {
