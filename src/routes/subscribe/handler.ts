@@ -12,7 +12,10 @@ export const subscribeHandler = async ({
 
   // Check if email is provided as sourceUrl while !isMailEnabled
   if (!isMailEnabled && sourceUrl.includes("@")) {
-    return json({ error: "Email subscriptions are not allowed." }, { status: 400 });
+    return json(
+      { error: "Email subscriptions are not allowed." },
+      { status: 400 },
+    );
   }
 
   if (sourceUrl.includes("@")) {

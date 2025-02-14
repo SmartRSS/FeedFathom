@@ -219,7 +219,9 @@
           bind:value={feedUrl}
           id="feedUrl"
           type="text"
-          pattern={isMailEnabled ? "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$|^(https?://.+)$" : "^(https?://.+)$"}
+          pattern={isMailEnabled
+            ? "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$|^(https?://.+)$"
+            : "^(https?://.+)$"}
           title={isMailEnabled
             ? "Enter a valid email or feed URL."
             : "Enter a valid feed URL."}
