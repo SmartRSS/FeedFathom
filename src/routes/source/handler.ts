@@ -1,10 +1,10 @@
+import { type ValidatedRequestEvent } from "../../app";
+import { type DeleteSource } from "./validator";
 import { json } from "@sveltejs/kit";
-import type { ValidatedRequestEvent } from "../../app";
-import { DeleteSource } from "./validator";
 
 export const deleteSourceHandler = async ({
-  locals,
   body,
+  locals,
 }: ValidatedRequestEvent<DeleteSource>) => {
   await locals.dependencies.userSourcesRepository.removeSourceFromUser(
     locals.user.id,

@@ -1,25 +1,25 @@
-import * as schema from "$lib/schema";
-
-export type Source = typeof schema.sources.$inferSelect;
+import type * as schema from "$lib/schema";
 
 export enum NodeType {
   FOLDER = "folder",
   SOURCE = "source",
 }
 
-type TreeFolder = {
-  uid: string;
-  type: NodeType.FOLDER;
-  name: string;
-  children: TreeNode[];
-};
-export type TreeSource = {
-  uid: string;
-  type: NodeType.SOURCE;
-  xmlUrl: string;
-  name: string;
-  homeUrl: string;
-  unreadCount: number;
-  favicon: string | null;
-};
+export type Source = typeof schema.sources.$inferSelect;
+
 export type TreeNode = TreeFolder | TreeSource;
+export type TreeSource = {
+  favicon: null | string;
+  homeUrl: string;
+  name: string;
+  type: NodeType.SOURCE;
+  uid: string;
+  unreadCount: number;
+  xmlUrl: string;
+};
+type TreeFolder = {
+  children: TreeNode[];
+  name: string;
+  type: NodeType.FOLDER;
+  uid: string;
+};

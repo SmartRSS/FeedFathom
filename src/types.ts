@@ -1,16 +1,29 @@
-import type { Article } from "./types/article.type";
-import type { TreeNode } from "./types/source-types";
-import type { DisplayMode } from "$lib/settings";
+import { type DisplayMode } from "$lib/settings";
+import { type Article } from "./types/article.type";
+import { type TreeNode } from "./types/source-types";
 
-export interface FeedData {
-  url: string;
-  title: string;
+export type ArticleListComponentProps = {
+  articlesLoaded: ArticlesLoadedFunction;
+  articlesRemoved: ArticlesRemovedFunction;
+  articlesSelected: ArticlesSelectedFunction;
+  focusChanged: FocusChangedFunction;
+  focusedColumn: FocusTarget;
+  promisesMap: ArticlePromisesMap;
+  selectedSourcesList: string[];
 }
 
 export type ArticlePromisesMap = Map<
   string,
-  { time: number; promise: Promise<Article[]> }
+  { promise: Promise<Article[]>; time: number; }
 >;
+
+export type ArticlesLoadedFunction = (
+  sourcesArticlesMap: Map<string, number>,
+) => void;
+
+export type ArticlesRemovedFunction = (
+  removedArticleList: Article[],
+) => Promise<void>;
 
 export type ArticlesSelectedFunction = (
   selectedArticleIdList: number[],
@@ -18,40 +31,27 @@ export type ArticlesSelectedFunction = (
 
 export type DisplayModeChangedFunction = (displayMode: DisplayMode) => void;
 
-export type ArticlesRemovedFunction = (
-  removedArticleList: Article[],
-) => Promise<void>;
-
-export type ArticlesLoadedFunction = (
-  sourcesArticlesMap: Map<string, number>,
-) => void;
+export type FeedData = {
+  title: string;
+  url: string;
+}
 
 export type FocusChangedFunction = (focusTarget: FocusTarget) => void;
 
-export interface ArticleListComponentProps {
-  articlesSelected: ArticlesSelectedFunction;
-  articlesRemoved: ArticlesRemovedFunction;
-  articlesLoaded: ArticlesLoadedFunction;
-  focusChanged: FocusChangedFunction;
-  selectedSourcesList: string[];
-  promisesMap: ArticlePromisesMap;
-  focusedColumn: FocusTarget;
-}
+export type FocusTarget =
+  | ".articles-column"
+  | ".content-column"
+  | ".sources-column";
 
 export type NodeEventFunction = (node: TreeNode) => void;
 
-export interface TreeNodeComponentProps {
-  node: TreeNode;
-  selectedNodeUid: string;
+export type TreeNodeComponentProps = {
   nested: boolean;
-  nodeSelected: NodeEventFunction;
-  nodeTouchStart: NodeEventFunction;
+  node: TreeNode;
   nodeHeld: NodeEventFunction;
-  nodeTouchEnd: NodeEventFunction;
   nodeMouseLeave: NodeEventFunction;
+  nodeSelected: NodeEventFunction;
+  nodeTouchEnd: NodeEventFunction;
+  nodeTouchStart: NodeEventFunction;
+  selectedNodeUid: string;
 }
-
-export type FocusTarget =
-  | ".sources-column"
-  | ".articles-column"
-  | ".content-column";

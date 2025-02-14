@@ -1,24 +1,25 @@
+import { type ArticlesRepository } from "$lib/db/article-repository";
+import { type SourcesRepository } from "$lib/db/source-repository";
+import { type Source } from "../../types/source-types";
+import { err as error_ } from "../../util/log";
+import * as mailParser from "mailparser";
+import stream from "node:stream/promises";
 import {
   SMTPServer,
   type SMTPServerAddress,
   type SMTPServerSession,
 } from "smtp-server";
-import * as mailParser from "mailparser";
-import type { Source } from "../../types/source-types";
-import stream from "node:stream/promises";
-import { err } from "../../util/log";
-import type { SourcesRepository } from "$lib/db/source-repository";
-import type { ArticlesRepository } from "$lib/db/article-repository";
 
-export interface MailWorkerConfig {
+export type MailWorkerConfig = {
   allowedDomains?: string[] | undefined;
   hostname?: string | undefined;
   maxSize?: number | undefined; // in bytes
 }
 
 export class MailWorker {
-  private server: SMTPServer | undefined;
   private config: MailWorkerConfig;
+
+  private server: SMTPServer | undefined;
 
   constructor(
     private readonly sourcesRepository: SourcesRepository,
@@ -28,37 +29,17 @@ export class MailWorker {
     this.config = {
       allowedDomains: config.allowedDomains,
       hostname: config.hostname,
-      maxSize: config.maxSize ?? 10 * 1024 * 1024,
+      maxSize: config.maxSize ?? 10 * 1_024 * 1_024,
     };
   }
 
   public initialize() {
     this.server = new SMTPServer({
-      size: this.config.maxSize,
       disabledCommands: ["AUTH"],
-      onRcptTo: async (
-        _address: SMTPServerAddress,
-        _session: SMTPServerSession,
-        callback: (err?: Error) => void,
-      ) => {
-        try {
-          const source = await this.sourcesRepository.findSourceByUrl(
-            _address.address,
-          );
-          if (!source) {
-            return callback(new Error("Unknown recipient"));
-          }
-          return callback();
-        } catch (error: unknown) {
-          return callback(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
-      },
       onData: async (emailStream, session, callback) => {
         try {
           if (emailStream.sizeExceeded) {
-            err("Email size limit exceeded");
+            error_("Email size limit exceeded");
             return callback(new Error("Email size limit exceeded"));
           }
 
@@ -68,6 +49,7 @@ export class MailWorker {
           if (!senderAddress) {
             return callback(new Error("Unknown sender"));
           }
+
           const recipientMails = this.extractRecipientAddresses(email);
           if (recipientMails.length > 10) {
             return callback(new Error("Too many recipients"));
@@ -79,7 +61,7 @@ export class MailWorker {
                 return await this.sourcesRepository.findSourceByUrl(address);
               }),
             )
-          ).filter((source): source is Source => source !== undefined);
+          ).filter((source): source is Source => {return source !== undefined});
           if (sources.length === 0) {
             return callback(new Error("No recipients known"));
           }
@@ -97,7 +79,7 @@ export class MailWorker {
           await stream.finished(emailStream);
           return callback();
         } catch (error: unknown) {
-          err("Failed to process incoming email:", error);
+          error_("Failed to process incoming email:", error);
           emailStream.resume();
           await stream.finished(emailStream);
           return callback(
@@ -105,6 +87,27 @@ export class MailWorker {
           );
         }
       },
+      onRcptTo: async (
+        _address: SMTPServerAddress,
+        _session: SMTPServerSession,
+        callback: (error?: Error) => void,
+      ) => {
+        try {
+          const source = await this.sourcesRepository.findSourceByUrl(
+            _address.address,
+          );
+          if (!source) {
+            return callback(new Error("Unknown recipient"));
+          }
+
+          return callback();
+        } catch (error: unknown) {
+          return callback(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
+      },
+      size: this.config.maxSize,
     });
 
     this.server.listen(25, () => {
@@ -112,19 +115,12 @@ export class MailWorker {
     });
   }
 
-  private extractRecipientAddresses(email: mailParser.ParsedMail): string[] {
-    const recipients = Array.isArray(email.to) ? email.to : [email.to];
-    const recipientMails: string[] = [];
-
-    recipients.forEach((addressObject) => {
-      addressObject?.value.forEach((value) => {
-        if (value.address) {
-          recipientMails.push(value.address);
-        }
+  public async shutdown(): Promise<void> {
+    if (this.server) {
+      return new Promise<void>((resolve) => {
+        this.server!.close(() => {return resolve()});
       });
-    });
-
-    return recipientMails;
+    }
   }
 
   private createArticleFromEmail(
@@ -137,30 +133,39 @@ export class MailWorker {
     return {
       author: senderAddress,
       content: this.getEmailContent(email),
-      guid: guid,
+      guid,
       publishedAt: date,
-      sourceId: sourceId,
+      sourceId,
       title: email.subject ?? "Untitled",
       updatedAt: date,
       url: `/article/${guid}`,
     };
   }
 
+  private extractRecipientAddresses(email: mailParser.ParsedMail): string[] {
+    const recipients = Array.isArray(email.to) ? email.to : [email.to];
+    const recipientMails: string[] = [];
+
+    for (const addressObject of recipients) {
+      for (const value of addressObject?.value) {
+        if (value.address) {
+          recipientMails.push(value.address);
+        }
+      }
+    }
+
+    return recipientMails;
+  }
+
   private getEmailContent(email: mailParser.ParsedMail): string {
     if (typeof email.html === "string") {
       return email.html;
     }
+
     if (typeof email.textAsHtml === "string") {
       return email.textAsHtml;
     }
-    return "No content.";
-  }
 
-  public async shutdown(): Promise<void> {
-    if (this.server) {
-      return new Promise<void>((resolve) => {
-        this.server!.close(() => resolve());
-      });
-    }
+    return "No content.";
   }
 }

@@ -1,5 +1,5 @@
-import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
+import { type Scanner } from "./scanner.interface";
 
 export class OdseeScanner implements Scanner {
   scan(currentUrl: URL, _document: Document): FeedData[] {
@@ -11,8 +11,9 @@ export class OdseeScanner implements Scanner {
     if (!channelNameMatch) {
       return [];
     }
+
     const channelName = channelNameMatch[1];
     const href = "https://lbryfeed.melroy.org/channel/" + channelName;
-    return [{ url: href, title: "Channel feed" }];
+    return [{ title: "Channel feed", url: href }];
   }
 }

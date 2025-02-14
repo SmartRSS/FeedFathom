@@ -1,14 +1,14 @@
 let boundaryMemory:
+  | undefined
   | {
       [key: string]: {
-        today: Date;
-        oneWeekAgo: Date;
-        oneMonthAgo: Date;
-        twoMonthsAgo: Date;
         lastYear: Date;
+        oneMonthAgo: Date;
+        oneWeekAgo: Date;
+        today: Date;
+        twoMonthsAgo: Date;
       };
-    }
-  | undefined;
+    };
 
 export const generateBoundaryDates = () => {
   const now = new Date();
@@ -23,11 +23,11 @@ export const generateBoundaryDates = () => {
   const lastYear = new Date();
   lastYear.setFullYear(now.getFullYear() - 1);
   return {
-    today: midnight,
-    oneWeekAgo,
-    oneMonthAgo,
-    twoMonthsAgo,
     lastYear,
+    oneMonthAgo,
+    oneWeekAgo,
+    today: midnight,
+    twoMonthsAgo,
   };
 };
 
@@ -50,14 +50,18 @@ export const getDateGroup = (
   if (pubDate.toDateString() === boundaryDates.today.toDateString()) {
     return "Today";
   }
+
   if (pubDate >= boundaryDates.oneWeekAgo) {
     return "Within the Last Week";
   }
+
   if (pubDate >= boundaryDates.oneMonthAgo) {
     return "Within the Last Month";
   }
+
   if (pubDate >= boundaryDates.lastYear) {
     return "Within the Last Year";
   }
+
   return "Older";
 };

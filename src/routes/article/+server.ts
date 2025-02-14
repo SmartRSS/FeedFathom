@@ -1,14 +1,15 @@
-import { json, type RequestHandler } from "@sveltejs/kit";
-import { DisplayMode } from "$lib/settings";
 import { extractArticle } from "$lib/extract-article";
+import { DisplayMode } from "$lib/settings";
+import { json, type RequestHandler } from "@sveltejs/kit";
 
-export const GET: RequestHandler = async ({ url, locals }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
   const articlesRepository = locals.dependencies.articlesRepository;
 
   const articleIdParameter = url.searchParams.get("article");
   if (!articleIdParameter) {
     return json({}, { status: 404 });
   }
+
   const articleId = Number.parseInt(articleIdParameter);
 
   const article = await articlesRepository.getArticle(articleId);

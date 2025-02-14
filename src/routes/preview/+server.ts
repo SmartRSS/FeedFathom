@@ -1,5 +1,5 @@
+import { err as error_ } from "../../util/log";
 import { json, type RequestHandler } from "@sveltejs/kit";
-import { err } from "../../util/log";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   try {
@@ -9,6 +9,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         error: "No feed url",
       });
     }
+
     new URL(feedUrl);
     const source = await locals.dependencies.feedParser.preview(feedUrl);
     if (!source) {
@@ -16,9 +17,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         error: "Invalid feed url",
       });
     }
+
     return json(source);
-  } catch (e) {
-    err(e);
+  } catch (error) {
+    error_(error);
     return json({
       error: "Invalid feed url",
     });

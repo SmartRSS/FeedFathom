@@ -1,16 +1,16 @@
-import type { Scanner } from "./scanners/scanner.interface";
-import { XmlScanner } from "./scanners/xml-scanner";
-import { HeadScanner } from "./scanners/head-scanner";
+import { type FeedData } from "../types";
 import { BitchuteScanner } from "./scanners/bitchute-scanner";
+import { GeneratorScanner } from "./scanners/generator-scanner";
 import { GithubScanner } from "./scanners/github-scanner";
+import { HeadScanner } from "./scanners/head-scanner";
 import { HiveblogScanner } from "./scanners/hiveblog-scanner";
+import { LinkFeedScanner } from "./scanners/link-feed.scanner";
 import { OdseeScanner } from "./scanners/odsee-scanner";
+import { type Scanner } from "./scanners/scanner.interface";
 import { SteemitScanner } from "./scanners/steemit-scanner";
 import { VimeoScanner } from "./scanners/vimeo-scanner";
+import { XmlScanner } from "./scanners/xml-scanner";
 import { YoutubeScanner } from "./scanners/youtube-scanner";
-import { GeneratorScanner } from "./scanners/generator-scanner";
-import { LinkFeedScanner } from "./scanners/link-feed.scanner";
-import { type FeedData } from "../types";
 
 const scanners: Scanner[] = [
   new XmlScanner(),
@@ -60,8 +60,8 @@ export async function scan(address: string, document: Document) {
 
   if (feedDataList.length === 0) {
     feedDataList.push({
-      url: `https://openrss.org/${address}`,
       title: "Attempt to use OpenRSS",
+      url: `https://openrss.org/${address}`,
     });
   }
 

@@ -16,9 +16,10 @@ export const rewriteLinks = (content: string, articleUrl: string) => {
   for (const [tagName, attributeName] of tagAttributePairs) {
     rewriter.on(`${tagName}[${attributeName}]`, {
       element: (element) =>
-        handleElement(element, tagName, attributeName, articleUrl),
+        {return handleElement(element, tagName, attributeName, articleUrl)},
     });
   }
+
   const result = rewriter.transform(content);
   rewriter = null;
   return result;
@@ -48,8 +49,10 @@ const handleElement = (
     if (tagName === "a") {
       element.setAttribute("target", "_blank");
     }
+
     return; // no need to change anything
   }
+
   if (URL.canParse(attributeValue, articleUrl)) {
     const absoluteUrl = new URL(attributeValue, articleUrl).href;
     element.setAttribute(attributeName, absoluteUrl);

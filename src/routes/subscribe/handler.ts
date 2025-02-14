@@ -1,14 +1,14 @@
-import { json } from "@sveltejs/kit";
-import type { ValidatedRequestEvent } from "../../app";
-import { SubscribeRequest } from "./validator";
+import { type ValidatedRequestEvent } from "../../app";
 import { isMailEnabled } from "../../util/is-mail-enabled";
+import { type SubscribeRequest } from "./validator";
+import { json } from "@sveltejs/kit";
 
 export const subscribeHandler = async ({
   body,
   locals,
   url,
 }: ValidatedRequestEvent<SubscribeRequest>) => {
-  const { sourceUrl, sourceName, sourceFolder } = body;
+  const { sourceFolder, sourceName, sourceUrl } = body;
 
   // Check if email is provided as sourceUrl while !isMailEnabled
   if (!isMailEnabled && sourceUrl.includes("@")) {
@@ -22,26 +22,28 @@ export const subscribeHandler = async ({
     await locals.dependencies.userSourcesRepository.addSourceToUser(
       locals.user.id,
       {
-        url: sourceUrl,
         homeUrl: url.origin,
-        parentId: sourceFolder,
         name: sourceName,
+        parentId: sourceFolder,
+        url: sourceUrl,
       },
     );
     return json(true);
   }
+
   try {
     const preview = await locals.dependencies.feedParser.preview(sourceUrl);
     if (!preview) {
       return json(false);
     }
+
     await locals.dependencies.userSourcesRepository.addSourceToUser(
       locals.user.id,
       {
-        url: sourceUrl,
         homeUrl: preview.link ?? url.origin,
-        parentId: sourceFolder,
         name: sourceName,
+        parentId: sourceFolder,
+        url: sourceUrl,
       },
     );
     return json(true);

@@ -1,6 +1,6 @@
-import { type Handle, redirect } from "@sveltejs/kit";
 import container from "./container";
 import { cookiesConfig } from "./util/cookies-config";
+import { type Handle, redirect } from "@sveltejs/kit";
 
 const pathsNotRequiringLogin = ["/register", "/login"];
 
@@ -9,6 +9,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
+
   const sid = event.cookies.get("sid");
   const user = sid
     ? await event.locals.dependencies.usersRepository.getUserBySid(sid)
@@ -25,5 +26,6 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (!pathsNotRequiringLogin.includes(event.url.pathname)) {
     return resolve(event);
   }
+
   return redirect(302, "/login");
 };

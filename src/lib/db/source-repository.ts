@@ -1,17 +1,17 @@
-import * as schema from "../schema";
-import { and, eq, gt, isNull, lt, or, sql, asc } from "drizzle-orm";
-import { err } from "../../util/log";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { Queue } from "bullmq";
 import { JobName } from "../../types/job-name.enum";
+import { err as error } from "../../util/log";
+import * as schema from "../schema";
+import { type Queue } from "bullmq";
+import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 type SortField =
-  | "url"
-  | "subscriber_count"
   | "created_at"
+  | "failures"
   | "last_attempt"
   | "last_success"
-  | "failures";
+  | "subscriber_count"
+  | "url";
 
 export class SourcesRepository {
   constructor(
@@ -19,51 +19,101 @@ export class SourcesRepository {
     private readonly bullmqQueue: Queue,
   ) {}
 
-  public async updateFavicon(
-    sourceId: number,
-    favicon: Buffer | string,
-  ): Promise<void> {
-    let type: string;
-    let encoded: string;
-
-    if (Buffer.isBuffer(favicon)) {
-      type = "png";
-      encoded = favicon.toString("base64");
-    } else {
-      type = "svg+xml";
-      encoded = Buffer.from(favicon, "utf-8").toString("base64");
+  public async addSource(payload: { homeUrl: string; url: string; }) {
+    const source = (
+      await this.drizzleConnection
+        .insert(schema.sources)
+        .values(payload)
+        .returning()
+    ).at(0);
+    if (!source) {
+      throw new Error("failed");
     }
 
-    await this.drizzleConnection
-      .update(schema.sources)
-      .set({
-        favicon: `data:image/${type};base64,${encoded}`,
+    await this.bullmqQueue.add(JobName.PARSE_SOURCE, {
+      id: source.id,
+      skipCache: true,
+      url: source.url,
+    });
+    return source;
+  }
+
+  public async failSource(
+    sourceId: number,
+    reason: string = "",
+  ): Promise<void> {
+    try {
+      await this.drizzleConnection
+        .update(schema.sources)
+        .set({
+          lastAttempt: new Date(),
+          recentFailureDetails: reason,
+          recentFailures: sql`${schema.sources.recentFailures} + 1`,
+        })
+        .where(eq(schema.sources.id, sourceId));
+    } catch (error_) {
+      error("fail source", error_);
+    }
+  }
+
+  public async findOrCreateSourceByUrl(
+    url: string,
+    payload: {
+      home_url: string;
+    },
+  ) {
+    const source = await this.findSourceByUrl(url);
+    if (source) {
+      return source;
+    }
+
+    return await this.addSource({
+      homeUrl: payload.home_url,
+      url,
+    });
+  }
+
+  public async findSourceByUrl(url: string) {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(schema.sources)
+        .where(eq(schema.sources.url, url))
+    ).at(0);
+  }
+
+  public async getRecentlySuccessfulSources() {
+    return this.drizzleConnection
+      .select({
+        homeUrl: schema.sources.homeUrl,
+        id: schema.sources.id,
       })
-      .where(eq(schema.sources.id, sourceId));
+      .from(schema.sources)
+      .where(gt(schema.sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
   }
 
   public async getSourcesToProcess() {
-    const noRecentFailures = () => eq(schema.sources.recentFailures, 0);
-    const failedRecently = () => gt(schema.sources.recentFailures, 0);
+    const noRecentFailures = () => {return eq(schema.sources.recentFailures, 0)};
+    const failedRecently = () => {return gt(schema.sources.recentFailures, 0)};
 
     const failedAttemptTimeout = () =>
-      sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
+      {return sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`};
 
     const lastAttemptTimeout = () =>
-      lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
+      {return lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`)};
 
-    const isLastAttemptNull = () => isNull(schema.sources.lastAttempt);
+    const isLastAttemptNull = () => {return isNull(schema.sources.lastAttempt)};
 
-    const isWebSource = () => sql`${schema.sources.url} LIKE 'http%'`;
+    const isWebSource = () => {return sql`${schema.sources.url} LIKE 'http%'`};
 
     const shouldProcessSource = () =>
-      or(
+      {return or(
         or(
           and(noRecentFailures(), lastAttemptTimeout()),
           and(failedRecently(), failedAttemptTimeout()),
         ),
         isLastAttemptNull(),
-      );
+      )};
 
     return this.drizzleConnection
       .select({
@@ -78,92 +128,15 @@ export class SourcesRepository {
       );
   }
 
-  public async findSourceByUrl(url: string) {
-    return (
-      await this.drizzleConnection
-        .select()
-        .from(schema.sources)
-        .where(eq(schema.sources.url, url))
-    ).at(0);
-  }
-
-  public async addSource(payload: { url: string; homeUrl: string }) {
-    const source = (
-      await this.drizzleConnection
-        .insert(schema.sources)
-        .values(payload)
-        .returning()
-    ).at(0);
-    if (!source) {
-      throw new Error("failed");
-    }
-    await this.bullmqQueue.add(JobName.PARSE_SOURCE, {
-      id: source.id,
-      url: source.url,
-      skipCache: true,
-    });
-    return source;
-  }
-
-  public async failSource(
-    sourceId: number,
-    reason: string = "",
-  ): Promise<void> {
-    try {
-      await this.drizzleConnection
-        .update(schema.sources)
-        .set({
-          lastAttempt: new Date(),
-          recentFailures: sql`${schema.sources.recentFailures} + 1`,
-          recentFailureDetails: reason,
-        })
-        .where(eq(schema.sources.id, sourceId));
-    } catch (e) {
-      err("fail source", e);
-    }
-  }
-
-  public async successSource(
-    sourceId: number,
-    cached: boolean = false,
-  ): Promise<void> {
-    const now = new Date();
-    await this.drizzleConnection
-      .update(schema.sources)
-      .set({
-        lastAttempt: now,
-        lastSuccess: now,
-        recentFailures: 0,
-        recentFailureDetails: cached ? "cached" : "not cached",
-      })
-      .where(eq(schema.sources.id, sourceId));
-  }
-
-  public async findOrCreateSourceByUrl(
-    url: string,
-    payload: {
-      home_url: string;
-    },
-  ) {
-    const source = await this.findSourceByUrl(url);
-    if (source) {
-      return source;
-    }
-    return await this.addSource({
-      url: url,
-      homeUrl: payload.home_url,
-    });
-  }
-
   public async listAllSources(sortBy: SortField, order: "asc" | "desc") {
     // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
     const validSortBy = [
-      "subscriber_count",
       "created_at",
+      "failures",
       "last_attempt",
       "last_success",
+      "subscriber_count",
       "url",
-      "failures",
     ].includes(sortBy)
       ? sortBy
       : "created_at";
@@ -195,20 +168,49 @@ export class SourcesRepository {
     return this.drizzleConnection.execute(query);
   }
 
-  public async getRecentlySuccessfulSources() {
-    return this.drizzleConnection
-      .select({
-        id: schema.sources.id,
-        homeUrl: schema.sources.homeUrl,
+  public async successSource(
+    sourceId: number,
+    cached: boolean = false,
+  ): Promise<void> {
+    const now = new Date();
+    await this.drizzleConnection
+      .update(schema.sources)
+      .set({
+        lastAttempt: now,
+        lastSuccess: now,
+        recentFailureDetails: cached ? "cached" : "not cached",
+        recentFailures: 0,
       })
-      .from(schema.sources)
-      .where(gt(schema.sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+      .where(eq(schema.sources.id, sourceId));
+  }
+
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer | string,
+  ): Promise<void> {
+    let type: string;
+    let encoded: string;
+
+    if (Buffer.isBuffer(favicon)) {
+      type = "png";
+      encoded = favicon.toString("base64");
+    } else {
+      type = "svg+xml";
+      encoded = Buffer.from(favicon, "utf-8").toString("base64");
+    }
+
+    await this.drizzleConnection
+      .update(schema.sources)
+      .set({
+        favicon: `data:image/${type};base64,${encoded}`,
+      })
+      .where(eq(schema.sources.id, sourceId));
   }
 
   public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
     await this.drizzleConnection
       .update(schema.sources)
-      .set({ url: newUrl, recentFailures: 0, recentFailureDetails: "" })
+      .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })
       .where(eq(schema.sources.url, oldUrl));
   }
 }

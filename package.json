@@ -28,6 +28,7 @@
     "archiver": "^7.0.1",
     "drizzle-kit": "0.30.4",
     "eslint": "^9.19.0",
+    "eslint-config-canonical": "^44.3.43",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-svelte": "^2.46.1",
@@ -63,7 +64,8 @@
     "ulid": "^2.3.0",
     "valibot": "^1.0.0-beta.15",
     "vite": "^6.1.0",
-    "vite-plugin-node-polyfills": "^0.23.0"
+    "vite-plugin-node-polyfills": "^0.23.0",
+    "xml2js": "^0.6.2"
   },
   "type": "module",
   "trustedDependencies": []

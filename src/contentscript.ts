@@ -1,10 +1,10 @@
-import type { FeedData } from "./types";
 import { scan } from "$lib/scanner";
+import { type FeedData } from "./types";
 
 (function () {
   const oldHref = document.location.href;
-  let scanTimeoutRef: Timer | null = null;
-  let visibilityTimeoutRef: Timer | null = null;
+  let scanTimeoutRef: null | Timer = null;
+  let visibilityTimeoutRef: null | Timer = null;
 
   async function init(currentHref: string) {
     const feedsData = await scan(currentHref, document);
@@ -12,18 +12,19 @@ import { scan } from "$lib/scanner";
     if (isYouTubeDomain(currentHref)) {
       setupMutationObserver(feedsData, currentHref);
     }
+
     updateAvailableSourcesList(feedsData);
   }
 
   function setupEventListeners(feedsData: FeedData[]) {
     document.addEventListener(
       "visibilitychange",
-      () => updateAvailableSourcesList(feedsData),
+      () => {return updateAvailableSourcesList(feedsData)},
       false,
     );
     document.addEventListener(
       "pagehide",
-      () => updateAvailableSourcesList(feedsData),
+      () => {return updateAvailableSourcesList(feedsData)},
       false,
     );
   }
@@ -37,18 +38,21 @@ import { scan } from "$lib/scanner";
     if (!bodyList) {
       return;
     }
+
     const mutationObserver = new MutationObserver(() => {
       if (currentHref === document.location.href) {
         return;
       }
+
       const newHref = document.location.href;
       if (scanTimeoutRef) {
         clearTimeout(scanTimeoutRef);
       }
+
       scanTimeoutRef = setTimeout(async () => {
         await scan(newHref, document);
         updateAvailableSourcesList(feedsData);
-      }, 1500);
+      }, 1_500);
     });
 
     const observerConfig = {
@@ -63,6 +67,7 @@ import { scan } from "$lib/scanner";
       void browser.runtime.sendMessage({ action: "visibility-lost" });
       return;
     }
+
     if (visibilityTimeoutRef) {
       clearTimeout(visibilityTimeoutRef);
     }
@@ -70,7 +75,7 @@ import { scan } from "$lib/scanner";
     visibilityTimeoutRef = setTimeout(() => {
       void browser.runtime.sendMessage({
         action: "list-feeds",
-        feedsData: feedsData,
+        feedsData,
       });
     }, 500);
   }

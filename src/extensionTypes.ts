@@ -1,12 +1,12 @@
-import type { FeedData } from "./types";
+import { type FeedData } from "./types";
 
-type VisibilityLostMessage = {
-  action: "visibility-lost";
-};
+export type Message = ListFeedsMessage | VisibilityLostMessage;
 
 type ListFeedsMessage = {
   action: "list-feeds";
   feedsData: FeedData[];
 };
 
-export type Message = VisibilityLostMessage | ListFeedsMessage;
+type VisibilityLostMessage = {
+  action: "visibility-lost";
+};

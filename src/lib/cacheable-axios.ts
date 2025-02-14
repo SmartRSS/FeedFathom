@@ -1,27 +1,28 @@
+import { err as error_ } from "../util/log";
 import Axios, { type AxiosInstance } from "axios";
-import * as https from "node:https";
 import {
   buildStorage,
   canStale,
   setupCache,
   type StorageValue,
 } from "axios-cache-interceptor";
-import Redis from "ioredis";
+import type Redis from "ioredis";
 import fs from "node:fs";
+import * as https from "node:https";
 import path from "path";
-import { err } from "../util/log";
 
 function getBuildTime(): string {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
 
   try {
     if (fs.existsSync(buildTimePath)) {
-      return fs.readFileSync(buildTimePath, "utf-8").trim();
+      return fs.readFileSync(buildTimePath, "utf8").trim();
     }
+
     // If file doesn't exist, return current timestamp for development
     return Date.now().toString();
   } catch (error) {
-    err("Error reading BUILD_TIME, using current timestamp:", error);
+    error_("Error reading BUILD_TIME, using current timestamp:", error);
     return Date.now().toString();
   }
 }
@@ -46,22 +47,26 @@ export const buildAxios = (redis: Redis) => {
       if (!cachedValue) {
         return undefined;
       }
+
       return JSON.parse(cachedValue) as StorageValue;
     },
-    async set(key, value, req) {
+    async remove(key) {
+      await redis.del(`axios-cache-${key}`);
+    },
+    async set(key, value, request) {
       const currentTime = Date.now();
       const ttl =
         value.state === "loading"
           ? currentTime +
-            (req?.cache && typeof req.cache.ttl === "number"
-              ? req.cache.ttl
-              : 60000)
+            (request?.cache && typeof request.cache.ttl === "number"
+              ? request.cache.ttl
+              : 60_000)
           : (value.state === "stale" && value.ttl) ||
               (value.state === "cached" && !canStale(value))
             ? value.createdAt + value.ttl!
             : undefined;
 
-      const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1800000;
+      const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1_800_000;
 
       await redis.set(
         `axios-cache-${key}`,
@@ -69,9 +74,6 @@ export const buildAxios = (redis: Redis) => {
         "PX",
         validTtl,
       );
-    },
-    async remove(key) {
-      await redis.del(`axios-cache-${key}`);
     },
   });
 

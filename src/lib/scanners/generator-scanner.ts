@@ -1,5 +1,5 @@
-import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
+import { type Scanner } from "./scanner.interface";
 
 export class GeneratorScanner implements Scanner {
   scan(currentUrl: URL, document: Document): FeedData[] {
@@ -9,8 +9,9 @@ export class GeneratorScanner implements Scanner {
     }
 
     if (generator.getAttribute("content")?.includes("WordPress")) {
-      return [{ url: `${currentUrl.origin}/feed`, title: `Wordpress Feed` }];
+      return [{ title: `Wordpress Feed`, url: `${currentUrl.origin}/feed` }];
     }
+
     return [];
   }
 }

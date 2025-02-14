@@ -45,6 +45,6 @@ export class LinkFeedScanner implements Scanner {
   }
 
   private isFeedUrl(pathname: string): boolean {
-    return this.feedUrlPatterns.some((pattern) => pattern.test(pathname));
+    return this.feedUrlPatterns.some((pattern) => {return pattern.test(pathname)});
   }
 }

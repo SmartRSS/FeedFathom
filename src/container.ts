@@ -1,3 +1,16 @@
+import { buildAxios } from "$lib/cacheable-axios";
+import { ArticlesRepository } from "$lib/db/article-repository";
+import { FoldersRepository } from "$lib/db/folder-repository";
+import { SourcesRepository } from "$lib/db/source-repository";
+import { UsersRepository } from "$lib/db/user-repository";
+import { UserSourcesRepository } from "$lib/db/user-source-repository";
+import { FeedParser } from "$lib/feed-parser";
+import { OpmlParser } from "$lib/opml-parser";
+import type * as schema from "$lib/schema";
+import { Cli } from "$lib/workers/cli";
+import { Initializer } from "$lib/workers/initializer";
+import { MailWorker } from "$lib/workers/mail";
+import { MainWorker } from "$lib/workers/main";
 import {
   asClass,
   asFunction,
@@ -5,25 +18,12 @@ import {
   createContainer,
   InjectionMode,
 } from "awilix";
-import { SourcesRepository } from "$lib/db/source-repository";
-import { UsersRepository } from "$lib/db/user-repository";
-import { OpmlParser } from "$lib/opml-parser";
-import { FeedParser } from "$lib/feed-parser";
+import { type AxiosCacheInstance } from "axios-cache-interceptor";
 import { Queue } from "bullmq";
-import { drizzle, type BunSQLDatabase } from "drizzle-orm/bun-sql";
-import * as schema from "$lib/schema";
-import { UserSourcesRepository } from "$lib/db/user-source-repository";
-import { ArticlesRepository } from "$lib/db/article-repository";
-import { FoldersRepository } from "$lib/db/folder-repository";
-import { MainWorker } from "$lib/workers/main";
-import { MailWorker } from "$lib/workers/mail";
-import { Initializer } from "$lib/workers/initializer";
-import { buildAxios } from "$lib/cacheable-axios";
-import type { AxiosCacheInstance } from "axios-cache-interceptor";
+import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
-import { Cli } from "$lib/workers/cli";
 
-export interface Dependencies {
+export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
   bullmqQueue: Queue;
@@ -42,11 +42,11 @@ export interface Dependencies {
 }
 
 const ioRedisConnection = new Redis({
-  host: "redis",
-  port: 6379,
-  lazyConnect: false,
   db: 0,
+  host: "redis",
+  lazyConnect: false,
   maxRetriesPerRequest: null,
+  port: 6_379,
 });
 
 const bullmq = new Queue("tasks", {
@@ -69,7 +69,7 @@ container.register({
   initializer: asClass(Initializer).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
   mainWorker: asClass(MainWorker).singleton(),
-  opmlParser: asFunction(() => new OpmlParser()).singleton(),
+  opmlParser: asFunction(() => {return new OpmlParser()}).singleton(),
   redis: asValue(ioRedisConnection),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),

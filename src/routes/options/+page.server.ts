@@ -1,65 +1,18 @@
-import { type Actions, json, error } from "@sveltejs/kit";
+import { type PageServerLoad } from "../$types";
 import { isPlainText } from "../../util/is-plain-text";
-import { err } from "../../util/log";
-import type { PageServerLoad } from "../$types";
+import { err as error_ } from "../../util/log";
+import { type Actions, error, json } from "@sveltejs/kit";
 
 export const actions: Actions = {
-  importOpml: async ({ request, locals }) => {
+  changePassword: async ({ locals, request }) => {
     if (!locals.user) {
       return {
-        success: false,
-        status: 400,
         error: "",
+        status: 400,
+        success: false,
       };
     }
-    try {
-      const formData = Object.fromEntries(await request.formData());
-      if ("opml"! in formData) {
-        return {
-          success: false,
-          status: 400,
-          error: "No file uploaded",
-        };
-      }
-      const opml = formData["opml"] as unknown as File;
 
-      if (!opml.name || opml.name === "undefined") {
-        return {
-          success: false,
-          status: 400,
-          error: "No file uploaded",
-        };
-      }
-
-      const content = await opml.text();
-      if (!isPlainText(content)) {
-        return {
-          success: false,
-          status: 400,
-          error: "Invalid file",
-        };
-      }
-
-      const tree = await locals.dependencies.opmlParser.parseOpml(content);
-      await locals.dependencies.userSourcesRepository.insertTree(
-        locals.user.id,
-        tree,
-      );
-
-      return { success: true };
-    } catch (e) {
-      err("import failed", e);
-      return json(e, { status: 500 });
-    }
-  },
-  changePassword: async ({ request, locals }) => {
-    if (!locals.user) {
-      return {
-        success: false,
-        status: 400,
-        error: "",
-      };
-    }
     try {
       const formData = await request.formData();
       const oldPassword = formData.get("oldPassword");
@@ -70,16 +23,19 @@ export const actions: Actions = {
           success: false,
         };
       }
+
       if (typeof oldPassword !== "string") {
         return {
           success: false,
         };
       }
+
       if (typeof password1 !== "string") {
         return {
           success: false,
         };
       }
+
       const user = await locals.dependencies.usersRepository.findUser(
         locals.user.email,
       );
@@ -88,11 +44,13 @@ export const actions: Actions = {
           success: false,
         };
       }
+
       if (!(await Bun.password.verify(oldPassword, user.password))) {
         return {
           success: false,
         };
       }
+
       const newHash = await Bun.password.hash(password1);
       await locals.dependencies.usersRepository.updatePassword(
         user.id,
@@ -100,9 +58,59 @@ export const actions: Actions = {
       );
 
       return { success: true };
-    } catch (e) {
-      err("import failed", e);
-      return json(e, { status: 500 });
+    } catch (error__) {
+      error_("import failed", error__);
+      return json(error__, { status: 500 });
+    }
+  },
+  importOpml: async ({ locals, request }) => {
+    if (!locals.user) {
+      return {
+        error: "",
+        status: 400,
+        success: false,
+      };
+    }
+
+    try {
+      const formData = Object.fromEntries(await request.formData());
+      if ("opml"! in formData) {
+        return {
+          error: "No file uploaded",
+          status: 400,
+          success: false,
+        };
+      }
+
+      const opml = formData["opml"] as unknown as File;
+
+      if (!opml.name || opml.name === "undefined") {
+        return {
+          error: "No file uploaded",
+          status: 400,
+          success: false,
+        };
+      }
+
+      const content = await opml.text();
+      if (!isPlainText(content)) {
+        return {
+          error: "Invalid file",
+          status: 400,
+          success: false,
+        };
+      }
+
+      const tree = await locals.dependencies.opmlParser.parseOpml(content);
+      await locals.dependencies.userSourcesRepository.insertTree(
+        locals.user.id,
+        tree,
+      );
+
+      return { success: true };
+    } catch (error__) {
+      error_("import failed", error__);
+      return json(error__, { status: 500 });
     }
   },
 };

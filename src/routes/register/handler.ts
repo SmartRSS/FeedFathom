@@ -1,7 +1,7 @@
-import type { UnauthenticatedRequestEvent } from "../../app";
-import { json } from "@sveltejs/kit";
+import { type UnauthenticatedRequestEvent } from "../../app";
 import { llog } from "../../util/log";
-import type { RegisterRequest } from "./validator";
+import { type RegisterRequest } from "./validator";
+import { json } from "@sveltejs/kit";
 
 export const registerHandler = async ({
   body,
@@ -18,12 +18,13 @@ export const registerHandler = async ({
   if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
     return json(
       {
-        success: false,
         error: "Registration is currently disabled",
+        success: false,
       },
       { status: 403 },
     );
   }
+
   console.log(process.env["ALLOWED_EMAILS"], "asdf");
   // Only check allowed emails if the list exists and isn't empty
   const allowedEmails = process.env["ALLOWED_EMAILS"]
@@ -36,8 +37,8 @@ export const registerHandler = async ({
   ) {
     return json(
       {
-        success: false,
         error: process.env["ALLOWED_EMAILS"],
+        success: false,
       },
       { status: 403 },
     );
@@ -46,18 +47,18 @@ export const registerHandler = async ({
   try {
     const hash = await Bun.password.hash(body.password);
     await locals.dependencies.usersRepository.createUser({
-      name: body.username,
       email: body.email,
+      name: body.username,
       passwordHash: hash,
     });
 
     return json({ success: true });
-  } catch (e) {
-    llog(e);
+  } catch (error) {
+    llog(error);
     return json(
       {
-        success: false,
         error: "An account with this email already exists",
+        success: false,
       },
       { status: 409 },
     );

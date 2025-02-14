@@ -12,5 +12,6 @@ export const err = (...args: unknown[]): void => {
     console.error(new Date().toISOString(), callerLine, ...args);
     return;
   }
+
   console.error(new Date().toISOString(), ...args);
 };

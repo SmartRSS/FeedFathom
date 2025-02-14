@@ -1,11 +1,12 @@
+import { type Message } from "./extensionTypes";
 import { ulid } from "ulid";
-import type { Message } from "./extensionTypes";
 
 const previewSource = async (address: string) => {
   const instanceObject = await browser.storage.sync.get("instance");
   if (typeof instanceObject["instance"] !== "string") {
     return;
   }
+
   const instance = instanceObject["instance"];
   const fixedAddress = address.replace(/^feed:/i, "https:");
   void browser.tabs.create({
@@ -18,6 +19,7 @@ browser.contextMenus.onClicked.addListener(async (info) => {
   if (typeof instanceObject["instance"] !== "string") {
     return;
   }
+
   const instance = instanceObject["instance"];
 
   if (info.menuItemId === "FeedFathom_newsletter") {
@@ -27,11 +29,13 @@ browser.contextMenus.onClicked.addListener(async (info) => {
     await previewSource(email);
     return;
   }
+
   if (info.menuItemId !== "FeedFathom") {
     if (!instance) {
       await navigator.clipboard.writeText(info.menuItemId as string);
       return;
     }
+
     await previewSource(info.menuItemId as string);
   }
 });
@@ -40,28 +44,29 @@ const messageHandler = (message: Message) => {
   if (message.action === "list-feeds") {
     void browser.contextMenus.removeAll();
     browser.contextMenus.create({
-      id: "FeedFathom_newsletter",
       contexts: ["action"],
+      id: "FeedFathom_newsletter",
       title: "newsletter",
     });
     browser.contextMenus.create(
       {
-        id: "FeedFathom",
         contexts: ["action"],
+        id: "FeedFathom",
         title: "Subscribe",
       },
-      function () {
-        message.feedsData.forEach(function (feed) {
+      () => {
+        for (const feed of message.feedsData) {
           browser.contextMenus.create({
-            id: feed.url,
-            title: feed.title,
             contexts: ["action"],
+            id: feed.url,
             parentId: "FeedFathom",
+            title: feed.title,
           });
-        });
+        }
       },
     );
   }
+
   if (message.action === "visibility-lost") {
     void browser.contextMenus.removeAll();
   }
@@ -74,11 +79,13 @@ browser.action.onClicked.addListener(async () => {
   if (typeof instanceObject["instance"] !== "string") {
     return;
   }
+
   const instance = instanceObject["instance"];
   if (!instance) {
     await browser.runtime.openOptionsPage();
     return;
   }
+
   void browser.tabs.create({
     active: true,
     url: instance,

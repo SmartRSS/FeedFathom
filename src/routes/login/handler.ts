@@ -1,14 +1,14 @@
-import type { UnauthenticatedRequestEvent } from "../../app";
-import { json } from "@sveltejs/kit";
+import { type UnauthenticatedRequestEvent } from "../../app";
 import { cookiesConfig } from "../../util/cookies-config";
-import type { LoginRequest } from "./validator";
+import { type LoginRequest } from "./validator";
+import { json } from "@sveltejs/kit";
 
 const message = "Wrong login data";
 
 export const loginHandler = async ({
-  locals,
-  cookies,
   body,
+  cookies,
+  locals,
 }: UnauthenticatedRequestEvent<LoginRequest>) => {
   const user = await locals.dependencies.usersRepository.findUser(body.email);
   if (!user) {
@@ -22,6 +22,7 @@ export const loginHandler = async ({
       },
     );
   }
+
   const result = await Bun.password.verify(body.password, user.password);
   if (!result) {
     return json(

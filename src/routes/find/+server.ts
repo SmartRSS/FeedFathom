@@ -1,7 +1,7 @@
+import { scan } from "$lib/scanner";
+import { err as error_ } from "../../util/log";
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { JSDOM } from "jsdom";
-import { scan } from "$lib/scanner";
-import { err } from "../../util/log";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   try {
@@ -11,9 +11,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         error: "No feed url",
       });
     }
+
     const response = await locals.dependencies.axiosInstance.get(link);
-    const doc = new JSDOM(response.data, { url: link });
-    const possibleFeeds = await scan(link, doc.window.document);
+    const document_ = new JSDOM(response.data, { url: link });
+    const possibleFeeds = await scan(link, document_.window.document);
     if (possibleFeeds.length === 0) {
       return json({
         error: "Invalid feed url",
@@ -21,8 +22,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     }
 
     return json(possibleFeeds);
-  } catch (e: unknown) {
-    err(e);
+  } catch (error: unknown) {
+    error_(error);
     return json({
       error: "Invalid feed url",
     });

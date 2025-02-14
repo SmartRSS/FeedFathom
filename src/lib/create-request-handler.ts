@@ -1,6 +1,6 @@
-import * as v from "valibot";
+import { type ValidatedRequestEvent } from "../app";
 import { json, type RequestEvent } from "@sveltejs/kit";
-import type { ValidatedRequestEvent } from "../app";
+import * as v from "valibot";
 
 export function createRequestHandler<T extends v.GenericSchema>(
   schema: T,
@@ -14,7 +14,7 @@ export function createRequestHandler<T extends v.GenericSchema>(
     const parseResult = v.safeParse(schema, await request.json());
     if (!parseResult.success) {
       return json(
-        { error: "Invalid input", details: parseResult.issues },
+        { details: parseResult.issues, error: "Invalid input" },
         { status: 400 },
       );
     }

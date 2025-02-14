@@ -1,29 +1,40 @@
 import * as schema from "$lib/schema";
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-import { Article } from "../../types/article.type";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { type Article } from "../../types/article.type";
 import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export class ArticlesRepository {
   public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
-  public async removeUserArticles(articleIdList: number[], userId: number) {
-    const now = new Date();
-    const values = articleIdList.map((articleId) => ({
-      userId,
-      articleId,
-      deletedAt: now,
-    }));
+  public async batchUpsertArticles(
+    payloads: Array<{
+      author: string;
+      content: string;
+      guid: string;
+      publishedAt: Date;
+      sourceId: number;
+      title: string;
+      updatedAt: Date;
+      url: string;
+    }>,
+  ) {
+    if (payloads.length === 0) {
+      return;
+    }
 
-    await this.drizzleConnection.transaction(async (trx) => {
-      await trx
-        .insert(schema.userArticles)
-        .values(values)
-        .onConflictDoUpdate({
-          target: [schema.userArticles.userId, schema.userArticles.articleId],
-          set: { deletedAt: now },
-        });
-    });
+    await this.drizzleConnection
+      .insert(schema.articles)
+      .values(payloads)
+      .onConflictDoUpdate({
+        set: {
+          content: sql`excluded.content`,
+          title: sql`excluded.title`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+        target: schema.articles.guid,
+      });
+    payloads.length = 0;
   }
 
   public async getArticle(articleId: number): Promise<Article | undefined> {
@@ -37,7 +48,16 @@ export class ArticlesRepository {
     if (!article) {
       return;
     }
+
     return article;
+  }
+
+  async getArticleByGuid(guid: string): Promise<Article | undefined> {
+    const result = await this.drizzleConnection
+      .select()
+      .from(schema.articles)
+      .where(eq(schema.articles.guid, guid));
+    return result[0];
   }
 
   public async getUserArticlesForSources(sourceIds: number[], userId: number) {
@@ -45,15 +65,15 @@ export class ArticlesRepository {
       return [];
     }
 
-    const startTime = new Date().valueOf();
+    const startTime = Date.now();
     const articles = await this.drizzleConnection
       .select({
+        author: schema.articles.author,
         id: schema.articles.id,
+        publishedAt: schema.articles.publishedAt,
         sourceId: schema.articles.sourceId,
         title: schema.articles.title,
-        author: schema.articles.author,
         url: schema.articles.url,
-        publishedAt: schema.articles.publishedAt,
       })
       .from(schema.articles)
       .leftJoin(
@@ -73,50 +93,31 @@ export class ArticlesRepository {
         ),
       )
       .orderBy(desc(schema.articles.publishedAt));
-    console.log("query time", new Date().valueOf() - startTime);
+    console.log("query time", Date.now() - startTime);
 
     const boundaryDates = getBoundaryDates();
-    return articles.map((item) => ({
+    return articles.map((item) => {return {
       group: getDateGroup(boundaryDates, item.publishedAt),
       ...item,
-    }));
+    }});
   }
 
-  public async batchUpsertArticles(
-    payloads: {
-      author: string;
-      content: string;
-      guid: string;
-      publishedAt: Date;
-      sourceId: number;
-      title: string;
-      updatedAt: Date;
-      url: string;
-    }[],
-  ) {
-    if (payloads.length === 0) {
-      return;
-    }
+  public async removeUserArticles(articleIdList: number[], userId: number) {
+    const now = new Date();
+    const values = articleIdList.map((articleId) => {return {
+      articleId,
+      deletedAt: now,
+      userId,
+    }});
 
-    await this.drizzleConnection
-      .insert(schema.articles)
-      .values(payloads)
-      .onConflictDoUpdate({
-        target: schema.articles.guid,
-        set: {
-          updatedAt: sql`excluded.updated_at`,
-          title: sql`excluded.title`,
-          content: sql`excluded.content`,
-        },
-      });
-    payloads.length = 0;
-  }
-
-  async getArticleByGuid(guid: string): Promise<Article | undefined> {
-    const result = await this.drizzleConnection
-      .select()
-      .from(schema.articles)
-      .where(eq(schema.articles.guid, guid));
-    return result[0];
+    await this.drizzleConnection.transaction(async (trx) => {
+      await trx
+        .insert(schema.userArticles)
+        .values(values)
+        .onConflictDoUpdate({
+          set: { deletedAt: now },
+          target: [schema.userArticles.userId, schema.userArticles.articleId],
+        });
+    });
   }
 }

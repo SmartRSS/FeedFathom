@@ -1,5 +1,5 @@
+import { type PageServerLoad } from "../$types";
 import { redirect } from "@sveltejs/kit";
-import type { PageServerLoad } from "../$types";
 
 export const load: PageServerLoad = async ({ locals }) => {
   const user = locals.user; // Assuming user info is stored in locals
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   console.table(sources);
 
   return {
-    user,
     sources,
+    user,
   };
 };

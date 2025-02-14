@@ -1,15 +1,15 @@
-import { json, type RequestHandler } from "@sveltejs/kit";
-import { updateSourceHandler } from "./update-source.handler";
 import { createRequestHandler } from "$lib/create-request-handler";
+import { updateSourceHandler } from "./update-source.handler";
 import { UpdateSourceRequest } from "./update-source.validator";
+import { json, type RequestHandler } from "@sveltejs/kit";
 
 type SortField =
-  | "url"
-  | "subscriber_count"
   | "created_at"
+  | "failures"
   | "last_attempt"
   | "last_success"
-  | "failures";
+  | "subscriber_count"
+  | "url";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const sortBy = (url.searchParams.get("sortBy") || "created_at") as SortField; // Default sort field
