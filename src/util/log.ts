@@ -8,10 +8,26 @@ export const logError = (...args: unknown[]): void => {
   // Capture the stack trace
   const stack = error.stack?.split("\n");
   if (stack && stack.length > 2 && stack[2]) {
-    // The third line of the stack trace should indicate the caller location
-    const callerLine = stack[2].trim();
-    console.error(new Date().toISOString(), callerLine, ...args);
-    return;
+    const [_, __, ...lines] = stack.map((line) => {
+      return line.trim() + "\n";
+    });
+
+    const argsWithNewlines: unknown[] = [];
+    for (let index = 0; index < args.length; index++) {
+      argsWithNewlines.push(args[index]);
+      if (index < args.length - 1) {
+        argsWithNewlines.push("\n");
+      }
+    }
+
+    const message = [
+      new Date().toISOString() + "\n",
+      ...lines,
+      "Passed arguments: \n",
+      ...argsWithNewlines,
+    ];
+
+    return console.error(...message);
   }
 
   console.error(new Date().toISOString(), ...args);
