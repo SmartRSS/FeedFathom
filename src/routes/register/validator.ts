@@ -1,6 +1,7 @@
 import * as v from "valibot";
 
 const allowedEmails =
+  // eslint-disable-next-line n/no-process-env
   process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
 
 export const RegisterRequest = v.pipe(
@@ -14,7 +15,9 @@ export const RegisterRequest = v.pipe(
     passwordConfirm: v.string(),
     username: v.string(),
   }),
-  v.check((input) => {return input.password === input.passwordConfirm}),
+  v.check((input) => {
+    return input.password === input.passwordConfirm;
+  }),
 );
 
 export type RegisterRequest = v.InferOutput<typeof RegisterRequest>;

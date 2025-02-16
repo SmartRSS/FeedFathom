@@ -1,7 +1,8 @@
+/* eslint-disable n/callback-return */
 import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import { type Source } from "../../types/source-types";
-import { logError as error_ } from "../../util/log";
+import { logError as error_, llog } from "../../util/log";
 import * as mailParser from "mailparser";
 import stream from "node:stream/promises";
 import {
@@ -13,11 +14,11 @@ import {
 export type MailWorkerConfig = {
   allowedDomains?: string[] | undefined;
   hostname?: string | undefined;
-  maxSize?: number | undefined; // in bytes
-}
+  maxSizeBytes?: number | undefined;
+};
 
 export class MailWorker {
-  private config: MailWorkerConfig;
+  private readonly config: MailWorkerConfig;
 
   private server: SMTPServer | undefined;
 
@@ -29,98 +30,107 @@ export class MailWorker {
     this.config = {
       allowedDomains: config.allowedDomains,
       hostname: config.hostname,
-      maxSize: config.maxSize ?? 10 * 1_024 * 1_024,
+      maxSizeBytes: config.maxSizeBytes ?? 10 * 1_024 * 1_024,
     };
   }
 
   public initialize() {
     this.server = new SMTPServer({
       disabledCommands: ["AUTH"],
-      onData: async (emailStream, session, callback) => {
-        try {
-          if (emailStream.sizeExceeded) {
-            error_("Email size limit exceeded");
-            return callback(new Error("Email size limit exceeded"));
+      onData: (emailStream, session, callback) => {
+        (async () => {
+          try {
+            if (emailStream.sizeExceeded) {
+              error_("Email size limit exceeded");
+              callback(new Error("Email size limit exceeded"));
+              return;
+            }
+
+            const email = await mailParser.simpleParser(emailStream);
+
+            const senderAddress = session.envelope.mailFrom;
+            if (!senderAddress) {
+              callback(new Error("Unknown sender"));
+              return;
+            }
+
+            const recipientMails = this.extractRecipientAddresses(email);
+            if (recipientMails.length > 10) {
+              callback(new Error("Too many recipients"));
+              return;
+            }
+
+            const sources = (
+              await Promise.all(
+                recipientMails.map(async (address) => {
+                  return await this.sourcesRepository.findSourceByUrl(address);
+                }),
+              )
+            ).filter((source): source is Source => {
+              return source !== undefined;
+            });
+            if (sources.length === 0) {
+              callback(new Error("No recipients known"));
+              return;
+            }
+
+            const articles = sources.map((feed) => {
+              return this.createArticleFromEmail(
+                email,
+                feed.id,
+                senderAddress.address,
+              );
+            });
+
+            await this.articlesRepository.batchUpsertArticles(articles);
+            emailStream.resume();
+            await stream.finished(emailStream);
+            callback();
+          } catch (error: unknown) {
+            error_("Failed to process incoming email:", error);
+            emailStream.resume();
+            await stream.finished(emailStream);
+            callback(error instanceof Error ? error : new Error(String(error)));
           }
-
-          const email = await mailParser.simpleParser(emailStream);
-
-          const senderAddress = session.envelope.mailFrom;
-          if (!senderAddress) {
-            return callback(new Error("Unknown sender"));
-          }
-
-          const recipientMails = this.extractRecipientAddresses(email);
-          if (recipientMails.length > 10) {
-            return callback(new Error("Too many recipients"));
-          }
-
-          const sources = (
-            await Promise.all(
-              recipientMails.map(async (address) => {
-                return await this.sourcesRepository.findSourceByUrl(address);
-              }),
-            )
-          ).filter((source): source is Source => {return source !== undefined});
-          if (sources.length === 0) {
-            return callback(new Error("No recipients known"));
-          }
-
-          const articles = sources.map((feed) => {
-            return this.createArticleFromEmail(
-              email,
-              feed.id,
-              senderAddress.address,
-            );
-          });
-
-          await this.articlesRepository.batchUpsertArticles(articles);
-          emailStream.resume();
-          await stream.finished(emailStream);
-          return callback();
-        } catch (error: unknown) {
-          error_("Failed to process incoming email:", error);
-          emailStream.resume();
-          await stream.finished(emailStream);
-          return callback(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
+        })();
       },
-      onRcptTo: async (
+      onRcptTo: (
         _address: SMTPServerAddress,
         _session: SMTPServerSession,
         callback: (error?: Error) => void,
       ) => {
-        try {
-          const source = await this.sourcesRepository.findSourceByUrl(
-            _address.address,
-          );
-          if (!source) {
-            return callback(new Error("Unknown recipient"));
-          }
+        (async () => {
+          try {
+            const source = await this.sourcesRepository.findSourceByUrl(
+              _address.address,
+            );
+            if (!source) {
+              callback(new Error("Unknown recipient"));
+              return;
+            }
 
-          return callback();
-        } catch (error: unknown) {
-          return callback(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
+            callback();
+          } catch (error: unknown) {
+            callback(error instanceof Error ? error : new Error(String(error)));
+          }
+        })();
       },
-      size: this.config.maxSize,
+      size: this.config.maxSizeBytes,
     });
 
     this.server.listen(25, () => {
-      console.log(`Mail server listening on port 25`);
+      llog(`Mail server listening on port 25`);
     });
   }
 
   public async shutdown(): Promise<void> {
-    if (this.server) {
-      return new Promise<void>((resolve) => {
-        this.server!.close(() => {return resolve()});
-      });
-    }
+    await new Promise<void>((resolve) => {
+      if (this.server) {
+        this.server.close(() => {
+          resolve();
+        });
+      }
+    });
   }
 
   private createArticleFromEmail(
@@ -147,9 +157,11 @@ export class MailWorker {
     const recipientMails: string[] = [];
 
     for (const addressObject of recipients) {
-      for (const value of addressObject?.value) {
-        if (value.address) {
-          recipientMails.push(value.address);
+      if (Array.isArray(addressObject?.value)) {
+        for (const value of addressObject.value) {
+          if (value.address) {
+            recipientMails.push(value.address);
+          }
         }
       }
     }

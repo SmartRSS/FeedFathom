@@ -1,12 +1,12 @@
 import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner.interface";
+import { type Scanner } from "./scanner-interface";
 
 export class LinkFeedScanner implements Scanner {
   private readonly feedUrlPatterns = [
-    /\/(rss|feed|atom|feeds)\/?$/i,
-    /\.(rss|xml|atom)$/i,
-    /feeds?\/(rss|atom)/i,
-    /\/syndication\/?$/i,
+    /\/(rss|feed|atom|feeds)\/?$/iu,
+    /\.(rss|xml|atom)$/iu,
+    /feeds?\/(rss|atom)/iu,
+    /\/syndication\/?$/iu,
   ];
 
   scan(currentUrl: URL, document: Document): FeedData[] {
@@ -32,11 +32,12 @@ export class LinkFeedScanner implements Scanner {
         // Check if URL matches common feed patterns
         if (this.isFeedUrl(feedUrl.pathname)) {
           feeds.push({
-            title: anchor.textContent?.trim() || "Untitled Feed",
+            title: anchor.textContent?.trim() ?? "Untitled Feed",
             url: feedUrl.href,
           });
         }
       } catch {
+        // eslint-disable-next-line no-console
         console.warn(`Invalid URL: ${href}`);
       }
     }
@@ -45,6 +46,8 @@ export class LinkFeedScanner implements Scanner {
   }
 
   private isFeedUrl(pathname: string): boolean {
-    return this.feedUrlPatterns.some((pattern) => {return pattern.test(pathname)});
+    return this.feedUrlPatterns.some((pattern) => {
+      return pattern.test(pathname);
+    });
   }
 }

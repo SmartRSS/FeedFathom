@@ -12,20 +12,17 @@ void (async () => {
       ? storedInstance["instance"]
       : "";
   instanceInput.addEventListener("change", (event: Event) => {
-    try {
-      if (!event.target) {
-        return;
-      }
+    if (!event.target) {
+      return;
+    }
 
-      const instanceAddress = (event.target as HTMLInputElement).value;
-      if (instanceAddress) {
-        new URL(instanceAddress);
-      }
-
-      void browser.storage.sync.set({ instance: instanceAddress });
-    } catch {
+    const instanceAddress = (event.target as HTMLInputElement).value;
+    if (!URL.canParse(instanceAddress)) {
+      // eslint-disable-next-line no-alert
       alert("bad URL");
     }
+
+    void browser.storage.sync.set({ instance: instanceAddress });
   });
 })();
 

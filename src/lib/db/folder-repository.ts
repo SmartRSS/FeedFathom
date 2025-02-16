@@ -21,7 +21,7 @@ export class FoldersRepository {
   }
 
   public async getUserFolders(userId: number) {
-    return this.drizzleConnection
+    return await this.drizzleConnection
       .select()
       .from(schema.userFolders)
       .where(eq(schema.userFolders.userId, userId));

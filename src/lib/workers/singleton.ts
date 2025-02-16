@@ -24,6 +24,6 @@ export class SingletonJobHandler {
       return null;
     }
 
-    return job();
+    return await job();
   }
 }

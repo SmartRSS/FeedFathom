@@ -1,11 +1,12 @@
 import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner.interface";
+import { type Scanner } from "./scanner-interface";
 
 export class GithubScanner implements Scanner {
   private static readonly BASE_URL = "https://github.com/";
 
   private static readonly REPO_PATTERN = new RegExp(
     `^${GithubScanner.BASE_URL}(.+/.+)$`,
+    "u",
   );
 
   private static getBaseRepoUrl(url: string): string {

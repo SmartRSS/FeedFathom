@@ -33,8 +33,8 @@ export const generateBoundaryDates = () => {
 
 export const getBoundaryDates = () => {
   const today = new Date().getDate();
-  if (boundaryMemory && today in boundaryMemory) {
-    return boundaryMemory[today]!;
+  if (boundaryMemory && today in boundaryMemory && boundaryMemory[today]) {
+    return boundaryMemory[today];
   }
 
   const boundaryDates = generateBoundaryDates();

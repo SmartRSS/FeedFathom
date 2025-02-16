@@ -8,36 +8,38 @@ const previewSource = async (address: string) => {
   }
 
   const instance = instanceObject["instance"];
-  const fixedAddress = address.replace(/^feed:/i, "https:");
+  const fixedAddress = address.replace(/^feed:/iu, "https:");
   void browser.tabs.create({
     url: new URL(`/preview?feedUrl=${fixedAddress}`, instance).href,
   });
 };
 
-browser.contextMenus.onClicked.addListener(async (info) => {
-  const instanceObject = await browser.storage.sync.get("instance");
-  if (typeof instanceObject["instance"] !== "string") {
-    return;
-  }
-
-  const instance = instanceObject["instance"];
-
-  if (info.menuItemId === "FeedFathom_newsletter") {
-    const uuid = ulid();
-    const email = instance.replace("https://", `${uuid}@`);
-    await navigator.clipboard.writeText(email);
-    await previewSource(email);
-    return;
-  }
-
-  if (info.menuItemId !== "FeedFathom") {
-    if (!instance) {
-      await navigator.clipboard.writeText(info.menuItemId as string);
+browser.contextMenus.onClicked.addListener((info) => {
+  (async () => {
+    const instanceObject = await browser.storage.sync.get("instance");
+    if (typeof instanceObject["instance"] !== "string") {
       return;
     }
 
-    await previewSource(info.menuItemId as string);
-  }
+    const instance = instanceObject["instance"];
+
+    if (info.menuItemId === "FeedFathom_newsletter") {
+      const uuid = ulid();
+      const email = instance.replace("https://", `${uuid}@`);
+      await navigator.clipboard.writeText(email);
+      await previewSource(email);
+      return;
+    }
+
+    if (info.menuItemId !== "FeedFathom") {
+      if (!instance) {
+        await navigator.clipboard.writeText(info.menuItemId as string);
+        return;
+      }
+
+      await previewSource(info.menuItemId as string);
+    }
+  })();
 });
 
 const messageHandler = (message: Message) => {
@@ -74,20 +76,22 @@ const messageHandler = (message: Message) => {
 
 browser.runtime.onMessage.addListener(messageHandler);
 
-browser.action.onClicked.addListener(async () => {
-  const instanceObject = await browser.storage.sync.get("instance");
-  if (typeof instanceObject["instance"] !== "string") {
-    return;
-  }
+browser.action.onClicked.addListener(() => {
+  (async () => {
+    const instanceObject = await browser.storage.sync.get("instance");
+    if (typeof instanceObject["instance"] !== "string") {
+      return;
+    }
 
-  const instance = instanceObject["instance"];
-  if (!instance) {
-    await browser.runtime.openOptionsPage();
-    return;
-  }
+    const instance = instanceObject["instance"];
+    if (!instance) {
+      await browser.runtime.openOptionsPage();
+      return;
+    }
 
-  void browser.tabs.create({
-    active: true,
-    url: instance,
-  });
+    void browser.tabs.create({
+      active: true,
+      url: instance,
+    });
+  })();
 });

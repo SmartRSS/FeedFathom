@@ -46,5 +46,5 @@ export const extractArticle = async (
 ) => {
   const cleanContent = await getContent(content, articleUrl, displayMode);
   const extractor = new displayModeToExtractor[displayMode]();
-  return extractor.extract(cleanContent, articleUrl);
+  return await extractor.extract(cleanContent, articleUrl);
 };

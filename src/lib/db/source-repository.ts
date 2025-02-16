@@ -1,4 +1,4 @@
-import { JobName } from "../../types/job-name.enum";
+import { JobName } from "../../types/job-name-enum";
 import { logError as error } from "../../util/log";
 import * as schema from "../schema";
 import { type Queue } from "bullmq";
@@ -19,7 +19,7 @@ export class SourcesRepository {
     private readonly bullmqQueue: Queue,
   ) {}
 
-  public async addSource(payload: { homeUrl: string; url: string; }) {
+  public async addSource(payload: { homeUrl: string; url: string }) {
     const source = (
       await this.drizzleConnection
         .insert(schema.sources)
@@ -83,7 +83,7 @@ export class SourcesRepository {
   }
 
   public async getRecentlySuccessfulSources() {
-    return this.drizzleConnection
+    return await this.drizzleConnection
       .select({
         homeUrl: schema.sources.homeUrl,
         id: schema.sources.id,
@@ -93,29 +93,41 @@ export class SourcesRepository {
   }
 
   public async getSourcesToProcess() {
-    const noRecentFailures = () => {return eq(schema.sources.recentFailures, 0)};
-    const failedRecently = () => {return gt(schema.sources.recentFailures, 0)};
+    const noRecentFailures = () => {
+      return eq(schema.sources.recentFailures, 0);
+    };
 
-    const failedAttemptTimeout = () =>
-      {return sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`};
+    const failedRecently = () => {
+      return gt(schema.sources.recentFailures, 0);
+    };
 
-    const lastAttemptTimeout = () =>
-      {return lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`)};
+    const failedAttemptTimeout = () => {
+      return sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
+    };
 
-    const isLastAttemptNull = () => {return isNull(schema.sources.lastAttempt)};
+    const lastAttemptTimeout = () => {
+      return lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
+    };
 
-    const isWebSource = () => {return sql`${schema.sources.url} LIKE 'http%'`};
+    const isLastAttemptNull = () => {
+      return isNull(schema.sources.lastAttempt);
+    };
 
-    const shouldProcessSource = () =>
-      {return or(
+    const isWebSource = () => {
+      return sql`${schema.sources.url} LIKE 'http%'`;
+    };
+
+    const shouldProcessSource = () => {
+      return or(
         or(
           and(noRecentFailures(), lastAttemptTimeout()),
           and(failedRecently(), failedAttemptTimeout()),
         ),
         isLastAttemptNull(),
-      )};
+      );
+    };
 
-    return this.drizzleConnection
+    return await this.drizzleConnection
       .select({
         id: schema.sources.id,
         url: schema.sources.url,
@@ -165,7 +177,7 @@ export class SourcesRepository {
         ORDER BY ${validSortBy} ${validOrder}
     `;
 
-    return this.drizzleConnection.execute(query);
+    return await this.drizzleConnection.execute(query);
   }
 
   public async successSource(
@@ -196,7 +208,7 @@ export class SourcesRepository {
       encoded = favicon.toString("base64");
     } else {
       type = "svg+xml";
-      encoded = Buffer.from(favicon, "utf-8").toString("base64");
+      encoded = Buffer.from(favicon, "utf8").toString("base64");
     }
 
     await this.drizzleConnection

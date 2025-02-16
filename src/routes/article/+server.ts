@@ -10,14 +10,14 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     return json({}, { status: 404 });
   }
 
-  const articleId = Number.parseInt(articleIdParameter);
+  const articleId = Number.parseInt(articleIdParameter, 10);
 
   const article = await articlesRepository.getArticle(articleId);
   if (!article) {
     return json({}, { status: 404 });
   }
 
-  const displayMode = (url.searchParams.get("displayMode") ||
+  const displayMode = (url.searchParams.get("displayMode") ??
     DisplayMode.FEED) as DisplayMode;
 
   const extractedArticle = await extractArticle(

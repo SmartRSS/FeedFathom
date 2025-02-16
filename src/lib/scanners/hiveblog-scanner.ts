@@ -1,5 +1,5 @@
 import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner.interface";
+import { type Scanner } from "./scanner-interface";
 
 export class HiveblogScanner implements Scanner {
   scan(currentUrl: URL, _document: Document): FeedData[] {
@@ -7,7 +7,7 @@ export class HiveblogScanner implements Scanner {
       return [];
     }
 
-    const channelNameMatch = /hive\.blog\/(.+)/.exec(currentUrl.href);
+    const channelNameMatch = /hive\.blog\/(.+)/u.exec(currentUrl.href);
     if (!channelNameMatch) {
       return [];
     }

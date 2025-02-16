@@ -4,9 +4,9 @@ import { GeneratorScanner } from "./scanners/generator-scanner";
 import { GithubScanner } from "./scanners/github-scanner";
 import { HeadScanner } from "./scanners/head-scanner";
 import { HiveblogScanner } from "./scanners/hiveblog-scanner";
-import { LinkFeedScanner } from "./scanners/link-feed.scanner";
+import { LinkFeedScanner } from "./scanners/link-feed-scanner";
 import { OdseeScanner } from "./scanners/odsee-scanner";
-import { type Scanner } from "./scanners/scanner.interface";
+import { type Scanner } from "./scanners/scanner-interface";
 import { SteemitScanner } from "./scanners/steemit-scanner";
 import { VimeoScanner } from "./scanners/vimeo-scanner";
 import { XmlScanner } from "./scanners/xml-scanner";
@@ -26,7 +26,7 @@ const scanners: Scanner[] = [
   new LinkFeedScanner(),
 ];
 
-export async function scan(address: string, document: Document) {
+export const scan = async (address: string, document: Document) => {
   const feedDataList: FeedData[] = [];
   const addressUrl = new URL(address);
   const seenUrls = new Set<string>();
@@ -66,4 +66,4 @@ export async function scan(address: string, document: Document) {
   }
 
   return feedDataList;
-}
+};

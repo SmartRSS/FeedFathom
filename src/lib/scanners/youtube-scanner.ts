@@ -1,5 +1,5 @@
 import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner.interface";
+import { type Scanner } from "./scanner-interface";
 
 export class YoutubeScanner implements Scanner {
   scan(currentUrl: URL, _document: Document): FeedData[] {
@@ -13,7 +13,7 @@ export class YoutubeScanner implements Scanner {
   private findFeedsForYoutubeAddress(address: string) {
     const youtubeFeeds: FeedData[] = [];
     const addressUrl = new URL(address);
-    const userMatch = /c\/(.+)/.exec(address);
+    const userMatch = /c\/(.+)/u.exec(address);
     if (userMatch) {
       youtubeFeeds.push({
         title: "User feed",
@@ -21,7 +21,7 @@ export class YoutubeScanner implements Scanner {
       });
     }
 
-    const channelMatch = /channel\/(.+)/.exec(address);
+    const channelMatch = /channel\/(.+)/u.exec(address);
     if (channelMatch) {
       youtubeFeeds.push({
         title: "Channel feed",
@@ -31,7 +31,9 @@ export class YoutubeScanner implements Scanner {
       });
     }
 
-    const channelMatch2 = new RegExp(`${addressUrl}\\/(@.+)`).exec(address);
+    const channelMatch2 = new RegExp(`${addressUrl}\\/(@.+)`, "u").exec(
+      address,
+    );
     if (channelMatch2) {
       youtubeFeeds.push({
         title: "Channel feed",
@@ -41,7 +43,7 @@ export class YoutubeScanner implements Scanner {
       });
     }
 
-    const playlistMatch = /list=([\w\-]+)/.exec(address);
+    const playlistMatch = /list=([\w-]+)/u.exec(address);
     if (playlistMatch) {
       youtubeFeeds.push({
         title: "Current playlist feed",

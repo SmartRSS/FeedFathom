@@ -42,9 +42,7 @@ export class FeedParser {
         return;
       }
 
-      const { cached, feed: parsedFeed } = await this.parseUrl(
-        source.url,
-      );
+      const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
       if (cached && !source.skipCache) {
         await this.sourcesRepository.successSource(source.id, true);
         return;
@@ -63,10 +61,10 @@ export class FeedParser {
             item.url ?? "",
           ),
           guid,
-          publishedAt: new Date(item.published || Date.now()),
+          publishedAt: new Date(item.published ?? Date.now()),
           sourceId: source.id,
           title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-          updatedAt: new Date(item.updated || item.published || Date.now()),
+          updatedAt: new Date(item.updated ?? item.published ?? Date.now()),
           url: item.url ?? "",
         };
       });
@@ -85,7 +83,10 @@ export class FeedParser {
       llog("fail source");
       let message = "";
       if (error_ instanceof AxiosError) {
-        message += error_.cause + "\n";
+        message +=
+          error_.cause instanceof Object
+            ? JSON.stringify(error_.cause)
+            : error_.cause + "\n";
         message += error_.code + "\n";
         message += error_.message + "\n";
         message += error_.response?.status + "\n";
@@ -96,7 +97,6 @@ export class FeedParser {
 
       await this.sourcesRepository.failSource(source.id, message);
       error(source.url + " failed");
-
     }
   }
 
@@ -108,7 +108,7 @@ export class FeedParser {
     }
 
     // const chosenParser =
-    //   parserStrategies[urlObject.origin] || this.parseGenericFeed;
+    //   parserStrategies[urlObject.origin] ?? this.parseGenericFeed;
     // return await chosenParser.bind(this)(url);
     return await this.parseGenericFeed(url);
   }
@@ -123,11 +123,11 @@ export class FeedParser {
         title: parsedFeed.title,
       };
     } catch {
-
+      return {};
     }
   }
 
-  public async refreshFavicon(source: { homeUrl: string; id: number; }) {
+  public async refreshFavicon(source: { homeUrl: string; id: number }) {
     const urls = [
       `https://icons.duckduckgo.com/ip3/${source.homeUrl}.ico`,
       `https://unavatar.io/${source.homeUrl}`,
@@ -145,7 +145,8 @@ export class FeedParser {
         }
 
         await this.sourcesRepository.updateFavicon(source.id, response.data);
-        break; // Exit loop after successful update
+        // Exit loop after successful update
+        break;
       } catch {
         // nop
       }
@@ -157,11 +158,11 @@ export class FeedParser {
     const lastFetchKey = `lastFetchTimestamp:${domain}`;
 
     const lastFetchTimestamp = Number.parseInt(
-      (await this.redis.get(lastFetchKey)) || "0",
+      (await this.redis.get(lastFetchKey)) ?? "0",
       10,
     );
 
-    const delaySetting = this.domainDelaySettings[domain] || this.defaultDelay;
+    const delaySetting = this.domainDelaySettings[domain] ?? this.defaultDelay;
     if (now < lastFetchTimestamp + delaySetting) {
       llog(`can't process ${domain} yet`);
       return false;

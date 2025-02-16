@@ -1,5 +1,5 @@
 import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner.interface";
+import { type Scanner } from "./scanner-interface";
 
 export class SteemitScanner implements Scanner {
   scan(currentUrl: URL, _document: Document): FeedData[] {
@@ -7,7 +7,7 @@ export class SteemitScanner implements Scanner {
       return [];
     }
 
-    const channelNameMatch = /steemit\.com\/(.+)/.exec(currentUrl.href);
+    const channelNameMatch = /steemit\.com\/(.+)/u.exec(currentUrl.href);
     if (!channelNameMatch) {
       return [];
     }

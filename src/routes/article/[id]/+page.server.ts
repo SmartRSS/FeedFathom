@@ -1,5 +1,5 @@
 import container from "../../../container";
-import { type Article } from "../../../types/article.type";
+import { type Article } from "../../../types/article-type";
 import { type PageServerLoad } from "./$types";
 import { error } from "@sveltejs/kit";
 

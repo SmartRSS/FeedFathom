@@ -2,7 +2,7 @@ import { type PageServerLoad } from "../$types";
 import { redirect } from "@sveltejs/kit";
 
 export const load: PageServerLoad = async ({ locals }) => {
-  const user = locals.user; // Assuming user info is stored in locals
+  const user = locals.user;
   if (!user?.isAdmin) {
     return redirect(302, "/");
   }
@@ -12,7 +12,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     "created_at",
     "desc",
   );
-  console.table(sources);
 
   return {
     sources,

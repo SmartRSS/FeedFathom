@@ -1,12 +1,12 @@
 import { type ValidatedRequestEvent } from "../../app";
-import { type UpdateSourceRequest } from "./update-source.validator";
+import { type UpdateSourceRequest } from "./validator";
 import { json } from "@sveltejs/kit";
 
 export const updateSourceHandler = async (
   event: ValidatedRequestEvent<UpdateSourceRequest>,
 ) => {
   const { body, locals } = event;
-  const user = locals.user; // Assuming user info is stored in locals
+  const user = locals.user;
   if (!user.isAdmin) {
     return json({ error: "Unauthorized" }, { status: 403 });
   }

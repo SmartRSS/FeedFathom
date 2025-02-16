@@ -1,5 +1,5 @@
 import { type DisplayMode } from "$lib/settings";
-import { type Article } from "./types/article.type";
+import { type Article } from "./types/article-type";
 import { type TreeNode } from "./types/source-types";
 
 export type ArticleListComponentProps = {
@@ -10,11 +10,11 @@ export type ArticleListComponentProps = {
   focusedColumn: FocusTarget;
   promisesMap: ArticlePromisesMap;
   selectedSourcesList: string[];
-}
+};
 
 export type ArticlePromisesMap = Map<
   string,
-  { promise: Promise<Article[]>; time: number; }
+  { promise: Promise<Article[]>; time: number }
 >;
 
 export type ArticlesLoadedFunction = (
@@ -34,7 +34,7 @@ export type DisplayModeChangedFunction = (displayMode: DisplayMode) => void;
 export type FeedData = {
   title: string;
   url: string;
-}
+};
 
 export type FocusChangedFunction = (focusTarget: FocusTarget) => void;
 
@@ -54,4 +54,4 @@ export type TreeNodeComponentProps = {
   nodeTouchEnd: NodeEventFunction;
   nodeTouchStart: NodeEventFunction;
   selectedNodeUid: string;
-}
+};

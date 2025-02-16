@@ -1,8 +1,9 @@
+/* eslint-disable n/no-process-env */
 
 import { type SourcesRepository } from "$lib/db/source-repository";
 import { type UserSourcesRepository } from "$lib/db/user-source-repository";
 import { type FeedParser } from "$lib/feed-parser";
-import { JobName } from "../../types/job-name.enum";
+import { JobName } from "../../types/job-name-enum";
 import { logError as error_, llog } from "../../util/log";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
@@ -11,7 +12,7 @@ import type Redis from "ioredis";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
-  return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+  return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed;
 };
 
 // type SingletonJobConfig = {
@@ -50,16 +51,18 @@ export class MainWorker {
   private async gatherParseSourceJobs() {
     const sourcesToProcess = await this.sourcesRepository.getSourcesToProcess();
     llog(`number of sources to process found: ${sourcesToProcess.length}`);
-    const jobs = sourcesToProcess.map((source) => {return {
-      data: source,
-      jobId: JobName.PARSE_SOURCE + ":" + source.url,
-      name: JobName.PARSE_SOURCE,
-      opts: {
+    const jobs = sourcesToProcess.map((source) => {
+      return {
+        data: source,
         jobId: JobName.PARSE_SOURCE + ":" + source.url,
-        removeOnComplete: { count: 0 },
-        removeOnFail: { count: 0 },
-      },
-    }});
+        name: JobName.PARSE_SOURCE,
+        opts: {
+          jobId: JobName.PARSE_SOURCE + ":" + source.url,
+          removeOnComplete: { count: 0 },
+          removeOnFail: { count: 0 },
+        },
+      };
+    });
 
     // explicitly clear the array
     sourcesToProcess.length = 0;
@@ -74,7 +77,7 @@ export class MainWorker {
     }
   }
 
-  private processJob = async (job: Job) => {
+  private readonly processJob = async (job: Job) => {
     try {
       // if (job.name.startsWith("SINGLETON:")) {
       //   await this.processSingletonJob(job);
@@ -99,16 +102,18 @@ export class MainWorker {
       case JobName.GATHER_FAVICON_JOBS: {
         const successfullSources =
           await this.sourcesRepository.getRecentlySuccessfulSources();
-        const tasks = successfullSources.map((source) => {return {
-          data: source,
-          jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
-          name: JobName.REFRESH_FAVICON,
-          opts: {
+        const tasks = successfullSources.map((source) => {
+          return {
+            data: source,
             jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
-            removeOnComplete: { count: 0 },
-            removeOnFail: { count: 0 },
-          },
-        }});
+            name: JobName.REFRESH_FAVICON,
+            opts: {
+              jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
+              removeOnComplete: { count: 0 },
+              removeOnFail: { count: 0 },
+            },
+          };
+        });
         await this.bullmqQueue.addBulk(tasks);
         break;
       }
@@ -155,11 +160,13 @@ export class MainWorker {
   // }
 
   private setSignalHandlers() {
-    process.on("SIGTERM", async () => {
-      if (this.worker) {
-        await this.worker.close();
-        llog("Worker closed gracefully");
-      }
+    process.on("SIGTERM", () => {
+      (async () => {
+        if (this.worker) {
+          await this.worker.close();
+          llog("Worker closed gracefully");
+        }
+      })();
     });
   }
 
@@ -225,7 +232,8 @@ export class MainWorker {
       ),
       connection: this.redis,
       lockDuration:
-        parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) * 1_000,
+        parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) *
+        1_000,
       removeOnComplete: { count: 0 },
       removeOnFail: { count: 0 },
     };

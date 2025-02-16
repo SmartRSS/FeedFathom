@@ -1,5 +1,5 @@
 import * as schema from "$lib/schema";
-import { type Article } from "../../types/article.type";
+import { type Article } from "../../types/article-type";
 import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -34,7 +34,6 @@ export class ArticlesRepository {
         },
         target: schema.articles.guid,
       });
-    payloads.length = 0;
   }
 
   public async getArticle(articleId: number): Promise<Article | undefined> {
@@ -44,10 +43,6 @@ export class ArticlesRepository {
         .from(schema.articles)
         .where(eq(schema.articles.id, articleId))
     ).at(0);
-
-    if (!article) {
-      return;
-    }
 
     return article;
   }
@@ -65,7 +60,6 @@ export class ArticlesRepository {
       return [];
     }
 
-    const startTime = Date.now();
     const articles = await this.drizzleConnection
       .select({
         author: schema.articles.author,
@@ -93,22 +87,25 @@ export class ArticlesRepository {
         ),
       )
       .orderBy(desc(schema.articles.publishedAt));
-    console.log("query time", Date.now() - startTime);
 
     const boundaryDates = getBoundaryDates();
-    return articles.map((item) => {return {
-      group: getDateGroup(boundaryDates, item.publishedAt),
-      ...item,
-    }});
+    return articles.map((item) => {
+      return {
+        group: getDateGroup(boundaryDates, item.publishedAt),
+        ...item,
+      };
+    });
   }
 
   public async removeUserArticles(articleIdList: number[], userId: number) {
     const now = new Date();
-    const values = articleIdList.map((articleId) => {return {
-      articleId,
-      deletedAt: now,
-      userId,
-    }});
+    const values = articleIdList.map((articleId) => {
+      return {
+        articleId,
+        deletedAt: now,
+        userId,
+      };
+    });
 
     await this.drizzleConnection.transaction(async (trx) => {
       await trx

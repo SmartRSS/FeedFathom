@@ -25,7 +25,11 @@ export class UserSourcesRepository {
   ) {
     if (sourcePayload.parentId) {
       const folders = await this.foldersRepository.getUserFolders(userId);
-      if (!folders.some((folder) => {return folder.id === sourcePayload.parentId})) {
+      if (
+        !folders.some((folder) => {
+          return folder.id === sourcePayload.parentId;
+        })
+      ) {
         error("no folder", folders[0]);
         return;
       }
@@ -54,10 +58,8 @@ export class UserSourcesRepository {
     ).at(0);
 
     if (!userSource) {
-      return;
+      throw new Error("no user source");
     }
-
-    return userSource;
   }
 
   public async cleanup() {
@@ -120,7 +122,7 @@ export class UserSourcesRepository {
   }
 
   public async getUserSources(userId: number) {
-    return this.drizzleConnection
+    return await this.drizzleConnection
       .select({
         favicon: schema.sources.favicon,
         homeUrl: schema.sources.homeUrl,

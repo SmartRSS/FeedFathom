@@ -1,4 +1,4 @@
-import { type Extractor } from "./extractor.interface";
+import { type Extractor } from "./extractor-interface";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 

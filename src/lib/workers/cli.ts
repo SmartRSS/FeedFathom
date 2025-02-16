@@ -1,4 +1,5 @@
 import { type UsersRepository } from "$lib/db/user-repository";
+import { llog } from "../../util/log";
 
 export class Cli {
   constructor(private readonly usersRepository: UsersRepository) {}
@@ -12,12 +13,12 @@ export class Cli {
         }
 
         await this.usersRepository.makeAdmin(email);
-        console.log(`User ${email} made admin`);
+        llog(`User ${email} made admin`);
         break;
       }
 
       default:
-        process.exit(1);
+        throw new Error("1");
     }
   }
 }

@@ -2,7 +2,7 @@ import { type ValidatedRequestEvent } from "../app";
 import { json, type RequestEvent } from "@sveltejs/kit";
 import * as v from "valibot";
 
-export function createRequestHandler<T extends v.GenericSchema>(
+export const createRequestHandler = function <T extends v.GenericSchema>(
   schema: T,
   handler: (
     event: ValidatedRequestEvent<v.InferOutput<T>>,
@@ -19,9 +19,9 @@ export function createRequestHandler<T extends v.GenericSchema>(
       );
     }
 
-    return handler({
+    return await handler({
       ...event,
       body: parseResult.output,
     } as ValidatedRequestEvent<v.InferOutput<T>>);
   };
-}
+};

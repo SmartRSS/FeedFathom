@@ -74,7 +74,7 @@ export const actions: Actions = {
 
     try {
       const formData = Object.fromEntries(await request.formData());
-      if ("opml"! in formData) {
+      if (!("opml" in formData)) {
         return {
           error: "No file uploaded",
           status: 400,
@@ -116,7 +116,7 @@ export const actions: Actions = {
 };
 
 export const load: PageServerLoad = ({ locals }) => {
-  const user = locals.user; // Assuming user info is stored in locals
+  const user = locals.user;
 
   if (!user) {
     throw error(401, "Unauthorized");

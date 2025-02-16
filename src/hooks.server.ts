@@ -4,28 +4,30 @@ import { type Handle, redirect } from "@sveltejs/kit";
 
 const pathsNotRequiringLogin = ["/register", "/login"];
 
-export const handle: Handle = async ({ event, resolve }) => {
+export const handle: Handle = (async ({ event, resolve }) => {
   event.locals.dependencies = container.cradle;
+
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
-    return resolve(event);
+    return await resolve(event);
   }
 
   const sid = event.cookies.get("sid");
-  const user = sid
-    ? await event.locals.dependencies.usersRepository.getUserBySid(sid)
-    : null;
-
-  if (!sid || !user) {
+  if (!sid) {
     event.cookies.delete("sid", { path: "/" });
-
     return redirect(302, "/login");
   }
 
-  event.locals.user = user;
-  event.cookies.set("sid", sid, cookiesConfig);
-  if (!pathsNotRequiringLogin.includes(event.url.pathname)) {
-    return resolve(event);
+  const user =
+    await event.locals.dependencies.usersRepository.getUserBySid(sid);
+
+  if (!user) {
+    event.cookies.delete("sid", { path: "/" });
+    return redirect(302, "/login");
   }
 
-  return redirect(302, "/login");
-};
+  // eslint-disable-next-line require-atomic-updates
+  event.locals.user = user;
+  event.cookies.set("sid", sid, cookiesConfig);
+
+  return await resolve(event);
+})();

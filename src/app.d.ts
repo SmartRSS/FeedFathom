@@ -1,12 +1,13 @@
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 import { type Dependencies } from "./container";
-import { type User } from "./types/user.type";
+import { type User } from "./types/user-type";
 import { type RequestEvent } from "@sveltejs/kit";
 
 declare global {
   namespace App {
     // interface Error {}
+    // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
     interface Locals {
       dependencies: Dependencies;
       user?: User;
@@ -26,4 +27,4 @@ export type UnauthenticatedRequestEvent<T> = ValidatedRequestEvent<T> & {
 export type ValidatedRequestEvent<T> = RequestEvent & {
   body: T;
   locals: App.Locals & { user: User };
-}
+};

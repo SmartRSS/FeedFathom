@@ -3,12 +3,14 @@ import { deleteArticlesHandler } from "./handler";
 import { DeleteArticles } from "./validator";
 import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 
-function isValidSourcesArray(sources: unknown): sources is number[] {
+const isValidSourcesArray = (sources: unknown): sources is number[] => {
   return (
     Array.isArray(sources) &&
-    sources.every((source) => {return typeof source === "number"})
+    sources.every((source) => {
+      return typeof source === "number";
+    })
   );
-}
+};
 
 export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
   if (!locals.user) {
@@ -19,7 +21,6 @@ export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
     });
   }
 
-  const startTime = Date.now();
   const sourcesList =
     url.searchParams.get("sources")?.split(",").map(Number) ?? [];
   if (!isValidSourcesArray(sourcesList) || sourcesList.length === 0) {
@@ -31,7 +32,6 @@ export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
       sourcesList,
       locals.user.id,
     );
-  console.log("time", Date.now() - startTime);
   return json(articles);
 };
 

@@ -23,12 +23,12 @@ export const load: PageServerLoad = async ({ locals }) => {
   for (const source of userSources) {
     const sourceData: TreeSource = {
       favicon: source.favicon,
-      homeUrl: source.homeUrl || "",
+      homeUrl: source.homeUrl ?? "",
       name: source.name,
       type: NodeType.SOURCE,
-      uid: source.id!.toString(),
+      uid: source.id?.toString() ?? "",
       unreadCount: source.unreadArticlesCount,
-      xmlUrl: source.url || "",
+      xmlUrl: source.url ?? "",
     };
     if (source.parentId) {
       const stringId = source.parentId.toString();
@@ -42,12 +42,14 @@ export const load: PageServerLoad = async ({ locals }) => {
     }
   }
 
-  const treeFromDatabase: TreeNode[] = userFolders.map((folder) => {return {
-    children: folderLookup[folder.id.toString()] ?? [],
-    name: folder.name,
-    type: NodeType.FOLDER,
-    uid: folder.id.toString(),
-  }});
+  const treeFromDatabase: TreeNode[] = userFolders.map((folder) => {
+    return {
+      children: folderLookup[folder.id.toString()] ?? [],
+      name: folder.name,
+      type: NodeType.FOLDER,
+      uid: folder.id.toString(),
+    };
+  });
 
   treeFromDatabase.push(...sourcesWithoutFolder);
 

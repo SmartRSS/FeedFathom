@@ -1,4 +1,4 @@
-import { type Extractor } from "./extractor.interface";
+import { type Extractor } from "./extractor-interface";
 import { extractFromHtml } from "@extractus/article-extractor";
 
 export class Extractus implements Extractor {

@@ -1,5 +1,5 @@
 import { logError as error_ } from "../util/log";
-import Axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance } from "axios";
 import {
   buildStorage,
   canStale,
@@ -9,9 +9,9 @@ import {
 import type Redis from "ioredis";
 import fs from "node:fs";
 import * as https from "node:https";
-import path from "path";
+import path from "node:path";
 
-function getBuildTime(): string {
+const getBuildTime = (): string => {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
 
   try {
@@ -25,12 +25,12 @@ function getBuildTime(): string {
     error_("Error reading BUILD_TIME, using current timestamp:", error);
     return Date.now().toString();
   }
-}
+};
 
 const cachedBuildTimestamp = getBuildTime();
 
 export const buildAxios = (redis: Redis) => {
-  const axiosInstance: AxiosInstance = Axios.create({
+  const axiosInstance: AxiosInstance = axios.create({
     headers: {
       "Accept-Encoding": "gzip, deflate",
       "User-Agent": `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
@@ -63,7 +63,7 @@ export const buildAxios = (redis: Redis) => {
               : 60_000)
           : (value.state === "stale" && value.ttl) ||
               (value.state === "cached" && !canStale(value))
-            ? value.createdAt + value.ttl!
+            ? value.createdAt + (value?.ttl ?? 60_000)
             : undefined;
 
       const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1_800_000;

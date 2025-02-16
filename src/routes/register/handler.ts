@@ -9,12 +9,7 @@ export const registerHandler = async ({
 }: UnauthenticatedRequestEvent<RegisterRequest>) => {
   const userCount = await locals.dependencies.usersRepository.getUserCount();
 
-  console.log("Environment variables:", {
-    ALLOWED_EMAILS: process.env["ALLOWED_EMAILS"],
-    ENABLE_REGISTRATION: process.env["ENABLE_REGISTRATION"],
-    NODE_ENV: process.env["NODE_ENV"],
-  });
-
+  // eslint-disable-next-line n/no-process-env
   if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
     return json(
       {
@@ -25,8 +20,8 @@ export const registerHandler = async ({
     );
   }
 
-  console.log(process.env["ALLOWED_EMAILS"], "asdf");
   // Only check allowed emails if the list exists and isn't empty
+  // eslint-disable-next-line n/no-process-env
   const allowedEmails = process.env["ALLOWED_EMAILS"]
     ?.split(",")
     .filter(Boolean);
@@ -37,7 +32,7 @@ export const registerHandler = async ({
   ) {
     return json(
       {
-        error: process.env["ALLOWED_EMAILS"],
+        error: "",
         success: false,
       },
       { status: 403 },
