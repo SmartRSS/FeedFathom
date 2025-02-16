@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import type { Article } from "../types/article.type";
+  import type { Article } from "../types/article-type";
   import { goto } from "$app/navigation";
   import config from "$lib/images/icons/System/settings-5-fill.svg";
   import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";

@@ -27,7 +27,8 @@ export const logError = (...args: unknown[]): void => {
       ...argsWithNewlines,
     ];
 
-    console.error(...message); return;
+    console.error(...message);
+    return;
   }
 
   console.error(new Date().toISOString(), ...args);

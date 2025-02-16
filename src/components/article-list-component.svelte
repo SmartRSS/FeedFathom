@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { Article } from "../types/article.type";
+  import type { Article } from "../types/article-type";
   import { goto } from "$app/navigation";
   import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
   import config from "$lib/images/icons/System/settings-5-fill.svg";

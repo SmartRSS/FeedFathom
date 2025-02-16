@@ -1,8 +1,8 @@
-
-
-
-
-import { type OpmlFolder, type OpmlSource, type Outline } from "../types/opml-types";
+import {
+  type OpmlFolder,
+  type OpmlSource,
+  type Outline,
+} from "../types/opml-types";
 import { logError as error_ } from "../util/log";
 import xml2js from "xml2js";
 
@@ -11,9 +11,9 @@ export class OpmlParser {
     const parser = new xml2js.Parser();
     try {
       const object = await parser.parseStringPromise(opml);
-      return object.opml.body[0].outline.map((outline: Outline) =>
-        {return this.processOutline(outline)},
-      );
+      return object.opml.body[0].outline.map((outline: Outline) => {
+        return this.processOutline(outline);
+      });
     } catch (error) {
       error_("Error while parsing OPML:", error);
       throw error;
@@ -51,7 +51,9 @@ export class OpmlParser {
     }
 
     const children =
-      outline.outline?.map((child) => {return this.processOutline(child)}) ?? [];
+      outline.outline?.map((child) => {
+        return this.processOutline(child);
+      }) ?? [];
     return {
       children,
       name: title,

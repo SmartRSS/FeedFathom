@@ -3,7 +3,7 @@ import type Redis from "ioredis";
 export type SingletonJobConfig = {
   delayMs: number;
   key: string;
-}
+};
 
 export class SingletonJobHandler {
   constructor(private readonly redis: Redis) {}

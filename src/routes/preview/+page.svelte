@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
-  import type { Folder } from "../../types/folder.type";
+  import type { Folder } from "../../types/folder-type";
   import { ulid } from "ulid";
   import { logError, llog } from "../../util/log";
 

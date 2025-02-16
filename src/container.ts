@@ -39,7 +39,7 @@ export type Dependencies = {
   sourcesRepository: SourcesRepository;
   userSourcesRepository: UserSourcesRepository;
   usersRepository: UsersRepository;
-}
+};
 
 const ioRedisConnection = new Redis({
   db: 0,
@@ -69,7 +69,9 @@ container.register({
   initializer: asClass(Initializer).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
   mainWorker: asClass(MainWorker).singleton(),
-  opmlParser: asFunction(() => {return new OpmlParser()}).singleton(),
+  opmlParser: asFunction(() => {
+    return new OpmlParser();
+  }).singleton(),
   redis: asValue(ioRedisConnection),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),

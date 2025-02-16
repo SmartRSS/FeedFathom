@@ -38,10 +38,12 @@ export const sources = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
     url: varchar("url").notNull(),
   },
-  (table) => {return [
-    index("last_attempt_idx").on(table.lastAttempt),
-    index("recent_failures_idx").on(table.recentFailures),
-  ]},
+  (table) => {
+    return [
+      index("last_attempt_idx").on(table.lastAttempt),
+      index("recent_failures_idx").on(table.recentFailures),
+    ];
+  },
 );
 
 export const userFolders = pgTable("user_folders", {
@@ -51,7 +53,12 @@ export const userFolders = pgTable("user_folders", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   userId: integer("user_id")
     .notNull()
-    .references(() => {return users.id}, { onDelete: "cascade" }),
+    .references(
+      () => {
+        return users.id;
+      },
+      { onDelete: "cascade" },
+    ),
 });
 
 export const userSources = pgTable(
@@ -59,28 +66,50 @@ export const userSources = pgTable(
   {
     id: serial("id").primaryKey(),
     name: varchar("name").notNull(),
-    parentId: integer("parent_id").references(() => {return userFolders.id}, {
-      onDelete: "cascade",
-    }),
+    parentId: integer("parent_id").references(
+      () => {
+        return userFolders.id;
+      },
+      {
+        onDelete: "cascade",
+      },
+    ),
     sourceId: integer("source_id")
       .notNull()
-      .references(() => {return sources.id}, { onDelete: "cascade" }),
+      .references(
+        () => {
+          return sources.id;
+        },
+        { onDelete: "cascade" },
+      ),
     userId: integer("user_id")
       .notNull()
-      .references(() => {return users.id}, { onDelete: "cascade" }),
+      .references(
+        () => {
+          return users.id;
+        },
+        { onDelete: "cascade" },
+      ),
   },
-  (table) => {return {
-    unique: unique().on(table.userId, table.sourceId),
-  }},
+  (table) => {
+    return {
+      unique: unique().on(table.userId, table.sourceId),
+    };
+  },
 );
 
 export const userSourceSettings = pgTable("user_source_settings", {
   id: serial("id").primaryKey(),
   settings: varchar("settings").notNull(),
   userSource: integer("user_source")
-    .references(() => {return userSources.id}, {
-      onDelete: "cascade",
-    })
+    .references(
+      () => {
+        return userSources.id;
+      },
+      {
+        onDelete: "cascade",
+      },
+    )
     .notNull(),
 });
 
@@ -92,7 +121,12 @@ export const articles = pgTable("articles", {
   publishedAt: timestamp("published_at").notNull(),
   sourceId: integer("source_id")
     .notNull()
-    .references(() => {return sources.id}, { onDelete: "cascade" }),
+    .references(
+      () => {
+        return sources.id;
+      },
+      { onDelete: "cascade" },
+    ),
   title: varchar("title").notNull(),
   updatedAt: timestamp("updated_at"),
   url: varchar("url").notNull(),
@@ -103,20 +137,32 @@ export const userArticles = pgTable(
   "user_articles",
   {
     articleId: integer("article_id")
-      .references(() => {return articles.id}, {
-        onDelete: "cascade",
-        onUpdate: "cascade",
-      })
+      .references(
+        () => {
+          return articles.id;
+        },
+        {
+          onDelete: "cascade",
+          onUpdate: "cascade",
+        },
+      )
       .notNull(),
     deletedAt: timestamp("deleted_at"),
     readAt: timestamp("read_at"),
     userId: integer("user_id")
-      .references(() => {return users.id}, { onDelete: "cascade" })
+      .references(
+        () => {
+          return users.id;
+        },
+        { onDelete: "cascade" },
+      )
       .notNull(),
   },
-  (table) => {return {
-    pk: primaryKey({ columns: [table.userId, table.articleId] }),
-  }},
+  (table) => {
+    return {
+      pk: primaryKey({ columns: [table.userId, table.articleId] }),
+    };
+  },
 );
 
 export const sessions = pgTable("sessions", {
@@ -125,39 +171,58 @@ export const sessions = pgTable("sessions", {
   userAgent: varchar("user_agent").notNull(),
   userId: integer("user_id")
     .notNull()
-    .references(() => {return users.id}, { onDelete: "cascade" }),
+    .references(
+      () => {
+        return users.id;
+      },
+      { onDelete: "cascade" },
+    ),
 });
 
-export const userArticlesRelation = relations(users, ({ many }) => {return {
-  userArticles: many(userArticles),
-}});
+export const userArticlesRelation = relations(users, ({ many }) => {
+  return {
+    userArticles: many(userArticles),
+  };
+});
 
-export const userSourcesRelation = relations(users, ({ many }) => {return {
-  userSources: many(userSources),
-}});
+export const userSourcesRelation = relations(users, ({ many }) => {
+  return {
+    userSources: many(userSources),
+  };
+});
 
-export const articleUserArticlesRelation = relations(articles, ({ many }) => {return {
-  userArticles: many(userArticles),
-}});
+export const articleUserArticlesRelation = relations(articles, ({ many }) => {
+  return {
+    userArticles: many(userArticles),
+  };
+});
 
-export const sourceArticlesRelation = relations(sources, ({ many }) => {return {
-  articles: many(articles),
-}});
+export const sourceArticlesRelation = relations(sources, ({ many }) => {
+  return {
+    articles: many(articles),
+  };
+});
 
-export const articlesSourceRelation = relations(articles, ({ one }) => {return {
-  source: one(sources, {
-    fields: [articles.sourceId],
-    references: [sources.id],
-  }),
-}});
+export const articlesSourceRelation = relations(articles, ({ one }) => {
+  return {
+    source: one(sources, {
+      fields: [articles.sourceId],
+      references: [sources.id],
+    }),
+  };
+});
 
-export const sourcesUserSourcesRelation = relations(sources, ({ many }) => {return {
-  userSources: many(userSources),
-}});
+export const sourcesUserSourcesRelation = relations(sources, ({ many }) => {
+  return {
+    userSources: many(userSources),
+  };
+});
 
-export const userSourcesSourceRelation = relations(userSources, ({ one }) => {return {
-  source: one(sources, {
-    fields: [userSources.sourceId],
-    references: [sources.id],
-  }),
-}});
+export const userSourcesSourceRelation = relations(userSources, ({ one }) => {
+  return {
+    source: one(sources, {
+      fields: [userSources.sourceId],
+      references: [sources.id],
+    }),
+  };
+});
