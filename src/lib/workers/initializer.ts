@@ -65,6 +65,8 @@ export class Initializer {
         logError(error.message);
       }
 
+      logError(error);
+
       throw new Error("1");
     }
   }
