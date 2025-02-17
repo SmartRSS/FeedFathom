@@ -1,8 +1,7 @@
 import container from "../../../container";
-import { type RouteParams as RouteParameters } from "./$types";
 import { error } from "@sveltejs/kit";
 
-export const load = async ({ params }: { params: RouteParameters }) => {
+export const load = async ({ params }: { params: { id: string } }) => {
   const article = await container.cradle.articlesRepository.getArticleByGuid(
     params.id,
   );
