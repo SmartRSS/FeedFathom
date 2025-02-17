@@ -8,7 +8,7 @@
   import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
   import config from "$lib/images/icons/System/settings-5-fill.svg";
   import addFolder from "$lib/images/icons/Document/folder-add-fill.svg";
-  import type { Article } from "../types/article.type";
+  import type { Article } from "../types/article-type";
 
   import { goto } from "$app/navigation";
   import { DisplayMode } from "$lib/settings";

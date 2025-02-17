@@ -1,5 +1,5 @@
-import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
+import { type Scanner } from "./scanner-interface";
 
 export class VimeoScanner implements Scanner {
   scan(currentUrl: URL, document: Document): FeedData[] {
@@ -7,23 +7,24 @@ export class VimeoScanner implements Scanner {
       return [];
     }
 
-    const channelNameFromUrl = /vimeo\.com\/(.+)/.exec(currentUrl.href)?.[1];
+    const channelNameFromUrl = /vimeo\.com\/(.+)/u.exec(currentUrl.href)?.[1];
     const channelLink = document.querySelector("a.js-user-link");
     const channelNameFromLink =
       channelLink?.getAttribute("href")?.replace("/", "") ?? "";
 
-    if (!/^[a-zA-Z]+$/.test(channelNameFromUrl ?? "")) {
+    if (!/^[A-Za-z]+$/u.test(channelNameFromUrl ?? "")) {
       return [
         {
-          url: `https://vimeo.com/${channelNameFromLink}/videos/rss/`,
           title: "Channel feed",
+          url: `https://vimeo.com/${channelNameFromLink}/videos/rss/`,
         },
       ];
     }
+
     return [
       {
-        url: `https://vimeo.com/${channelNameFromUrl}/videos/rss/`,
         title: "Channel feed",
+        url: `https://vimeo.com/${channelNameFromUrl}/videos/rss/`,
       },
     ];
   }

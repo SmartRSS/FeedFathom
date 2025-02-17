@@ -1,9 +1,9 @@
 import type Redis from "ioredis";
 
-export interface SingletonJobConfig {
-  key: string;
+export type SingletonJobConfig = {
   delayMs: number;
-}
+  key: string;
+};
 
 export class SingletonJobHandler {
   constructor(private readonly redis: Redis) {}
@@ -11,18 +11,19 @@ export class SingletonJobHandler {
   async runSingleton<T>(
     config: SingletonJobConfig,
     job: () => Promise<T>,
-  ): Promise<T | null> {
+  ): Promise<null | T> {
     const lock = await this.redis.set(
       `singleton-job-lock:${config.key}`,
       "locked",
       "EX",
-      Math.floor(config.delayMs / 1000),
+      Math.floor(config.delayMs / 1_000),
       "NX",
     );
 
     if (!lock) {
       return null;
     }
-    return job();
+
+    return await job();
   }
 }

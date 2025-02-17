@@ -2,9 +2,9 @@
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
-  import type { Folder } from "../../types/folder.type";
+  import type { Folder } from "../../types/folder-type";
   import { ulid } from "ulid";
-  import { err, llog } from "../../util/log";
+  import { logError, llog } from "../../util/log";
 
   interface FoundFeed {
     url: string;
@@ -41,7 +41,7 @@
       try {
         folders = (await foldersResponse.json()) as Folder[];
       } catch (jsonError) {
-        err("Failed to parseSource folders JSON:", jsonError);
+        logError("Failed to parseSource folders JSON:", jsonError);
         displayError("Failed to load folders.");
       }
     }
@@ -103,7 +103,7 @@
       link = data.link;
       feedUrl = data.feedUrl;
     } catch (error) {
-      err("Error loading feed preview:", error);
+      logError("Error loading feed preview:", error);
       displayError("Failed to load feed preview.");
     } finally {
       isLoading = false;
@@ -126,7 +126,7 @@
       }
       foundFeeds = (await response.json()) as FoundFeed[];
     } catch (error) {
-      err("Error fetching feeds:", error);
+      logError("Error fetching feeds:", error);
       displayError("Failed to find feeds.");
     } finally {
       isLoading = false;
@@ -156,7 +156,7 @@
     if (response.ok) {
       await goto("/");
     } else {
-      err("Failed to subscribe to the feed.");
+      logError("Failed to subscribe to the feed.");
       displayError("Failed to subscribe to the feed.");
     }
   }
@@ -179,7 +179,7 @@
         displayClipboardMessage("Email copied to clipboard!");
       },
       (e: unknown) => {
-        err("Failed to copy email:", e);
+        logError("Failed to copy email:", e);
         displayError("Failed to copy email to clipboard.");
       },
     );

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import type { Article } from "../types/article.type";
+  import type { Article } from "../types/article-type";
   import { goto } from "$app/navigation";
   import config from "$lib/images/icons/System/settings-5-fill.svg";
   import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
@@ -12,7 +12,7 @@
     FocusChangedFunction,
     FocusTarget,
   } from "../types";
-  import { err } from "../util/log";
+  import { logError } from "../util/log";
 
   type ArticleComponentProps = {
     selectedArticleId: number | null;
@@ -87,7 +87,7 @@
 
   async function fetchData(attempt = 0) {
     if (attempt > 10) {
-      err("failed to fetch data");
+      logError("failed to fetch data");
       return;
     }
 
@@ -151,7 +151,7 @@
       iframeDoc.body.addEventListener("click", clickHandler);
       iframeDoc.body.innerHTML = selectedArticle.content;
     } catch (error) {
-      err("Error fetching data", error);
+      logError("Error fetching data", error);
     }
   }
 

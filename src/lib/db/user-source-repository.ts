@@ -1,12 +1,11 @@
+import { type FoldersRepository } from "$lib/db/folder-repository";
+import { type SourcesRepository } from "$lib/db/source-repository";
 import * as schema from "$lib/schema";
+import { type OpmlNode } from "../../types/opml-types";
+import { type TreeNode } from "../../types/source-types";
+import { logError as error } from "../../util/log";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
-import type { TreeNode } from "../../types/source-types";
-
-import type { OpmlNode } from "../../types/opml-types";
-import { err } from "../../util/log";
-import type { FoldersRepository } from "$lib/db/folder-repository";
-import type { SourcesRepository } from "$lib/db/source-repository";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export class UserSourcesRepository {
   public constructor(
@@ -15,68 +14,27 @@ export class UserSourcesRepository {
     private readonly sourcesRepository: SourcesRepository,
   ) {}
 
-  public async getUserSources(userId: number) {
-    return this.drizzleConnection
-      .select({
-        id: schema.sources.id,
-        name: schema.userSources.name,
-        parentId: schema.userSources.parentId,
-        favicon: schema.sources.favicon,
-        url: schema.sources.url,
-        homeUrl: schema.sources.homeUrl,
-        unreadArticlesCount: sql<number>`(
-          coalesce(count(articles.id), 0) -
-          coalesce(count(CASE
-            WHEN user_articles.deleted_at IS NOT NULL
-            OR user_articles.read_at >= articles.updated_at
-            THEN 1
-          END), 0)
-        )::int`,
-      })
-      .from(schema.userSources)
-      .where(eq(schema.userSources.userId, userId))
-      .leftJoin(
-        schema.sources,
-        eq(schema.sources.id, schema.userSources.sourceId),
-      )
-      .leftJoin(
-        schema.articles,
-        eq(schema.articles.sourceId, schema.sources.id),
-      )
-      .leftJoin(
-        schema.userArticles,
-        and(
-          eq(schema.userArticles.userId, userId),
-          eq(schema.userArticles.articleId, schema.articles.id),
-        ),
-      )
-      .groupBy(
-        schema.sources.id,
-        schema.userSources.name,
-        schema.userSources.parentId,
-        schema.sources.favicon,
-        schema.sources.url,
-        schema.sources.homeUrl,
-      )
-      .orderBy(schema.userSources.name);
-  }
-
   public async addSourceToUser(
     userId: number,
     sourcePayload: {
-      url: string;
       homeUrl: string;
-      parentId: number | null;
       name: string;
+      parentId: null | number;
+      url: string;
     },
   ) {
     if (sourcePayload.parentId) {
       const folders = await this.foldersRepository.getUserFolders(userId);
-      if (!folders.some((folder) => folder.id === sourcePayload.parentId)) {
-        err("no folder", folders[0]);
+      if (
+        !folders.some((folder) => {
+          return folder.id === sourcePayload.parentId;
+        })
+      ) {
+        error("no folder", folders[0]);
         return;
       }
     }
+
     const source = await this.sourcesRepository.findOrCreateSourceByUrl(
       sourcePayload.url,
       {
@@ -88,10 +46,10 @@ export class UserSourcesRepository {
       await this.drizzleConnection
         .insert(schema.userSources)
         .values({
-          userId: userId,
-          sourceId: source.id,
           name: sourcePayload.name,
           parentId: sourcePayload.parentId,
+          sourceId: source.id,
+          userId,
         })
         .onConflictDoNothing({
           target: [schema.userSources.sourceId, schema.userSources.userId],
@@ -100,46 +58,8 @@ export class UserSourcesRepository {
     ).at(0);
 
     if (!userSource) {
-      return;
+      throw new Error("no user source");
     }
-
-    return userSource;
-  }
-
-  public async insertTree(
-    userId: number,
-    tree: TreeNode[] | OpmlNode[],
-    parentId?: number,
-  ) {
-    for (const node of tree) {
-      if (node.type === "folder") {
-        const folder = await this.foldersRepository.createFolder(
-          userId,
-          node.name,
-        );
-        if ("children" in node)
-          await this.insertTree(userId, node.children, folder.id);
-      }
-      if (node.type === "source") {
-        await this.addSourceToUser(userId, {
-          url: node.xmlUrl,
-          homeUrl: node.homeUrl,
-          parentId: parentId ?? null,
-          name: node.name,
-        });
-      }
-    }
-  }
-
-  public async removeSourceFromUser(userId: number, sourceId: number) {
-    await this.drizzleConnection
-      .delete(schema.userSources)
-      .where(
-        and(
-          eq(schema.userSources.userId, userId),
-          eq(schema.userSources.sourceId, sourceId),
-        ),
-      );
   }
 
   public async cleanup() {
@@ -196,8 +116,91 @@ export class UserSourcesRepository {
               .from(schema.articles),
           ),
         );
-    } catch (e) {
-      err("cleanup", e);
+    } catch (error_) {
+      error("cleanup", error_);
     }
+  }
+
+  public async getUserSources(userId: number) {
+    return await this.drizzleConnection
+      .select({
+        favicon: schema.sources.favicon,
+        homeUrl: schema.sources.homeUrl,
+        id: schema.sources.id,
+        name: schema.userSources.name,
+        parentId: schema.userSources.parentId,
+        unreadArticlesCount: sql<number>`(
+          coalesce(count(articles.id), 0) -
+          coalesce(count(CASE
+            WHEN user_articles.deleted_at IS NOT NULL
+            OR user_articles.read_at >= articles.updated_at
+            THEN 1
+          END), 0)
+        )::int`,
+        url: schema.sources.url,
+      })
+      .from(schema.userSources)
+      .where(eq(schema.userSources.userId, userId))
+      .leftJoin(
+        schema.sources,
+        eq(schema.sources.id, schema.userSources.sourceId),
+      )
+      .leftJoin(
+        schema.articles,
+        eq(schema.articles.sourceId, schema.sources.id),
+      )
+      .leftJoin(
+        schema.userArticles,
+        and(
+          eq(schema.userArticles.userId, userId),
+          eq(schema.userArticles.articleId, schema.articles.id),
+        ),
+      )
+      .groupBy(
+        schema.sources.id,
+        schema.userSources.name,
+        schema.userSources.parentId,
+        schema.sources.favicon,
+        schema.sources.url,
+        schema.sources.homeUrl,
+      )
+      .orderBy(schema.userSources.name);
+  }
+
+  public async insertTree(
+    userId: number,
+    tree: OpmlNode[] | TreeNode[],
+    parentId?: number,
+  ) {
+    for (const node of tree) {
+      if (node.type === "folder") {
+        const folder = await this.foldersRepository.createFolder(
+          userId,
+          node.name,
+        );
+        if ("children" in node)
+          await this.insertTree(userId, node.children, folder.id);
+      }
+
+      if (node.type === "source") {
+        await this.addSourceToUser(userId, {
+          homeUrl: node.homeUrl,
+          name: node.name,
+          parentId: parentId ?? null,
+          url: node.xmlUrl,
+        });
+      }
+    }
+  }
+
+  public async removeSourceFromUser(userId: number, sourceId: number) {
+    await this.drizzleConnection
+      .delete(schema.userSources)
+      .where(
+        and(
+          eq(schema.userSources.userId, userId),
+          eq(schema.userSources.sourceId, sourceId),
+        ),
+      );
   }
 }

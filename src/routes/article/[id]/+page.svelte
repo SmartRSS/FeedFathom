@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from "./$types";
-  import type { Article } from "../../../types/article.type";
+  import type { Article } from "../../../types/article-type";
 
   export let data: PageData & { article: Article };
   const { article } = data;

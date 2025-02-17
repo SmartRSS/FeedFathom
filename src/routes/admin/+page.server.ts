@@ -1,8 +1,7 @@
 import { redirect } from "@sveltejs/kit";
-import type { PageServerLoad } from "../$types";
 
-export const load: PageServerLoad = async ({ locals }) => {
-  const user = locals.user; // Assuming user info is stored in locals
+export const load = async ({ locals }: { locals: App.Locals }) => {
+  const user = locals.user;
   if (!user?.isAdmin) {
     return redirect(302, "/");
   }
@@ -12,10 +11,9 @@ export const load: PageServerLoad = async ({ locals }) => {
     "created_at",
     "desc",
   );
-  console.table(sources);
 
   return {
-    user,
     sources,
+    user,
   };
 };

@@ -1,21 +1,21 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import {
+  type OpmlFolder,
+  type OpmlSource,
+  type Outline,
+} from "../types/opml-types";
+import { logError as error_ } from "../util/log";
 import xml2js from "xml2js";
-import type { OpmlFolder, OpmlSource, Outline } from "../types/opml-types";
-import { err } from "../util/log";
 
 export class OpmlParser {
-  async parseOpml(opml: string): Promise<(OpmlFolder | OpmlSource)[]> {
+  async parseOpml(opml: string): Promise<Array<OpmlFolder | OpmlSource>> {
     const parser = new xml2js.Parser();
     try {
       const object = await parser.parseStringPromise(opml);
-      return object.opml.body[0].outline.map((outline: Outline) =>
-        this.processOutline(outline),
-      );
+      return object.opml.body[0].outline.map((outline: Outline) => {
+        return this.processOutline(outline);
+      });
     } catch (error) {
-      err("Error while parsing OPML:", error);
+      error_("Error while parsing OPML:", error);
       throw error;
     }
   }
@@ -26,34 +26,38 @@ export class OpmlParser {
     const title = outline.$["title"] ?? outline.$["text"] ?? "Untitled";
     const homeUrl = outline.$["htmlUrl"] ?? "";
 
-    if (["rss", "atom", "rdf", "jsonfeed"].includes(type) || xmlUrl) {
+    if (["atom", "jsonfeed", "rdf", "rss"].includes(type) || xmlUrl) {
       return {
-        type: "source",
-        xmlUrl,
-        name: title,
         homeUrl: (() => {
           if (homeUrl) {
             return homeUrl;
           }
+
           if (xmlUrl) {
             try {
               return new URL(xmlUrl).origin;
             } catch (error) {
-              err("Error parsing URL:", error);
+              error_("Error parsing URL:", error);
               return "";
             }
           }
+
           return "";
         })(),
+        name: title,
+        type: "source",
+        xmlUrl,
       };
     }
 
     const children =
-      outline.outline?.map((child) => this.processOutline(child)) ?? [];
+      outline.outline?.map((child) => {
+        return this.processOutline(child);
+      }) ?? [];
     return {
-      type: "folder",
-      name: title,
       children,
+      name: title,
+      type: "folder",
     };
   }
 }

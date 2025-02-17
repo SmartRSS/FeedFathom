@@ -1,8 +1,8 @@
-export function isPlainText(str: string) {
+export const isPlainText = (string_: string) => {
   // This regular expression matches any character not typically found in plain text.
   // It allows space, tab, and printable ASCII characters.
   // This regular expression is intended to match control characters that wouldn't appear in plain text.
   // eslint-disable-next-line no-control-regex
-  const nonPrintablePattern = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/;
-  return !nonPrintablePattern.test(str);
-}
+  const nonPrintablePattern = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/u;
+  return !nonPrintablePattern.test(string_);
+};

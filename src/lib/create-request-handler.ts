@@ -1,8 +1,18 @@
-import * as v from "valibot";
+import { type User } from "../types/user-type";
 import { json, type RequestEvent } from "@sveltejs/kit";
-import type { ValidatedRequestEvent } from "../app";
+import * as v from "valibot";
 
-export function createRequestHandler<T extends v.GenericSchema>(
+export type UnauthenticatedRequestEvent<T> = ValidatedRequestEvent<T> & {
+  body: T;
+  locals: Omit<App.Locals, "user">;
+};
+
+export type ValidatedRequestEvent<T> = RequestEvent & {
+  body: T;
+  locals: App.Locals & { user: User };
+};
+
+export const createRequestHandler = function <T extends v.GenericSchema>(
   schema: T,
   handler: (
     event: ValidatedRequestEvent<v.InferOutput<T>>,
@@ -14,14 +24,14 @@ export function createRequestHandler<T extends v.GenericSchema>(
     const parseResult = v.safeParse(schema, await request.json());
     if (!parseResult.success) {
       return json(
-        { error: "Invalid input", details: parseResult.issues },
+        { details: parseResult.issues, error: "Invalid input" },
         { status: 400 },
       );
     }
 
-    return handler({
+    return await handler({
       ...event,
       body: parseResult.output,
     } as ValidatedRequestEvent<v.InferOutput<T>>);
   };
-}
+};

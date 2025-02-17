@@ -1,9 +1,7 @@
-import { error } from "@sveltejs/kit";
-import type { PageServerLoad } from "./$types";
 import container from "../../../container";
-import type { Article } from "../../../types/article.type";
+import { error } from "@sveltejs/kit";
 
-export const load = (async ({ params }) => {
+export const load = async ({ params }: { params: { id: string } }) => {
   const article = await container.cradle.articlesRepository.getArticleByGuid(
     params.id,
   );
@@ -15,4 +13,4 @@ export const load = (async ({ params }) => {
   return {
     article,
   };
-}) satisfies PageServerLoad<{ article: Article }>;
+};

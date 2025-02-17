@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { Article } from "../types/article.type";
+  import type { Article } from "../types/article-type";
   import { goto } from "$app/navigation";
   import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
   import config from "$lib/images/icons/System/settings-5-fill.svg";
@@ -8,7 +8,7 @@
   import doubleCheck from "$lib/images/icons/System/check-double-fill.svg";
   import type { ArticleListComponentProps } from "../types";
   import { SvelteSet as Set } from "svelte/reactivity";
-  import { err } from "../util/log";
+  import { logError } from "../util/log";
 
   let {
     articlesSelected,
@@ -68,7 +68,7 @@
           .filter((id) => typeof id === "number"),
       );
     } catch (e: any) {
-      err(e.message);
+      logError(e.message);
       isLoading = false;
     }
   }

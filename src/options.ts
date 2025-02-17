@@ -1,28 +1,28 @@
 void (async () => {
   const storedInstance = await browser.storage.sync.get("instance");
-  const instanceInput = document.getElementById(
-    "instance",
+  const instanceInput = document.querySelector(
+    "#instance",
   ) as HTMLInputElement | null;
   if (!instanceInput) {
     return;
   }
+
   instanceInput.value =
     typeof storedInstance["instance"] === "string"
       ? storedInstance["instance"]
       : "";
-  instanceInput.addEventListener("change", function (event: Event) {
-    try {
-      if (!event.target) {
-        return;
-      }
-      const instanceAddress = (event.target as HTMLInputElement).value;
-      if (instanceAddress) {
-        new URL(instanceAddress);
-      }
-      void browser.storage.sync.set({ instance: instanceAddress });
-    } catch {
+  instanceInput.addEventListener("change", (event: Event) => {
+    if (!event.target) {
+      return;
+    }
+
+    const instanceAddress = (event.target as HTMLInputElement).value;
+    if (!URL.canParse(instanceAddress)) {
+      // eslint-disable-next-line no-alert
       alert("bad URL");
     }
+
+    void browser.storage.sync.set({ instance: instanceAddress });
   });
 })();
 

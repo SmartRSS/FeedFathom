@@ -31,7 +31,13 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*", "*.ts"],
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "src/**/*",
+    "*.ts"
+  ],
   "exclude": ["node_modules/*", "public/*", "migrations/*", "build/*"]
 
   // Path aliases are handled by https://kit.svelte.dev/docs/configuration#alias

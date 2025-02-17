@@ -1,6 +1,6 @@
-export function isMimeText(type: string) {
+export const isMimeText = (type: string) => {
   return (
-    ["", "text/plain", "application/xml"].includes(type) ||
+    ["", "application/xml", "text/plain"].includes(type) ||
     type.includes("text")
   );
-}
+};

@@ -1,10 +1,10 @@
+import { type ValidatedRequestEvent } from "$lib/create-request-handler";
+import { type DeleteArticles } from "./validator";
 import { json } from "@sveltejs/kit";
-import type { ValidatedRequestEvent } from "../../app";
-import type { DeleteArticles } from "./validator";
 
 export const deleteArticlesHandler = async ({
-  locals,
   body,
+  locals,
 }: ValidatedRequestEvent<DeleteArticles>) => {
   await locals.dependencies.articlesRepository.removeUserArticles(
     body.removedArticleIdList,

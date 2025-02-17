@@ -1,5 +1,5 @@
-import { type Scanner } from "./scanner.interface";
 import { type FeedData } from "../../types";
+import { type Scanner } from "./scanner-interface";
 
 export class BitchuteScanner implements Scanner {
   private readonly feedBase: string =
@@ -18,6 +18,6 @@ export class BitchuteScanner implements Scanner {
 
     const channelName = channelLinkElement.textContent;
     const feedLink = `${this.feedBase}${channelName}`;
-    return [{ url: feedLink, title: `Channel feed for ${channelName}` }];
+    return [{ title: `Channel feed for ${channelName}`, url: feedLink }];
   }
 }

@@ -1,19 +1,19 @@
+export type OpmlFolder = {
+  children: Array<OpmlFolder | OpmlSource>;
+  name: string;
+  type: "folder";
+};
+export type OpmlNode = OpmlFolder | OpmlSource;
+export type OpmlSource = {
+  homeUrl: string;
+  name: string;
+  type: "source";
+  xmlUrl: string;
+};
 export type Outline = {
-  [key: string]: unknown;
   $: {
     [key: string]: string;
   };
+  [key: string]: unknown;
   outline?: Outline[];
 };
-export type OpmlSource = {
-  type: "source";
-  xmlUrl: string;
-  name: string;
-  homeUrl: string;
-};
-export type OpmlFolder = {
-  type: "folder";
-  name: string;
-  children: (OpmlSource | OpmlFolder)[];
-};
-export type OpmlNode = OpmlFolder | OpmlSource;
