@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 
-export const load = async ({ locals }) => {
+export const load = async ({ locals }: { locals: App.Locals }) => {
   const user = locals.user;
   if (!user?.isAdmin) {
     return redirect(302, "/");

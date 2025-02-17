@@ -4,7 +4,7 @@ import {
   type TreeSource,
 } from "../types/source-types";
 
-export const load = async ({ locals }) => {
+export const load = async ({ locals }: { locals: App.Locals }) => {
   if (!locals.user) {
     return {
       tree: [],

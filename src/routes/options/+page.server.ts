@@ -3,7 +3,13 @@ import { logError as error_ } from "../../util/log";
 import { type Actions, error, json } from "@sveltejs/kit";
 
 export const actions: Actions = {
-  changePassword: async ({ locals, request }) => {
+  changePassword: async ({
+    locals,
+    request,
+  }: {
+    locals: App.Locals;
+    request: Request;
+  }) => {
     if (!locals.user) {
       return {
         error: "",
@@ -114,7 +120,7 @@ export const actions: Actions = {
   },
 };
 
-export const load = ({ locals }) => {
+export const load = ({ locals }: { locals: App.Locals }) => {
   const user = locals.user;
 
   if (!user) {
