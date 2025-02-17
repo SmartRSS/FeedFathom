@@ -1,6 +1,6 @@
 import { type MailWorker } from "$lib/workers/mail";
 import { type MainWorker } from "$lib/workers/main";
-import { logError } from "../../util/log";
+import { llog, logError } from "../../util/log";
 import { type Cli } from "./cli";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -29,6 +29,8 @@ export class Initializer {
       logError("INTEGRATION environment variable is not set");
       throw new Error("INTEGRATION environment variable is not set");
     }
+
+    llog(integration);
 
     switch (integration) {
       case "mail": {
