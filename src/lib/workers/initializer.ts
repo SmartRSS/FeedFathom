@@ -3,7 +3,7 @@ import { type MainWorker } from "$lib/workers/main";
 import { llog, logError } from "../../util/log";
 import { type Cli } from "./cli";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { migrate } from "drizzle-orm/bun-sql/migrator";
 
 // Schedule the next task function definition with a config object
 export class Initializer {
