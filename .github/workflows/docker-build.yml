@@ -88,5 +88,5 @@ jobs:
             echo ${{ github.sha }}
             cd $DEPLOY_PATH
             docker compose pull
-            docker compose up -d migrator server worker mail --remove-orphans
+            docker compose up -d server worker mail --remove-orphans
           EOF
