@@ -60,6 +60,8 @@ export class Initializer {
       await migrate(this.drizzleConnection, {
         migrationsFolder: "./drizzle",
       });
+      // eslint-disable-next-line n/no-process-exit
+      process.exit(0);
     } catch (error: unknown) {
       if (error instanceof Error) {
         logError(error.message);
