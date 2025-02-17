@@ -26,16 +26,16 @@ services:
     volumes:
       - postgres_storage_17:/var/lib/postgresql/data
 
-  # migrator:
-  #   init: true
-  #   image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
-  #   environment:
-  #     INTEGRATION: "migrator"
-  #   command:
-  #     - "/app/worker-entrypoint.js"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
+  migrator:
+    init: true
+    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    environment:
+      INTEGRATION: "migrator"
+    command:
+      - "/app/worker-entrypoint.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   server:
     init: true
@@ -67,8 +67,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      # migrator:
-      #   condition: service_completed_successfully
+      migrator:
+        condition: service_completed_successfully
 
   worker:
     init: true
@@ -91,8 +91,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      # migrator:
-      #   condition: service_completed_successfully
+      migrator:
+        condition: service_completed_successfully
 
   mail:
     init: true
