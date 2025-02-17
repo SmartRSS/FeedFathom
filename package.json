@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "export _UID=$(id -u) && export _GID=$(id -g) && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build",
-    "build-server": "svelte-kit sync && vite build",
+    "build-server": "bunx --bun svelte-kit sync && bunx --bun vite build",
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
-    "watch-server": "svelte-kit sync && vite dev --host",
+    "watch-server": "bunx --bun svelte-kit sync && bunx --bun vite dev --host",
     "watch-worker": "svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
     "lint": "bun test && svelte-kit sync && tsc && eslint --cache ./src && svelte-check --tsconfig ./tsconfig.json && prettier --check ./src",
     "lint:fix": "svelte-kit sync && eslint src --fix && prettier --write ./src",
@@ -62,7 +62,7 @@
     "svelte-adapter-bun": "^0.5.2",
     "svelte-preprocess": "^6.0.3",
     "ulid": "^2.3.0",
-    "valibot": "^1.0.0-rc.0",
+    "valibot": "^1.0.0-rc.1",
     "vite": "^6.1.0",
     "vite-plugin-node-polyfills": "^0.23.0",
     "xml2js": "^0.6.2"

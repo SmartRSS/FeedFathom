@@ -1,4 +1,4 @@
-import { type ValidatedRequestEvent } from "../../app";
+import { type ValidatedRequestEvent } from "$lib/create-request-handler";
 import { type DeleteSource } from "./validator";
 import { json } from "@sveltejs/kit";
 

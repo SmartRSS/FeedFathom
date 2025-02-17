@@ -1,4 +1,4 @@
-import { type ValidatedRequestEvent } from "../../app";
+import { type ValidatedRequestEvent } from "$lib/create-request-handler";
 import { isMailEnabled } from "../../util/is-mail-enabled";
 import { type SubscribeRequest } from "./validator";
 import { json } from "@sveltejs/kit";

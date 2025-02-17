@@ -1,4 +1,4 @@
-import { type UnauthenticatedRequestEvent } from "../../app";
+import { type UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { llog } from "../../util/log";
 import { type RegisterRequest } from "./validator";
 import { json } from "@sveltejs/kit";

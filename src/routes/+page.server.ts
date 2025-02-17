@@ -3,9 +3,8 @@ import {
   type TreeNode,
   type TreeSource,
 } from "../types/source-types";
-import { type PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load = async ({ locals }) => {
   if (!locals.user) {
     return {
       tree: [],

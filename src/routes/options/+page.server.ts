@@ -1,4 +1,3 @@
-import { type PageServerLoad } from "../$types";
 import { isPlainText } from "../../util/is-plain-text";
 import { logError as error_ } from "../../util/log";
 import { type Actions, error, json } from "@sveltejs/kit";
@@ -115,7 +114,7 @@ export const actions: Actions = {
   },
 };
 
-export const load: PageServerLoad = ({ locals }) => {
+export const load = ({ locals }) => {
   const user = locals.user;
 
   if (!user) {
