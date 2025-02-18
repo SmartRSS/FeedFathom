@@ -21,7 +21,7 @@
       alert("Invalid file type");
       return;
     }
-    if (!file.name.endsWith(".opml")) {
+    if (!file.name.endsWith(".opml") && !file.name.endsWith(".xml")) {
       cancel();
       alert("Invalid file extension");
       return;
@@ -79,7 +79,7 @@
   >
     <div class="input-block">
       <label for="opml">Import OPML:</label>
-      <input accept=".opml" id="opml" name="opml" required type="file" />
+      <input accept=".opml,.xml" id="opml" name="opml" required type="file" />
     </div>
     <div class="submit-block">
       <button type="submit">Submit</button>

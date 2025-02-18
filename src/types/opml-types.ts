@@ -11,7 +11,7 @@ export type OpmlSource = {
   xmlUrl: string;
 };
 export type Outline = {
-  $: {
+  "@_": {
     [key: string]: string;
   };
   [key: string]: unknown;
