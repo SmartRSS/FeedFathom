@@ -3,28 +3,36 @@ import {
   type OpmlSource,
   type Outline,
 } from "../types/opml-types";
-import { logError as error_ } from "../util/log";
-import xml2js from "xml2js";
+import { logError } from "../util/log";
+import { XMLParser } from "fast-xml-parser";
 
 export class OpmlParser {
   async parseOpml(opml: string): Promise<Array<OpmlFolder | OpmlSource>> {
-    const parser = new xml2js.Parser();
+    const parser = new XMLParser({
+      allowBooleanAttributes: true,
+      alwaysCreateTextNode: true,
+      attributeNamePrefix: "",
+      attributesGroupName: "@_",
+      ignoreAttributes: false,
+    });
     try {
-      const object = await parser.parseStringPromise(opml);
-      return object.opml.body[0].outline.map((outline: Outline) => {
+      const object = parser.parse(opml);
+      const mainOutline = object.opml.body.outline;
+
+      return mainOutline.map((outline: Outline) => {
         return this.processOutline(outline);
       });
     } catch (error) {
-      error_("Error while parsing OPML:", error);
+      logError("Error while parsing OPML:", error);
       throw error;
     }
   }
 
   processOutline(outline: Outline): OpmlFolder | OpmlSource {
-    const type = outline.$["type"] ?? "";
-    const xmlUrl = outline.$["xmlUrl"] ?? "";
-    const title = outline.$["title"] ?? outline.$["text"] ?? "Untitled";
-    const homeUrl = outline.$["htmlUrl"] ?? "";
+    const title = outline["@_"]?.["title"] ?? "Unknown";
+    const type = outline["@_"]?.["type"] ?? "";
+    const xmlUrl = outline["@_"]?.["xmlUrl"] ?? "";
+    const homeUrl = outline["@_"]?.["htmlUrl"] ?? "";
 
     if (["atom", "jsonfeed", "rdf", "rss"].includes(type) || xmlUrl) {
       return {
@@ -33,13 +41,8 @@ export class OpmlParser {
             return homeUrl;
           }
 
-          if (xmlUrl) {
-            try {
-              return new URL(xmlUrl).origin;
-            } catch (error) {
-              error_("Error parsing URL:", error);
-              return "";
-            }
+          if (URL.canParse(xmlUrl)) {
+            return new URL(xmlUrl).origin;
           }
 
           return "";
