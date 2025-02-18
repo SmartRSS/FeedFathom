@@ -21,7 +21,7 @@
       alert("Invalid file type");
       return;
     }
-    if (!file.name.endsWith(".opml") && ! file.name.endsWith(".xml")) {
+    if (!file.name.endsWith(".opml") && !file.name.endsWith(".xml")) {
       cancel();
       alert("Invalid file extension");
       return;
