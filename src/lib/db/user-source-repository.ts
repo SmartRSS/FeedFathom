@@ -1,7 +1,7 @@
 import { type FoldersRepository } from "$lib/db/folder-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
+import { type OpmlNode } from "$lib/opml-parser";
 import * as schema from "$lib/schema";
-import { type OpmlNode } from "../../types/opml-types";
 import { type TreeNode } from "../../types/source-types";
 import { logError as error } from "../../util/log";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
