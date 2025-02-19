@@ -1,4 +1,5 @@
 import { type FeedData } from "../types";
+import { logError } from "../util/log";
 import { BitchuteScanner } from "./scanners/bitchute-scanner";
 import { GeneratorScanner } from "./scanners/generator-scanner";
 import { GithubScanner } from "./scanners/github-scanner";
@@ -32,12 +33,17 @@ export const scan = async (address: string, document: Document) => {
   const seenUrls = new Set<string>();
 
   const results = await Promise.all(
-    scanners.map((scanner) => {
-      return scanner.scan(addressUrl, document);
-      // Each scanner is expected to check applicability for the given address or document.
-      // If the address is not relevant (e.g., wrong platform or unsupported content),
-      // the scanner should early exit (return []) without performing unnecessary computation
-      // or network requests. This ensures efficient resource usage and scalability as more scanners are added.
+    scanners.map(async (scanner) => {
+      try {
+        // Each scanner is expected to check applicability for the given address or document.
+        // If the address is not relevant (e.g., wrong platform or unsupported content),
+        // the scanner should early exit (return []) without performing unnecessary computation
+        // or network requests. This ensures efficient resource usage and scalability as more scanners are added.
+        return scanner.scan(addressUrl, document);
+      } catch (error) {
+        logError(`Scanner ${scanner.constructor.name} failed:`, error);
+        return [];
+      }
     }),
   );
 
