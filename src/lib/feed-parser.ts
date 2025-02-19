@@ -11,9 +11,6 @@ import { type AxiosCacheInstance } from "axios-cache-interceptor";
 import type Redis from "ioredis";
 import * as dns from "node:dns";
 
-// const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
-//   {};
-
 export class FeedParser {
   private readonly defaultDelay = 10_000;
 
@@ -70,7 +67,6 @@ export class FeedParser {
       });
 
       await this.articlesRepository.batchUpsertArticles(articlePayloads);
-      articlePayloads.length = 0;
 
       await this.sourcesRepository.successSource(source.id);
     } catch (error_: unknown) {
@@ -102,14 +98,13 @@ export class FeedParser {
 
   public async parseUrl(url: string) {
     const urlObject = new URL(url);
+    // explicitly lookup the hostname to provide more meaningful error message if it fails
+    // axios would leave a generic connection error
     const lookupResult = await dns.promises.lookup(urlObject.hostname);
     if (!lookupResult.address) {
       throw new Error(`Failed to resolve ${urlObject.hostname}`);
     }
 
-    // const chosenParser =
-    //   parserStrategies[urlObject.origin] ?? this.parseGenericFeed;
-    // return await chosenParser.bind(this)(url);
     return await this.parseGenericFeed(url);
   }
 
