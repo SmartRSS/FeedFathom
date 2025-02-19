@@ -1,16 +1,18 @@
+type BoundaryDates = {
+  lastYear: Date;
+  oneMonthAgo: Date;
+  oneWeekAgo: Date;
+  today: Date;
+  twoMonthsAgo: Date;
+};
+
 let boundaryMemory:
   | undefined
   | {
-      [key: string]: {
-        lastYear: Date;
-        oneMonthAgo: Date;
-        oneWeekAgo: Date;
-        today: Date;
-        twoMonthsAgo: Date;
-      };
+      [key: string]: BoundaryDates;
     };
 
-export const generateBoundaryDates = () => {
+export const generateBoundaryDates = (): BoundaryDates => {
   const now = new Date();
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
@@ -31,15 +33,42 @@ export const generateBoundaryDates = () => {
   };
 };
 
-export const getBoundaryDates = () => {
-  const today = new Date().getDate();
-  if (boundaryMemory && today in boundaryMemory && boundaryMemory[today]) {
-    return boundaryMemory[today];
+const getDateKey = (date: Date): string => {
+  const [dateString] = date.toISOString().split('T');
+  if (!dateString) {
+    throw new Error('Failed to generate date key');
+  }
+
+  return dateString;
+};
+
+export const cleanupOldEntries = (): void => {
+  if (!boundaryMemory) {
+    return;
+  }
+
+  const todayKey = getDateKey(new Date());
+  const currentValue = boundaryMemory[todayKey];
+  if (!currentValue) {
+    return;
+  }
+
+  const newMemory: { [key: string]: BoundaryDates } = {};
+  newMemory[todayKey] = currentValue;
+  boundaryMemory = newMemory;
+};
+
+export const getBoundaryDates = (): BoundaryDates => {
+  const todayKey = getDateKey(new Date());
+
+  if (boundaryMemory && todayKey in boundaryMemory && boundaryMemory[todayKey]) {
+    return boundaryMemory[todayKey];
   }
 
   const boundaryDates = generateBoundaryDates();
   boundaryMemory = {};
-  boundaryMemory[today] = boundaryDates;
+  boundaryMemory[todayKey] = boundaryDates;
+  cleanupOldEntries();
   return boundaryDates;
 };
 
