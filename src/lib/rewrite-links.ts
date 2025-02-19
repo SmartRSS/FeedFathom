@@ -12,7 +12,11 @@ const tagAttributePairs = [
 ] as const;
 
 const isAbsoluteUrl = (url: string) => {
-  return URL.canParse(url);
+  try {
+    return new URL(url).protocol !== "";
+  } catch {
+    return false;
+  }
 };
 
 // Helper to process "srcset" attributes
@@ -41,7 +45,6 @@ const processSrcset = (srcsetValue: string, baseUrl: string): string => {
     .join(", ");
 };
 
-// New function to handle element processing
 const handleElement = (
   element: HTMLRewriterTypes.Element,
   tagName: string,
@@ -51,6 +54,11 @@ const handleElement = (
   const attributeValue = element.getAttribute(attributeName);
   if (!attributeValue) {
     return;
+  }
+
+  if (tagName === "a") {
+    element.setAttribute("target", "_blank");
+    element.setAttribute("rel", "noopener noreferrer");
   }
 
   if (attributeName === "srcset") {
@@ -63,25 +71,23 @@ const handleElement = (
 
   // General handling for src, href, etc.
   if (isAbsoluteUrl(attributeValue)) {
-    if (tagName === "a") {
-      element.setAttribute("target", "_blank");
-    }
-
     // no need to change anything
+    return;
+  }
+
+  if (attributeValue.startsWith("//")) {
+    element.setAttribute(attributeName, `https:${attributeValue}`);
     return;
   }
 
   if (URL.canParse(attributeValue, articleUrl)) {
     const absoluteUrl = new URL(attributeValue, articleUrl).href;
     element.setAttribute(attributeName, absoluteUrl);
-    if (tagName === "a") {
-      element.setAttribute("target", "_blank");
-    }
   }
 };
 
 export const rewriteLinks = (content: string, articleUrl: string) => {
-  let rewriter: HTMLRewriter | null = new HTMLRewriter();
+  const rewriter = new HTMLRewriter();
   for (const [tagName, attributeName] of tagAttributePairs) {
     rewriter.on(`${tagName}[${attributeName}]`, {
       element: (element) => {
@@ -90,7 +96,5 @@ export const rewriteLinks = (content: string, articleUrl: string) => {
     });
   }
 
-  const result = rewriter.transform(content);
-  rewriter = null;
-  return result;
+  return rewriter.transform(content);
 };
