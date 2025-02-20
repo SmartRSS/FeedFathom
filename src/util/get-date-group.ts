@@ -34,9 +34,9 @@ export const generateBoundaryDates = (): BoundaryDates => {
 };
 
 const getDateKey = (date: Date): string => {
-  const [dateString] = date.toISOString().split('T');
+  const [dateString] = date.toISOString().split("T");
   if (!dateString) {
-    throw new Error('Failed to generate date key');
+    throw new Error("Failed to generate date key");
   }
 
   return dateString;
@@ -61,7 +61,11 @@ export const cleanupOldEntries = (): void => {
 export const getBoundaryDates = (): BoundaryDates => {
   const todayKey = getDateKey(new Date());
 
-  if (boundaryMemory && todayKey in boundaryMemory && boundaryMemory[todayKey]) {
+  if (
+    boundaryMemory &&
+    todayKey in boundaryMemory &&
+    boundaryMemory[todayKey]
+  ) {
     return boundaryMemory[todayKey];
   }
 
