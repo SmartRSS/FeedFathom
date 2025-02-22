@@ -18,7 +18,7 @@ const isAbsoluteUrl = (url: string) => {
 // Helper to process "srcset" attributes
 const processSrcset = (srcsetValue: string, baseUrl: string): string => {
   return srcsetValue
-    .split(",")
+    .split(/,\s+/u)
     .map((path) => {
       const [url, width] = path.trim().split(/\s+/u);
       if (!url) {
