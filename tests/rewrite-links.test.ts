@@ -1,6 +1,5 @@
-import { describe, expect, test} from "bun:test"
+import { describe, expect, test } from "bun:test";
 import { rewriteLinks } from "../src/lib/rewrite-links";
-
 
 describe("fixLinks", () => {
   test("should convert relative URLs to absolute URLs", () => {
@@ -21,7 +20,9 @@ describe("fixLinks", () => {
     const content = '<img srcset="/image1.jpg 1x, /image2.jpg 2x" />';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toContain('srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"');
+    expect(result).toContain(
+      'srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"',
+    );
   });
 
   test("should not change absolute URLs", () => {
@@ -54,10 +55,10 @@ describe("fixLinks", () => {
   });
 
   test("should return empty string for empty content", () => {
-    const content = '';
+    const content = "";
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toBe('');
+    expect(result).toBe("");
   });
 
   test("should handle <link> tags correctly", () => {
@@ -75,10 +76,13 @@ describe("fixLinks", () => {
   });
 
   test("should handle <picture> tags correctly", () => {
-    const content = '<picture><source srcset="/image1.jpg 1x, /image2.jpg 2x" /></picture>';
+    const content =
+      '<picture><source srcset="/image1.jpg 1x, /image2.jpg 2x" /></picture>';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toContain('srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"');
+    expect(result).toContain(
+      'srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"',
+    );
   });
 
   test("should handle multiple tags in the same content", () => {
@@ -105,7 +109,8 @@ describe("fixLinks", () => {
   });
 
   test("should handle nested relative URLs correctly", () => {
-    const content = '<a href="./nested/path">Link</a><a href="./nested2/path">Link</a>';
+    const content =
+      '<a href="./nested/path">Link</a><a href="./nested2/path">Link</a>';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
     expect(result).toContain('href="https://example.com/nested/path"');
@@ -138,21 +143,28 @@ describe("fixLinks", () => {
     const content = '<img srcset="../image1.jpg 1x, ../image2.jpg 2x" />';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toContain('srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"');
+    expect(result).toContain(
+      'srcset="https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x"',
+    );
   });
 
   test("should handle nested relative URLs in srcset attributes correctly", () => {
-    const content = '<img srcset="./nested/image1.jpg 1x, ./nested/image2.jpg 2x" />';
+    const content =
+      '<img srcset="./nested/image1.jpg 1x, ./nested/image2.jpg 2x" />';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toContain('srcset="https://example.com/nested/image1.jpg 1x, https://example.com/nested/image2.jpg 2x"');
+    expect(result).toContain(
+      'srcset="https://example.com/nested/image1.jpg 1x, https://example.com/nested/image2.jpg 2x"',
+    );
   });
 
   test("should handle multiple relative URLs in srcset attributes", () => {
     const content = '<img srcset="../path1.jpg 1x, ./path2.jpg 2x" />';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toContain('srcset="https://example.com/path1.jpg 1x, https://example.com/path2.jpg 2x"');
+    expect(result).toContain(
+      'srcset="https://example.com/path1.jpg 1x, https://example.com/path2.jpg 2x"',
+    );
   });
 
   test("should handle relative URLs with query parameters in srcset", () => {
@@ -175,5 +187,23 @@ describe("fixLinks", () => {
     const result = rewriteLinks(content, articleUrl);
     expect(result).toContain('src="https://example.com/video.mp4"');
     expect(result).toContain('poster="https://example.com/poster.jpg"');
+  });
+
+  test("should handle srcset with URLs containing commas", () => {
+    const content =
+      '<img srcset="https://substackcdn.com/image/fetch/w_424,c_limit,f_webp,q_auto:good,fl_progressive:steep/image.jpg 424w, https://substackcdn.com/image/fetch/w_848,c_limit,f_webp,q_auto:good,fl_progressive:steep/image.jpg 848w" />';
+    const articleUrl = "https://example.com/article";
+    const result = rewriteLinks(content, articleUrl);
+    expect(result).toBe(content); // Should not modify absolute URLs but also not break them
+  });
+
+  test("should handle relative URLs with commas in query parameters in srcset", () => {
+    const content =
+      '<img srcset="/image/fetch/w_424,c_limit,f_webp,q_auto:good/image.jpg 424w, /image/fetch/w_848,c_limit,f_webp/image.jpg 848w" />';
+    const articleUrl = "https://example.com/article";
+    const result = rewriteLinks(content, articleUrl);
+    expect(result).toContain(
+      'srcset="https://example.com/image/fetch/w_424,c_limit,f_webp,q_auto:good/image.jpg 424w, https://example.com/image/fetch/w_848,c_limit,f_webp/image.jpg 848w"',
+    );
   });
 });
