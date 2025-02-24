@@ -6,6 +6,12 @@ const pathsNotRequiringLogin = ["/register", "/login"];
 
 export const handle: Handle = async ({ event, resolve }) => {
   event.locals.dependencies = container.cradle;
+
+  // Redirect empty path to root
+  if (event.url.pathname === "") {
+    return redirect(302, "/");
+  }
+
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
     return await resolve(event);
   }
