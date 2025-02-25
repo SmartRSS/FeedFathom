@@ -17,7 +17,7 @@ import { type FeedData } from "./types";
   // Debounce utility function
   const debounce = <T extends (feedsData: FeedData[]) => void>(
     function_: T,
-    delay: number
+    delay: number,
   ): ((feedsData: FeedData[]) => void) => {
     let timeoutId: null | Timer = null;
 
@@ -36,7 +36,7 @@ import { type FeedData } from "./types";
   const updateAvailableSourcesList = (feedsData: FeedData[]) => {
     if (document.hidden) {
       try {
-        void browser.runtime.sendMessage({ action: "visibility-lost" });
+        void chrome.runtime.sendMessage({ action: "visibility-lost" });
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Error sending visibility-lost message:", error);
@@ -52,7 +52,7 @@ import { type FeedData } from "./types";
 
     visibilityTimeoutRef = setTimeout(() => {
       try {
-        void browser.runtime.sendMessage({
+        void chrome.runtime.sendMessage({
           action: "list-feeds",
           feedsData,
         });
@@ -66,7 +66,10 @@ import { type FeedData } from "./types";
   };
 
   // Create a debounced version for event handlers
-  const debouncedUpdateSourcesList = debounce(updateAvailableSourcesList, VISIBILITY_DEBOUNCE_MS);
+  const debouncedUpdateSourcesList = debounce(
+    updateAvailableSourcesList,
+    VISIBILITY_DEBOUNCE_MS,
+  );
 
   const setupEventListeners = (feedsData: FeedData[]) => {
     document.addEventListener(
@@ -90,9 +93,7 @@ import { type FeedData } from "./types";
     return new URL(url).hostname.endsWith("youtube.com");
   };
 
-  const setupMutationObserver = (
-    currentHref: string,
-  ) => {
+  const setupMutationObserver = (currentHref: string) => {
     const bodyList = document.querySelector("body");
 
     if (!bodyList) {
@@ -161,10 +162,10 @@ import { type FeedData } from "./types";
   };
 
   // Add unload listener for cleanup
-  window.addEventListener('unload', cleanup);
+  window.addEventListener("unload", cleanup);
 
   // Additionally, listen for history API navigation events
-  window.addEventListener('popstate', () => {
+  window.addEventListener("popstate", () => {
     if (oldHref !== document.location.href) {
       void (async () => {
         try {

@@ -39,7 +39,7 @@ const isValidOrigin = (urlString: string): boolean => {
  */
 const getInstanceUrl = async (): Promise<null | string> => {
   try {
-    const instanceObject = await browser.storage.sync.get("instance");
+    const instanceObject = await chrome.storage.sync.get("instance");
     if (typeof instanceObject["instance"] !== "string") {
       return null;
     }
@@ -107,7 +107,7 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
 
   try {
     // Clean up existing menus first
-    await browser.contextMenus.removeAll();
+    await chrome.contextMenus.removeAll();
 
     // If clear was requested, honor it and exit
     if (clearMenusRequested) {
@@ -117,12 +117,12 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
 
     // Create parent menu items
     await Promise.all([
-      browser.contextMenus.create({
+      chrome.contextMenus.create({
         contexts: ["action"],
         id: "FeedFathom_newsletter",
         title: "newsletter",
       }),
-      browser.contextMenus.create({
+      chrome.contextMenus.create({
         contexts: ["action"],
         id: "FeedFathom",
         title: "Subscribe",
@@ -131,14 +131,14 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
 
     // Check again if clear was requested during parent menu creation
     if (clearMenusRequested) {
-      await browser.contextMenus.removeAll();
+      await chrome.contextMenus.removeAll();
       markClearProcessed();
       return;
     }
 
     // Create child menu items
     const menuPromises = feedsData.map((feed) => {
-      return browser.contextMenus.create({
+      return chrome.contextMenus.create({
         contexts: ["action"],
         id: feed.url,
         parentId: "FeedFathom",
@@ -154,7 +154,7 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
 
     // Handle any state changes that occurred during update
     if (clearMenusRequested) {
-      void browser.contextMenus.removeAll();
+      void chrome.contextMenus.removeAll();
       markClearProcessed();
     } else if (hasPendingFeeds()) {
       const pendingFeeds = consumePendingFeeds();
@@ -178,7 +178,7 @@ const previewSource = async (address: string): Promise<void> => {
   }
 
   const fixedAddress = address.replace(/^feed:/iu, "https:");
-  void browser.tabs.create({
+  void chrome.tabs.create({
     url: new URL(`/preview?feedUrl=${fixedAddress}`, instance).href,
   });
 };
@@ -218,7 +218,7 @@ const handleFeedSubscription = async (
 /**
  * Handles context menu item clicks
  */
-browser.contextMenus.onClicked.addListener((info) => {
+chrome.contextMenus.onClicked.addListener((info) => {
   (async () => {
     const instance = await getInstanceUrl();
     if (!instance) {
@@ -239,7 +239,11 @@ browser.contextMenus.onClicked.addListener((info) => {
 /**
  * Handles messages from content scripts
  */
-const messageHandler = (message: Message): void => {
+const messageHandler = (
+  message: Message,
+  _sender: chrome.runtime.MessageSender,
+  _sendResponse: () => void
+): boolean => {
   if (message.action === "list-feeds") {
     // Debounce menu updates
     if (menuUpdateTimer) {
@@ -262,25 +266,27 @@ const messageHandler = (message: Message): void => {
     if (isMenuUpdateInProgress) {
       requestMenuClear();
     } else {
-      void browser.contextMenus.removeAll();
+      void chrome.contextMenus.removeAll();
     }
   }
+
+  return false;
 };
 
-browser.runtime.onMessage.addListener(messageHandler);
+chrome.runtime.onMessage.addListener(messageHandler);
 
 /**
  * Handles clicks on the browser action (extension icon)
  */
-browser.action.onClicked.addListener(() => {
+chrome.action.onClicked.addListener(() => {
   (async () => {
     const instance = await getInstanceUrl();
     if (!instance || !isValidOrigin(instance)) {
-      await browser.runtime.openOptionsPage();
+      await chrome.runtime.openOptionsPage();
       return;
     }
 
-    void browser.tabs.create({
+    void chrome.tabs.create({
       active: true,
       url: instance,
     });
