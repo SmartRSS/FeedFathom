@@ -242,7 +242,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
 const messageHandler = (
   message: Message,
   _sender: chrome.runtime.MessageSender,
-  _sendResponse: () => void
+  _sendResponse: () => void,
 ): boolean => {
   if (message.action === "list-feeds") {
     // Debounce menu updates
