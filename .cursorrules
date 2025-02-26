@@ -1,0 +1,57 @@
+# FeedFathom Coding Style Rules
+
+## General Formatting
+- Use 2 spaces for indentation
+- Use double quotes for strings
+- Include trailing commas in multi-line lists, objects, etc.
+- Use semicolons at the end of statements
+- Maximum line length should follow Prettier defaults
+
+## TypeScript Rules
+- Strict type checking is enabled
+- No unused variables (except those prefixed with _ or __)
+- No unused parameters (except those prefixed with _ or __)
+- No unchecked indexed access
+- No implicit returns
+- No unreachable code
+- No unused labels
+- No fallthrough cases in switch statements
+- No implicit overrides
+- No property access from index signatures
+- Consistent casing in file names
+- Force consistent module detection
+
+## Naming Conventions
+- Variables should use camelCase, UPPER_CASE, or PascalCase
+- Leading and trailing underscores are allowed for variables
+
+## Import/Export Rules
+- Use ES modules
+- Resolve JSON modules is enabled
+- Verbatim module syntax is enforced
+
+## Svelte-specific Rules
+- Svelte files use the recommended Svelte ESLint configuration
+- Svelte files are parsed with svelte-eslint-parser
+
+## Disabled Rules
+- "canonical/filename-match-regex" is disabled
+- "@typescript-eslint/no-redeclare" is disabled
+- "id-length" is disabled
+- "canonical/import-specifier-newline" is disabled
+- "canonical/destructuring-property-newline" is disabled
+- "no-inline-comments" is disabled
+- "canonical/id-match" is disabled
+
+## Browser and Node Compatibility
+- Both browser and Node.js globals are available
+
+## File Structure
+- Source code is in the src/ directory
+- TypeScript configuration extends .svelte-kit/tsconfig.json
+- Ignores node_modules, dist, .svelte-kit, and bin directories
+
+## Maintenance
+- This .cursorrules file should be updated whenever new linting errors are encountered and understood
+- New rules should be added to the appropriate section with clear explanations
+- Examples of correct usage should be included when helpful
