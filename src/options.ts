@@ -1,5 +1,5 @@
 void (async () => {
-  const storedInstance = await browser.storage.sync.get("instance");
+  const storedInstance = await chrome.storage.sync.get("instance");
   const instanceInput = document.querySelector(
     "#instance",
   ) as HTMLInputElement | null;
@@ -22,7 +22,7 @@ void (async () => {
       alert("bad URL");
     }
 
-    void browser.storage.sync.set({ instance: instanceAddress });
+    void chrome.storage.sync.set({ instance: instanceAddress });
   });
 })();
 

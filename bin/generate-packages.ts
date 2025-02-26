@@ -47,7 +47,6 @@ await fs.promises.writeFile(
   chromiumManifestString,
   "utf-8",
 );
-await $`sed -i 's/browser./chrome./g' ext/build-ch/*.js`;
 
 await createPackage("ext/build-ff/", "ext/FeedFathom_ff.zip");
 await createPackage("ext/build-ch/", "ext/FeedFathom_ch.zip");
