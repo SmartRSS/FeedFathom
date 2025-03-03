@@ -1,0 +1,94 @@
+# FeedFathom Coding Style Rules
+
+## General Formatting
+- Use 2 spaces for indentation
+- Use double quotes for strings
+- Include trailing commas in multi-line lists, objects, etc.
+- Use semicolons at the end of statements
+- Maximum line length should follow Prettier defaults
+
+## TypeScript Rules
+- Strict type checking is enabled
+- No unused variables (except those prefixed with _ or __)
+- No unused parameters (except those prefixed with _ or __)
+- No unchecked indexed access
+- No implicit returns
+- No unreachable code
+- No unused labels
+- No fallthrough cases in switch statements
+- No implicit overrides
+- No property access from index signatures
+- Consistent casing in file names
+- Force consistent module detection
+- Do not attempt to clear arrays or objects right before the end of scope manually unless it is a very complex situation that may not be freed properly otherwise
+
+## Naming Conventions
+- Variables should use camelCase, UPPER_CASE, or PascalCase
+- Leading and trailing underscores are allowed for variables
+
+## Import/Export Rules
+- Use ES modules
+- Resolve JSON modules is enabled
+- Verbatim module syntax is enforced
+
+## Svelte-specific Rules
+- Svelte files use the recommended Svelte ESLint configuration
+- Svelte files are parsed with svelte-eslint-parser
+
+## Disabled Rules
+- "canonical/filename-match-regex" is disabled
+- "@typescript-eslint/no-redeclare" is disabled
+- "id-length" is disabled
+- "canonical/import-specifier-newline" is disabled
+- "canonical/destructuring-property-newline" is disabled
+- "no-inline-comments" is disabled
+- "canonical/id-match" is disabled
+
+## Browser and Node Compatibility
+- Both browser and Node.js globals are available
+
+## File Structure
+- Source code is in the src/ directory
+- TypeScript configuration extends .svelte-kit/tsconfig.json
+- Ignores node_modules, dist, .svelte-kit, and bin directories
+
+## Maintenance
+- This .cursorrules file should be updated whenever new linting errors are encountered and understood
+- New rules should be added to the appropriate section with clear explanations
+- Examples of correct usage should be included when helpful
+
+## Lint Command Execution
+- The full lint command (`bun lint`) performs multiple checks in sequence, it will timeout when run by agent, you should use these steps instead:
+
+### Step-by-Step Lint Process
+1. **Run Tests**: `bun test`
+   - Runs all tests to ensure functionality is working
+   - If tests fail, fix the issues before proceeding
+
+2. **Sync Svelte Kit**: `bunx --bun svelte-kit sync`
+   - Syncs Svelte kit configuration
+   - If sync fails, check Svelte configuration files
+
+3. **TypeScript Compilation**: `bunx --bun tsc`
+   - Runs TypeScript compiler to check for type errors
+   - If compilation fails, fix type errors before proceeding
+
+4. **ESLint Check**: `bunx --bun eslint ./src --fix`
+   - Runs ESLint on source files to check for code style and potential issues
+   - If ESLint reports errors, fix them before proceeding
+   - Using fix parameter will automatically fix lint errors when possible, leaving you with only ones it can't help with
+
+5. **Svelte Type Checking**: `bunx --bun svelte-check --tsconfig ./tsconfig.json`
+   - Runs Svelte type checking to ensure Svelte components are type-safe
+   - If Svelte check fails, fix the type issues in Svelte components
+
+6. **Prettier Check**: `bunx --bun prettier --check ./src`
+   - Checks formatting with Prettier
+   - If formatting issues are found, run `bun format` to fix them
+
+### Important Notes
+- Each step should be run separately and monitored for completion
+- Wait for each command to fully complete before proceeding to the next step
+- If any step returns a non-zero exit code, it will exit with an error
+- Analyze error output to understand which step failed and why
+- Fix the specific errors before running that step again
