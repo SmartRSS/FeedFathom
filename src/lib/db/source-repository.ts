@@ -73,6 +73,15 @@ export class SourcesRepository {
     });
   }
 
+  public async findSourceById(id: number) {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(schema.sources)
+        .where(eq(schema.sources.id, id))
+    ).at(0);
+  }
+
   public async findSourceByUrl(url: string) {
     return (
       await this.drizzleConnection

@@ -1,6 +1,7 @@
 import * as schema from "$lib/schema";
 import { type Article } from "../../types/article-type";
 import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
+import { logError } from "../../util/log";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -23,17 +24,22 @@ export class ArticlesRepository {
       return;
     }
 
-    await this.drizzleConnection
-      .insert(schema.articles)
-      .values(payloads)
-      .onConflictDoUpdate({
-        set: {
-          content: sql`excluded.content`,
-          title: sql`excluded.title`,
-          updatedAt: sql`excluded.updated_at`,
-        },
-        target: schema.articles.guid,
-      });
+    try {
+      await this.drizzleConnection
+        .insert(schema.articles)
+        .values(payloads)
+        .onConflictDoUpdate({
+          set: {
+            content: sql`excluded.content`,
+            title: sql`excluded.title`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+          target: schema.articles.guid,
+        });
+    } catch (error) {
+      logError("Error upserting articles:", error);
+      throw error;
+    }
   }
 
   public async getArticle(articleId: number): Promise<Article | undefined> {

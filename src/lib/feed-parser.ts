@@ -1,7 +1,7 @@
 import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import container from "../container";
-import { logError as error, llog } from "../util/log";
+import { logError as error } from "../util/log";
 import { rewriteLinks } from "./rewrite-links";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { type Feed } from "@rowanmanning/feed-parser/lib/feed/base";
@@ -43,6 +43,7 @@ export class FeedParser {
       }
 
       const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
+
       if (cached && !source.skipCache) {
         await this.sourcesRepository.successSource(source.id, true);
         return;
@@ -80,7 +81,6 @@ export class FeedParser {
         error("parseSource", error_);
       }
 
-      llog("fail source");
       let message = "";
       if (error_ instanceof AxiosError) {
         message +=
@@ -164,7 +164,6 @@ export class FeedParser {
 
     const delaySetting = this.domainDelaySettings[domain] ?? this.defaultDelay;
     if (now < lastFetchTimestamp + delaySetting) {
-      llog(`can't process ${domain} yet`);
       return false;
     }
 

@@ -1,5 +1,12 @@
 import container from "./container";
+import { llog, logError } from "./util/log";
 
-const initializer = container.resolve("initializer");
-
-await initializer.initialize();
+try {
+  llog("Starting worker entrypoint");
+  const initializer = container.resolve("initializer");
+  await initializer.initialize();
+  llog("Worker initialized successfully");
+} catch (error) {
+  logError("Failed to initialize worker:", error);
+  throw new Error("Worker initialization failed");
+}
