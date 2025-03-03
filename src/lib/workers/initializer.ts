@@ -1,3 +1,10 @@
+import { type CommandBus } from "$lib/commands/command-bus";
+import {
+  type CommandRegistryDependencies,
+  registerCommandHandlers,
+} from "$lib/commands/registry";
+import { type SourcesRepository } from "$lib/db/source-repository";
+import { type FeedParser } from "$lib/feed-parser";
 import { type MailWorker } from "$lib/workers/mail";
 import { type MainWorker } from "$lib/workers/main";
 import { llog, logError } from "../../util/log";
@@ -8,10 +15,13 @@ import { migrate } from "drizzle-orm/bun-sql/migrator";
 // Schedule the next task function definition with a config object
 export class Initializer {
   constructor(
-    private readonly mainWorker: MainWorker,
-    private readonly drizzleConnection: BunSQLDatabase,
-    private readonly mailWorker: MailWorker,
     private readonly cli: Cli,
+    private readonly commandBus: CommandBus,
+    private readonly drizzleConnection: BunSQLDatabase,
+    private readonly feedParser: FeedParser,
+    private readonly mailWorker: MailWorker,
+    private readonly mainWorker: MainWorker,
+    private readonly sourcesRepository: SourcesRepository,
   ) {}
 
   public async initialize() {
@@ -21,6 +31,12 @@ export class Initializer {
       // eslint-disable-next-line n/no-process-exit
       process.exit(0);
     }
+
+    // Register command handlers
+    this.registerCommandHandlers();
+
+    // Set up cleanup on process exit
+    this.setupCleanupHandlers();
 
     // Check if INTEGRATION is defined
     // eslint-disable-next-line n/no-process-env
@@ -49,27 +65,47 @@ export class Initializer {
       }
 
       default: {
-        logError("Wrong integration");
-        throw new Error("Wrong integration");
+        logError(`Unknown integration: ${integration}`);
+        throw new Error(`Unknown integration: ${integration}`);
       }
     }
   }
 
-  private async runMigrator() {
+  private registerCommandHandlers() {
     try {
-      await migrate(this.drizzleConnection, {
-        migrationsFolder: "./drizzle",
-      });
-      // eslint-disable-next-line n/no-process-exit
-      process.exit(0);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        logError(error.message);
-      }
+      // Create dependencies object with proper interface
+      const commandDependencies: CommandRegistryDependencies = {
+        commandBus: this.commandBus,
+        feedParser: this.feedParser,
+        sourcesRepository: this.sourcesRepository,
+      };
 
-      logError(error);
+      // Register command handlers
+      registerCommandHandlers(commandDependencies);
 
-      throw new Error("1");
+      llog("Command handlers registered");
+    } catch (error) {
+      logError("Failed to register command handlers:", error);
+      throw error;
     }
+  }
+
+  private async runMigrator() {
+    llog("Running migrations");
+    await migrate(this.drizzleConnection, { migrationsFolder: "./drizzle" });
+    llog("Migrations complete");
+    // eslint-disable-next-line n/no-process-exit
+    process.exit(0);
+  }
+
+  private setupCleanupHandlers() {
+    // Clean up on process exit
+    process.on("SIGTERM", () => {
+      // Nothing to clean up anymore
+    });
+
+    process.on("SIGINT", () => {
+      // Nothing to clean up anymore
+    });
   }
 }

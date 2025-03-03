@@ -1,34 +1,30 @@
 /* eslint-disable n/no-process-env */
 
+import { type CommandBus } from "$lib/commands/command-bus";
+import {
+  CommandType,
+  type ParseSourceCommand,
+  type SourceCommandResult,
+} from "$lib/commands/types";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import { type UserSourcesRepository } from "$lib/db/user-source-repository";
 import { type FeedParser } from "$lib/feed-parser";
 import { JobName } from "../../types/job-name-enum";
-import { logError as error_, llog } from "../../util/log";
+import { llog, logError } from "../../util/log";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
-
-// import { SingletonJobHandler } from "./singleton";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed;
 };
 
-// type SingletonJobConfig = {
-//   delayMs: number;
-//   name: JobName;
-// };
-
 const DEFAULT_CLEANUP_INTERVAL = 60;
 const DEFAULT_GATHER_INTERVAL = 20;
 const DEFAULT_LOCK_DURATION = 60;
 const DEFAULT_WORKER_CONCURRENCY = 25;
 
-// const SINGLETON_JOBS: readonly SingletonJobConfig[] = [] as const;
-
 export class MainWorker {
-  // private singletonHandler: SingletonJobHandler;
   private worker: undefined | Worker;
 
   constructor(
@@ -37,54 +33,75 @@ export class MainWorker {
     private readonly redis: Redis,
     private readonly sourcesRepository: SourcesRepository,
     private readonly userSourcesRepository: UserSourcesRepository,
-  ) {
-    // this.singletonHandler = new SingletonJobHandler(redis);
-  }
+    private readonly commandBus: CommandBus,
+  ) {}
 
   async initialize() {
-    this.setSignalHandlers();
+    llog("Initializing worker");
     this.setupWorker();
+    this.setSignalHandlers();
     await this.setupScheduledTasks();
     llog("Worker initialized and tasks scheduled");
+
+    // Log queue status every minute
+    setInterval(() => {
+      void this.logQueueStatus();
+    }, 60_000);
+
+    // Gather parse source jobs on startup
+    await this.gatherParseSourceJobs();
   }
 
   private async gatherParseSourceJobs() {
-    const sourcesToProcess = await this.sourcesRepository.getSourcesToProcess();
-    llog(`number of sources to process found: ${sourcesToProcess.length}`);
-    const jobs = sourcesToProcess.map((source) => {
+    const sources = await this.sourcesRepository.getSourcesToProcess();
+    llog(`Found ${sources.length} sources to process`);
+
+    return sources.map((source) => {
       return {
         data: source,
-        jobId: JobName.PARSE_SOURCE + ":" + source.url,
+        jobId: JobName.PARSE_SOURCE + ":" + source.id,
         name: JobName.PARSE_SOURCE,
         opts: {
-          jobId: JobName.PARSE_SOURCE + ":" + source.url,
+          jobId: JobName.PARSE_SOURCE + ":" + source.id,
           removeOnComplete: { count: 0 },
           removeOnFail: { count: 0 },
         },
       };
     });
-
-    // explicitly clear the array
-    sourcesToProcess.length = 0;
-    return jobs;
   }
 
   private handleJobError(error: unknown, job: Job) {
-    error_(`failed processing job ${job.name}`);
-    if (error instanceof Error) {
-      error_(error.message);
-      error_(error.cause);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError(`Error processing job: ${job.name}, ID: ${job.id}`, error);
+    if (job) {
+      llog(`Worker failed job ${job.id} with error: ${errorMessage}`);
+    } else {
+      llog(`Worker failed unknown job with error: ${errorMessage}`);
+    }
+  }
+
+  private async logQueueStatus(): Promise<void> {
+    try {
+      const status = await this.bullmqQueue.getJobCounts();
+      llog(
+        `Queue status - Waiting: ${status["waiting"]}, Active: ${status["active"]}, Delayed: ${status["delayed"]}, Completed: ${status["completed"]}, Failed: ${status["failed"]}`,
+      );
+    } catch (error) {
+      logError(
+        "Error getting queue status: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
     }
   }
 
   private readonly processJob = async (job: Job) => {
+    llog(
+      `Processing job: ${job.name}, ID: ${job.id}, Data: ${JSON.stringify(job.data)}`,
+    );
     try {
-      // if (job.name.startsWith("SINGLETON:")) {
-      //   await this.processSingletonJob(job);
-      // } else {
       await this.processRegularJob(job);
-      // }
 
+      llog(`Successfully processed job: ${job.name}, ID: ${job.id}`);
       return true;
     } catch (error: unknown) {
       this.handleJobError(error, job);
@@ -96,12 +113,16 @@ export class MainWorker {
   private async processRegularJob(job: Job) {
     switch (job.name) {
       case JobName.CLEANUP:
+        llog("Running cleanup job");
         await this.bullmqQueue.trimEvents(100);
         await this.userSourcesRepository.cleanup();
+        llog("Cleanup job completed");
         break;
       case JobName.GATHER_FAVICON_JOBS: {
+        llog("Running gather favicon jobs");
         const successfullSources =
           await this.sourcesRepository.getRecentlySuccessfulSources();
+        llog(`Found ${successfullSources.length} sources for favicon refresh`);
         const tasks = successfullSources.map((source) => {
           return {
             data: source,
@@ -115,49 +136,37 @@ export class MainWorker {
           };
         });
         await this.bullmqQueue.addBulk(tasks);
+        llog(`Added ${tasks.length} favicon refresh jobs to queue`);
         break;
       }
 
       case JobName.GATHER_JOBS: {
+        llog("Running gather jobs");
         const parseSourceJobs = await this.gatherParseSourceJobs();
         await this.bullmqQueue.addBulk(parseSourceJobs);
+        llog(`Added ${parseSourceJobs.length} parse source jobs to queue`);
         break;
       }
 
       case JobName.PARSE_SOURCE:
-        await this.feedParser.parseSource(job.data);
+        llog(`Parsing source with ID: ${job.data.id}`);
+        // Use the command bus instead of directly calling the feed parser
+        await this.commandBus.execute<ParseSourceCommand, SourceCommandResult>({
+          sourceId: job.data.id,
+          timestamp: Date.now(),
+          type: CommandType.PARSE_SOURCE,
+        });
+        llog(`Completed parsing source with ID: ${job.data.id}`);
         break;
       case JobName.REFRESH_FAVICON:
+        llog(`Refreshing favicon for: ${job.data.homeUrl}`);
         await this.feedParser.refreshFavicon(job.data);
+        llog(`Completed refreshing favicon for: ${job.data.homeUrl}`);
         break;
       default:
         throw new Error(`Unknown job type: ${job.name}`);
     }
   }
-
-  // private async processSingletonJob(job: Job) {
-  //   const jobName = job.data.jobName as JobName;
-  //   const jobConfig = SINGLETON_JOBS.find((job) => job.name === jobName);
-  //   if (!jobConfig) {
-  //     err(`Unknown singleton job configuration: ${jobName}`);
-  //     return true;
-  //   }
-
-  //   await this.singletonHandler.runSingleton(
-  //     { key: jobName, delayMs: jobConfig.delayMs },
-  //     async () => await this.executeSingletonJob(jobName),
-  //   );
-
-  //   return true;
-  // }
-
-  // private async executeSingletonJob(jobName: JobName) {
-  //   switch (jobName) {
-  //     default:
-  //       await Bun.sleep(1);
-  //       throw new Error(`No handler for singleton job: ${jobName}`);
-  //   }
-  // }
 
   private setSignalHandlers() {
     process.on("SIGTERM", () => {
@@ -171,73 +180,85 @@ export class MainWorker {
   }
 
   private async setupScheduledTasks() {
-    // cleanup legacy jobs that may still be present on the queue
-    const existingJobs = await this.bullmqQueue.getJobs();
-    const validJobNames = Object.values(JobName);
-    for (const job of existingJobs) {
-      if (!validJobNames.includes(job.name)) {
-        await this.bullmqQueue.remove(job.id);
-      }
-    }
+    const cleanupInterval = parseNumber(
+      process.env["CLEANUP_INTERVAL"],
+      DEFAULT_CLEANUP_INTERVAL,
+    );
+    const gatherInterval = parseNumber(
+      process.env["GATHER_INTERVAL"],
+      DEFAULT_GATHER_INTERVAL,
+    );
 
-    existingJobs.length = 0;
+    llog(
+      `Setting up scheduled tasks - Cleanup interval: ${cleanupInterval} minutes, Gather interval: ${gatherInterval} minutes`,
+    );
 
-    await this.bullmqQueue.upsertJobScheduler(
+    // Schedule cleanup job
+    await this.bullmqQueue.add(
       JobName.CLEANUP,
+      {},
       {
-        every:
-          parseNumber(
-            process.env["CLEANUP_INTERVAL"],
-            DEFAULT_CLEANUP_INTERVAL,
-          ) * 1_000,
+        jobId: JobName.CLEANUP,
+        repeat: {
+          every: cleanupInterval * 60 * 1_000,
+        },
       },
-      { name: JobName.CLEANUP },
     );
+    llog("Scheduled cleanup job");
 
-    await this.bullmqQueue.upsertJobScheduler(
+    // Schedule gather job
+    await this.bullmqQueue.add(
       JobName.GATHER_JOBS,
+      {},
       {
-        every:
-          parseNumber(
-            process.env["GATHER_JOBS_INTERVAL"],
-            DEFAULT_GATHER_INTERVAL,
-          ) * 1_000,
+        jobId: JobName.GATHER_JOBS,
+        repeat: {
+          every: gatherInterval * 60 * 1_000,
+        },
       },
-      { name: JobName.GATHER_JOBS },
     );
+    llog("Scheduled gather jobs");
 
-    await this.bullmqQueue.upsertJobScheduler(
+    // Schedule favicon job
+    await this.bullmqQueue.add(
       JobName.GATHER_FAVICON_JOBS,
+      {},
       {
-        every: 1_000 * 60 * 60,
+        jobId: JobName.GATHER_FAVICON_JOBS,
+        repeat: {
+          every: 24 * 60 * 60 * 1_000,
+        },
       },
-      { name: JobName.GATHER_FAVICON_JOBS },
     );
-
-    // Schedule all singleton jobs
-    // for (const job of SINGLETON_JOBS) {
-    //   await this.bullmqQueue.upsertJobScheduler(
-    //     job.name,
-    //     { every: Math.floor(job.delayMs / 2) },
-    //     { name: job.name, data: { jobName: job.name } },
-    //   );
-    // }
+    llog("Scheduled favicon jobs");
   }
 
   private setupWorker() {
-    const config = {
-      concurrency: parseNumber(
-        process.env["WORKER_CONCURRENCY"],
-        DEFAULT_WORKER_CONCURRENCY,
-      ),
-      connection: this.redis,
-      lockDuration:
-        parseNumber(process.env["LOCK_DURATION"], DEFAULT_LOCK_DURATION) *
-        1_000,
-      removeOnComplete: { count: 0 },
-      removeOnFail: { count: 0 },
-    };
+    const concurrency = parseNumber(
+      process.env["WORKER_CONCURRENCY"],
+      DEFAULT_WORKER_CONCURRENCY,
+    );
+    const lockDuration = parseNumber(
+      process.env["LOCK_DURATION"],
+      DEFAULT_LOCK_DURATION,
+    );
 
-    this.worker = new Worker(this.bullmqQueue.name, this.processJob, config);
+    llog(
+      `Setting up worker with concurrency: ${concurrency}, lock duration: ${lockDuration} seconds`,
+    );
+
+    this.worker = new Worker("tasks", this.processJob, {
+      autorun: true,
+      concurrency,
+      connection: this.redis,
+      lockDuration: lockDuration * 1_000,
+    });
+
+    // Set up minimal event listeners for the worker
+    this.worker.on("failed", (job: Job | undefined, error: Error) => {
+      logError(`Worker job failed: ${job?.id ?? "unknown"}`, error);
+    });
+
+    llog("Worker setup complete");
   }
 }
