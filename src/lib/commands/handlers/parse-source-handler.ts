@@ -64,10 +64,7 @@ export const createParseSourceHandler = (
   feedParser: FeedParser,
   sourcesRepository: SourcesRepository,
 ): CommandHandler<ParseSourceCommand, SourceCommandResult> => {
-  const handler = new ParseSourceHandler(
-    feedParser,
-    sourcesRepository,
-  );
+  const handler = new ParseSourceHandler(feedParser, sourcesRepository);
   return async (command: ParseSourceCommand) => {
     return await handler.execute(command);
   };

@@ -1,8 +1,8 @@
+import { type SourcesRepository } from "../db/source-repository";
+import { type FeedParser } from "../feed-parser";
 import { type CommandBus } from "./command-bus";
 import { createParseSourceHandler } from "./handlers/parse-source-handler";
 import { CommandType } from "./types";
-import { type SourcesRepository } from "../db/source-repository";
-import { type FeedParser } from "../feed-parser";
 
 /**
  * Dependencies required for command registration
