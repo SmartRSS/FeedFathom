@@ -20,7 +20,10 @@ describe("rewriteLinks", () => {
     });
 
   for (const file of files) {
-    const content = readFileSync(join("tests/rewrite-links/cases", file), "utf8");
+    const content = readFileSync(
+      join("tests/rewrite-links/cases", file),
+      "utf8",
+    );
     const testCase = JSON.parse(content) as TestCase;
 
     test(testCase.description, () => {

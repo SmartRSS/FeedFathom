@@ -36,6 +36,7 @@
     ".svelte-kit/non-ambient.d.ts",
     ".svelte-kit/types/**/$types.d.ts",
     "src/**/*.ts",
+    "src/**/*.svelte",
     "tests/**/*.ts"
   ],
   "exclude": ["node_modules/*", "public/*", "migrations/*", "build/*", "ext/*"]

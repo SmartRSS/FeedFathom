@@ -5,7 +5,9 @@ import {
 } from "../src/util/get-date-group";
 import { afterAll, describe, expect, test } from "bun:test";
 
-const generateTestBoundaryDates = (fixedDate: string): {
+const generateTestBoundaryDates = (
+  fixedDate: string,
+): {
   earliestLastMonth: string;
   earliestLastWeek: string;
   earliestLastYear: string;
@@ -99,7 +101,6 @@ describe("generateTestBoundaryDates", () => {
     expect(new Date(boundaries.latestLastWeek).getMinutes()).toBe(59);
     expect(new Date(boundaries.latestLastWeek).getSeconds()).toBe(59);
   });
-
 });
 
 describe("getDateGroup", () => {
