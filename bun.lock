@@ -7,7 +7,7 @@
         "@eslint/js": "^9.21.0",
         "@extractus/article-extractor": "^8.0.17",
         "@mozilla/readability": "^0.6.0",
-        "@rowanmanning/feed-parser": "^1.1.2",
+        "@rowanmanning/feed-parser": "^2.0.0",
         "@sveltejs/kit": "^2.17.3",
         "@sveltejs/vite-plugin-svelte": "^5.0.3",
         "awilix": "^12.0.4",
@@ -329,7 +329,7 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.34.8", "", { "os": "win32", "cpu": "x64" }, "sha512-U0FaE5O1BCpZSeE6gBl3c5ObhePQSfk9vDRToMmTkbhCOgW4jqvtS5LGyQ76L1fH8sM0keRp4uDTsbjiUyjk0g=="],
 
-    "@rowanmanning/feed-parser": ["@rowanmanning/feed-parser@1.1.2", "", { "dependencies": { "fast-xml-parser": "^5.0.8", "html-entities": "^2.3.3" } }, "sha512-qdHcmbmflsZi9s5Gc5Xot4hjrbHJJva6BNcHrL2rhKDrrpeC1jYXpQC1GXQOv9HWhaUFtWn7L7u4nsDjscFgag=="],
+    "@rowanmanning/feed-parser": ["@rowanmanning/feed-parser@2.0.0", "", { "dependencies": { "fast-xml-parser": "^5.0.8", "html-entities": "^2.3.3" } }, "sha512-HiVFb67HfSKk1S8m2igG74BJr/zrLFkAH71T8o32hXIUxjt0+siQxvNjdiaMmXp+lFhY31ner0EqEl+seIfORg=="],
 
     "@selderee/plugin-htmlparser2": ["@selderee/plugin-htmlparser2@0.11.0", "", { "dependencies": { "domhandler": "^5.0.3", "selderee": "^0.11.0" } }, "sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ=="],
 
