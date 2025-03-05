@@ -1,0 +1,5 @@
+{
+  "description": "srcset with width descriptors",
+  "content": "<img srcset=\"/small.jpg 300w, /medium.jpg 600w, /large.jpg 900w\" />",
+  "expected": "<img srcset=\"https://example.com/small.jpg 300w, https://example.com/medium.jpg 600w, https://example.com/large.jpg 900w\" />"
+}

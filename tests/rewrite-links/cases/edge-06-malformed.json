@@ -1,0 +1,5 @@
+{
+  "description": "malformed attribute",
+  "content": "<a href=\"/path\" title=\"test>malformed\">Link</a>",
+  "expected": "<a href=\"https://example.com/path\" title=\"test>malformed\" target=\"_blank\">Link</a>"
+}

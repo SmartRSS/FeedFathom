@@ -1,0 +1,5 @@
+{
+  "description": "srcset with nested relative paths",
+  "content": "<img srcset=\"./nested/image1.jpg 1x, ./nested/image2.jpg 2x\" />",
+  "expected": "<img srcset=\"https://example.com/nested/image1.jpg 1x, https://example.com/nested/image2.jpg 2x\" />"
+}

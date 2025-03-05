@@ -1,0 +1,5 @@
+{
+  "description": "srcset with relative URLs containing commas",
+  "content": "<img srcset=\"/image/fetch/w_424,c_limit,f_webp,q_auto:good/image.jpg 424w, /image/fetch/w_848,c_limit,f_webp/image.jpg 848w\" />",
+  "expected": "<img srcset=\"https://example.com/image/fetch/w_424,c_limit,f_webp,q_auto:good/image.jpg 424w, https://example.com/image/fetch/w_848,c_limit,f_webp/image.jpg 848w\" />"
+}

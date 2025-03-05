@@ -1,0 +1,5 @@
+{
+  "description": "URL with fragment",
+  "content": "<a href=\"/path#section\">Link with fragment</a>",
+  "expected": "<a href=\"https://example.com/path#section\" target=\"_blank\">Link with fragment</a>"
+}

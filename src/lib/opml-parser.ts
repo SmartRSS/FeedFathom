@@ -14,10 +14,15 @@ export class OpmlParser {
       attributeNamePrefix: "",
       attributesGroupName: "@_",
       ignoreAttributes: false,
+      isArray: (name) => {return name === "outline"},
     });
     try {
       const object = parser.parse(opml);
-      const mainOutline = object.opml.body.outline;
+      const mainOutline = object.opml?.body?.outline;
+
+      if (!mainOutline) {
+        return [];
+      }
 
       return mainOutline.map((outline: Outline) => {
         return this.processOutline(outline);
@@ -29,7 +34,7 @@ export class OpmlParser {
   }
 
   processOutline(outline: Outline): OpmlFolder | OpmlSource {
-    const title = outline["@_"]?.["title"] ?? "Unknown";
+    const title = outline["@_"]?.["title"] ?? outline["@_"]?.["text"] ?? "Unknown";
     const type = outline["@_"]?.["type"] ?? "";
     const xmlUrl = outline["@_"]?.["xmlUrl"] ?? "";
     const homeUrl = outline["@_"]?.["htmlUrl"] ?? "";
@@ -53,10 +58,15 @@ export class OpmlParser {
       };
     }
 
-    const children =
-      outline.outline?.map((child) => {
-        return this.processOutline(child);
-      }) ?? [];
+    let children: Array<OpmlFolder | OpmlSource> = [];
+    if (outline.outline) {
+      if (Array.isArray(outline.outline)) {
+        children = outline.outline.map((child: Outline) => {return this.processOutline(child)});
+      } else {
+        children = [this.processOutline(outline.outline as Outline)];
+      }
+    }
+
     return {
       children,
       name: title,

@@ -1,0 +1,5 @@
+{
+  "description": "nested elements with URLs",
+  "content": "<a href=\"/relative/path\"><img src=\"/image.jpg\"></a>",
+  "expected": "<a href=\"https://example.com/relative/path\" target=\"_blank\"><img src=\"https://example.com/image.jpg\"></a>"
+}

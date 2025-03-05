@@ -1,0 +1,5 @@
+{
+  "description": "multiple different elements",
+  "content": "<img src=\"/image.jpg\" /><a href=\"/link\">Link</a><video src=\"/video.mp4\"></video>",
+  "expected": "<img src=\"https://example.com/image.jpg\" /><a href=\"https://example.com/link\" target=\"_blank\">Link</a><video src=\"https://example.com/video.mp4\"></video>"
+}

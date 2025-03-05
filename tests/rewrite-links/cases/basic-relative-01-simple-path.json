@@ -1,0 +1,5 @@
+{
+  "description": "simple relative path",
+  "content": "<a href=\"/relative/path\">Link</a>",
+  "expected": "<a href=\"https://example.com/relative/path\" target=\"_blank\">Link</a>"
+}
