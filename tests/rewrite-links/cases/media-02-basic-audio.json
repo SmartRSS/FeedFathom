@@ -1,0 +1,5 @@
+{
+  "description": "basic audio tag",
+  "content": "<audio src=\"/audio.mp3\" controls></audio>",
+  "expected": "<audio src=\"https://example.com/audio.mp3\" controls></audio>"
+}

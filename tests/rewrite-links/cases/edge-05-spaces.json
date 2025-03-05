@@ -1,0 +1,5 @@
+{
+  "description": "URL with spaces",
+  "content": "<a href=\"path with spaces.html\">Link with spaces</a>",
+  "expected": "<a href=\"https://example.com/path%20with%20spaces.html\" target=\"_blank\">Link with spaces</a>"
+}

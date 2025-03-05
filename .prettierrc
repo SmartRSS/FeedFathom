@@ -6,15 +6,21 @@
   "plugins": ["prettier-plugin-svelte"],
   "overrides": [
     {
-      "files": "*.svelte",
+      "files": ["*.ts", "*.tsx", "*.svelte", "*.css"],
       "options": {
-        "parser": "svelte"
+        "parser": "typescript"
       }
     },
     {
-      "files": [".prettierrc", "*.json"],
+      "files": ["*.json"],
       "options": {
         "parser": "json"
+      }
+    },
+    {
+      "files": "*.svelte",
+      "options": {
+        "parser": "svelte"
       }
     }
   ]

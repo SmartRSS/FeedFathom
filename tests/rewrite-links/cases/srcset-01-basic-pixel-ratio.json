@@ -1,0 +1,5 @@
+{
+  "description": "basic srcset with device pixel ratio descriptors",
+  "content": "<img srcset=\"/image1.jpg 1x, /image2.jpg 2x\" />",
+  "expected": "<img srcset=\"https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x\" />"
+}

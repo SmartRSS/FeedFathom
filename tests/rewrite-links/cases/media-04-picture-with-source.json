@@ -1,0 +1,5 @@
+{
+  "description": "picture tag with source and fallback",
+  "content": "<picture>\n      <source srcset=\"/image1.jpg 1x, /image2.jpg 2x\" />\n      <img src=\"/fallback.jpg\" alt=\"Fallback\" />\n    </picture>",
+  "expected": "<picture>\n      <source srcset=\"https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x\" />\n      <img src=\"https://example.com/fallback.jpg\" alt=\"Fallback\" />\n    </picture>"
+}

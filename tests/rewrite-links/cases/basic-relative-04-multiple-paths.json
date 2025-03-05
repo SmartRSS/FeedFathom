@@ -1,0 +1,5 @@
+{
+  "description": "multiple relative paths",
+  "content": "<a href=\"../path1\">Link1</a><a href=\"./path2\">Link2</a>",
+  "expected": "<a href=\"https://example.com/path1\" target=\"_blank\">Link1</a><a href=\"https://example.com/path2\" target=\"_blank\">Link2</a>"
+}

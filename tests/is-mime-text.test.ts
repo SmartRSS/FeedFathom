@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { isMimeText } from "../src/util/is-mime-text";
+import { describe, expect, test } from "bun:test";
 
 describe("isMimeText", () => {
   test("should return true for empty string", () => {

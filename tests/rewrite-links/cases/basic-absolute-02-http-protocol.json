@@ -1,0 +1,5 @@
+{
+  "description": "absolute URL with http protocol",
+  "content": "<a href=\"http://another.absolute.com\">Link</a>",
+  "expected": "<a href=\"http://another.absolute.com\" target=\"_blank\">Link</a>"
+}

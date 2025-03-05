@@ -1,0 +1,5 @@
+{
+  "description": "absolute URL should not be changed",
+  "content": "<a href=\"https://already.absolute.com\">Link</a>",
+  "expected": "<a href=\"https://already.absolute.com\" target=\"_blank\">Link</a>"
+}

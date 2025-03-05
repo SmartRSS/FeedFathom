@@ -1,0 +1,5 @@
+{
+  "description": "basic image tag",
+  "content": "<img src=\"/image.jpg\" alt=\"Test Image\" />",
+  "expected": "<img src=\"https://example.com/image.jpg\" alt=\"Test Image\" />"
+}

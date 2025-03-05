@@ -1,0 +1,5 @@
+{
+  "description": "video tag with poster",
+  "content": "<video src=\"/video.mp4\" poster=\"/poster.jpg\"></video>",
+  "expected": "<video src=\"https://example.com/video.mp4\" poster=\"https://example.com/poster.jpg\"></video>"
+}

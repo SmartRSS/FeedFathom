@@ -1,0 +1,5 @@
+{
+  "description": "link tag with href",
+  "content": "<link href=\"/styles.css\" />",
+  "expected": "<link href=\"https://example.com/styles.css\" />"
+}

@@ -12,16 +12,31 @@ let boundaryMemory:
 
 export const generateBoundaryDates = () => {
   const now = new Date();
-  const midnight = new Date();
+
+  // Today's boundary
+  const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(now.getDate() - 7);
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(now.getMonth() - 1);
-  const twoMonthsAgo = new Date();
-  twoMonthsAgo.setMonth(now.getMonth() - 2);
-  const lastYear = new Date();
-  lastYear.setFullYear(now.getFullYear() - 1);
+
+  // Last Week's boundary
+  const oneWeekAgo = new Date(midnight);
+  oneWeekAgo.setDate(midnight.getDate() - 7);
+  oneWeekAgo.setHours(0, 0, 0, 0);
+
+  // Last Month's boundary
+  const oneMonthAgo = new Date(midnight);
+  oneMonthAgo.setMonth(midnight.getMonth() - 1);
+  oneMonthAgo.setHours(0, 0, 0, 0);
+
+  // Two Months Ago boundary (for future use)
+  const twoMonthsAgo = new Date(midnight);
+  twoMonthsAgo.setMonth(midnight.getMonth() - 2);
+  twoMonthsAgo.setHours(0, 0, 0, 0);
+
+  // Last Year's boundary
+  const lastYear = new Date(midnight);
+  lastYear.setFullYear(midnight.getFullYear() - 1);
+  lastYear.setHours(0, 0, 0, 0);
+
   return {
     lastYear,
     oneMonthAgo,

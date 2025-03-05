@@ -1,0 +1,5 @@
+{
+  "description": "URL with query parameters",
+  "content": "<a href=\"/path?query=1&param=2\">Link with query</a>",
+  "expected": "<a href=\"https://example.com/path?query=1&param=2\" target=\"_blank\">Link with query</a>"
+}

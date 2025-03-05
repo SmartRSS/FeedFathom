@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { isPlainText } from "../src/util/is-plain-text";
+import { describe, expect, test } from "bun:test";
 
 describe("isPlainText", () => {
   test("should return true for empty string", () => {
@@ -27,7 +27,8 @@ describe("isPlainText", () => {
   });
 
   test("should return false for binary data", () => {
-    const binaryString = String.fromCharCode(0, 1, 2, 3, 4, 5); // Simulating binary data as a string
+    // Simulating binary data as a string
+    const binaryString = String.fromCodePoint(0, 1, 2, 3, 4, 5);
     expect(isPlainText(binaryString)).toBe(false);
   });
 

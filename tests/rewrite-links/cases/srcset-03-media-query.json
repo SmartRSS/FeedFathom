@@ -1,0 +1,5 @@
+{
+  "description": "srcset with media query",
+  "content": "<source srcset=\"/image1.jpg 1x, /image2.jpg 2x\" media=\"(min-width: 800px)\" />",
+  "expected": "<source srcset=\"https://example.com/image1.jpg 1x, https://example.com/image2.jpg 2x\" media=\"(min-width: 800px)\" />"
+}
