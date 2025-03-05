@@ -35,7 +35,6 @@ services:
     deploy:
       replicas: 1
 
-
   mail:
     build:
       context: .

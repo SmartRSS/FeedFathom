@@ -8,9 +8,9 @@
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
     "watch-server": "bunx --bun svelte-kit sync && bunx --bun vite dev --host",
     "watch-worker": "bunx --bun svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
-    "lint": "bun test && bunx --bun svelte-kit sync && bunx --bun tsc && bunx --bun eslint ./src && bunx --bun svelte-check --tsconfig ./tsconfig.json && bunx --bun prettier --check ./src",
-    "lint:fix": "bunx --bun svelte-kit sync && bunx --bun eslint src --fix && bunx --bun prettier --write ./src",
-    "format": "prettier --write ./src",
+    "lint": "bun test && bunx --bun svelte-kit sync && bunx --bun tsc && bunx --bun eslint && bunx --bun svelte-check --tsconfig ./tsconfig.json && bunx --bun prettier --check .",
+    "lint:fix": "bunx --bun svelte-kit sync && bunx --bun eslint --fix && bunx --bun prettier --write .",
+    "format": "prettier --write .",
     "pack": "bin/generate-packages.ts"
   },
   "devDependencies": {

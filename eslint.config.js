@@ -14,12 +14,14 @@ const ignores = [
   "node_modules/**", // Ignore node_modules directory
   "dist/**",
   "bin/**",
+  "vite.config.ts",
+  "ext/**",
+  "build/**",
 ];
 
 const eslintSvelteConfig = {
   ...eslintPluginSvelte.configs["flat/recommended"],
-  files: ["*.svelte"],
-  ignores,
+  files: ["./src/**/*.svelte"],
   parser: "svelte-eslint-parser",
   parserOptions: {
     extraFileExtensions: [".svelte"],
@@ -41,7 +43,6 @@ const canonicalArray = [
   typescriptTypeChecking.recommended,
 ].map((config) => ({
   ...config,
-  ignores,
   rules: {
     ...config.rules,
     ...eslintConfigPrettier.rules,
@@ -70,7 +71,10 @@ const canonicalArray = [
 }));
 
 export default [
-  { files: ["./src/**/*.{js,mjs,cjs,ts}"] },
+  {
+    ignores,
+  },
+  { files: ["./src/**/*.ts", "./tests/**/*.ts"] },
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   eslintSvelteConfig,
   ...canonicalArray,

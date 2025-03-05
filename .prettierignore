@@ -1,6 +1,30 @@
+# Build outputs
 .svelte-kit
-node-modules
+dist
+build
+
+# Dependencies
+node_modules
+pnpm-lock.yaml
+package-lock.json
+bun.lockb
+
+# Configuration files
+**/*.js
+vite.config.ts
+*.config.js
+*.config.ts
+
+# External directories
+ext
+drizzle
+
+# Documentation
+*.md
+LICENSE
+
+# System and IDE
+.git
 .github
 .idea
-drizzle
-*.md
+.DS_Store

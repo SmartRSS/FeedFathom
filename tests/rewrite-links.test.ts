@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { rewriteLinks } from "../src/lib/rewrite-links";
+import { describe, expect, test } from "bun:test";
 
 describe("fixLinks", () => {
   test("should convert relative URLs to absolute URLs", () => {
@@ -194,7 +194,8 @@ describe("fixLinks", () => {
       '<img srcset="https://substackcdn.com/image/fetch/w_424,c_limit,f_webp,q_auto:good,fl_progressive:steep/image.jpg 424w, https://substackcdn.com/image/fetch/w_848,c_limit,f_webp,q_auto:good,fl_progressive:steep/image.jpg 848w" />';
     const articleUrl = "https://example.com/article";
     const result = rewriteLinks(content, articleUrl);
-    expect(result).toBe(content); // Should not modify absolute URLs but also not break them
+    // Should not modify absolute URLs but also not break them
+    expect(result).toBe(content);
   });
 
   test("should handle relative URLs with commas in query parameters in srcset", () => {
