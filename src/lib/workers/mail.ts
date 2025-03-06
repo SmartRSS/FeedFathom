@@ -1,6 +1,7 @@
 /* eslint-disable n/callback-return */
 import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
+import { EmailProcessor } from "$lib/email-processor";
 import { type Source } from "../../types/source-types";
 import { logError as error_, llog } from "../../util/log";
 import * as mailParser from "mailparser";
@@ -20,6 +21,8 @@ export type MailWorkerConfig = {
 export class MailWorker {
   private readonly config: MailWorkerConfig;
 
+  private readonly emailProcessor: EmailProcessor;
+
   private server: SMTPServer | undefined;
 
   constructor(
@@ -32,6 +35,7 @@ export class MailWorker {
       hostname: config.hostname,
       maxSizeBytes: config.maxSizeBytes ?? 10 * 1_024 * 1_024,
     };
+    this.emailProcessor = new EmailProcessor();
   }
 
   public initialize() {
@@ -142,7 +146,7 @@ export class MailWorker {
     const date = email.date ?? new Date();
     return {
       author: senderAddress,
-      content: this.getEmailContent(email),
+      content: this.emailProcessor.getEmailContent(email),
       guid,
       publishedAt: date,
       sourceId,
@@ -153,31 +157,6 @@ export class MailWorker {
   }
 
   private extractRecipientAddresses(email: mailParser.ParsedMail): string[] {
-    const recipients = Array.isArray(email.to) ? email.to : [email.to];
-    const recipientMails: string[] = [];
-
-    for (const addressObject of recipients) {
-      if (Array.isArray(addressObject?.value)) {
-        for (const value of addressObject.value) {
-          if (value.address) {
-            recipientMails.push(value.address);
-          }
-        }
-      }
-    }
-
-    return recipientMails;
-  }
-
-  private getEmailContent(email: mailParser.ParsedMail): string {
-    if (typeof email.html === "string") {
-      return email.html;
-    }
-
-    if (typeof email.textAsHtml === "string") {
-      return email.textAsHtml;
-    }
-
-    return "No content.";
+    return this.emailProcessor.extractRecipientAddresses(email);
   }
 }
