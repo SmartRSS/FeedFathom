@@ -1,4 +1,5 @@
 import { type ValidatedRequestEvent } from "$lib/create-request-handler";
+import { type FeedPreview } from "$lib/feed-mapper";
 import { isMailEnabled } from "../../util/is-mail-enabled";
 import { type SubscribeRequest } from "./validator";
 import { json } from "@sveltejs/kit";
@@ -32,7 +33,9 @@ export const subscribeHandler = async ({
   }
 
   try {
-    const preview = await locals.dependencies.feedParser.preview(sourceUrl);
+    const preview = (await locals.dependencies.feedParser.preview(
+      sourceUrl,
+    )) as FeedPreview;
     if (!preview) {
       return json(false);
     }
@@ -40,7 +43,7 @@ export const subscribeHandler = async ({
     await locals.dependencies.userSourcesRepository.addSourceToUser(
       locals.user.id,
       {
-        homeUrl: preview.link ?? url.origin,
+        homeUrl: preview?.link ?? url.origin,
         name: sourceName,
         parentId: sourceFolder,
         url: sourceUrl,

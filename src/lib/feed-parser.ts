@@ -2,10 +2,9 @@ import { type ArticlesRepository } from "$lib/db/article-repository";
 import { type SourcesRepository } from "$lib/db/source-repository";
 import container from "../container";
 import { logError as error } from "../util/log";
+import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper";
 import { rewriteLinks } from "./rewrite-links";
 import { parseFeed } from "@rowanmanning/feed-parser";
-import { type Feed } from "@rowanmanning/feed-parser/lib/feed/base";
-import { type FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
 import { AxiosError } from "axios";
 import { type AxiosCacheInstance } from "axios-cache-interceptor";
 import type Redis from "ioredis";
@@ -50,24 +49,12 @@ export class FeedParser {
       }
 
       const articlePayloads = parsedFeed.items.map((item) => {
-        const guid = this.generateGuid(item, parsedFeed, source.url);
-        return {
-          author:
-            item.authors[0]?.name ??
-            parsedFeed.title ??
-            parsedFeed.url ??
-            source.url,
-          content: rewriteLinks(
-            item.content ?? item.description ?? "",
-            item.url ?? "",
-          ),
-          guid,
-          publishedAt: new Date(item.published ?? Date.now()),
-          sourceId: source.id,
-          title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-          updatedAt: new Date(item.updated ?? item.published ?? Date.now()),
-          url: item.url ?? "",
-        };
+        return mapFeedItemToArticle(
+          item,
+          parsedFeed,
+          { id: source.id, url: source.url },
+          rewriteLinks,
+        );
       });
 
       await this.articlesRepository.batchUpsertArticles(articlePayloads);
@@ -116,12 +103,7 @@ export class FeedParser {
   public async preview(sourceUrl: string) {
     try {
       const { feed: parsedFeed } = await this.parseUrl(sourceUrl);
-      return {
-        description: parsedFeed.description,
-        feedUrl: sourceUrl,
-        link: parsedFeed.url,
-        title: parsedFeed.title,
-      };
+      return mapFeedToPreview(parsedFeed, sourceUrl);
     } catch {
       return {};
     }
@@ -169,28 +151,6 @@ export class FeedParser {
 
     await this.redis.set(lastFetchKey, now.toString());
     return true;
-  }
-
-  private generateGuid(item: FeedItem, parsedFeed: Feed, sourceUrl: string) {
-    if (item.id) {
-      return item.id;
-    }
-
-    if (item.url && item.title) {
-      return `${item.url}_${item.title}`;
-    }
-
-    const hashInput = [
-      item.content,
-      item.description,
-      item.title,
-      parsedFeed.title,
-      parsedFeed.url,
-      sourceUrl,
-    ]
-      .filter(Boolean)
-      .join("_");
-    return Bun.hash(hashInput).toString(36);
   }
 
   private async parseGenericFeed(url: string) {
