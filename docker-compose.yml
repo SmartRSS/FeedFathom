@@ -133,4 +133,3 @@ volumes:
 networks:
   feedfathom:
     driver: bridge
-  

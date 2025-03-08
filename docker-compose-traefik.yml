@@ -5,11 +5,11 @@ services:
       - feedfathom
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.foundry.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
-      - "traefik.http.routers.foundry.entrypoints=web"
-      - "traefik.http.services.foundry.loadbalancer.server.port=3000"
+      - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
+      - "traefik.http.routers.feedfathom.entrypoints=web"
+      - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
 
 networks:
   traefik:
     external: true
-  feedfathom: 
+  feedfathom:
