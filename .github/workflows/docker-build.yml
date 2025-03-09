@@ -70,23 +70,25 @@ jobs:
           ref: ${{ github.sha }}
           sparse-checkout: |
             docker-compose.yml
+            docker-compose.traefik.yml
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy Docker Compose file to server
-        run: scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
+      - name: Copy Docker Compose files to server
+        run: |
+          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
+          scp -o StrictHostKeyChecking=no docker-compose-traefik.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.traefik.yml
 
       - name: Deploy to server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            export FEEDFATHOM_TAG=${{ github.sha }}
-            export DEPLOY_PATH=${{ env.DEPLOY_PATH }}
-            export MAIL_REPLICAS=1
-            echo ${{ github.sha }}
-            cd $DEPLOY_PATH
-            docker compose pull
-            docker compose up -d migrator server worker mail --remove-orphans
+            cd $DEPLOY_PATH && \
+            FEEDFATHOM_TAG=${{ github.sha }} \
+            MAIL_REPLICAS=1 \
+            FEED_FATHOM_DOMAIN=${{ secrets.FEED_FATHOM_DOMAIN }} \
+            docker compose -f docker-compose.yml -f docker-compose.traefik.yml pull && \
+            docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d migrator server worker mail --remove-orphans
           EOF
