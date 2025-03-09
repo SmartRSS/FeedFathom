@@ -54,7 +54,7 @@ services:
         order: start-first
       replicas: ${APP_REPLICAS:-1}
     healthcheck:
-      test: "curl -f --head http://localhost:3000/api/health || exit 1"
+      test: "curl -L http://localhost:3000/health || exit 1"
       interval: 5s
       timeout: 3s
       retries: 3
