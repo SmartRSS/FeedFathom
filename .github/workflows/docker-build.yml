@@ -86,9 +86,9 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
             cd ${{ env.DEPLOY_PATH }} && \
-            FEEDFATHOM_TAG=${{ github.sha }} \
-            MAIL_REPLICAS=1 \
-            FEED_FATHOM_DOMAIN=${{ secrets.FEED_FATHOM_DOMAIN }} \
+            export FEEDFATHOM_TAG=${{ github.sha }} && \
+            export MAIL_REPLICAS=1 && \
+            export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml up -d migrator server worker mail --remove-orphans
           EOF
