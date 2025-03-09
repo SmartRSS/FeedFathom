@@ -53,12 +53,6 @@ services:
         delay: 10s
         order: start-first
       replicas: ${APP_REPLICAS:-1}
-    healthcheck:
-      test: "curl -L http://localhost:3000/health || exit 1"
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
     ports:
       - "3456:3000"
     environment:
