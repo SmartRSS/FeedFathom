@@ -43,7 +43,7 @@ services:
     networks:
       - feedfathom
 
-  server:
+  feedfathom-server:
     init: true
     image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
     restart: always

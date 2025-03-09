@@ -1,13 +1,13 @@
 services:
-  server:
+  feedfathom-server:
     networks:
       - traefik
       - feedfathom
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
-      - "traefik.http.routers.feedfathom.entrypoints=web"
-      - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
+      - "traefik.http.routers.feedfathom-server.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
+      - "traefik.http.routers.feedfathom-server.entrypoints=web"
+      - "traefik.http.services.feedfathom-server.loadbalancer.server.port=3000"
 
 networks:
   traefik:
