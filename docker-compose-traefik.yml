@@ -8,9 +8,6 @@ services:
       - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
-      - "traefik.http.middlewares.feedfathom-retry.retry.attempts=25"
-      - "traefik.http.middlewares.feedfathom-retry.retry.initialinterval=2s"
-      - "traefik.http.routers.feedfathom.middlewares=feedfathom-retry"
 
 networks:
   traefik:
