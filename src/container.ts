@@ -131,4 +131,5 @@ container.register({
     .singleton(),
 });
 
+// biome-ignore lint/style/noDefaultExport: TODO
 export default container;

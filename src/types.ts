@@ -27,7 +27,7 @@ export type ArticlesRemovedFunction = (
 
 export type ArticlesSelectedFunction = (
   selectedArticleIdList: number[],
-) => Promise<void>;
+) => void;
 
 export type DisplayModeChangedFunction = (displayMode: DisplayMode) => void;
 

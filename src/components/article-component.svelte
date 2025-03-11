@@ -33,6 +33,7 @@ let {
   articlesRemoved,
   focusChanged,
   displayModeChanged,
+  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
   focusedColumn,
 }: ArticleComponentProps = $props();
 
@@ -160,14 +161,17 @@ async function fetchData(attempt = 0) {
   }
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function handleBack() {
   focusChanged(".articles-column");
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function deleteItem() {
   articlesRemoved([selectedArticle]);
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function handleChange() {
   displayModeChanged(displayMode);
 }
@@ -176,6 +180,7 @@ $effect(() => {
   fetchData();
 });
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function shouldHide() {
   return (
     typeof window !== "undefined" &&

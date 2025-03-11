@@ -6,6 +6,7 @@ let email = $state("");
 // biome-ignore lint/style/useConst: bound by Svelte
 let password = $state("");
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const handleSubmit = async (e: SubmitEvent) => {
   e.preventDefault();
   const res = await fetch("/login", {

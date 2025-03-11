@@ -22,8 +22,10 @@ let password = "";
 // biome-ignore lint/style/useConst: bound by Svelte
 let passwordConfirm = "";
 let validationMessage = "";
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let isSubmitting = false;
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const handleSubmit = async (event: SubmitEvent) => {
   event.preventDefault();
 

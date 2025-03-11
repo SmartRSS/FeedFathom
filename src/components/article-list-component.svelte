@@ -22,12 +22,14 @@ const {
   focusChanged,
   articlesRemoved,
   articlesLoaded,
+  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
   focusedColumn,
 }: ArticleListComponentProps = $props();
 
 let selectedItems = $state(new SvelteSet<number>());
 let lastSelectedIndex: number | null = $state(null);
 let focusedIndex = $state(0);
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let isLoading = $state(false);
 let articles: Article[] = $state([]);
 
@@ -161,6 +163,7 @@ function handleDelete(event: KeyboardEvent) {
   deleteItems();
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function handleKeyDown(event: KeyboardEvent) {
   switch (event.key) {
     case "a": {
@@ -186,6 +189,9 @@ function handleKeyDown(event: KeyboardEvent) {
     case "Delete": {
       handleDelete(event);
       break;
+    }
+    default: {
+      logError(`Unhandled key: ${event.key}`);
     }
   }
 }
@@ -280,6 +286,7 @@ function selectItem(index: number, event?: MouseEvent | KeyboardEvent) {
   focusChanged(".content-column");
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function handleBack() {
   focusChanged(".sources-column");
 }

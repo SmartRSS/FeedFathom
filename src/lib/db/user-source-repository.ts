@@ -169,8 +169,9 @@ export class UserSourcesRepository {
           userId,
           node.name,
         );
-        if ("children" in node)
+        if ("children" in node) {
           await this.insertTree(userId, node.children, folder.id);
+        }
       }
 
       if (node.type === "source") {

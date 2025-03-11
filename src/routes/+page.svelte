@@ -34,11 +34,13 @@ import properties from "../assets/properties.svg";
 const staleTile = 5 * 1000;
 const promisesMap: ArticlePromisesMap = new Map();
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let selectedSourcesList: string[] = $state([]);
 // biome-ignore lint/style/useConst: bound by Svelte
 let sourceProperties: HTMLDialogElement | null = $state(null);
 let selectedNode: TreeNode | null = $state(null);
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let displayMode: DisplayMode = $state(DisplayMode.Feed);
 
 let focusedColumn: FocusTarget = $state(".sources-column");
@@ -82,7 +84,8 @@ function setFocusTo(selector: FocusTarget) {
   focusedColumn = selector;
 }
 
-async function nodeSelected(node: TreeNode) {
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function nodeSelected(node: TreeNode) {
   selectedSourcesList =
     node.type === NodeType.Folder
       ? node.children.map((child) => child.uid)
@@ -97,6 +100,7 @@ async function nodeSelected(node: TreeNode) {
   setFocusTo(".articles-column");
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 async function nodeHeld(node: TreeNode) {
   selectedSourcesList =
     node.type === "folder" && (node.children?.length ?? 0) > 0
@@ -106,12 +110,13 @@ async function nodeHeld(node: TreeNode) {
   selectedNode = node;
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let selectedArticleId: number | null = $state(null);
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let selectedNodeUid: string = $state("");
 
-const articlesSelected: ArticlesSelectedFunction = async (
-  selectedArticleIdList,
-) => {
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const articlesSelected: ArticlesSelectedFunction = (selectedArticleIdList) => {
   displayMode = DisplayMode.Feed;
   selectedArticleId =
     selectedArticleIdList.length === 1 && selectedArticleIdList[0]
@@ -119,10 +124,12 @@ const articlesSelected: ArticlesSelectedFunction = async (
       : null;
 };
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const focusChanged: FocusChangedFunction = (focusTarget) => {
   setFocusTo(focusTarget);
 };
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
   if (removedArticleList.length > 0) {
     void fetch("./articles", {
@@ -172,11 +179,13 @@ $effect(() => {
   selectedNodeUid;
 });
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const handleSourceDetails = () => {
   sourceProperties?.showModal();
 };
 
-const handleDeleteSource = async () => {
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const handleDeleteSource = () => {
   if (!selectedNode) {
     return;
   }
@@ -213,10 +222,12 @@ const handleDeleteSource = async () => {
   });
 };
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function displayModeChanged(newDisplayMode: DisplayMode) {
   displayMode = newDisplayMode;
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
   tree = tree.map((node) => {
     if (node.type === "folder") {
@@ -235,6 +246,7 @@ const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
   });
 };
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 async function nodeTouchStart(node: TreeNode) {
   currentNode = node;
   const sources =
@@ -252,13 +264,15 @@ async function nodeTouchStart(node: TreeNode) {
   promisesMap.set(sources, { time: date, promise: fetchArticles(sources) });
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function nodeMouseLeave(node: TreeNode) {
   if (node.uid === currentNode?.uid && node.type === currentNode?.type) {
     currentNode = null;
   }
 }
 
-async function nodeTouchEnd(node: TreeNode) {
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function nodeTouchEnd(node: TreeNode) {
   if (node.uid !== currentNode?.uid || node.type !== currentNode?.type) {
     return;
   }

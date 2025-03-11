@@ -8,8 +8,10 @@ import { logError } from "../../util/log.ts";
 
 // Access props directly
 const { data } = $props();
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const { user } = data;
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
   const file = (formData as FormData).get("opml") as File;
   if (!file) {
@@ -41,7 +43,8 @@ const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
 };
 let passwordForm: HTMLFormElement;
 
-const changePassword: SubmitFunction = async ({ formData, cancel }) => {
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const changePassword: SubmitFunction = ({ formData, cancel }) => {
   for (const field of ["oldPassword", "password1", "password2"]) {
     if (!formData.get(field)) {
       logError(`no ${field}`);
@@ -51,8 +54,10 @@ const changePassword: SubmitFunction = async ({ formData, cancel }) => {
   }
 };
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let valid = $state(true);
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function isValid() {
   if (!passwordForm["password1"].value) {
     valid = true;
