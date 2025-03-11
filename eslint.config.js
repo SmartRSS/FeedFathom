@@ -96,6 +96,11 @@ export default [
       "canonical/prefer-inline-type-import": "off",
       "perfectionist/sort-named-imports": "off",
       "import/extensions": "off",
+
+      // Performance optimizations for slow rules
+      "import/no-cycle": ["error", { ignoreExternal: true }],
+      "n/no-extraneous-import": "off",
+      "@typescript-eslint/naming-convention": "off",
     },
   },
   biome,

@@ -193,6 +193,7 @@
       "recommended": false,
       "all": true,
       "complexity": {
+        "all": true,
         "noExtraBooleanCast": "error",
         "noForEach": "error",
         "noMultipleSpacesInRegularExpressionLiterals": "error",
@@ -218,6 +219,7 @@
         "noUselessTypeConstraint": "error"
       },
       "correctness": {
+        "all": true,
         "noConstAssign": "error",
         "noConstantCondition": "off",
         "noConstructorReturn": "error",
@@ -249,9 +251,11 @@
         "useYield": "error"
       },
       "security": {
+        "all": true,
         "noGlobalEval": "error"
       },
       "style": {
+        "all": true,
         "noArguments": "error",
         "noCommaOperator": "error",
         "noDefaultExport": "off",
@@ -319,6 +323,7 @@
         "useShorthandFunctionType": "error"
       },
       "suspicious": {
+        "all": true,
         "noAssignInExpressions": "error",
         "noAsyncPromiseExecutor": "error",
         "noCatchAssign": "error",
