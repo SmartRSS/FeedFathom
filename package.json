@@ -20,7 +20,7 @@
     "@types/archiver": "^6.0.3",
     "@types/bun": "^1.2.5",
     "@types/chrome": "^0.0.308",
-    "@types/eslint": "^8.56.6",
+    "@types/eslint": "^9.6.1",
     "@types/jsdom": "^21.1.7",
     "@types/mailparser": "^3.4.5",
     "@types/smtp-server": "^3.5.10",
@@ -29,7 +29,7 @@
     "@typescript-eslint/parser": "^8.26.1",
     "archiver": "^7.0.1",
     "drizzle-kit": "0.30.5",
-    "eslint": "^8.56.0",
+    "eslint": "^9.22.0",
     "eslint-config-biome": "^1.9.4",
     "eslint-config-canonical": "^44.3.44",
     "eslint-config-prettier": "^10.1.1",
@@ -45,7 +45,7 @@
     "zlib": "^1.0.5"
   },
   "dependencies": {
-    "@eslint/js": "^8.56.0",
+    "@eslint/js": "^8.57.1",
     "@extractus/article-extractor": "^8.0.17",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.0.0",
