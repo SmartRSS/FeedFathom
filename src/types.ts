@@ -1,6 +1,6 @@
-import { type DisplayMode } from "$lib/settings";
-import { type Article } from "./types/article-type";
-import { type TreeNode } from "./types/source-types";
+import type { DisplayMode } from "$lib/settings";
+import type { Article } from "./types/article-type.ts";
+import type { TreeNode } from "./types/source-types.ts";
 
 export type ArticleListComponentProps = {
   articlesLoaded: ArticlesLoadedFunction;
@@ -27,7 +27,7 @@ export type ArticlesRemovedFunction = (
 
 export type ArticlesSelectedFunction = (
   selectedArticleIdList: number[],
-) => Promise<void>;
+) => void;
 
 export type DisplayModeChangedFunction = (displayMode: DisplayMode) => void;
 

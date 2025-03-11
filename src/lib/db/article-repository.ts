@@ -1,9 +1,9 @@
-import * as schema from "$lib/schema";
-import { type Article } from "../../types/article-type";
-import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
-import { logError } from "../../util/log";
+import { articles, userArticles } from "$lib/schema";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { Article } from "../../types/article-type.ts";
+import { getBoundaryDates, getDateGroup } from "../../util/get-date-group.ts";
+import { logError } from "../../util/log.ts";
 
 export class ArticlesRepository {
   public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
@@ -26,7 +26,7 @@ export class ArticlesRepository {
 
     try {
       await this.drizzleConnection
-        .insert(schema.articles)
+        .insert(articles)
         .values(payloads)
         .onConflictDoUpdate({
           set: {
@@ -34,7 +34,7 @@ export class ArticlesRepository {
             title: sql`excluded.title`,
             updatedAt: sql`excluded.updated_at`,
           },
-          target: schema.articles.guid,
+          target: articles.guid,
         });
     } catch (error) {
       logError("Error upserting articles:", error);
@@ -46,8 +46,8 @@ export class ArticlesRepository {
     const article = (
       await this.drizzleConnection
         .select()
-        .from(schema.articles)
-        .where(eq(schema.articles.id, articleId))
+        .from(articles)
+        .where(eq(articles.id, articleId))
     ).at(0);
 
     return article;
@@ -56,46 +56,46 @@ export class ArticlesRepository {
   async getArticleByGuid(guid: string): Promise<Article | undefined> {
     const result = await this.drizzleConnection
       .select()
-      .from(schema.articles)
-      .where(eq(schema.articles.guid, guid));
+      .from(articles)
+      .where(eq(articles.guid, guid));
     return result[0];
   }
 
   public async getUserArticlesForSources(sourceIds: number[], userId: number) {
-    if (!sourceIds.length) {
+    if (sourceIds.length === 0) {
       return [];
     }
 
-    const articles = await this.drizzleConnection
+    const loadedArticles = await this.drizzleConnection
       .select({
-        author: schema.articles.author,
-        id: schema.articles.id,
-        publishedAt: schema.articles.publishedAt,
-        sourceId: schema.articles.sourceId,
-        title: schema.articles.title,
-        url: schema.articles.url,
+        author: articles.author,
+        id: articles.id,
+        publishedAt: articles.publishedAt,
+        sourceId: articles.sourceId,
+        title: articles.title,
+        url: articles.url,
       })
-      .from(schema.articles)
+      .from(articles)
       .leftJoin(
-        schema.userArticles,
+        userArticles,
         and(
-          eq(schema.articles.id, schema.userArticles.articleId),
-          eq(schema.userArticles.userId, userId),
+          eq(articles.id, userArticles.articleId),
+          eq(userArticles.userId, userId),
         ),
       )
       .where(
         and(
-          inArray(schema.articles.sourceId, sourceIds),
+          inArray(articles.sourceId, sourceIds),
           or(
-            isNull(schema.userArticles.articleId),
-            gt(schema.articles.updatedAt, schema.userArticles.readAt),
+            isNull(userArticles.articleId),
+            gt(articles.updatedAt, userArticles.readAt),
           ),
         ),
       )
-      .orderBy(desc(schema.articles.publishedAt));
+      .orderBy(desc(articles.publishedAt));
 
     const boundaryDates = getBoundaryDates();
-    return articles.map((item) => {
+    return loadedArticles.map((item) => {
       return {
         group: getDateGroup(boundaryDates, item.publishedAt),
         ...item,
@@ -115,11 +115,11 @@ export class ArticlesRepository {
 
     await this.drizzleConnection.transaction(async (trx) => {
       await trx
-        .insert(schema.userArticles)
+        .insert(userArticles)
         .values(values)
         .onConflictDoUpdate({
           set: { deletedAt: now },
-          target: [schema.userArticles.userId, schema.userArticles.articleId],
+          target: [userArticles.userId, userArticles.articleId],
         });
     });
   }

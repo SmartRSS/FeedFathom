@@ -1,4 +1,3 @@
-/* eslint-disable no-constructor-return */
 import {
   generateBoundaryDates,
   getDateGroup,

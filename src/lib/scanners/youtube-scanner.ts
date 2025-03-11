@@ -1,6 +1,9 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
+const playlistExpression = /list=([\w-]+)/u;
+const channelExpression = /channel\/(.+)/u;
+const userExpression = /c\/(.+)/u;
 export class YoutubeScanner implements Scanner {
   scan(currentUrl: URL, _document: Document): FeedData[] {
     if (!currentUrl.hostname.endsWith("youtube.com")) {
@@ -13,21 +16,19 @@ export class YoutubeScanner implements Scanner {
   private findFeedsForYoutubeAddress(address: string) {
     const youtubeFeeds: FeedData[] = [];
     const addressUrl = new URL(address);
-    const userMatch = /c\/(.+)/u.exec(address);
+    const userMatch = userExpression.exec(address);
     if (userMatch) {
       youtubeFeeds.push({
         title: "User feed",
-        url: "https://www.youtube.com/feeds/videos.xml?user=" + userMatch[1],
+        url: `https://www.youtube.com/feeds/videos.xml?user=${userMatch[1]}`,
       });
     }
 
-    const channelMatch = /channel\/(.+)/u.exec(address);
+    const channelMatch = channelExpression.exec(address);
     if (channelMatch) {
       youtubeFeeds.push({
         title: "Channel feed",
-        url:
-          "https://www.youtube.com/feeds/videos.xml?channel_id=" +
-          channelMatch[1],
+        url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`,
       });
     }
 
@@ -37,19 +38,15 @@ export class YoutubeScanner implements Scanner {
     if (channelMatch2) {
       youtubeFeeds.push({
         title: "Channel feed",
-        url:
-          "https://www.youtube.com/feeds/videos.xml?channel_id=" +
-          channelMatch2[1],
+        url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch2[1]}`,
       });
     }
 
-    const playlistMatch = /list=([\w-]+)/u.exec(address);
+    const playlistMatch = playlistExpression.exec(address);
     if (playlistMatch) {
       youtubeFeeds.push({
         title: "Current playlist feed",
-        url:
-          "https://www.youtube.com/feeds/videos.xml?playlist_id=" +
-          playlistMatch[1],
+        url: `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistMatch[1]}`,
       });
     }
 

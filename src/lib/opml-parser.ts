@@ -1,10 +1,6 @@
-import {
-  type OpmlFolder,
-  type OpmlSource,
-  type Outline,
-} from "../types/opml-types";
-import { logError } from "../util/log";
 import { XMLParser } from "fast-xml-parser";
+import type { OpmlFolder, OpmlSource, Outline } from "../types/opml-types.ts";
+import { logError } from "../util/log.ts";
 
 export class OpmlParser {
   async parseOpml(opml: string): Promise<Array<OpmlFolder | OpmlSource>> {

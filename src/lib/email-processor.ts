@@ -1,4 +1,4 @@
-import { type ParsedMail } from "mailparser";
+import type { ParsedMail } from "mailparser";
 
 export class EmailProcessor {
   /**

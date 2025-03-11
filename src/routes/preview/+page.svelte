@@ -1,194 +1,211 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
-  import type { Folder } from "../../types/folder-type";
-  import { ulid } from "ulid";
-  import { logError, llog } from "../../util/log";
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
+import { onMount } from "svelte";
+import { ulid } from "ulid";
+import type { Folder } from "../../types/folder-type.ts";
+import { llog, logError } from "../../util/log.ts";
 
-  interface FoundFeed {
-    url: string;
-    title: string;
+interface FoundFeed {
+  url: string;
+  title: string;
+}
+
+interface FeedPreview {
+  title: string;
+  description: string;
+  link: string;
+  feedUrl: string;
+}
+
+const { data } = $props();
+const { isMailEnabled } = data;
+
+let title = $state("");
+let link = $state("");
+let feedUrl = $state("");
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let isLoading = $state(false);
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let folders: Folder[] = $state([]);
+// biome-ignore lint/style/useConst: bound by Svelte
+let folder = $state("");
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let foundFeeds: FoundFeed[] = $state([]);
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let selectingFeed = $state(false);
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let errorMessage = $state("");
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let clipboardMessage = $state("");
+
+onMount(async () => {
+  feedUrl = page.url.searchParams.get("feedUrl") ?? "";
+  link = page.url.searchParams.get("link") ?? "";
+
+  const foldersResponse = await fetch("folders");
+  if (foldersResponse.ok) {
+    try {
+      folders = (await foldersResponse.json()) as Folder[];
+    } catch (jsonError) {
+      logError("Failed to parseSource folders JSON:", jsonError);
+      displayError("Failed to load folders.");
+    }
   }
 
-  interface FeedPreview {
-    title: string;
-    description: string;
-    link: string;
-    feedUrl: string;
+  if (!(feedUrl || link)) {
+    return;
+  }
+  feedUrl ? await loadFeedPreview() : await findFeeds();
+});
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const isFormFilled = $derived(title && link && feedUrl);
+const mailLikeExpression = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    // Check if isMailEnabled is false and the URL looks like an email
+    if (!isMailEnabled && mailLikeExpression.test(url)) {
+      return false; // Invalid if it looks like an email
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function displayError(message: string) {
+  errorMessage = message;
+  setTimeout(() => {
+    errorMessage = "";
+  }, 3000); // Clear after 3 seconds
+}
+
+function displayClipboardMessage(message: string) {
+  clipboardMessage = message;
+  setTimeout(() => {
+    clipboardMessage = "";
+  }, 3000); // Clear after 3 seconds
+}
+
+async function loadFeedPreview() {
+  if (!isValidUrl(feedUrl)) {
+    llog("Invalid Feed URL");
+    displayError("Invalid Feed URL");
+    return;
   }
 
-  const { data } = $props();
-  const { isMailEnabled } = data;
+  // New validation for feedUrl against email format
+  if (!isMailEnabled && mailLikeExpression.test(feedUrl)) {
+    llog("Feed URL cannot be an email when mail is not enabled");
+    displayError("Feed URL cannot be an email when mail is not enabled");
+    return;
+  }
 
-  let title = $state("");
-  let link = $state("");
-  let feedUrl = $state("");
-  let isLoading = $state(false);
-  let folders: Folder[] = $state([]);
-  let folder = $state("");
-  let foundFeeds: FoundFeed[] = $state([]);
-  let selectingFeed = $state(false);
-  let errorMessage = $state("");
-  let clipboardMessage = $state("");
-
-  onMount(async () => {
-    feedUrl = $page.url.searchParams.get("feedUrl") ?? "";
-    link = $page.url.searchParams.get("link") ?? "";
-
-    const foldersResponse = await fetch("folders");
-    if (foldersResponse.ok) {
-      try {
-        folders = (await foldersResponse.json()) as Folder[];
-      } catch (jsonError) {
-        logError("Failed to parseSource folders JSON:", jsonError);
-        displayError("Failed to load folders.");
-      }
+  try {
+    isLoading = true;
+    const response = await fetch(`/preview?feedUrl=${feedUrl}`);
+    if (!response.ok) {
+      llog("response not ok");
+      throw new Error("Failed to load feed preview");
     }
+    const data = (await response.json()) as FeedPreview;
+    title = data.title;
+    link = data.link;
+    feedUrl = data.feedUrl;
+  } catch (error) {
+    logError("Error loading feed preview:", error);
+    displayError("Failed to load feed preview.");
+  } finally {
+    isLoading = false;
+  }
+}
 
-    if (!feedUrl && !link) {
-      return;
+async function findFeeds() {
+  if (!isValidUrl(link)) {
+    displayError("Invalid Link URL");
+    return;
+  }
+
+  isLoading = true;
+  selectingFeed = true;
+
+  try {
+    const response = await fetch(`/find?link=${link}`);
+    if (!response.ok) {
+      throw new Error("Failed to find feeds");
     }
-    feedUrl ? await loadFeedPreview() : await findFeeds();
+    foundFeeds = (await response.json()) as FoundFeed[];
+  } catch (error) {
+    logError("Error fetching feeds:", error);
+    displayError("Failed to find feeds.");
+  } finally {
+    isLoading = false;
+  }
+}
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function selectFeed(selectedFeedUrl: string) {
+  selectingFeed = false;
+  feedUrl = selectedFeedUrl;
+  foundFeeds = [];
+  loadFeedPreview();
+}
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+async function save() {
+  const response = await fetch("subscribe", {
+    method: "post",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sourceUrl: feedUrl,
+      sourceName: title,
+      sourceFolder: folder ? Number.parseInt(folder) : null,
+    }),
   });
 
-  let isFormFilled = $derived(title && link && feedUrl);
-
-  function isValidUrl(url: string): boolean {
-    try {
-      new URL(url);
-      // Check if isMailEnabled is false and the URL looks like an email
-      if (!isMailEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) {
-        return false; // Invalid if it looks like an email
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
+  if (response.ok) {
+    await goto("/");
+  } else {
+    logError("Failed to subscribe to the feed.");
+    displayError("Failed to subscribe to the feed.");
   }
+}
 
-  function displayError(message: string) {
-    errorMessage = message;
-    setTimeout(() => (errorMessage = ""), 3000); // Clear after 3 seconds
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function cancel() {
+  goto("/");
+}
 
-  function displayClipboardMessage(message: string) {
-    clipboardMessage = message;
-    setTimeout(() => (clipboardMessage = ""), 3000); // Clear after 3 seconds
-  }
+// Function to generate ULID email using current domain and copy to clipboard
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function generateAndCopyUlidEmail() {
+  const currentDomain = window.location.hostname;
+  const generatedUlid = ulid();
+  const email = `${generatedUlid}@${currentDomain}`;
+  feedUrl = email;
+  link = email;
 
-  async function loadFeedPreview() {
-    if (!isValidUrl(feedUrl)) {
-      llog("Invalid Feed URL");
-      displayError("Invalid Feed URL");
-      return;
-    }
+  // Copy to clipboard
+  navigator.clipboard.writeText(email).then(
+    () => {
+      displayClipboardMessage("Email copied to clipboard!");
+    },
+    (e: unknown) => {
+      logError("Failed to copy email:", e);
+      displayError("Failed to copy email to clipboard.");
+    },
+  );
+}
 
-    // New validation for feedUrl against email format
-    if (!isMailEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feedUrl)) {
-      llog("Feed URL cannot be an email when mail is not enabled");
-      displayError("Feed URL cannot be an email when mail is not enabled");
-      return;
-    }
-
-    try {
-      isLoading = true;
-      const response = await fetch(`/preview?feedUrl=${feedUrl}`);
-      if (!response.ok) {
-        llog("response not ok");
-        throw new Error("Failed to load feed preview");
-      }
-      const data = (await response.json()) as FeedPreview;
-      title = data.title;
-      link = data.link;
-      feedUrl = data.feedUrl;
-    } catch (error) {
-      logError("Error loading feed preview:", error);
-      displayError("Failed to load feed preview.");
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function findFeeds() {
-    if (!isValidUrl(link)) {
-      displayError("Invalid Link URL");
-      return;
-    }
-
-    isLoading = true;
-    selectingFeed = true;
-
-    try {
-      const response = await fetch(`/find?link=${link}`);
-      if (!response.ok) {
-        throw new Error("Failed to find feeds");
-      }
-      foundFeeds = (await response.json()) as FoundFeed[];
-    } catch (error) {
-      logError("Error fetching feeds:", error);
-      displayError("Failed to find feeds.");
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  function selectFeed(selectedFeedUrl: string) {
-    selectingFeed = false;
-    feedUrl = selectedFeedUrl;
-    foundFeeds = [];
-    loadFeedPreview();
-  }
-
-  async function save() {
-    const response = await fetch("subscribe", {
-      method: "post",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sourceUrl: feedUrl,
-        sourceName: title,
-        sourceFolder: folder ? parseInt(folder) : null,
-      }),
-    });
-
-    if (response.ok) {
-      await goto("/");
-    } else {
-      logError("Failed to subscribe to the feed.");
-      displayError("Failed to subscribe to the feed.");
-    }
-  }
-
-  function cancel() {
-    goto("/");
-  }
-
-  // Function to generate ULID email using current domain and copy to clipboard
-  function generateAndCopyUlidEmail() {
-    const currentDomain = window.location.hostname;
-    const generatedUlid = ulid();
-    const email = `${generatedUlid}@${currentDomain}`;
-    feedUrl = email;
-    link = email;
-
-    // Copy to clipboard
-    navigator.clipboard.writeText(email).then(
-      () => {
-        displayClipboardMessage("Email copied to clipboard!");
-      },
-      (e: unknown) => {
-        logError("Failed to copy email:", e);
-        displayError("Failed to copy email to clipboard.");
-      },
-    );
-  }
-
-  function closeDialog() {
-    selectingFeed = false;
-    (document.getElementById("feed-dialog") as HTMLDialogElement)?.close();
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function closeDialog() {
+  selectingFeed = false;
+  (document.getElementById("feed-dialog") as HTMLDialogElement)?.close();
+}
 </script>
 
 <main>

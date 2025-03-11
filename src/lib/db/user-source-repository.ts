@@ -1,11 +1,11 @@
-import { type FoldersRepository } from "$lib/db/folder-repository";
-import { type SourcesRepository } from "$lib/db/source-repository";
-import * as schema from "$lib/schema";
-import { type OpmlNode } from "../../types/opml-types";
-import { type TreeNode } from "../../types/source-types";
-import { logError as error } from "../../util/log";
+import type { FoldersRepository } from "$lib/db/folder-repository";
+import type { SourcesRepository } from "$lib/db/source-repository";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
-import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { OpmlNode } from "../../types/opml-types.ts";
+import type { TreeNode } from "../../types/source-types.ts";
+import { logError as error } from "../../util/log.ts";
+import { articles, sources, userArticles, userSources } from "../schema.ts";
 
 export class UserSourcesRepository {
   public constructor(
@@ -38,13 +38,14 @@ export class UserSourcesRepository {
     const source = await this.sourcesRepository.findOrCreateSourceByUrl(
       sourcePayload.url,
       {
+        // biome-ignore lint/style/useNamingConvention: <explanation>
         home_url: sourcePayload.homeUrl,
       },
     );
 
     const userSource = (
       await this.drizzleConnection
-        .insert(schema.userSources)
+        .insert(userSources)
         .values({
           name: sourcePayload.name,
           parentId: sourcePayload.parentId,
@@ -52,7 +53,7 @@ export class UserSourcesRepository {
           userId,
         })
         .onConflictDoNothing({
-          target: [schema.userSources.sourceId, schema.userSources.userId],
+          target: [userSources.sourceId, userSources.userId],
         })
         .returning()
     ).at(0);
@@ -66,54 +67,50 @@ export class UserSourcesRepository {
     try {
       // Step 1: Clean up orphaned userArticles that belong to a user not subscribing their source anymore
       const subscribedSourceIds = this.drizzleConnection
-        .select({ sourceId: schema.userSources.sourceId })
-        .from(schema.userSources);
+        .select({ sourceId: userSources.sourceId })
+        .from(userSources);
 
       // Query to find all articles whose sourceIds are not in the subscribed sourceIds
       const orphanedArticleIds = this.drizzleConnection
-        .select({ id: schema.articles.id })
-        .from(schema.articles)
-        .where(notInArray(schema.articles.sourceId, subscribedSourceIds));
+        .select({ id: articles.id })
+        .from(articles)
+        .where(notInArray(articles.sourceId, subscribedSourceIds));
 
       // Delete userArticles where articleId is in the orphaned articles list
       await this.drizzleConnection
-        .delete(schema.userArticles)
-        .where(inArray(schema.userArticles.articleId, orphanedArticleIds))
+        .delete(userArticles)
+        .where(inArray(userArticles.articleId, orphanedArticleIds))
         .execute();
 
       // Step 2: Clean up orphaned sources that nobody subscribes to anymore
       await this.drizzleConnection
-        .delete(schema.sources)
+        .delete(sources)
         .where(
           notInArray(
-            schema.sources.id,
+            sources.id,
             this.drizzleConnection
-              .selectDistinct({ id: schema.userSources.sourceId })
-              .from(schema.userSources),
+              .selectDistinct({ id: userSources.sourceId })
+              .from(userSources),
           ),
         );
 
       // Step 3: Clean up orphaned articles that have no source now
       await this.drizzleConnection
-        .delete(schema.articles)
+        .delete(articles)
         .where(
           notInArray(
-            schema.articles.sourceId,
-            this.drizzleConnection
-              .select({ id: schema.sources.id })
-              .from(schema.sources),
+            articles.sourceId,
+            this.drizzleConnection.select({ id: sources.id }).from(sources),
           ),
         );
 
       // Step 4: Clean up orphaned userArticles without corresponding articles
       await this.drizzleConnection
-        .delete(schema.userArticles)
+        .delete(userArticles)
         .where(
           notInArray(
-            schema.userArticles.articleId,
-            this.drizzleConnection
-              .select({ id: schema.articles.id })
-              .from(schema.articles),
+            userArticles.articleId,
+            this.drizzleConnection.select({ id: articles.id }).from(articles),
           ),
         );
     } catch (error_) {
@@ -124,11 +121,11 @@ export class UserSourcesRepository {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
-        favicon: schema.sources.favicon,
-        homeUrl: schema.sources.homeUrl,
-        id: schema.sources.id,
-        name: schema.userSources.name,
-        parentId: schema.userSources.parentId,
+        favicon: sources.favicon,
+        homeUrl: sources.homeUrl,
+        id: sources.id,
+        name: userSources.name,
+        parentId: userSources.parentId,
         unreadArticlesCount: sql<number>`(
           coalesce(count(articles.id), 0) -
           coalesce(count(CASE
@@ -137,34 +134,28 @@ export class UserSourcesRepository {
             THEN 1
           END), 0)
         )::int`,
-        url: schema.sources.url,
+        url: sources.url,
       })
-      .from(schema.userSources)
-      .where(eq(schema.userSources.userId, userId))
+      .from(userSources)
+      .where(eq(userSources.userId, userId))
+      .leftJoin(sources, eq(sources.id, userSources.sourceId))
+      .leftJoin(articles, eq(articles.sourceId, sources.id))
       .leftJoin(
-        schema.sources,
-        eq(schema.sources.id, schema.userSources.sourceId),
-      )
-      .leftJoin(
-        schema.articles,
-        eq(schema.articles.sourceId, schema.sources.id),
-      )
-      .leftJoin(
-        schema.userArticles,
+        userArticles,
         and(
-          eq(schema.userArticles.userId, userId),
-          eq(schema.userArticles.articleId, schema.articles.id),
+          eq(userArticles.userId, userId),
+          eq(userArticles.articleId, articles.id),
         ),
       )
       .groupBy(
-        schema.sources.id,
-        schema.userSources.name,
-        schema.userSources.parentId,
-        schema.sources.favicon,
-        schema.sources.url,
-        schema.sources.homeUrl,
+        sources.id,
+        userSources.name,
+        userSources.parentId,
+        sources.favicon,
+        sources.url,
+        sources.homeUrl,
       )
-      .orderBy(schema.userSources.name);
+      .orderBy(userSources.name);
   }
 
   public async insertTree(
@@ -178,8 +169,9 @@ export class UserSourcesRepository {
           userId,
           node.name,
         );
-        if ("children" in node)
+        if ("children" in node) {
           await this.insertTree(userId, node.children, folder.id);
+        }
       }
 
       if (node.type === "source") {
@@ -195,12 +187,9 @@ export class UserSourcesRepository {
 
   public async removeSourceFromUser(userId: number, sourceId: number) {
     await this.drizzleConnection
-      .delete(schema.userSources)
+      .delete(userSources)
       .where(
-        and(
-          eq(schema.userSources.userId, userId),
-          eq(schema.userSources.sourceId, sourceId),
-        ),
+        and(eq(userSources.userId, userId), eq(userSources.sourceId, sourceId)),
       );
   }
 }

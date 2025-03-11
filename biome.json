@@ -1,0 +1,261 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "defaultBranch": "main"
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "ignore": ["tests/**/*.test.ts"]
+  },
+  "formatter": {
+    "enabled": true,
+    "useEditorconfig": false,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 80,
+    "attributePosition": "auto",
+    "bracketSpacing": true,
+    "ignore": [
+      "**/.svelte-kit",
+      "**/dist",
+      "**/build",
+      "**/node_modules",
+      "**/pnpm-lock.yaml",
+      "**/package-lock.json",
+      "**/bun.lockb",
+      "**/*.js",
+      "**/vite.config.ts",
+      "**/*.config.js",
+      "**/*.config.ts",
+      "**/ext",
+      "**/drizzle",
+      "**/*.md",
+      "**/LICENSE",
+      "**/.git",
+      "**/.github",
+      "**/.idea",
+      "**/.DS_Store"
+    ]
+  },
+  "organizeImports": {
+    "enabled": true
+  },
+  "javascript": {
+    "formatter": {
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSameLine": false,
+      "quoteStyle": "double",
+      "attributePosition": "auto",
+      "bracketSpacing": true
+    },
+    "globals": [
+      "onscrollend",
+      "onpointerleave",
+      "oncontextrestored",
+      "onemptied",
+      "ongamepaddisconnected",
+      "onkeypress",
+      "onloadeddata",
+      "onmouseup",
+      "onvolumechange",
+      "onpaste",
+      "onstorage",
+      "onkeyup",
+      "onabort",
+      "oncut",
+      "ontransitionrun",
+      "onafterprint",
+      "onblur",
+      "ondurationchange",
+      "ontransitionstart",
+      "oncanplaythrough",
+      "onanimationend",
+      "onmouseleave",
+      "ondragleave",
+      "onplay",
+      "onunhandledrejection",
+      "onbeforeprint",
+      "onpointercancel",
+      "onsubmit",
+      "ondragstart",
+      "onmessage",
+      "location",
+      "onoffline",
+      "onappinstalled",
+      "onwheel",
+      "onended",
+      "onkeydown",
+      "onclick",
+      "onfocus",
+      "onscroll",
+      "ongamepadconnected",
+      "oncanplay",
+      "onpointerdown",
+      "ondeviceorientationabsolute",
+      "onauxclick",
+      "ondevicemotion",
+      "onratechange",
+      "ontransitionend",
+      "onscrollsnapchanging",
+      "onchange",
+      "onselect",
+      "onbeforeinstallprompt",
+      "onbeforetoggle",
+      "onmouseout",
+      "ontimeupdate",
+      "ondragover",
+      "oncuechange",
+      "ontransitioncancel",
+      "onprogress",
+      "onbeforeinput",
+      "onpointerenter",
+      "onmouseenter",
+      "oninvalid",
+      "onpointerout",
+      "onpagereveal",
+      "onpause",
+      "onanimationstart",
+      "onwaiting",
+      "onscrollsnapchange",
+      "ondeviceorientation",
+      "onclose",
+      "onbeforeunload",
+      "oncancel",
+      "onseeked",
+      "onpointerover",
+      "ongotpointercapture",
+      "onloadedmetadata",
+      "onpageshow",
+      "onstalled",
+      "oncontextmenu",
+      "onreset",
+      "ondrag",
+      "onbeforematch",
+      "onload",
+      "onlostpointercapture",
+      "onsuspend",
+      "onselectionchange",
+      "onpagehide",
+      "onrejectionhandled",
+      "onunload",
+      "onanimationcancel",
+      "onmousedown",
+      "onpointerup",
+      "onmouseover",
+      "onformdata",
+      "oncontentvisibilityautostatechange",
+      "onresize",
+      "onsearch",
+      "ontoggle",
+      "exports",
+      "onpageswap",
+      "onbeforexrselect",
+      "onlanguagechange",
+      "ondragenter",
+      "onerror",
+      "onpointermove",
+      "onmousemove",
+      "ondrop",
+      "onhashchange",
+      "onsecuritypolicyviolation",
+      "onslotchange",
+      "oncopy",
+      "onanimationiteration",
+      "ondblclick",
+      "ondragend",
+      "onpointerrawupdate",
+      "onpopstate",
+      "onplaying",
+      "oncontextlost",
+      "onloadstart",
+      "onseeking",
+      "oninput",
+      "onmessageerror",
+      "onselectstart",
+      "onmousewheel",
+      "ononline",
+      "Bun",
+      "chrome",
+      "App",
+      "HTMLRewriter",
+      "HTMLRewriterTypes"
+    ]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "all": true,
+      "complexity": {
+        "all": true,
+        "useLiteralKeys": "off",
+        "noVoid": "off"
+      },
+      "correctness": {
+        "all": true,
+        "noNodejsModules": "off"
+      },
+      "security": {
+        "all": true
+      },
+      "style": {
+        "all": true,
+        "noParameterProperties": "off",
+        "noRestrictedGlobals": {
+          "level": "off",
+          "options": {}
+        },
+        "useFilenamingConvention": {
+          "level": "off",
+          "options": {
+            "requireAscii": true,
+            "filenameCases": ["kebab-case"]
+          }
+        },
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        },
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": {
+                  "kind": "variable"
+                },
+                "match": "_?_?([^_]*)_?_?",
+                "formats": ["camelCase", "PascalCase", "CONSTANT_CASE"]
+              }
+            ]
+          }
+        }
+      },
+      "suspicious": {
+        "all": true,
+        "noEmptyBlockStatements": "off"
+      }
+    },
+    "ignore": [
+      "**/*.js",
+      ".svelte-kit/**",
+      "node_modules/**",
+      "dist/**",
+      "bin/**",
+      "vite.config.ts",
+      "ext/**",
+      "build/**"
+    ]
+  }
+}

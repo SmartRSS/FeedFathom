@@ -1,26 +1,24 @@
-import { type FeedData } from "../../types";
-import { logError as error } from "../../util/log";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import { logError as error } from "../../util/log.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
 const selector = [
   'link[type="application/rss+xml"]',
   'link[type="application/atom+xml"]',
 ].join(", ");
 const getFeeds = function* (document: Document): Generator<FeedData> {
-  const baseURL = document.baseURI || "";
+  const baseUrl = document.baseURI || "";
 
   for (const feed of document.querySelectorAll(selector)) {
     const url = feed.getAttribute("href");
     if (!url) {
-      // eslint-disable-next-line no-console
-      console.warn("RSS feed link is missing 'href'. Skipping.");
       continue;
     }
 
-    const resolvedURL = new URL(url, baseURL).toString();
-    const title = feed.getAttribute("title") ?? resolvedURL;
+    const resolvedUrl = new URL(url, baseUrl).toString();
+    const title = feed.getAttribute("title") ?? resolvedUrl;
 
-    yield { title, url: resolvedURL };
+    yield { title, url: resolvedUrl };
   }
 };
 

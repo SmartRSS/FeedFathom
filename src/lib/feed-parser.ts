@@ -1,14 +1,14 @@
-import { type ArticlesRepository } from "$lib/db/article-repository";
-import { type SourcesRepository } from "$lib/db/source-repository";
-import container from "../container";
-import { logError as error } from "../util/log";
-import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper";
-import { rewriteLinks } from "./rewrite-links";
+import { lookup } from "node:dns/promises";
+import type { ArticlesRepository } from "$lib/db/article-repository";
+import type { SourcesRepository } from "$lib/db/source-repository";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
-import { type AxiosCacheInstance } from "axios-cache-interceptor";
+import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type Redis from "ioredis";
-import * as dns from "node:dns";
+import container from "../container.ts";
+import { logError as error } from "../util/log.ts";
+import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
+import { rewriteLinks } from "./rewrite-links.ts";
 
 // const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
 //   {};
@@ -73,23 +73,23 @@ export class FeedParser {
         message +=
           error_.cause instanceof Object
             ? JSON.stringify(error_.cause)
-            : error_.cause + "\n";
-        message += error_.code + "\n";
-        message += error_.message + "\n";
-        message += error_.response?.status + "\n";
+            : `${error_.cause}\n`;
+        message += `${error_.code}\n`;
+        message += `${error_.message}\n`;
+        message += `${error_.response?.status}\n`;
         message += error_.response?.data;
       } else {
         message = error_ instanceof Error ? error_.message : String(error_);
       }
 
       await this.sourcesRepository.failSource(source.id, message);
-      error(source.url + " failed");
+      error(`${source.url} failed`);
     }
   }
 
   public async parseUrl(url: string) {
     const urlObject = new URL(url);
-    const lookupResult = await dns.promises.lookup(urlObject.hostname);
+    const lookupResult = await lookup(urlObject.hostname);
     if (!lookupResult.address) {
       throw new Error(`Failed to resolve ${urlObject.hostname}`);
     }

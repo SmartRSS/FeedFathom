@@ -1,28 +1,28 @@
 /* eslint-disable n/no-process-env */
 
-import { type CommandBus } from "$lib/commands/command-bus";
+import type { CommandBus } from "$lib/commands/command-bus";
 import {
   CommandType,
   type ParseSourceCommand,
   type SourceCommandResult,
 } from "$lib/commands/types";
-import { type SourcesRepository } from "$lib/db/source-repository";
-import { type UserSourcesRepository } from "$lib/db/user-source-repository";
-import { type FeedParser } from "$lib/feed-parser";
-import { JobName } from "../../types/job-name-enum";
-import { llog, logError } from "../../util/log";
+import type { SourcesRepository } from "$lib/db/source-repository";
+import type { UserSourcesRepository } from "$lib/db/user-source-repository";
+import type { FeedParser } from "$lib/feed-parser";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
+import { JobName } from "../../types/job-name-enum.ts";
+import { llog, logError } from "../../util/log.ts";
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed;
 };
 
-const DEFAULT_CLEANUP_INTERVAL = 60;
-const DEFAULT_GATHER_INTERVAL = 20;
-const DEFAULT_LOCK_DURATION = 60;
-const DEFAULT_WORKER_CONCURRENCY = 25;
+const defaultCleanupInterval = 60;
+const defaultGatherInterval = 20;
+const defaultLockDuration = 60;
+const defaultWorkerConcurrency = 25;
 
 export class MainWorker {
   private worker: undefined | Worker;
@@ -43,11 +43,6 @@ export class MainWorker {
     await this.setupScheduledTasks();
     llog("Worker initialized and tasks scheduled");
 
-    // Log queue status every minute
-    setInterval(() => {
-      void this.logQueueStatus();
-    }, 60_000);
-
     // Gather parse source jobs on startup
     await this.gatherParseSourceJobs();
   }
@@ -59,10 +54,10 @@ export class MainWorker {
     return sources.map((source) => {
       return {
         data: source,
-        jobId: JobName.PARSE_SOURCE + ":" + source.id,
-        name: JobName.PARSE_SOURCE,
+        jobId: `${JobName.ParseSource}:${source.id}`,
+        name: JobName.ParseSource,
         opts: {
-          jobId: JobName.PARSE_SOURCE + ":" + source.id,
+          jobId: `${JobName.ParseSource}:${source.id}`,
           removeOnComplete: { count: 0 },
           removeOnFail: { count: 0 },
         },
@@ -77,20 +72,6 @@ export class MainWorker {
       llog(`Worker failed job ${job.id} with error: ${errorMessage}`);
     } else {
       llog(`Worker failed unknown job with error: ${errorMessage}`);
-    }
-  }
-
-  private async logQueueStatus(): Promise<void> {
-    try {
-      const status = await this.bullmqQueue.getJobCounts();
-      llog(
-        `Queue status - Waiting: ${status["waiting"]}, Active: ${status["active"]}, Delayed: ${status["delayed"]}, Completed: ${status["completed"]}, Failed: ${status["failed"]}`,
-      );
-    } catch (error) {
-      logError(
-        "Error getting queue status: " +
-          (error instanceof Error ? error.message : String(error)),
-      );
     }
   }
 
@@ -112,13 +93,15 @@ export class MainWorker {
 
   private async processRegularJob(job: Job) {
     switch (job.name) {
-      case JobName.CLEANUP:
+      case JobName.Cleanup: {
         llog("Running cleanup job");
         await this.bullmqQueue.trimEvents(100);
         await this.userSourcesRepository.cleanup();
         llog("Cleanup job completed");
         break;
-      case JobName.GATHER_FAVICON_JOBS: {
+      }
+
+      case JobName.GatherFaviconJobs: {
         llog("Running gather favicon jobs");
         const successfullSources =
           await this.sourcesRepository.getRecentlySuccessfulSources();
@@ -126,10 +109,10 @@ export class MainWorker {
         const tasks = successfullSources.map((source) => {
           return {
             data: source,
-            jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
-            name: JobName.REFRESH_FAVICON,
+            jobId: `${JobName.RefreshFavicon}:${source.homeUrl}`,
+            name: JobName.RefreshFavicon,
             opts: {
-              jobId: JobName.REFRESH_FAVICON + ":" + source.homeUrl,
+              jobId: `${JobName.RefreshFavicon}:${source.homeUrl}`,
               removeOnComplete: { count: 0 },
               removeOnFail: { count: 0 },
             },
@@ -140,7 +123,7 @@ export class MainWorker {
         break;
       }
 
-      case JobName.GATHER_JOBS: {
+      case JobName.GatherJobs: {
         llog("Running gather jobs");
         const parseSourceJobs = await this.gatherParseSourceJobs();
         await this.bullmqQueue.addBulk(parseSourceJobs);
@@ -148,7 +131,7 @@ export class MainWorker {
         break;
       }
 
-      case JobName.PARSE_SOURCE:
+      case JobName.ParseSource: {
         llog(`Parsing source with ID: ${job.data.id}`);
         // Use the command bus instead of directly calling the feed parser
         await this.commandBus.execute<ParseSourceCommand, SourceCommandResult>({
@@ -158,11 +141,15 @@ export class MainWorker {
         });
         llog(`Completed parsing source with ID: ${job.data.id}`);
         break;
-      case JobName.REFRESH_FAVICON:
+      }
+
+      case JobName.RefreshFavicon: {
         llog(`Refreshing favicon for: ${job.data.homeUrl}`);
         await this.feedParser.refreshFavicon(job.data);
         llog(`Completed refreshing favicon for: ${job.data.homeUrl}`);
         break;
+      }
+
       default:
         throw new Error(`Unknown job type: ${job.name}`);
     }
@@ -182,11 +169,11 @@ export class MainWorker {
   private async setupScheduledTasks() {
     const cleanupInterval = parseNumber(
       process.env["CLEANUP_INTERVAL"],
-      DEFAULT_CLEANUP_INTERVAL,
+      defaultCleanupInterval,
     );
     const gatherInterval = parseNumber(
       process.env["GATHER_INTERVAL"],
-      DEFAULT_GATHER_INTERVAL,
+      defaultGatherInterval,
     );
 
     llog(
@@ -195,10 +182,10 @@ export class MainWorker {
 
     // Schedule cleanup job
     await this.bullmqQueue.add(
-      JobName.CLEANUP,
+      JobName.Cleanup,
       {},
       {
-        jobId: JobName.CLEANUP,
+        jobId: JobName.Cleanup,
         repeat: {
           every: cleanupInterval * 60 * 1_000,
         },
@@ -208,10 +195,10 @@ export class MainWorker {
 
     // Schedule gather job
     await this.bullmqQueue.add(
-      JobName.GATHER_JOBS,
+      JobName.GatherJobs,
       {},
       {
-        jobId: JobName.GATHER_JOBS,
+        jobId: JobName.GatherJobs,
         repeat: {
           every: gatherInterval * 60 * 1_000,
         },
@@ -221,10 +208,10 @@ export class MainWorker {
 
     // Schedule favicon job
     await this.bullmqQueue.add(
-      JobName.GATHER_FAVICON_JOBS,
+      JobName.GatherFaviconJobs,
       {},
       {
-        jobId: JobName.GATHER_FAVICON_JOBS,
+        jobId: JobName.GatherFaviconJobs,
         repeat: {
           every: 24 * 60 * 60 * 1_000,
         },
@@ -236,11 +223,11 @@ export class MainWorker {
   private setupWorker() {
     const concurrency = parseNumber(
       process.env["WORKER_CONCURRENCY"],
-      DEFAULT_WORKER_CONCURRENCY,
+      defaultWorkerConcurrency,
     );
     const lockDuration = parseNumber(
       process.env["LOCK_DURATION"],
-      DEFAULT_LOCK_DURATION,
+      defaultLockDuration,
     );
 
     llog(

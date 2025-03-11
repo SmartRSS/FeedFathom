@@ -1,7 +1,7 @@
 import { createRequestHandler } from "$lib/create-request-handler";
-import { deleteArticlesHandler } from "./handler";
-import { DeleteArticles } from "./validator";
-import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
+import { type RequestEvent, type RequestHandler, json } from "@sveltejs/kit";
+import { deleteArticlesHandler } from "./handler.ts";
+import { DeleteArticles } from "./validator.ts";
 
 const isValidSourcesArray = (sources: unknown): sources is number[] => {
   return (

@@ -1,28 +1,28 @@
-import container from "../container";
-import { Extractus } from "./extractors/extractus";
-import { MozillaReadability } from "./extractors/mozilla-readability";
-import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain";
-import { Original } from "./extractors/original";
-import { DisplayMode } from "./settings";
-import DOMPurify from "dompurify";
+import domPurify from "dompurify";
 import { JSDOM } from "jsdom";
+import container from "../container.ts";
+import { Extractus } from "./extractors/extractus.ts";
+import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain.ts";
+import { MozillaReadability } from "./extractors/mozilla-readability.ts";
+import { Original } from "./extractors/original.ts";
+import { DisplayMode } from "./settings.ts";
 
 const displayModeToExtractor = {
-  [DisplayMode.EXTRACTUS]: Extractus,
-  [DisplayMode.FEED]: Original,
-  [DisplayMode.READABILITY]: MozillaReadability,
-  [DisplayMode.READABILITY_PLAIN]: MozillaReadabilityPlain,
+  [DisplayMode.Extractus]: Extractus,
+  [DisplayMode.Feed]: Original,
+  [DisplayMode.Readability]: MozillaReadability,
+  [DisplayMode.ReadabilityPlain]: MozillaReadabilityPlain,
 } as const;
 
 const window = new JSDOM("").window;
-const purify = DOMPurify(window);
+const purify = domPurify(window);
 
 const getContent = async (
   content: null | string | undefined,
   articleUrl: string,
   displayMode: DisplayMode,
 ) => {
-  if (displayMode === DisplayMode.FEED) {
+  if (displayMode === DisplayMode.Feed) {
     return purify.sanitize(content ?? "");
   }
 

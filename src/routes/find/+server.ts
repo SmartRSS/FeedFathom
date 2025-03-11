@@ -1,7 +1,7 @@
 import { scan } from "$lib/scanner";
-import { logError as error_ } from "../../util/log";
-import { json, type RequestHandler } from "@sveltejs/kit";
+import { type RequestHandler, json } from "@sveltejs/kit";
 import { JSDOM } from "jsdom";
+import { logError as error_ } from "../../util/log.ts";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   try {

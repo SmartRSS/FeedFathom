@@ -43,11 +43,9 @@ describe("generateBoundaryDates", () => {
         constructor(dateString?: string) {
           if (dateString) {
             super();
-            // eslint-disable-next-line no-constructor-return
             return new originalDate(dateString);
           }
 
-          // eslint-disable-next-line no-constructor-return
           return new originalDate(fixedDate);
         }
       } as typeof Date;

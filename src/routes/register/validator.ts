@@ -1,23 +1,32 @@
-import * as v from "valibot";
+import {
+  type InferOutput,
+  check,
+  email,
+  picklist,
+  pipe,
+  strictObject,
+  string,
+  trim,
+} from "valibot";
 
 const allowedEmails =
   // eslint-disable-next-line n/no-process-env
   process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
 
-export const RegisterRequest = v.pipe(
-  v.strictObject({
-    email: v.pipe(
-      v.string(),
-      v.email(),
-      allowedEmails.length > 0 ? v.picklist(allowedEmails) : v.trim(),
+export const RegisterRequest = pipe(
+  strictObject({
+    email: pipe(
+      string(),
+      email(),
+      allowedEmails.length > 0 ? picklist(allowedEmails) : trim(),
     ),
-    password: v.string(),
-    passwordConfirm: v.string(),
-    username: v.string(),
+    password: string(),
+    passwordConfirm: string(),
+    username: string(),
   }),
-  v.check((input) => {
+  check((input) => {
     return input.password === input.passwordConfirm;
   }),
 );
 
-export type RegisterRequest = v.InferOutput<typeof RegisterRequest>;
+export type RegisterRequest = InferOutput<typeof RegisterRequest>;

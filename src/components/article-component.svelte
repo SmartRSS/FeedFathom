@@ -1,109 +1,115 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
-  import type { Article } from "../types/article-type";
-  import { goto } from "$app/navigation";
-  import config from "$lib/images/icons/System/settings-5-fill.svg";
-  import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
-  import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
-  import type { DisplayMode } from "$lib/settings";
-  import type {
-    ArticlesRemovedFunction,
-    DisplayModeChangedFunction,
-    FocusChangedFunction,
-    FocusTarget,
-  } from "../types";
-  import { logError } from "../util/log";
+// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+import { goto } from "$app/navigation";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import config from "$lib/images/icons/System/settings-5-fill.svg";
+import type { DisplayMode } from "$lib/settings";
+import { onDestroy, onMount } from "svelte";
+import type {
+  ArticlesRemovedFunction,
+  DisplayModeChangedFunction,
+  FocusChangedFunction,
+  FocusTarget,
+} from "../types.ts";
+import type { Article } from "../types/article-type.ts";
+import { logError } from "../util/log.ts";
 
-  type ArticleComponentProps = {
-    selectedArticleId: number | null;
-    displayMode: DisplayMode;
-    articlesRemoved: ArticlesRemovedFunction;
-    focusChanged: FocusChangedFunction;
-    displayModeChanged: DisplayModeChangedFunction;
-    focusedColumn: FocusTarget;
-  };
-  let {
-    selectedArticleId,
-    displayMode,
-    articlesRemoved,
-    focusChanged,
-    displayModeChanged,
-    focusedColumn,
-  }: ArticleComponentProps = $props();
+type ArticleComponentProps = {
+  selectedArticleId: number | null;
+  displayMode: DisplayMode;
+  articlesRemoved: ArticlesRemovedFunction;
+  focusChanged: FocusChangedFunction;
+  displayModeChanged: DisplayModeChangedFunction;
+  focusedColumn: FocusTarget;
+};
+// biome-ignore lint/style/useConst: bound by Svelte
+let {
+  selectedArticleId,
+  displayMode,
+  articlesRemoved,
+  focusChanged,
+  displayModeChanged,
+  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+  focusedColumn,
+}: ArticleComponentProps = $props();
 
-  let selectedArticle: Article;
-  let frame: HTMLIFrameElement;
+let selectedArticle: Article;
+let frame: HTMLIFrameElement;
 
-  const clickHandler = (event: MouseEvent) => {
-    const targetElement = event.target as HTMLElement;
-    if (targetElement.matches("a")) {
-      const href = targetElement.getAttribute("href");
-      if (!href || href[0] !== "#") {
-        return true;
-      }
-      const name = href.substring(1);
+const clickHandler = (event: MouseEvent) => {
+  const targetElement = event.target as HTMLElement;
+  if (targetElement.matches("a")) {
+    const href = targetElement.getAttribute("href");
+    if (!href || href[0] !== "#") {
+      return true;
+    }
+    const name = href.substring(1);
 
-      const element =
-        frame?.contentDocument?.querySelector(`[name="${name}"]`) ??
-        frame?.contentDocument?.getElementById(name);
+    const element =
+      frame?.contentDocument?.querySelector(`[name="${name}"]`) ??
+      frame?.contentDocument?.getElementById(name);
 
-      if (!element) {
-        return true;
-      }
-      event.preventDefault();
-      const getOffset = (el: Element) => {
-        const box = el.getBoundingClientRect();
+    if (!element) {
+      return true;
+    }
+    event.preventDefault();
+    const getOffset = (el: Element) => {
+      const box = el.getBoundingClientRect();
 
-        return {
-          top:
-            box.top +
-            (frame?.contentWindow?.scrollY ?? 0) -
-            (frame?.contentDocument?.documentElement.clientTop ?? 0),
-          left:
-            box.left +
-            (frame?.contentWindow?.scrollX ?? 0) -
-            (frame?.contentDocument?.documentElement.clientLeft ?? 0),
-        };
+      return {
+        top:
+          box.top +
+          (frame?.contentWindow?.scrollY ?? 0) -
+          (frame?.contentDocument?.documentElement.clientTop ?? 0),
+        left:
+          box.left +
+          (frame?.contentWindow?.scrollX ?? 0) -
+          (frame?.contentDocument?.documentElement.clientLeft ?? 0),
       };
+    };
 
-      const offset = getOffset(element);
-      frame?.contentWindow?.scrollTo(offset.left, offset.top);
-      return false;
-    }
-    return true;
-  };
-  onMount(() => {
-    fetchData();
-    if (frame?.contentDocument?.body) {
-      frame.contentDocument.body.addEventListener("click", clickHandler);
-    }
-  });
+    const offset = getOffset(element);
+    frame?.contentWindow?.scrollTo(offset.left, offset.top);
+    return false;
+  }
+  return true;
+};
+onMount(() => {
+  fetchData();
+  if (frame?.contentDocument?.body) {
+    frame.contentDocument.body.addEventListener("click", clickHandler);
+  }
+});
 
-  onDestroy(() => {
-    if (frame?.contentDocument?.body) {
-      frame.contentDocument.body.removeEventListener("click", clickHandler);
-    }
-  });
+onDestroy(() => {
+  if (frame?.contentDocument?.body) {
+    frame.contentDocument.body.removeEventListener("click", clickHandler);
+  }
+});
 
-  async function fetchData(attempt = 0) {
-    if (attempt > 10) {
-      logError("failed to fetch data");
-      return;
-    }
+async function fetchData(attempt = 0) {
+  if (attempt > 10) {
+    logError("failed to fetch data");
+    return;
+  }
 
-    if (!frame) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      return await fetchData(attempt + 1);
-    }
-    const iframeDoc = frame?.contentDocument || frame?.contentWindow?.document;
-    if (!iframeDoc) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      return await fetchData(attempt + 1);
-    }
+  if (!frame) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return await fetchData(attempt + 1);
+  }
+  const iframeDoc = frame?.contentDocument || frame?.contentWindow?.document;
+  if (!iframeDoc) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return await fetchData(attempt + 1);
+  }
 
-    iframeDoc.head.innerHTML = "";
-    const styleEl = iframeDoc.createElement("style");
-    styleEl.innerHTML = `
+  iframeDoc.head.innerHTML = "";
+  const styleEl = iframeDoc.createElement("style");
+  styleEl.innerHTML = `
             body {
                 height: initial;
                 max-height: initial;
@@ -130,54 +136,58 @@
                 word-wrap: break-word;
             }
         `;
-    iframeDoc.head.appendChild(styleEl);
-    if (!selectedArticleId) {
-      iframeDoc.body.innerHTML = "";
+  iframeDoc.head.appendChild(styleEl);
+  if (!selectedArticleId) {
+    iframeDoc.body.innerHTML = "";
 
+    return;
+  }
+  iframeDoc.body.innerHTML = "Loading...";
+
+  try {
+    const res = await fetch(
+      `/article?article=${selectedArticleId}&displayMode=${displayMode}`,
+    );
+    selectedArticle = (await res.json()) as Article;
+    if (typeof selectedArticle.content !== "string") {
       return;
     }
-    iframeDoc.body.innerHTML = "Loading...";
 
-    try {
-      const res = await fetch(
-        `/article?article=${selectedArticleId}&displayMode=${displayMode}`,
-      );
-      selectedArticle = (await res.json()) as Article;
-      if (typeof selectedArticle.content !== "string") {
-        return;
-      }
-
-      iframeDoc.body.removeEventListener("click", clickHandler);
-      iframeDoc.body.addEventListener("click", clickHandler);
-      iframeDoc.body.innerHTML = selectedArticle.content;
-    } catch (error) {
-      logError("Error fetching data", error);
-    }
+    iframeDoc.body.removeEventListener("click", clickHandler);
+    iframeDoc.body.addEventListener("click", clickHandler);
+    iframeDoc.body.innerHTML = selectedArticle.content;
+  } catch (error) {
+    logError("Error fetching data", error);
   }
+}
 
-  function handleBack() {
-    focusChanged(".articles-column");
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function handleBack() {
+  focusChanged(".articles-column");
+}
 
-  function deleteItem() {
-    articlesRemoved([selectedArticle]);
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function deleteItem() {
+  articlesRemoved([selectedArticle]);
+}
 
-  function handleChange() {
-    displayModeChanged(displayMode);
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function handleChange() {
+  displayModeChanged(displayMode);
+}
 
-  $effect(() => {
-    fetchData();
-  });
+$effect(() => {
+  fetchData();
+});
 
-  function shouldHide() {
-    return (
-      typeof window !== "undefined" &&
-      window.location &&
-      window?.location.pathname.startsWith("/readArticle")
-    );
-  }
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function shouldHide() {
+  return (
+    typeof window !== "undefined" &&
+    window.location &&
+    window?.location.pathname.startsWith("/readArticle")
+  );
+}
 </script>
 
 <div

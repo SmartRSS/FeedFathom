@@ -1,10 +1,6 @@
 import { EmailProcessor } from "../src/lib/email-processor";
 import { describe, expect, test } from "bun:test";
-import {
-  type AddressObject,
-  type EmailAddress,
-  type ParsedMail,
-} from "mailparser";
+import { type AddressObject, type EmailAddress, type ParsedMail } from "mailparser";
 
 const createAddressObject = (value: EmailAddress[] = []): AddressObject => {
   return {

@@ -1,7 +1,7 @@
-import * as v from "valibot";
+import { type InferOutput, array, number, strictObject } from "valibot";
 
-export const DeleteArticles = v.strictObject({
-  removedArticleIdList: v.array(v.number()),
+export const DeleteArticles = strictObject({
+  removedArticleIdList: array(number()),
 });
 
-export type DeleteArticles = v.InferOutput<typeof DeleteArticles>;
+export type DeleteArticles = InferOutput<typeof DeleteArticles>;

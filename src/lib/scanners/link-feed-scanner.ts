@@ -1,14 +1,13 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
+const feedUrlPatterns = [
+  /\/(rss|feed|atom|feeds)\/?$/iu,
+  /\.(rss|xml|atom)$/iu,
+  /feeds?\/(rss|atom)/iu,
+  /\/syndication\/?$/iu,
+] as const;
 export class LinkFeedScanner implements Scanner {
-  private readonly feedUrlPatterns = [
-    /\/(rss|feed|atom|feeds)\/?$/iu,
-    /\.(rss|xml|atom)$/iu,
-    /feeds?\/(rss|atom)/iu,
-    /\/syndication\/?$/iu,
-  ];
-
   scan(currentUrl: URL, document: Document): FeedData[] {
     const feeds: FeedData[] = [];
 
@@ -36,17 +35,14 @@ export class LinkFeedScanner implements Scanner {
             url: feedUrl.href,
           });
         }
-      } catch {
-        // eslint-disable-next-line no-console
-        console.warn(`Invalid URL: ${href}`);
-      }
+      } catch {}
     }
 
     return feeds;
   }
 
   private isFeedUrl(pathname: string): boolean {
-    return this.feedUrlPatterns.some((pattern) => {
+    return feedUrlPatterns.some((pattern) => {
       return pattern.test(pathname);
     });
   }

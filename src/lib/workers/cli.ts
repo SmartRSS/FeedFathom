@@ -1,5 +1,5 @@
-import { type UsersRepository } from "$lib/db/user-repository";
-import { llog } from "../../util/log";
+import type { UsersRepository } from "$lib/db/user-repository";
+import { llog } from "../../util/log.ts";
 
 export class Cli {
   constructor(private readonly usersRepository: UsersRepository) {}

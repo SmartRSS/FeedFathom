@@ -1,6 +1,6 @@
-import { type Message } from "./extensionTypes";
-import { type FeedData } from "./types";
 import { ulid } from "ulid";
+import type { Message } from "./extensionTypes.ts";
+import type { FeedData } from "./types.ts";
 
 // ===== URL Validation Functions =====
 
@@ -167,6 +167,8 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
 
 // ===== Feed Preview Functionality =====
 
+const feedSchemaExpression = /^feed:/iu;
+
 /**
  * Opens a preview of the specified feed in a new tab
  * @param address The feed address to preview
@@ -177,7 +179,7 @@ const previewSource = async (address: string): Promise<void> => {
     return;
   }
 
-  const fixedAddress = address.replace(/^feed:/iu, "https:");
+  const fixedAddress = address.replace(feedSchemaExpression, "https:");
   void chrome.tabs.create({
     url: new URL(`/preview?feedUrl=${fixedAddress}`, instance).href,
   });
@@ -281,7 +283,7 @@ chrome.runtime.onMessage.addListener(messageHandler);
 chrome.action.onClicked.addListener(() => {
   (async () => {
     const instance = await getInstanceUrl();
-    if (!instance || !isValidOrigin(instance)) {
+    if (!(instance && isValidOrigin(instance))) {
       await chrome.runtime.openOptionsPage();
       return;
     }

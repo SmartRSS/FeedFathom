@@ -1,6 +1,6 @@
-import container from "./container";
-import { cookiesConfig } from "./util/cookies-config";
 import { type Handle, redirect } from "@sveltejs/kit";
+import container from "./container.ts";
+import { cookiesConfig } from "./util/cookies-config.ts";
 
 const pathsNotRequiringLogin = ["/register", "/login"];
 

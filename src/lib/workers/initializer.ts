@@ -1,16 +1,16 @@
-import { type CommandBus } from "$lib/commands/command-bus";
+import type { CommandBus } from "$lib/commands/command-bus";
 import {
   type CommandRegistryDependencies,
   registerCommandHandlers,
 } from "$lib/commands/registry";
-import { type SourcesRepository } from "$lib/db/source-repository";
-import { type FeedParser } from "$lib/feed-parser";
-import { type MailWorker } from "$lib/workers/mail";
-import { type MainWorker } from "$lib/workers/main";
-import { llog, logError } from "../../util/log";
-import { type Cli } from "./cli";
-import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { SourcesRepository } from "$lib/db/source-repository";
+import type { FeedParser } from "$lib/feed-parser";
+import type { MailWorker } from "$lib/workers/mail";
+import type { MainWorker } from "$lib/workers/main";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
+import { llog, logError } from "../../util/log.ts";
+import type { Cli } from "./cli.ts";
 
 // Schedule the next task function definition with a config object
 export class Initializer {

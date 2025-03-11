@@ -1,67 +1,74 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import * as v from "valibot";
+import { goto } from "$app/navigation";
+import {
+  boolean,
+  nullable,
+  optional,
+  safeParse,
+  strictObject,
+  string,
+} from "valibot";
+const RegisterResponse = strictObject({
+  success: boolean(),
+  error: optional(nullable(string())),
+});
 
-  const RegisterResponse = v.strictObject({
-    success: v.boolean(),
-    error: v.optional(v.nullable(v.string())),
-  });
+// biome-ignore lint/style/useConst: bound by Svelte
+let username = "";
+// biome-ignore lint/style/useConst: bound by Svelte
+let email = "";
+// biome-ignore lint/style/useConst: bound by Svelte
+let password = "";
+// biome-ignore lint/style/useConst: bound by Svelte
+let passwordConfirm = "";
+let validationMessage = "";
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let isSubmitting = false;
 
-  let username = "";
-  let email = "";
-  let password = "";
-  let passwordConfirm = "";
-  let validationMessage = "";
-  let isSubmitting = false;
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const handleSubmit = async (event: SubmitEvent) => {
+  event.preventDefault();
 
-  const handleSubmit = async (event: SubmitEvent) => {
-    event.preventDefault();
+  if (password !== passwordConfirm) {
+    validationMessage = "Passwords do not match!";
+    return;
+  }
 
-    console.log("Submitting registration form");
+  try {
+    isSubmitting = true;
+    const res = await fetch("/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password, passwordConfirm }),
+    });
+    const result = safeParse(RegisterResponse, await res.json());
 
-    if (password !== passwordConfirm) {
-      validationMessage = "Passwords do not match!";
+    if (!result.success) {
+      validationMessage = "Unexpected server response";
       return;
     }
 
-    try {
-      isSubmitting = true;
-      const res = await fetch("/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, email, password, passwordConfirm }),
-      });
-
-      console.log("Response status:", res.status);
-      const result = v.safeParse(RegisterResponse, await res.json());
-      console.log("Response data:", result);
-
-      if (!result.success) {
-        validationMessage = "Unexpected server response";
-        return;
-      }
-
-      if (res.ok) {
-        await goto("/login");
-      } else {
-        validationMessage =
-          result.issues || "Registration failed. Please try again.";
-      }
-    } catch (error) {
-      validationMessage = "An error occurred. Please try again later.";
-    } finally {
-      isSubmitting = false;
+    if (res.ok) {
+      await goto("/login");
+    } else {
+      validationMessage =
+        result.issues || "Registration failed. Please try again.";
     }
-  };
-
-  $: {
-    if (password && passwordConfirm && password !== passwordConfirm) {
-      validationMessage = "Passwords do not match!";
-    } else if (!validationMessage.includes("Registration")) {
-      // Only clear validation if it's not a server error
-      validationMessage = "";
-    }
+  } catch (_error) {
+    validationMessage = "An error occurred. Please try again later.";
+  } finally {
+    isSubmitting = false;
   }
+};
+
+$: {
+  if (password && passwordConfirm && password !== passwordConfirm) {
+    validationMessage = "Passwords do not match!";
+  } else if (!validationMessage.includes("Registration")) {
+    // Only clear validation if it's not a server error
+    validationMessage = "";
+  }
+}
 </script>
 
 <main>

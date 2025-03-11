@@ -1,5 +1,5 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
 export class BitchuteScanner implements Scanner {
   private readonly feedBase: string =

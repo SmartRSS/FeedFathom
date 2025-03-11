@@ -1,11 +1,11 @@
-import { type SourcesRepository } from "$lib/db/source-repository";
-import { type FeedParser } from "$lib/feed-parser";
-import { logError } from "../../../util/log";
-import {
-  type CommandHandler,
-  type ParseSourceCommand,
-  type SourceCommandResult,
-} from "../types";
+import type { SourcesRepository } from "$lib/db/source-repository";
+import type { FeedParser } from "$lib/feed-parser";
+import { logError } from "../../../util/log.ts";
+import type {
+  CommandHandler,
+  ParseSourceCommand,
+  SourceCommandResult,
+} from "../types.ts";
 
 /**
  * Handler for the parse source command

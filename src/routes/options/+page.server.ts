@@ -1,6 +1,6 @@
-import { isPlainText } from "../../util/is-plain-text";
-import { logError as error_ } from "../../util/log";
 import { type Actions, error, json } from "@sveltejs/kit";
+import { isPlainText } from "../../util/is-plain-text.ts";
+import { logError as error_ } from "../../util/log.ts";
 
 export const actions: Actions = {
   changePassword: async ({
@@ -23,7 +23,11 @@ export const actions: Actions = {
       const oldPassword = formData.get("oldPassword");
       const password1 = formData.get("password1");
       const password2 = formData.get("password2");
-      if (!password1 || !password2 || password1 !== password2 || !oldPassword) {
+      if (
+        !(password1 && password2) ||
+        password1 !== password2 ||
+        !oldPassword
+      ) {
         return {
           success: false,
         };

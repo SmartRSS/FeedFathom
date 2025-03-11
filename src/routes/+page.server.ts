@@ -2,7 +2,7 @@ import {
   NodeType,
   type TreeNode,
   type TreeSource,
-} from "../types/source-types";
+} from "../types/source-types.ts";
 
 export const load = async ({ locals }: { locals: App.Locals }) => {
   if (!locals.user) {
@@ -24,7 +24,7 @@ export const load = async ({ locals }: { locals: App.Locals }) => {
       favicon: source.favicon,
       homeUrl: source.homeUrl ?? "",
       name: source.name,
-      type: NodeType.SOURCE,
+      type: NodeType.Source,
       uid: source.id?.toString() ?? "",
       unreadCount: source.unreadArticlesCount,
       xmlUrl: source.url ?? "",
@@ -45,7 +45,7 @@ export const load = async ({ locals }: { locals: App.Locals }) => {
     return {
       children: folderLookup[folder.id.toString()] ?? [],
       name: folder.name,
-      type: NodeType.FOLDER,
+      type: NodeType.Folder,
       uid: folder.id.toString(),
     };
   });

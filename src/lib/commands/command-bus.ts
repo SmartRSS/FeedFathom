@@ -1,5 +1,5 @@
-import { logError } from "../../util/log";
-import { type Command, type CommandHandler, type CommandResult } from "./types";
+import { logError } from "../../util/log.ts";
+import type { Command, CommandHandler, CommandResult } from "./types.ts";
 
 /**
  * A command bus implementation that routes commands to their handlers

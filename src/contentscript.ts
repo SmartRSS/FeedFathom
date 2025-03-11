@@ -1,13 +1,13 @@
 import { scan } from "$lib/scanner";
-import { type FeedData } from "./types";
+import type { FeedData } from "./types.ts";
 
-(function () {
+(() => {
   // Define Timer type missing in the codebase
   type Timer = ReturnType<typeof setTimeout>;
 
   // Constants for timeout durations
-  const VISIBILITY_DEBOUNCE_MS = 500;
-  const SCAN_DEBOUNCE_MS = 1_500;
+  const visibilityDebounceMs = 500;
+  const scanDebounceMs = 1_500;
 
   const oldHref = document.location.href;
   let scanTimeoutRef: null | Timer = null;
@@ -37,9 +37,8 @@ import { type FeedData } from "./types";
     if (document.hidden) {
       try {
         void chrome.runtime.sendMessage({ action: "visibility-lost" });
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Error sending visibility-lost message:", error);
+      } catch {
+        // nop
       }
 
       return;
@@ -56,19 +55,16 @@ import { type FeedData } from "./types";
           action: "list-feeds",
           feedsData,
         });
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Error sending list-feeds message:", error);
-      }
+      } catch {}
 
       visibilityTimeoutRef = null;
-    }, VISIBILITY_DEBOUNCE_MS);
+    }, visibilityDebounceMs);
   };
 
   // Create a debounced version for event handlers
   const debouncedUpdateSourcesList = debounce(
     updateAvailableSourcesList,
-    VISIBILITY_DEBOUNCE_MS,
+    visibilityDebounceMs,
   );
 
   const setupEventListeners = (feedsData: FeedData[]) => {
@@ -97,8 +93,6 @@ import { type FeedData } from "./types";
     const bodyList = document.querySelector("body");
 
     if (!bodyList) {
-      // eslint-disable-next-line no-console
-      console.warn("Body element not found, cannot setup MutationObserver");
       return;
     }
 
@@ -125,14 +119,11 @@ import { type FeedData } from "./types";
           try {
             const updatedFeedsData = await scan(newHref, document);
             updateAvailableSourcesList(updatedFeedsData);
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.error("Error scanning page:", error);
-          }
+          } catch {}
         })();
 
         scanTimeoutRef = null;
-      }, SCAN_DEBOUNCE_MS);
+      }, scanDebounceMs);
     });
 
     const observerConfig = {
@@ -171,10 +162,7 @@ import { type FeedData } from "./types";
         try {
           const feedsData = await scan(document.location.href, document);
           updateAvailableSourcesList(feedsData);
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error("Error scanning page after navigation:", error);
-        }
+        } catch {}
       })();
     }
   });
@@ -189,10 +177,7 @@ import { type FeedData } from "./types";
       }
 
       updateAvailableSourcesList(feedsData);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Error initializing content script:", error);
-    }
+    } catch {}
   };
 
   void init(oldHref);

@@ -1,9 +1,9 @@
-import { JobName } from "../../types/job-name-enum";
-import { logError as error } from "../../util/log";
-import * as schema from "../schema";
-import { type Queue } from "bullmq";
+import type { Queue } from "bullmq";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
-import { type BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { JobName } from "../../types/job-name-enum.ts";
+import { logError as error } from "../../util/log.ts";
+import { sources } from "../schema.ts";
 
 type SortField =
   | "created_at"
@@ -21,16 +21,13 @@ export class SourcesRepository {
 
   public async addSource(payload: { homeUrl: string; url: string }) {
     const source = (
-      await this.drizzleConnection
-        .insert(schema.sources)
-        .values(payload)
-        .returning()
+      await this.drizzleConnection.insert(sources).values(payload).returning()
     ).at(0);
     if (!source) {
       throw new Error("failed");
     }
 
-    await this.bullmqQueue.add(JobName.PARSE_SOURCE, {
+    await this.bullmqQueue.add(JobName.ParseSource, {
       id: source.id,
       skipCache: true,
       url: source.url,
@@ -38,19 +35,16 @@ export class SourcesRepository {
     return source;
   }
 
-  public async failSource(
-    sourceId: number,
-    reason: string = "",
-  ): Promise<void> {
+  public async failSource(sourceId: number, reason = ""): Promise<void> {
     try {
       await this.drizzleConnection
-        .update(schema.sources)
+        .update(sources)
         .set({
           lastAttempt: new Date(),
           recentFailureDetails: reason,
-          recentFailures: sql`${schema.sources.recentFailures} + 1`,
+          recentFailures: sql`${sources.recentFailures} + 1`,
         })
-        .where(eq(schema.sources.id, sourceId));
+        .where(eq(sources.id, sourceId));
     } catch (error_) {
       error("fail source", error_);
     }
@@ -59,6 +53,7 @@ export class SourcesRepository {
   public async findOrCreateSourceByUrl(
     url: string,
     payload: {
+      // biome-ignore lint/style/useNamingConvention: <explanation>
       home_url: string;
     },
   ) {
@@ -77,8 +72,8 @@ export class SourcesRepository {
     return (
       await this.drizzleConnection
         .select()
-        .from(schema.sources)
-        .where(eq(schema.sources.id, id))
+        .from(sources)
+        .where(eq(sources.id, id))
     ).at(0);
   }
 
@@ -86,44 +81,44 @@ export class SourcesRepository {
     return (
       await this.drizzleConnection
         .select()
-        .from(schema.sources)
-        .where(eq(schema.sources.url, url))
+        .from(sources)
+        .where(eq(sources.url, url))
     ).at(0);
   }
 
   public async getRecentlySuccessfulSources() {
     return await this.drizzleConnection
       .select({
-        homeUrl: schema.sources.homeUrl,
-        id: schema.sources.id,
+        homeUrl: sources.homeUrl,
+        id: sources.id,
       })
-      .from(schema.sources)
-      .where(gt(schema.sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+      .from(sources)
+      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
   }
 
   public async getSourcesToProcess() {
     const noRecentFailures = () => {
-      return eq(schema.sources.recentFailures, 0);
+      return eq(sources.recentFailures, 0);
     };
 
     const failedRecently = () => {
-      return gt(schema.sources.recentFailures, 0);
+      return gt(sources.recentFailures, 0);
     };
 
     const failedAttemptTimeout = () => {
-      return sql`${schema.sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${schema.sources.recentFailures}, 15)`;
+      return sql`${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)`;
     };
 
     const lastAttemptTimeout = () => {
-      return lt(schema.sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
+      return lt(sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
     };
 
     const isLastAttemptNull = () => {
-      return isNull(schema.sources.lastAttempt);
+      return isNull(sources.lastAttempt);
     };
 
     const isWebSource = () => {
-      return sql`${schema.sources.url} LIKE 'http%'`;
+      return sql`${sources.url} LIKE 'http%'`;
     };
 
     const shouldProcessSource = () => {
@@ -138,14 +133,14 @@ export class SourcesRepository {
 
     return await this.drizzleConnection
       .select({
-        id: schema.sources.id,
-        url: schema.sources.url,
+        id: sources.id,
+        url: sources.url,
       })
-      .from(schema.sources)
+      .from(sources)
       .where(and(shouldProcessSource(), isWebSource()))
-      .orderBy(asc(schema.sources.lastAttempt))
+      .orderBy(asc(sources.lastAttempt))
       .limit(
-        sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${schema.sources})::int;` as unknown as number,
+        sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${sources})::int;` as unknown as number,
       );
   }
 
@@ -189,20 +184,17 @@ export class SourcesRepository {
     return await this.drizzleConnection.execute(query);
   }
 
-  public async successSource(
-    sourceId: number,
-    cached: boolean = false,
-  ): Promise<void> {
+  public async successSource(sourceId: number, cached = false): Promise<void> {
     const now = new Date();
     await this.drizzleConnection
-      .update(schema.sources)
+      .update(sources)
       .set({
         lastAttempt: now,
         lastSuccess: now,
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,
       })
-      .where(eq(schema.sources.id, sourceId));
+      .where(eq(sources.id, sourceId));
   }
 
   public async updateFavicon(
@@ -221,17 +213,17 @@ export class SourcesRepository {
     }
 
     await this.drizzleConnection
-      .update(schema.sources)
+      .update(sources)
       .set({
         favicon: `data:image/${type};base64,${encoded}`,
       })
-      .where(eq(schema.sources.id, sourceId));
+      .where(eq(sources.id, sourceId));
   }
 
   public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
     await this.drizzleConnection
-      .update(schema.sources)
+      .update(sources)
       .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })
-      .where(eq(schema.sources.url, oldUrl));
+      .where(eq(sources.url, oldUrl));
   }
 }

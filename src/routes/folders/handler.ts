@@ -1,6 +1,6 @@
-import { type ValidatedRequestEvent } from "$lib/create-request-handler";
-import { type DeleteFolder } from "./validator";
+import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import type { DeleteFolder } from "./validator.ts";
 
 export const deleteFolderHandler = async ({
   body,

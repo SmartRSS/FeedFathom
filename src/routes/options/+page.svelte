@@ -1,68 +1,74 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import type { SubmitFunction } from "@sveltejs/kit";
-  import { logError } from "../../util/log";
-  import { isMimeText } from "../../util/is-mime-text";
-  import { isPlainText } from "../../util/is-plain-text";
+// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+import { enhance } from "$app/forms";
+import type { SubmitFunction } from "@sveltejs/kit";
+import { isMimeText } from "../../util/is-mime-text.ts";
+import { isPlainText } from "../../util/is-plain-text.ts";
+import { logError } from "../../util/log.ts";
 
-  // Access props directly
-  const { data } = $props();
-  const { user } = data;
+// Access props directly
+const { data } = $props();
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const { user } = data;
 
-  const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
-    const file = (formData as FormData).get("opml") as File;
-    if (!file) {
-      cancel();
-      alert("No file selected");
-      return;
-    }
-    if (!isMimeText(file.type)) {
-      cancel();
-      alert("Invalid file type");
-      return;
-    }
-    if (!file.name.endsWith(".opml") && !file.name.endsWith(".xml")) {
-      cancel();
-      alert("Invalid file extension");
-      return;
-    }
-    if (file.size > 100_000) {
-      cancel();
-      alert("File too large");
-      return;
-    }
-    const fileContents = await file.text();
-    if (!isPlainText(fileContents)) {
-      cancel();
-      alert("Invalid file contents 1");
-      return;
-    }
-  };
-  let passwordForm: HTMLFormElement;
-
-  const changePassword: SubmitFunction = async ({ formData, cancel }) => {
-    for (const field of ["oldPassword", "password1", "password2"]) {
-      if (!formData.get(field)) {
-        logError("no " + field);
-        cancel();
-        return;
-      }
-    }
-  };
-
-  let valid = $state(true);
-
-  function isValid() {
-    if (!passwordForm["password1"].value) {
-      valid = true;
-      return;
-    }
-    if (!passwordForm["password2"].value) {
-      valid = true;
-      return;
-    }
-    valid = passwordForm["password1"].value === passwordForm["password2"].value;
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
+  const file = (formData as FormData).get("opml") as File;
+  if (!file) {
+    cancel();
+    alert("No file selected");
+    return;
   }
+  if (!isMimeText(file.type)) {
+    cancel();
+    alert("Invalid file type");
+    return;
+  }
+  if (!(file.name.endsWith(".opml") || file.name.endsWith(".xml"))) {
+    cancel();
+    alert("Invalid file extension");
+    return;
+  }
+  if (file.size > 100_000) {
+    cancel();
+    alert("File too large");
+    return;
+  }
+  const fileContents = await file.text();
+  if (!isPlainText(fileContents)) {
+    cancel();
+    alert("Invalid file contents 1");
+    return;
+  }
+};
+let passwordForm: HTMLFormElement;
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+const changePassword: SubmitFunction = ({ formData, cancel }) => {
+  for (const field of ["oldPassword", "password1", "password2"]) {
+    if (!formData.get(field)) {
+      logError(`no ${field}`);
+      cancel();
+      return;
+    }
+  }
+};
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let valid = $state(true);
+
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+function isValid() {
+  if (!passwordForm["password1"].value) {
+    valid = true;
+    return;
+  }
+  if (!passwordForm["password2"].value) {
+    valid = true;
+    return;
+  }
+  valid = passwordForm["password1"].value === passwordForm["password2"].value;
+}
 </script>
 
 <div class="form-container">

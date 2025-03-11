@@ -1,6 +1,6 @@
-import { type Extractor } from "./extractor-interface";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
+import type { Extractor } from "./extractor-interface.ts";
 
 export class MozillaReadability implements Extractor {
   extract(content: string, articleUrl: string): string {

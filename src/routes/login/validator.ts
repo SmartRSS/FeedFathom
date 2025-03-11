@@ -1,8 +1,8 @@
-import * as v from "valibot";
+import { type InferOutput, email, pipe, strictObject, string } from "valibot";
 
-export const LoginRequest = v.strictObject({
-  email: v.pipe(v.string(), v.email()),
-  password: v.string(),
+export const LoginRequest = strictObject({
+  email: pipe(string(), email()),
+  password: string(),
 });
 
-export type LoginRequest = v.InferOutput<typeof LoginRequest>;
+export type LoginRequest = InferOutput<typeof LoginRequest>;

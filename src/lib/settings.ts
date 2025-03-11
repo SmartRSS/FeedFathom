@@ -1,10 +1,6 @@
 export enum DisplayMode {
-  EXTRACTUS = "EXTRACTUS",
-  FEED = "FEED",
-  READABILITY = "READABILITY",
-  READABILITY_PLAIN = "READABILITY_PLAIN",
+  Extractus = "EXTRACTUS",
+  Feed = "FEED",
+  Readability = "READABILITY",
+  ReadabilityPlain = "READABILITY_PLAIN",
 }
-
-// interface Settings {
-//   displayMode: DisplayMode;
-// }

@@ -1,4 +1,4 @@
-import { type Outline } from "../../../../src/types/opml-types";
+import type { Outline } from "../../../../src/types/opml-types.ts";
 
 export const input: Outline = {
   "@_": {
