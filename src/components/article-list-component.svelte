@@ -1,16 +1,16 @@
 <script lang="ts">
 // biome-ignore lint/correctness/noUnusedImports: bound by Svelte
 import { goto } from "$app/navigation";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import doubleCheck from "$lib/images/icons/System/check-double-fill.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import config from "$lib/images/icons/System/settings-5-fill.svg";
 import { onMount } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import back from "../assets/back.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import config from "../assets/config.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import del from "../assets/del.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import doubleCheck from "../assets/double-check.svg";
 import type { ArticleListComponentProps } from "../types.ts";
 import type { Article } from "../types/article-type.ts";
 import { logError } from "../util/log.ts";

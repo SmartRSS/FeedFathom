@@ -9,11 +9,6 @@ import { NodeType, type TreeNode } from "../types/source-types.ts";
 // biome-ignore lint/correctness/noUnusedImports: Svelte component
 import TreeNodeComponent from "./tree-node-component.svelte";
 
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import arrowDown from "../assets/arrow-down.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import arrowRight from "../assets/arrow-right.svg";
-
 let isOpen = $state(false);
 
 const {

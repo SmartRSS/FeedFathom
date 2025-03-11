@@ -21,15 +21,15 @@ import type { Article } from "../types/article-type.ts";
 import { NodeType, type TreeNode } from "../types/source-types.ts";
 
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import addFolder from "../assets/add-folder.svg";
+import addFolder from "$lib/images/icons/Document/folder-add-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import add from "../assets/add.svg";
+import add from "$lib/images/icons/System/add-box-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import config from "../assets/config.svg";
+import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import del from "../assets/del.svg";
+import properties from "$lib/images/icons/System/information-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
-import properties from "../assets/properties.svg";
+import config from "$lib/images/icons/System/settings-5-fill.svg";
 
 const staleTile = 5 * 1000;
 const promisesMap: ArticlePromisesMap = new Map();
