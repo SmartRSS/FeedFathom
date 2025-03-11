@@ -1,5 +1,9 @@
 <script lang="ts">
 import { browser } from "$app/environment";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import arrowDown from "$lib/images/arrow-down.png";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import arrowRight from "$lib/images/arrow-right.png";
 import feed from "$lib/images/feed.png";
 import folder from "$lib/images/folder.png";
 import folderOpened from "$lib/images/folder_opened.png";
