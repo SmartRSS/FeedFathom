@@ -45,7 +45,7 @@
     "zlib": "^1.0.5"
   },
   "dependencies": {
-    "@eslint/js": "^8.57.1",
+    "@eslint/js": "^9.0.0",
     "@extractus/article-extractor": "^8.0.17",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.0.0",
