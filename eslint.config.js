@@ -44,12 +44,13 @@ const canonicalArray = [
   typescriptTypeChecking.recommended,
 ].map((config) => ({
   ...config,
-  rules: {
-    ...config.rules,
-    ...eslintConfigPrettier.rules,
-    quotes: "off",
-    ...(config?.plugins?.["@typescript-eslint"]
-      ? {
+  rules: Object.fromEntries(
+    Object.entries({
+      ...config.rules,
+      ...eslintConfigPrettier.rules,
+      quotes: "off",
+      ...(config?.plugins?.["@typescript-eslint"]
+        ? {
           "@typescript-eslint/no-unused-vars": [
             "error",
             {
@@ -67,8 +68,9 @@ const canonicalArray = [
             },
           ],
         }
-      : {}),
-  },
+        : {}),
+    }).filter(([key]) => !key.startsWith("@stylistic/"))
+  ),
 }));
 
 export default [
@@ -86,7 +88,7 @@ export default [
       "id-length": "off",
       "canonical/import-specifier-newline": "off",
       "canonical/destructuring-property-newline": "off",
-      "no-inline-comments": "off", // covered by @stylistic/line-comment-position
+      "no-inline-comments": "off",
       "canonical/id-match": "off",
       "no-control-regex": "off",
       "perfectionist/sort-imports": "off",
