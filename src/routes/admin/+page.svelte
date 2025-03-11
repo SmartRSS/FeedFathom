@@ -1,63 +1,64 @@
 <script lang="ts">
-  interface Source {
-    url: string;
-    created_at: string; // or Date if you prefer
-    last_attempt: string; // or Date
-    last_success: string; // or Date
-    subscriber_count: number;
-    recent_failure_details: string;
-    failures: number;
+interface Source {
+  url: string;
+  // biome-ignore lint/style/useNamingConvention: <explanation>
+  created_at: string; // or Date if you prefer
+  // biome-ignore lint/style/useNamingConvention: <explanation>
+  last_attempt: string; // or Date
+  // biome-ignore lint/style/useNamingConvention: <explanation>
+  last_success: string; // or Date
+  // biome-ignore lint/style/useNamingConvention: <explanation>
+  subscriber_count: number;
+  // biome-ignore lint/style/useNamingConvention: <explanation>
+  recent_failure_details: string;
+  failures: number;
+}
+
+const { data } = $props();
+let sources: Source[] = $state(data.sources) as Source[]; // Define the type of sources
+let order = "asc";
+let currentSourceUrl = ""; // Store the current source URL
+let newSourceUrl = $state(""); // Store the new source URL
+
+const fetchSortedSources = async (field: string) => {
+  const response = await fetch(`/admin?sortBy=${field}&order=${order}`);
+  if (response.ok) {
+    sources = (await response.json()) as Source[]; // Update sources with the new data
+  } else {
   }
+};
 
-  const { data } = $props();
-  let sources: Source[] = $state(data.sources) as Source[]; // Define the type of sources
-  let order = "asc";
-  let currentSourceUrl = ""; // Store the current source URL
-  let newSourceUrl = $state(""); // Store the new source URL
+const sortSources = (field: string) => {
+  order = order === "asc" ? "desc" : "asc"; // Toggle order
+  fetchSortedSources(field);
+};
 
-  const fetchSortedSources = async (field: string) => {
-    const response = await fetch(`/admin?sortBy=${field}&order=${order}`);
-    if (response.ok) {
-      sources = (await response.json()) as Source[]; // Update sources with the new data
-    } else {
-      console.error("Failed to fetch sorted sources");
-    }
-  };
+const updateSource = async (oldUrl: string, newUrl: string) => {
+  const response = await fetch("/admin", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ oldUrl, newUrl }), // Send both old and new URLs
+  });
 
-  const sortSources = (field: string) => {
-    order = order === "asc" ? "desc" : "asc"; // Toggle order
-    fetchSortedSources(field);
-  };
+  if (response.ok) {
+    fetchSortedSources("created_at"); // Refresh the sources
+  } else {
+  }
+};
 
-  const updateSource = async (oldUrl: string, newUrl: string) => {
-    const response = await fetch(`/admin`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ oldUrl, newUrl }), // Send both old and new URLs
-    });
+const openModal = (sourceUrl: string) => {
+  currentSourceUrl = sourceUrl; // Set the current source URL
+  newSourceUrl = sourceUrl; // Pre-fill the new URL input
+  const dialog = document.getElementById("edit-dialog") as HTMLDialogElement;
+  dialog.showModal(); // Show the dialog
+};
 
-    if (response.ok) {
-      // Optionally, refresh the sources or show a success message
-      console.log("Source updated successfully");
-      fetchSortedSources("created_at"); // Refresh the sources
-    } else {
-      console.error("Failed to update source");
-    }
-  };
-
-  const openModal = (sourceUrl: string) => {
-    currentSourceUrl = sourceUrl; // Set the current source URL
-    newSourceUrl = sourceUrl; // Pre-fill the new URL input
-    const dialog = document.getElementById("edit-dialog") as HTMLDialogElement;
-    dialog.showModal(); // Show the dialog
-  };
-
-  const closeModal = () => {
-    const dialog = document.getElementById("edit-dialog") as HTMLDialogElement;
-    dialog.close(); // Close the dialog
-  };
+const closeModal = () => {
+  const dialog = document.getElementById("edit-dialog") as HTMLDialogElement;
+  dialog.close(); // Close the dialog
+};
 </script>
 
 <div class="table-container">

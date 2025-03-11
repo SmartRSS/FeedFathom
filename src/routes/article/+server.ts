@@ -1,6 +1,6 @@
 import { extractArticle } from "$lib/extract-article";
 import { DisplayMode } from "$lib/settings";
-import { json, type RequestHandler } from "@sveltejs/kit";
+import { type RequestHandler, json } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const articlesRepository = locals.dependencies.articlesRepository;
@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   }
 
   const displayMode = (url.searchParams.get("displayMode") ??
-    DisplayMode.FEED) as DisplayMode;
+    DisplayMode.Feed) as DisplayMode;
 
   const extractedArticle = await extractArticle(
     article.content,

@@ -6,7 +6,10 @@ export default defineConfig({
     rollupOptions: {
       external: ["jsdom"],
       onwarn(warning, warn) {
-        if (warning.code === "EVAL" && warning.id?.includes("fast-xml-parser")) {
+        if (
+          warning.code === "EVAL" &&
+          warning.id?.includes("fast-xml-parser")
+        ) {
           return;
         }
 

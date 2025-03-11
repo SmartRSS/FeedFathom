@@ -1,5 +1,5 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
 export class XmlScanner implements Scanner {
   scan(currentUrl: URL, document: Document): FeedData[] {
@@ -15,16 +15,16 @@ export class XmlScanner implements Scanner {
     }
 
     const rootName = rootDocumentElement.nodeName.toLowerCase();
-    let isRSS1 = false;
+    let isRss1 = false;
     if (
       (rootName === "rdf" || rootName === "rdf:rdf") &&
       rootDocumentElement.getAttribute("xmlns")
     ) {
-      isRSS1 =
+      isRss1 =
         rootDocumentElement.getAttribute("xmlns")?.includes("rss") ?? false;
     }
 
-    if (["channel", "feed", "rss"].includes(rootName) || isRSS1) {
+    if (["channel", "feed", "rss"].includes(rootName) || isRss1) {
       return [{ title: "This feed", url: currentUrl.href }];
     }
 

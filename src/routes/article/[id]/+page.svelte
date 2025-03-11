@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
-  import type { Article } from "../../../types/article-type";
+import type { Article } from "../../../types/article-type.ts";
+import type { PageData } from "./$types.ts";
 
-  export let data: PageData & { article: Article };
-  const { article } = data;
+export let data: PageData & { article: Article };
+const { article } = data;
 </script>
 
 <svelte:head>

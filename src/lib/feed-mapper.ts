@@ -1,5 +1,5 @@
-import { type Feed } from "@rowanmanning/feed-parser/lib/feed/base";
-import { type FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
+import type { Feed } from "@rowanmanning/feed-parser/lib/feed/base";
+import type { FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
 
 export type ArticlePayload = {
   author: string;

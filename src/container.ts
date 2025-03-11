@@ -7,19 +7,20 @@ import { UsersRepository } from "$lib/db/user-repository";
 import { UserSourcesRepository } from "$lib/db/user-source-repository";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
-import * as schema from "$lib/schema";
+// biome-ignore lint/style/noNamespaceImport: <explanation>
+import * as schema from "$lib/schema.ts";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
 import { MainWorker } from "$lib/workers/main";
 import {
+  InjectionMode,
   asClass,
   asFunction,
   asValue,
   createContainer,
-  InjectionMode,
 } from "awilix";
-import { type AxiosCacheInstance } from "axios-cache-interceptor";
+import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { Queue } from "bullmq";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";

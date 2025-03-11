@@ -1,4 +1,4 @@
-import { type OpmlSource } from "../../../../src/types/opml-types";
+import type { OpmlSource } from "../../../../src/types/opml-types.ts";
 
 export const expected: OpmlSource[] = [
   {

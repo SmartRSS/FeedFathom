@@ -2,31 +2,46 @@
  * Command types enum
  */
 export enum CommandType {
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   BATCH_UPSERT_ARTICLES = "article.batch_upsert",
   // System commands
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   CLEANUP = "system.cleanup",
   // Article commands
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   CREATE_ARTICLE = "article.create",
   // Folder commands
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   CREATE_FOLDER = "folder.create",
   // Source commands
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   CREATE_SOURCE = "source.create",
 
   // User commands
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   CREATE_USER = "user.create",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   DELETE_ARTICLE = "article.delete",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   DELETE_FOLDER = "folder.delete",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   DELETE_SOURCE = "source.delete",
-
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   DELETE_USER = "user.delete",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   MAKE_USER_ADMIN = "user.make_admin",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   PARSE_SOURCE = "source.parse",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   REFRESH_SOURCE_FAVICON = "source.refresh_favicon",
 
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   UPDATE_ARTICLE = "article.update",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   UPDATE_FOLDER = "folder.update",
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   UPDATE_SOURCE = "source.update",
-
+  // biome-ignore lint/style/useNamingConvention: <explanation>
   UPDATE_USER = "user.update",
 }
 

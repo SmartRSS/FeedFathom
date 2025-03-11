@@ -1,5 +1,5 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
 export class GithubScanner implements Scanner {
   private static readonly BASE_URL = "https://github.com/";

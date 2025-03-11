@@ -1,15 +1,16 @@
-import { logError as error_ } from "../util/log";
+import fs from "node:fs";
+import { Agent } from "node:https";
+import path from "node:path";
 import axios, { type AxiosInstance } from "axios";
 import {
+  type CacheRequestConfig,
+  type StorageValue,
   buildStorage,
   canStale,
   setupCache,
-  type StorageValue,
 } from "axios-cache-interceptor";
 import type Redis from "ioredis";
-import fs from "node:fs";
-import * as https from "node:https";
-import path from "node:path";
+import { logError as error_ } from "../util/log.ts";
 
 const getBuildTime = (): string => {
   const buildTimePath = path.join(process.cwd(), "BUILD_TIME");
@@ -35,11 +36,49 @@ export const buildAxios = (redis: Redis) => {
       "Accept-Encoding": "gzip, deflate",
       "User-Agent": `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
     },
-    httpsAgent: new https.Agent({
+    httpsAgent: new Agent({
       // increases reliability of data loading from misconfigured servers
       rejectUnauthorized: false,
     }),
   });
+
+  // Default cache duration of 1 minute
+  const defaultTtl = 60_000;
+
+  // Fallback cache duration of 30 minutes
+  const fallbackTtl = 1_800_000;
+
+  const getRequestTtl = (request: CacheRequestConfig | undefined): number => {
+    if (
+      request?.cache &&
+      typeof request.cache === "object" &&
+      typeof request.cache.ttl === "number"
+    ) {
+      return request.cache.ttl;
+    }
+
+    return defaultTtl;
+  };
+
+  const calculateCacheTtl = (
+    value: StorageValue,
+    request: CacheRequestConfig | undefined,
+    currentTime: number,
+  ): number => {
+    if (value.state === "loading") {
+      return currentTime + getRequestTtl(request);
+    }
+
+    if (value.state === "stale" && value.ttl) {
+      return value.createdAt + value.ttl;
+    }
+
+    if (value.state === "cached" && !canStale(value)) {
+      return value.createdAt + (value.ttl ?? defaultTtl);
+    }
+
+    return currentTime + fallbackTtl;
+  };
 
   const redisStorage = buildStorage({
     async find(key) {
@@ -55,18 +94,8 @@ export const buildAxios = (redis: Redis) => {
     },
     async set(key, value, request) {
       const currentTime = Date.now();
-      const ttl =
-        value.state === "loading"
-          ? currentTime +
-            (request?.cache && typeof request.cache.ttl === "number"
-              ? request.cache.ttl
-              : 60_000)
-          : (value.state === "stale" && value.ttl) ||
-              (value.state === "cached" && !canStale(value))
-            ? value.createdAt + (value?.ttl ?? 60_000)
-            : undefined;
-
-      const validTtl = ttl && ttl > currentTime ? ttl - currentTime : 1_800_000;
+      const ttl = calculateCacheTtl(value, request, currentTime);
+      const validTtl = ttl > currentTime ? ttl - currentTime : fallbackTtl;
 
       await redis.set(
         `axios-cache-${key}`,

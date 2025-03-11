@@ -1,4 +1,4 @@
-import { json, type RequestHandler } from "@sveltejs/kit";
+import { type RequestHandler, json } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const feedUrl = url.searchParams.get("feedUrl");

@@ -1,26 +1,28 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+import { goto } from "$app/navigation";
 
-  let email = "";
-  let password = "";
+// biome-ignore lint/style/useConst: bound by Svelte
+let email = $state("");
+// biome-ignore lint/style/useConst: bound by Svelte
+let password = $state("");
 
-  const handleSubmit = async (e: SubmitEvent) => {
-    e.preventDefault();
-    const res = await fetch("/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (res.ok) {
-      return await goto("/");
-    }
-    alert("Wrong login info");
-  };
+const handleSubmit = async (e: SubmitEvent) => {
+  e.preventDefault();
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (res.ok) {
+    return await goto("/");
+  }
+  alert("Wrong login info");
+};
 </script>
 
 <main>
   <div class="form-container">
-    <form on:submit={handleSubmit} class="login-form">
+    <form onsubmit={handleSubmit} class="login-form">
       <fieldset>
         <legend>Login Information</legend>
         <div class="input-block">

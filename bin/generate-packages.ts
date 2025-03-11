@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun";
-import fs from "fs";
+import fs from "node:fs";
+import path from "node:path";
 import archiver from "archiver";
-import path from "path";
+import { $ } from "bun";
 
 const parentDir = path.resolve(__dirname, "..");
 process.chdir(parentDir);
@@ -22,7 +22,7 @@ async function createPackage(from: string, target: string) {
   const archive = archiver("zip", {
     zlib: { level: 9 },
   });
-  archive.on("error", function (err: unknown) {
+  archive.on("error", (err: unknown) => {
     throw err;
   });
   archive.pipe(output);
@@ -38,8 +38,8 @@ const baseManifestJsonString = await fs.promises.readFile(
 );
 const baseManifestData = JSON.parse(baseManifestJsonString);
 
-delete baseManifestData.background.scripts;
-delete baseManifestData.browser_specific_settings;
+baseManifestData.background.scripts = undefined;
+baseManifestData.browser_specific_settings = undefined;
 
 const chromiumManifestString = JSON.stringify(baseManifestData, null, 2);
 await fs.promises.writeFile(

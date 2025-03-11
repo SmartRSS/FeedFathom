@@ -1,18 +1,22 @@
-import { type FeedData } from "../../types";
-import { type Scanner } from "./scanner-interface";
+import type { FeedData } from "../../types.ts";
+import type { Scanner } from "./scanner-interface.ts";
 
+const channelNameFromUrlExpression = /vimeo\.com\/(.+)/u;
+const channelNameTestExpression = /^[A-Za-z]+$/u;
 export class VimeoScanner implements Scanner {
   scan(currentUrl: URL, document: Document): FeedData[] {
     if (!currentUrl.hostname.endsWith("vimeo.com")) {
       return [];
     }
 
-    const channelNameFromUrl = /vimeo\.com\/(.+)/u.exec(currentUrl.href)?.[1];
+    const channelNameFromUrl = channelNameFromUrlExpression.exec(
+      currentUrl.href,
+    )?.[1];
     const channelLink = document.querySelector("a.js-user-link");
     const channelNameFromLink =
       channelLink?.getAttribute("href")?.replace("/", "") ?? "";
 
-    if (!/^[A-Za-z]+$/u.test(channelNameFromUrl ?? "")) {
+    if (!channelNameTestExpression.test(channelNameFromUrl ?? "")) {
       return [
         {
           title: "Channel feed",

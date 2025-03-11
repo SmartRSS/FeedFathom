@@ -1,8 +1,8 @@
 import type * as schema from "$lib/schema";
 
 export enum NodeType {
-  FOLDER = "folder",
-  SOURCE = "source",
+  Folder = "folder",
+  Source = "source",
 }
 
 export type Source = typeof schema.sources.$inferSelect;
@@ -12,7 +12,7 @@ export type TreeSource = {
   favicon: null | string;
   homeUrl: string;
   name: string;
-  type: NodeType.SOURCE;
+  type: NodeType.Source;
   uid: string;
   unreadCount: number;
   xmlUrl: string;
@@ -20,6 +20,6 @@ export type TreeSource = {
 type TreeFolder = {
   children: TreeNode[];
   name: string;
-  type: NodeType.FOLDER;
+  type: NodeType.Folder;
   uid: string;
 };

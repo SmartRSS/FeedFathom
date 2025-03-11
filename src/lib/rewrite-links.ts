@@ -15,12 +15,14 @@ const isAbsoluteUrl = (url: string) => {
   return URL.canParse(url);
 };
 
+const srcsetSplitterExpression = /\s+/u;
+
 // Helper to process "srcset" attributes
 const processSrcset = (srcsetValue: string, baseUrl: string): string => {
   return srcsetValue
-    .split(/,\s+/u)
+    .split(", ")
     .map((path) => {
-      const [url, width] = path.trim().split(/\s+/u);
+      const [url, width] = path.trim().split(srcsetSplitterExpression);
       if (!url) {
         // Fall back to the original value if the URL is invalid
         return path;

@@ -1,4 +1,4 @@
-import { type FeedData } from "./types";
+import type { FeedData } from "./types.ts";
 
 export type Message = ListFeedsMessage | VisibilityLostMessage;
 

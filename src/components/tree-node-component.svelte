@@ -1,126 +1,130 @@
 <script lang="ts">
-  import TreeNodeComponent from "./tree-node-component.svelte";
-  import { onMount } from "svelte";
-  import feed from "$lib/images/feed.png";
-  import folder_opened from "$lib/images/folder_opened.png";
-  import folder from "$lib/images/folder.png";
-  import arrow_right from "$lib/images/arrow-right.png";
-  import arrow_down from "$lib/images/arrow-down.png";
-  import { browser } from "$app/environment";
-  import { NodeType, type TreeNode } from "../types/source-types";
-  import type { TreeNodeComponentProps } from "../types";
+import { browser } from "$app/environment";
+import feed from "$lib/images/feed.png";
+import folder from "$lib/images/folder.png";
+import folderOpened from "$lib/images/folder_opened.png";
+import { onMount } from "svelte";
+import type { TreeNodeComponentProps } from "../types.ts";
+import { NodeType, type TreeNode } from "../types/source-types.ts";
+// biome-ignore lint/correctness/noUnusedImports: Svelte component
+import TreeNodeComponent from "./tree-node-component.svelte";
 
-  let isOpen = $state(false);
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import arrowDown from "../assets/arrow-down.svg";
+// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+import arrowRight from "../assets/arrow-right.svg";
 
-  let {
-    node,
-    selectedNodeUid,
-    nested,
-    nodeSelected,
-    nodeTouchStart,
-    nodeHeld,
-    nodeTouchEnd,
-    nodeMouseLeave,
-  }: TreeNodeComponentProps = $props();
+let isOpen = $state(false);
 
-  let pressTimer: number;
-  let longPressDetected = false;
+const {
+  node,
+  selectedNodeUid,
+  nested,
+  nodeSelected,
+  nodeTouchStart,
+  nodeHeld,
+  nodeTouchEnd,
+  nodeMouseLeave,
+}: TreeNodeComponentProps = $props();
 
-  onMount(async () => {
-    if (!browser || node.type !== NodeType.FOLDER) {
-      return;
-    }
-    isOpen = JSON.parse(
-      window.localStorage.getItem(`folderState:${node.uid}`) ?? "false",
-    ) as boolean;
-  });
+let pressTimer: number;
+let longPressDetected = false;
 
-  function handleNodeSelected(e: Event) {
-    e.stopImmediatePropagation();
-    e.preventDefault();
-    if (longPressDetected) {
-      return false;
-    }
-    nodeSelected(node);
-    return true;
+onMount(async () => {
+  if (!browser || node.type !== NodeType.Folder) {
+    return;
   }
+  isOpen = JSON.parse(
+    window.localStorage.getItem(`folderState:${node.uid}`) ?? "false",
+  ) as boolean;
+});
 
-  async function toggleOpen(e: MouseEvent) {
-    if (browser) {
-      await window.localStorage.setItem(
-        `folderState:${node.uid}`,
-        JSON.stringify(!isOpen),
-      );
-    }
-    isOpen = !isOpen;
-
-    e.stopImmediatePropagation();
-    e.preventDefault();
+function handleNodeSelected(e: Event) {
+  e.stopImmediatePropagation();
+  e.preventDefault();
+  if (longPressDetected) {
     return false;
   }
+  nodeSelected(node);
+  return true;
+}
 
-  function getIcon(node: TreeNode) {
-    if (node.type === NodeType.FOLDER) {
-      return isOpen ? folder_opened : folder;
-    }
-    return node.favicon ? node.favicon : feed;
+async function toggleOpen(e: MouseEvent) {
+  if (browser) {
+    await window.localStorage.setItem(
+      `folderState:${node.uid}`,
+      JSON.stringify(!isOpen),
+    );
+  }
+  isOpen = !isOpen;
+
+  e.stopImmediatePropagation();
+  e.preventDefault();
+  return false;
+}
+
+function getIcon(node: TreeNode) {
+  if (node.type === NodeType.Folder) {
+    return isOpen ? folderOpened : folder;
+  }
+  return node.favicon ? node.favicon : feed;
+}
+
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === "enter" || event.key === " ") {
+    handleNodeSelected(event);
+  }
+};
+
+function getUnreadCount(node: TreeNode): number {
+  if (node.type === NodeType.Folder && node.children) {
+    return node.children.reduce((prev: number, curr: TreeNode) => {
+      return prev + getUnreadCount(curr);
+    }, 0);
+  }
+  if ("unreadCount" in node) {
+    return node.unreadCount;
+  }
+  return 0;
+}
+
+function hasUnread(node: TreeNode) {
+  if (node.type === NodeType.Folder) {
+    return node.children?.some(
+      (source) => source.type === NodeType.Source && source.unreadCount > 0,
+    );
   }
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "enter" || event.key === " ") {
-      handleNodeSelected(event);
-    }
-  };
+  return node.unreadCount > 0;
+}
 
-  function getUnreadCount(node: TreeNode): number {
-    if (node.type === NodeType.FOLDER && node.children) {
-      return node.children.reduce((prev: number, curr: TreeNode) => {
-        return prev + getUnreadCount(curr);
-      }, 0);
-    } else if ("unreadCount" in node) {
-      return node.unreadCount;
-    } else {
-      return 0;
-    }
-  }
+function isNodeSelected(node: TreeNode, selectedNodeUid: string) {
+  return node.type + node.uid === selectedNodeUid;
+}
 
-  function hasUnread(node: TreeNode) {
-    if (node.type === NodeType.FOLDER) {
-      return node.children?.some(
-        (source) => source.type === NodeType.SOURCE && source.unreadCount > 0,
-      );
-    }
+const onTouchStart = (e: Event) => {
+  e.stopImmediatePropagation();
+  longPressDetected = false;
+  nodeTouchStart(node);
+  pressTimer = window.setTimeout(() => {
+    longPressDetected = true;
+    nodeHeld(node);
+  }, 1000);
+};
 
-    return node.unreadCount > 0;
-  }
-
-  function isNodeSelected(node: TreeNode, selectedNodeUid: string) {
-    return node.type + node.uid === selectedNodeUid;
-  }
-
-  const onTouchStart = (e: Event) => {
-    e.stopImmediatePropagation();
-    longPressDetected = false;
-    nodeTouchStart(node);
-    pressTimer = window.setTimeout(() => {
-      longPressDetected = true;
-      nodeHeld(node);
-    }, 1000);
-  };
-
-  const onTouchEnd = (e: Event) => {
-    e.stopImmediatePropagation();
-    nodeTouchEnd(node);
-    clearTimeout(pressTimer);
-    return false;
-  };
+const onTouchEnd = (e: Event) => {
+  e.stopImmediatePropagation();
+  nodeTouchEnd(node);
+  clearTimeout(pressTimer);
+  return false;
+};
 </script>
 
 <div
   aria-selected={isNodeSelected(node, selectedNodeUid)}
   class="node {node.type}"
   class:nested
-  class:open={isOpen && node.type === NodeType.FOLDER}
+  class:open={isOpen && node.type === NodeType.Folder}
   class:selected={isNodeSelected(node, selectedNodeUid)}
   class:unread={hasUnread(node)}
   onclick={handleNodeSelected}
@@ -134,10 +138,10 @@
   tabindex="0"
 >
   <div style="display: flex; align-items: center;">
-    {#if node.type === NodeType.FOLDER}
+    {#if node.type === NodeType.Folder}
       <button class="chevron" onclick={toggleOpen} aria-label="toggle folder">
         <img
-          src={isOpen ? arrow_down : arrow_right}
+          src={isOpen ? arrowDown : arrowRight}
           alt="toggle folder button"
         />
       </button>
@@ -149,7 +153,7 @@
     <span class="right">{getUnreadCount(node)}</span>
   {/if}
 </div>
-{#if node.type === NodeType.FOLDER && isOpen && Array.isArray(node.children)}
+{#if node.type === NodeType.Folder && isOpen && Array.isArray(node.children)}
   {#each node.children as childNode}
     <TreeNodeComponent
       nested={true}

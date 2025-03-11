@@ -1,7 +1,7 @@
-import * as v from "valibot";
+import { type InferOutput, number, strictObject } from "valibot";
 
-export const DeleteFolder = v.strictObject({
-  removeFolderId: v.number(),
+export const DeleteFolder = strictObject({
+  removeFolderId: number(),
 });
 
-export type DeleteFolder = v.InferOutput<typeof DeleteFolder>;
+export type DeleteFolder = InferOutput<typeof DeleteFolder>;

@@ -1,7 +1,7 @@
 import { createRequestHandler } from "$lib/create-request-handler";
-import { updateSourceHandler } from "./handler";
-import { UpdateSourceRequest } from "./validator";
-import { json, type RequestHandler } from "@sveltejs/kit";
+import { type RequestHandler, json } from "@sveltejs/kit";
+import { updateSourceHandler } from "./handler.ts";
+import { UpdateSourceRequest } from "./validator.ts";
 
 type SortField =
   | "created_at"

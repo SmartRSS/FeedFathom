@@ -1,5 +1,5 @@
-import container from "./container";
-import { llog, logError } from "./util/log";
+import container from "./container.ts";
+import { llog, logError } from "./util/log.ts";
 
 try {
   llog("Starting worker entrypoint");

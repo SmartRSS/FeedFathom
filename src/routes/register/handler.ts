@@ -1,7 +1,7 @@
-import { type UnauthenticatedRequestEvent } from "$lib/create-request-handler";
-import { llog } from "../../util/log";
-import { type RegisterRequest } from "./validator";
+import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import { llog } from "../../util/log.ts";
+import type { RegisterRequest } from "./validator.ts";
 
 export const registerHandler = async ({
   body,

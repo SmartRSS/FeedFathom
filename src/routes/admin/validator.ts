@@ -1,8 +1,8 @@
-import * as v from "valibot";
+import { type InferOutput, strictObject, string } from "valibot";
 
-export const UpdateSourceRequest = v.strictObject({
-  newUrl: v.string(),
-  oldUrl: v.string(),
+export const UpdateSourceRequest = strictObject({
+  newUrl: string(),
+  oldUrl: string(),
 });
 
-export type UpdateSourceRequest = v.InferOutput<typeof UpdateSourceRequest>;
+export type UpdateSourceRequest = InferOutput<typeof UpdateSourceRequest>;

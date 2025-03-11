@@ -1,16 +1,16 @@
-import { type FeedData } from "../types";
-import { BitchuteScanner } from "./scanners/bitchute-scanner";
-import { GeneratorScanner } from "./scanners/generator-scanner";
-import { GithubScanner } from "./scanners/github-scanner";
-import { HeadScanner } from "./scanners/head-scanner";
-import { HiveblogScanner } from "./scanners/hiveblog-scanner";
-import { LinkFeedScanner } from "./scanners/link-feed-scanner";
-import { OdseeScanner } from "./scanners/odsee-scanner";
-import { type Scanner } from "./scanners/scanner-interface";
-import { SteemitScanner } from "./scanners/steemit-scanner";
-import { VimeoScanner } from "./scanners/vimeo-scanner";
-import { XmlScanner } from "./scanners/xml-scanner";
-import { YoutubeScanner } from "./scanners/youtube-scanner";
+import type { FeedData } from "../types.ts";
+import { BitchuteScanner } from "./scanners/bitchute-scanner.ts";
+import { GeneratorScanner } from "./scanners/generator-scanner.ts";
+import { GithubScanner } from "./scanners/github-scanner.ts";
+import { HeadScanner } from "./scanners/head-scanner.ts";
+import { HiveblogScanner } from "./scanners/hiveblog-scanner.ts";
+import { LinkFeedScanner } from "./scanners/link-feed-scanner.ts";
+import { OdseeScanner } from "./scanners/odsee-scanner.ts";
+import type { Scanner } from "./scanners/scanner-interface.ts";
+import { SteemitScanner } from "./scanners/steemit-scanner.ts";
+import { VimeoScanner } from "./scanners/vimeo-scanner.ts";
+import { XmlScanner } from "./scanners/xml-scanner.ts";
+import { YoutubeScanner } from "./scanners/youtube-scanner.ts";
 
 const scanners: Scanner[] = [
   new XmlScanner(),

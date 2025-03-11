@@ -1,8 +1,9 @@
+import biome from "eslint-config-biome";
+import canon from "eslint-config-canonical/configurations/index.js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import eslintPluginSvelte from "eslint-plugin-svelte";
 import globals from "globals";
 import svelteConfig from "./svelte.config.js";
-import canon from "eslint-config-canonical/configurations/index.js";
 
 import typescriptCompatibility from "eslint-config-canonical/configurations/typescript-compatibility.js";
 import typescriptTypeChecking from "eslint-config-canonical/configurations/typescript-type-checking.js";
@@ -87,6 +88,13 @@ export default [
       "canonical/destructuring-property-newline": "off",
       "no-inline-comments": "off", // covered by @stylistic/line-comment-position
       "canonical/id-match": "off",
+      "no-control-regex": "off",
+      "perfectionist/sort-imports": "off",
+      "import/consistent-type-specifier-style": "off",
+      "canonical/prefer-inline-type-import": "off",
+      "perfectionist/sort-named-imports": "off",
+      "import/extensions": "off",
     },
   },
+  biome,
 ];
