@@ -7,7 +7,7 @@
     "build-extension": "bin/generate-packages.ts",
     "build-server": "bunx --bun svelte-kit sync && bunx --bun vite build",
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
-    "build-image": "mkdir -p build && (bun build-server & bun build-worker & wait)",
+    "build-image": "mkdir -p build && bun build-server && bun build-worker",
     "build-project": "rm -rf build && mkdir -p build && (bun build-server & bun build-worker & bun build-extension & wait)",
     "watch-server": "bunx --bun svelte-kit sync && bunx --bun vite dev --host",
     "watch-worker": "bunx --bun svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
