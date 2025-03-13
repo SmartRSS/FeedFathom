@@ -44,7 +44,7 @@ const clickHandler = (event: MouseEvent) => {
   const targetElement = event.target as HTMLElement;
   if (targetElement.matches("a")) {
     const href = targetElement.getAttribute("href");
-    if (!href || href[0] !== "#") {
+    if (!href?.startsWith("#")) {
       return true;
     }
     const name = href.substring(1);
@@ -79,7 +79,7 @@ const clickHandler = (event: MouseEvent) => {
   return true;
 };
 onMount(() => {
-  fetchData();
+  void fetchData();
   if (frame?.contentDocument?.body) {
     frame.contentDocument.body.addEventListener("click", clickHandler);
   }
@@ -99,12 +99,14 @@ async function fetchData(attempt = 0) {
 
   if (!frame) {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    return await fetchData(attempt + 1);
+    await fetchData(attempt + 1);
+    return;
   }
-  const iframeDoc = frame?.contentDocument || frame?.contentWindow?.document;
+  const iframeDoc = frame?.contentDocument ?? frame?.contentWindow?.document;
   if (!iframeDoc) {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    return await fetchData(attempt + 1);
+    await fetchData(attempt + 1);
+    return;
   }
 
   iframeDoc.head.innerHTML = "";
@@ -136,7 +138,7 @@ async function fetchData(attempt = 0) {
                 word-wrap: break-word;
             }
         `;
-  iframeDoc.head.appendChild(styleEl);
+  iframeDoc.head.append(styleEl);
   if (!selectedArticleId) {
     iframeDoc.body.innerHTML = "";
 
@@ -168,7 +170,7 @@ function handleBack() {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function deleteItem() {
-  articlesRemoved([selectedArticle]);
+  void articlesRemoved([selectedArticle]);
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -177,7 +179,7 @@ function handleChange() {
 }
 
 $effect(() => {
-  fetchData();
+  void fetchData();
 });
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -214,7 +216,7 @@ function shouldHide() {
     <button
       aria-label="options"
       class="settings-button"
-      onclick={() => goto("/options")}><img alt="" src={config} /></button
+      onclick={async () => await goto("/options")}><img alt="" src={config} /></button
     >
   </div>
   <iframe bind:this={frame} title="article content"></iframe>

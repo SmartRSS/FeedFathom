@@ -52,9 +52,9 @@ function handleNodeSelected(e: Event) {
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
-async function toggleOpen(e: MouseEvent) {
+function toggleOpen(e: MouseEvent) {
   if (browser) {
-    await window.localStorage.setItem(
+    window.localStorage.setItem(
       `folderState:${node.uid}`,
       JSON.stringify(!isOpen),
     );
@@ -71,7 +71,7 @@ function getIcon(node: TreeNode) {
   if (node.type === NodeType.Folder) {
     return isOpen ? folderOpened : folder;
   }
-  return node.favicon ? node.favicon : feed;
+  return node.favicon ?? feed;
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -164,7 +164,7 @@ const onTouchEnd = (e: Event) => {
   {/if}
 </div>
 {#if node.type === NodeType.Folder && isOpen && Array.isArray(node.children)}
-  {#each node.children as childNode}
+  {#each node.children as childNode (childNode.uid)}
     <TreeNodeComponent
       nested={true}
       node={childNode}

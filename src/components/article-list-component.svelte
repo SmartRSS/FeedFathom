@@ -69,7 +69,7 @@ async function fetchData() {
     focusedIndex = 0;
     selectedItems.clear();
     selectedItems.add(0);
-    void articlesSelected(
+    articlesSelected(
       Array.from(selectedItems)
         .map((itemIndex) => articles[itemIndex]?.id)
         .filter((id) => typeof id === "number"),
@@ -200,7 +200,7 @@ function deleteItems() {
   if (selectedItems.size === 0) {
     return;
   }
-  articlesRemoved(
+  void articlesRemoved(
     Array.from(selectedItems)
       .map((index) => articles[index])
       .filter(Boolean),
@@ -293,7 +293,7 @@ function handleBack() {
 
 $effect(() => {
   selectedSourcesList;
-  fetchData();
+  void fetchData();
 });
 $effect(() => {
   // selectedItems = selectedItems;
@@ -321,7 +321,7 @@ $effect(() => {
     <button
       aria-label="options"
       class="settings-button only-mobile"
-      onclick={() => goto("/options")}><img alt="" src={config} /></button
+      onclick={async () => await goto("/options")}><img alt="" src={config} /></button
     >
   </div>
   <div

@@ -1,37 +1,16 @@
 import biome from "eslint-config-biome";
 import canon from "eslint-config-canonical/configurations/index.js";
 import eslintConfigPrettier from "eslint-config-prettier";
-import eslintPluginSvelte from "eslint-plugin-svelte";
+import svelte from 'eslint-plugin-svelte';
 import globals from "globals";
+import ts from 'typescript-eslint';
 import svelteConfig from "./svelte.config.js";
 
 import typescriptCompatibility from "eslint-config-canonical/configurations/typescript-compatibility.js";
 import typescriptTypeChecking from "eslint-config-canonical/configurations/typescript-type-checking.js";
 
 const { browser, canonical, module, node, regexp, typescript } = canon;
-const ignores = [
-  "**/*.js",
-  ".svelte-kit/**",
-  "node_modules/**", // Ignore node_modules directory
-  "dist/**",
-  "bin/**",
-  "vite.config.ts",
-  "ext/**",
-  "build/**",
-];
 
-const eslintSvelteConfig = {
-  ...eslintPluginSvelte.configs["flat/recommended"],
-  files: ["./src/**/*.svelte"],
-  parser: "svelte-eslint-parser",
-  parserOptions: {
-    extraFileExtensions: [".svelte"],
-    parser: "@typescript-eslint/parser",
-    project: "tsconfig.json",
-    svelteConfig,
-    tsconfigRootDir: "./",
-  },
-};
 
 const canonicalArray = [
   browser.recommended,
@@ -74,13 +53,27 @@ const canonicalArray = [
 }));
 
 export default [
-  {
-    ignores,
-  },
-  { files: ["./src/**/*.ts", "./tests/**/*.ts"] },
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
-  eslintSvelteConfig,
+  ...ts.configs.recommended,
   ...canonicalArray,
+  ...svelte.configs.recommended.map(config => ({
+    ...config,
+    rules: {
+      ...config.rules,
+      "@typescript-eslint/no-unused-expressions": "off",
+    }
+  })),
+  {
+    files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        extraFileExtensions: ['.svelte'],
+        parser: ts.parser,
+        svelteConfig,
+      }
+    }
+  },
   {
     rules: {
       "canonical/filename-match-regex": "off",
