@@ -1,33 +1,38 @@
 /// <reference types="@sveltejs/kit" />
 import { build, files, version } from '$service-worker';
 
-// Create a unique cache name for this deployment
-const CACHE = `cache-${version}`;
+// Use a constant cache name
+const CACHE = "feedfathom-cache-v1";
 
 const ASSETS = [
   ...build, // the app itself
-  ...files  // everything in `static`
+  ...files, // everything in `static`
 ];
 
-self.addEventListener('install', (event) => {
-  // Create a new cache and add all files to it
-  async function addFilesToCache() {
-    const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
-  }
+async function addFilesToCache() {
+  const cache = await caches.open(CACHE);
+  await cache.addAll(ASSETS);
+}
 
+async function deleteOldCache() {
+  const cache = await caches.open(CACHE);
+  const newAssetPaths = new Set(ASSETS);
+  const existingKeys = (await cache.keys()).map(request => new URL(request.url).pathname);
+
+  for (const oldPath of existingKeys) {
+    if (!newAssetPaths.has(oldPath)) {
+      const oldRequest = new Request(oldPath);
+      void cache.delete(oldRequest);
+    }
+  }
+}
+
+self.addEventListener('install', (event) => {
   event.waitUntil(addFilesToCache());
 });
 
 self.addEventListener('activate', (event) => {
-  // Remove previous cached data from disk
-  async function deleteOldCaches() {
-    for (const key of await caches.keys()) {
-      if (key !== CACHE) await caches.delete(key);
-    }
-  }
-
-  event.waitUntil(deleteOldCaches());
+  void deleteOldCache();
 });
 
 self.addEventListener('fetch', (event) => {
