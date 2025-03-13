@@ -67,10 +67,27 @@ FeedFathom consists of several key components:
 To build the project, run the following command:
 
 ```bash
-bun run build
+bun run build-project
 ```
 
-This command compiles the TypeScript files and generates the necessary output in the `dist` directory.
+This command compiles the TypeScript files and generates the necessary output in the `build` directory. It consists of these steps:
+
+1. Building the server:
+```bash
+bun run build-server
+```
+
+2. Building the worker:
+```bash
+bun run build-worker
+```
+
+3. Building the browser extensions:
+```bash
+bun run pack
+```
+
+You can also run these steps individually if you only need to build a specific component.
 
 ---
 
@@ -82,6 +99,16 @@ bun run dev
 ````
 
 This command requires Docker to be running, as it handles the environment setup for the development server. Without Docker, it is not possible to run the development server using the provided commands.
+
+For development, you can also use these watch commands:
+
+```bash
+# To watch and rebuild the server on changes:
+bun run watch-server
+
+# To watch and rebuild the worker on changes:
+bun run watch-worker
+```
 
 > **Note**: While it is theoretically possible to run the project without Docker, no commands for such a setup are provided in this repository, and support for manual setups may require additional effort.
 
@@ -103,6 +130,38 @@ This command will start the application in production mode along with any requir
 After creating the first account, it's recommended to keep registration disabled unless you intend to make the instance public or have other security measures in place.
 
 > **Note**: While it is technically possible to run the project without Docker, no ready-to-use commands are provided. To run the project manually, you would need to set up the required environment, which includes services like **Redis** and **Postgres**, and configure the necessary **environment variables** for the application to function correctly. Refer to the official [Redis Documentation](https://redis.io/) and [Postgres Documentation](https://www.postgresql.org/) for help.
+
+## Linting and Code Quality
+
+FeedFathom maintains code quality through several linting and formatting tools. You can run these commands to maintain code quality:
+
+```bash
+# Run all linting checks
+bun run lint
+
+# Fix linting issues automatically where possible
+bun run lint:fix
+
+# Format code using Biome
+bun run format
+
+# Run ESLint only
+bun run eslint
+
+# Fix ESLint issues
+bun run eslint:fix
+
+# Run Svelte type checking
+bun run svelte-check
+```
+
+The complete lint process includes several steps that are run in sequence:
+1. Running tests
+2. Syncing Svelte Kit
+3. Running Biome checks
+4. Running TypeScript type checking
+5. Running ESLint
+6. Running Svelte type checking
 
 ## Environment Variables
 
@@ -128,16 +187,16 @@ FeedFathom supports the following environment variables for configuration:
 
 ## Packing the Extension
 
-To prepare the browser extensions for Firefox and Chromium, run:
+Browser extensions are built automatically as part of the main build process (`bun run build-project`). If you want to build only the extensions without rebuilding the entire project, run:
 
 ```bash
 bun run pack
 ```
 
-This will create two zip files in the `dist` directory:
+This will create in the `build` directory:
 
-- `FeedFathom_ff.zip` for Firefox.
-- `FeedFathom_ch.zip` for Chromium.
+- Zip files: `FeedFathom_ff.zip` for Firefox and `FeedFathom_ch.zip` for Chromium.
+- Unpacked extension directories that are ready to use.
 
 ---
 
@@ -158,7 +217,7 @@ After packing the extension, you can load it into your browser as follows:
 2. Navigate to `chrome://extensions/`.
 3. Enable `Developer mode`.
 4. Click `Load unpacked`.
-5. Select the `dist_chromium` directory.
+5. Select the `build/chromium` directory.
 
 ---
 

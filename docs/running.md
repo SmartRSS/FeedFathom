@@ -36,9 +36,58 @@ After creating the first account, it's recommended to keep registration disabled
 To build the project:
 
 ```bash
-bun run build
+bun run build-project
 ```
 
-This compiles TypeScript files and generates output in the `dist` directory.
+This compiles TypeScript files and generates output in the `build` directory.
 
-[Next: Browser Extensions](./extensions.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 } 
+The build process consists of three parts that can be run individually:
+
+```bash
+# Build the server component
+bun run build-server
+
+# Build the worker component
+bun run build-worker
+
+# Build the browser extensions
+bun run build-extension
+```
+
+## Development Workflow
+
+For development, you can use watch commands that automatically rebuild on file changes:
+
+```bash
+# Watch and rebuild the server
+bun run watch-server
+
+# Watch and rebuild the worker
+bun run watch-worker
+```
+
+## Code Quality and Linting
+
+FeedFathom uses several tools to maintain code quality:
+
+```bash
+# Run all lint checks
+bun run lint
+
+# Fix linting issues where possible
+bun run lint:fix
+
+# Format code using Biome
+bun run format
+
+# Run ESLint only
+bun run eslint
+
+# Fix ESLint issues
+bun run eslint:fix
+
+# Run Svelte type checking
+bun run svelte-check
+```
+
+[Next: Browser Extensions](./extensions.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
