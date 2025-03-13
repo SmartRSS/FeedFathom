@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 let updateAvailable = false;
 let registration: ServiceWorkerRegistration | undefined;
 
@@ -7,9 +8,11 @@ onMount(() => {
   if (typeof window !== "undefined") {
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/service-worker.js").then((reg) => {
-          registration = reg;
-        });
+        void navigator.serviceWorker
+          .register("/service-worker.js")
+          .then((reg) => {
+            registration = reg;
+          });
       });
     }
 
