@@ -107,7 +107,6 @@ jobs:
             # Start services with optimized flags
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml up -d \
               --no-deps \
-              --no-pull \
               --remove-orphans \
               migrator server worker mail && \
             # Wait for services to be healthy
