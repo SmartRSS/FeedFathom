@@ -8,15 +8,22 @@ nav_order: 4
 
 ## Building Extensions
 
-To build the browser extensions:
+The browser extensions are built as part of the main build process:
 
 ```bash
-bun run pack
+bun run build-project
 ```
 
-This creates two zip files in the `dist` directory:
-- `FeedFathom_ff.zip` for Firefox
-- `FeedFathom_ch.zip` for Chromium
+This builds both the application and the browser extensions. The build process creates:
+
+- Zip files in the `build` directory: `FeedFathom_ff.zip` for Firefox and `FeedFathom_ch.zip` for Chromium
+- Unpacked extension directories that are ready to use
+
+If you want to build only the extensions without rebuilding the entire project, you can use:
+
+```bash
+bun run build-extension
+```
 
 ## Installation Instructions
 
@@ -25,14 +32,14 @@ This creates two zip files in the `dist` directory:
 1. Navigate to `about:debugging`
 2. Click "This Firefox" in the sidebar
 3. Click "Load Temporary Add-on"
-4. Select `FeedFathom_ff.zip`
+4. Select `FeedFathom_ff.zip` from the `ext` directory
 
 ### Chromium-based Browsers
 
 1. Navigate to `chrome://extensions/`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select the `dist_chromium` directory
+4. Select the `ext/build-ch` directory (the unpacked directory created during build)
 
 ## Features
 
@@ -41,4 +48,4 @@ This creates two zip files in the `dist` directory:
 - Newsletter email address generation
 - API instance integration
 
-[Next: Contributing](./contributing.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 } 
+[Next: Contributing](./contributing.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }

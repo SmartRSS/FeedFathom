@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "export _UID=$(id -u) && export _GID=$(id -g) && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build",
+    "build-extension": "bin/generate-packages.ts",
     "build-server": "bunx --bun svelte-kit sync && bunx --bun vite build",
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
+    "build-image": "bun build-server && bun build-worker",
+    "build-project": "rm -rf build && bun build-server && bun build-worker && bun build-extension",
     "watch-server": "bunx --bun svelte-kit sync && bunx --bun vite dev --host",
     "watch-worker": "bunx --bun svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
     "eslint": "bunx --bun eslint --config=eslint.config.js ./src/**/*.{ts,svelte} ./tests/**/*.ts",
@@ -13,8 +16,7 @@
     "svelte-check": "bunx --bun svelte-check --tsconfig ./tsconfig.json",
     "lint": "bun test && bunx --bun svelte-kit sync && biome check && bunx --bun tsc && bun eslint && bun svelte-check",
     "lint:fix": "bunx --bun svelte-kit sync && bun eslint:fix --fix && biome check --write",
-    "format": "biome format --write",
-    "pack": "bin/generate-packages.ts"
+    "format": "biome format --write"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
@@ -39,8 +41,6 @@
     "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-svelte": "^3.1.0",
     "globals": "^16.0.0",
-    "prettier": "^3.5.3",
-    "prettier-plugin-svelte": "^3.3.3",
     "svelte-check": "^4.1.5",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
@@ -54,7 +54,6 @@
     "@rowanmanning/feed-parser": "^2.0.0",
     "@sveltejs/kit": "^2.19.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@worker-tools/html-rewriter": "^0.1.0-pre.19",
     "awilix": "^12.0.4",
     "axios": "^1.8.3",
     "axios-cache-interceptor": "^1.6.2",
