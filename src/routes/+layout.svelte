@@ -1,9 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import "../app.css";
-
 let updateAvailable = false;
-let isOffline = false;
 let registration: ServiceWorkerRegistration | undefined;
 
 onMount(() => {
@@ -25,16 +22,12 @@ onMount(() => {
           updateAvailable = true;
         }
         localStorage.setItem("app_version", event.data.version);
-      } else if (event.data.type === "CONNECTION_STATUS") {
-        isOffline = !event.data.isOnline;
       }
     });
-
-    // Initial online status
-    isOffline = !navigator.onLine;
   }
 });
 
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function updateServiceWorker() {
   if (registration?.waiting) {
     registration.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -53,11 +46,5 @@ function updateServiceWorker() {
     >
       Update Now
     </button>
-  </div>
-{/if}
-
-{#if isOffline}
-  <div class="fixed top-0 left-0 right-0 bg-yellow-500 text-white p-2 text-center text-sm">
-    You are currently offline. Some features may be limited.
   </div>
 {/if}
