@@ -60,6 +60,12 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
       ORIGIN: ${ORIGIN:-http://localhost:3456}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/login" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
