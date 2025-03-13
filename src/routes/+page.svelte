@@ -154,10 +154,10 @@ const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
         node.children = node.children?.map((source) => {
           if (source.type === NodeType.Source) {
             const removedCount =
-              removedArticlesMap.get(Number.parseInt(source.uid)) || 0;
+              removedArticlesMap.get(Number.parseInt(source.uid)) ?? 0;
             source.unreadCount = Math.max(
               0,
-              (source.unreadCount || 0) - removedCount,
+              (source.unreadCount ?? 0) - removedCount,
             );
           }
           return source;
@@ -165,8 +165,8 @@ const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
       }
       if (node.type === NodeType.Source) {
         const removedCount =
-          removedArticlesMap.get(Number.parseInt(node.uid)) || 0;
-        node.unreadCount = Math.max(0, (node.unreadCount || 0) - removedCount);
+          removedArticlesMap.get(Number.parseInt(node.uid)) ?? 0;
+        node.unreadCount = Math.max(0, (node.unreadCount ?? 0) - removedCount);
         return node;
       }
       return node;
@@ -280,7 +280,7 @@ function nodeTouchEnd(node: TreeNode) {
 
 async function fetchArticles(sources: string) {
   const response = await fetch(`./articles?sources=${sources}`);
-  return (await response.json()) as Promise<Article[]>;
+  return await ((await response.json()) as Promise<Article[]>);
 }
 
 const cleanupInterval = setInterval(clearStalePromises, staleTile / 2);
@@ -308,10 +308,10 @@ function clearStalePromises() {
     class:focused-column={focusedColumn === ".sources-column"}
   >
     <div class="toolbar">
-      <button aria-label="add source" onclick={() => goto("/preview")}
+      <button aria-label="add source" onclick={async () => await goto("/preview")}
         ><img alt="" src={add} />
       </button>
-      <button aria-label="add folder" onclick={() => goto("/preview")}
+      <button aria-label="add folder" onclick={async () => await goto("/preview")}
         ><img alt="" src={addFolder} />
       </button>
       <button
@@ -331,11 +331,11 @@ function clearStalePromises() {
       <button
         aria-label="options"
         class="settings-button only-mobile"
-        onclick={() => goto("/options")}><img alt="" src={config} /></button
+        onclick={async () => await goto("/options")}><img alt="" src={config} /></button
       >
     </div>
     <ul class="tree">
-      {#each tree as node}
+      {#each tree as node (node.uid)}
         <TreeNodeComponent
           {node}
           {selectedNodeUid}

@@ -39,7 +39,8 @@
       "**/.git",
       "**/.github",
       "**/.idea",
-      "**/.DS_Store"
+      "**/.DS_Store",
+      "**/bun.lock"
     ]
   },
   "organizeImports": {
