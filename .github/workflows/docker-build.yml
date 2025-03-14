@@ -96,10 +96,20 @@ jobs:
               migrator server worker mail && \
             # Wait for services to be healthy
             echo "Waiting for services to be healthy..." && \
+            MAX_ATTEMPTS=150 && \
             for service in server worker mail; do
               echo "Checking health of \$service..." && \
-              until docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps \$service | grep -q "healthy"; do
+              attempts=0 && \
+              until docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps --format json | \
+                jq -e --arg service "\$service" '.[] | select(.Service == $service and .Health == "healthy")' > /dev/null; do
+                attempts=\$((attempts + 1)) && \
+                if [ \$attempts -ge \$MAX_ATTEMPTS ]; then
+                  echo "Timeout waiting for \$service to become healthy after 5 minutes" >&2
+                  exit 1
+                fi && \
+                echo "Service \$service is not healthy yet, waiting... (attempt \$attempts/\$MAX_ATTEMPTS)" && \
                 sleep 2
               done
+              echo "Service \$service is now healthy"
             done
           EOF
