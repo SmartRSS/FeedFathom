@@ -98,17 +98,13 @@ jobs:
             echo "Waiting for services to be healthy..." && \
             MAX_ATTEMPTS=150 && \
             attempts=0 && \
-            until docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
-              grep -q "server.*(healthy)" && \
-              docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
-              grep -q "worker.*(healthy)" && \
-              docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
-              grep -q "mail.*(healthy)"; do
+            until ! docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
+              grep -v "(healthy)" | grep -q "."; do
               attempts=\$((attempts + 1)) && \
               if [ \$attempts -ge \$MAX_ATTEMPTS ]; then
                 echo "Timeout waiting for services to become healthy after 5 minutes" >&2
                 echo "Current status:" >&2
-                docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | grep -E "server|worker|mail" >&2
+                docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps >&2
                 exit 1
               fi && \
               echo "Waiting for all services to be healthy... (attempt \$attempts/\$MAX_ATTEMPTS)" && \
