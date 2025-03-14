@@ -99,7 +99,7 @@ jobs:
             MAX_ATTEMPTS=150 && \
             attempts=0 && \
             until ! docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
-              grep -v "(healthy)" | grep -q "."; do
+              grep -v "(healthy)" | grep -q "Up"; do
               attempts=\$((attempts + 1)) && \
               if [ \$attempts -ge \$MAX_ATTEMPTS ]; then
                 echo "Timeout waiting for services to become healthy after 5 minutes" >&2
