@@ -100,8 +100,8 @@ jobs:
             for service in server worker mail; do
               echo "Checking health of \$service..." && \
               attempts=0 && \
-              until docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps --format json | \
-                jq -e --arg service "\$service" '.[] | select(.Service == $service and .Health == "healthy")' > /dev/null; do
+              until docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
+                grep -q "\$service.*(healthy)"; do
                 attempts=\$((attempts + 1)) && \
                 if [ \$attempts -ge \$MAX_ATTEMPTS ]; then
                   echo "Timeout waiting for \$service to become healthy after 5 minutes" >&2
