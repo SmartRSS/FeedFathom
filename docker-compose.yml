@@ -91,6 +91,12 @@ services:
     mem_limit: "1000M"
     deploy:
       replicas: ${WORKER_REPLICAS:-2}
+    healthcheck:
+      test: [ "CMD", "bun", "-e", "const Redis = require('ioredis'); const redis = new Redis('redis://redis:6379'); redis.ping().then(() => process.exit(0)).catch(() => process.exit(1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
@@ -114,6 +120,12 @@ services:
     deploy:
       mode: global
       replicas: ${MAIL_REPLICAS:-0}
+    healthcheck:
+      test: [ "CMD", "bun", "-e", "const net = require('net'); const client = new net.Socket(); client.connect(25, 'localhost', () => { client.end(); process.exit(0); }); client.on('error', () => process.exit(1));" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

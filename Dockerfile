@@ -30,6 +30,12 @@ RUN mkdir -p /app/build && \
 
 FROM oven/bun:slim AS release
 WORKDIR /app
+
+# Install curl efficiently in a single layer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY drizzle/ /app/drizzle/
 COPY --from=base /app/build/ /app/
 ENTRYPOINT ["/usr/local/bin/bun"]
