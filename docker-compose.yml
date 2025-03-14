@@ -61,7 +61,7 @@ services:
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
       ORIGIN: ${ORIGIN:-http://localhost:3456}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/login" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
       interval: 5s
       timeout: 3s
       retries: 5
