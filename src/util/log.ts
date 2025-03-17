@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 export const llog = (..._args: unknown[]): void => {};
 
 export const logError = (...args: unknown[]): void => {

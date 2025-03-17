@@ -86,7 +86,7 @@ const closeModal = () => {
       </tr>
     </thead>
     <tbody>
-      {#each sources as source}
+      {#each sources as source (source.url)}
         <tr>
           <td>
             <button onclick={() => openModal(source.url)}>Edit</button>

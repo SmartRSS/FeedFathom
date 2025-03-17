@@ -26,7 +26,7 @@ const {
   focusedColumn,
 }: ArticleListComponentProps = $props();
 
-let selectedItems = $state(new SvelteSet<number>());
+let selectedItems = new SvelteSet<number>();
 let lastSelectedIndex: number | null = $state(null);
 let focusedIndex = $state(0);
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte

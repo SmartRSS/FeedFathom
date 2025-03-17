@@ -7,7 +7,7 @@ declare global {
   // biome-ignore lint/style/noNamespace: required to declare shape of Locals
   namespace App {
     // interface Error {}
-    // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+
     interface Locals {
       dependencies: Dependencies;
       user?: User;

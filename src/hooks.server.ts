@@ -32,7 +32,6 @@ export const handle: Handle = async ({ event, resolve }) => {
     return redirect(302, "/login");
   }
 
-  // eslint-disable-next-line require-atomic-updates
   event.locals.user = user;
   event.cookies.set("sid", sid, cookiesConfig);
   if (!pathsNotRequiringLogin.includes(event.url.pathname)) {

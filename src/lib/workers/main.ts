@@ -1,5 +1,3 @@
-/* eslint-disable n/no-process-env */
-
 import type { CommandBus } from "$lib/commands/command-bus";
 import {
   CommandType,

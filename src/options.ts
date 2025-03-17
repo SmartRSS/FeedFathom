@@ -18,7 +18,6 @@ void (async () => {
 
     const instanceAddress = (event.target as HTMLInputElement).value;
     if (!URL.canParse(instanceAddress)) {
-      // eslint-disable-next-line no-alert
       alert("bad URL");
     }
 

@@ -28,7 +28,6 @@ export class Initializer {
     const [_, ___, command, ...argument] = process.argv;
     if (command) {
       await this.cli.execute(command, argument);
-      // eslint-disable-next-line n/no-process-exit
       process.exit(0);
     }
 
@@ -39,7 +38,6 @@ export class Initializer {
     this.setupCleanupHandlers();
 
     // Check if INTEGRATION is defined
-    // eslint-disable-next-line n/no-process-env
     const integration = process.env["INTEGRATION"];
     if (!integration) {
       logError("INTEGRATION environment variable is not set");
@@ -94,7 +92,6 @@ export class Initializer {
     llog("Running migrations");
     await migrate(this.drizzleConnection, { migrationsFolder: "./drizzle" });
     llog("Migrations complete");
-    // eslint-disable-next-line n/no-process-exit
     process.exit(0);
   }
 
