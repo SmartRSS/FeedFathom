@@ -61,7 +61,7 @@ services:
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
       ORIGIN: ${ORIGIN:-http://localhost:3456}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
+      test: [ "CMD", "bun", "-e", "try { const res = await fetch('http://localhost:3000'); if (!res.ok) throw new Error('Not OK'); process.exit(0); } catch (e) { process.exit(1); }" ]
       interval: 5s
       timeout: 3s
       retries: 5
