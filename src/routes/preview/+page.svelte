@@ -253,7 +253,7 @@ function closeDialog() {
         <select bind:value={folder} name="folder">
           <option selected value="">-- no parent --</option>
           <hr />
-          {#each folders as folder}
+          {#each folders as folder (folder.id)}
             <option value={folder.id}>{folder.name}</option>
           {/each}
         </select>
@@ -303,7 +303,7 @@ function closeDialog() {
         {#if isLoading}
           <p>Loading...</p>
         {/if}
-        {#each foundFeeds as feed}
+        {#each foundFeeds as feed (feed.url)}
           <div>
             <button type="button" onclick={() => selectFeed(feed.url)}>
               {feed.title} - {feed.url}

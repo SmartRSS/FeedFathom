@@ -10,7 +10,6 @@ import {
 } from "valibot";
 
 const allowedEmails =
-  // eslint-disable-next-line n/no-process-env
   process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
 
 export const RegisterRequest = pipe(

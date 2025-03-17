@@ -1,6 +1,5 @@
 import type { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
-/* eslint-disable n/callback-return */
 import type { ArticlesRepository } from "$lib/db/article-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
 import { EmailProcessor } from "$lib/email-processor";
@@ -202,4 +201,3 @@ export class MailWorker {
     return senderAddress;
   }
 }
-/* eslint-enable n/callback-return */

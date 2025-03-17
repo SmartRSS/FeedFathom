@@ -54,7 +54,7 @@ const handleSubmit = async (event: SubmitEvent) => {
       validationMessage =
         result.issues || "Registration failed. Please try again.";
     }
-  } catch (_error) {
+  } catch {
     validationMessage = "An error occurred. Please try again later.";
   } finally {
     isSubmitting = false;
