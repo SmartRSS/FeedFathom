@@ -1,7 +1,8 @@
-import { type InferOutput, number, strictObject } from "valibot";
+import { type } from "arktype";
 
-export const DeleteFolder = strictObject({
-  removeFolderId: number(),
+export const DeleteFolder = type({
+  removeFolderId: "number",
+  "+": "reject",
 });
 
-export type DeleteFolder = InferOutput<typeof DeleteFolder>;
+export type DeleteFolder = typeof DeleteFolder.infer;
