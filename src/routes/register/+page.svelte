@@ -1,16 +1,10 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
-import {
-  boolean,
-  nullable,
-  optional,
-  safeParse,
-  strictObject,
-  string,
-} from "valibot";
-const RegisterResponse = strictObject({
-  success: boolean(),
-  error: optional(nullable(string())),
+import { type } from "arktype";
+const RegisterResponse = type({
+  success: "boolean",
+  error: "string | null",
+  "+": "reject",
 });
 
 // biome-ignore lint/style/useConst: bound by Svelte
@@ -41,9 +35,9 @@ const handleSubmit = async (event: SubmitEvent) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, email, password, passwordConfirm }),
     });
-    const result = safeParse(RegisterResponse, await res.json());
+    const result = RegisterResponse(await res.json());
 
-    if (!result.success) {
+    if (result instanceof type.errors) {
       validationMessage = "Unexpected server response";
       return;
     }
@@ -51,8 +45,7 @@ const handleSubmit = async (event: SubmitEvent) => {
     if (res.ok) {
       await goto("/login");
     } else {
-      validationMessage =
-        result.issues || "Registration failed. Please try again.";
+      validationMessage = "Registration failed. Please try again.";
     }
   } catch {
     validationMessage = "An error occurred. Please try again later.";
