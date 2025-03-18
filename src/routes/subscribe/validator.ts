@@ -1,16 +1,10 @@
-import {
-  type InferOutput,
-  null as n,
-  number,
-  strictObject,
-  string,
-  union,
-} from "valibot";
+import { type } from "arktype";
 
-export const SubscribeRequest = strictObject({
-  sourceFolder: union([number(), n()]),
-  sourceName: string(),
-  sourceUrl: string(),
+export const SubscribeRequest = type({
+  sourceFolder: "number | null",
+  sourceName: "string",
+  sourceUrl: "string",
+  "+": "reject",
 });
 
-export type SubscribeRequest = InferOutput<typeof SubscribeRequest>;
+export type SubscribeRequest = typeof SubscribeRequest.infer;

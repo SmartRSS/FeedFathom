@@ -1,8 +1,9 @@
-import { type InferOutput, strictObject, string } from "valibot";
+import { type } from "arktype";
 
-export const UpdateSourceRequest = strictObject({
-  newUrl: string(),
-  oldUrl: string(),
+export const UpdateSourceRequest = type({
+  newUrl: type.string,
+  oldUrl: type.string,
+  "+": "reject",
 });
 
-export type UpdateSourceRequest = InferOutput<typeof UpdateSourceRequest>;
+export type UpdateSourceRequest = typeof UpdateSourceRequest.infer;

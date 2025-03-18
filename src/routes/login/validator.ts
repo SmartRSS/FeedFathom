@@ -1,8 +1,9 @@
-import { type InferOutput, email, pipe, strictObject, string } from "valibot";
+import { type } from "arktype";
 
-export const LoginRequest = strictObject({
-  email: pipe(string(), email()),
-  password: string(),
+export const LoginRequest = type({
+  email: "string",
+  password: "string",
+  "+": "reject",
 });
 
-export type LoginRequest = InferOutput<typeof LoginRequest>;
+export type LoginRequest = typeof LoginRequest.infer;
