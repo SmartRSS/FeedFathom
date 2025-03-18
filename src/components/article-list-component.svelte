@@ -26,7 +26,8 @@ const {
   focusedColumn,
 }: ArticleListComponentProps = $props();
 
-let selectedItems = new SvelteSet<number>();
+// eslint-disable-next-line svelte/no-unnecessary-state-wrap
+let selectedItems = $state(new SvelteSet<number>());
 let lastSelectedIndex: number | null = $state(null);
 let focusedIndex = $state(0);
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -82,14 +83,20 @@ async function fetchData() {
 
 onMount(fetchData);
 
+// Add an effect to handle selection changes
+$effect(() => {
+  if (selectedItems) {
+    articlesSelected(
+      Array.from(selectedItems)
+        .map((itemIndex) => articles[itemIndex]?.id)
+        .filter((id) => typeof id === "number"),
+    );
+  }
+});
+
 function selectAll() {
   selectedItems = new SvelteSet(
     Array.from({ length: articles.length }, (_, i) => i),
-  );
-  articlesSelected(
-    Array.from(selectedItems)
-      .map((itemIndex) => articles[itemIndex]?.id)
-      .filter((id) => typeof id === "number"),
   );
 }
 
@@ -165,6 +172,16 @@ function handleDelete(event: KeyboardEvent) {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function handleKeyDown(event: KeyboardEvent) {
+  // Ignore modifier keys when pressed alone
+  if (
+    event.key === "Control" ||
+    event.key === "Shift" ||
+    event.key === "Alt" ||
+    event.key === "Meta"
+  ) {
+    return;
+  }
+
   switch (event.key) {
     case "a": {
       handleCtrlA(event);
@@ -191,7 +208,7 @@ function handleKeyDown(event: KeyboardEvent) {
       break;
     }
     default: {
-      logError(`Unhandled key: ${event.key}`);
+      // nop
     }
   }
 }
@@ -240,22 +257,25 @@ function deleteItems() {
 function handleRangeSelection(index: number, startIndex: number) {
   const start = Math.min(index, startIndex);
   const end = Math.max(index, startIndex);
+  const newSet = new SvelteSet(selectedItems);
   for (let i = start; i <= end; i++) {
-    selectedItems.add(i);
+    newSet.add(i);
   }
+  selectedItems = newSet;
 }
 
 function handleCtrlSelection(index: number) {
-  if (selectedItems.has(index)) {
-    selectedItems.delete(index);
+  const newSet = new SvelteSet(selectedItems);
+  if (newSet.has(index)) {
+    newSet.delete(index);
   } else {
-    selectedItems.add(index);
+    newSet.add(index);
   }
+  selectedItems = newSet;
 }
 
 function handleSingleSelection(index: number) {
-  selectedItems.clear();
-  selectedItems.add(index);
+  selectedItems = new SvelteSet([index]);
 }
 
 function selectItem(index: number, event?: MouseEvent | KeyboardEvent) {
@@ -294,9 +314,6 @@ function handleBack() {
 $effect(() => {
   selectedSourcesList;
   void fetchData();
-});
-$effect(() => {
-  // selectedItems = selectedItems;
 });
 </script>
 
