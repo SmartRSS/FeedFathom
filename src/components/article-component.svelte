@@ -39,8 +39,6 @@ let {
 
 let selectedArticle: Article;
 let frame: HTMLIFrameElement;
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
-let isLoading = $state(false);
 
 const clickHandler = (event: MouseEvent) => {
   const targetElement = event.target as HTMLElement;
@@ -139,7 +137,6 @@ async function fetchData() {
     return;
   }
 
-  isLoading = true;
   iframeDoc.body.innerHTML = "Loading...";
 
   try {
@@ -157,8 +154,6 @@ async function fetchData() {
   } catch (error) {
     logError("Error fetching data", error);
     iframeDoc.body.innerHTML = "Error loading article";
-  } finally {
-    isLoading = false;
   }
 }
 
@@ -220,9 +215,6 @@ function shouldHide() {
       onclick={async () => await goto("/options")}><img alt="" src={config} /></button
     >
   </div>
-  {#if isLoading}
-    <div class="loading-indicator">Loading article...</div>
-  {/if}
   <iframe bind:this={frame} title="article content"></iframe>
 </div>
 
@@ -240,17 +232,5 @@ function shouldHide() {
 
   .hide {
     display: none !important;
-  }
-
-  .loading-indicator {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--white);
-    padding: 1rem;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
   }
 </style>

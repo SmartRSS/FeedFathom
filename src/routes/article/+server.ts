@@ -43,8 +43,19 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     totalExecutionTime: `${(dbExecutionTime + extractExecutionTime).toFixed(2)}ms`,
   });
 
-  return json({
-    ...article,
-    content: extractedArticle,
-  });
+  return json(
+    {
+      ...article,
+      content: extractedArticle,
+    },
+    {
+      headers: {
+        "Server-Timing": `db;dur=${dbExecutionTime},extract;dur=${extractExecutionTime}`,
+        "X-Response-Time": `${(dbExecutionTime + extractExecutionTime).toFixed(2)}ms`,
+        "X-Request-ID": crypto.randomUUID(),
+        "X-Origin-Region": process.env["CF_REGION"] || "unknown",
+        "X-Origin-IP": process.env["CF_CONNECTING_IP"] || "unknown",
+      },
+    },
+  );
 };
