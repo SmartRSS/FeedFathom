@@ -12,7 +12,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
   const articleId = Number.parseInt(articleIdParameter, 10);
 
+  const dbStartTime = performance.now();
   const article = await articlesRepository.getArticle(articleId);
+  const dbEndTime = performance.now();
+  const dbExecutionTime = dbEndTime - dbStartTime;
+
   if (!article) {
     return json({}, { status: 404 });
   }
@@ -20,11 +24,22 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const displayMode = (url.searchParams.get("displayMode") ??
     DisplayMode.Feed) as DisplayMode;
 
+  const extractStartTime = performance.now();
   const extractedArticle = await extractArticle(
     article.content,
     article.url,
     displayMode,
   );
+  const extractEndTime = performance.now();
+  const extractExecutionTime = extractEndTime - extractStartTime;
+
+  // Log the execution times
+  console.log({
+    operation: "article_fetch",
+    dbExecutionTime: `${dbExecutionTime.toFixed(2)}ms`,
+    extractExecutionTime: `${extractExecutionTime.toFixed(2)}ms`,
+    totalExecutionTime: `${(dbExecutionTime + extractExecutionTime).toFixed(2)}ms`,
+  });
 
   return json({
     ...article,
