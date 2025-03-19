@@ -60,7 +60,6 @@ services:
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
-      ORIGIN: ${ORIGIN:-http://localhost:3456}
     healthcheck:
       test: [ "CMD", "bun", "-e", "\"try { const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { throw new Error('Not OK'); } process.exit(0); }catch {process.exit(1);}\"" ]
       interval: 5s
