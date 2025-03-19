@@ -76,6 +76,15 @@ jobs:
     if: github.ref == 'refs/heads/main'
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
+      ENABLE_REGISTRATION: ${{ vars.ENABLE_REGISTRATION }}
+      ORIGIN: ${{ vars.ORIGIN }}
+      WORKER_CONCURRENCY: ${{ vars.WORKER_CONCURRENCY }}
+      LOCK_DURATION: ${{ vars.LOCK_DURATION }}
+      CLEANUP_INTERVAL: ${{ vars.CLEANUP_INTERVAL }}
+      GATHER_JOBS_INTERVAL: ${{ vars.GATHER_JOBS_INTERVAL }}
+      APP_REPLICAS: ${{ vars.APP_REPLICAS }}
+      WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
 
     steps:
       - name: Checkout repository
