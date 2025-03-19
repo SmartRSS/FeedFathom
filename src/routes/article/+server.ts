@@ -34,6 +34,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const extractExecutionTime = extractEndTime - extractStartTime;
 
   // Log the execution times
+  // biome-ignore lint/suspicious/noConsoleLog: <explanation>
+  // biome-ignore lint/suspicious/noConsole: <explanation>
   console.log({
     operation: "article_fetch",
     dbExecutionTime: `${dbExecutionTime.toFixed(2)}ms`,
