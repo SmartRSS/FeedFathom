@@ -54,8 +54,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm64/v8
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=min,compression=zstd
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache,mode=max
           tags: |
             ghcr.io/${{ env.REPO_NAME }}:latest
             ghcr.io/${{ env.REPO_NAME }}:${{ github.sha }}
