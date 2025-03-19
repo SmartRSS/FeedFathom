@@ -39,6 +39,8 @@ let {
 
 let selectedArticle: Article;
 let frame: HTMLIFrameElement;
+// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+let isLoading = $state(false);
 
 const clickHandler = (event: MouseEvent) => {
   const targetElement = event.target as HTMLElement;
@@ -91,59 +93,53 @@ onDestroy(() => {
   }
 });
 
-async function fetchData(attempt = 0) {
-  if (attempt > 10) {
-    logError("failed to fetch data");
+async function fetchData() {
+  if (!frame) {
     return;
   }
 
-  if (!frame) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await fetchData(attempt + 1);
-    return;
-  }
-  const iframeDoc = frame?.contentDocument ?? frame?.contentWindow?.document;
+  const iframeDoc = frame.contentDocument ?? frame.contentWindow?.document;
   if (!iframeDoc) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await fetchData(attempt + 1);
     return;
   }
 
   iframeDoc.head.innerHTML = "";
   const styleEl = iframeDoc.createElement("style");
   styleEl.innerHTML = `
-            body {
-                height: initial;
-                max-height: initial;
-                width: initial;
-                max-width: initial;
-                color: initial;
-                background-color: initial;
-                overflow: initial;
-                display: block;
-                min-width: initial;
-                min-height: initial;
-                padding: 20px 30px;
-                margin: 0;
-                font-family: Arial, sans-serif;
-                font-size: 0.9rem;
-                line-height: 1.5;
-                word-wrap: break-word;
-                white-space: pre-line;
-            }
-            body * {
-                max-width: 100% !important;
-                height: auto !important;
-                width: auto;
-                word-wrap: break-word;
-            }
-        `;
+    body {
+      height: initial;
+      max-height: initial;
+      width: initial;
+      max-width: initial;
+      color: initial;
+      background-color: initial;
+      overflow: initial;
+      display: block;
+      min-width: initial;
+      min-height: initial;
+      padding: 20px 30px;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      word-wrap: break-word;
+      white-space: pre-line;
+    }
+    body * {
+      max-width: 100% !important;
+      height: auto !important;
+      width: auto;
+      word-wrap: break-word;
+    }
+  `;
   iframeDoc.head.append(styleEl);
+
   if (!selectedArticleId) {
     iframeDoc.body.innerHTML = "";
-
     return;
   }
+
+  isLoading = true;
   iframeDoc.body.innerHTML = "Loading...";
 
   try {
@@ -160,6 +156,9 @@ async function fetchData(attempt = 0) {
     iframeDoc.body.innerHTML = selectedArticle.content;
   } catch (error) {
     logError("Error fetching data", error);
+    iframeDoc.body.innerHTML = "Error loading article";
+  } finally {
+    isLoading = false;
   }
 }
 
@@ -179,7 +178,9 @@ function handleChange() {
 }
 
 $effect(() => {
-  void fetchData();
+  if (frame) {
+    void fetchData();
+  }
 });
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -219,6 +220,9 @@ function shouldHide() {
       onclick={async () => await goto("/options")}><img alt="" src={config} /></button
     >
   </div>
+  {#if isLoading}
+    <div class="loading-indicator">Loading article...</div>
+  {/if}
   <iframe bind:this={frame} title="article content"></iframe>
 </div>
 
@@ -236,5 +240,17 @@ function shouldHide() {
 
   .hide {
     display: none !important;
+  }
+
+  .loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--white);
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
   }
 </style>
