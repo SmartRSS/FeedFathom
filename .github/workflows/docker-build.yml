@@ -102,6 +102,14 @@ jobs:
             export FEEDFATHOM_TAG=${{ github.sha }} && \
             export MAIL_REPLICAS=1 && \
             export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
+            export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \
+            export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && \
+            export ORIGIN='${{ env.ORIGIN }}' && \
+            export WORKER_CONCURRENCY='${{ env.WORKER_CONCURRENCY }}' && \
+            export LOCK_DURATION='${{ env.LOCK_DURATION }}' && \
+            export CLEANUP_INTERVAL='${{ env.CLEANUP_INTERVAL }}' && \
+            export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && \
+            export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull && \
             # Start services with optimized flags
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml up -d \
