@@ -62,7 +62,6 @@ jobs:
             ghcr.io/${{ env.REPO_NAME }}:${{ env.BRANCH_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
-          outputs: type=docker,dest=/tmp/image.tar
           build-args: |
             BUILDKIT_PROGRESS=plain
             BUILDKIT_STEP_LOG_MAX_SIZE=10485760
