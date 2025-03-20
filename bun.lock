@@ -36,7 +36,7 @@
         "@total-typescript/ts-reset": "^0.6.1",
         "@types/archiver": "^6.0.3",
         "@types/bun": "^1.2.5",
-        "@types/chrome": "^0.0.309",
+        "@types/chrome": "^0.0.310",
         "@types/eslint": "^9.6.1",
         "@types/jsdom": "^21.1.7",
         "@types/mailparser": "^3.4.5",
@@ -313,7 +313,7 @@
 
     "@types/bun": ["@types/bun@1.2.5", "", { "dependencies": { "bun-types": "1.2.5" } }, "sha512-w2OZTzrZTVtbnJew1pdFmgV99H0/L+Pvw+z1P67HaR18MHOzYnTYOi6qzErhK8HyT+DB782ADVPPE92Xu2/Opg=="],
 
-    "@types/chrome": ["@types/chrome@0.0.309", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-ZFADzcp8b+roUrux68U8pti4cmNOLJXWkShk8lfxj9SBcjYqpJt7NypBprSJUJDJVakGZgd2Tt00QePIGh7oPA=="],
+    "@types/chrome": ["@types/chrome@0.0.310", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-2+C6NKe4DxGbT6v8noDOx5APEUtSxRL0Rzm2TVGYFkPi1fO36hiN9W1QIuGI93rdM34Qy4d+7orA+vXRZk5rjA=="],
 
     "@types/cookie": ["@types/cookie@0.6.0", "", {}, "sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA=="],
 
