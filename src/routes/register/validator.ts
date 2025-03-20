@@ -1,7 +1,5 @@
 import { type } from "arktype";
-
-const allowedEmails =
-  process.env["ALLOWED_EMAILS"]?.split(",").filter(Boolean) ?? [];
+import { config } from "../../config.ts";
 
 export const RegisterRequest = type({
   email: "string.email",
@@ -18,7 +16,10 @@ export const RegisterRequest = type({
     return true;
   })
   .narrow((n, ctx) => {
-    if (!allowedEmails.includes(n.email)) {
+    if (
+      config["ALLOWED_EMAILS"].length > 0 &&
+      !config["ALLOWED_EMAILS"].includes(n.email)
+    ) {
       ctx.mustBe("Email is not allowed");
       return false;
     }
