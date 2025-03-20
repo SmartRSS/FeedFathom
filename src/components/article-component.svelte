@@ -78,11 +78,50 @@ const clickHandler = (event: MouseEvent) => {
   }
   return true;
 };
-onMount(() => {
-  void fetchData();
-  if (frame?.contentDocument?.body) {
-    frame.contentDocument.body.addEventListener("click", clickHandler);
+
+const iframeStyles = `
+  body {
+    height: initial;
+    max-height: initial;
+    width: initial;
+    max-width: initial;
+    color: initial;
+    background-color: initial;
+    overflow: initial;
+    display: block;
+    min-width: initial;
+    min-height: initial;
+    padding: 20px 30px;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    white-space: pre-line;
   }
+  body * {
+    max-width: 100% !important;
+    height: auto !important;
+    width: auto;
+    word-wrap: break-word;
+  }
+`;
+
+function initializeIframe(iframeDoc: Document) {
+  const head = iframeDoc.head || iframeDoc.getElementsByTagName("head")[0];
+  const style = iframeDoc.createElement("style");
+  style.textContent = iframeStyles;
+  head.appendChild(style);
+
+  // Set up event listener once
+  iframeDoc.body.addEventListener("click", clickHandler);
+}
+
+onMount(() => {
+  if (frame?.contentDocument) {
+    initializeIframe(frame.contentDocument);
+  }
+  void fetchData();
 });
 
 onDestroy(() => {
@@ -92,52 +131,18 @@ onDestroy(() => {
 });
 
 async function fetchData() {
-  if (!frame) {
+  if (!frame?.contentDocument?.body) {
     return;
   }
 
-  const iframeDoc = frame.contentDocument ?? frame.contentWindow?.document;
-  if (!iframeDoc) {
-    return;
-  }
-
-  iframeDoc.head.innerHTML = "";
-  const styleEl = iframeDoc.createElement("style");
-  styleEl.innerHTML = `
-    body {
-      height: initial;
-      max-height: initial;
-      width: initial;
-      max-width: initial;
-      color: initial;
-      background-color: initial;
-      overflow: initial;
-      display: block;
-      min-width: initial;
-      min-height: initial;
-      padding: 20px 30px;
-      margin: 0;
-      font-family: Arial, sans-serif;
-      font-size: 0.9rem;
-      line-height: 1.5;
-      word-wrap: break-word;
-      white-space: pre-line;
-    }
-    body * {
-      max-width: 100% !important;
-      height: auto !important;
-      width: auto;
-      word-wrap: break-word;
-    }
-  `;
-  iframeDoc.head.append(styleEl);
+  const body = frame.contentDocument.body;
 
   if (!selectedArticleId) {
-    iframeDoc.body.innerHTML = "";
+    body.textContent = "";
     return;
   }
 
-  iframeDoc.body.innerHTML = "Loading...";
+  body.textContent = "Loading...";
 
   try {
     const res = await fetch(
@@ -148,12 +153,10 @@ async function fetchData() {
       return;
     }
 
-    iframeDoc.body.removeEventListener("click", clickHandler);
-    iframeDoc.body.addEventListener("click", clickHandler);
-    iframeDoc.body.innerHTML = selectedArticle.content;
+    body.innerHTML = selectedArticle.content;
   } catch (error) {
     logError("Error fetching data", error);
-    iframeDoc.body.innerHTML = "Error loading article";
+    body.textContent = "Error loading article";
   }
 }
 
