@@ -2,19 +2,23 @@ import { type } from "arktype";
 
 const configSchema = type({
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  ALLOWED_EMAILS: type("string").pipe((s) => s.split(",").filter(Boolean)),
+  ALLOWED_EMAILS: type("string")
+    .pipe((s) => s.split(",").filter(Boolean))
+    .default(""),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  ENABLE_REGISTRATION: type("string").pipe((s) => s === "true"),
+  ENABLE_REGISTRATION: type("string")
+    .pipe((s) => s === "true")
+    .default("false"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  WORKER_CONCURRENCY: type("string.numeric.parse"),
+  WORKER_CONCURRENCY: type("string.numeric.parse").default("1"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  LOCK_DURATION: "string.numeric.parse",
+  LOCK_DURATION: type("string.numeric.parse").default("1000"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  CLEANUP_INTERVAL: "string.numeric.parse",
+  CLEANUP_INTERVAL: type("string.numeric.parse").default("1000"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  GATHER_JOBS_INTERVAL: "string.numeric.parse",
+  GATHER_JOBS_INTERVAL: type("string.numeric.parse").default("1000"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
-  APP_REPLICAS: "string.numeric.parse",
+  APP_REPLICAS: type("string.numeric.parse").default("1"),
   "INTEGRATION?": "'mail'|'migrator'|'worker'",
   "+": "delete",
 });

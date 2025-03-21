@@ -6,7 +6,13 @@ const config = {
   optimizeDeps: { exclude: ["@sveltejs/kit"] },
   csrf: { checkOrigin: false },
   kit: {
-    adapter: adapter({ precompress: false }),
+    adapter: adapter({ precompress: false, prerender: false, ssr: false }),
+    prerender: {
+      crawl: false,
+      handleEntryGeneratorMismatch: "ignore",
+      handleMissingId: "ignore",
+      entries: [],
+    },
   },
   vite: {
     svelte: {
