@@ -24,6 +24,7 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { Queue } from "bullmq";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
+import { type Config, config } from "./config.ts";
 
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
@@ -31,6 +32,7 @@ export type Dependencies = {
   bullmqQueue: Queue;
   cli: Cli;
   commandBus: CommandBus;
+  config: Config;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
@@ -85,6 +87,7 @@ container.register({
 // Register repositories
 container.register({
   articlesRepository: asClass(ArticlesRepository).singleton(),
+  config: asValue(config),
   foldersRepository: asClass(FoldersRepository).singleton(),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),

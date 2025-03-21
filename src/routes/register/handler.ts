@@ -9,7 +9,7 @@ export const registerHandler = async ({
 }: UnauthenticatedRequestEvent<RegisterRequest>) => {
   const userCount = await locals.dependencies.usersRepository.getUserCount();
 
-  if (userCount > 0 && process.env["ENABLE_REGISTRATION"] !== "true") {
+  if (userCount > 0 && !locals.dependencies.config["ENABLE_REGISTRATION"]) {
     return json(
       {
         error: "Registration is currently disabled",
@@ -20,9 +20,7 @@ export const registerHandler = async ({
   }
 
   // Only check allowed emails if the list exists and isn't empty
-  const allowedEmails = process.env["ALLOWED_EMAILS"]
-    ?.split(",")
-    .filter(Boolean);
+  const allowedEmails = locals.dependencies.config["ALLOWED_EMAILS"];
   if (
     allowedEmails &&
     allowedEmails.length > 0 &&

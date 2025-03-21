@@ -9,23 +9,15 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type { FeedParser } from "$lib/feed-parser";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
+import type { Config } from "../../config.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import { llog, logError } from "../../util/log.ts";
-
-const parseNumber = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value);
-  return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed;
-};
-
-const defaultCleanupInterval = 60;
-const defaultGatherInterval = 20;
-const defaultLockDuration = 60;
-const defaultWorkerConcurrency = 25;
 
 export class MainWorker {
   private worker: undefined | Worker;
 
   constructor(
+    private readonly config: Config,
     private readonly bullmqQueue: Queue,
     private readonly feedParser: FeedParser,
     private readonly redis: Redis,
@@ -165,17 +157,8 @@ export class MainWorker {
   }
 
   private async setupScheduledTasks() {
-    const cleanupInterval = parseNumber(
-      process.env["CLEANUP_INTERVAL"],
-      defaultCleanupInterval,
-    );
-    const gatherInterval = parseNumber(
-      process.env["GATHER_INTERVAL"],
-      defaultGatherInterval,
-    );
-
     llog(
-      `Setting up scheduled tasks - Cleanup interval: ${cleanupInterval} minutes, Gather interval: ${gatherInterval} minutes`,
+      `Setting up scheduled tasks - Cleanup interval: ${this.config["CLEANUP_INTERVAL"]} minutes, Gather interval: ${this.config["GATHER_JOBS_INTERVAL"]} minutes`,
     );
 
     // Schedule cleanup job
@@ -185,7 +168,7 @@ export class MainWorker {
       {
         jobId: JobName.Cleanup,
         repeat: {
-          every: cleanupInterval * 60 * 1_000,
+          every: this.config["CLEANUP_INTERVAL"] * 60 * 1_000,
         },
       },
     );
@@ -198,7 +181,7 @@ export class MainWorker {
       {
         jobId: JobName.GatherJobs,
         repeat: {
-          every: gatherInterval * 60 * 1_000,
+          every: this.config["GATHER_JOBS_INTERVAL"] * 60 * 1_000,
         },
       },
     );
@@ -219,24 +202,15 @@ export class MainWorker {
   }
 
   private setupWorker() {
-    const concurrency = parseNumber(
-      process.env["WORKER_CONCURRENCY"],
-      defaultWorkerConcurrency,
-    );
-    const lockDuration = parseNumber(
-      process.env["LOCK_DURATION"],
-      defaultLockDuration,
-    );
-
     llog(
-      `Setting up worker with concurrency: ${concurrency}, lock duration: ${lockDuration} seconds`,
+      `Setting up worker with concurrency: ${this.config["WORKER_CONCURRENCY"]}, lock duration: ${this.config["LOCK_DURATION"]} seconds`,
     );
 
     this.worker = new Worker("tasks", this.processJob, {
       autorun: true,
-      concurrency,
+      concurrency: this.config["WORKER_CONCURRENCY"],
       connection: this.redis,
-      lockDuration: lockDuration * 1_000,
+      lockDuration: this.config["LOCK_DURATION"] * 1_000,
     });
 
     // Set up minimal event listeners for the worker
