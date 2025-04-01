@@ -21,9 +21,7 @@ export type ArticlesLoadedFunction = (
   sourcesArticlesMap: Map<string, number>,
 ) => void;
 
-export type ArticlesRemovedFunction = (
-  removedArticleList: Article[],
-) => Promise<void>;
+export type ArticlesRemovedFunction = (removedArticleList: Article[]) => void;
 
 export type ArticlesSelectedFunction = (
   selectedArticleIdList: number[],

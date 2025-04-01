@@ -92,9 +92,7 @@ export const userSources = pgTable(
       ),
   },
   (table) => {
-    return {
-      unique: unique().on(table.userId, table.sourceId),
-    };
+    return [unique().on(table.userId, table.sourceId)];
   },
 );
 
@@ -159,9 +157,7 @@ export const userArticles = pgTable(
       .notNull(),
   },
   (table) => {
-    return {
-      pk: primaryKey({ columns: [table.userId, table.articleId] }),
-    };
+    return [primaryKey({ columns: [table.userId, table.articleId] })];
   },
 );
 

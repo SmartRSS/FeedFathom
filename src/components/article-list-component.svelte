@@ -52,7 +52,7 @@ async function fetchData() {
       return;
     }
     articlesListElement.scrollTop = 0;
-    articles = await promise?.promise;
+    articles = await promise.promise;
     const sourceArticleCounts = new Map<string, number>();
     for (const sourceId of selectedSourcesList) {
       sourceArticleCounts.set(sourceId, 0);
@@ -85,13 +85,11 @@ onMount(fetchData);
 
 // Add an effect to handle selection changes
 $effect(() => {
-  if (selectedItems) {
-    articlesSelected(
-      Array.from(selectedItems)
-        .map((itemIndex) => articles[itemIndex]?.id)
-        .filter((id) => typeof id === "number"),
-    );
-  }
+  articlesSelected(
+    Array.from(selectedItems)
+      .map((itemIndex) => articles[itemIndex]?.id)
+      .filter((id) => typeof id === "number"),
+  );
 });
 
 function selectAll() {
@@ -123,7 +121,7 @@ function handleArrowDown(event: KeyboardEvent) {
     selectedItems.add(focusedIndex);
   }
   document
-    .querySelector(`[data-index="${focusedIndex}"]`)
+    .querySelector(`[data-index="${focusedIndex.toString()}"]`)
     ?.scrollIntoView({ block: "nearest" });
   articlesSelected(
     Array.from(selectedItems)
@@ -217,7 +215,7 @@ function deleteItems() {
   if (selectedItems.size === 0) {
     return;
   }
-  void articlesRemoved(
+  articlesRemoved(
     Array.from(selectedItems)
       .map((index) => articles[index])
       .filter(Boolean),
@@ -284,7 +282,7 @@ function selectItem(index: number, event?: MouseEvent | KeyboardEvent) {
 
   if (lastSelectedIndex === null) {
     handleSingleSelection(index);
-  } else if (event?.ctrlKey && event?.shiftKey) {
+  } else if (event?.ctrlKey && event.shiftKey) {
     handleRangeSelection(index, lastSelectedIndex);
   } else if (event?.ctrlKey) {
     handleCtrlSelection(index);
@@ -338,7 +336,7 @@ $effect(() => {
     <button
       aria-label="options"
       class="settings-button only-mobile"
-      onclick={async () => await goto("/options")}><img alt="" src={config} /></button
+      onclick={async () => { await goto("/options"); }}><img alt="" src={config} /></button
     >
   </div>
   <div
@@ -351,7 +349,7 @@ $effect(() => {
     {#if isLoading}
       LOADING...
     {:else}
-      {#each articles ?? [] as article, index (article)}
+      {#each articles as article, index (article)}
         {#if article.group !== articles[index - 1]?.group}
           <div class="date-group">{article.group}</div>
         {/if}
@@ -361,8 +359,8 @@ $effect(() => {
           data-index={index}
         >
           <a
-            href={article.url || `/readArticle/${article.id}`}
-            onclick={(e) => selectItem(index, e)}
+            href={article.url || `/readArticle/${article.id.toString()}`}
+            onclick={(e) => { selectItem(index, e); }}
           >
             <div class="title">{article.title}</div>
             <div class="details">
@@ -457,7 +455,7 @@ $effect(() => {
   }
 
   .articles-list {
-    overflow-y: auto; /* add scroll if content overflows */
+    overflow-y: auto;
     overflow-x: hidden;
     flex-grow: 1;
   }
