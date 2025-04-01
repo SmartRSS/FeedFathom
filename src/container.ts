@@ -108,6 +108,7 @@ container.register({
       return {
         bullmqQueue: container.cradle.bullmqQueue,
         commandBus: container.cradle.commandBus,
+        config: container.cradle.config,
         feedParser: container.cradle.feedParser,
         redis: container.cradle.redis,
         sourcesRepository: container.cradle.sourcesRepository,
