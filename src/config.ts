@@ -23,19 +23,18 @@ const configSchema = type({
   "+": "delete",
 });
 
-type Config = typeof configSchema.infer;
-function assertConfig(value: Config | type.errors): asserts value is Config {
+type AppConfig = typeof configSchema.infer;
+
+function assertConfig(
+  value: AppConfig | type.errors,
+): asserts value is AppConfig {
   if (value instanceof type.errors) {
     throw new Error(`Invalid config: ${value.summary}`);
   }
 }
 
-function createConfig(): Config {
-  const result = configSchema(process.env);
-  assertConfig(result);
-  return result;
-}
+const rawConfig = configSchema(process.env);
+assertConfig(rawConfig);
 
-const config = createConfig();
-
-export { config, type Config };
+export type { AppConfig };
+export const config = rawConfig satisfies AppConfig;

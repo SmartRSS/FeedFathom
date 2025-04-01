@@ -9,7 +9,7 @@ import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type { FeedParser } from "$lib/feed-parser";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
-import type { Config } from "../../config.ts";
+import type { AppConfig } from "../../config.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import { llog, logError } from "../../util/log.ts";
 
@@ -17,7 +17,7 @@ export class MainWorker {
   private worker: undefined | Worker;
 
   constructor(
-    private readonly config: Config,
+    private readonly config: AppConfig,
     private readonly bullmqQueue: Queue,
     private readonly feedParser: FeedParser,
     private readonly redis: Redis,
