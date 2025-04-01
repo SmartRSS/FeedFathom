@@ -1,5 +1,3 @@
-#!/usr/bin/env bun
-
 import fs from "node:fs";
 import path from "node:path";
 import archiver from "archiver";
@@ -8,7 +6,7 @@ import { $ } from "bun";
 const parentDir = path.resolve(__dirname, "..");
 process.chdir(parentDir);
 
-await $`bun i --frozen-lockfile`;
+await $`bun install --frozen-lockfile`;
 await $`sh -c '[ -d ext ] && rm -rf ext/build*/ || true'`;
 await $`bun build src/bg.ts --outfile=ext/build-ff/bg.js`;
 await $`bun build src/contentscript.ts --outfile=ext/build-ff/contentscript.js`;

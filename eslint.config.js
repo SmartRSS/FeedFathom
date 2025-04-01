@@ -5,19 +5,40 @@ import ts from 'typescript-eslint';
 import svelteConfig from "./svelte.config.js";
 
 
-
-
-
-
 export default [
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   ...ts.configs.recommended,
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parser: ts.parser,
+      parserOptions: {
+        project: true,
+        tsconfigRootDir: process.cwd(),
+      },
+    },
+    rules: {
+      ...ts.configs.strictTypeChecked.rules,
+    },
+  },
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parser: ts.parser,
+      parserOptions: {
+        project: true,
+        tsconfigRootDir: process.cwd(),
+      },
+    },
+  },
   ...svelte.configs.recommended.map(config => ({
     ...config,
     rules: {
       ...config.rules,
       "svelte/no-at-html-tags": "off",
       "@typescript-eslint/no-unused-expressions": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-explicit-any": "off",
     }
   })),
   {
@@ -25,6 +46,7 @@ export default [
     languageOptions: {
       parserOptions: {
         projectService: true,
+        project: true,
         extraFileExtensions: ['.svelte'],
         parser: ts.parser,
         svelteConfig,

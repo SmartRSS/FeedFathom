@@ -29,6 +29,23 @@ export class FeedParser {
     private readonly sourcesRepository: SourcesRepository,
   ) {}
 
+  private formatErrorMessage(error_: unknown): string {
+    if (error_ instanceof AxiosError) {
+      return [
+        error_.cause instanceof Object
+          ? JSON.stringify(error_.cause)
+          : "unknown cause",
+        error_.code ?? "no code",
+        error_.message,
+        String(error_.response?.status ?? "no status"),
+        typeof error_.response?.data === "string"
+          ? error_.response.data
+          : JSON.stringify(error_.response?.data ?? "no data"),
+      ].join("\n");
+    }
+    return error_ instanceof Error ? error_.message : String(error_);
+  }
+
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
@@ -68,20 +85,7 @@ export class FeedParser {
         error("parseSource", error_);
       }
 
-      let message = "";
-      if (error_ instanceof AxiosError) {
-        message +=
-          error_.cause instanceof Object
-            ? JSON.stringify(error_.cause)
-            : `${error_.cause}\n`;
-        message += `${error_.code}\n`;
-        message += `${error_.message}\n`;
-        message += `${error_.response?.status}\n`;
-        message += error_.response?.data;
-      } else {
-        message = error_ instanceof Error ? error_.message : String(error_);
-      }
-
+      const message = this.formatErrorMessage(error_);
       await this.sourcesRepository.failSource(source.id, message);
       error(`${source.url} failed`);
     }
@@ -125,8 +129,19 @@ export class FeedParser {
         if (response.status !== 200) {
           continue;
         }
+        if (
+          typeof response.data !== "string" &&
+          !(response.data instanceof ArrayBuffer)
+        ) {
+          continue;
+        }
 
-        await this.sourcesRepository.updateFavicon(source.id, response.data);
+        await this.sourcesRepository.updateFavicon(
+          source.id,
+          typeof response.data === "string"
+            ? response.data
+            : Buffer.from(response.data),
+        );
         // Exit loop after successful update
         break;
       } catch {
@@ -159,14 +174,14 @@ export class FeedParser {
     if (response.status !== 200) {
       error(`failed to load data for ${url}`);
       throw new Error(
-        `Failed to load data for ${url}, received status ${response.status}`,
+        `Failed to load data for ${url}, received status ${response.status.toString()}`,
       );
     }
 
     if (typeof response.data !== "string") {
       error(`failed to load data for ${url}`);
       throw new Error(
-        `Failed to load data for ${url}, received status ${response.status}`,
+        `Failed to load data for ${url}, received status ${response.status.toString()}`,
       );
     }
 

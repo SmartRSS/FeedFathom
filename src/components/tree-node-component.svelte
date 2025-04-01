@@ -83,7 +83,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function getUnreadCount(node: TreeNode): number {
-  if (node.type === NodeType.Folder && node.children) {
+  if (node.type === NodeType.Folder) {
     return node.children.reduce((prev: number, curr: TreeNode) => {
       return prev + getUnreadCount(curr);
     }, 0);
@@ -97,7 +97,7 @@ function getUnreadCount(node: TreeNode): number {
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function hasUnread(node: TreeNode) {
   if (node.type === NodeType.Folder) {
-    return node.children?.some(
+    return node.children.some(
       (source) => source.type === NodeType.Source && source.unreadCount > 0,
     );
   }
@@ -140,7 +140,7 @@ const onTouchEnd = (e: Event) => {
   onclick={handleNodeSelected}
   onkeydown={handleKeyDown}
   onmousedown={onTouchStart}
-  onmouseleave={() => nodeMouseLeave(node)}
+  onmouseleave={() => { nodeMouseLeave(node); }}
   onmouseup={onTouchEnd}
   ontouchend={onTouchEnd}
   ontouchstart={onTouchStart}
@@ -238,7 +238,7 @@ const onTouchEnd = (e: Event) => {
   .right {
     margin-left: auto;
     padding-left: 1rem;
-    font-style: italic; /* Optional: Adjust as needed */
+    font-style: italic;
     margin-right: 0.5rem;
   }
 </style>

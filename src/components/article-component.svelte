@@ -50,8 +50,8 @@ const clickHandler = (event: MouseEvent) => {
     const name = href.substring(1);
 
     const element =
-      frame?.contentDocument?.querySelector(`[name="${name}"]`) ??
-      frame?.contentDocument?.getElementById(name);
+      frame.contentDocument?.querySelector(`[name="${name}"]`) ??
+      frame.contentDocument?.getElementById(name);
 
     if (!element) {
       return true;
@@ -63,17 +63,17 @@ const clickHandler = (event: MouseEvent) => {
       return {
         top:
           box.top +
-          (frame?.contentWindow?.scrollY ?? 0) -
-          (frame?.contentDocument?.documentElement.clientTop ?? 0),
+          (frame.contentWindow?.scrollY ?? 0) -
+          (frame.contentDocument?.documentElement.clientTop ?? 0),
         left:
           box.left +
-          (frame?.contentWindow?.scrollX ?? 0) -
-          (frame?.contentDocument?.documentElement.clientLeft ?? 0),
+          (frame.contentWindow?.scrollX ?? 0) -
+          (frame.contentDocument?.documentElement.clientLeft ?? 0),
       };
     };
 
     const offset = getOffset(element);
-    frame?.contentWindow?.scrollTo(offset.left, offset.top);
+    frame.contentWindow?.scrollTo(offset.left, offset.top);
     return false;
   }
   return true;
@@ -108,7 +108,7 @@ const iframeStyles = `
 `;
 
 function initializeIframe(iframeDoc: Document) {
-  const head = iframeDoc.head || iframeDoc.getElementsByTagName("head")[0];
+  const head = iframeDoc.head;
   const style = iframeDoc.createElement("style");
   style.textContent = iframeStyles;
   head.appendChild(style);
@@ -118,20 +118,20 @@ function initializeIframe(iframeDoc: Document) {
 }
 
 onMount(() => {
-  if (frame?.contentDocument) {
+  if (frame.contentDocument) {
     initializeIframe(frame.contentDocument);
   }
   void fetchData();
 });
 
 onDestroy(() => {
-  if (frame?.contentDocument?.body) {
+  if (frame.contentDocument?.body) {
     frame.contentDocument.body.removeEventListener("click", clickHandler);
   }
 });
 
 async function fetchData() {
-  if (!frame?.contentDocument?.body) {
+  if (!frame.contentDocument?.body) {
     return;
   }
 
@@ -146,7 +146,7 @@ async function fetchData() {
 
   try {
     const res = await fetch(
-      `/article?article=${selectedArticleId}&displayMode=${displayMode}`,
+      `/article?article=${selectedArticleId.toString()}&displayMode=${displayMode}`,
     );
     selectedArticle = (await res.json()) as Article;
     if (typeof selectedArticle.content !== "string") {
@@ -167,7 +167,7 @@ function handleBack() {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function deleteItem() {
-  void articlesRemoved([selectedArticle]);
+  articlesRemoved([selectedArticle]);
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -176,17 +176,14 @@ function handleChange() {
 }
 
 $effect(() => {
-  if (frame) {
-    void fetchData();
-  }
+  void fetchData();
 });
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function shouldHide() {
   return (
     typeof window !== "undefined" &&
-    window.location &&
-    window?.location.pathname.startsWith("/readArticle")
+    window.location.pathname.startsWith("/readArticle")
   );
 }
 </script>
@@ -215,7 +212,7 @@ function shouldHide() {
     <button
       aria-label="options"
       class="settings-button"
-      onclick={async () => await goto("/options")}><img alt="" src={config} /></button
+      onclick={async () => { await goto("/options"); }}><img alt="" src={config} /></button
     >
   </div>
   <iframe bind:this={frame} title="article content"></iframe>

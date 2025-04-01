@@ -74,7 +74,7 @@ export const buildAxios = (redis: Redis) => {
     }
 
     if (value.state === "cached" && !canStale(value)) {
-      return value.createdAt + (value.ttl ?? defaultTtl);
+      return value.createdAt + value.ttl;
     }
 
     return currentTime + fallbackTtl;

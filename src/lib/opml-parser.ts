@@ -1,9 +1,54 @@
+import { type } from "arktype";
 import { XMLParser } from "fast-xml-parser";
-import type { OpmlFolder, OpmlSource, Outline } from "../types/opml-types.ts";
+import type { OpmlFolder, OpmlSource } from "../types/opml-types.ts";
 import { logError } from "../util/log.ts";
 
+const outlineItem = type({
+  "@_": {
+    "title?": "string",
+    "text?": "string",
+    "type?": "string",
+    "xmlUrl?": "string",
+    "htmlUrl?": "string",
+    "[string]": "string",
+  },
+  "[string]": "unknown",
+});
+
+const outlineFolder = type({
+  "@_": {
+    "title?": "string",
+    "text?": "string",
+  },
+  "outline?": outlineItem.array(),
+});
+const outline = outlineItem.or(outlineFolder);
+
+const outlineSchema = type({
+  "@_": {
+    "title?": "string",
+    "text?": "string",
+    "type?": "string",
+    "xmlUrl?": "string",
+    "htmlUrl?": "string",
+    "[string]": "string",
+  },
+  "[string]": "unknown",
+  "outline?": outline.array(),
+});
+
+type Outline = typeof outlineSchema.infer;
+
+const opmlSchema = type({
+  opml: {
+    body: {
+      outline: outlineSchema.array(),
+    },
+  },
+});
+
 export class OpmlParser {
-  async parseOpml(opml: string): Promise<Array<OpmlFolder | OpmlSource>> {
+  parseOpml(opml: string): Array<OpmlFolder | OpmlSource> {
     const parser = new XMLParser({
       allowBooleanAttributes: true,
       alwaysCreateTextNode: true,
@@ -15,12 +60,17 @@ export class OpmlParser {
       },
     });
     try {
-      const object = parser.parse(opml);
-      const mainOutline = object.opml?.body?.outline;
-
-      if (!mainOutline) {
+      const object = parser.parse(opml) as unknown;
+      if (typeof object !== "object" || object === null) {
         return [];
       }
+
+      const result = opmlSchema(object);
+      if (result instanceof type.errors) {
+        return [];
+      }
+
+      const mainOutline = result.opml.body.outline;
 
       return mainOutline.map((outline: Outline) => {
         return this.processOutline(outline);
@@ -32,11 +82,10 @@ export class OpmlParser {
   }
 
   processOutline(outline: Outline): OpmlFolder | OpmlSource {
-    const title =
-      outline["@_"]?.["title"] ?? outline["@_"]?.["text"] ?? "Unknown";
-    const type = outline["@_"]?.["type"] ?? "";
-    const xmlUrl = outline["@_"]?.["xmlUrl"] ?? "";
-    const homeUrl = outline["@_"]?.["htmlUrl"] ?? "";
+    const title = outline["@_"]["title"] ?? outline["@_"]["text"] ?? "Unknown";
+    const type = outline["@_"]["type"] ?? "";
+    const xmlUrl = outline["@_"]["xmlUrl"] ?? "";
+    const homeUrl = outline["@_"]["htmlUrl"] ?? "";
 
     if (["atom", "jsonfeed", "rdf", "rss"].includes(type) || xmlUrl) {
       return {
@@ -64,7 +113,7 @@ export class OpmlParser {
           return this.processOutline(child);
         });
       } else {
-        children = [this.processOutline(outline.outline as Outline)];
+        children = [this.processOutline(outline.outline)];
       }
     }
 

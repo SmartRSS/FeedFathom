@@ -8,7 +8,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": ["tests/**/*.test.ts"]
+    "ignore": ["tests/**/*.test.ts", "**/*.svelte"]
   },
   "formatter": {
     "enabled": true,

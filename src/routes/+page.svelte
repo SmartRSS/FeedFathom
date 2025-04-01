@@ -46,7 +46,7 @@ let displayMode: DisplayMode = $state(DisplayMode.Feed);
 let focusedColumn: FocusTarget = $state(".sources-column");
 
 let currentNode: TreeNode | null = $state(null);
-const { data } = $props();
+const { data }: { data: { tree: TreeNode[] } } = $props();
 let tree = $state(data.tree);
 
 function handleBackButton() {
@@ -101,10 +101,10 @@ function nodeSelected(node: TreeNode) {
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
-async function nodeHeld(node: TreeNode) {
+function nodeHeld(node: TreeNode) {
   selectedSourcesList =
-    node.type === "folder" && (node.children?.length ?? 0) > 0
-      ? (node.children?.map((child) => child.uid) ?? [])
+    node.type === NodeType.Folder && node.children.length > 0
+      ? node.children.map((child) => child.uid)
       : [node.uid];
   selectedNodeUid = node.type + node.uid;
   selectedNode = node;
@@ -130,7 +130,7 @@ const focusChanged: FocusChangedFunction = (focusTarget) => {
 };
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
-const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
+const articlesRemoved: ArticlesRemovedFunction = (removedArticleList) => {
   if (removedArticleList.length > 0) {
     void fetch("./articles", {
       method: "DELETE",
@@ -150,15 +150,12 @@ const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
       new Map<number, number>(),
     );
     tree = tree.map((node) => {
-      if (node.type === "folder") {
-        node.children = node.children?.map((source) => {
+      if (node.type === NodeType.Folder) {
+        node.children = node.children.map((source) => {
           if (source.type === NodeType.Source) {
             const removedCount =
               removedArticlesMap.get(Number.parseInt(source.uid)) ?? 0;
-            source.unreadCount = Math.max(
-              0,
-              (source.unreadCount ?? 0) - removedCount,
-            );
+            source.unreadCount = Math.max(0, source.unreadCount - removedCount);
           }
           return source;
         });
@@ -166,7 +163,7 @@ const articlesRemoved: ArticlesRemovedFunction = async (removedArticleList) => {
       if (node.type === NodeType.Source) {
         const removedCount =
           removedArticlesMap.get(Number.parseInt(node.uid)) ?? 0;
-        node.unreadCount = Math.max(0, (node.unreadCount ?? 0) - removedCount);
+        node.unreadCount = Math.max(0, node.unreadCount - removedCount);
         return node;
       }
       return node;
@@ -181,7 +178,7 @@ $effect(() => {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 const handleSourceDetails = () => {
-  sourceProperties?.showModal();
+  sourceProperties!.showModal();
 };
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
@@ -189,11 +186,11 @@ const handleDeleteSource = () => {
   if (!selectedNode) {
     return;
   }
-  if (!confirm("are ya sur?")) {
+  if (!confirm("Are you sure you want to delete this source?")) {
     return;
   }
-  if (selectedNode.type === "folder") {
-    if (selectedNode.children?.length > 0) {
+  if (selectedNode.type === NodeType.Folder) {
+    if (selectedNode.children.length > 0) {
       alert("folder has children");
       return;
     }
@@ -231,7 +228,7 @@ function displayModeChanged(newDisplayMode: DisplayMode) {
 const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
   tree = tree.map((node) => {
     if (node.type === "folder") {
-      node.children = node.children?.map((source) => {
+      node.children = node.children.map((source) => {
         if (source.type === NodeType.Source) {
           source.unreadCount =
             sourcesArticlesMap.get(source.uid) ?? source.unreadCount;
@@ -251,7 +248,7 @@ async function nodeTouchStart(node: TreeNode) {
   currentNode = node;
   const sources =
     node.type === NodeType.Folder
-      ? node.children?.map((source: TreeNode) => source.uid).join(",")
+      ? node.children.map((source: TreeNode) => source.uid).join(",")
       : node.uid;
   if (!sources) {
     return;
@@ -266,14 +263,14 @@ async function nodeTouchStart(node: TreeNode) {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function nodeMouseLeave(node: TreeNode) {
-  if (node.uid === currentNode?.uid && node.type === currentNode?.type) {
+  if (node.uid === currentNode?.uid && node.type === currentNode.type) {
     currentNode = null;
   }
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function nodeTouchEnd(node: TreeNode) {
-  if (node.uid !== currentNode?.uid || node.type !== currentNode?.type) {
+  if (node.uid !== currentNode?.uid || node.type !== currentNode.type) {
     return;
   }
 }
@@ -308,10 +305,10 @@ function clearStalePromises() {
     class:focused-column={focusedColumn === ".sources-column"}
   >
     <div class="toolbar">
-      <button aria-label="add source" onclick={async () => await goto("/preview")}
+      <button aria-label="add source" onclick={async () => { await goto("/preview"); }}
         ><img alt="" src={add} />
       </button>
-      <button aria-label="add folder" onclick={async () => await goto("/preview")}
+      <button aria-label="add folder" onclick={async () => { await goto("/preview"); }}
         ><img alt="" src={addFolder} />
       </button>
       <button
@@ -331,7 +328,7 @@ function clearStalePromises() {
       <button
         aria-label="options"
         class="settings-button only-mobile"
-        onclick={async () => await goto("/options")}><img alt="" src={config} /></button
+        onclick={async () => { await goto("/options"); }}><img alt="" src={config} /></button
       >
     </div>
     <ul class="tree">
