@@ -104,14 +104,14 @@ container.register({
 // Register MainWorker separately to avoid circular dependencies
 container.register({
   mainWorker: asClass(MainWorker)
-    .inject(() => ({
-      bullmqQueue: container.cradle.bullmqQueue,
-      commandBus: container.cradle.commandBus,
-      config: container.cradle.config,
-      feedParser: container.cradle.feedParser,
-      redis: container.cradle.redis,
-      sourcesRepository: container.cradle.sourcesRepository,
-      userSourcesRepository: container.cradle.userSourcesRepository,
+    .inject((container) => ({
+      bullmqQueue: container.resolve("bullmqQueue"),
+      commandBus: container.resolve("commandBus"),
+      config: container.resolve("config"),
+      feedParser: container.resolve("feedParser"),
+      redis: container.resolve("redis"),
+      sourcesRepository: container.resolve("sourcesRepository"),
+      userSourcesRepository: container.resolve("userSourcesRepository"),
     }))
     .singleton(),
 });
@@ -119,15 +119,15 @@ container.register({
 // Register Initializer last
 container.register({
   initializer: asClass(Initializer)
-    .inject(() => ({
-      cli: container.cradle.cli,
-      commandBus: container.cradle.commandBus,
-      config: container.cradle.config,
-      drizzleConnection: container.cradle.drizzleConnection,
-      feedParser: container.cradle.feedParser,
-      mailWorker: container.cradle.mailWorker,
-      mainWorker: container.cradle.mainWorker,
-      sourcesRepository: container.cradle.sourcesRepository,
+    .inject((container) => ({
+      cli: container.resolve("cli"),
+      commandBus: container.resolve("commandBus"),
+      config: container.resolve("config"),
+      drizzleConnection: container.resolve("drizzleConnection"),
+      feedParser: container.resolve("feedParser"),
+      mailWorker: container.resolve("mailWorker"),
+      mainWorker: container.resolve("mainWorker"),
+      sourcesRepository: container.resolve("sourcesRepository"),
     }))
     .singleton(),
 });
