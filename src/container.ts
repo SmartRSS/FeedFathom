@@ -125,6 +125,7 @@ container.register({
       return {
         cli: container.cradle.cli,
         commandBus: container.cradle.commandBus,
+        config: container.cradle.config,
         drizzleConnection: container.cradle.drizzleConnection,
         feedParser: container.cradle.feedParser,
         mailWorker: container.cradle.mailWorker,
