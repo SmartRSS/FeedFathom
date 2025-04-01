@@ -103,33 +103,33 @@ container.register({
 
 // Register MainWorker separately to avoid circular dependencies
 container.register({
-  mainWorker: asClass(MainWorker)
-    .singleton()
-    .inject((container) => ({
-      bullmqQueue: container.resolve("bullmqQueue"),
-      commandBus: container.resolve("commandBus"),
-      config: container.resolve("config"),
-      feedParser: container.resolve("feedParser"),
-      redis: container.resolve("redis"),
-      sourcesRepository: container.resolve("sourcesRepository"),
-      userSourcesRepository: container.resolve("userSourcesRepository"),
-    })),
+  mainWorker: asFunction((container) => {
+    return new MainWorker(
+      container.resolve("config"),
+      container.resolve("bullmqQueue"),
+      container.resolve("feedParser"),
+      container.resolve("redis"),
+      container.resolve("sourcesRepository"),
+      container.resolve("userSourcesRepository"),
+      container.resolve("commandBus"),
+    );
+  }).singleton(),
 });
 
 // Register Initializer last
 container.register({
-  initializer: asClass(Initializer)
-    .singleton()
-    .inject((container) => ({
-      cli: container.resolve("cli"),
-      commandBus: container.resolve("commandBus"),
-      config: container.resolve("config"),
-      drizzleConnection: container.resolve("drizzleConnection"),
-      feedParser: container.resolve("feedParser"),
-      mailWorker: container.resolve("mailWorker"),
-      mainWorker: container.resolve("mainWorker"),
-      sourcesRepository: container.resolve("sourcesRepository"),
-    })),
+  initializer: asFunction((container) => {
+    return new Initializer(
+      container.resolve("cli"),
+      container.resolve("commandBus"),
+      container.resolve("drizzleConnection"),
+      container.resolve("feedParser"),
+      container.resolve("mailWorker"),
+      container.resolve("mainWorker"),
+      container.resolve("sourcesRepository"),
+      container.resolve("config"),
+    );
+  }).singleton(),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO
