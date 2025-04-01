@@ -103,31 +103,31 @@ container.register({
 
 // Register MainWorker separately to avoid circular dependencies
 container.register({
-  mainWorker: asFunction((container) => {
+  mainWorker: asFunction((cradle) => {
     return new MainWorker(
-      container.resolve("config"),
-      container.resolve("bullmqQueue"),
-      container.resolve("feedParser"),
-      container.resolve("redis"),
-      container.resolve("sourcesRepository"),
-      container.resolve("userSourcesRepository"),
-      container.resolve("commandBus"),
+      cradle.resolve("config"),
+      cradle.resolve("bullmqQueue"),
+      cradle.resolve("feedParser"),
+      cradle.resolve("redis"),
+      cradle.resolve("sourcesRepository"),
+      cradle.resolve("userSourcesRepository"),
+      cradle.resolve("commandBus"),
     );
   }).singleton(),
 });
 
 // Register Initializer last
 container.register({
-  initializer: asFunction((container) => {
+  initializer: asFunction((cradle) => {
     return new Initializer(
-      container.resolve("cli"),
-      container.resolve("commandBus"),
-      container.resolve("drizzleConnection"),
-      container.resolve("feedParser"),
-      container.resolve("mailWorker"),
-      container.resolve("mainWorker"),
-      container.resolve("sourcesRepository"),
-      container.resolve("config"),
+      cradle.resolve("cli"),
+      cradle.resolve("commandBus"),
+      cradle.resolve("drizzleConnection"),
+      cradle.resolve("feedParser"),
+      cradle.resolve("mailWorker"),
+      cradle.resolve("mainWorker"),
+      cradle.resolve("sourcesRepository"),
+      cradle.resolve("config"),
     );
   }).singleton(),
 });
