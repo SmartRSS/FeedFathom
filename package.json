@@ -1,10 +1,10 @@
 {
   "name": "feedfathom-app",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "scripts": {
     "dev": "export _UID=$(id -u) && export _GID=$(id -g) && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build",
-    "build-extension": "bin/generate-packages.ts",
+    "build-extension": "./bin/generate-packages.ts",
     "build-server": "bunx --bun svelte-kit sync && bunx --bun vite build",
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
     "build-for-image": "mkdir -p build && bun build-server && bun build-worker",
@@ -14,39 +14,32 @@
     "eslint": "bunx --bun eslint --config=eslint.config.js ./src/**/*.{ts,svelte} ./tests/**/*.ts",
     "eslint:fix": "bunx --bun eslint --config=eslint.config.js ./src/**/*.{ts,svelte} ./tests/**/*.ts --fix",
     "svelte-check": "bunx --bun svelte-check --tsconfig ./tsconfig.json",
-    "lint": "bun test && bunx --bun svelte-kit sync && biome check && bunx --bunx tsc && bun eslint && bun svelte-check",
+    "lint": "bun test && bunx --bun svelte-kit sync && biome check && bunx --bunx tsc && bun eslint && bun svelte-check && bun knip",
     "lint:fix": "bunx --bun svelte-kit sync && bun eslint:fix --fix && biome check --write",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "knip": "knip"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@stylistic/eslint-plugin": "^4.2.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/archiver": "^6.0.3",
     "@types/bun": "^1.2.8",
     "@types/chrome": "^0.0.313",
-    "@types/eslint": "^9.6.1",
     "@types/jsdom": "^21.1.7",
     "@types/mailparser": "^3.4.5",
+    "@types/node": "^22.13.15",
     "@types/smtp-server": "^3.5.10",
-    "@typescript-eslint/eslint-plugin": "^8.29.0",
-    "@typescript-eslint/parser": "^8.29.0",
     "archiver": "^7.0.1",
-    "drizzle-kit": "0.30.6",
     "eslint": "^9.23.0",
     "eslint-config-biome": "^1.9.4",
-    "eslint-config-prettier": "^10.1.1",
-    "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-svelte": "^3.4.1",
     "globals": "^16.0.0",
+    "knip": "^5.46.4",
     "svelte-check": "^4.1.5",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.29.0",
-    "vite-plugin-node-polyfills": "^0.23.0",
-    "zlib": "^1.0.5"
+    "typescript-eslint": "^8.29.0"
   },
   "dependencies": {
-    "@eslint/js": "^9.23.0",
     "@extractus/article-extractor": "^8.0.17",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.0.2",
@@ -70,5 +63,14 @@
     "vite": "^6.2.4"
   },
   "type": "module",
-  "trustedDependencies": []
+  "trustedDependencies": [],
+  "knip": {
+    "$schema": "https://unpkg.com/knip@5/schema.json",
+    "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**"],
+    "ignore": ["build/**", "ext/**"],
+    "ignoreBinaries": ["export", "build"],
+    "ignoreDependencies": ["svelte-check"],
+    "ignoreImports": ["$app/*"],
+    "ignoreUnresolved": ["^\\$app/"]
+  }
 }
