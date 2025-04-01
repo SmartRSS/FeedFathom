@@ -77,6 +77,48 @@ jobs:
       - name: Log out from GitHub Container Registry
         run: docker logout ghcr.io
 
+  verify:
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and start services
+        run: |
+          docker compose pull
+          docker compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to be healthy..."
+          MAX_ATTEMPTS=150
+          attempts=0
+          until ! docker compose ps | grep -v "(healthy)" | grep -q "Up"; do
+            attempts=$((attempts + 1))
+            if [ $attempts -ge $MAX_ATTEMPTS ]; then
+              echo "Timeout waiting for services to become healthy after 5 minutes" >&2
+              echo "Current status:" >&2
+              docker compose ps >&2
+              exit 1
+            fi
+            echo "Waiting for all services to be healthy... (attempt $attempts/$MAX_ATTEMPTS)"
+            sleep 2
+          done
+          echo "All services are now healthy"
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
   deploy:
     runs-on: ubuntu-24.04
     needs: build
