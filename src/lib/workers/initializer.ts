@@ -9,7 +9,7 @@ import type { MailWorker } from "$lib/workers/mail";
 import type { MainWorker } from "$lib/workers/main";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
-import type { Config } from "../../config.ts";
+import type { AppConfig } from "../../config.ts";
 import { llog, logError } from "../../util/log.ts";
 import type { Cli } from "./cli.ts";
 
@@ -23,7 +23,7 @@ export class Initializer {
     private readonly mailWorker: MailWorker,
     private readonly mainWorker: MainWorker,
     private readonly sourcesRepository: SourcesRepository,
-    private readonly config: Config,
+    private readonly config: AppConfig,
   ) {}
 
   public async initialize() {

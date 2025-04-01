@@ -24,7 +24,7 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { Queue } from "bullmq";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
-import { type Config, config } from "./config.ts";
+import { type AppConfig, config } from "./config.ts";
 
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
@@ -32,7 +32,7 @@ export type Dependencies = {
   bullmqQueue: Queue;
   cli: Cli;
   commandBus: CommandBus;
-  config: Config;
+  config: AppConfig;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
@@ -75,13 +75,13 @@ const container = createContainer<Dependencies>({
 // Register all dependencies in a single call
 container.register({
   // Basic dependencies
-  axiosInstance: asFunction(buildAxios).singleton(),
-  bullmqQueue: asValue(bullmq),
-  commandBus: asClass(CommandBus).singleton(),
-  drizzleConnection: asValue(databaseConnection),
-  opmlParser: asFunction(() => new OpmlParser()).singleton(),
-  redis: asValue(ioRedisConnection),
   config: asValue(config),
+  redis: asValue(ioRedisConnection),
+  bullmqQueue: asValue(bullmq),
+  drizzleConnection: asValue(databaseConnection),
+  axiosInstance: asFunction(buildAxios).singleton(),
+  commandBus: asClass(CommandBus).singleton(),
+  opmlParser: asFunction(() => new OpmlParser()).singleton(),
 
   // Repositories
   articlesRepository: asClass(ArticlesRepository).singleton(),
