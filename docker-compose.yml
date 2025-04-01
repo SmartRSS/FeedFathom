@@ -91,6 +91,12 @@ services:
     mem_limit: ${WORKER_MEM_LIMIT:-1000M}
     deploy:
       replicas: ${WORKER_REPLICAS:-10}
+      update_config:
+        parallelism: 2
+        delay: 25s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
     healthcheck:
       test: [ "CMD", "bun", "-e", "const Redis = require('ioredis'); const redis = new Redis('redis://redis:6379'); redis.ping().then(() => process.exit(0)).catch(() => process.exit(1))" ]
       interval: 10s
