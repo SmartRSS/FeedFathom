@@ -72,64 +72,32 @@ const container = createContainer<Dependencies>({
   strict: true,
 });
 
-// Register basic dependencies first
+// Register all dependencies in a single call
 container.register({
+  // Basic dependencies
   axiosInstance: asFunction(buildAxios).singleton(),
   bullmqQueue: asValue(bullmq),
   commandBus: asClass(CommandBus).singleton(),
   drizzleConnection: asValue(databaseConnection),
-  opmlParser: asFunction(() => {
-    return new OpmlParser();
-  }).singleton(),
+  opmlParser: asFunction(() => new OpmlParser()).singleton(),
   redis: asValue(ioRedisConnection),
   config: asValue(config),
-});
 
-// Register repositories
-container.register({
+  // Repositories
   articlesRepository: asClass(ArticlesRepository).singleton(),
   foldersRepository: asClass(FoldersRepository).singleton(),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),
   usersRepository: asClass(UsersRepository).singleton(),
-});
 
-// Register services that depend on repositories
-container.register({
+  // Services
   cli: asClass(Cli).singleton(),
   feedParser: asClass(FeedParser).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
-});
 
-// Register MainWorker separately to avoid circular dependencies
-container.register({
-  mainWorker: asFunction((cradle) => {
-    return new MainWorker(
-      cradle.resolve("config"),
-      cradle.resolve("bullmqQueue"),
-      cradle.resolve("feedParser"),
-      cradle.resolve("redis"),
-      cradle.resolve("sourcesRepository"),
-      cradle.resolve("userSourcesRepository"),
-      cradle.resolve("commandBus"),
-    );
-  }).singleton(),
-});
-
-// Register Initializer last
-container.register({
-  initializer: asFunction((cradle) => {
-    return new Initializer(
-      cradle.resolve("cli"),
-      cradle.resolve("commandBus"),
-      cradle.resolve("drizzleConnection"),
-      cradle.resolve("feedParser"),
-      cradle.resolve("mailWorker"),
-      cradle.resolve("mainWorker"),
-      cradle.resolve("sourcesRepository"),
-      cradle.resolve("config"),
-    );
-  }).singleton(),
+  // Workers
+  mainWorker: asClass(MainWorker).singleton(),
+  initializer: asClass(Initializer).singleton(),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO
