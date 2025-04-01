@@ -82,12 +82,12 @@ container.register({
     return new OpmlParser();
   }).singleton(),
   redis: asValue(ioRedisConnection),
+  config: asValue(config),
 });
 
 // Register repositories
 container.register({
   articlesRepository: asClass(ArticlesRepository).singleton(),
-  config: asValue(config),
   foldersRepository: asClass(FoldersRepository).singleton(),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),
@@ -104,6 +104,7 @@ container.register({
 // Register MainWorker separately to avoid circular dependencies
 container.register({
   mainWorker: asClass(MainWorker)
+    .singleton()
     .inject((container) => ({
       bullmqQueue: container.resolve("bullmqQueue"),
       commandBus: container.resolve("commandBus"),
@@ -112,13 +113,13 @@ container.register({
       redis: container.resolve("redis"),
       sourcesRepository: container.resolve("sourcesRepository"),
       userSourcesRepository: container.resolve("userSourcesRepository"),
-    }))
-    .singleton(),
+    })),
 });
 
 // Register Initializer last
 container.register({
   initializer: asClass(Initializer)
+    .singleton()
     .inject((container) => ({
       cli: container.resolve("cli"),
       commandBus: container.resolve("commandBus"),
@@ -128,8 +129,7 @@ container.register({
       mailWorker: container.resolve("mailWorker"),
       mainWorker: container.resolve("mainWorker"),
       sourcesRepository: container.resolve("sourcesRepository"),
-    }))
-    .singleton(),
+    })),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO
