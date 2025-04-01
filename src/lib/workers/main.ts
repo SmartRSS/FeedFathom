@@ -17,7 +17,7 @@ export class MainWorker {
   private worker: undefined | Worker;
 
   constructor(
-    private readonly config: AppConfig,
+    private readonly appConfig: AppConfig,
     private readonly bullmqQueue: Queue,
     private readonly feedParser: FeedParser,
     private readonly redis: Redis,
@@ -158,7 +158,7 @@ export class MainWorker {
 
   private async setupScheduledTasks() {
     llog(
-      `Setting up scheduled tasks - Cleanup interval: ${this.config["CLEANUP_INTERVAL"]} minutes, Gather interval: ${this.config["GATHER_JOBS_INTERVAL"]} minutes`,
+      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} minutes, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} minutes`,
     );
 
     // Schedule cleanup job
@@ -168,7 +168,7 @@ export class MainWorker {
       {
         jobId: JobName.Cleanup,
         repeat: {
-          every: this.config["CLEANUP_INTERVAL"] * 60 * 1_000,
+          every: this.appConfig["CLEANUP_INTERVAL"] * 60 * 1_000,
         },
       },
     );
@@ -181,7 +181,7 @@ export class MainWorker {
       {
         jobId: JobName.GatherJobs,
         repeat: {
-          every: this.config["GATHER_JOBS_INTERVAL"] * 60 * 1_000,
+          every: this.appConfig["GATHER_JOBS_INTERVAL"] * 60 * 1_000,
         },
       },
     );
@@ -203,14 +203,14 @@ export class MainWorker {
 
   private setupWorker() {
     llog(
-      `Setting up worker with concurrency: ${this.config["WORKER_CONCURRENCY"]}, lock duration: ${this.config["LOCK_DURATION"]} seconds`,
+      `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}, lock duration: ${this.appConfig["LOCK_DURATION"]} seconds`,
     );
 
     this.worker = new Worker("tasks", this.processJob, {
       autorun: true,
-      concurrency: this.config["WORKER_CONCURRENCY"],
+      concurrency: this.appConfig["WORKER_CONCURRENCY"],
       connection: this.redis,
-      lockDuration: this.config["LOCK_DURATION"] * 1_000,
+      lockDuration: this.appConfig["LOCK_DURATION"] * 1_000,
     });
 
     // Set up minimal event listeners for the worker

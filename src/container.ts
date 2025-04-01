@@ -32,7 +32,7 @@ export type Dependencies = {
   bullmqQueue: Queue;
   cli: Cli;
   commandBus: CommandBus;
-  config: AppConfig;
+  appConfig: AppConfig;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
@@ -75,7 +75,7 @@ const container = createContainer<Dependencies>({
 // Register all dependencies in a single call
 container.register({
   // Basic dependencies
-  config: asValue(config),
+  appConfig: asValue(config),
   redis: asValue(ioRedisConnection),
   bullmqQueue: asValue(bullmq),
   drizzleConnection: asValue(databaseConnection),

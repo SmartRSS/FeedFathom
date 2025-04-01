@@ -23,7 +23,7 @@ export class Initializer {
     private readonly mailWorker: MailWorker,
     private readonly mainWorker: MainWorker,
     private readonly sourcesRepository: SourcesRepository,
-    private readonly config: AppConfig,
+    private readonly appConfig: AppConfig,
   ) {}
 
   public async initialize() {
@@ -40,7 +40,7 @@ export class Initializer {
     this.setupCleanupHandlers();
 
     // Check if INTEGRATION is defined
-    const integration = this.config["INTEGRATION"];
+    const integration = this.appConfig["INTEGRATION"];
     if (!integration) {
       logError("INTEGRATION environment variable is not set");
       throw new Error("INTEGRATION environment variable is not set");
