@@ -1,10 +1,9 @@
-
 import { $ } from "bun";
 
 const VERSION = "v0.1.0";
 
 // Check if compose v2 is available
-const composeCommand = await $`docker compose >/dev/null 2>&1`.then(() => "docker compose").catch(() => "docker-compose");
+const composeCommand = await $`which docker compose`.then(() => "docker compose").catch(() => "docker-compose");
 
 // Function to get target replicas for all services from compose config
 async function getTargetReplicasMap(services, composeFiles) {

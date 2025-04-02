@@ -152,7 +152,7 @@ jobs:
 
       - name: Copy Docker Compose files and rollout script to server
         run: |
-          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml rollout.js ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
 
       - name: Deploy to server
         run: |
