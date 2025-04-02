@@ -1,8 +1,5 @@
 services:
   server:
-    extends:
-      file: docker-compose.yml
-      service: server
     ports: !reset []
     expose:
       - 3000
