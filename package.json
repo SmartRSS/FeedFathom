@@ -66,9 +66,9 @@
   "trustedDependencies": [],
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
-    "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**"],
-    "ignore": ["build/**", "ext/**"],
-    "ignoreBinaries": ["export", "build", "rollout.js"],
+    "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**", "rollout.js"],
+    "ignore": ["build/**", "ext/**", "rollout.js"],
+    "ignoreBinaries": ["export", "build"],
     "ignoreDependencies": ["svelte-check"],
     "ignoreImports": ["$app/*"],
     "ignoreUnresolved": ["^\\$app/"]
