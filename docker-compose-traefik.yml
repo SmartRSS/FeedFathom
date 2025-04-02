@@ -14,6 +14,13 @@ services:
       - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
+      - "traefik.http.services.feedfathom.healthcheck.path=/healthcheck"
+      - "traefik.http.services.feedfathom.healthcheck.interval=5s"
+      - "traefik.http.services.feedfathom.healthcheck.timeout=1s"
+      - "traefik.http.services.feedfathom.healthcheck.status=200-299"
+      # Circuit Breaker Configuration
+      - "traefik.http.services.feedfathom.loadbalancer.healthcheck.failurethreshold=2" # Number of consecutive failures before opening the circuit
+      - "traefik.http.services.feedfathom.loadbalancer.healthcheck.passhostheader=true" # Optional: Pass the Host header during health checks
   mail:
     networks:
       - traefik
