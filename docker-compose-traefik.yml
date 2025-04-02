@@ -3,7 +3,7 @@ services:
     extends:
       file: docker-compose.yml
       service: server
-    ports: []
+    ports: !reset []
     networks:
       - traefik
       - feedfathom
@@ -13,7 +13,7 @@ services:
       - "traefik.http.routers.feedfathom.entrypoints=web"
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
   mail:
-    ports: []
+    ports: !reset []
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.smtp.rule=HostSNI(`*`)"
