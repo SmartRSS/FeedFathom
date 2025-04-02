@@ -4,6 +4,8 @@ services:
       file: docker-compose.yml
       service: server
     ports: !reset []
+    expose:
+      - 3000
     networks:
       - traefik
       - feedfathom
@@ -17,6 +19,8 @@ services:
       - traefik
       - feedfathom
     ports: !reset []
+    expose:
+      - 25
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.smtp.rule=HostSNI(`*`)"
