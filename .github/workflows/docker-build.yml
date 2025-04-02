@@ -147,7 +147,7 @@ jobs:
             rollout.js
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
