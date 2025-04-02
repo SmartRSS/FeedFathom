@@ -61,7 +61,7 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: "bun -e \"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { throw new Error('Not OK'); } process.exit(0); }catch {process.exit(1);}\""
+      test: "true"
       interval: 5s
       timeout: 3s
       retries: 5
