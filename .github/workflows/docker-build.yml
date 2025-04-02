@@ -144,15 +144,19 @@ jobs:
           sparse-checkout: |
             docker-compose.yml
             docker-compose-traefik.yml
+            rollout.js
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy Docker Compose files to server
+      - name: Copy Docker Compose files and rollout script to server
         run: |
-          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml rollout.js ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
 
       - name: Deploy to server
         run: |
@@ -171,24 +175,7 @@ jobs:
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull && \
-            # Update services with proper dependency handling
-            docker rollout -f docker-compose.yml -f docker-compose-traefik.yml \
-              migrator server worker mail && \
-            # Wait for services to be healthy
-            echo "Waiting for services to be healthy..." && \
-            MAX_ATTEMPTS=250 && \
-            attempts=0 && \
-            until ! docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
-              grep -v "(healthy)" | grep -q "Up"; do
-              attempts=\$((attempts + 1)) && \
-              if [ \$attempts -ge \$MAX_ATTEMPTS ]; then
-                echo "Timeout waiting for services to become healthy after 5 minutes" >&2
-                echo "Current status:" >&2
-                docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps >&2
-                exit 1
-              fi && \
-              echo "Waiting for all services to be healthy... (attempt \$attempts/\$MAX_ATTEMPTS)" && \
-              sleep 2
-            done && \
-            echo "All services are now healthy"
+            # Update services with proper dependency handling using rollout.js
+            bun rollout.js -f docker-compose.yml -f docker-compose-traefik.yml \
+              migrator server worker mail
           EOF
