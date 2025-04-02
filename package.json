@@ -68,7 +68,7 @@
     "$schema": "https://unpkg.com/knip@5/schema.json",
     "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**"],
     "ignore": ["build/**", "ext/**"],
-    "ignoreBinaries": ["export", "build"],
+    "ignoreBinaries": ["export", "build", "rollout.js"],
     "ignoreDependencies": ["svelte-check"],
     "ignoreImports": ["$app/*"],
     "ignoreUnresolved": ["^\\$app/"]
