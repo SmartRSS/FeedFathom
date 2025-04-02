@@ -13,6 +13,9 @@ services:
       - "traefik.http.routers.feedfathom.entrypoints=web"
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
   mail:
+    networks:
+      - traefik
+      - feedfathom
     ports: !reset []
     labels:
       - "traefik.enable=true"
