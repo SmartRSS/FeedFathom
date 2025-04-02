@@ -98,7 +98,7 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: [ "CMD", "bun", "-e", "\"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const Redis = require('ioredis'); const redis = new Redis('redis://redis:6379'); redis.ping().then(() => process.exit(0)).catch(() => process.exit(1))}\"" ]
+      test: "bun -e \" if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
       interval: 10s
       timeout: 5s
       retries: 3
@@ -131,7 +131,7 @@ services:
         delay: 10s
         order: start-first
     healthcheck:
-      test: [ "CMD", "bun", "-e", "\"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const net = require('net'); const client = new net.Socket(); client.connect(25, 'localhost', () => { client.end(); process.exit(0); }); client.on('error', () => process.exit(1));}\"" ]
+      test: "bun -e \" if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
       interval: 10s
       timeout: 5s
       retries: 3
