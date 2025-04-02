@@ -61,7 +61,7 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: [ "CMD", "bun", "-e", "\"try { const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { throw new Error('Not OK'); } process.exit(0); }catch {process.exit(1);}\"" ]
+      test: [ "CMD", "bun", "-e", "\"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { throw new Error('Not OK'); } process.exit(0); }catch {process.exit(1);}\"" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -98,7 +98,7 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: [ "CMD", "bun", "-e", "const Redis = require('ioredis'); const redis = new Redis('redis://redis:6379'); redis.ping().then(() => process.exit(0)).catch(() => process.exit(1))" ]
+      test: [ "CMD", "bun", "-e", "\"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const Redis = require('ioredis'); const redis = new Redis('redis://redis:6379'); redis.ping().then(() => process.exit(0)).catch(() => process.exit(1))}\"" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -126,8 +126,12 @@ services:
     deploy:
       mode: global
       replicas: ${MAIL_REPLICAS:-0}
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
     healthcheck:
-      test: [ "CMD", "bun", "-e", "const net = require('net'); const client = new net.Socket(); client.connect(25, 'localhost', () => { client.end(); process.exit(0); }); client.on('error', () => process.exit(1));" ]
+      test: [ "CMD", "bun", "-e", "\"try { if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } const net = require('net'); const client = new net.Socket(); client.connect(25, 'localhost', () => { client.end(); process.exit(0); }); client.on('error', () => process.exit(1));}\"" ]
       interval: 10s
       timeout: 5s
       retries: 3
