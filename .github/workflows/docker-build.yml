@@ -172,8 +172,7 @@ jobs:
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull && \
             # Update services with proper dependency handling
-            docker rollout -f docker-compose.yml -f docker-compose-traefik.yml \
-              --remove-orphans \
+            docker rollout --pre-stop-hook "touch /tmp/drain && sleep 30" -f docker-compose.yml -f docker-compose-traefik.yml \
               migrator server worker mail && \
             # Wait for services to be healthy
             echo "Waiting for services to be healthy..." && \
