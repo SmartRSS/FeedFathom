@@ -57,7 +57,7 @@ async function rolloutService(service, composeFiles, targetReplicas) {
 
     // Calculate step size
     const step = calculateStep(targetReplicas);
-    const currentReplicas = await getCurrentReplicas(service, composeFiles);
+    let currentReplicas = await getCurrentReplicas(service, composeFiles);
 
     console.log(`Target replicas: ${targetReplicas}, Current replicas: ${currentReplicas}, Step size: ${step}`);
 
