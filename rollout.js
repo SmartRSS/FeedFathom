@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { $ } from "bun";
+
 const VERSION = "v0.1.0";
 
 // Check if compose v2 is available

@@ -144,7 +144,6 @@ jobs:
           sparse-checkout: |
             docker-compose.yml
             docker-compose-traefik.yml
-            # rollout.js
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
