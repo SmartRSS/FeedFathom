@@ -146,9 +146,6 @@ jobs:
             docker-compose-traefik.yml
             rollout.js
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v1
-
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
         with:
@@ -162,6 +159,8 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
             cd ${{ env.DEPLOY_PATH }} && \
+            # Ensure PATH includes Bun's location
+            export PATH="/home/${{ secrets.SSH_USER }}/.bun/bin:$PATH" && \
             export FEEDFATHOM_TAG=${{ github.sha }} && \
             export MAIL_REPLICAS=1 && \
             export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
