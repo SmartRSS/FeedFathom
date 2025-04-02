@@ -61,7 +61,7 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: "true"
+      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { process.exit(1); } process.exit(0);\""
       interval: 5s
       timeout: 3s
       retries: 5
