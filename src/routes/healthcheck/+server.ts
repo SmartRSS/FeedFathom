@@ -1,5 +1,5 @@
-import { json } from "@sveltejs/kit";
+import { type RequestHandler, json } from "@sveltejs/kit";
 
-export const GET = () => {
-  return json({ status: "healthy" }, { status: 200 });
+export const GET: RequestHandler = () => {
+  return json({ status: "ok" });
 };
