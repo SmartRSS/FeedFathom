@@ -171,9 +171,8 @@ jobs:
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull && \
-            # Start services with optimized flags
+            # Update services with proper dependency handling
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml up -d \
-              --no-deps \
               --remove-orphans \
               migrator server worker mail && \
             # Wait for services to be healthy
