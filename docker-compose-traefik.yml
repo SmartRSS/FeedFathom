@@ -1,5 +1,9 @@
 services:
   server:
+    extends:
+      file: docker-compose.yml
+      service: server
+    ports: []
     networks:
       - traefik
       - feedfathom
