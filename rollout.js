@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+
+import { $ } from "bun";
 
 const VERSION = "v0.1.0";
 
