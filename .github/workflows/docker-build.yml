@@ -178,7 +178,7 @@ jobs:
               migrator server worker mail && \
             # Wait for services to be healthy
             echo "Waiting for services to be healthy..." && \
-            MAX_ATTEMPTS=150 && \
+            MAX_ATTEMPTS=250 && \
             attempts=0 && \
             until ! docker compose -f docker-compose.yml -f docker-compose-traefik.yml ps | \
               grep -v "(healthy)" | grep -q "Up"; do
