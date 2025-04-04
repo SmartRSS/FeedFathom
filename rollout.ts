@@ -399,7 +399,7 @@ async function scaleService(service: string, replicas: number) {
   // use --no-recreate to prevent old replicas from being replaced
   // use --no-deps to prevent starting migrator every time
   await executeComposeCommand(
-    `up -d --scale ${service}=${replicas} --no-recreate --no-deps`,
+    `up -d --scale ${service}=${replicas} --no-recreate --no-deps > /dev/null 2>&1`,
   );
 
   // Wait a moment for containers to start
