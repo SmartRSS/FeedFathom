@@ -21,6 +21,7 @@ services:
       - 25
     labels:
       - "traefik.enable=true"
+      - "traefik.tcp.routers.mail-tcp.rule=HostSNI(`*`)"
       - "traefik.tcp.routers.mail-tcp.entrypoints=smtp"
       - "traefik.tcp.services.mail-tcp.loadbalancer.server.port=25"
 
