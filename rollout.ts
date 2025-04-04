@@ -144,7 +144,7 @@ function parseJSONL<T>(jsonlString: string, context: string): T[] {
 async function getCurrentReplicas(service: string) {
   try {
     const result = await executeComposeCommand(`ps ${service} --format json`);
-    const containers = parseJSONL(result, `service ${service}`);
+    const containers = parseJSONL<Container>(result, `service ${service}`);
     return containers.length;
   } catch (error) {
     if (error instanceof Error) {
@@ -191,37 +191,37 @@ async function getContainersByAge(
   ascending = true,
 ): Promise<string[]> {
   try {
+    logInfo(
+      `Getting containers for service ${service} (count: ${count}, ascending: ${ascending})`,
+    );
     const result = await executeComposeCommand(`ps ${service} --format json`);
+    logInfo(`Raw container data: ${result}`);
 
-    // Parse the JSONL and map the properties to camelCase
-    const containers = parseJSONL<Record<string, string>>(
-      result,
-      `service ${service}`,
-    ).map((container) => {
-      const result: Record<string, string> = {};
-      for (const [key, value] of Object.entries(container)) {
-        // Handle acronyms by keeping them lowercase (e.g. ID -> id, URL -> url)
-        const isAcronym = key === key.toUpperCase();
-        const camelKey = isAcronym
-          ? key.toLowerCase()
-          : key.charAt(0).toLowerCase() + key.slice(1);
-        result[camelKey] = value;
-      }
-      return result;
-    });
+    const containers = parseJSONL<Container>(result, `service ${service}`);
 
     // Log container details for debugging
     logInfo(`Found ${containers.length} containers for service ${service}`);
     containers.forEach((container, index) => {
       logInfo(
-        `Container ${index + 1}: ID=${container["id"]}, Created=${container["createdAt"]}`,
+        `Container ${index + 1}: ID=${container.id}, Name=${container.name}, Created=${container.createdAt}, Running=${container.state.running}, Status=${container.state.status}, Health=${container.health?.status || "none"}`,
       );
     });
 
-    return containers
+    // Filter out non-running containers
+    const runningContainers = containers.filter((c) => c.state.running);
+    logInfo(
+      `Found ${runningContainers.length} running containers out of ${containers.length} total`,
+    );
+
+    if (runningContainers.length === 0) {
+      logInfo("No running containers found");
+      return [];
+    }
+
+    const sortedContainers = runningContainers
       .sort((a, b) => {
         // Parse the Docker date format: "2025-04-03 09:30:05 +0200 CEST"
-        const parseDockerDate = (dateStr: string | undefined): number => {
+        const parseDockerDate = (dateStr: string): number => {
           if (!dateStr) {
             throw new Error("Missing creation date");
           }
@@ -235,20 +235,23 @@ async function getContainersByAge(
         };
 
         try {
-          const timeA = parseDockerDate(a["createdAt"]);
-          const timeB = parseDockerDate(b["createdAt"]);
+          const timeA = parseDockerDate(a.createdAt);
+          const timeB = parseDockerDate(b.createdAt);
           return ascending ? timeA - timeB : timeB - timeA;
         } catch (error) {
-          logError(
-            `Error parsing dates: ${a["createdAt"]} and ${b["createdAt"]}`,
-          );
+          logError(`Error parsing dates: ${a.createdAt} and ${b.createdAt}`);
           throw new Error(
             `Invalid container creation timestamp: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       })
-      .slice(0, count)
-      .map((c) => c["id"] || "");
+      .slice(0, count);
+
+    const containerIds = sortedContainers.map((c) => c.id);
+    logInfo(
+      `Selected ${containerIds.length} containers: ${containerIds.join(" ")}`,
+    );
+    return containerIds;
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(
@@ -359,18 +362,30 @@ async function drainContainers(containers: string[]) {
   const existingContainers = [];
   for (const containerId of containers) {
     try {
+      logInfo(`Checking existence of container ${containerId}`);
       const result = await executeComposeCommand("ps --format json");
+      logInfo(`Raw container data: ${result}`);
       const containerInfo = parseJSONL<Container>(result, "container status");
       const container = containerInfo.find((c) => c.id === containerId);
-      if (container?.state?.running) {
-        existingContainers.push(containerId);
+
+      if (container) {
+        logInfo(
+          `Found container ${containerId}: Running=${container.state.running}, Status=${container.state.status}, Health=${container.health?.status || "none"}`,
+        );
+        if (container.state.running) {
+          existingContainers.push(containerId);
+          logInfo(`Container ${containerId} is running, will be drained`);
+        } else {
+          logInfo(
+            `Container ${containerId} is not running (status: ${container.state.status}), skipping drain`,
+          );
+        }
       } else {
-        logInfo(`Container ${containerId} is not running, skipping drain`);
+        logInfo(`Container ${containerId} not found in container list`);
       }
     } catch (error) {
-      // If container doesn't exist or other error, log and continue
       logInfo(
-        `Container ${containerId} no longer exists or is not accessible: ${error instanceof Error ? error.message : String(error)}`,
+        `Error checking container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -383,8 +398,9 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
+      logInfo(`Creating drain file in container ${containerId}`);
       await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
-      logInfo(`Created drain file in container ${containerId}`);
+      logInfo(`Successfully created drain file in container ${containerId}`);
     } catch (error) {
       logError(
         `Failed to create drain file in container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -422,13 +438,38 @@ async function scaleService(service: string, replicas: number) {
 // Helper function to stop drained containers
 async function stopDrainedContainers(containers: string[]): Promise<void> {
   if (containers.length === 0) {
+    logInfo("No containers to stop");
     return;
   }
 
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
+
+  // Check if containers still exist before stopping
+  try {
+    const result = await executeComposeCommand("ps --format json");
+    logInfo(`Raw container data before stop: ${result}`);
+    const containerInfo = parseJSONL<Container>(result, "container status");
+
+    for (const containerId of containers) {
+      const container = containerInfo.find((c) => c.id === containerId);
+      if (container) {
+        logInfo(
+          `Found container ${containerId} before stop: Running=${container.state.running}, Status=${container.state.status}`,
+        );
+      } else {
+        logInfo(`Container ${containerId} not found before stop`);
+      }
+    }
+  } catch (error) {
+    logInfo(
+      `Error checking containers before stop: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   try {
     await executeDockerCommand(`docker stop ${containerIds}`);
+    logInfo(`Successfully stopped containers ${containerIds}`);
   } catch (error) {
     // If containers don't exist, that's fine - they're already stopped
     if (error instanceof Error && error.message.includes("No such container")) {
