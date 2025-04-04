@@ -162,17 +162,9 @@ async function compareContainerStatus(
   expectedStatus: string,
 ) {
   try {
-    const result = await executeComposeCommand(
-      `ps --format json --filter id=${containerId}`,
-    );
-    const containers = parseJSONL<Container>(
-      result,
-      `container ${containerId}`,
-    );
-    if (containers.length === 0) {
-      return false;
-    }
-    const container = containers[0];
+    const result = await executeComposeCommand("ps --format json");
+    const containers = parseJSONL<Container>(result, "container status");
+    const container = containers.find((c) => c.id === containerId);
     if (!container) {
       return false;
     }
@@ -295,15 +287,13 @@ async function waitForContainerStatus(
   // First filter out containers that no longer exist
   for (const container of containers) {
     try {
-      const result = await executeComposeCommand(
-        `ps --format json --filter id=${container}`,
+      const result = await executeComposeCommand("ps --format json");
+      const containerInfo = parseJSONL<Container>(result, "container status");
+      const foundContainer = containerInfo.find(
+        (c: Container) => c.id === container,
       );
-      const containerInfo = parseJSONL<Container>(
-        result,
-        `container ${container}`,
-      );
-      if (containerInfo.length > 0 && containerInfo[0]?.state?.running) {
-        existingContainers.push(container);
+      if (foundContainer?.state?.running) {
+        existingContainers.push(foundContainer);
       } else {
         logInfo(`Container ${container} is not running, skipping health check`);
       }
@@ -329,11 +319,11 @@ async function waitForContainerStatus(
   // Check initial status of all containers
   const unhealthyContainers = [];
   for (const container of existingContainers) {
-    const isHealthy = await compareContainerStatus(container, status);
+    const isHealthy = await compareContainerStatus(container.id, status);
     if (!isHealthy) {
-      unhealthyContainers.push(container);
+      unhealthyContainers.push(container.id);
     } else {
-      logInfo(`Container ${container} is already ${status}`);
+      logInfo(`Container ${container.id} is already ${status}`);
     }
   }
 
@@ -343,16 +333,16 @@ async function waitForContainerStatus(
   }
 
   // Wait for remaining unhealthy containers to reach desired status
-  for (const container of unhealthyContainers) {
-    while (!(await compareContainerStatus(container, status))) {
+  for (const containerId of unhealthyContainers) {
+    while (!(await compareContainerStatus(containerId, status))) {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
-          `Timeout waiting for container ${container} to become ${status}`,
+          `Timeout waiting for container ${containerId} to become ${status}`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
     }
-    logInfo(`Container ${container} became ${status}`);
+    logInfo(`Container ${containerId} became ${status}`);
   }
 }
 
@@ -369,19 +359,10 @@ async function drainContainers(containers: string[]) {
   const existingContainers = [];
   for (const containerId of containers) {
     try {
-      const result = await executeComposeCommand(
-        `ps --format json --filter id=${containerId}`,
-      );
-      const containerInfo = parseJSONL<Container>(
-        result,
-        `container ${containerId}`,
-      );
-      const container = containerInfo[0];
-      if (
-        container &&
-        typeof container === "object" &&
-        container.state?.running
-      ) {
+      const result = await executeComposeCommand("ps --format json");
+      const containerInfo = parseJSONL<Container>(result, "container status");
+      const container = containerInfo.find((c) => c.id === containerId);
+      if (container?.state?.running) {
         existingContainers.push(containerId);
       } else {
         logInfo(`Container ${containerId} is not running, skipping drain`);
@@ -402,7 +383,7 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
-      await executeComposeCommand(`exec ${containerId} touch /tmp/drain`);
+      await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
       logInfo(`Created drain file in container ${containerId}`);
     } catch (error) {
       logError(
@@ -447,7 +428,7 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
   try {
-    await executeComposeCommand(`stop ${containerIds}`);
+    await executeDockerCommand(`docker stop ${containerIds}`);
   } catch (error) {
     // If containers don't exist, that's fine - they're already stopped
     if (error instanceof Error && error.message.includes("No such container")) {
@@ -707,7 +688,7 @@ async function handleOneOffService(service: string): Promise<void> {
       logInfo(
         `Service ${service} is already running with ${currentReplicas} replicas. Stopping existing containers.`,
       );
-      await executeComposeCommand(`stop ${service}`);
+      await executeDockerCommand(`docker stop ${service}`);
     }
 
     // Run the one-off service
