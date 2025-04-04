@@ -173,22 +173,25 @@ async function compareContainerStatus(
     // Add debug logging
     logInfo(`Checking health for container ${containerId}:`);
     logInfo(`Container found: ${!!container}`);
-    if (container) {
-      logInfo(`Container state: ${container.State}`);
-      logInfo(`Container health: ${container.Health || "undefined"}`);
-      logInfo(`Container status: ${container.Status}`);
-    }
-
     if (!container) {
       return false;
     }
-    const status = container.Health?.toLowerCase() || "";
-    if (!status) {
+
+    const containerHealth = container?.Health?.toLowerCase() || "";
+    logInfo(`Container health: ${containerHealth}`);
+    logInfo(`Container status: ${container.Status}`);
+
+    // Handle "starting" health state
+    if (containerHealth === "starting") {
+      return false; // Container is still starting, not healthy yet
+    }
+
+    if (!containerHealth) {
       throw new Error(
         `Container ${containerId} has no health check configured`,
       );
     }
-    return status === expectedStatus.toLowerCase();
+    return containerHealth === expectedStatus.toLowerCase();
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("No such container")) {
       // If container doesn't exist, consider it unhealthy
