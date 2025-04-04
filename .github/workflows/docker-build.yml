@@ -173,6 +173,6 @@ jobs:
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             docker compose -f docker-compose.yml pull migrator server worker mail && \
-            bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml up -d \
+            bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml \
               migrator server worker mail
           EOF
