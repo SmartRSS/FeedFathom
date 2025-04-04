@@ -10,33 +10,16 @@ const healthcheckInterval = 500;
 const composeFiles: string[] = [];
 
 // Add type definitions at the top of the file
-interface ContainerHealth {
-  status?: string;
-  failingStreak?: number;
-  log?: Array<{
-    start: string;
-    end: string;
-    exitCode: number;
-    output: string;
-  }>;
-}
-
-interface ContainerState {
-  running: boolean;
-  status: string;
-  health?: ContainerHealth;
-}
-
 interface Container {
-  id: string;
-  name: string;
-  state: ContainerState;
-  health?: ContainerHealth;
-  createdAt: string;
+  ID: string;
+  Name: string;
+  CreatedAt: string;
+  State: string;
+  Status: string;
+  Health?: string;
   // Add fields from docker compose ps output
   Command?: string;
   ExitCode?: number;
-  Health?: string;
   Image?: string;
   Labels?: string;
   LocalVolumes?: string;
@@ -54,8 +37,6 @@ interface Container {
   RunningFor?: string;
   Service?: string;
   Size?: string;
-  State?: string;
-  Status?: string;
 }
 
 // Centralized logging functions
@@ -187,7 +168,7 @@ async function compareContainerStatus(
   try {
     const result = await executeComposeCommand("ps --format json");
     const containers = parseJSONL<Container>(result, "container status");
-    const container = containers.find((c) => c.id === containerId);
+    const container = containers.find((c) => c.ID === containerId);
     if (!container) {
       return false;
     }
@@ -226,7 +207,7 @@ async function getContainersByAge(
     logInfo(`Found ${containers.length} containers for service ${service}`);
     containers.forEach((container, index) => {
       logInfo(
-        `Container ${index + 1}: ID=${container.id}, Name=${container.name}, Created=${container.createdAt}, State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
+        `Container ${index + 1}: ID=${container.ID}, Name=${container.Name}, Created=${container.CreatedAt}, State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
       );
     });
 
@@ -258,11 +239,11 @@ async function getContainersByAge(
         };
 
         try {
-          const timeA = parseDockerDate(a.createdAt);
-          const timeB = parseDockerDate(b.createdAt);
+          const timeA = parseDockerDate(a.CreatedAt);
+          const timeB = parseDockerDate(b.CreatedAt);
           return ascending ? timeA - timeB : timeB - timeA;
         } catch (error) {
-          logError(`Error parsing dates: ${a.createdAt} and ${b.createdAt}`);
+          logError(`Error parsing dates: ${a.CreatedAt} and ${b.CreatedAt}`);
           throw new Error(
             `Invalid container creation timestamp: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -270,7 +251,7 @@ async function getContainersByAge(
       })
       .slice(0, count);
 
-    const containerIds = sortedContainers.map((c) => c.id);
+    const containerIds = sortedContainers.map((c) => c.ID);
     logInfo(
       `Selected ${containerIds.length} containers: ${containerIds.join(" ")}`,
     );
@@ -316,9 +297,9 @@ async function waitForContainerStatus(
       const result = await executeComposeCommand("ps --format json");
       const containerInfo = parseJSONL<Container>(result, "container status");
       const foundContainer = containerInfo.find(
-        (c: Container) => c.id === container,
+        (c: Container) => c.ID === container,
       );
-      if (foundContainer?.state?.running) {
+      if (foundContainer?.State === "running") {
         existingContainers.push(foundContainer);
       } else {
         logInfo(`Container ${container} is not running, skipping health check`);
@@ -345,11 +326,11 @@ async function waitForContainerStatus(
   // Check initial status of all containers
   const unhealthyContainers = [];
   for (const container of existingContainers) {
-    const isHealthy = await compareContainerStatus(container.id, status);
+    const isHealthy = await compareContainerStatus(container.ID, status);
     if (!isHealthy) {
-      unhealthyContainers.push(container.id);
+      unhealthyContainers.push(container.ID);
     } else {
-      logInfo(`Container ${container.id} is already ${status}`);
+      logInfo(`Container ${container.ID} is already ${status}`);
     }
   }
 
@@ -389,7 +370,7 @@ async function drainContainers(containers: string[]) {
       const result = await executeComposeCommand("ps --format json");
       logInfo(`Raw container data: ${result}`);
       const containerInfo = parseJSONL<Container>(result, "container status");
-      const container = containerInfo.find((c) => c.id === containerId);
+      const container = containerInfo.find((c) => c.ID === containerId);
 
       if (container) {
         logInfo(
@@ -475,7 +456,7 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
     const containerInfo = parseJSONL<Container>(result, "container status");
 
     for (const containerId of containers) {
-      const container = containerInfo.find((c) => c.id === containerId);
+      const container = containerInfo.find((c) => c.ID === containerId);
       if (container) {
         logInfo(
           `Found container ${containerId} before stop: State=${container.State}, Status=${container.Status}`,
@@ -853,12 +834,11 @@ if (!isRunning) {
         const containers = parseJSONL<Container>(result, "project status");
         const nonHealthyContainers = containers.filter(
           (container): container is Container => {
-            if (!container?.state?.running) {
+            if (container.State !== "running") {
               return false;
             }
             return (
-              !container.health?.status ||
-              container.health.status.toLowerCase() !== "healthy"
+              !container.Health || container.Health.toLowerCase() !== "healthy"
             );
           },
         );
