@@ -199,17 +199,8 @@ async function getContainersByAge(
       `Getting containers for service ${service} (count: ${count}, ascending: ${ascending})`,
     );
     const result = await executeComposeCommand(`ps ${service} --format json`);
-    logInfo(`Raw container data: ${result}`);
 
     const containers = parseJSONL<Container>(result, `service ${service}`);
-
-    // Log container details for debugging
-    logInfo(`Found ${containers.length} containers for service ${service}`);
-    containers.forEach((container, index) => {
-      logInfo(
-        `Container ${index + 1}: ID=${container.ID}, Name=${container.Name}, Created=${container.CreatedAt}, State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
-      );
-    });
 
     // Filter out non-running containers
     const runningContainers = containers.filter((c) => c.State === "running");
@@ -252,9 +243,6 @@ async function getContainersByAge(
       .slice(0, count);
 
     const containerIds = sortedContainers.map((c) => c.ID);
-    logInfo(
-      `Selected ${containerIds.length} containers: ${containerIds.join(" ")}`,
-    );
     return containerIds;
   } catch (error) {
     if (error instanceof Error) {
@@ -366,26 +354,12 @@ async function drainContainers(containers: string[]) {
   const existingContainers = [];
   for (const containerId of containers) {
     try {
-      logInfo(`Checking existence of container ${containerId}`);
       const result = await executeComposeCommand("ps --format json");
-      logInfo(`Raw container data: ${result}`);
       const containerInfo = parseJSONL<Container>(result, "container status");
       const container = containerInfo.find((c) => c.ID === containerId);
 
-      if (container) {
-        logInfo(
-          `Found container ${containerId}: State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
-        );
-        if (container.State === "running") {
-          existingContainers.push(containerId);
-          logInfo(`Container ${containerId} is running, will be drained`);
-        } else {
-          logInfo(
-            `Container ${containerId} is not running (status: ${container.Status}), skipping drain`,
-          );
-        }
-      } else {
-        logInfo(`Container ${containerId} not found in container list`);
+      if (container?.State === "running") {
+        existingContainers.push(containerId);
       }
     } catch (error) {
       logInfo(
@@ -402,9 +376,7 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
-      logInfo(`Creating drain file in container ${containerId}`);
       await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
-      logInfo(`Successfully created drain file in container ${containerId}`);
     } catch (error) {
       logError(
         `Failed to create drain file in container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -428,9 +400,7 @@ async function scaleService(service: string, replicas: number) {
     throw new Error("Replica count must be a non-negative integer");
   }
   logInfo(`Scaling service ${service} to ${replicas} replicas`);
-  await executeComposeCommand(
-    `scale ${service}=${replicas} ${service}  > /dev/null 2>&1`,
-  );
+  await executeComposeCommand(`scale ${service}=${replicas} ${service}`);
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
     throw new Error(
@@ -448,28 +418,6 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
 
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
-
-  // Check if containers still exist before stopping
-  try {
-    const result = await executeComposeCommand("ps --format json");
-    logInfo(`Raw container data before stop: ${result}`);
-    const containerInfo = parseJSONL<Container>(result, "container status");
-
-    for (const containerId of containers) {
-      const container = containerInfo.find((c) => c.ID === containerId);
-      if (container) {
-        logInfo(
-          `Found container ${containerId} before stop: State=${container.State}, Status=${container.Status}`,
-        );
-      } else {
-        logInfo(`Container ${containerId} not found before stop`);
-      }
-    }
-  } catch (error) {
-    logInfo(
-      `Error checking containers before stop: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 
   try {
     await executeDockerCommand(`docker stop ${containerIds}`);
@@ -751,14 +699,10 @@ async function handleOneOffService(service: string): Promise<void> {
 // Function to check if the compose project is running
 async function isComposeProjectRunning(): Promise<boolean> {
   try {
-    // Try to get the project status
     const result = await executeComposeCommand("ps --format json");
     const containers = parseJSONL<Container>(result, "project status");
-
-    // If there are any containers running, the project is running
     return containers.length > 0;
   } catch (error) {
-    // If the command fails, assume the project is not running
     logInfo(
       `Compose project appears to be not running: ${error instanceof Error ? error.message : String(error)}`,
     );
