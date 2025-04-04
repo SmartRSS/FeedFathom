@@ -19,7 +19,7 @@ services:
       - 25
     labels:
       - "traefik.enable=true"
-      - "traefik.tcp.routers.smtp.rule=Host(`*`)"
+      - "traefik.tcp.routers.smtp.rule=HostSNI(`*`)"
       - "traefik.tcp.routers.smtp.entrypoints=smtp"
 
 networks:
