@@ -400,7 +400,7 @@ async function scaleService(service: string, replicas: number) {
     throw new Error("Replica count must be a non-negative integer");
   }
   logInfo(`Scaling service ${service} to ${replicas} replicas`);
-  await executeComposeCommand(`scale ${service}=${replicas}}`);
+  await executeComposeCommand(`scale ${service}=${replicas}`);
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
     throw new Error(
