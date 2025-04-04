@@ -429,7 +429,7 @@ async function scaleService(service: string, replicas: number) {
   }
   logInfo(`Scaling service ${service} to ${replicas} replicas`);
   await executeComposeCommand(
-    `up -d --scale ${service}=${replicas} ${service} --no-recreate > /dev/null 2>&1`,
+    `up -d --scale ${service}=${replicas} ${service}  > /dev/null 2>&1`,
   );
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
