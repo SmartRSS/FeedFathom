@@ -247,8 +247,13 @@ async function getLatestContainers(
 }
 
 // Function to wait for containers to be healthy
-async function waitForContainerStatus(containers: string[], status: string) {
+async function waitForContainerStatus(
+  containers: string[],
+  status: string,
+  timeoutMs = 30000,
+) {
   const existingContainers = [];
+  const startTime = Date.now();
 
   // First filter out containers that no longer exist
   for (const container of containers) {
@@ -284,6 +289,11 @@ async function waitForContainerStatus(containers: string[], status: string) {
   // Wait for remaining containers to reach desired status
   for (const container of existingContainers) {
     while (!(await compareContainerStatus(container, status))) {
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error(
+          `Timeout waiting for container ${container} to become ${status}`,
+        );
+      }
       await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
     }
   }
@@ -550,8 +560,27 @@ async function rolloutService(service: string, targetReplicas: number) {
     const newContainers = await getLatestContainers(service, scaleDelta);
     logInfo(`New containers created: ${newContainers.join(" ")}`);
 
-    logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
-    await waitForContainerStatus(newContainers, "healthy");
+    try {
+      logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
+      await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Timeout")) {
+        logError(
+          `Timeout waiting for containers to become healthy: ${error.message}`,
+        );
+        // Get current replicas to see what actually started
+        const currentReplicas = await getCurrentReplicas(service);
+        if (currentReplicas < upScale) {
+          logError(
+            `Only ${currentReplicas} containers started out of ${upScale} requested`,
+          );
+          throw new Error(
+            `Failed to start all containers: only ${currentReplicas} started`,
+          );
+        }
+      }
+      throw error;
+    }
 
     const toDrain = oldContainers.splice(0, scaleDelta);
     logInfo(`Draining old containers: ${toDrain.join(" ")}`);
@@ -568,8 +597,27 @@ async function rolloutService(service: string, targetReplicas: number) {
       targetReplicas - currentReplicas,
     );
 
-    logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
-    await waitForContainerStatus(newContainers, "healthy");
+    try {
+      logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
+      await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Timeout")) {
+        logError(
+          `Timeout waiting for containers to become healthy: ${error.message}`,
+        );
+        // Get current replicas to see what actually started
+        const actualReplicas = await getCurrentReplicas(service);
+        if (actualReplicas < targetReplicas) {
+          logError(
+            `Only ${actualReplicas} containers started out of ${targetReplicas} requested`,
+          );
+          throw new Error(
+            `Failed to start all containers: only ${actualReplicas} started`,
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   logInfo(`Rollout completed for service: ${service}`);

@@ -10,7 +10,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
-      - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
   mail:
     networks:
       - traefik
@@ -20,9 +19,8 @@ services:
       - 25
     labels:
       - "traefik.enable=true"
-      - "traefik.tcp.routers.smtp.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.smtp.rule=Host(`*`)"
       - "traefik.tcp.routers.smtp.entrypoints=smtp"
-      - "traefik.tcp.services.smtp.loadbalancer.server.port=25"
 
 networks:
   traefik:
