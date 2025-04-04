@@ -137,7 +137,7 @@ async function compareContainerStatus(
 ) {
   try {
     const result = await executeDockerCommand(
-      `docker inspect --format='{{.State.Health.Status}}' ${containerId}`,
+      `docker inspect --format='{{.State.Health.Status}}' ${containerId} || echo 'unhealthy'`,
     );
     const status = result.trim();
     if (!status) {
@@ -269,7 +269,7 @@ async function drainContainers(containers: string[]) {
     try {
       // Check if container exists and is running
       const containerInfo = await executeDockerCommand(
-        `docker inspect --format='{{.State.Running}}' ${containerId}`,
+        `docker inspect --format='{{.State.Running}}' ${containerId} || 0`,
       );
       const isRunning = containerInfo.trim() === "true";
 
@@ -294,7 +294,9 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
-      await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
+      await executeDockerCommand(
+        `docker exec ${containerId} touch /tmp/drain || 0`,
+      );
       logInfo(`Created drain file in container ${containerId}`);
     } catch (error) {
       logError(
@@ -338,7 +340,7 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
 
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
-  await executeDockerCommand(`docker stop ${containerIds}`, false);
+  await executeDockerCommand(`docker stop ${containerIds} || 0`, false);
 }
 
 // Function to get service type from compose config
