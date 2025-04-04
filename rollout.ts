@@ -9,6 +9,32 @@ const healthcheckInterval = 500;
 // Global variables
 const composeFiles: string[] = [];
 
+// Add type definitions at the top of the file
+interface ContainerHealth {
+  status?: string;
+  failingStreak?: number;
+  log?: Array<{
+    start: string;
+    end: string;
+    exitCode: number;
+    output: string;
+  }>;
+}
+
+interface ContainerState {
+  running: boolean;
+  status: string;
+  health?: ContainerHealth;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  state: ContainerState;
+  health?: ContainerHealth;
+  createdAt: string;
+}
+
 // Centralized logging functions
 function logInfo(message: string): void {
   // biome-ignore lint/suspicious/noConsole: Logging is intentional
@@ -136,16 +162,27 @@ async function compareContainerStatus(
   expectedStatus: string,
 ) {
   try {
-    const result = await executeDockerCommand(
-      `docker inspect --format='{{.State.Health.Status}}' ${containerId}`,
+    const result = await executeComposeCommand(
+      `ps --format json --filter id=${containerId}`,
     );
-    const status = result.trim();
+    const containers = parseJSONL<Container>(
+      result,
+      `container ${containerId}`,
+    );
+    if (containers.length === 0) {
+      return false;
+    }
+    const container = containers[0];
+    if (!container) {
+      return false;
+    }
+    const status = container.health?.status?.toLowerCase() || "";
     if (!status) {
       throw new Error(
         `Container ${containerId} has no health check configured`,
       );
     }
-    return status === expectedStatus;
+    return status === expectedStatus.toLowerCase();
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("No such container")) {
       // If container doesn't exist, consider it unhealthy
@@ -258,11 +295,14 @@ async function waitForContainerStatus(
   // First filter out containers that no longer exist
   for (const container of containers) {
     try {
-      const result = await executeDockerCommand(
-        `docker inspect --format='{{.State.Running}}' ${container}`,
+      const result = await executeComposeCommand(
+        `ps --format json --filter id=${container}`,
       );
-      const isRunning = result.trim() === "true";
-      if (isRunning) {
+      const containerInfo = parseJSONL<Container>(
+        result,
+        `container ${container}`,
+      );
+      if (containerInfo.length > 0 && containerInfo[0]?.state?.running) {
         existingContainers.push(container);
       } else {
         logInfo(`Container ${container} is not running, skipping health check`);
@@ -286,8 +326,24 @@ async function waitForContainerStatus(
     return;
   }
 
-  // Wait for remaining containers to reach desired status
+  // Check initial status of all containers
+  const unhealthyContainers = [];
   for (const container of existingContainers) {
+    const isHealthy = await compareContainerStatus(container, status);
+    if (!isHealthy) {
+      unhealthyContainers.push(container);
+    } else {
+      logInfo(`Container ${container} is already ${status}`);
+    }
+  }
+
+  if (unhealthyContainers.length === 0) {
+    logInfo("All containers are already healthy");
+    return;
+  }
+
+  // Wait for remaining unhealthy containers to reach desired status
+  for (const container of unhealthyContainers) {
     while (!(await compareContainerStatus(container, status))) {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
@@ -296,6 +352,7 @@ async function waitForContainerStatus(
       }
       await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
     }
+    logInfo(`Container ${container} became ${status}`);
   }
 }
 
@@ -312,13 +369,19 @@ async function drainContainers(containers: string[]) {
   const existingContainers = [];
   for (const containerId of containers) {
     try {
-      // Check if container exists and is running
-      const containerInfo = await executeDockerCommand(
-        `docker inspect --format='{{.State.Running}}' ${containerId}`,
+      const result = await executeComposeCommand(
+        `ps --format json --filter id=${containerId}`,
       );
-      const isRunning = containerInfo.trim() === "true";
-
-      if (isRunning) {
+      const containerInfo = parseJSONL<Container>(
+        result,
+        `container ${containerId}`,
+      );
+      const container = containerInfo[0];
+      if (
+        container &&
+        typeof container === "object" &&
+        container.state?.running
+      ) {
         existingContainers.push(containerId);
       } else {
         logInfo(`Container ${containerId} is not running, skipping drain`);
@@ -339,7 +402,7 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
-      await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
+      await executeComposeCommand(`exec ${containerId} touch /tmp/drain`);
       logInfo(`Created drain file in container ${containerId}`);
     } catch (error) {
       logError(
@@ -384,7 +447,7 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
   try {
-    await executeDockerCommand(`docker stop ${containerIds}`, false);
+    await executeComposeCommand(`stop ${containerIds}`);
   } catch (error) {
     // If containers don't exist, that's fine - they're already stopped
     if (error instanceof Error && error.message.includes("No such container")) {
@@ -511,6 +574,7 @@ async function runOneOffService(service: string): Promise<void> {
 }
 
 // Main rollout function
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <explanation>
 async function rolloutService(service: string, targetReplicas: number) {
   logInfo(`Starting rollout for service: ${service}`);
 
@@ -663,7 +727,7 @@ async function isComposeProjectRunning(): Promise<boolean> {
   try {
     // Try to get the project status
     const result = await executeComposeCommand("ps --format json");
-    const containers = parseJSONL(result, "project status");
+    const containers = parseJSONL<Container>(result, "project status");
 
     // If there are any containers running, the project is running
     return containers.length > 0;
@@ -740,15 +804,19 @@ if (!isRunning) {
     logInfo("Waiting for all services to be healthy...");
     while (true) {
       try {
-        const containers = await executeDockerCommand(
-          "docker ps --format '{{.ID}}\t{{.Status}}' --filter 'label=com.docker.compose.project'",
+        const result = await executeComposeCommand("ps --format json");
+        const containers = parseJSONL<Container>(result, "project status");
+        const nonHealthyContainers = containers.filter(
+          (container): container is Container => {
+            if (!container?.state?.running) {
+              return false;
+            }
+            return (
+              !container.health?.status ||
+              container.health.status.toLowerCase() !== "healthy"
+            );
+          },
         );
-        const nonHealthyContainers = containers
-          .split("\n")
-          .filter(
-            (line) =>
-              line && !line.includes("(healthy)") && !line.includes("Exit 0"),
-          );
 
         if (nonHealthyContainers.length === 0) {
           break;
