@@ -389,6 +389,34 @@ async function gracefulShutdown(containers: string[]) {
   await stopDrainedContainers(containers);
 }
 
+// Helper function to stop drained containers
+async function stopDrainedContainers(containers: string[]): Promise<void> {
+  if (containers.length === 0) {
+    logInfo("No containers to stop");
+    return;
+  }
+
+  const containerIds = containers.join(" ");
+  logInfo(`Stopping and removing containers ${containerIds}`);
+
+  try {
+    // Stop the containers
+    await executeDockerCommand(`docker stop ${containerIds}`);
+    // Remove them immediately after stopping
+    await executeDockerCommand(`docker rm ${containerIds}`);
+    logInfo(`Successfully stopped and removed containers ${containerIds}`);
+  } catch (error) {
+    // If containers don't exist, that's fine - they're already stopped/removed
+    if (error instanceof Error && error.message.includes("No such container")) {
+      logInfo(
+        `Containers ${containerIds} no longer exist, skipping stop/remove`,
+      );
+    } else {
+      throw error;
+    }
+  }
+}
+
 // Function to scale service
 async function scaleService(service: string, replicas: number) {
   if (!Number.isInteger(replicas) || replicas < 0) {
@@ -410,29 +438,6 @@ async function scaleService(service: string, replicas: number) {
     throw new Error(
       `Failed to scale service ${service} to ${replicas} replicas (got ${actualReplicas})`,
     );
-  }
-}
-
-// Helper function to stop drained containers
-async function stopDrainedContainers(containers: string[]): Promise<void> {
-  if (containers.length === 0) {
-    logInfo("No containers to stop");
-    return;
-  }
-
-  const containerIds = containers.join(" ");
-  logInfo(`Stopping containers ${containerIds}`);
-
-  try {
-    await executeDockerCommand(`docker stop ${containerIds}`);
-    logInfo(`Successfully stopped containers ${containerIds}`);
-  } catch (error) {
-    // If containers don't exist, that's fine - they're already stopped
-    if (error instanceof Error && error.message.includes("No such container")) {
-      logInfo(`Containers ${containerIds} no longer exist, skipping stop`);
-    } else {
-      throw error;
-    }
   }
 }
 
