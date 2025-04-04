@@ -286,8 +286,24 @@ async function waitForContainerStatus(
     return;
   }
 
-  // Wait for remaining containers to reach desired status
+  // Check initial status of all containers
+  const unhealthyContainers = [];
   for (const container of existingContainers) {
+    const isHealthy = await compareContainerStatus(container, status);
+    if (!isHealthy) {
+      unhealthyContainers.push(container);
+    } else {
+      logInfo(`Container ${container} is already ${status}`);
+    }
+  }
+
+  if (unhealthyContainers.length === 0) {
+    logInfo("All containers are already healthy");
+    return;
+  }
+
+  // Wait for remaining unhealthy containers to reach desired status
+  for (const container of unhealthyContainers) {
     while (!(await compareContainerStatus(container, status))) {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
@@ -296,6 +312,7 @@ async function waitForContainerStatus(
       }
       await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
     }
+    logInfo(`Container ${container} became ${status}`);
   }
 }
 
