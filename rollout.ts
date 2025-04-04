@@ -170,33 +170,11 @@ async function compareContainerStatus(
     const containers = parseJSONL<Container>(result, "container status");
     const container = containers.find((c) => c.ID === containerId);
 
-    // Add debug logging
-    logInfo(`Checking health for container ${containerId}:`);
-    logInfo(`Container found: ${!!container}`);
     if (!container) {
       return false;
     }
 
     const containerHealth = container?.Health?.toLowerCase() || "";
-    logInfo(`Container health: ${containerHealth}`);
-    logInfo(`Container status: ${container.Status}`);
-
-    // Handle "starting" health state or empty health (transitional state)
-    if (containerHealth === "starting" || !containerHealth) {
-      return false; // Container is still starting/transitioning, not healthy yet
-    }
-
-    // Only throw error if we're sure there's no health check (container is fully started)
-    if (
-      !containerHealth &&
-      container.Status.includes("Up") &&
-      !container.Status.includes("health")
-    ) {
-      throw new Error(
-        `Container ${containerId} has no health check configured`,
-      );
-    }
-
     return containerHealth === expectedStatus.toLowerCase();
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("No such container")) {
@@ -289,7 +267,6 @@ async function getLatestContainers(
   return await getContainersByAge(service, count, false);
 }
 
-// Function to wait for containers to be healthy
 async function waitForContainerStatus(
   containers: string[],
   status: string,
@@ -334,19 +311,18 @@ async function waitForContainerStatus(
   const unhealthyContainers = [];
   for (const container of existingContainers) {
     const isHealthy = await compareContainerStatus(container.ID, status);
-    if (!isHealthy) {
-      unhealthyContainers.push(container.ID);
-    } else {
+    if (isHealthy) {
       logInfo(`Container ${container.ID} is already ${status}`);
+    } else {
+      unhealthyContainers.push(container.ID);
     }
   }
 
   if (unhealthyContainers.length === 0) {
-    logInfo("All containers are already healthy");
+    logInfo(`All containers are already ${status}`);
     return;
   }
 
-  // Wait for remaining unhealthy containers to reach desired status
   for (const containerId of unhealthyContainers) {
     while (!(await compareContainerStatus(containerId, status))) {
       if (Date.now() - startTime > timeoutMs) {
@@ -420,9 +396,10 @@ async function scaleService(service: string, replicas: number) {
   }
   logInfo(`Scaling service ${service} to ${replicas} replicas`);
 
-  // Use up --scale instead of scale to add new containers without replacing existing ones
+  // use --no-recreate to prevent old replicas from being replaced
+  // use --no-deps to prevent starting migrator every time
   await executeComposeCommand(
-    `up -d --scale ${service}=${replicas} --no-recreate`,
+    `up -d --scale ${service}=${replicas} --no-recreate --no-deps`,
   );
 
   // Wait a moment for containers to start
