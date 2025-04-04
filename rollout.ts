@@ -181,16 +181,22 @@ async function compareContainerStatus(
     logInfo(`Container health: ${containerHealth}`);
     logInfo(`Container status: ${container.Status}`);
 
-    // Handle "starting" health state
-    if (containerHealth === "starting") {
-      return false; // Container is still starting, not healthy yet
+    // Handle "starting" health state or empty health (transitional state)
+    if (containerHealth === "starting" || !containerHealth) {
+      return false; // Container is still starting/transitioning, not healthy yet
     }
 
-    if (!containerHealth) {
+    // Only throw error if we're sure there's no health check (container is fully started)
+    if (
+      !containerHealth &&
+      container.Status.includes("Up") &&
+      !container.Status.includes("health")
+    ) {
       throw new Error(
         `Container ${containerId} has no health check configured`,
       );
     }
+
     return containerHealth === expectedStatus.toLowerCase();
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("No such container")) {
