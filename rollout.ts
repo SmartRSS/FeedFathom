@@ -33,6 +33,29 @@ interface Container {
   state: ContainerState;
   health?: ContainerHealth;
   createdAt: string;
+  // Add fields from docker compose ps output
+  Command?: string;
+  ExitCode?: number;
+  Health?: string;
+  Image?: string;
+  Labels?: string;
+  LocalVolumes?: string;
+  Mounts?: string;
+  Names?: string;
+  Networks?: string;
+  Ports?: string;
+  Project?: string;
+  Publishers?: Array<{
+    URL: string;
+    TargetPort: number;
+    PublishedPort: number;
+    Protocol: string;
+  }>;
+  RunningFor?: string;
+  Service?: string;
+  Size?: string;
+  State?: string;
+  Status?: string;
 }
 
 // Centralized logging functions
@@ -168,7 +191,7 @@ async function compareContainerStatus(
     if (!container) {
       return false;
     }
-    const status = container.health?.status?.toLowerCase() || "";
+    const status = container.Health?.toLowerCase() || "";
     if (!status) {
       throw new Error(
         `Container ${containerId} has no health check configured`,
@@ -203,12 +226,12 @@ async function getContainersByAge(
     logInfo(`Found ${containers.length} containers for service ${service}`);
     containers.forEach((container, index) => {
       logInfo(
-        `Container ${index + 1}: ID=${container.id}, Name=${container.name}, Created=${container.createdAt}, Running=${container.state.running}, Status=${container.state.status}, Health=${container.health?.status || "none"}`,
+        `Container ${index + 1}: ID=${container.id}, Name=${container.name}, Created=${container.createdAt}, State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
       );
     });
 
     // Filter out non-running containers
-    const runningContainers = containers.filter((c) => c.state.running);
+    const runningContainers = containers.filter((c) => c.State === "running");
     logInfo(
       `Found ${runningContainers.length} running containers out of ${containers.length} total`,
     );
@@ -370,14 +393,14 @@ async function drainContainers(containers: string[]) {
 
       if (container) {
         logInfo(
-          `Found container ${containerId}: Running=${container.state.running}, Status=${container.state.status}, Health=${container.health?.status || "none"}`,
+          `Found container ${containerId}: State=${container.State}, Status=${container.Status}, Health=${container.Health || "none"}`,
         );
-        if (container.state.running) {
+        if (container.State === "running") {
           existingContainers.push(containerId);
           logInfo(`Container ${containerId} is running, will be drained`);
         } else {
           logInfo(
-            `Container ${containerId} is not running (status: ${container.state.status}), skipping drain`,
+            `Container ${containerId} is not running (status: ${container.Status}), skipping drain`,
           );
         }
       } else {
@@ -455,7 +478,7 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
       const container = containerInfo.find((c) => c.id === containerId);
       if (container) {
         logInfo(
-          `Found container ${containerId} before stop: Running=${container.state.running}, Status=${container.state.status}`,
+          `Found container ${containerId} before stop: State=${container.State}, Status=${container.Status}`,
         );
       } else {
         logInfo(`Container ${containerId} not found before stop`);
