@@ -172,7 +172,7 @@ jobs:
             export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && \
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
-            docker compose -f docker-compose.yml pull migrator server worker mail && \
+            docker compose -f docker-compose.yml pull migrator mail server worker && \
             bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml \
-              migrator server worker mail
+              migrator mail server worker
           EOF
