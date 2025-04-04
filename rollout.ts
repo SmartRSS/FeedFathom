@@ -263,7 +263,8 @@ async function drainContainers(containers: string[]) {
 
   logInfo(`Draining containers ${containers.join(" ")}`);
 
-  // Verify each container exists and is running before draining
+  // Filter out containers that no longer exist
+  const existingContainers = [];
   for (const containerId of containers) {
     try {
       // Check if container exists and is running
@@ -272,13 +273,29 @@ async function drainContainers(containers: string[]) {
       );
       const isRunning = containerInfo.trim() === "true";
 
-      if (!isRunning) {
-        logError(`Container ${containerId} is not running, skipping drain`);
-        continue;
+      if (isRunning) {
+        existingContainers.push(containerId);
+      } else {
+        logInfo(`Container ${containerId} is not running, skipping drain`);
       }
+    } catch (error) {
+      // If container doesn't exist or other error, log and continue
+      logInfo(
+        `Container ${containerId} no longer exists or is not accessible: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
-      // Create drain file only in this specific container
+  if (existingContainers.length === 0) {
+    logInfo("No running containers to drain");
+    return;
+  }
+
+  // Create drain files only in existing containers
+  for (const containerId of existingContainers) {
+    try {
       await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
+      logInfo(`Created drain file in container ${containerId}`);
     } catch (error) {
       logError(
         `Failed to create drain file in container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
