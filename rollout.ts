@@ -169,6 +169,16 @@ async function compareContainerStatus(
     const result = await executeComposeCommand("ps --format json");
     const containers = parseJSONL<Container>(result, "container status");
     const container = containers.find((c) => c.ID === containerId);
+
+    // Add debug logging
+    logInfo(`Checking health for container ${containerId}:`);
+    logInfo(`Container found: ${!!container}`);
+    if (container) {
+      logInfo(`Container state: ${container.State}`);
+      logInfo(`Container health: ${container.Health || "undefined"}`);
+      logInfo(`Container status: ${container.Status}`);
+    }
+
     if (!container) {
       return false;
     }
