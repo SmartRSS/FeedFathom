@@ -419,7 +419,15 @@ async function scaleService(service: string, replicas: number) {
     throw new Error("Replica count must be a non-negative integer");
   }
   logInfo(`Scaling service ${service} to ${replicas} replicas`);
-  await executeComposeCommand(`scale ${service}=${replicas}`);
+
+  // Use up --scale instead of scale to add new containers without replacing existing ones
+  await executeComposeCommand(
+    `up -d --scale ${service}=${replicas} --no-recreate`,
+  );
+
+  // Wait a moment for containers to start
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
     throw new Error(
@@ -598,7 +606,6 @@ async function rolloutService(service: string, targetReplicas: number) {
     const toDrain = oldContainers.splice(0, scaleDelta);
 
     logInfo(`Phase 1: Scaling down by ${scaleDelta} containers`);
-
     await gracefulShutdown(toDrain);
   }
 
@@ -639,11 +646,13 @@ async function rolloutService(service: string, targetReplicas: number) {
       throw error;
     }
 
+    // Only drain old containers after new ones are healthy
     const toDrain = oldContainers.splice(0, scaleDelta);
     logInfo(`Draining old containers: ${toDrain.join(" ")}`);
     await gracefulShutdown(toDrain);
   }
 
+  // Final adjustment if needed
   const currentReplicas = await getCurrentReplicas(service);
   if (currentReplicas !== targetReplicas) {
     logInfo(`Final adjustment: scaling to ${targetReplicas} replicas`);
