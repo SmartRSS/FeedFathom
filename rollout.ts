@@ -264,33 +264,20 @@ async function waitForContainerStatus(
   status: string,
   timeoutMs = 30000,
 ) {
-  const existingContainers = [];
+  const existingContainers: Container[] = [];
   const startTime = Date.now();
 
   // First filter out containers that no longer exist
   for (const container of containers) {
-    try {
-      const result = await executeComposeCommand("ps --format json");
-      const containerInfo = parseJSONL<Container>(result, "container status");
-      const foundContainer = containerInfo.find(
-        (c: Container) => c.ID === container,
-      );
-      if (foundContainer?.State === "running") {
-        existingContainers.push(foundContainer);
-      } else {
-        logInfo(`Container ${container} is not running, skipping health check`);
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("No such container")
-      ) {
-        logInfo(
-          `Container ${container} no longer exists, skipping health check`,
-        );
-      } else {
-        throw error;
-      }
+    const result = await executeComposeCommand("ps --format json");
+    const containerInfo = parseJSONL<Container>(result, "container status");
+    const foundContainer = containerInfo.find(
+      (c: Container) => c.ID === container,
+    );
+    if (foundContainer?.State === "running") {
+      existingContainers.push(foundContainer);
+    } else {
+      logInfo(`Container ${container} is not running, skipping health check`);
     }
   }
 
@@ -306,11 +293,6 @@ async function waitForContainerStatus(
     if (!isHealthy) {
       unhealthyContainers.push(container.ID);
     }
-  }
-
-  if (unhealthyContainers.length === 0) {
-    logInfo(`All containers are already ${status}`);
-    return;
   }
 
   for (const containerId of unhealthyContainers) {
