@@ -137,7 +137,7 @@ async function compareContainerStatus(
 ) {
   try {
     const result = await executeDockerCommand(
-      `docker inspect --format='{{.State.Health.Status}}' ${containerId} || echo 'unhealthy'`,
+      `docker inspect --format='{{.State.Health.Status}}' ${containerId}`,
     );
     const status = result.trim();
     if (!status) {
@@ -148,7 +148,8 @@ async function compareContainerStatus(
     return status === expectedStatus;
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("No such container")) {
-      throw new Error(`Container ${containerId} not found`);
+      // If container doesn't exist, consider it unhealthy
+      return false;
     }
     throw error;
   }
@@ -269,7 +270,7 @@ async function drainContainers(containers: string[]) {
     try {
       // Check if container exists and is running
       const containerInfo = await executeDockerCommand(
-        `docker inspect --format='{{.State.Running}}' ${containerId} || 0`,
+        `docker inspect --format='{{.State.Running}}' ${containerId}`,
       );
       const isRunning = containerInfo.trim() === "true";
 
@@ -294,9 +295,7 @@ async function drainContainers(containers: string[]) {
   // Create drain files only in existing containers
   for (const containerId of existingContainers) {
     try {
-      await executeDockerCommand(
-        `docker exec ${containerId} touch /tmp/drain || 0`,
-      );
+      await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
       logInfo(`Created drain file in container ${containerId}`);
     } catch (error) {
       logError(
@@ -340,7 +339,16 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
 
   const containerIds = containers.join(" ");
   logInfo(`Stopping containers ${containerIds}`);
-  await executeDockerCommand(`docker stop ${containerIds} || 0`, false);
+  try {
+    await executeDockerCommand(`docker stop ${containerIds}`, false);
+  } catch (error) {
+    // If containers don't exist, that's fine - they're already stopped
+    if (error instanceof Error && error.message.includes("No such container")) {
+      logInfo(`Containers ${containerIds} no longer exist, skipping stop`);
+    } else {
+      throw error;
+    }
+  }
 }
 
 // Function to get service type from compose config
