@@ -12,9 +12,6 @@ services:
       - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
-      - "traefik.http.services.feedfathom.loadbalancer.server.address=server:3000"
-      - "traefik.http.services.feedfathom.loadbalancer.server.scheme=http"
-
   mail:
     networks:
       - traefik
