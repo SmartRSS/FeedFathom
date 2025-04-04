@@ -248,7 +248,41 @@ async function getLatestContainers(
 
 // Function to wait for containers to be healthy
 async function waitForContainerStatus(containers: string[], status: string) {
+  const existingContainers = [];
+
+  // First filter out containers that no longer exist
   for (const container of containers) {
+    try {
+      const result = await executeDockerCommand(
+        `docker inspect --format='{{.State.Running}}' ${container}`,
+      );
+      const isRunning = result.trim() === "true";
+      if (isRunning) {
+        existingContainers.push(container);
+      } else {
+        logInfo(`Container ${container} is not running, skipping health check`);
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("No such container")
+      ) {
+        logInfo(
+          `Container ${container} no longer exists, skipping health check`,
+        );
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  if (existingContainers.length === 0) {
+    logInfo("No running containers to check health status");
+    return;
+  }
+
+  // Wait for remaining containers to reach desired status
+  for (const container of existingContainers) {
     while (!(await compareContainerStatus(container, status))) {
       await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
     }
