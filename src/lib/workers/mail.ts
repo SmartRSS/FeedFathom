@@ -32,7 +32,7 @@ export class MailWorker {
   constructor(
     private readonly sourcesRepository: SourcesRepository,
     private readonly articlesRepository: ArticlesRepository,
-    config: Partial<MailWorkerConfig> = {},
+    config: Partial<MailWorkerConfig> = {}
   ) {
     this.config = {
       allowedDomains: config.allowedDomains,
@@ -49,12 +49,12 @@ export class MailWorker {
       onRcptTo: (
         _address: SMTPServerAddress,
         _session: SMTPServerSession,
-        callback: (error?: Error) => void,
+        callback: (error?: Error) => void
       ) => {
         (async () => {
           try {
             const source = await this.sourcesRepository.findSourceByUrl(
-              _address.address,
+              _address.address
             );
             if (!source) {
               callback(new Error("Unknown recipient"));
@@ -68,8 +68,6 @@ export class MailWorker {
         })();
       },
       size: this.config.maxSizeBytes,
-      socketTimeout: 0,
-      closeTimeout: 0,
     });
 
     this.server.listen(25, () => {
@@ -90,7 +88,7 @@ export class MailWorker {
   private createArticleFromEmail(
     email: ParsedMail,
     sourceId: number,
-    senderAddress: string,
+    senderAddress: string
   ) {
     const guid = Bun.randomUUIDv7();
     const date = email.date ?? new Date();
@@ -109,7 +107,7 @@ export class MailWorker {
   private createArticles(
     email: ParsedMail,
     sources: Source[],
-    senderAddress: string,
+    senderAddress: string
   ) {
     return sources.map((feed) => {
       return this.createArticleFromEmail(email, feed.id, senderAddress);
@@ -121,7 +119,7 @@ export class MailWorker {
   }
 
   private async finalizeEmailProcessing(
-    emailStream: EmailStream,
+    emailStream: EmailStream
   ): Promise<void> {
     emailStream.resume();
     await finished(emailStream);
@@ -137,7 +135,7 @@ export class MailWorker {
       await Promise.all(
         recipientMails.map(async (address) => {
           return await this.sourcesRepository.findSourceByUrl(address);
-        }),
+        })
       )
     ).filter((source): source is Source => {
       return source !== undefined;
@@ -153,7 +151,7 @@ export class MailWorker {
   private handleEmailData(
     emailStream: EmailStream,
     session: SMTPServerSession,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ): void {
     (async () => {
       try {
@@ -167,7 +165,7 @@ export class MailWorker {
   private async handleEmailError(
     error: unknown,
     emailStream: EmailStream,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ): Promise<void> {
     error_("Failed to process incoming email:", error);
     await this.finalizeEmailProcessing(emailStream);
@@ -177,7 +175,7 @@ export class MailWorker {
   private async processEmailStream(
     emailStream: EmailStream,
     session: SMTPServerSession,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ): Promise<void> {
     if (emailStream.sizeExceeded) {
       error_("Email size limit exceeded");
