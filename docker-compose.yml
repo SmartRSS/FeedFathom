@@ -61,9 +61,9 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) { process.exit(1); } process.exit(0);\""
-      interval: 5s
-      timeout: 3s
+      test: "bun -e \"if (require('fs').existsSync('/tmp/drain')) { console.log('drain'); process.exit(1); } try { const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) {console.log('not ok'); process.exit(1); } console.log('ok'); process.exit(0); } catch { console.log('exception'); process.exit(1);}\""
+      interval: 1s
+      timeout: 1s
       retries: 5
       start_period: 10s
     depends_on:
@@ -73,6 +73,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+    tmpfs:
+      - /tmp
     networks:
       - feedfathom
 
@@ -98,10 +100,10 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: "bun -e \" if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      test: "bun -e \"if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
+      interval: 1s
+      timeout: 1s
+      retries: 5
       start_period: 10s
     depends_on:
       redis:
@@ -110,6 +112,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+    tmpfs:
+      - /tmp
     networks:
       - feedfathom
 
@@ -132,13 +136,15 @@ services:
         order: start-first
     healthcheck:
       test: "bun -e \" if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy
+    tmpfs:
+      - /tmp
     networks:
       - feedfathom
 

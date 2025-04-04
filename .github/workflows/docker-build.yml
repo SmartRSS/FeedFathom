@@ -144,7 +144,7 @@ jobs:
           sparse-checkout: |
             docker-compose.yml
             docker-compose-traefik.yml
-
+            rollout.ts
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
         with:
@@ -152,7 +152,7 @@ jobs:
 
       - name: Copy Docker Compose files and rollout script to server
         run: |
-          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml rollout.ts ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
 
       - name: Deploy to server
         run: |
@@ -173,6 +173,6 @@ jobs:
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             docker compose -f docker-compose.yml pull migrator server worker mail && \
-            docker compose -f docker-compose.yml up -d \
+            bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml up -d \
               migrator server worker mail
           EOF
