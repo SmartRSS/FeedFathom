@@ -192,21 +192,14 @@ async function getContainersByAge(
   ascending = true,
 ): Promise<string[]> {
   try {
-    logInfo(
-      `Getting containers for service ${service} (count: ${count}, ascending: ${ascending})`,
-    );
     const result = await executeComposeCommand(`ps ${service} --format json`);
 
     const containers = parseJSONL<Container>(result, `service ${service}`);
 
     // Filter out non-running containers
     const runningContainers = containers.filter((c) => c.State === "running");
-    logInfo(
-      `Found ${runningContainers.length} running containers out of ${containers.length} total`,
-    );
 
     if (runningContainers.length === 0) {
-      logInfo("No running containers found");
       return [];
     }
 
@@ -239,8 +232,7 @@ async function getContainersByAge(
       })
       .slice(0, count);
 
-    const containerIds = sortedContainers.map((c) => c.ID);
-    return containerIds;
+    return sortedContainers.map((c) => c.ID);
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(
@@ -308,12 +300,10 @@ async function waitForContainerStatus(
   }
 
   // Check initial status of all containers
-  const unhealthyContainers = [];
+  const unhealthyContainers: string[] = [];
   for (const container of existingContainers) {
     const isHealthy = await compareContainerStatus(container.ID, status);
-    if (isHealthy) {
-      logInfo(`Container ${container.ID} is already ${status}`);
-    } else {
+    if (!isHealthy) {
       unhealthyContainers.push(container.ID);
     }
   }
@@ -345,31 +335,8 @@ async function drainContainers(containers: string[]) {
 
   logInfo(`Draining containers ${containers.join(" ")}`);
 
-  // Filter out containers that no longer exist
-  const existingContainers = [];
-  for (const containerId of containers) {
-    try {
-      const result = await executeComposeCommand("ps --format json");
-      const containerInfo = parseJSONL<Container>(result, "container status");
-      const container = containerInfo.find((c) => c.ID === containerId);
-
-      if (container?.State === "running") {
-        existingContainers.push(containerId);
-      }
-    } catch (error) {
-      logInfo(
-        `Error checking container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (existingContainers.length === 0) {
-    logInfo("No running containers to drain");
-    return;
-  }
-
   // Create drain files only in existing containers
-  for (const containerId of existingContainers) {
+  for (const containerId of containers) {
     try {
       await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
     } catch (error) {
@@ -399,22 +366,11 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
   const containerIds = containers.join(" ");
   logInfo(`Stopping and removing containers ${containerIds}`);
 
-  try {
-    // Stop the containers
-    await executeDockerCommand(`docker stop ${containerIds}`);
-    // Remove them immediately after stopping
-    await executeDockerCommand(`docker rm ${containerIds}`);
-    logInfo(`Successfully stopped and removed containers ${containerIds}`);
-  } catch (error) {
-    // If containers don't exist, that's fine - they're already stopped/removed
-    if (error instanceof Error && error.message.includes("No such container")) {
-      logInfo(
-        `Containers ${containerIds} no longer exist, skipping stop/remove`,
-      );
-    } else {
-      throw error;
-    }
-  }
+  // Stop the containers
+  await executeDockerCommand(`docker stop ${containerIds}`);
+  // Remove them immediately after stopping
+  await executeDockerCommand(`docker rm ${containerIds}`);
+  logInfo(`Successfully stopped and removed containers ${containerIds}`);
 }
 
 // Function to scale service
@@ -471,7 +427,7 @@ async function getServiceType(
 
     // Heuristic 1: If service has no healthcheck, it might be one-off
     if (!serviceConfig.healthcheck) {
-      logInfo(`Service ${service} has no healthcheck, might be one-off`);
+      return "one-off";
     }
 
     // Heuristic 2: If restart policy is "no", "on-failure", or not defined, it might be one-off
@@ -480,9 +436,6 @@ async function getServiceType(
       serviceConfig.restart === "on-failure" ||
       !serviceConfig.restart
     ) {
-      logInfo(
-        `Service ${service} has restart policy "${serviceConfig.restart}", might be one-off`,
-      );
       return "one-off";
     }
 
@@ -506,9 +459,6 @@ async function getServiceType(
           cmdStr.toLowerCase().includes(indicator),
         )
       ) {
-        logInfo(
-          `Service ${service} has command that suggests one-off task: ${cmdStr}`,
-        );
         return "one-off";
       }
     }
@@ -628,10 +578,7 @@ async function rolloutService(service: string, targetReplicas: number) {
       throw error;
     }
 
-    // Only drain old containers after new ones are healthy
-    const toDrain = oldContainers.splice(0, scaleDelta);
-    logInfo(`Draining old containers: ${toDrain.join(" ")}`);
-    await gracefulShutdown(toDrain);
+    await gracefulShutdown(oldContainers.splice(0, scaleDelta));
   }
 
   // Final adjustment if needed
@@ -801,9 +748,6 @@ if (!isRunning) {
           break;
         }
 
-        logInfo(
-          `Waiting for ${nonHealthyContainers.length} containers to become healthy...`,
-        );
         await new Promise((resolve) =>
           setTimeout(resolve, healthcheckInterval),
         );
