@@ -1,5 +1,43 @@
 import feed from "$lib/images/feed.png";
 import type { RequestHandler } from "@sveltejs/kit";
+import { logError } from "../../../util/log.ts";
+
+function sniffContentType(bytes: Uint8Array): string {
+  // Check for PNG
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  // Check for GIF
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return "image/gif";
+  }
+  // Check for JPEG
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  // Check for ICO
+  if (
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    bytes[2] === 0x01 &&
+    bytes[3] === 0x00
+  ) {
+    return "image/x-icon";
+  }
+  // Check for SVG (look for SVG tag)
+  const decoder = new TextDecoder();
+  const header = decoder.decode(bytes.slice(0, 100));
+  if (header.includes("<svg")) {
+    return "image/svg+xml";
+  }
+  // Default to PNG if we can't determine the type
+  return "image/png";
+}
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   if (!locals.user) {
@@ -11,42 +49,91 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     return new Response(null, { status: 404 });
   }
 
-  const userSources =
-    await locals.dependencies.userSourcesRepository.getUserSources(
-      locals.user.id,
-    );
+  try {
+    const userSources =
+      await locals.dependencies.userSourcesRepository.getUserSources(
+        locals.user.id,
+      );
 
-  const source = userSources.find((s) => s.id?.toString() === sourceId);
-  if (!source?.favicon) {
+    const source = userSources.find((s) => s.id?.toString() === sourceId);
+    if (!source?.favicon) {
+      return new Response(feed, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        } as HeadersInit,
+      });
+    }
+
+    // Validate favicon data format
+    if (!source.favicon.startsWith("data:image/")) {
+      logError("Invalid favicon format for source", { sourceId });
+      return new Response(feed, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        } as HeadersInit,
+      });
+    }
+
+    const parts = source.favicon.split(",");
+    if (parts.length !== 2) {
+      logError("Invalid favicon data format for source", { sourceId });
+      return new Response(feed, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        } as HeadersInit,
+      });
+    }
+
+    const [, base64Data] = parts;
+    if (!base64Data) {
+      logError("Missing base64 data in favicon for source", { sourceId });
+      return new Response(feed, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        } as HeadersInit,
+      });
+    }
+
+    try {
+      // Convert base64 to binary
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Sniff the content type from the binary data
+      const contentType = sniffContentType(bytes);
+
+      return new Response(bytes, {
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        } as HeadersInit,
+      });
+    } catch (error) {
+      logError("Failed to decode base64 favicon for source", {
+        sourceId,
+        error,
+      });
+      return new Response(feed, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        } as HeadersInit,
+      });
+    }
+  } catch (error) {
+    logError("Error processing favicon request", { sourceId, error });
     return new Response(feed, {
       headers: {
-        "Content-Type": "image/svg",
-        "Cache-Control": "public, max-age=3600", // Cache for 1 hour
-      },
-    });
-  }
-
-  const base64Data = source.favicon.split(",")[1];
-  if (!base64Data) {
-    return new Response(feed, {
-      headers: {
-        "Content-Type": "image/svg",
+        "Content-Type": "image/png",
         "Cache-Control": "public, max-age=3600",
-      },
+      } as HeadersInit,
     });
   }
-
-  // Convert base64 to binary
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  return new Response(bytes, {
-    headers: {
-      "Content-Type": "image/x-icon",
-      "Cache-Control": "public, max-age=3600", // Cache for 1 hour
-    },
-  });
 };
