@@ -115,6 +115,24 @@ jobs:
           done
           echo "All services are now healthy"
 
+      - name: Verify web server is responding
+        run: |
+          echo "Verifying web server response..."
+          MAX_ATTEMPTS=30
+          attempts=0
+          until curl -s -w "%{http_code}" -o /dev/null http://localhost:3000 | grep -q "^[23]"; do
+            attempts=$((attempts + 1))
+            if [ $attempts -ge $MAX_ATTEMPTS ]; then
+              echo "Timeout waiting for web server to respond with non-error status after 1 minute" >&2
+              echo "Current response:" >&2
+              curl -v http://localhost:3000 >&2
+              exit 1
+            fi
+            echo "Waiting for web server to respond with non-error status... (attempt $attempts/$MAX_ATTEMPTS)"
+            sleep 2
+          done
+          echo "Web server is responding with non-error status successfully"
+
       - name: Cleanup
         if: always()
         run: docker compose down -v
