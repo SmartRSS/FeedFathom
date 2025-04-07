@@ -82,6 +82,8 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     timeout-minutes: 10
+    env:
+      WORKER_REPLICAS: 1
 
     steps:
       - name: Checkout repository
@@ -120,18 +122,20 @@ jobs:
           echo "Verifying web server response..."
           MAX_ATTEMPTS=30
           attempts=0
-          until curl -s -w "%{http_code}" -o /dev/null http://localhost:3000 | grep -q "^[23]"; do
+          until RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:3000) && STATUS_CODE=$(echo "$RESPONSE" | tail -n1) && echo "$STATUS_CODE" | grep -q "^[23]"; do
             attempts=$((attempts + 1))
             if [ $attempts -ge $MAX_ATTEMPTS ]; then
               echo "Timeout waiting for web server to respond with non-error status after 1 minute" >&2
               echo "Current response:" >&2
-              curl -v http://localhost:3000 >&2
+              echo "$RESPONSE" >&2
               exit 1
             fi
             echo "Waiting for web server to respond with non-error status... (attempt $attempts/$MAX_ATTEMPTS)"
             sleep 2
           done
-          echo "Web server is responding with non-error status successfully"
+          echo "Web server response body:"
+          echo "$RESPONSE" | sed '$d'
+          echo "Web server is responding with status code: $STATUS_CODE"
 
       - name: Cleanup
         if: always()
