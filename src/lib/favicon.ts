@@ -1,29 +1,37 @@
-import { createHash } from "node:crypto";
-
 const faviconCacheKey = "feedfathom_favicons";
 const faviconCacheDuration = 7 * 24 * 60 * 60 * 1000; // 7 days
 const hashLength = 8; // Short hash for cache validation
 
+interface FaviconEntry {
+  readonly hash: string;
+  readonly data: string;
+  readonly timestamp: number;
+}
+
 interface FaviconCache {
-  [key: string]: {
-    hash: string;
-    data: string;
-    timestamp: number;
-  };
+  [key: string]: FaviconEntry;
 }
 
 function getFaviconHash(favicon: string): string {
-  // Use first 8 chars of MD5 for shorter transfer
-  return createHash("md5").update(favicon).digest("hex").slice(0, hashLength);
+  // Use first 8 chars of SHA-256 for shorter transfer
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(favicon);
+  return hasher.digest("hex").slice(0, hashLength);
 }
 
-export function getCachedFavicons(): FaviconCache {
-  if (typeof window === "undefined") {
-    return {};
+export async function getCachedFavicons(): Promise<FaviconCache> {
+  if (typeof Bun === "undefined") {
+    throw new Error("This function can only be used in a Bun environment");
   }
 
   try {
-    const cached = localStorage.getItem(faviconCacheKey);
+    const file = Bun.file(faviconCacheKey);
+    const exists = await file.exists();
+    if (!exists) {
+      return {};
+    }
+
+    const cached = await file.text();
     if (!cached) {
       return {};
     }
@@ -40,20 +48,23 @@ export function getCachedFavicons(): FaviconCache {
     }, {} as FaviconCache);
 
     // Update cache with cleaned data
-    localStorage.setItem(faviconCacheKey, JSON.stringify(valid));
+    await Bun.write(faviconCacheKey, JSON.stringify(valid));
     return valid;
   } catch {
     return {};
   }
 }
 
-export function cacheFavicon(sourceId: string, favicon: string | null): void {
-  if (!favicon || typeof window === "undefined") {
+export async function cacheFavicon(
+  sourceId: string,
+  favicon: string | null,
+): Promise<void> {
+  if (!favicon || typeof Bun === "undefined") {
     return;
   }
 
   try {
-    const cache = getCachedFavicons();
+    const cache = await getCachedFavicons();
     const hash = getFaviconHash(favicon);
 
     cache[sourceId] = {
@@ -62,16 +73,16 @@ export function cacheFavicon(sourceId: string, favicon: string | null): void {
       timestamp: Date.now(),
     };
 
-    localStorage.setItem(faviconCacheKey, JSON.stringify(cache));
+    await Bun.write(faviconCacheKey, JSON.stringify(cache));
   } catch {
     // Ignore storage errors
   }
 }
 
-export function getCachedFavicon(
+export async function getCachedFavicon(
   sourceId: string,
-): { hash: string; data: string } | null {
-  const cache = getCachedFavicons();
+): Promise<{ readonly hash: string; readonly data: string } | null> {
+  const cache = await getCachedFavicons();
   const entry = cache[sourceId];
   if (!entry) {
     return null;

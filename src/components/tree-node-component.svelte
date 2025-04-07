@@ -4,7 +4,6 @@ import { browser } from "$app/environment";
 import arrowDown from "$lib/images/arrow-down.png";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
 import arrowRight from "$lib/images/arrow-right.png";
-import feed from "$lib/images/feed.png";
 import folder from "$lib/images/folder.png";
 import folderOpened from "$lib/images/folder_opened.png";
 import { onMount } from "svelte";
@@ -71,7 +70,7 @@ function getIcon(node: TreeNode) {
   if (node.type === NodeType.Folder) {
     return isOpen ? folderOpened : folder;
   }
-  return node.favicon ?? feed;
+  return `/favicons/${node.uid}`;
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
