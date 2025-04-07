@@ -2,6 +2,15 @@ import feed from "$lib/images/feed.png";
 import type { RequestHandler } from "@sveltejs/kit";
 import { logError } from "../../../util/log.ts";
 
+function getFallbackResponse(): Response {
+  return new Response(feed, {
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+    } as HeadersInit,
+  });
+}
+
 function sniffContentType(bytes: Uint8Array): string {
   // Check for PNG
   if (
@@ -55,45 +64,25 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     );
 
     if (!source?.favicon) {
-      return new Response(feed, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
-        } as HeadersInit,
-      });
+      return getFallbackResponse();
     }
 
     // Validate favicon data format
     if (!source.favicon.startsWith("data:image/")) {
       logError("Invalid favicon format for source", { sourceId });
-      return new Response(feed, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=3600",
-        } as HeadersInit,
-      });
+      return getFallbackResponse();
     }
 
     const parts = source.favicon.split(",");
     if (parts.length !== 2) {
       logError("Invalid favicon data format for source", { sourceId });
-      return new Response(feed, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=3600",
-        } as HeadersInit,
-      });
+      return getFallbackResponse();
     }
 
     const [, base64Data] = parts;
     if (!base64Data) {
       logError("Missing base64 data in favicon for source", { sourceId });
-      return new Response(feed, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=3600",
-        } as HeadersInit,
-      });
+      return getFallbackResponse();
     }
 
     try {
@@ -118,20 +107,10 @@ export const GET: RequestHandler = async ({ locals, params }) => {
         sourceId,
         error,
       });
-      return new Response(feed, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=3600",
-        } as HeadersInit,
-      });
+      return getFallbackResponse();
     }
   } catch (error) {
     logError("Error processing favicon request", { sourceId, error });
-    return new Response(feed, {
-      headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=3600",
-      } as HeadersInit,
-    });
+    return getFallbackResponse();
   }
 };
