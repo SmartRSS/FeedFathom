@@ -90,7 +90,7 @@ if (!building) {
   // Create database connection
   const databaseConnection = drizzle(
     "postgresql://postgres:postgres@postgres:5432/postgres",
-    { schema }
+    { schema },
   );
 
   // Register all dependencies in a single call
