@@ -50,7 +50,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
   try {
     const source = await locals.dependencies.sourcesRepository.findSourceById(
-      Number.parseInt(sourceId, 10)
+      Number.parseInt(sourceId, 10),
     );
 
     if (!source?.favicon) {
