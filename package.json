@@ -71,6 +71,6 @@
     "ignoreBinaries": ["export", "build"],
     "ignoreDependencies": ["svelte-check"],
     "ignoreImports": ["$app/*"],
-    "ignoreUnresolved": ["^\\$app/"]
+    "ignoreUnresolved": ["^\\$app/", "^\\$service-worker"]
   }
 }

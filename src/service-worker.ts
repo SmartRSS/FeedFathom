@@ -1,76 +1,87 @@
-const FAVICON_CACHE = "feedfathom-favicons-v1";
-const FAVICON_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
+/// <reference types="@sveltejs/kit" />
+/// <reference lib="webworker" />
+import { build, files, version } from "$service-worker";
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(FAVICON_CACHE).then((cache) => {
-      return cache.addAll([]);
-    }),
-  );
+declare const self: ServiceWorkerGlobalScope;
+
+// Create a unique cache name for this deployment
+const CACHE = `cache-${version}`;
+
+const ASSETS = [
+  ...build, // the app itself
+  ...files, // everything in `static`
+];
+
+self.addEventListener("install", (event: ExtendableEvent) => {
+  // Create a new cache and add all files to it
+  async function addFilesToCache() {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ASSETS);
+  }
+
+  event.waitUntil(addFilesToCache());
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith("feedfathom-favicons-"))
-          .filter((name) => name !== FAVICON_CACHE)
-          .map((name) => caches.delete(name)),
-      );
-    }),
-  );
+self.addEventListener("activate", (event: ExtendableEvent) => {
+  // Remove previous cached data from disk
+  async function deleteOldCaches() {
+    for (const key of await caches.keys()) {
+      if (key !== CACHE) {
+        await caches.delete(key);
+      }
+    }
+  }
+
+  event.waitUntil(deleteOldCaches());
 });
 
-self.addEventListener("fetch", (event) => {
-  if (!event.request.url.includes("/favicons/")) {
+self.addEventListener("fetch", (event: FetchEvent) => {
+  // ignore POST requests etc
+  if (event.request.method !== "GET") {
     return;
   }
 
-  event.respondWith(
-    (async () => {
-      const url = new URL(event.request.url);
-      const sourceId = url.pathname.split("/").pop();
+  async function respond() {
+    const url = new URL(event.request.url);
+    const cache = await caches.open(CACHE);
 
-      if (!sourceId) {
-        return fetch(event.request);
+    // `build`/`files` can always be served from the cache
+    if (ASSETS.includes(url.pathname)) {
+      const response = await cache.match(url.pathname);
+
+      if (response) {
+        return response;
       }
+    }
 
-      // Try to get from cache first
-      const cache = await caches.open(FAVICON_CACHE);
-      const cachedResponse = await cache.match(event.request);
-
-      if (cachedResponse) {
-        const cachedData = await cachedResponse.json();
-        const now = Date.now();
-
-        // Check if the favicon has changed
-        if (now - cachedData.timestamp < FAVICON_CACHE_DURATION) {
-          return cachedResponse;
-        }
-      }
-
-      // If not in cache or needs update, fetch from network
+    // for everything else, try the network first, but
+    // fall back to the cache if we're offline
+    try {
       const response = await fetch(event.request);
-      const data = await response.json();
 
-      if (data.changed && data.data) {
-        // Update cache with new data
-        const newResponse = new Response(
-          JSON.stringify({
-            ...data,
-            timestamp: Date.now(),
-          }),
-          {
-            headers: response.headers,
-          },
-        );
+      // if we're offline, fetch can return a value that is not a Response
+      // instead of throwing - and we can't pass this non-Response to respondWith
+      if (!(response instanceof Response)) {
+        throw new Error("invalid response from fetch");
+      }
 
-        await cache.put(event.request, newResponse);
-        return newResponse;
+      if (response.status === 200) {
+        cache.put(event.request, response.clone());
       }
 
       return response;
-    })(),
-  );
+    } catch (err) {
+      const response = await cache.match(event.request);
+
+      if (response) {
+        return response;
+      }
+
+      // if there's no cache, then just error out
+      // as there is nothing we can do to respond to this request
+      throw err;
+    }
+  }
+
+  event.respondWith(respond());
 });

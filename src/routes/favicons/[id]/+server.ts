@@ -1,5 +1,5 @@
-import type { RequestHandler } from "@sveltejs/kit";
 import feed from "$lib/images/feed.png";
+import type { RequestHandler } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   if (!locals.user) {

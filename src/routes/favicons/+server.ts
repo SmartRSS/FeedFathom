@@ -1,10 +1,27 @@
-import { type RequestHandler, json } from "@sveltejs/kit";
 import { createHash } from "node:crypto";
+import { type RequestHandler, json } from "@sveltejs/kit";
 
-const HASH_LENGTH = 8;
+const hashLength = 8;
 
 function getFaviconHash(favicon: string): string {
-  return createHash("md5").update(favicon).digest("hex").slice(0, HASH_LENGTH);
+  return createHash("md5").update(favicon).digest("hex").slice(0, hashLength);
+}
+
+function processFavicon(favicon: string | null, clientHash: string) {
+  if (!favicon) {
+    return {
+      hash: "",
+      data: null,
+      changed: false,
+    };
+  }
+
+  const hash = getFaviconHash(favicon);
+  return {
+    hash,
+    data: hash !== clientHash ? favicon : null,
+    changed: hash !== clientHash,
+  };
 }
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -23,31 +40,15 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     await locals.dependencies.userSourcesRepository.getUserSources(
       locals.user.id,
     );
-
   const result: Record<
     string,
     { hash: string; data: string | null; changed: boolean }
   > = {};
 
   for (const source of userSources) {
-    if (sourceIds.includes(source.id?.toString() ?? "")) {
-      const sourceId = source.id?.toString() ?? "";
-      const favicon = source.favicon;
-
-      if (favicon) {
-        const hash = getFaviconHash(favicon);
-        result[sourceId] = {
-          hash,
-          data: hash !== clientHash ? favicon : null,
-          changed: hash !== clientHash,
-        };
-      } else {
-        result[sourceId] = {
-          hash: "",
-          data: null,
-          changed: false,
-        };
-      }
+    const sourceId = source.id?.toString() ?? "";
+    if (sourceIds.includes(sourceId)) {
+      result[sourceId] = processFavicon(source.favicon, clientHash);
     }
   }
 
