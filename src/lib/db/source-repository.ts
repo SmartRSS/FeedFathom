@@ -15,11 +15,15 @@ type SortField =
 
 export class SourcesRepository {
   constructor(
-    private readonly drizzleConnection: BunSQLDatabase,
-    private readonly bullmqQueue: Queue,
+    private readonly drizzleConnection: BunSQLDatabase | null,
+    private readonly bullmqQueue: Queue | null,
   ) {}
 
   public async addSource(payload: { homeUrl: string; url: string }) {
+    if (!(this.drizzleConnection && this.bullmqQueue)) {
+      return null;
+    }
+
     const source = (
       await this.drizzleConnection.insert(sources).values(payload).returning()
     ).at(0);
@@ -36,6 +40,10 @@ export class SourcesRepository {
   }
 
   public async failSource(sourceId: number, reason = ""): Promise<void> {
+    if (!this.drizzleConnection) {
+      return;
+    }
+
     try {
       await this.drizzleConnection
         .update(sources)
@@ -69,6 +77,10 @@ export class SourcesRepository {
   }
 
   public async findSourceById(id: number) {
+    if (!this.drizzleConnection) {
+      return null;
+    }
+
     return (
       await this.drizzleConnection
         .select()
@@ -78,6 +90,10 @@ export class SourcesRepository {
   }
 
   public async findSourceByUrl(url: string) {
+    if (!this.drizzleConnection) {
+      return null;
+    }
+
     return (
       await this.drizzleConnection
         .select()
@@ -87,6 +103,10 @@ export class SourcesRepository {
   }
 
   public async getRecentlySuccessfulSources() {
+    if (!this.drizzleConnection) {
+      return [];
+    }
+
     return await this.drizzleConnection
       .select({
         homeUrl: sources.homeUrl,
@@ -97,6 +117,10 @@ export class SourcesRepository {
   }
 
   public async getSourcesToProcess() {
+    if (!this.drizzleConnection) {
+      return [];
+    }
+
     const noRecentFailures = () => {
       return eq(sources.recentFailures, 0);
     };
@@ -131,7 +155,7 @@ export class SourcesRepository {
       );
     };
 
-    return await this.drizzleConnection
+    const query = this.drizzleConnection
       .select({
         id: sources.id,
         url: sources.url,
@@ -142,9 +166,15 @@ export class SourcesRepository {
       .limit(
         sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${sources})::int;` as unknown as number,
       );
+
+    return await query;
   }
 
   public async listAllSources(sortBy: SortField, order: "asc" | "desc") {
+    if (!this.drizzleConnection) {
+      return [];
+    }
+
     // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
     const validSortBy = [
       "created_at",
@@ -185,6 +215,10 @@ export class SourcesRepository {
   }
 
   public async successSource(sourceId: number, cached = false): Promise<void> {
+    if (!this.drizzleConnection) {
+      return;
+    }
+
     const now = new Date();
     await this.drizzleConnection
       .update(sources)
@@ -201,6 +235,10 @@ export class SourcesRepository {
     sourceId: number,
     favicon: Buffer | string,
   ): Promise<void> {
+    if (!this.drizzleConnection) {
+      return;
+    }
+
     let type: string;
     let encoded: string;
 
@@ -221,6 +259,10 @@ export class SourcesRepository {
   }
 
   public async updateSourceUrl(oldUrl: string, newUrl: string): Promise<void> {
+    if (!this.drizzleConnection) {
+      return;
+    }
+
     await this.drizzleConnection
       .update(sources)
       .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })

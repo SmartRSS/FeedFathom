@@ -192,6 +192,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
             cd ${{ env.DEPLOY_PATH }} && \
             # Ensure PATH includes Bun's location
+            export NODE_ENV=production && \
             export PATH="/home/${{ secrets.SSH_USER }}/.bun/bin:$PATH" && \
             export FEEDFATHOM_TAG=${{ github.sha }} && \
             export MAIL_REPLICAS=1 && \

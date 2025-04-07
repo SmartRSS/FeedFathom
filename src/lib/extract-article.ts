@@ -1,6 +1,6 @@
 import domPurify from "dompurify";
 import { JSDOM } from "jsdom";
-import container from "../container.ts";
+import { container } from "../container.ts";
 import { Extractus } from "./extractors/extractus.ts";
 import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain.ts";
 import { MozillaReadability } from "./extractors/mozilla-readability.ts";
