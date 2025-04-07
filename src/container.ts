@@ -1,3 +1,4 @@
+// import { building } from "$app/environment";
 import { buildAxios } from "$lib/cacheable-axios";
 import { CommandBus } from "$lib/commands/command-bus";
 import { ArticlesRepository } from "$lib/db/article-repository";
@@ -26,6 +27,8 @@ import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
 import { type AppConfig, config } from "./config.ts";
 
+const building = process.env["NODE_ENV"] !== "production";
+
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
@@ -46,59 +49,58 @@ export type Dependencies = {
   usersRepository: UsersRepository;
 };
 
-// Create Redis connection
-const ioRedisConnection = new Redis({
-  db: 0,
-  host: "redis",
-  lazyConnect: false,
-  maxRetriesPerRequest: null,
-  port: 6_379,
-});
-
-// Create BullMQ queue
-const bullmq = new Queue("tasks", {
-  connection: ioRedisConnection,
-});
-
-// Create database connection
-const databaseConnection = drizzle(
-  "postgresql://postgres:postgres@postgres:5432/postgres",
-  { schema },
-);
-
 // Create the container
 const container = createContainer<Dependencies>({
   injectionMode: InjectionMode.CLASSIC,
   strict: true,
 });
 
-// Register all dependencies in a single call
 container.register({
-  // Basic dependencies
   appConfig: asValue(config),
-  redis: asValue(ioRedisConnection),
-  bullmqQueue: asValue(bullmq),
-  drizzleConnection: asValue(databaseConnection),
-  axiosInstance: asFunction(buildAxios).singleton(),
   commandBus: asClass(CommandBus).singleton(),
   opmlParser: asFunction(() => new OpmlParser()).singleton(),
-
-  // Repositories
   articlesRepository: asClass(ArticlesRepository).singleton(),
   foldersRepository: asClass(FoldersRepository).singleton(),
   sourcesRepository: asClass(SourcesRepository).singleton(),
   userSourcesRepository: asClass(UserSourcesRepository).singleton(),
   usersRepository: asClass(UsersRepository).singleton(),
-
-  // Services
   cli: asClass(Cli).singleton(),
   feedParser: asClass(FeedParser).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
-
-  // Workers
   mainWorker: asClass(MainWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
 });
 
-// biome-ignore lint/style/noDefaultExport: TODO
-export default container;
+// Only create connections if not in build time
+if (!building) {
+  // Create Redis connection
+  const ioRedisConnection = new Redis({
+    db: 0,
+    host: "redis",
+    lazyConnect: false,
+    maxRetriesPerRequest: null,
+    port: 6_379,
+  });
+
+  // Create BullMQ queue
+  const bullmq = new Queue("tasks", {
+    connection: ioRedisConnection,
+  });
+
+  // Create database connection
+  const databaseConnection = drizzle(
+    "postgresql://postgres:postgres@postgres:5432/postgres",
+    { schema }
+  );
+
+  // Register all dependencies in a single call
+  container.register({
+    // Basic dependencies
+    redis: asValue(ioRedisConnection),
+    bullmqQueue: asValue(bullmq),
+    drizzleConnection: asValue(databaseConnection),
+    axiosInstance: asFunction(buildAxios).singleton(),
+  });
+}
+
+export { container };

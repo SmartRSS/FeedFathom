@@ -40,6 +40,9 @@ export const loginHandler = async ({
     "",
   );
 
+  if (!sid) {
+    return json({ error: "Failed to create session" }, { status: 500 });
+  }
   cookies.set("sid", sid, cookiesConfig);
   return json({
     sid,

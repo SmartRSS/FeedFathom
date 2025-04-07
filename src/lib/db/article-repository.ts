@@ -6,7 +6,7 @@ import { getBoundaryDates, getDateGroup } from "../../util/get-date-group.ts";
 import { logError } from "../../util/log.ts";
 
 export class ArticlesRepository {
-  public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase | null) {}
 
   public async batchUpsertArticles(
     payloads: Array<{
@@ -20,7 +20,7 @@ export class ArticlesRepository {
       url: string;
     }>,
   ) {
-    if (payloads.length === 0) {
+    if (!this.drizzleConnection || payloads.length === 0) {
       return;
     }
 
@@ -43,6 +43,10 @@ export class ArticlesRepository {
   }
 
   public async getArticle(articleId: number): Promise<Article | undefined> {
+    if (!this.drizzleConnection) {
+      return undefined;
+    }
+
     const article = (
       await this.drizzleConnection
         .select()
@@ -54,6 +58,10 @@ export class ArticlesRepository {
   }
 
   async getArticleByGuid(guid: string): Promise<Article | undefined> {
+    if (!this.drizzleConnection) {
+      return undefined;
+    }
+
     const result = await this.drizzleConnection
       .select()
       .from(articles)
@@ -62,6 +70,10 @@ export class ArticlesRepository {
   }
 
   public async getUserArticlesForSources(sourceIds: number[], userId: number) {
+    if (!this.drizzleConnection) {
+      return [];
+    }
+
     if (sourceIds.length === 0) {
       return [];
     }
@@ -104,6 +116,10 @@ export class ArticlesRepository {
   }
 
   public async removeUserArticles(articleIdList: number[], userId: number) {
+    if (!this.drizzleConnection) {
+      return;
+    }
+
     const now = new Date();
     const values = articleIdList.map((articleId) => {
       return {
