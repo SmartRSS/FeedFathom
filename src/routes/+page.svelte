@@ -20,6 +20,7 @@ import type {
 } from "../types.ts";
 import type { Article } from "../types/article-type.ts";
 import { NodeType, type TreeNode } from "../types/source-types.ts";
+import { getCachedFavicon } from "$lib/favicon";
 
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
 import addFolder from "$lib/images/icons/Document/folder-add-fill.svg";
@@ -48,15 +49,75 @@ let focusedColumn: FocusTarget = $state(".sources-column");
 
 let currentNode: TreeNode | null = $state(null);
 let tree: TreeNode[] = $state([]);
+let faviconLoadingPromise: Promise<void> | null = $state(null);
 
 async function loadTree() {
   try {
     const response = await fetch("/tree");
     const data = await response.json() as { tree: TreeNode[] };
     tree = data.tree;
+    void loadFavicons();
   } catch (error) {
     console.error("Failed to load tree:", error);
   }
+}
+
+async function loadFavicons() {
+  if (faviconLoadingPromise) return;
+
+  faviconLoadingPromise = (async () => {
+    try {
+      const sourceIds = tree
+        .flatMap((node) => {
+          if (node.type === NodeType.Folder) {
+            return node.children.map((child) => child.uid);
+          }
+          return [node.uid];
+        })
+        .filter((id) => {
+          // Check if we have a valid cached favicon
+          const cached = getCachedFavicon(id);
+          if (cached) {
+            updateFavicon(id, `/favicons/${id}`);
+            return false;
+          }
+          return true;
+        });
+
+      if (!sourceIds.length) return;
+
+      // Load favicons in parallel but update UI as each one arrives
+      await Promise.all(
+        sourceIds.map(async (id) => {
+          try {
+            updateFavicon(id, `/favicons/${id}`);
+          } catch (error) {
+            console.error(`Failed to load favicon for source ${id}:`, error);
+          }
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to load favicons:", error);
+    } finally {
+      faviconLoadingPromise = null;
+    }
+  })();
+}
+
+function updateFavicon(sourceId: string, faviconUrl: string | null) {
+  tree = tree.map((node) => {
+    if (node.type === NodeType.Folder) {
+      node.children = node.children.map((source) => {
+        if (source.type === NodeType.Source && source.uid === sourceId) {
+          source.favicon = faviconUrl;
+        }
+        return source;
+      });
+    } else if (node.type === NodeType.Source && node.uid === sourceId) {
+      node.favicon = faviconUrl;
+    }
+    return node;
+  });
 }
 
 function handleBackButton() {
