@@ -50,16 +50,14 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   }
 
   try {
-    const userSources =
-      await locals.dependencies.userSourcesRepository.getUserSources(
-        locals.user.id,
-      );
+    const source = await locals.dependencies.sourcesRepository.findSourceById(
+      Number.parseInt(sourceId, 10),
+    );
 
-    const source = userSources.find((s) => s.id?.toString() === sourceId);
     if (!source?.favicon) {
       return new Response(feed, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/svg+xml",
           "Cache-Control": "public, max-age=3600", // Cache for 1 hour
         } as HeadersInit,
       });
@@ -70,7 +68,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       logError("Invalid favicon format for source", { sourceId });
       return new Response(feed, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/svg+xml",
           "Cache-Control": "public, max-age=3600",
         } as HeadersInit,
       });
@@ -81,7 +79,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       logError("Invalid favicon data format for source", { sourceId });
       return new Response(feed, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/svg+xml",
           "Cache-Control": "public, max-age=3600",
         } as HeadersInit,
       });
@@ -92,7 +90,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       logError("Missing base64 data in favicon for source", { sourceId });
       return new Response(feed, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/svg+xml",
           "Cache-Control": "public, max-age=3600",
         } as HeadersInit,
       });
@@ -122,7 +120,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       });
       return new Response(feed, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/svg+xml",
           "Cache-Control": "public, max-age=3600",
         } as HeadersInit,
       });
@@ -131,7 +129,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     logError("Error processing favicon request", { sourceId, error });
     return new Response(feed, {
       headers: {
-        "Content-Type": "image/png",
+        "Content-Type": "image/svg+xml",
         "Cache-Control": "public, max-age=3600",
       } as HeadersInit,
     });
