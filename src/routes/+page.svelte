@@ -46,8 +46,17 @@ let displayMode: DisplayMode = $state(DisplayMode.Feed);
 let focusedColumn: FocusTarget = $state(".sources-column");
 
 let currentNode: TreeNode | null = $state(null);
-const { data }: { data: { tree: TreeNode[] } } = $props();
-let tree = $state(data.tree);
+let tree: TreeNode[] = $state([]);
+
+async function loadTree() {
+  try {
+    const response = await fetch("/tree");
+    const data = await response.json() as { tree: TreeNode[] };
+    tree = data.tree;
+  } catch (error) {
+    console.error("Failed to load tree:", error);
+  }
+}
 
 function handleBackButton() {
   if (!isMobile()) {
@@ -75,6 +84,7 @@ const isMobile = () => {
 
 onMount(() => {
   window.addEventListener("popstate", handleBackButton);
+  void loadTree();
 });
 
 function setFocusTo(selector: FocusTarget) {
