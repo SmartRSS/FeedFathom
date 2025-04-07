@@ -1,6 +1,7 @@
 <script lang="ts">
 // biome-ignore lint/correctness/noUnusedImports: bound by Svelte
 import { goto } from "$app/navigation";
+import { browser } from "$app/environment";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
 import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
@@ -41,6 +42,10 @@ let selectedArticle: Article;
 let frame: HTMLIFrameElement;
 
 const clickHandler = (event: MouseEvent) => {
+  if (!browser) {
+    return true;
+  }
+
   const targetElement = event.target as HTMLElement;
   if (targetElement.matches("a")) {
     const href = targetElement.getAttribute("href");
@@ -118,20 +123,20 @@ function initializeIframe(iframeDoc: Document) {
 }
 
 onMount(() => {
-  if (frame.contentDocument) {
+  if (browser && frame.contentDocument) {
     initializeIframe(frame.contentDocument);
   }
   void fetchData();
 });
 
 onDestroy(() => {
-  if (frame.contentDocument?.body) {
+  if (browser && frame.contentDocument?.body) {
     frame.contentDocument.body.removeEventListener("click", clickHandler);
   }
 });
 
 async function fetchData() {
-  if (!frame.contentDocument?.body) {
+  if (!browser || !frame.contentDocument?.body) {
     return;
   }
 
@@ -181,10 +186,7 @@ $effect(() => {
 
 // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
 function shouldHide() {
-  return (
-    typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/readArticle")
-  );
+  return browser && window.location.pathname.startsWith("/readArticle");
 }
 </script>
 
