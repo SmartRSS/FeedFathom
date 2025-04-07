@@ -1,9 +1,13 @@
-import feed from "$lib/images/feed.png";
 import type { RequestHandler } from "@sveltejs/kit";
-import { logError } from "../../../util/log.ts";
+import { llog, logError } from "../../../util/log.ts";
+
+// Import the feed image using Bun's file handling
+const feedIconFile = Bun.file("client/feed.png");
+llog(feedIconFile.name);
+const feedImage = await feedIconFile.arrayBuffer();
 
 function getFallbackResponse(): Response {
-  return new Response(feed, {
+  return new Response(feedImage, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=3600", // Cache for 1 hour
