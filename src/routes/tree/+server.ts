@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 
   for (const source of userSources) {
     const sourceData: TreeSource = {
-      favicon: source.favicon,
+      favicon: null,
       homeUrl: source.homeUrl ?? "",
       name: source.name,
       type: NodeType.Source,

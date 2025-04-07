@@ -20,7 +20,6 @@ import type {
 } from "../types.ts";
 import type { Article } from "../types/article-type.ts";
 import { NodeType, type TreeNode } from "../types/source-types.ts";
-
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
 import addFolder from "$lib/images/icons/Document/folder-add-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
@@ -54,10 +53,12 @@ async function loadTree() {
     const response = await fetch("/tree");
     const data = await response.json() as { tree: TreeNode[] };
     tree = data.tree;
+    // void loadFavicons();
   } catch (error) {
     console.error("Failed to load tree:", error);
   }
 }
+
 
 function handleBackButton() {
   if (!isMobile()) {
