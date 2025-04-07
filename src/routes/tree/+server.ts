@@ -1,14 +1,13 @@
+import { type RequestHandler, json } from "@sveltejs/kit";
 import {
   NodeType,
   type TreeNode,
   type TreeSource,
-} from "../types/source-types.ts";
+} from "../../types/source-types.ts";
 
-export const load = async ({ locals }: { locals: App.Locals }) => {
+export const GET: RequestHandler = async ({ locals }) => {
   if (!locals.user) {
-    return {
-      tree: [],
-    };
+    return json({ tree: [] });
   }
 
   const [userSources, userFolders] = await Promise.all([
@@ -52,5 +51,5 @@ export const load = async ({ locals }: { locals: App.Locals }) => {
 
   treeFromDatabase.push(...sourcesWithoutFolder);
 
-  return { tree: treeFromDatabase };
+  return json({ tree: treeFromDatabase });
 };
