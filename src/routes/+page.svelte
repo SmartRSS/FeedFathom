@@ -1,6 +1,7 @@
 <script lang="ts">
 // biome-ignore lint/correctness/noUnusedImports: bound by Svelte
 import { goto } from "$app/navigation";
+import { browser } from "$app/environment";
 import { DisplayMode } from "$lib/settings";
 import { onDestroy, onMount } from "svelte";
 // biome-ignore lint/correctness/noUnusedImports: Svelte component
@@ -76,7 +77,7 @@ function handleBackButton() {
 }
 
 const isMobile = () => {
-  if (typeof window === "undefined") {
+  if (!browser) {
     return false; // Not in a browser environment
   }
   return window.matchMedia("only screen and (max-width: 768px)").matches;
@@ -297,6 +298,8 @@ onDestroy(() => {
   if (isMobile()) {
     window.removeEventListener("popstate", handleBackButton);
   }
+  promisesMap.clear();
+  clearInterval(cleanupInterval);
 });
 
 function clearStalePromises() {
