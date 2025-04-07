@@ -2,7 +2,7 @@ import type { RequestHandler } from "@sveltejs/kit";
 import { llog, logError } from "../../../util/log.ts";
 
 // Import the feed image using Bun's file handling
-const feedIconFile = Bun.file("client/feed.png");
+const feedIconFile = Bun.file("src/lib/images/feed.png");
 llog(feedIconFile.name);
 const feedImage = await feedIconFile.arrayBuffer();
 
