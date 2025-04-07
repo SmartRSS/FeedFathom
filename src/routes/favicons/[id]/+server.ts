@@ -1,19 +1,5 @@
 import type { RequestHandler } from "@sveltejs/kit";
-import { llog, logError } from "../../../util/log.ts";
-
-// Import the feed image using Bun's file handling
-const feedIconFile = Bun.file("src/lib/images/feed.png");
-llog(feedIconFile.name);
-const feedImage = await feedIconFile.arrayBuffer();
-
-function getFallbackResponse(): Response {
-  return new Response(feedImage, {
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=3600", // Cache for 1 hour
-    } as HeadersInit,
-  });
-}
+import { logError } from "../../../util/log.ts";
 
 function sniffContentType(bytes: Uint8Array): string {
   // Check for PNG
@@ -64,29 +50,29 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
   try {
     const source = await locals.dependencies.sourcesRepository.findSourceById(
-      Number.parseInt(sourceId, 10),
+      Number.parseInt(sourceId, 10)
     );
 
     if (!source?.favicon) {
-      return getFallbackResponse();
+      return new Response(null, { status: 404 });
     }
 
     // Validate favicon data format
     if (!source.favicon.startsWith("data:image/")) {
       logError("Invalid favicon format for source", { sourceId });
-      return getFallbackResponse();
+      return new Response(null, { status: 404 });
     }
 
     const parts = source.favicon.split(",");
     if (parts.length !== 2) {
       logError("Invalid favicon data format for source", { sourceId });
-      return getFallbackResponse();
+      return new Response(null, { status: 404 });
     }
 
     const [, base64Data] = parts;
     if (!base64Data) {
       logError("Missing base64 data in favicon for source", { sourceId });
-      return getFallbackResponse();
+      return new Response(null, { status: 404 });
     }
 
     try {
@@ -111,10 +97,10 @@ export const GET: RequestHandler = async ({ locals, params }) => {
         sourceId,
         error,
       });
-      return getFallbackResponse();
+      return new Response(null, { status: 404 });
     }
   } catch (error) {
     logError("Error processing favicon request", { sourceId, error });
-    return getFallbackResponse();
+    return new Response(null, { status: 404 });
   }
 };
