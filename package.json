@@ -17,8 +17,7 @@
     "lint": "bun test && bunx --bun svelte-kit sync && biome check && bunx --bunx tsc && bun eslint && bun svelte-check && bun knip",
     "lint:fix": "bunx --bun svelte-kit sync && bun eslint:fix --fix && biome check --write",
     "format": "biome format --write",
-    "knip": "knip",
-    "copy-feed-image": "bun run scripts/copy-feed-image.ts"
+    "knip": "knip"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

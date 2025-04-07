@@ -84,9 +84,19 @@ const isMobile = () => {
   return window.matchMedia("only screen and (max-width: 768px)").matches;
 };
 
+function isNodeIconImage(element: EventTarget | null): element is HTMLImageElement {
+  return element instanceof Element && element.matches("img.node-icon");
+}
+
 onMount(() => {
   window.addEventListener("popstate", handleBackButton);
   void loadTree();
+
+  document.body.addEventListener("error", (event) => {
+    if (isNodeIconImage(event.target)) {
+      event.target.src = "/feed.png";
+    }
+  }, true);
 });
 
 function setFocusTo(selector: FocusTarget) {
