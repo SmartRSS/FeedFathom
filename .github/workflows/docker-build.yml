@@ -96,7 +96,8 @@ jobs:
 
       - name: Build and start services
         run: |
-          docker compose pull
+          export FEEDFATHOM_TAG=${{ github.sha }} && \
+          docker compose pull && \
           docker compose up -d
 
       - name: Wait for services to be healthy
@@ -147,6 +148,14 @@ jobs:
           echo "Web server response body:"
           echo "$RESPONSE" | sed '$d'
           echo "Web server is responding with status code: $STATUS_CODE"
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo "Verification failed. Printing logs for all services:"
+          docker compose logs migrator worker mail server
+          echo "Current container status:"
+          docker compose ps
 
       - name: Cleanup
         if: always()
