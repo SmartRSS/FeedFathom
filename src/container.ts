@@ -82,17 +82,14 @@ const databaseConnection = isBuildMode
       schema,
     });
 
-// Register all dependencies in a single call
+// Register all dependencies
 container.register({
   // Basic dependencies
   redis: asValue(ioRedisConnection),
   bullmqQueue: asValue(bullmq),
   drizzleConnection: asValue(databaseConnection),
   axiosInstance: asFunction(buildAxios).singleton(),
-});
-
-// Register all dependencies in a single call
-container.register({
+  // Application dependencies
   appConfig: asValue(config),
   commandBus: asClass(CommandBus).singleton(),
   opmlParser: asFunction(() => new OpmlParser()).singleton(),
