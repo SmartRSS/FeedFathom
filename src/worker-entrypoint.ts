@@ -1,4 +1,4 @@
-import { container } from "./container.ts";
+import container from "./container.ts";
 import { llog, logError } from "./util/log.ts";
 
 try {
