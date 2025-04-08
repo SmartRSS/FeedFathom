@@ -11,7 +11,7 @@ export class UserSourcesRepository {
   public constructor(
     private readonly drizzleConnection: BunSQLDatabase,
     private readonly foldersRepository: FoldersRepository,
-    private readonly sourcesRepository: SourcesRepository
+    private readonly sourcesRepository: SourcesRepository,
   ) {}
 
   public async addSourceToUser(
@@ -21,7 +21,7 @@ export class UserSourcesRepository {
       name: string;
       parentId: null | number;
       url: string;
-    }
+    },
   ) {
     if (sourcePayload.parentId) {
       const folders = await this.foldersRepository.getUserFolders(userId);
@@ -40,7 +40,7 @@ export class UserSourcesRepository {
       {
         // biome-ignore lint/style/useNamingConvention: <explanation>
         home_url: sourcePayload.homeUrl,
-      }
+      },
     );
 
     const userSource = (
@@ -90,8 +90,8 @@ export class UserSourcesRepository {
             sources.id,
             this.drizzleConnection
               .selectDistinct({ id: userSources.sourceId })
-              .from(userSources)
-          )
+              .from(userSources),
+          ),
         );
 
       // Step 3: Clean up orphaned articles that have no source now
@@ -100,8 +100,8 @@ export class UserSourcesRepository {
         .where(
           notInArray(
             articles.sourceId,
-            this.drizzleConnection.select({ id: sources.id }).from(sources)
-          )
+            this.drizzleConnection.select({ id: sources.id }).from(sources),
+          ),
         );
 
       // Step 4: Clean up orphaned userArticles without corresponding articles
@@ -110,8 +110,8 @@ export class UserSourcesRepository {
         .where(
           notInArray(
             userArticles.articleId,
-            this.drizzleConnection.select({ id: articles.id }).from(articles)
-          )
+            this.drizzleConnection.select({ id: articles.id }).from(articles),
+          ),
         );
     } catch (error_) {
       error("cleanup", error_);
@@ -144,8 +144,8 @@ export class UserSourcesRepository {
         userArticles,
         and(
           eq(userArticles.userId, userId),
-          eq(userArticles.articleId, articles.id)
-        )
+          eq(userArticles.articleId, articles.id),
+        ),
       )
       .groupBy(
         sources.id,
@@ -153,7 +153,7 @@ export class UserSourcesRepository {
         userSources.parentId,
         sources.favicon,
         sources.url,
-        sources.homeUrl
+        sources.homeUrl,
       )
       .orderBy(userSources.name);
   }
@@ -161,13 +161,13 @@ export class UserSourcesRepository {
   public async insertTree(
     userId: number,
     tree: OpmlNode[] | TreeNode[],
-    parentId?: number
+    parentId?: number,
   ) {
     for (const node of tree) {
       if (node.type === "folder") {
         const folder = await this.foldersRepository.createFolder(
           userId,
-          node.name
+          node.name,
         );
         if ("children" in node) {
           await this.insertTree(userId, node.children, folder.id);
@@ -189,7 +189,7 @@ export class UserSourcesRepository {
     await this.drizzleConnection
       .delete(userSources)
       .where(
-        and(eq(userSources.userId, userId), eq(userSources.sourceId, sourceId))
+        and(eq(userSources.userId, userId), eq(userSources.sourceId, sourceId)),
       );
   }
 }
