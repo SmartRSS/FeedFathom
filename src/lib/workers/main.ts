@@ -5,6 +5,8 @@ import {
   type SourceCommandResult,
 } from "$lib/commands/types";
 import type { SourcesRepository } from "$lib/db/source-repository";
+import type { UserSourcesRepository } from "$lib/db/user-source-repository";
+import type { FeedParser } from "$lib/feed-parser";
 import { type Job, type Queue, Worker } from "bullmq";
 import type Redis from "ioredis";
 import type { AppConfig } from "../../config.ts";
@@ -16,9 +18,11 @@ export class MainWorker {
 
   constructor(
     private readonly appConfig: AppConfig,
-    private readonly bullmqQueue: Queue | null,
-    private readonly redis: Redis | null,
+    private readonly bullmqQueue: Queue,
+    private readonly feedParser: FeedParser,
+    private readonly redis: Redis,
     private readonly sourcesRepository: SourcesRepository,
+    private readonly userSourcesRepository: UserSourcesRepository,
     private readonly commandBus: CommandBus,
   ) {}
 
@@ -51,25 +55,93 @@ export class MainWorker {
     });
   }
 
-  private async processJob(
-    job: Job<ParseSourceCommand>,
-  ): Promise<SourceCommandResult> {
-    if (!this.bullmqQueue) {
-      return { success: false, error: new Error("Queue not available") };
+  private handleJobError(error: unknown, job: Job) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError(`Error processing job: ${job.name}, ID: ${job.id}`, error);
+    if (job) {
+      llog(`Worker failed job ${job.id} with error: ${errorMessage}`);
+    } else {
+      llog(`Worker failed unknown job with error: ${errorMessage}`);
     }
+  }
 
+  private readonly processJob = async (job: Job) => {
+    llog(
+      `Processing job: ${job.name}, ID: ${job.id}, Data: ${JSON.stringify(job.data)}`,
+    );
     try {
-      const command: ParseSourceCommand = {
-        sourceId: job.data.sourceId,
-        timestamp: Date.now(),
-        type: CommandType.PARSE_SOURCE,
-      };
+      await this.processRegularJob(job);
 
-      const result = await this.commandBus.execute(command);
-      return result;
-    } catch (error) {
-      logError(`Error processing job ${job.id}:`, error);
-      return { success: false, error: new Error("Internal server error") };
+      llog(`Successfully processed job: ${job.name}, ID: ${job.id}`);
+      return true;
+    } catch (error: unknown) {
+      this.handleJobError(error, job);
+      // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
+      return true;
+    }
+  };
+
+  private async processRegularJob(job: Job) {
+    switch (job.name) {
+      case JobName.Cleanup: {
+        llog("Running cleanup job");
+        await this.bullmqQueue.trimEvents(100);
+        await this.userSourcesRepository.cleanup();
+        llog("Cleanup job completed");
+        break;
+      }
+
+      case JobName.GatherFaviconJobs: {
+        llog("Running gather favicon jobs");
+        const successfullSources =
+          await this.sourcesRepository.getRecentlySuccessfulSources();
+        llog(`Found ${successfullSources.length} sources for favicon refresh`);
+        const tasks = successfullSources.map((source) => {
+          return {
+            data: source,
+            jobId: `${JobName.RefreshFavicon}:${source.homeUrl}`,
+            name: JobName.RefreshFavicon,
+            opts: {
+              jobId: `${JobName.RefreshFavicon}:${source.homeUrl}`,
+              removeOnComplete: { count: 0 },
+              removeOnFail: { count: 0 },
+            },
+          };
+        });
+        await this.bullmqQueue.addBulk(tasks);
+        llog(`Added ${tasks.length} favicon refresh jobs to queue`);
+        break;
+      }
+
+      case JobName.GatherJobs: {
+        llog("Running gather jobs");
+        const parseSourceJobs = await this.gatherParseSourceJobs();
+        await this.bullmqQueue.addBulk(parseSourceJobs);
+        llog(`Added ${parseSourceJobs.length} parse source jobs to queue`);
+        break;
+      }
+
+      case JobName.ParseSource: {
+        llog(`Parsing source with ID: ${job.data.id}`);
+        // Use the command bus instead of directly calling the feed parser
+        await this.commandBus.execute<ParseSourceCommand, SourceCommandResult>({
+          sourceId: job.data.id,
+          timestamp: Date.now(),
+          type: CommandType.PARSE_SOURCE,
+        });
+        llog(`Completed parsing source with ID: ${job.data.id}`);
+        break;
+      }
+
+      case JobName.RefreshFavicon: {
+        llog(`Refreshing favicon for: ${job.data.homeUrl}`);
+        await this.feedParser.refreshFavicon(job.data);
+        llog(`Completed refreshing favicon for: ${job.data.homeUrl}`);
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown job type: ${job.name}`);
     }
   }
 
@@ -85,10 +157,6 @@ export class MainWorker {
   }
 
   private async setupScheduledTasks() {
-    if (!this.bullmqQueue) {
-      return;
-    }
-
     llog(
       `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} minutes, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} minutes`,
     );
@@ -134,15 +202,11 @@ export class MainWorker {
   }
 
   private setupWorker() {
-    if (!this.redis) {
-      return;
-    }
-
     llog(
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}, lock duration: ${this.appConfig["LOCK_DURATION"]} seconds`,
     );
 
-    const worker = new Worker("tasks", this.processJob.bind(this), {
+    this.worker = new Worker("tasks", this.processJob, {
       autorun: true,
       concurrency: this.appConfig["WORKER_CONCURRENCY"],
       connection: this.redis,
@@ -150,22 +214,10 @@ export class MainWorker {
     });
 
     // Set up minimal event listeners for the worker
-    worker.on("failed", (job: Job | undefined, error: Error) => {
+    this.worker.on("failed", (job: Job | undefined, error: Error) => {
       logError(`Worker job failed: ${job?.id ?? "unknown"}`, error);
     });
 
-    this.worker = worker;
     llog("Worker setup complete");
-  }
-
-  public start() {
-    this.setupWorker();
-  }
-
-  public stop() {
-    if (this.worker) {
-      void this.worker.close();
-      this.worker = undefined;
-    }
   }
 }

@@ -4,13 +4,9 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { sessions, users } from "../schema.ts";
 
 export class UsersRepository {
-  constructor(private readonly drizzleConnection: BunSQLDatabase | null) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async createSession(userId: number, userAgent?: null | string) {
-    if (!this.drizzleConnection) {
-      return null;
-    }
-
     const uuid = crypto.randomUUID();
     await this.drizzleConnection.insert(sessions).values({
       sid: uuid,
@@ -25,10 +21,6 @@ export class UsersRepository {
     name: string;
     passwordHash: string;
   }) {
-    if (!this.drizzleConnection) {
-      return null;
-    }
-
     return (
       await this.drizzleConnection
         .insert(users)
@@ -42,10 +34,6 @@ export class UsersRepository {
   }
 
   public async findUser(email: string) {
-    if (!this.drizzleConnection) {
-      return null;
-    }
-
     return (
       await this.drizzleConnection
         .select()
@@ -56,10 +44,6 @@ export class UsersRepository {
   }
 
   public async getUserBySid(sid: string) {
-    if (!this.drizzleConnection) {
-      return null;
-    }
-
     const { password: _password, ...rest } = getTableColumns(users);
     return (
       await this.drizzleConnection
@@ -72,10 +56,6 @@ export class UsersRepository {
   }
 
   public async getUserCount(): Promise<number> {
-    if (!this.drizzleConnection) {
-      return 0;
-    }
-
     const result = await this.drizzleConnection
       .select({
         count: sql`count(${users.id})`,
@@ -86,10 +66,6 @@ export class UsersRepository {
   }
 
   public async makeAdmin(email: string) {
-    if (!this.drizzleConnection) {
-      return;
-    }
-
     return await this.drizzleConnection
       .update(users)
       .set({ isAdmin: true })
@@ -98,10 +74,6 @@ export class UsersRepository {
   }
 
   public async updatePassword(userId: number, passwordHash: string) {
-    if (!this.drizzleConnection) {
-      return;
-    }
-
     return await this.drizzleConnection
       .update(users)
       .set({ password: passwordHash })
