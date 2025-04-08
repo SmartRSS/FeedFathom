@@ -27,23 +27,21 @@ import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
 import { type AppConfig, config } from "./config.ts";
 
-const building = process.env["NODE_ENV"] !== "production";
-
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
-  bullmqQueue: Queue;
+  bullmqQueue: Queue | null;
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
-  drizzleConnection: BunSQLDatabase<typeof schema>;
+  drizzleConnection: BunSQLDatabase<typeof schema> | null;
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
   initializer: Initializer;
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
-  redis: Redis;
+  redis: Redis | null;
   sourcesRepository: SourcesRepository;
   userSourcesRepository: UserSourcesRepository;
   usersRepository: UsersRepository;
@@ -55,6 +53,45 @@ const container = createContainer<Dependencies>({
   strict: true,
 });
 
+// Only create connections if not in build mode
+const isBuildMode = process.env["BUILD_MODE"] === "true";
+
+// Create Redis connection
+const ioRedisConnection = isBuildMode
+  ? null
+  : new Redis({
+      db: 0,
+      host: "redis",
+      lazyConnect: false,
+      maxRetriesPerRequest: null,
+      port: 6_379,
+    });
+
+// Create BullMQ queue
+const bullmq =
+  isBuildMode || !ioRedisConnection
+    ? null
+    : new Queue("tasks", {
+        connection: ioRedisConnection,
+      });
+
+// Create database connection
+const databaseConnection = isBuildMode
+  ? null
+  : drizzle("postgresql://postgres:postgres@postgres:5432/postgres", {
+      schema,
+    });
+
+// Register all dependencies in a single call
+container.register({
+  // Basic dependencies
+  redis: asValue(ioRedisConnection),
+  bullmqQueue: asValue(bullmq),
+  drizzleConnection: asValue(databaseConnection),
+  axiosInstance: asFunction(buildAxios).singleton(),
+});
+
+// Register all dependencies in a single call
 container.register({
   appConfig: asValue(config),
   commandBus: asClass(CommandBus).singleton(),
@@ -70,37 +107,5 @@ container.register({
   mainWorker: asClass(MainWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
 });
-
-// Only create connections if not in build time
-if (!building) {
-  // Create Redis connection
-  const ioRedisConnection = new Redis({
-    db: 0,
-    host: "redis",
-    lazyConnect: false,
-    maxRetriesPerRequest: null,
-    port: 6_379,
-  });
-
-  // Create BullMQ queue
-  const bullmq = new Queue("tasks", {
-    connection: ioRedisConnection,
-  });
-
-  // Create database connection
-  const databaseConnection = drizzle(
-    "postgresql://postgres:postgres@postgres:5432/postgres",
-    { schema },
-  );
-
-  // Register all dependencies in a single call
-  container.register({
-    // Basic dependencies
-    redis: asValue(ioRedisConnection),
-    bullmqQueue: asValue(bullmq),
-    drizzleConnection: asValue(databaseConnection),
-    axiosInstance: asFunction(buildAxios).singleton(),
-  });
-}
 
 export { container };

@@ -7,7 +7,7 @@ import type { TreeNode } from "../../types/source-types.ts";
 import { logError as error } from "../../util/log.ts";
 import { articles, sources, userArticles, userSources } from "../schema.ts";
 
-const building = process.env["NODE_ENV"] !== "production";
+const building = process.env["BUILD_MODE"] === "true";
 
 export class UserSourcesRepository {
   public constructor(
