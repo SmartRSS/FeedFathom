@@ -5,7 +5,7 @@ import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type Redis from "ioredis";
-import { container } from "../container.ts";
+import container from "../container.ts";
 import { logError as error } from "../util/log.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
@@ -24,8 +24,8 @@ export class FeedParser {
 
   constructor(
     private readonly articlesRepository: ArticlesRepository,
-    private readonly axiosInstance: AxiosCacheInstance | null,
-    private readonly redis: Redis | null,
+    private readonly axiosInstance: AxiosCacheInstance,
+    private readonly redis: Redis,
     private readonly sourcesRepository: SourcesRepository,
   ) {}
 
@@ -151,10 +151,6 @@ export class FeedParser {
   }
 
   private async canDomainBeProcessedAlready(domain: string): Promise<boolean> {
-    if (!this.redis) {
-      return false;
-    }
-
     const now = Date.now();
     const lastFetchKey = `lastFetchTimestamp:${domain}`;
 
@@ -173,19 +169,19 @@ export class FeedParser {
   }
 
   private async parseGenericFeed(url: string) {
-    const response = await this.axiosInstance?.get(url);
+    const response = await this.axiosInstance.get(url);
 
-    if (response?.status !== 200) {
+    if (response.status !== 200) {
       error(`failed to load data for ${url}`);
       throw new Error(
-        `Failed to load data for ${url}, received status ${response?.status?.toString() ?? "no status"}`,
+        `Failed to load data for ${url}, received status ${response.status.toString()}`,
       );
     }
 
-    if (typeof response?.data !== "string") {
+    if (typeof response.data !== "string") {
       error(`failed to load data for ${url}`);
       throw new Error(
-        `Failed to load data for ${url}, received status ${response?.status?.toString() ?? "no status"}`,
+        `Failed to load data for ${url}, received status ${response.status.toString()}`,
       );
     }
 
