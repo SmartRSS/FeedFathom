@@ -148,6 +148,14 @@ jobs:
           echo "$RESPONSE" | sed '$d'
           echo "Web server is responding with status code: $STATUS_CODE"
 
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo "Verification failed. Printing logs for all services:"
+          docker compose logs
+          echo "Current container status:"
+          docker compose ps
+
       - name: Cleanup
         if: always()
         run: docker compose down -v
