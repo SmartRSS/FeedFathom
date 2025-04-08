@@ -152,7 +152,7 @@ jobs:
         if: failure()
         run: |
           echo "Verification failed. Printing logs for all services:"
-          docker compose logs
+          docker compose logs migrator worker mail server
           echo "Current container status:"
           docker compose ps
 
