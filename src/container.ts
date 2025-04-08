@@ -1,4 +1,3 @@
-// import { building } from "$app/environment";
 import { buildAxios } from "$lib/cacheable-axios";
 import { CommandBus } from "$lib/commands/command-bus";
 import { ArticlesRepository } from "$lib/db/article-repository";
@@ -53,34 +52,27 @@ const container = createContainer<Dependencies>({
   strict: true,
 });
 
-// Only create connections if not in build mode
-const isBuildMode = process.env["BUILD_MODE"] === "true";
-
 // Create Redis connection
-const ioRedisConnection = isBuildMode
-  ? null
-  : new Redis({
-      db: 0,
-      host: "redis",
-      lazyConnect: false,
-      maxRetriesPerRequest: null,
-      port: 6_379,
-    });
+const ioRedisConnection = new Redis({
+  db: 0,
+  host: "redis",
+  lazyConnect: false,
+  maxRetriesPerRequest: null,
+  port: 6_379,
+});
 
 // Create BullMQ queue
-const bullmq =
-  isBuildMode || !ioRedisConnection
-    ? null
-    : new Queue("tasks", {
-        connection: ioRedisConnection,
-      });
+const bullmq = new Queue("tasks", {
+  connection: ioRedisConnection,
+});
 
 // Create database connection
-const databaseConnection = isBuildMode
-  ? null
-  : drizzle("postgresql://postgres:postgres@postgres:5432/postgres", {
-      schema,
-    });
+const databaseConnection = drizzle(
+  "postgresql://postgres:postgres@postgres:5432/postgres",
+  {
+    schema,
+  },
+);
 
 // Register all dependencies
 container.register({

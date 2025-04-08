@@ -24,7 +24,7 @@ COPY src/ /app/src/
 # it is attached to UAS of performed requests for easier debugging
 RUN mkdir -p /app/build && \
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
-    BUILD_MODE=true bun build-for-image && \
+    bun build-for-image && \
     echo "Build timestamp: $timestamp" && \
     echo "$timestamp" > /app/build/BUILD_TIME
 
