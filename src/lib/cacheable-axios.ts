@@ -9,7 +9,7 @@ import {
   canStale,
   setupCache,
 } from "axios-cache-interceptor";
-import type Redis from "ioredis";
+import type { RedisClient } from "bun";
 import { logError as error_ } from "../util/log.ts";
 
 const getBuildTime = (): string => {
@@ -30,7 +30,7 @@ const getBuildTime = (): string => {
 
 const cachedBuildTimestamp = getBuildTime();
 
-export const buildAxios = (redis: Redis) => {
+export const buildAxios = (redis: RedisClient) => {
   const axiosInstance: AxiosInstance = axios.create({
     headers: {
       "Accept-Encoding": "gzip, deflate",

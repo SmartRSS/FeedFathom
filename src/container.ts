@@ -21,15 +21,15 @@ import {
   createContainer,
 } from "awilix";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
-import { Queue } from "bullmq";
+import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
-import Redis from "ioredis";
 import { type AppConfig, config } from "./config.ts";
+import { MockRedisClient } from "./lib/mock-redis-client.ts";
+import { SimpleQueue } from "./lib/simple-queue.ts";
 
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
-  bullmqQueue: Queue;
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
@@ -40,25 +40,32 @@ export type Dependencies = {
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
-  redis: Redis;
+  redis: RedisClient;
   sourcesRepository: SourcesRepository;
   userSourcesRepository: UserSourcesRepository;
   usersRepository: UsersRepository;
+  simpleQueue: SimpleQueue;
 };
 
-// Create Redis connection
-const ioRedisConnection = new Redis({
-  db: 0,
-  host: "redis",
-  lazyConnect: false,
-  maxRetriesPerRequest: null,
-  port: 6_379,
-});
+const redisClient = (() => {
+  // Use mock Redis during build process
+  if (process.env["BUILD"] === "true") {
+    return new MockRedisClient();
+  }
 
-// Create BullMQ queue
-const bullmq = new Queue("tasks", {
-  connection: ioRedisConnection,
-});
+  // Use real Redis in runtime
+  return new RedisClient("redis://redis:6379", {
+    connectionTimeout: 60 * 60 * 1000,
+    idleTimeout: 0,
+    autoReconnect: true,
+    maxRetries: 100,
+    enableOfflineQueue: true,
+    tls: false,
+    enableAutoPipelining: false,
+  });
+})();
+
+await redisClient.connect();
 
 // Create database connection
 const databaseConnection = drizzle(
@@ -76,8 +83,7 @@ const container = createContainer<Dependencies>({
 container.register({
   // Basic dependencies
   appConfig: asValue(config),
-  redis: asValue(ioRedisConnection),
-  bullmqQueue: asValue(bullmq),
+  redis: asValue(redisClient),
   drizzleConnection: asValue(databaseConnection),
   axiosInstance: asFunction(buildAxios).singleton(),
   commandBus: asClass(CommandBus).singleton(),
@@ -98,6 +104,7 @@ container.register({
   // Workers
   mainWorker: asClass(MainWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
+  simpleQueue: asClass(SimpleQueue).singleton(),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO

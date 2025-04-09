@@ -4,7 +4,7 @@ import type { SourcesRepository } from "$lib/db/source-repository";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
-import type Redis from "ioredis";
+import type { RedisClient } from "bun";
 import container from "../container.ts";
 import { logError as error } from "../util/log.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
@@ -25,7 +25,7 @@ export class FeedParser {
   constructor(
     private readonly articlesRepository: ArticlesRepository,
     private readonly axiosInstance: AxiosCacheInstance,
-    private readonly redis: Redis,
+    private readonly redis: RedisClient,
     private readonly sourcesRepository: SourcesRepository,
   ) {}
 
