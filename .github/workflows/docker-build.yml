@@ -13,6 +13,11 @@ on:
         description: 'Tag to deploy (defaults to latest commit SHA)'
         required: false
         type: string
+      is_pr:
+        description: 'Is this a PR deployment?'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -86,7 +91,7 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     needs: build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 10
     env:
       WORKER_REPLICAS: 1
@@ -169,8 +174,10 @@ jobs:
 
   deploy:
     runs-on: ubuntu-24.04
-    needs: build
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [build, verify]
+    if: |
+      (github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.is_pr == 'true')
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
