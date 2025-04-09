@@ -172,7 +172,7 @@ jobs:
     needs: [build, verify]
     if: |
       (github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.pull_request)
+      (github.event_name == 'workflow_dispatch')
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
