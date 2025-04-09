@@ -13,11 +13,6 @@ on:
         description: 'Tag to deploy (defaults to latest commit SHA)'
         required: false
         type: string
-      is_pr:
-        description: 'Is this a PR deployment?'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build:
@@ -177,7 +172,7 @@ jobs:
     needs: [build, verify]
     if: |
       (github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.is_pr == 'true')
+      (github.event_name == 'workflow_dispatch' && github.event.pull_request)
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
