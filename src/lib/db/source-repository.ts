@@ -1,10 +1,9 @@
-import type { Queue } from "bullmq";
+import type { SimpleQueue } from "$lib/simple-queue.ts";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { JobName } from "../../types/job-name-enum.ts";
 import { logError as error } from "../../util/log.ts";
 import { sources } from "../schema.ts";
-
 type SortField =
   | "created_at"
   | "failures"
@@ -16,7 +15,7 @@ type SortField =
 export class SourcesRepository {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase,
-    private readonly bullmqQueue: Queue,
+    private readonly simpleQueue: SimpleQueue,
   ) {}
 
   public async addSource(payload: { homeUrl: string; url: string }) {
@@ -27,10 +26,16 @@ export class SourcesRepository {
       throw new Error("failed");
     }
 
-    await this.bullmqQueue.add(JobName.ParseSource, {
-      id: source.id,
-      skipCache: true,
-      url: source.url,
+    await this.simpleQueue.addJobToQueue({
+      generalId: `${JobName.ParseSource}:${source.id}`,
+      instanceId: `${JobName.ParseSource}:${source.id}`,
+      name: JobName.ParseSource,
+      payload: {
+        id: source.id,
+        skipCache: true,
+        url: source.url,
+      },
+      every: 0, // Not a repeating job
     });
     return source;
   }

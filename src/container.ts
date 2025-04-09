@@ -21,15 +21,13 @@ import {
   createContainer,
 } from "awilix";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
-import { Queue } from "bullmq";
+import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
-import Redis from "ioredis";
 import { type AppConfig, config } from "./config.ts";
-
+import { SimpleQueue } from "./lib/simple-queue.ts";
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
-  bullmqQueue: Queue;
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
@@ -40,25 +38,53 @@ export type Dependencies = {
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
-  redis: Redis;
+  redis: RedisClient;
   sourcesRepository: SourcesRepository;
   userSourcesRepository: UserSourcesRepository;
   usersRepository: UsersRepository;
+  simpleQueue: SimpleQueue;
 };
 
-// Create Redis connection
-const ioRedisConnection = new Redis({
-  db: 0,
-  host: "redis",
-  lazyConnect: false,
-  maxRetriesPerRequest: null,
-  port: 6_379,
-});
+const redisClient = new RedisClient("redis://redis:6379", {
+  connectionTimeout: 60 * 60 * 1000,
 
-// Create BullMQ queue
-const bullmq = new Queue("tasks", {
-  connection: ioRedisConnection,
+  /**
+   * Idle timeout in milliseconds
+   * @default 0 (no timeout)
+   */
+  idleTimeout: 0,
+
+  /**
+   * Whether to automatically reconnect
+   * @default true
+   */
+  autoReconnect: true,
+
+  /**
+   * Maximum number of reconnection attempts
+   * @default 10
+   */
+  maxRetries: 100,
+
+  /**
+   * Whether to queue commands when disconnected
+   * @default true
+   */
+  enableOfflineQueue: true,
+
+  /**
+   * TLS options
+   * Can be a boolean or an object with TLS options
+   */
+  tls: false,
+
+  /**
+   * Whether to enable auto-pipelining
+   * @default true
+   */
+  enableAutoPipelining: false,
 });
+await redisClient.connect();
 
 // Create database connection
 const databaseConnection = drizzle(
@@ -76,8 +102,7 @@ const container = createContainer<Dependencies>({
 container.register({
   // Basic dependencies
   appConfig: asValue(config),
-  redis: asValue(ioRedisConnection),
-  bullmqQueue: asValue(bullmq),
+  redis: asValue(redisClient),
   drizzleConnection: asValue(databaseConnection),
   axiosInstance: asFunction(buildAxios).singleton(),
   commandBus: asClass(CommandBus).singleton(),
@@ -98,6 +123,7 @@ container.register({
   // Workers
   mainWorker: asClass(MainWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
+  simpleQueue: asClass(SimpleQueue).singleton(),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO

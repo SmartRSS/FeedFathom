@@ -1,4 +1,8 @@
-export const llog = (..._args: unknown[]): void => {};
+export const llog = (...args: unknown[]): void => {
+  // biome-ignore lint/suspicious/noConsoleLog: <explanation>
+  // biome-ignore lint/suspicious/noConsole: <explanation>
+  console.log(...args);
+};
 
 export const logError = (...args: unknown[]): void => {
   const error = new Error("dummy");
