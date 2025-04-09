@@ -194,8 +194,19 @@ export class MainWorker {
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
 
-    this.simpleQueue.startProcessing(this.processJob, 1);
+    const startQueueProcessing = () => {
+      this.simpleQueue.startProcessing(this.processJob, 1);
 
+      // Set up a periodic check to restart processing if it stops
+      setInterval(() => {
+        if (!this.simpleQueue.isProcessing()) {
+          llog("Queue processing stopped, restarting...");
+          this.simpleQueue.startProcessing(this.processJob, 1);
+        }
+      }, 5000); // Check every 5 seconds
+    };
+
+    startQueueProcessing();
     llog("Worker setup complete");
   }
 }

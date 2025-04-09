@@ -25,6 +25,8 @@ import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
 import { SimpleQueue } from "./lib/simple-queue.ts";
+import { MockRedisClient } from "./lib/mock-redis-client.ts";
+
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
@@ -45,45 +47,24 @@ export type Dependencies = {
   simpleQueue: SimpleQueue;
 };
 
-const redisClient = new RedisClient("redis://redis:6379", {
-  connectionTimeout: 60 * 60 * 1000,
+const redisClient = (() => {
+  // Use mock Redis during build process
+  if (process.env["BUILD"] === "true") {
+    return new MockRedisClient();
+  }
 
-  /**
-   * Idle timeout in milliseconds
-   * @default 0 (no timeout)
-   */
-  idleTimeout: 0,
+  // Use real Redis in runtime
+  return new RedisClient("redis://redis:6379", {
+    connectionTimeout: 60 * 60 * 1000,
+    idleTimeout: 0,
+    autoReconnect: true,
+    maxRetries: 100,
+    enableOfflineQueue: true,
+    tls: false,
+    enableAutoPipelining: false,
+  });
+})();
 
-  /**
-   * Whether to automatically reconnect
-   * @default true
-   */
-  autoReconnect: true,
-
-  /**
-   * Maximum number of reconnection attempts
-   * @default 10
-   */
-  maxRetries: 100,
-
-  /**
-   * Whether to queue commands when disconnected
-   * @default true
-   */
-  enableOfflineQueue: true,
-
-  /**
-   * TLS options
-   * Can be a boolean or an object with TLS options
-   */
-  tls: false,
-
-  /**
-   * Whether to enable auto-pipelining
-   * @default true
-   */
-  enableAutoPipelining: false,
-});
 await redisClient.connect();
 
 // Create database connection

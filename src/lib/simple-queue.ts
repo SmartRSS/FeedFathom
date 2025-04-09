@@ -49,9 +49,30 @@ export class SimpleQueue {
   constructor(private readonly redis: RedisClient) {}
 
   /**
+   * Check if we're in a build process
+   */
+  private isBuildProcess(): boolean {
+    const isBuild = process.env["BUILD"] === "true";
+
+    if (isBuild) {
+      llog("Build process detected with env var:", {
+        BUILD: process.env["BUILD"],
+      });
+    }
+
+    return isBuild;
+  }
+
+  /**
    * Add a job to the immediate queue
    */
   async addJobToQueue(jobData: JobData): Promise<void> {
+    // If we're in a build process, don't add jobs
+    if (this.isBuildProcess()) {
+      llog("Build process detected, skipping job add");
+      return;
+    }
+
     // Ensure delay is set (default to 0 if not provided)
     const jobWithDefaults = {
       ...jobData,
@@ -60,7 +81,11 @@ export class SimpleQueue {
 
     try {
       // Check if this is a duplicate job
-      const isDuplicate = await this.isDuplicateJob(jobWithDefaults);
+      const isDuplicate = await this.withTimeout(
+        () => this.isDuplicateJob(jobWithDefaults),
+        "isDuplicateJob",
+      );
+
       if (isDuplicate) {
         llog(
           `Duplicate job skipped: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}`,
@@ -69,13 +94,21 @@ export class SimpleQueue {
       }
 
       // Increment the reference counter for this job
-      await this.incrementJobReference(jobWithDefaults);
+      await this.withTimeout(
+        () => this.incrementJobReference(jobWithDefaults),
+        "incrementJobReference",
+      );
 
       // Add to queue
-      await this.redis.lpush(
-        this.immediateQueueKey,
-        JSON.stringify(jobWithDefaults),
+      await this.withTimeout(
+        () =>
+          this.redis.lpush(
+            this.immediateQueueKey,
+            JSON.stringify(jobWithDefaults),
+          ),
+        "lpush",
       );
+
       llog(
         `Job added to queue: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}`,
       );
@@ -239,28 +272,74 @@ export class SimpleQueue {
   }
 
   /**
+   * Execute a Redis operation with a timeout
+   */
+  private async withTimeout<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    timeoutMs = 5000,
+  ): Promise<T | null> {
+    try {
+      // Create a promise that rejects after the timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(
+              `Redis operation '${operationName}' timed out after ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+      });
+
+      // Race the operation against the timeout
+      return await Promise.race([operation(), timeoutPromise]);
+    } catch (error) {
+      logError(`Error in Redis operation '${operationName}':`, error);
+      return null;
+    }
+  }
+
+  /**
    * Process jobs from the queue
    */
   async processJob(handler: JobHandler): Promise<void> {
+    // If we're in a build process, don't start processing
+    if (this.isBuildProcess()) {
+      llog("Build process detected, skipping queue processing");
+      this.processing = false;
+      return;
+    }
+
+    llog("Starting job processing loop");
     while (this.processing) {
       try {
-        // Get a job from the queue
-        const result = await this.redis.rpop(this.immediateQueueKey);
+        // Get a job from the queue with timeout
+        llog("Attempting to get job from queue");
+        const result = await this.withTimeout(
+          () => this.redis.rpop(this.immediateQueueKey),
+          "rpop",
+        );
 
         if (!result) {
-          // No jobs available, wait a bit before checking again
+          // No jobs available or timeout occurred, wait a bit before checking again
+          llog(
+            "No jobs available or timeout occurred, waiting before next check",
+          );
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
 
+        llog("Job retrieved from queue, processing");
         // Process the job
         await this.processSingleJob(result, handler);
       } catch (error) {
         // Log the error and wait before retrying
         logError("Error in processJob:", error);
+        llog("Error occurred, waiting before retry");
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
+    llog("Job processing loop ended");
   }
 
   /**
@@ -327,6 +406,12 @@ export class SimpleQueue {
    * Start processing jobs with the specified handler
    */
   startProcessing(handler: JobHandler, numWorkers = 1): void {
+    // If we're in a build process, don't start processing
+    if (this.isBuildProcess()) {
+      llog("Build process detected, skipping queue start");
+      return;
+    }
+
     this.processing = true;
 
     for (let i = 0; i < numWorkers; i++) {
