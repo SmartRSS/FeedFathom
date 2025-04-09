@@ -7,6 +7,12 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      deploy_tag:
+        description: 'Tag to deploy (defaults to latest commit SHA)'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -164,7 +170,7 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
@@ -202,7 +208,7 @@ jobs:
             cd ${{ env.DEPLOY_PATH }} && \
             # Ensure PATH includes Bun's location
             export PATH="/home/${{ secrets.SSH_USER }}/.bun/bin:$PATH" && \
-            export FEEDFATHOM_TAG=${{ github.sha }} && \
+            export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && \
             export MAIL_REPLICAS=1 && \
             export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
             export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \

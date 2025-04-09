@@ -7,8 +7,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "lib": ["ES2021", "DOM", "DOM.Iterable"],
-    "target": "ES2021",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "target": "ES2022",
     "module": "ESNext",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
@@ -30,7 +30,7 @@
     "noUnusedParameters": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
-    "types": ["chrome", "bun-types"]
+    "types": ["chrome"]
   },
   "include": [
     ".svelte-kit/ambient.d.ts",

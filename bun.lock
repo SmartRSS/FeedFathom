@@ -28,13 +28,13 @@
         "@biomejs/biome": "^1.9.4",
         "@total-typescript/ts-reset": "^0.6.1",
         "@types/archiver": "^6.0.3",
+        "@types/bun": "^1.2.9",
         "@types/chrome": "^0.0.313",
         "@types/jsdom": "^21.1.7",
         "@types/mailparser": "^3.4.5",
         "@types/node": "^22.14.0",
         "@types/smtp-server": "^3.5.10",
         "archiver": "^7.0.1",
-        "bun-types": "^1.2.9",
         "eslint": "^9.24.0",
         "eslint-config-biome": "^1.9.4",
         "eslint-plugin-svelte": "^3.5.1",
@@ -250,6 +250,8 @@
     "@total-typescript/ts-reset": ["@total-typescript/ts-reset@0.6.1", "", {}, "sha512-cka47fVSo6lfQDIATYqb/vO1nvFfbPw7uWLayIXIhGETj0wcOOlrlkobOMDNQOFr9QOafegUPq13V2+6vtD7yg=="],
 
     "@types/archiver": ["@types/archiver@6.0.3", "", { "dependencies": { "@types/readdir-glob": "*" } }, "sha512-a6wUll6k3zX6qs5KlxIggs1P1JcYJaTCx2gnlr+f0S1yd2DoaEwoIK10HmBaLnZwWneBz+JBm0dwcZu0zECBcQ=="],
+
+    "@types/bun": ["@types/bun@1.2.9", "", { "dependencies": { "bun-types": "1.2.9" } }, "sha512-epShhLGQYc4Bv/aceHbmBhOz1XgUnuTZgcxjxk+WXwNyDXavv5QHD1QEFV0FwbTSQtNq6g4ZcV6y0vZakTjswg=="],
 
     "@types/chrome": ["@types/chrome@0.0.313", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-9R5T7gTaYZhkxlu+Ho4wk9FL+y/werWQY2yjGWSqCuiTsqS7nL/BE5UMTP6rU7J+oIG2FRKqrEycHhJATeltVA=="],
 
