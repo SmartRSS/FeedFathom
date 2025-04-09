@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import type { RedisClient } from "bun";
 
 interface GetExOptions {
   EX?: number;

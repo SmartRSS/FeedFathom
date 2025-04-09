@@ -24,8 +24,8 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
-import { SimpleQueue } from "./lib/simple-queue.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
+import { SimpleQueue } from "./lib/simple-queue.ts";
 
 export type Dependencies = {
   articlesRepository: ArticlesRepository;

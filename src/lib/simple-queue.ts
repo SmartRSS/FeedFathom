@@ -63,6 +63,10 @@ export class SimpleQueue {
     return isBuild;
   }
 
+  public isProcessing() {
+    return this.processing;
+  }
+
   /**
    * Add a job to the immediate queue
    */
