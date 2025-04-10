@@ -343,7 +343,6 @@ export class SimpleQueue {
           () => this.redis.llen(this.immediateQueueKey),
           "llen",
         );
-        llog(`Current queue length: ${queueLength}`);
 
         // If queue is empty, clear all reference counters
         if (queueLength === 0) {
