@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { eq, lte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { JobName } from "../types/job-name-enum.ts";
 import { llog, logError } from "../util/log.ts";
