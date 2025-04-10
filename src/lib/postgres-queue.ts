@@ -123,60 +123,64 @@ export class PostgresQueue {
         // Use a transaction to ensure the lock is held until we're done with the job
         await this.drizzleConnection.transaction(async (tx) => {
           // Select with FOR UPDATE to lock the row
-          const jobs = await tx
-            .select()
-            .from(jobQueue)
-            .where(sql`${jobQueue.notBefore} <= now()`)
-            .orderBy(jobQueue.id)
-            .limit(1)
-            .for("update");
+          try {
+            const jobs = await tx
+              .select()
+              .from(jobQueue)
+              .where(sql`${jobQueue.notBefore} <= now()`)
+              .orderBy(jobQueue.id)
+              .limit(1)
+              .for("update");
 
-          if (jobs.length === 0) {
-            return;
-          }
+            if (jobs.length === 0) {
+              return;
+            }
 
-          const job = jobs[0];
-          if (!job) {
-            return;
-          }
-          llog("Found job", job);
-          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id)).execute();
-          llog("Deleted job", job);
+            const job = jobs[0];
+            if (!job) {
+              return;
+            }
+            llog("Found job", job);
+            await tx.delete(jobQueue).where(eq(jobQueue.id, job.id)).execute();
+            llog("Deleted job", job);
 
-          jobFound = true;
+            jobFound = true;
 
-          // Process the job within the transaction
-          const maybeScheduledPayload = scheduledJobPayloadValidator(
-            job.payload,
-          );
-          if (!(maybeScheduledPayload instanceof type.errors)) {
-            llog("Rescheduling job", {
+            // Process the job within the transaction
+            const maybeScheduledPayload = scheduledJobPayloadValidator(
+              job.payload,
+            );
+            if (!(maybeScheduledPayload instanceof type.errors)) {
+              llog("Rescheduling job", {
+                generalId: job.generalId,
+                name: job.name,
+                delay: maybeScheduledPayload.every,
+                payload: job.payload,
+              });
+              // Reschedule the job before processing to ensure continuity
+              await this.addJobToQueue({
+                generalId: job.generalId,
+                name: job.name as JobName,
+                delay: maybeScheduledPayload.every,
+                payload: job.payload as Record<string, unknown>,
+              });
+            }
+            llog("Processing job", {
               generalId: job.generalId,
               name: job.name,
-              delay: maybeScheduledPayload.every,
               payload: job.payload,
             });
-            // Reschedule the job before processing to ensure continuity
-            await this.addJobToQueue({
-              generalId: job.generalId,
-              name: job.name as JobName,
-              delay: maybeScheduledPayload.every,
-              payload: job.payload as Record<string, unknown>,
-            });
-          }
-          llog("Processing job", {
-            generalId: job.generalId,
-            name: job.name,
-            payload: job.payload,
-          });
-          llog("Processing job", handler);
+            llog("Processing job", handler);
 
-          if (handler && typeof handler === "function") {
-            await handler({
-              generalId: job.generalId,
-              name: job.name as JobName,
-              payload: job.payload as Record<string, unknown>,
-            });
+            if (handler && typeof handler === "function") {
+              await handler({
+                generalId: job.generalId,
+                name: job.name as JobName,
+                payload: job.payload as Record<string, unknown>,
+              });
+            }
+          } catch {
+            // Do nothing
           }
         });
 
