@@ -188,6 +188,27 @@ export class SimpleQueue {
   }
 
   /**
+   * Clear all job reference counters
+   */
+  private async clearAllReferenceCounters(): Promise<void> {
+    try {
+      // Get all keys with the reference counter prefix
+      const pattern = `${this.jobReferenceCountersKey}:*`;
+      const keys = await this.redis.keys(pattern);
+
+      if (keys.length > 0) {
+        // Delete each key individually
+        for (const key of keys) {
+          await this.redis.del(key);
+        }
+        llog(`Cleared ${keys.length} job reference counters`);
+      }
+    } catch (error) {
+      logError("Error clearing job reference counters:", error);
+    }
+  }
+
+  /**
    * Schedule a job to run at regular intervals
    */
   async scheduleJob(options: ScheduleJobOptions): Promise<void> {
@@ -323,6 +344,12 @@ export class SimpleQueue {
           "llen",
         );
         llog(`Current queue length: ${queueLength}`);
+
+        // If queue is empty, clear all reference counters
+        if (queueLength === 0) {
+          await this.clearAllReferenceCounters();
+        }
+
         // Get a job from the queue with timeout
         const result = await this.withTimeout(
           () => this.redis.rpop(this.immediateQueueKey),
