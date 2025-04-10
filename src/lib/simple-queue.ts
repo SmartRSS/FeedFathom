@@ -318,17 +318,12 @@ export class SimpleQueue {
     while (this.processing) {
       try {
         // Get a job from the queue with timeout
-        llog("Attempting to get job from queue");
         const result = await this.withTimeout(
           () => this.redis.rpop(this.immediateQueueKey),
           "rpop",
         );
 
         if (!result) {
-          // No jobs available or timeout occurred, wait a bit before checking again
-          llog(
-            "No jobs available or timeout occurred, waiting before next check",
-          );
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }

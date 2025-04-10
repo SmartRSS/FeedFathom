@@ -195,13 +195,19 @@ export class MainWorker {
     );
 
     const startQueueProcessing = () => {
-      this.simpleQueue.startProcessing(this.processJob, 1);
+      this.simpleQueue.startProcessing(
+        this.processJob,
+        this.appConfig["WORKER_CONCURRENCY"],
+      );
 
       // Set up a periodic check to restart processing if it stops
       setInterval(() => {
         if (!this.simpleQueue.isProcessing()) {
           llog("Queue processing stopped, restarting...");
-          this.simpleQueue.startProcessing(this.processJob, 1);
+          this.simpleQueue.startProcessing(
+            this.processJob,
+            this.appConfig["WORKER_CONCURRENCY"],
+          );
         }
       }, 5000); // Check every 5 seconds
     };
