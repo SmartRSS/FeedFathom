@@ -77,17 +77,23 @@ export class SimpleQueue {
       return;
     }
 
-    // Ensure delay is set (default to 0 if not provided)
-    const jobWithDefaults = {
-      ...jobData,
-      delay: (jobData.delay ?? 0) * 1000 + Date.now(),
-    };
-    llog("Job with defaults:", jobWithDefaults);
+    // Create a copy of the job data to work with
+    const jobDataCopy = { ...jobData };
+
+    // Process the delay based on whether it's a new job or re-queued job
+    // If delay is significantly large, it's likely already a timestamp (milliseconds)
+    const now = Date.now();
+    if (jobDataCopy.delay == null || jobDataCopy.delay < now / 2) {
+      // New job: convert delay from seconds to milliseconds and add to current time
+      jobDataCopy.delay = (jobDataCopy.delay ?? 0) * 1000 + now;
+    }
+
+    llog("Job with processed delay:", jobDataCopy);
 
     try {
       // Check if this is a duplicate job
       const isDuplicate = await this.withTimeout(
-        () => this.isDuplicateJob(jobWithDefaults),
+        () => this.isDuplicateJob(jobDataCopy),
         "isDuplicateJob",
       );
 
@@ -97,17 +103,14 @@ export class SimpleQueue {
 
       // Increment the reference counter for this job
       await this.withTimeout(
-        () => this.incrementJobReference(jobWithDefaults),
+        () => this.incrementJobReference(jobDataCopy),
         "incrementJobReference",
       );
 
       // Add to queue
       await this.withTimeout(
         () =>
-          this.redis.lpush(
-            this.immediateQueueKey,
-            JSON.stringify(jobWithDefaults),
-          ),
+          this.redis.lpush(this.immediateQueueKey, JSON.stringify(jobDataCopy)),
         "lpush",
       );
     } catch (error) {
