@@ -92,9 +92,6 @@ export class SimpleQueue {
       );
 
       if (isDuplicate) {
-        llog(
-          `Duplicate job skipped: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}`,
-        );
         return;
       }
 
@@ -105,17 +102,13 @@ export class SimpleQueue {
       );
 
       // Add to queue
-      const listLength = await this.withTimeout(
+      await this.withTimeout(
         () =>
           this.redis.lpush(
             this.immediateQueueKey,
             JSON.stringify(jobWithDefaults),
           ),
         "lpush",
-      );
-
-      llog(
-        `Job added to queue: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}, list length: ${listLength}`,
       );
     } catch (error) {
       logError("Error adding job to queue:", error);
@@ -166,9 +159,6 @@ export class SimpleQueue {
           ? Number.parseInt(currentValue, 10) + 1
           : 1;
         await this.redis.set(key, newValue.toString());
-        llog(
-          `Incremented reference count for job ${jobData.generalId} to ${newValue}`,
-        );
       }
     } catch (error) {
       logError("Error incrementing job reference:", error);
@@ -186,9 +176,6 @@ export class SimpleQueue {
         if (currentValue) {
           const newValue = Math.max(0, Number.parseInt(currentValue, 10) - 1);
           await this.redis.set(key, newValue.toString());
-          llog(
-            `Decremented reference count for job ${jobData.generalId} to ${newValue}`,
-          );
         }
       }
     } catch (error) {
@@ -210,7 +197,6 @@ export class SimpleQueue {
         for (const key of keys) {
           await this.redis.del(key);
         }
-        llog(`Cleared ${keys.length} job reference counters`);
       }
     } catch (error) {
       logError("Error clearing job reference counters:", error);
@@ -224,16 +210,6 @@ export class SimpleQueue {
     const { id: generalId, name, every, payload = {} } = options;
 
     try {
-      // Check if this job is already scheduled
-      // const isAlreadyScheduled = await this.redis.sismember(
-      //   this.scheduledJobIdsKey,
-      //   generalId,
-      // );
-
-      // if (isAlreadyScheduled) {
-      //   return;
-      // }
-
       // Check if this job is already in the queue or being processed
       const isDuplicate = await this.isDuplicateJob({ generalId });
       if (isDuplicate) {
@@ -242,7 +218,6 @@ export class SimpleQueue {
 
       // Add to scheduled jobs set
       await this.redis.sadd(this.scheduledJobIdsKey, generalId);
-      llog("Scheduled job added to set:", generalId);
 
       if (Number.isNaN(every) || every <= 0) {
         logError(
@@ -368,9 +343,6 @@ export class SimpleQueue {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
-        llog("Job retrieved from queue:", result);
-
-        llog("Job retrieved from queue, processing");
         // Process the job
         await this.processSingleJob(result, handler);
       } catch (error) {
@@ -393,7 +365,6 @@ export class SimpleQueue {
     let jobData: JobData;
     try {
       const parsedData = JSON.parse(jobString) as Record<string, unknown>;
-      llog("Parsed job data:", parsedData);
 
       // Use the appropriate validator based on whether this is a scheduled job
       const validationResult = parsedData["every"]
