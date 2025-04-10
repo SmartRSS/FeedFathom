@@ -28,7 +28,7 @@ interface ScheduleJobOptions {
 export class PostgresQueue {
   private processing = false;
 
-  constructor(private readonly db: BunSQLDatabase) {}
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   /**
    * Check if we're in a build process
@@ -61,7 +61,7 @@ export class PostgresQueue {
 
     try {
       // Add to queue - if it fails due to uniqueness constraints, so be it
-      await this.db.insert(jobQueue).values({
+      await this.drizzleConnection.insert(jobQueue).values({
         generalId: jobData.generalId,
         name: jobData.name,
         notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
@@ -112,7 +112,7 @@ export class PostgresQueue {
         let jobFound = false;
 
         // Use a transaction to ensure the lock is held until we're done with the job
-        await this.db.transaction(async (tx) => {
+        await this.drizzleConnection.transaction(async (tx) => {
           // Select with FOR UPDATE to lock the row
           const jobs = await tx
             .select()
