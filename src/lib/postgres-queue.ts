@@ -86,7 +86,7 @@ export class PostgresQueue {
 
     if (Number.isNaN(every) || every <= 0) {
       logError(
-        `Invalid 'every' value for scheduled job ${generalId}: ${every}`,
+        `Invalid 'every' value for scheduled job ${generalId}: ${every}`
       );
       return;
     }
@@ -117,6 +117,7 @@ export class PostgresQueue {
       try {
         // Get the next job that's ready to run with a lock
         const now = new Date();
+        llog("Checking for jobs at", now);
         let jobFound = false;
 
         // Use a transaction to ensure the lock is held until we're done with the job
@@ -145,7 +146,7 @@ export class PostgresQueue {
 
           // Process the job within the transaction
           const maybeScheduledPayload = scheduledJobPayloadValidator(
-            job.payload,
+            job.payload
           );
           if (!(maybeScheduledPayload instanceof type.errors)) {
             // Reschedule the job before processing to ensure continuity
@@ -193,7 +194,7 @@ export class PostgresQueue {
 
     for (let i = 0; i < numWorkers; i++) {
       this.processJobs(handler).catch((error) =>
-        logError("Worker error:", error),
+        logError("Worker error:", error)
       );
     }
   }
