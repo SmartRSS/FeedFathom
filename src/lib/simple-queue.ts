@@ -7,7 +7,7 @@ const jobDataValidator = type({
   "generalId?": "string",
   "instanceId?": "string",
   "name?": "string",
-  "delay?": "number",
+  delay: type("number").default(0),
   "payload?": "object",
   "every?": "number.integer",
   "+": "reject",
