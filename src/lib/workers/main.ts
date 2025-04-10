@@ -154,14 +154,14 @@ export class MainWorker {
 
   private async setupScheduledTasks() {
     llog(
-      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} minutes, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} minutes`,
+      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`,
     );
 
     // Schedule cleanup job
     await this.simpleQueue.scheduleJob({
       id: JobName.Cleanup,
       name: JobName.Cleanup,
-      every: this.appConfig["CLEANUP_INTERVAL"] * 60,
+      every: this.appConfig["CLEANUP_INTERVAL"],
       payload: {},
     });
 
@@ -169,7 +169,7 @@ export class MainWorker {
     await this.simpleQueue.scheduleJob({
       id: JobName.GatherJobs,
       name: JobName.GatherJobs,
-      every: this.appConfig["GATHER_JOBS_INTERVAL"] * 60,
+      every: this.appConfig["GATHER_JOBS_INTERVAL"],
       payload: {},
     });
 
