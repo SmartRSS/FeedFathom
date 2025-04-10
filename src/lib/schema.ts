@@ -181,7 +181,7 @@ export const jobQueue = pgTable(
   "job_queue",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    generalId: varchar("general_id").notNull(),
+    generalId: varchar("general_id").notNull().unique(),
     name: varchar("name").notNull(),
     notBefore: timestamp("not_before").notNull().defaultNow(),
     payload: jsonb("payload").notNull().default({}),
