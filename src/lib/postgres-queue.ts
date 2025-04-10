@@ -149,6 +149,12 @@ export class PostgresQueue {
             job.payload,
           );
           if (!(maybeScheduledPayload instanceof type.errors)) {
+            llog("Rescheduling job", {
+              generalId: job.generalId,
+              name: job.name,
+              delay: maybeScheduledPayload.every,
+              payload: job.payload,
+            });
             // Reschedule the job before processing to ensure continuity
             await this.addJobToQueue({
               generalId: job.generalId,
@@ -157,6 +163,12 @@ export class PostgresQueue {
               payload: job.payload as Record<string, unknown>,
             });
           }
+          llog("Processing job", {
+            generalId: job.generalId,
+            name: job.name,
+            payload: job.payload,
+          });
+          llog("Processing job", handler);
 
           if (handler && typeof handler === "function") {
             await handler({
