@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { eq, lte } from "drizzle-orm";
+import { eq, lte, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { JobName } from "../types/job-name-enum.ts";
 import { llog, logError } from "../util/log.ts";
@@ -86,7 +86,7 @@ export class PostgresQueue {
 
     if (Number.isNaN(every) || every <= 0) {
       logError(
-        `Invalid 'every' value for scheduled job ${generalId}: ${every}`,
+        `Invalid 'every' value for scheduled job ${generalId}: ${every}`
       );
       return;
     }
@@ -126,8 +126,8 @@ export class PostgresQueue {
           const jobs = await tx
             .select()
             .from(jobQueue)
-            .where(lte(jobQueue.notBefore, now))
-            .orderBy(jobQueue.notBefore)
+            .where(sql`${jobQueue.notBefore} <= now()`)
+            .orderBy(jobQueue.id)
             .limit(1)
             .for("update");
 
@@ -146,7 +146,7 @@ export class PostgresQueue {
 
           // Process the job within the transaction
           const maybeScheduledPayload = scheduledJobPayloadValidator(
-            job.payload,
+            job.payload
           );
           if (!(maybeScheduledPayload instanceof type.errors)) {
             // Reschedule the job before processing to ensure continuity
@@ -194,7 +194,7 @@ export class PostgresQueue {
 
     for (let i = 0; i < numWorkers; i++) {
       this.processJobs(handler).catch((error) =>
-        logError("Worker error:", error),
+        logError("Worker error:", error)
       );
     }
   }
