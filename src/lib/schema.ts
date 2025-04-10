@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   index,
   integer,
@@ -11,7 +12,6 @@ import {
   timestamp,
   unique,
   varchar,
-  bigserial,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
