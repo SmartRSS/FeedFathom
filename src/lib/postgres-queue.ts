@@ -182,10 +182,8 @@ export class PostgresQueue {
 
             // Assign to the outer variable
             jobToProcess = jobData;
-          } catch (error) {
-            llog("Error in transaction", error);
-            // Re-throw to ensure transaction is rolled back
-            throw error;
+          } catch {
+            tx.rollback();
           }
         });
 
