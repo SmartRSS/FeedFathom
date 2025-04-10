@@ -1,6 +1,7 @@
 import { type } from "arktype";
 import { eq, lte } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { JobName } from "../types/job-name-enum.ts";
 import { llog, logError } from "../util/log.ts";
 import { jobQueue } from "./schema.ts";
 
@@ -11,16 +12,16 @@ const scheduledJobPayloadValidator = type({
 
 type JobData = {
   generalId: string;
-  name: string;
+  name: JobName;
   delay?: number;
   payload?: Record<string, unknown>;
 };
 
-type JobHandler = (jobData: JobData) => Promise<void> | void;
+export type JobHandler = (jobData: JobData) => Promise<void> | void;
 
 interface ScheduleJobOptions {
   generalId: string;
-  name: string;
+  name: JobName;
   every: number;
   payload?: Record<string, unknown>;
 }
@@ -95,8 +96,11 @@ export class PostgresQueue {
     await this.addJobToQueue({
       generalId,
       name,
-      delay: every,
-      payload,
+      delay: 0, // Run immediately first time
+      payload: {
+        ...payload,
+        every, // Include the interval in the payload for rescheduling
+      },
     });
   }
 
@@ -145,18 +149,18 @@ export class PostgresQueue {
           );
           if (!(maybeScheduledPayload instanceof type.errors)) {
             // Reschedule the job before processing to ensure continuity
-            await this.scheduleJob({
+            await this.addJobToQueue({
               generalId: job.generalId,
-              name: job.name,
-              payload: maybeScheduledPayload,
-              every: maybeScheduledPayload.every,
+              name: job.name as JobName,
+              delay: maybeScheduledPayload.every,
+              payload: job.payload as Record<string, unknown>,
             });
           }
 
           if (handler && typeof handler === "function") {
             await handler({
               generalId: job.generalId,
-              name: job.name,
+              name: job.name as JobName,
               payload: job.payload as Record<string, unknown>,
             });
           }

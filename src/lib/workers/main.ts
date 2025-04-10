@@ -7,10 +7,24 @@ import {
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type { FeedParser } from "$lib/feed-parser";
-import type { PostgresQueue } from "$lib/postgres-queue";
+import type { JobHandler, PostgresQueue } from "$lib/postgres-queue";
+import { type } from "arktype";
 import type { AppConfig } from "../../config.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import { llog, logError } from "../../util/log.ts";
+
+const parseSourcePayloadValidator = type({
+  id: "number",
+  skipCache: "boolean?",
+  url: "string?",
+  "+": "reject",
+});
+
+const refreshFaviconPayloadValidator = type({
+  homeUrl: "string",
+  id: "number",
+  "+": "reject",
+});
 
 export class MainWorker {
   constructor(
@@ -48,94 +62,97 @@ export class MainWorker {
     llog(`Worker failed job ${jobId} with error: ${errorMessage}`);
   }
 
-  private readonly processJob = async (jobData: Record<string, unknown>) => {
-    const jobId =
-      (jobData["generalId"] as string) ||
-      (jobData["instanceId"] as string) ||
-      "unknown";
-    const jobName = jobData["name"] as JobName;
-    const data = (jobData["payload"] as Record<string, unknown>) || {};
+  private readonly processJob: JobHandler = async (jobData) => {
+    const jobId = jobData.generalId;
+    const jobName = jobData.name;
+    const data = jobData.payload;
 
     llog(
       `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}`,
     );
 
     try {
-      await this.processRegularJob(jobName, data);
+      switch (jobName) {
+        case JobName.Cleanup: {
+          llog("Running cleanup job");
+          await this.userSourcesRepository.cleanup();
+          llog("Cleanup job completed");
+          break;
+        }
+
+        case JobName.GatherFaviconJobs: {
+          llog("Running gather favicon jobs");
+          const successfullSources =
+            await this.sourcesRepository.getRecentlySuccessfulSources();
+          llog(
+            `Found ${successfullSources.length} sources for favicon refresh`,
+          );
+
+          for (const source of successfullSources) {
+            const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;
+            await this.postgresQueue.addJobToQueue({
+              generalId: jobId,
+              name: JobName.RefreshFavicon,
+              payload: source,
+            });
+          }
+
+          llog(
+            `Added ${successfullSources.length} favicon refresh jobs to queue`,
+          );
+          break;
+        }
+
+        case JobName.GatherJobs: {
+          llog("Running gather jobs");
+          await this.gatherParseSourceJobs();
+          llog("Added parse source jobs to queue");
+          break;
+        }
+
+        case JobName.ParseSource: {
+          const validatedPayload = parseSourcePayloadValidator(data);
+          if (validatedPayload instanceof type.errors) {
+            throw new Error(
+              `Invalid ParseSource payload: ${JSON.stringify(validatedPayload)}`,
+            );
+          }
+          llog(`Parsing source with ID: ${validatedPayload.id}`);
+          // Use the command bus instead of directly calling the feed parser
+          await this.commandBus.execute<
+            ParseSourceCommand,
+            SourceCommandResult
+          >({
+            sourceId: validatedPayload.id.toString(),
+            timestamp: Date.now(),
+            type: CommandType.PARSE_SOURCE,
+          });
+          llog(`Completed parsing source with ID: ${validatedPayload.id}`);
+          break;
+        }
+
+        case JobName.RefreshFavicon: {
+          const validatedPayload = refreshFaviconPayloadValidator(data);
+          if (validatedPayload instanceof type.errors) {
+            throw new Error(
+              `Invalid RefreshFavicon payload: ${JSON.stringify(validatedPayload)}`,
+            );
+          }
+          llog(`Refreshing favicon for: ${validatedPayload.homeUrl}`);
+          await this.feedParser.refreshFavicon(validatedPayload);
+          llog(`Completed refreshing favicon for: ${validatedPayload.homeUrl}`);
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown job type: ${jobName}`);
+      }
       llog(`Successfully processed job: ${jobName}, ID: ${jobId}`);
     } catch (error: unknown) {
       this.handleJobError(error, jobId);
       // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
     }
   };
-
-  private async processRegularJob(
-    jobName: JobName,
-    data: Record<string, unknown>,
-  ) {
-    switch (jobName) {
-      case JobName.Cleanup: {
-        llog("Running cleanup job");
-        await this.userSourcesRepository.cleanup();
-        llog("Cleanup job completed");
-        break;
-      }
-
-      case JobName.GatherFaviconJobs: {
-        llog("Running gather favicon jobs");
-        const successfullSources =
-          await this.sourcesRepository.getRecentlySuccessfulSources();
-        llog(`Found ${successfullSources.length} sources for favicon refresh`);
-
-        for (const source of successfullSources) {
-          const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;
-          await this.postgresQueue.addJobToQueue({
-            generalId: jobId,
-            name: JobName.RefreshFavicon,
-            payload: source,
-          });
-        }
-
-        llog(
-          `Added ${successfullSources.length} favicon refresh jobs to queue`,
-        );
-        break;
-      }
-
-      case JobName.GatherJobs: {
-        llog("Running gather jobs");
-        await this.gatherParseSourceJobs();
-        llog("Added parse source jobs to queue");
-        break;
-      }
-
-      case JobName.ParseSource: {
-        const sourceId = data["id"] as string;
-        llog(`Parsing source with ID: ${sourceId}`);
-        // Use the command bus instead of directly calling the feed parser
-        await this.commandBus.execute<ParseSourceCommand, SourceCommandResult>({
-          sourceId,
-          timestamp: Date.now(),
-          type: CommandType.PARSE_SOURCE,
-        });
-        llog(`Completed parsing source with ID: ${sourceId}`);
-        break;
-      }
-
-      case JobName.RefreshFavicon: {
-        const homeUrl = data["homeUrl"] as string;
-        llog(`Refreshing favicon for: ${homeUrl}`);
-        await this.feedParser.refreshFavicon(
-          data as { homeUrl: string; id: number },
-        );
-        llog(`Completed refreshing favicon for: ${homeUrl}`);
-        break;
-      }
-
-      default:
-        throw new Error(`Unknown job type: ${jobName}`);
-    }
-  }
 
   private setSignalHandlers() {
     process.on("SIGTERM", () => {
