@@ -7,7 +7,7 @@ const jobDataValidator = type({
   "generalId?": "string",
   "instanceId?": "string",
   "name?": "string",
-  "delay?": "number",
+  "delay?": "number.integer | null",
   "payload?": "object",
   "every?": "number.integer",
   "+": "reject",
@@ -365,6 +365,8 @@ export class SimpleQueue {
     let jobData: JobData;
     try {
       const parsedData = JSON.parse(jobString) as Record<string, unknown>;
+      // Decrement the reference counter at the start of processing
+      await this.decrementJobReference(parsedData);
 
       // Use the appropriate validator based on whether this is a scheduled job
       const validationResult = parsedData["every"]
@@ -381,9 +383,6 @@ export class SimpleQueue {
       logError("Error parsing job data:", error);
       return;
     }
-
-    // Decrement the reference counter at the start of processing
-    await this.decrementJobReference(jobData);
 
     const now = Date.now();
 
