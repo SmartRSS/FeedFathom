@@ -168,6 +168,7 @@ export class MainWorker {
       `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`,
     );
 
+    llog("Scheduling cleanup job");
     // Schedule cleanup job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.Cleanup,
@@ -175,7 +176,9 @@ export class MainWorker {
       every: this.appConfig["CLEANUP_INTERVAL"],
       payload: {},
     });
+    llog("Scheduled cleanup job");
 
+    llog("Scheduling gather job");
     // Schedule gather job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.GatherJobs,
@@ -183,7 +186,9 @@ export class MainWorker {
       every: this.appConfig["GATHER_JOBS_INTERVAL"],
       payload: {},
     });
+    llog("Scheduled gather job");
 
+    llog("Scheduling favicon jobs");
     // Schedule favicon job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.GatherFaviconJobs,
