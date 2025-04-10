@@ -73,9 +73,8 @@ export class PostgresQueue {
         notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
         payload: jobData.payload ?? {},
       });
-    } catch (error) {
-      // Log the error but don't treat it as fatal
-      logError("Error adding job to queue:", error);
+    } catch {
+      // Do nothing
     }
   }
 
@@ -118,6 +117,7 @@ export class PostgresQueue {
       try {
         // Get the next job that's ready to run with a lock
         const now = new Date();
+        llog("Checking for jobs at", now);
         let jobFound = false;
 
         // Use a transaction to ensure the lock is held until we're done with the job
@@ -130,7 +130,6 @@ export class PostgresQueue {
             .orderBy(jobQueue.notBefore)
             .limit(1)
             .for("update");
-          llog(jobs);
 
           if (jobs.length === 0) {
             return;
@@ -140,6 +139,8 @@ export class PostgresQueue {
           if (!job) {
             return;
           }
+          llog("Found job", job);
+          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
 
           jobFound = true;
 
@@ -164,9 +165,6 @@ export class PostgresQueue {
               payload: job.payload as Record<string, unknown>,
             });
           }
-
-          // Delete the job after successful processing
-          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
         });
 
         // If no job was found, wait before checking again
