@@ -45,7 +45,7 @@ export const sources = pgTable(
       index("last_attempt_idx").on(table.lastAttempt),
       index("recent_failures_idx").on(table.recentFailures),
     ];
-  },
+  }
 );
 
 export const userFolders = pgTable("user_folders", {
@@ -59,7 +59,7 @@ export const userFolders = pgTable("user_folders", {
       () => {
         return users.id;
       },
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
 });
 
@@ -74,7 +74,7 @@ export const userSources = pgTable(
       },
       {
         onDelete: "cascade",
-      },
+      }
     ),
     sourceId: integer("source_id")
       .notNull()
@@ -82,7 +82,7 @@ export const userSources = pgTable(
         () => {
           return sources.id;
         },
-        { onDelete: "cascade" },
+        { onDelete: "cascade" }
       ),
     userId: integer("user_id")
       .notNull()
@@ -90,12 +90,12 @@ export const userSources = pgTable(
         () => {
           return users.id;
         },
-        { onDelete: "cascade" },
+        { onDelete: "cascade" }
       ),
   },
   (table) => {
     return [unique().on(table.userId, table.sourceId)];
-  },
+  }
 );
 
 export const userSourceSettings = pgTable("user_source_settings", {
@@ -108,7 +108,7 @@ export const userSourceSettings = pgTable("user_source_settings", {
       },
       {
         onDelete: "cascade",
-      },
+      }
     )
     .notNull(),
 });
@@ -125,7 +125,7 @@ export const articles = pgTable("articles", {
       () => {
         return sources.id;
       },
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
   title: varchar("title").notNull(),
   updatedAt: timestamp("updated_at"),
@@ -144,7 +144,7 @@ export const userArticles = pgTable(
         {
           onDelete: "cascade",
           onUpdate: "cascade",
-        },
+        }
       )
       .notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -154,13 +154,13 @@ export const userArticles = pgTable(
         () => {
           return users.id;
         },
-        { onDelete: "cascade" },
+        { onDelete: "cascade" }
       )
       .notNull(),
   },
   (table) => {
     return [primaryKey({ columns: [table.userId, table.articleId] })];
-  },
+  }
 );
 
 export const sessions = pgTable("sessions", {
@@ -173,7 +173,7 @@ export const sessions = pgTable("sessions", {
       () => {
         return users.id;
       },
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
 });
 
@@ -181,7 +181,7 @@ export const jobQueue = pgTable(
   "job_queue",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    generalId: varchar("general_id").notNull(),
+    generalId: varchar("general_id").notNull().unique(),
     name: varchar("name").notNull(),
     notBefore: timestamp("not_before").notNull().defaultNow(),
     payload: jsonb("payload").notNull().default({}),
@@ -191,7 +191,7 @@ export const jobQueue = pgTable(
       index("general_id_idx").on(table.generalId),
       index("not_before_idx").on(table.notBefore),
     ];
-  },
+  }
 );
 
 export const userArticlesRelation = relations(users, ({ many }) => {
