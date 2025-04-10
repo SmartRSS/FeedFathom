@@ -88,8 +88,6 @@ export class SimpleQueue {
       jobDataCopy.delay = (jobDataCopy.delay ?? 0) * 1000 + now;
     }
 
-    llog("Job with processed delay:", jobDataCopy);
-
     try {
       // Check if this is a duplicate job
       const isDuplicate = await this.withTimeout(
@@ -392,14 +390,12 @@ export class SimpleQueue {
     // Check if job is ready to run
     if (jobData.delay && now < jobData.delay) {
       // Job is not ready yet, put it back in the queue
-      llog("Job is not ready yet, putting it back in the queue");
       await this.addJobToQueue(jobData);
       return;
     }
 
     try {
       if (jobData.every && jobData.generalId) {
-        llog("Scheduling next repeat");
         await this.scheduleNextRepeat({
           generalId: jobData.generalId,
           every: jobData.every,
