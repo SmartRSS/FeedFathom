@@ -225,14 +225,14 @@ export class SimpleQueue {
 
     try {
       // Check if this job is already scheduled
-      const isAlreadyScheduled = await this.redis.sismember(
-        this.scheduledJobIdsKey,
-        generalId,
-      );
+      // const isAlreadyScheduled = await this.redis.sismember(
+      //   this.scheduledJobIdsKey,
+      //   generalId,
+      // );
 
-      if (isAlreadyScheduled) {
-        return;
-      }
+      // if (isAlreadyScheduled) {
+      //   return;
+      // }
 
       // Check if this job is already in the queue or being processed
       const isDuplicate = await this.isDuplicateJob({ generalId });
