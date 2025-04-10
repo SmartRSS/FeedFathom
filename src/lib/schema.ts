@@ -1,6 +1,5 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   index,
   integer,
@@ -12,6 +11,7 @@ import {
   timestamp,
   unique,
   varchar,
+  bigserial,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -180,10 +180,7 @@ export const sessions = pgTable("sessions", {
 export const jobQueue = pgTable(
   "job_queue",
   {
-    id: bigint("id", { mode: "number" })
-      .primaryKey()
-      .notNull()
-      .generatedAlwaysAs(sql`identity`),
+    id: bigserial("id", { mode: "number" }).primaryKey(),
     generalId: varchar("general_id").notNull(),
     name: varchar("name").notNull(),
     notBefore: timestamp("not_before").notNull().defaultNow(),

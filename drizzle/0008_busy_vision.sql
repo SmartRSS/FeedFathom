@@ -1,5 +1,5 @@
 CREATE TABLE "job_queue" (
-	"id" bigint PRIMARY KEY GENERATED ALWAYS AS (identity) STORED NOT NULL,
+	"id" bigserial PRIMARY KEY NOT NULL,
 	"general_id" varchar NOT NULL,
 	"name" varchar NOT NULL,
 	"not_before" timestamp DEFAULT now() NOT NULL,
