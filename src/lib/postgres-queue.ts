@@ -61,14 +61,13 @@ export class PostgresQueue {
     }
 
     try {
-      // Add to queue - if it fails due to uniqueness constraints, so be it
-      llog("Adding job to queue:", {
+      await this.drizzleConnection.insert(jobQueue).values({
         generalId: jobData.generalId,
         name: jobData.name,
         notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
         payload: jobData.payload ?? {},
       });
-      await this.drizzleConnection.insert(jobQueue).values({
+      llog("Added job to queue:", {
         generalId: jobData.generalId,
         name: jobData.name,
         notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
