@@ -119,11 +119,13 @@ export class PostgresQueue {
         const now = new Date();
         llog("Checking for jobs at", now);
         let jobFound = false;
+        let jobToProcess: JobData | null = null;
+        let scheduleInterval = 0;
 
-        // Use a transaction to ensure the lock is held until we're done with the job
+        // Use a transaction only to select and delete the job
         await this.drizzleConnection.transaction(async (tx) => {
-          // Select with FOR UPDATE to lock the row
           try {
+            // Select with FOR UPDATE to lock the row
             const jobs = await tx
               .select()
               .from(jobQueue)
@@ -141,51 +143,76 @@ export class PostgresQueue {
               return;
             }
             llog("Found job", job);
+
+            // Delete the job from the queue
             await tx.delete(jobQueue).where(eq(jobQueue.id, job.id)).execute();
             llog("Deleted job", job);
 
             jobFound = true;
 
-            // Process the job within the transaction
+            // Check if this is a scheduled job that needs to be rescheduled
             const maybeScheduledPayload = scheduledJobPayloadValidator(
               job.payload,
             );
+
             if (!(maybeScheduledPayload instanceof type.errors)) {
-              llog("Rescheduling job", {
+              llog("Will reschedule job", {
                 generalId: job.generalId,
                 name: job.name,
                 delay: maybeScheduledPayload.every,
                 payload: job.payload,
               });
-              // Reschedule the job before processing to ensure continuity
-              await this.addJobToQueue({
-                generalId: job.generalId,
-                name: job.name as JobName,
-                delay: maybeScheduledPayload.every,
-                payload: job.payload as Record<string, unknown>,
-              });
+
+              scheduleInterval = maybeScheduledPayload.every;
             }
+
+            // Prepare job data for processing outside the transaction
+            const jobData: JobData = {
+              generalId: job.generalId,
+              name: job.name as JobName,
+              payload: job.payload as Record<string, unknown>,
+            };
+
+            // Assign to the outer variable
+            jobToProcess = jobData;
+          } catch (error) {
+            llog("Error in transaction", error);
+            // Re-throw to ensure transaction is rolled back
+            throw error;
+          }
+        });
+
+        // Process the job outside the transaction if one was found
+        if (jobFound && jobToProcess) {
+          try {
+            // Use type assertion to help TypeScript
+            const job = jobToProcess as JobData;
+
             llog("Processing job", {
               generalId: job.generalId,
               name: job.name,
               payload: job.payload,
             });
-            llog("Processing job", handler);
 
-            if (handler && typeof handler === "function") {
-              await handler({
+            // Reschedule the job if it's a scheduled job
+            if (scheduleInterval > 0) {
+              await this.addJobToQueue({
                 generalId: job.generalId,
-                name: job.name as JobName,
-                payload: job.payload as Record<string, unknown>,
+                name: job.name,
+                delay: scheduleInterval,
+                payload: job.payload ?? {},
               });
             }
-          } catch {
-            // Do nothing
-          }
-        });
 
-        // If no job was found, wait before checking again
-        if (!jobFound) {
+            // Process the job
+            if (handler && typeof handler === "function") {
+              await handler(job);
+            }
+          } catch (error) {
+            logError("Error processing job outside transaction:", error);
+          }
+        } else if (!jobFound) {
+          // If no job was found, wait before checking again
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       } catch (error) {
