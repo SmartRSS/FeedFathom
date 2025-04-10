@@ -116,8 +116,6 @@ export class PostgresQueue {
     while (this.processing) {
       try {
         // Get the next job that's ready to run with a lock
-        const now = new Date();
-        llog("Checking for jobs at", now);
         let jobFound = false;
         let jobToProcess: JobData | null = null;
         let scheduleInterval = 0;
@@ -164,6 +162,15 @@ export class PostgresQueue {
               });
 
               scheduleInterval = maybeScheduledPayload.every;
+
+              if (scheduleInterval > 0) {
+                await this.addJobToQueue({
+                  generalId: job.generalId,
+                  name: job.name as JobName,
+                  delay: scheduleInterval,
+                  payload: (job.payload ?? {}) as Record<string, unknown>,
+                });
+              }
             }
 
             // Prepare job data for processing outside the transaction
@@ -195,14 +202,6 @@ export class PostgresQueue {
             });
 
             // Reschedule the job if it's a scheduled job
-            if (scheduleInterval > 0) {
-              await this.addJobToQueue({
-                generalId: job.generalId,
-                name: job.name,
-                delay: scheduleInterval,
-                payload: job.payload ?? {},
-              });
-            }
 
             // Process the job
             if (handler && typeof handler === "function") {
