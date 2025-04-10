@@ -33,7 +33,7 @@ export class MainWorker {
     private readonly sourcesRepository: SourcesRepository,
     private readonly userSourcesRepository: UserSourcesRepository,
     private readonly commandBus: CommandBus,
-    private readonly postgresQueue: PostgresQueue
+    private readonly postgresQueue: PostgresQueue,
   ) {}
 
   async initialize() {
@@ -68,7 +68,7 @@ export class MainWorker {
     const data = jobData.payload;
 
     llog(
-      `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}`
+      `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}`,
     );
 
     try {
@@ -85,7 +85,7 @@ export class MainWorker {
           const successfullSources =
             await this.sourcesRepository.getRecentlySuccessfulSources();
           llog(
-            `Found ${successfullSources.length} sources for favicon refresh`
+            `Found ${successfullSources.length} sources for favicon refresh`,
           );
 
           for (const source of successfullSources) {
@@ -98,7 +98,7 @@ export class MainWorker {
           }
 
           llog(
-            `Added ${successfullSources.length} favicon refresh jobs to queue`
+            `Added ${successfullSources.length} favicon refresh jobs to queue`,
           );
           break;
         }
@@ -114,7 +114,7 @@ export class MainWorker {
           const validatedPayload = parseSourcePayloadValidator(data);
           if (validatedPayload instanceof type.errors) {
             throw new Error(
-              `Invalid ParseSource payload: ${JSON.stringify(validatedPayload)}`
+              `Invalid ParseSource payload: ${JSON.stringify(validatedPayload)}`,
             );
           }
           llog(`Parsing source with ID: ${validatedPayload.id}`);
@@ -135,7 +135,7 @@ export class MainWorker {
           const validatedPayload = refreshFaviconPayloadValidator(data);
           if (validatedPayload instanceof type.errors) {
             throw new Error(
-              `Invalid RefreshFavicon payload: ${JSON.stringify(validatedPayload)}`
+              `Invalid RefreshFavicon payload: ${JSON.stringify(validatedPayload)}`,
             );
           }
           llog(`Refreshing favicon for: ${validatedPayload.homeUrl}`);
@@ -165,7 +165,7 @@ export class MainWorker {
 
   private async setupScheduledTasks() {
     llog(
-      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`
+      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`,
     );
 
     llog("Scheduling cleanup job");
@@ -201,11 +201,11 @@ export class MainWorker {
 
   private startWorker() {
     llog(
-      `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`
+      `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
     this.postgresQueue.startProcessing(
       this.processJob,
-      this.appConfig["WORKER_CONCURRENCY"]
+      this.appConfig["WORKER_CONCURRENCY"],
     );
     llog("Worker setup complete");
   }
