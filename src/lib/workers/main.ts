@@ -164,7 +164,6 @@ export class MainWorker {
       every: this.appConfig["CLEANUP_INTERVAL"] * 60,
       payload: {},
     });
-    llog("Scheduled cleanup job");
 
     // Schedule gather job
     await this.simpleQueue.scheduleJob({
@@ -173,7 +172,6 @@ export class MainWorker {
       every: this.appConfig["GATHER_JOBS_INTERVAL"] * 60,
       payload: {},
     });
-    llog("Scheduled gather jobs");
 
     // Schedule favicon job
     await this.simpleQueue.scheduleJob({

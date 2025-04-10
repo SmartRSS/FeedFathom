@@ -105,7 +105,7 @@ export class SimpleQueue {
       );
 
       // Add to queue
-      await this.withTimeout(
+      const listLength = await this.withTimeout(
         () =>
           this.redis.lpush(
             this.immediateQueueKey,
@@ -115,7 +115,7 @@ export class SimpleQueue {
       );
 
       llog(
-        `Job added to queue: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}`,
+        `Job added to queue: ${jobWithDefaults.generalId || jobWithDefaults.instanceId}, list length: ${listLength}`,
       );
     } catch (error) {
       logError("Error adding job to queue:", error);
@@ -201,7 +201,6 @@ export class SimpleQueue {
       );
 
       if (isAlreadyScheduled) {
-        llog(`Job ${generalId} already scheduled, skipping`);
         return;
       }
 
@@ -213,6 +212,7 @@ export class SimpleQueue {
 
       // Add to scheduled jobs set
       await this.redis.sadd(this.scheduledJobIdsKey, generalId);
+      llog("Scheduled job added to set:", generalId);
 
       if (Number.isNaN(every) || every <= 0) {
         logError(
@@ -317,6 +317,12 @@ export class SimpleQueue {
 
     while (this.processing) {
       try {
+        // Get current queue length
+        const queueLength = await this.withTimeout(
+          () => this.redis.llen(this.immediateQueueKey),
+          "llen",
+        );
+        llog(`Current queue length: ${queueLength}`);
         // Get a job from the queue with timeout
         const result = await this.withTimeout(
           () => this.redis.rpop(this.immediateQueueKey),
@@ -327,6 +333,7 @@ export class SimpleQueue {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
+        llog("Job retrieved from queue:", result);
 
         llog("Job retrieved from queue, processing");
         // Process the job
