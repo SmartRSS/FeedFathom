@@ -140,7 +140,8 @@ export class PostgresQueue {
             return;
           }
           llog("Found job", job);
-          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
+          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id)).execute();
+          llog("Deleted job", job);
 
           jobFound = true;
 
