@@ -80,8 +80,9 @@ export class SimpleQueue {
     // Ensure delay is set (default to 0 if not provided)
     const jobWithDefaults = {
       ...jobData,
-      delay: jobData.delay ?? 0,
+      delay: (jobData.delay ?? 0) * 1000 + Date.now(),
     };
+    llog("Job with defaults:", jobWithDefaults);
 
     try {
       // Check if this is a duplicate job
@@ -314,7 +315,6 @@ export class SimpleQueue {
       return;
     }
 
-    llog("Starting job processing loop");
     while (this.processing) {
       try {
         // Get a job from the queue with timeout
@@ -338,7 +338,6 @@ export class SimpleQueue {
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
-    llog("Job processing loop ended");
   }
 
   /**
@@ -352,6 +351,7 @@ export class SimpleQueue {
     let jobData: JobData;
     try {
       const parsedData = JSON.parse(jobString) as Record<string, unknown>;
+      llog("Parsed job data:", parsedData);
 
       // Use the appropriate validator based on whether this is a scheduled job
       const validationResult = parsedData["every"]
@@ -377,12 +377,14 @@ export class SimpleQueue {
     // Check if job is ready to run
     if (jobData.delay && now < jobData.delay) {
       // Job is not ready yet, put it back in the queue
+      llog("Job is not ready yet, putting it back in the queue");
       await this.addJobToQueue(jobData);
       return;
     }
 
     try {
       if (jobData.every && jobData.generalId) {
+        llog("Scheduling next repeat");
         await this.scheduleNextRepeat({
           generalId: jobData.generalId,
           every: jobData.every,
