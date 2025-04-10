@@ -127,6 +127,15 @@ export class SimpleQueue {
    */
   private async isDuplicateJob(jobData: JobData): Promise<boolean> {
     try {
+      // Check if the queue is empty
+      const queueLength = await this.redis.llen(this.immediateQueueKey);
+
+      // If queue is empty, clear all reference counters
+      if (queueLength === 0) {
+        await this.clearAllReferenceCounters();
+        return false; // Not a duplicate if we've cleared all counters
+      }
+
       // For jobs with generalId, check the reference counter
       if (jobData.generalId) {
         const counter = await this.redis.get(
