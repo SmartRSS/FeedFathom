@@ -130,7 +130,6 @@ export class PostgresQueue {
             .orderBy(jobQueue.notBefore)
             .limit(1)
             .for("update");
-          llog(jobs);
 
           if (jobs.length === 0) {
             return;
@@ -140,6 +139,7 @@ export class PostgresQueue {
           if (!job) {
             return;
           }
+          llog("Found job", job);
           await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
 
           jobFound = true;
