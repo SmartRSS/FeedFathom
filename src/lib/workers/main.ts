@@ -25,13 +25,9 @@ export class MainWorker {
   }
 
   async initialize() {
-    this.setupWorker();
     this.setSignalHandlers();
     await this.setupScheduledTasks();
-    llog("Worker initialized and tasks scheduled");
-
-    // Gather parse source jobs on startup
-    await this.gatherParseSourceJobs();
+    this.startWorker();
   }
 
   private async gatherParseSourceJobs() {
@@ -189,30 +185,14 @@ export class MainWorker {
     llog("Scheduled favicon jobs");
   }
 
-  private setupWorker() {
+  private startWorker() {
     llog(
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
-
-    const startQueueProcessing = () => {
-      this.simpleQueue.startProcessing(
-        this.processJob,
-        this.appConfig["WORKER_CONCURRENCY"],
-      );
-
-      // Set up a periodic check to restart processing if it stops
-      setInterval(() => {
-        if (!this.simpleQueue.isProcessing()) {
-          llog("Queue processing stopped, restarting...");
-          this.simpleQueue.startProcessing(
-            this.processJob,
-            this.appConfig["WORKER_CONCURRENCY"],
-          );
-        }
-      }, 5000); // Check every 5 seconds
-    };
-
-    startQueueProcessing();
+    this.simpleQueue.startProcessing(
+      this.processJob,
+      this.appConfig["WORKER_CONCURRENCY"],
+    );
     llog("Worker setup complete");
   }
 }
