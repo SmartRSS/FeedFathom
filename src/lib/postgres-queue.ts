@@ -73,9 +73,8 @@ export class PostgresQueue {
         notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
         payload: jobData.payload ?? {},
       });
-    } catch (error) {
-      // Log the error but don't treat it as fatal
-      logError("Error adding job to queue:", error);
+    } catch {
+      // Do nothing
     }
   }
 
@@ -87,7 +86,7 @@ export class PostgresQueue {
 
     if (Number.isNaN(every) || every <= 0) {
       logError(
-        `Invalid 'every' value for scheduled job ${generalId}: ${every}`,
+        `Invalid 'every' value for scheduled job ${generalId}: ${every}`
       );
       return;
     }
@@ -140,12 +139,13 @@ export class PostgresQueue {
           if (!job) {
             return;
           }
+          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
 
           jobFound = true;
 
           // Process the job within the transaction
           const maybeScheduledPayload = scheduledJobPayloadValidator(
-            job.payload,
+            job.payload
           );
           if (!(maybeScheduledPayload instanceof type.errors)) {
             // Reschedule the job before processing to ensure continuity
@@ -164,9 +164,6 @@ export class PostgresQueue {
               payload: job.payload as Record<string, unknown>,
             });
           }
-
-          // Delete the job after successful processing
-          await tx.delete(jobQueue).where(eq(jobQueue.id, job.id));
         });
 
         // If no job was found, wait before checking again
@@ -196,7 +193,7 @@ export class PostgresQueue {
 
     for (let i = 0; i < numWorkers; i++) {
       this.processJobs(handler).catch((error) =>
-        logError("Worker error:", error),
+        logError("Worker error:", error)
       );
     }
   }
