@@ -1,4 +1,4 @@
-import type { SimpleQueue } from "$lib/simple-queue.ts";
+import type { PostgresQueue } from "$lib/postgres-queue";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { JobName } from "../../types/job-name-enum.ts";
@@ -15,7 +15,7 @@ type SortField =
 export class SourcesRepository {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase,
-    private readonly simpleQueue: SimpleQueue,
+    private readonly postgresQueue: PostgresQueue,
   ) {}
 
   public async addSource(payload: { homeUrl: string; url: string }) {
@@ -26,16 +26,14 @@ export class SourcesRepository {
       throw new Error("failed");
     }
 
-    await this.simpleQueue.addJobToQueue({
+    await this.postgresQueue.addJobToQueue({
       generalId: `${JobName.ParseSource}:${source.id}`,
-      instanceId: `${JobName.ParseSource}:${source.id}`,
       name: JobName.ParseSource,
       payload: {
         id: source.id,
         skipCache: true,
         url: source.url,
       },
-      every: 0, // Not a repeating job
     });
     return source;
   }

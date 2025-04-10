@@ -25,7 +25,7 @@ import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
-import { SimpleQueue } from "./lib/simple-queue.ts";
+import { PostgresQueue } from "./lib/postgres-queue.ts";
 
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
@@ -44,7 +44,7 @@ export type Dependencies = {
   sourcesRepository: SourcesRepository;
   userSourcesRepository: UserSourcesRepository;
   usersRepository: UsersRepository;
-  simpleQueue: SimpleQueue;
+  postgresQueue: PostgresQueue;
 };
 
 const redisClient = (() => {
@@ -104,7 +104,7 @@ container.register({
   // Workers
   mainWorker: asClass(MainWorker).singleton(),
   initializer: asClass(Initializer).singleton(),
-  simpleQueue: asClass(SimpleQueue).singleton(),
+  postgresQueue: asClass(PostgresQueue).singleton(),
 });
 
 // biome-ignore lint/style/noDefaultExport: TODO

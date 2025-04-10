@@ -7,10 +7,10 @@ import {
 import type { SourcesRepository } from "$lib/db/source-repository";
 import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type { FeedParser } from "$lib/feed-parser";
+import type { PostgresQueue } from "$lib/postgres-queue";
 import type { AppConfig } from "../../config.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import { llog, logError } from "../../util/log.ts";
-import type { SimpleQueue } from "../simple-queue.ts";
 
 export class MainWorker {
   constructor(
@@ -19,10 +19,8 @@ export class MainWorker {
     private readonly sourcesRepository: SourcesRepository,
     private readonly userSourcesRepository: UserSourcesRepository,
     private readonly commandBus: CommandBus,
-    private readonly simpleQueue: SimpleQueue,
-  ) {
-    // Cast Redis to RedisClient for SimpleQueue
-  }
+    private readonly postgresQueue: PostgresQueue,
+  ) {}
 
   async initialize() {
     this.setSignalHandlers();
@@ -36,12 +34,10 @@ export class MainWorker {
 
     for (const source of sources) {
       const jobId = `${JobName.ParseSource}:${source.id}`;
-      await this.simpleQueue.addJobToQueue({
+      await this.postgresQueue.addJobToQueue({
         generalId: jobId,
-        instanceId: jobId,
         name: JobName.ParseSource,
         payload: source,
-        every: 0, // Not a repeating job
       });
     }
   }
@@ -93,12 +89,10 @@ export class MainWorker {
 
         for (const source of successfullSources) {
           const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;
-          await this.simpleQueue.addJobToQueue({
+          await this.postgresQueue.addJobToQueue({
             generalId: jobId,
-            instanceId: jobId,
             name: JobName.RefreshFavicon,
             payload: source,
-            every: 0, // Not a repeating job
           });
         }
 
@@ -146,7 +140,7 @@ export class MainWorker {
   private setSignalHandlers() {
     process.on("SIGTERM", () => {
       (() => {
-        this.simpleQueue.stopProcessing();
+        this.postgresQueue.stopProcessing();
         llog("Worker closed gracefully");
       })();
     });
@@ -158,24 +152,24 @@ export class MainWorker {
     );
 
     // Schedule cleanup job
-    await this.simpleQueue.scheduleJob({
-      id: JobName.Cleanup,
+    await this.postgresQueue.scheduleJob({
+      generalId: JobName.Cleanup,
       name: JobName.Cleanup,
       every: this.appConfig["CLEANUP_INTERVAL"],
       payload: {},
     });
 
     // Schedule gather job
-    await this.simpleQueue.scheduleJob({
-      id: JobName.GatherJobs,
+    await this.postgresQueue.scheduleJob({
+      generalId: JobName.GatherJobs,
       name: JobName.GatherJobs,
       every: this.appConfig["GATHER_JOBS_INTERVAL"],
       payload: {},
     });
 
     // Schedule favicon job
-    await this.simpleQueue.scheduleJob({
-      id: JobName.GatherFaviconJobs,
+    await this.postgresQueue.scheduleJob({
+      generalId: JobName.GatherFaviconJobs,
       name: JobName.GatherFaviconJobs,
       every: 24 * 60 * 60, // 24 hours in seconds
       payload: {},
@@ -187,7 +181,7 @@ export class MainWorker {
     llog(
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
-    this.simpleQueue.startProcessing(
+    this.postgresQueue.startProcessing(
       this.processJob,
       this.appConfig["WORKER_CONCURRENCY"],
     );
