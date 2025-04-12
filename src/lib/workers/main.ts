@@ -72,12 +72,8 @@ export class MainWorker {
         }
 
         case JobName.GatherFaviconJobs: {
-          llog("Running gather favicon jobs");
           const successfullSources =
             await this.sourcesRepository.getRecentlySuccessfulSources();
-          llog(
-            `Found ${successfullSources.length} sources for favicon refresh`,
-          );
 
           for (const source of successfullSources) {
             const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;
@@ -88,9 +84,6 @@ export class MainWorker {
             });
           }
 
-          llog(
-            `Added ${successfullSources.length} favicon refresh jobs to queue`,
-          );
           break;
         }
 
@@ -106,7 +99,6 @@ export class MainWorker {
               `Invalid ParseSource payload: ${JSON.stringify(validatedPayload)}`,
             );
           }
-          llog(`Parsing source with ID: ${validatedPayload.id}`);
           // Use the command bus instead of directly calling the feed parser
           await this.commandBus.execute<
             ParseSourceCommand,

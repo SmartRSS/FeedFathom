@@ -150,7 +150,7 @@ export class PostgresQueue {
     if (maybeScheduledPayload instanceof type.errors) {
       return;
     }
-    const newJobData: JobData = {``
+    const newJobData: JobData = {
       generalId: jobData.generalId,
       name: jobData.name,
       delay: maybeScheduledPayload.every,
@@ -187,8 +187,6 @@ export class PostgresQueue {
           ? JSON.parse(job["payload"])
           : job["payload"]) as Record<string, unknown>,
       };
-
-      llog("jobData", JSON.stringify(jobData, null, 2));
 
       // Delete the job within the same transaction
       await this.deleteJob(tx, job["id"]);
