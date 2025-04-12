@@ -66,15 +66,6 @@ export class PostgresQueue {
       llog("Build process detected, skipping job add");
       return;
     }
-    llog(
-      {
-        generalId: jobData.generalId,
-        name: jobData.name,
-        notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
-        payload: jobData.payload ?? {},
-      },
-      "adding to queue",
-    );
 
     try {
       // Use ON CONFLICT DO NOTHING to handle race conditions efficiently
@@ -197,7 +188,7 @@ export class PostgresQueue {
           : job["payload"]) as Record<string, unknown>,
       };
 
-      console.log("jobData", JSON.stringify(jobData, null, 2));
+      llog("jobData", JSON.stringify(jobData, null, 2));
 
       // Delete the job within the same transaction
       await this.deleteJob(tx, job["id"]);
