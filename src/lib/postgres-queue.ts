@@ -145,7 +145,7 @@ export class PostgresQueue {
    * Reschedule a job if it's a periodic job
    */
   private async rescheduleJobIfNeeded(tx: Transaction, jobData: JobData) {
-    const maybeScheduledPayload = scheduledJobPayloadValidator(jobData);
+    const maybeScheduledPayload = scheduledJobPayloadValidator(jobData.payload);
 
     if (maybeScheduledPayload instanceof type.errors) {
       return;
@@ -187,8 +187,6 @@ export class PostgresQueue {
           ? JSON.parse(job["payload"])
           : job["payload"]) as Record<string, unknown>,
       };
-
-      llog("jobData", JSON.stringify(jobData, null, 2));
 
       // Delete the job within the same transaction
       await this.deleteJob(tx, job["id"]);
