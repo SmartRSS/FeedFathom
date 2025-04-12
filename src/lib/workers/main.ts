@@ -64,10 +64,6 @@ export class MainWorker {
     const jobName = jobData.name;
     const data = jobData.payload;
 
-    llog(
-      `Processing job: ${jobName}, Data: ${JSON.stringify(data)}, JobData: ${JSON.stringify(jobData)}`,
-    );
-
     try {
       switch (jobName) {
         case JobName.Cleanup: {
