@@ -192,6 +192,8 @@ export class PostgresQueue {
           : job["payload"]) as Record<string, unknown>,
       };
 
+      console.log("jobData", JSON.stringify(jobData, null, 2));
+
       // Delete the job within the same transaction
       await this.deleteJob(tx, job["id"]);
 
