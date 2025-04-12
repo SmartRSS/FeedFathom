@@ -181,7 +181,7 @@ export class PostgresQueue {
       }
 
       const jobData = {
-        generalId: job["generalId"] as string,
+        generalId: job["general_id"] as string,
         name: job["name"] as JobName,
         payload: (typeof job["payload"] === "string"
           ? JSON.parse(job["payload"])
