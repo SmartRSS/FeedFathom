@@ -68,15 +68,13 @@ export class MainWorker {
     const data = jobData.payload;
 
     llog(
-      `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}`,
+      `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}, JobData: ${JSON.stringify(jobData)}`,
     );
 
     try {
       switch (jobName) {
         case JobName.Cleanup: {
-          llog("Running cleanup job");
           await this.userSourcesRepository.cleanup();
-          llog("Cleanup job completed");
           break;
         }
 
@@ -104,9 +102,7 @@ export class MainWorker {
         }
 
         case JobName.GatherJobs: {
-          llog("Running gather jobs");
           await this.gatherParseSourceJobs();
-          llog("Added parse source jobs to queue");
           break;
         }
 
@@ -147,7 +143,6 @@ export class MainWorker {
         default:
           throw new Error(`Unknown job type: ${jobName}`);
       }
-      llog(`Successfully processed job: ${jobName}, ID: ${jobId}`);
     } catch (error: unknown) {
       this.handleJobError(error, jobId);
       // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
