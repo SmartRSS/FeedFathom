@@ -1,6 +1,7 @@
 import { type } from "arktype";
-import { eq, sql } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { type ExtractTablesWithRelations, eq } from "drizzle-orm";
+import type { BunSQLDatabase, BunSQLQueryResultHKT } from "drizzle-orm/bun-sql";
+import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { JobName } from "../types/job-name-enum.ts";
 import { llog, logError } from "../util/log.ts";
 import { jobQueue } from "./schema.ts";
@@ -9,6 +10,12 @@ const scheduledJobPayloadValidator = type({
   every: "number.integer",
   "[string]": "unknown",
 });
+
+type Transaction = PgTransaction<
+  BunSQLQueryResultHKT,
+  Record<string, never>,
+  ExtractTablesWithRelations<Record<string, never>>
+>;
 
 type JobData = {
   generalId: string;
@@ -61,20 +68,19 @@ export class PostgresQueue {
     }
 
     try {
-      await this.drizzleConnection.insert(jobQueue).values({
-        generalId: jobData.generalId,
-        name: jobData.name,
-        notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
-        payload: jobData.payload ?? {},
-      });
-      llog("Added job to queue:", {
-        generalId: jobData.generalId,
-        name: jobData.name,
-        notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
-        payload: jobData.payload ?? {},
-      });
-    } catch {
-      // Do nothing
+      // Use ON CONFLICT DO NOTHING to handle race conditions efficiently
+      // This is a single database operation that handles the race condition at the DB level
+      await this.drizzleConnection
+        .insert(jobQueue)
+        .values({
+          generalId: jobData.generalId,
+          name: jobData.name,
+          notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
+          payload: jobData.payload ?? {},
+        })
+        .onConflictDoNothing();
+    } catch (error) {
+      logError("Error adding job to queue:", error);
     }
   }
 
@@ -103,6 +109,98 @@ export class PostgresQueue {
   }
 
   /**
+   * Select and lock a job from the queue using an atomic operation
+   */
+  private async selectAndLockJob(
+    tx: Transaction,
+    now: Date,
+    fiveMinutesAgo: Date,
+  ) {
+    const result = await tx.execute(`
+      WITH selected_job AS (
+        SELECT id
+        FROM job_queue
+        WHERE (locked_at IS NULL OR locked_at <= '${fiveMinutesAgo.toISOString()}')
+          AND not_before <= '${now.toISOString()}'
+        ORDER BY not_before ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE job_queue jq
+      SET locked_at = '${now.toISOString()}'
+      FROM selected_job sj
+      WHERE jq.id = sj.id
+      RETURNING jq.*
+    `);
+
+    return result?.[0] || null;
+  }
+
+  /**
+   * Delete a job from the queue
+   */
+  private async deleteJob(tx: Transaction, jobId: number) {
+    await tx.delete(jobQueue).where(eq(jobQueue.id, jobId));
+  }
+
+  /**
+   * Reschedule a job if it's a periodic job
+   */
+  private async rescheduleJobIfNeeded(tx: Transaction, jobData: JobData) {
+    const maybeScheduledPayload = scheduledJobPayloadValidator(jobData);
+
+    if (!(maybeScheduledPayload instanceof type.errors)) {
+      const newJobData: JobData = {
+        generalId: jobData.generalId,
+        name: jobData.name,
+        delay: maybeScheduledPayload.every,
+        payload: jobData.payload ?? {},
+      };
+      llog("Will reschedule job", newJobData);
+
+      await tx.insert(jobQueue).values({
+        generalId: newJobData.generalId,
+        name: newJobData.name,
+        notBefore: new Date((newJobData.delay ?? 0) * 1000 + Date.now()),
+        payload: newJobData.payload ?? {},
+      });
+    }
+  }
+
+  /**
+   * Pick a job from the queue using an atomic select-and-update operation
+   * This method uses a CTE (Common Table Expression) to atomically select and lock a job
+   */
+  async pickJob() {
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+    // Use a transaction to ensure atomicity
+    return await this.drizzleConnection.transaction(async (tx) => {
+      // Select and lock a job
+      const job = await this.selectAndLockJob(tx, now, fiveMinutesAgo);
+
+      if (!job) {
+        return null;
+      }
+
+      const jobData = {
+        generalId: job["generalId"],
+        name: job["name"] as JobName,
+        payload: job["payload"] as Record<string, unknown>,
+      };
+
+      // Delete the job within the same transaction
+      await this.deleteJob(tx, job["id"]);
+
+      // Check if this is a scheduled job that needs to be rescheduled
+      await this.rescheduleJobIfNeeded(tx, jobData);
+
+      return jobData;
+    });
+  }
+
+  /**
    * Process jobs from the queue
    */
   async processJobs(handler: JobHandler): Promise<void> {
@@ -115,108 +213,43 @@ export class PostgresQueue {
 
     while (this.processing) {
       try {
-        // Get the next job that's ready to run with a lock
-        let jobFound = false;
-        let jobToProcess: JobData | null = null;
-        let scheduleInterval = 0;
+        // Use the pickJob method to atomically select and lock a job
+        const jobData = await this.pickJob();
 
-        // Use a transaction only to select and delete the job
-        await this.drizzleConnection.transaction(async (tx) => {
-          try {
-            // Select with FOR UPDATE to lock the row
-            const jobs = await tx
-              .select()
-              .from(jobQueue)
-              .where(sql`${jobQueue.notBefore} <= now()`)
-              .orderBy(jobQueue.id)
-              .limit(1)
-              .for("update");
-
-            if (jobs.length === 0) {
-              return;
-            }
-
-            const job = jobs[0];
-            if (!job) {
-              return;
-            }
-            llog("Found job", job);
-
-            // Delete the job from the queue
-            await tx.delete(jobQueue).where(eq(jobQueue.id, job.id)).execute();
-            llog("Deleted job", job);
-
-            jobFound = true;
-
-            // Check if this is a scheduled job that needs to be rescheduled
-            const maybeScheduledPayload = scheduledJobPayloadValidator(
-              job.payload,
-            );
-
-            if (!(maybeScheduledPayload instanceof type.errors)) {
-              llog("Will reschedule job", {
-                generalId: job.generalId,
-                name: job.name,
-                delay: maybeScheduledPayload.every,
-                payload: job.payload,
-              });
-
-              scheduleInterval = maybeScheduledPayload.every;
-
-              if (scheduleInterval > 0) {
-                await this.addJobToQueue({
-                  generalId: job.generalId,
-                  name: job.name as JobName,
-                  delay: scheduleInterval,
-                  payload: (job.payload ?? {}) as Record<string, unknown>,
-                });
-              }
-            }
-
-            // Prepare job data for processing outside the transaction
-            const jobData: JobData = {
-              generalId: job.generalId,
-              name: job.name as JobName,
-              payload: job.payload as Record<string, unknown>,
-            };
-
-            // Assign to the outer variable
-            jobToProcess = jobData;
-          } catch {
-            tx.rollback();
-          }
-        });
-
-        // Process the job outside the transaction if one was found
-        if (jobFound && jobToProcess) {
-          try {
-            // Use type assertion to help TypeScript
-            const job = jobToProcess as JobData;
-
-            llog("Processing job", {
-              generalId: job.generalId,
-              name: job.name,
-              payload: job.payload,
-            });
-
-            // Reschedule the job if it's a scheduled job
-
-            // Process the job
-            if (handler && typeof handler === "function") {
-              await handler(job);
-            }
-          } catch (error) {
-            logError("Error processing job outside transaction:", error);
-          }
-        } else if (!jobFound) {
-          // If no job was found, wait before checking again
+        if (!jobData) {
+          // No job was available
           await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+
+        // Process the job
+        try {
+          llog("Processing job", {
+            generalId: jobData.generalId,
+            name: jobData.name,
+            payload: jobData.payload,
+          });
+
+          // Process the job
+          if (handler && typeof handler === "function") {
+            await handler(jobData);
+          }
+
+          llog(`Job ${jobData.generalId} completed`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          logError("Error processing job:", error);
+
+          llog(`Job ${jobData.generalId} failed`, {
+            error: errorMessage,
+          });
         }
       } catch (error) {
         // Log the error and wait before retrying
         logError("Error in processJob:", error);
         llog("Error occurred, waiting before retry");
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   }
