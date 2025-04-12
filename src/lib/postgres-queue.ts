@@ -196,6 +196,7 @@ export class PostgresQueue {
       try {
         const jobData = await this.pickJob();
         if (!jobData) {
+          await Bun.sleep(1000);
           continue;
         }
 
