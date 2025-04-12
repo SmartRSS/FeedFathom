@@ -66,6 +66,15 @@ export class PostgresQueue {
       llog("Build process detected, skipping job add");
       return;
     }
+    llog(
+      {
+        generalId: jobData.generalId,
+        name: jobData.name,
+        notBefore: new Date((jobData.delay ?? 0) * 1000 + Date.now()),
+        payload: jobData.payload ?? {},
+      },
+      "adding to queue",
+    );
 
     try {
       // Use ON CONFLICT DO NOTHING to handle race conditions efficiently

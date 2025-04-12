@@ -56,19 +56,16 @@ export class MainWorker {
     }
   }
 
-  private handleJobError(error: unknown, jobId: string) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logError(`Error processing job: ${jobId}`, error);
-    llog(`Worker failed job ${jobId} with error: ${errorMessage}`);
+  private handleJobError(error: unknown) {
+    logError("Error processing job:", error);
   }
 
   private readonly processJob: JobHandler = async (jobData) => {
-    const jobId = jobData.generalId;
     const jobName = jobData.name;
     const data = jobData.payload;
 
     llog(
-      `Processing job: ${jobName}, ID: ${jobId}, Data: ${JSON.stringify(data)}, JobData: ${JSON.stringify(jobData)}`,
+      `Processing job: ${jobName}, Data: ${JSON.stringify(data)}, JobData: ${JSON.stringify(jobData)}`,
     );
 
     try {
@@ -144,7 +141,7 @@ export class MainWorker {
           throw new Error(`Unknown job type: ${jobName}`);
       }
     } catch (error: unknown) {
-      this.handleJobError(error, jobId);
+      this.handleJobError(error);
       // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
     }
   };
