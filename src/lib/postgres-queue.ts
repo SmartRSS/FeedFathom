@@ -185,7 +185,7 @@ export class PostgresQueue {
       }
 
       const jobData = {
-        generalId: job["generalId"],
+        generalId: job["generalId"] as string,
         name: job["name"] as JobName,
         payload: (typeof job["payload"] === "string"
           ? JSON.parse(job["payload"])
@@ -228,18 +228,10 @@ export class PostgresQueue {
 
         // Process the job
         try {
-          llog("Processing job", {
-            generalId: jobData.generalId,
-            name: jobData.name,
-            payload: jobData.payload,
-          });
-
           // Process the job
           if (handler && typeof handler === "function") {
             await handler(jobData);
           }
-
-          llog(`Job ${jobData.generalId} completed`);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
