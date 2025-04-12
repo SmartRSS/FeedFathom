@@ -141,18 +141,12 @@ export class PostgresQueue {
     if (maybeScheduledPayload instanceof type.errors) {
       return;
     }
-    const newJobData: JobData = {
-      generalId: jobData.generalId,
-      name: jobData.name,
-      delay: maybeScheduledPayload.every,
-      payload: jobData.payload ?? {},
-    };
 
     await tx.insert(jobQueue).values({
-      generalId: newJobData.generalId,
-      name: newJobData.name,
-      notBefore: new Date((newJobData.delay ?? 0) * 1000 + Date.now()),
-      payload: newJobData.payload ?? {},
+      generalId: jobData.generalId,
+      name: jobData.name,
+      notBefore: new Date(maybeScheduledPayload.every * 1000 + Date.now()),
+      payload: jobData.payload ?? {},
     });
   }
 
