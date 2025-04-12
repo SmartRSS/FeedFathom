@@ -120,11 +120,9 @@ export class PostgresQueue {
   /**
    * Select and lock a job from the queue using an atomic operation
    */
-  private async selectAndLockJob(
-    tx: Transaction,
-    now: Date,
-    fiveMinutesAgo: Date,
-  ) {
+  private async selectAndLockJob(tx: Transaction) {
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
     const result = await tx.execute(`
       WITH selected_job AS (
         SELECT id
@@ -158,22 +156,23 @@ export class PostgresQueue {
   private async rescheduleJobIfNeeded(tx: Transaction, jobData: JobData) {
     const maybeScheduledPayload = scheduledJobPayloadValidator(jobData);
 
-    if (!(maybeScheduledPayload instanceof type.errors)) {
-      const newJobData: JobData = {
-        generalId: jobData.generalId,
-        name: jobData.name,
-        delay: maybeScheduledPayload.every,
-        payload: jobData.payload ?? {},
-      };
-      llog("Will reschedule job", newJobData);
-
-      await tx.insert(jobQueue).values({
-        generalId: newJobData.generalId,
-        name: newJobData.name,
-        notBefore: new Date((newJobData.delay ?? 0) * 1000 + Date.now()),
-        payload: newJobData.payload ?? {},
-      });
+    if (maybeScheduledPayload instanceof type.errors) {
+      return;
     }
+    const newJobData: JobData = {
+      generalId: jobData.generalId,
+      name: jobData.name,
+      delay: maybeScheduledPayload.every,
+      payload: jobData.payload ?? {},
+    };
+    llog("Will reschedule job", newJobData);
+
+    await tx.insert(jobQueue).values({
+      generalId: newJobData.generalId,
+      name: newJobData.name,
+      notBefore: new Date((newJobData.delay ?? 0) * 1000 + Date.now()),
+      payload: newJobData.payload ?? {},
+    });
   }
 
   /**
@@ -181,13 +180,10 @@ export class PostgresQueue {
    * This method uses a CTE (Common Table Expression) to atomically select and lock a job
    */
   async pickJob() {
-    const now = new Date();
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-
     // Use a transaction to ensure atomicity
     return await this.drizzleConnection.transaction(async (tx) => {
       // Select and lock a job
-      const job = await this.selectAndLockJob(tx, now, fiveMinutesAgo);
+      const job = await this.selectAndLockJob(tx);
 
       if (!job) {
         return null;
