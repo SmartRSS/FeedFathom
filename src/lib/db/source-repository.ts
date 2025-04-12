@@ -2,7 +2,7 @@ import type { PostgresQueue } from "$lib/postgres-queue";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { JobName } from "../../types/job-name-enum.ts";
-import { logError as error, llog } from "../../util/log.ts";
+import { logError as error } from "../../util/log.ts";
 import { sources } from "../schema.ts";
 type SortField =
   | "created_at"
@@ -100,7 +100,6 @@ export class SourcesRepository {
   }
 
   public async getSourcesToProcess() {
-    llog("Getting sources to process");
     const noRecentFailures = () => {
       return eq(sources.recentFailures, 0);
     };

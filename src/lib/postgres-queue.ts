@@ -3,7 +3,7 @@ import { type ExtractTablesWithRelations, eq } from "drizzle-orm";
 import type { BunSQLDatabase, BunSQLQueryResultHKT } from "drizzle-orm/bun-sql";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { JobName } from "../types/job-name-enum.ts";
-import { llog, logError } from "../util/log.ts";
+import { logError } from "../util/log.ts";
 import { jobQueue } from "./schema.ts";
 
 const scheduledJobPayloadValidator = type({
@@ -42,15 +42,7 @@ export class PostgresQueue {
    * Check if we're in a build process
    */
   private isBuildProcess(): boolean {
-    const isBuild = process.env["BUILD"] === "true";
-
-    if (isBuild) {
-      llog("Build process detected with env var:", {
-        BUILD: process.env["BUILD"],
-      });
-    }
-
-    return isBuild;
+    return process.env["BUILD"] === "true";
   }
 
   public isProcessing() {
@@ -63,7 +55,6 @@ export class PostgresQueue {
   async addJobToQueue(jobData: JobData): Promise<void> {
     // If we're in a build process, don't add jobs
     if (this.isBuildProcess()) {
-      llog("Build process detected, skipping job add");
       return;
     }
 
@@ -150,19 +141,12 @@ export class PostgresQueue {
     if (maybeScheduledPayload instanceof type.errors) {
       return;
     }
-    const newJobData: JobData = {
-      generalId: jobData.generalId,
-      name: jobData.name,
-      delay: maybeScheduledPayload.every,
-      payload: jobData.payload ?? {},
-    };
-    llog("Will reschedule job", newJobData);
 
     await tx.insert(jobQueue).values({
-      generalId: newJobData.generalId,
-      name: newJobData.name,
-      notBefore: new Date((newJobData.delay ?? 0) * 1000 + Date.now()),
-      payload: newJobData.payload ?? {},
+      generalId: jobData.generalId,
+      name: jobData.name,
+      notBefore: new Date(maybeScheduledPayload.every * 1000 + Date.now()),
+      payload: jobData.payload ?? {},
     });
   }
 
@@ -204,7 +188,6 @@ export class PostgresQueue {
   async processJobs(handler: JobHandler): Promise<void> {
     // If we're in a build process, don't start processing
     if (this.isBuildProcess()) {
-      llog("Build process detected, skipping queue processing");
       this.processing = false;
       return;
     }
@@ -229,17 +212,11 @@ export class PostgresQueue {
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          logError("Error processing job:", error);
-
-          llog(`Job ${jobData.generalId} failed`, {
-            error: errorMessage,
-          });
+          logError(`Error processing job ${jobData.generalId} :`, errorMessage);
         }
       } catch (error) {
-        // Log the error and wait before retrying
         logError("Error in processJob:", error);
-        llog("Error occurred, waiting before retry");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
   }
@@ -250,7 +227,6 @@ export class PostgresQueue {
   startProcessing(handler: JobHandler, numWorkers = 1): void {
     // If we're in a build process, don't start processing
     if (this.isBuildProcess()) {
-      llog("Build process detected, skipping queue start");
       return;
     }
 
