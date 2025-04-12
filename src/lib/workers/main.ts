@@ -44,7 +44,6 @@ export class MainWorker {
 
   private async gatherParseSourceJobs() {
     const sources = await this.sourcesRepository.getSourcesToProcess();
-    llog(`Found ${sources.length} sources to process`);
 
     for (const source of sources) {
       const jobId = `${JobName.ParseSource}:${source.id}`;
@@ -145,42 +144,36 @@ export class MainWorker {
       `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`,
     );
 
-    llog("Scheduling cleanup job");
-    // Schedule cleanup job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.Cleanup,
       name: JobName.Cleanup,
       every: this.appConfig["CLEANUP_INTERVAL"],
       payload: {},
     });
-    llog("Scheduled cleanup job");
 
-    llog("Scheduling gather job");
-    // Schedule gather job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.GatherJobs,
       name: JobName.GatherJobs,
       every: this.appConfig["GATHER_JOBS_INTERVAL"],
       payload: {},
     });
-    llog("Scheduled gather job");
 
-    llog("Scheduling favicon jobs");
-    // Schedule favicon job
     await this.postgresQueue.scheduleJob({
       generalId: JobName.GatherFaviconJobs,
       name: JobName.GatherFaviconJobs,
       every: 24 * 60 * 60, // 24 hours in seconds
       payload: {},
     });
-    llog("Scheduled favicon jobs");
   }
 
   private startWorker() {
     llog(
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
-    this.postgresQueue.startProcessing(this.processJob, 1);
+    this.postgresQueue.startProcessing(
+      this.processJob,
+      this.appConfig["WORKER_CONCURRENCY"],
+    );
     llog("Worker setup complete");
   }
 }

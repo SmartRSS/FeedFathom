@@ -100,7 +100,6 @@ export class SourcesRepository {
   }
 
   public async getSourcesToProcess() {
-    llog("Getting sources to process");
     const noRecentFailures = () => {
       return eq(sources.recentFailures, 0);
     };
