@@ -205,7 +205,7 @@ export class PostgresQueue {
       } catch (error) {
         logError("Error in processJob:", error);
       } finally {
-        await Bun.sleep(100);
+        await Bun.sleep(10);
       }
     }
   }
