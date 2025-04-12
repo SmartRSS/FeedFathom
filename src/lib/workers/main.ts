@@ -120,7 +120,6 @@ export class MainWorker {
             timestamp: Date.now(),
             type: CommandType.PARSE_SOURCE,
           });
-          llog(`Completed parsing source with ID: ${validatedPayload.id}`);
           break;
         }
 
@@ -131,9 +130,7 @@ export class MainWorker {
               `Invalid RefreshFavicon payload: ${JSON.stringify(validatedPayload)}`,
             );
           }
-          llog(`Refreshing favicon for: ${validatedPayload.homeUrl}`);
           await this.feedParser.refreshFavicon(validatedPayload);
-          llog(`Completed refreshing favicon for: ${validatedPayload.homeUrl}`);
           break;
         }
 
