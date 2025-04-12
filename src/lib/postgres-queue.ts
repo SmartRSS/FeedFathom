@@ -187,7 +187,9 @@ export class PostgresQueue {
       const jobData = {
         generalId: job["generalId"],
         name: job["name"] as JobName,
-        payload: job["payload"] as Record<string, unknown>,
+        payload: (typeof job["payload"] === "string"
+          ? JSON.parse(job["payload"])
+          : job["payload"]) as Record<string, unknown>,
       };
 
       // Delete the job within the same transaction
