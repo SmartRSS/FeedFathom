@@ -194,29 +194,18 @@ export class PostgresQueue {
 
     while (this.processing) {
       try {
-        // Use the pickJob method to atomically select and lock a job
         const jobData = await this.pickJob();
-
         if (!jobData) {
-          // No job was available
-          await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
 
-        // Process the job
-        try {
-          // Process the job
-          if (handler && typeof handler === "function") {
-            await handler(jobData);
-          }
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          logError(`Error processing job ${jobData.generalId} :`, errorMessage);
+        if (handler && typeof handler === "function") {
+          await handler(jobData);
         }
       } catch (error) {
         logError("Error in processJob:", error);
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      } finally {
+        await Bun.sleep(100);
       }
     }
   }
