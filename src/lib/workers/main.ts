@@ -166,7 +166,10 @@ export class MainWorker {
     llog(
       `Setting up worker with concurrency: ${this.appConfig["WORKER_CONCURRENCY"]}`,
     );
-    this.postgresQueue.startProcessing(this.processJob, 1);
+    this.postgresQueue.startProcessing(
+      this.processJob,
+      this.appConfig["WORKER_CONCURRENCY"],
+    );
     llog("Worker setup complete");
   }
 }
