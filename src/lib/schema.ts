@@ -185,11 +185,13 @@ export const jobQueue = pgTable(
     name: varchar("name").notNull(),
     notBefore: timestamp("not_before").notNull().defaultNow(),
     payload: jsonb("payload").notNull().default({}),
+    lockedAt: timestamp("locked_at"),
   },
   (table) => {
     return [
       index("general_id_idx").on(table.generalId),
       index("not_before_idx").on(table.notBefore),
+      index("locked_at_idx").on(table.lockedAt),
     ];
   },
 );
