@@ -145,12 +145,12 @@ export class PostgresQueue {
    * Reschedule a job if it's a periodic job
    */
   private async rescheduleJobIfNeeded(tx: Transaction, jobData: JobData) {
-    const maybeScheduledPayload = scheduledJobPayloadValidator(jobData);
+    const maybeScheduledPayload = scheduledJobPayloadValidator(jobData.payload);
 
     if (maybeScheduledPayload instanceof type.errors) {
       return;
     }
-    const newJobData: JobData = {
+    const newJobData: JobData = {``
       generalId: jobData.generalId,
       name: jobData.name,
       delay: maybeScheduledPayload.every,
