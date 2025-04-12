@@ -140,10 +140,6 @@ export class MainWorker {
   }
 
   private async setupScheduledTasks() {
-    llog(
-      `Setting up scheduled tasks - Cleanup interval: ${this.appConfig["CLEANUP_INTERVAL"]} seconds, Gather interval: ${this.appConfig["GATHER_JOBS_INTERVAL"]} seconds`,
-    );
-
     await this.postgresQueue.scheduleJob({
       generalId: JobName.Cleanup,
       name: JobName.Cleanup,

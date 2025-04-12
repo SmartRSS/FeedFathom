@@ -30,6 +30,7 @@ import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
 import properties from "$lib/images/icons/System/information-fill.svg";
 // biome-ignore lint/correctness/noUnusedImports: Svelte asset
 import config from "$lib/images/icons/System/settings-5-fill.svg";
+  import { logError } from "../util/log.ts";
 
 const staleTile = 5 * 1000;
 const promisesMap: ArticlePromisesMap = new Map();
@@ -55,7 +56,7 @@ async function loadTree() {
     tree = data.tree;
     // void loadFavicons();
   } catch (error) {
-    console.error("Failed to load tree:", error);
+    logError("Failed to load tree:", error);
   }
 }
 

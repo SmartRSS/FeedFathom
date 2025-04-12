@@ -46,8 +46,6 @@ export class Initializer {
       throw new Error("INTEGRATION environment variable is not set");
     }
 
-    llog(integration);
-
     switch (integration) {
       case "mail": {
         this.mailWorker.initialize();
@@ -82,8 +80,6 @@ export class Initializer {
 
       // Register command handlers
       registerCommandHandlers(commandDependencies);
-
-      llog("Command handlers registered");
     } catch (error) {
       logError("Failed to register command handlers:", error);
       throw error;
@@ -91,7 +87,6 @@ export class Initializer {
   }
 
   private async runMigrator() {
-    llog("Running migrations");
     await migrate(this.drizzleConnection, { migrationsFolder: "./drizzle" });
     llog("Migrations complete");
     process.exit(0);

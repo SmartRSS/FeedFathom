@@ -1,6 +1,6 @@
 import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
-import { llog } from "../../util/log.ts";
+import { logError } from "../../util/log.ts";
 import type { RegisterRequest } from "./validator.ts";
 
 export const registerHandler = async ({
@@ -45,7 +45,7 @@ export const registerHandler = async ({
 
     return json({ success: true });
   } catch (error) {
-    llog(error);
+    logError(error);
     return json(
       {
         error: "An account with this email already exists",

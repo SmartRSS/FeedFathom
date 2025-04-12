@@ -91,14 +91,12 @@ function displayClipboardMessage(message: string) {
 
 async function loadFeedPreview() {
   if (!isValidUrl(feedUrl)) {
-    llog("Invalid Feed URL");
     displayError("Invalid Feed URL");
     return;
   }
 
   // New validation for feedUrl against email format
   if (!isMailEnabled && mailLikeExpression.test(feedUrl)) {
-    llog("Feed URL cannot be an email when mail is not enabled");
     displayError("Feed URL cannot be an email when mail is not enabled");
     return;
   }
@@ -107,7 +105,6 @@ async function loadFeedPreview() {
     isLoading = true;
     const response = await fetch(`/preview?feedUrl=${feedUrl}`);
     if (!response.ok) {
-      llog("response not ok");
       throw new Error("Failed to load feed preview");
     }
     const data = (await response.json()) as FeedPreview;
