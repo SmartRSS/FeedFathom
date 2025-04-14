@@ -119,6 +119,9 @@ jobs:
           # Patch = HHMM (time)
           FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
           echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
+          mkdir -p docs/assets
+          mkdir -p docs/assets/extension
+
 
       # 7. Create Firefox update manifest
       - name: Create Firefox update manifest
@@ -126,6 +129,7 @@ jobs:
           # Create or update updates.json using Bun
           bun run -e "
             const fs = require('fs');
+            const path = require('path');
 
             const data = {
               addons: {
@@ -144,7 +148,10 @@ jobs:
               }
             };
 
-            fs.writeFileSync('docs/assets/updates.json', JSON.stringify(data, null, 2));
+            const updatesPath = 'docs/assets/updates.json';
+            const resolvedPath = path.resolve(updatesPath);
+            console.log('Writing updates.json to:', resolvedPath);
+            fs.writeFileSync(updatesPath, JSON.stringify(data, null, 2));
           "
 
       # 8. Put files where they belong
@@ -153,6 +160,10 @@ jobs:
           mkdir -p docs/assets/extension
           cp ext/FeedFathom_ff.zip docs/assets/extension/FeedFathom_ff.xpi
           cp ext/FeedFathom_ch.zip docs/assets/extension/FeedFathom_ch.zip
+          echo "Extension files copied to: $(realpath docs/assets/extension)"
+          ls -la docs/assets/extension/
+          echo "Updates.json location:"
+          ls -la docs/assets/
 
       # 9. Update documentation
       - name: Update extension.md with template variables
