@@ -1,5 +1,5 @@
 import { scan } from "$lib/scanner";
-import type { FeedData } from "./types.ts";
+import type { FeedData } from "../lib/scanners/feed-data-type.ts";
 
 (() => {
   // Define Timer type missing in the codebase
