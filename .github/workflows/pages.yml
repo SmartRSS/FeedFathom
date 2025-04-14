@@ -55,29 +55,44 @@ jobs:
       # 5. Calculate hashes and check if update is needed
       - name: Calculate and compare hashes
         run: |
+          # Ensure assets directory exists
+          mkdir -p docs/assets/extension
+
           # Calculate hash of the new build
           NEW_HASH=$(sha256sum ext/FeedFathom_ff.zip | cut -d' ' -f1)
           echo "NEW_HASH=$NEW_HASH" >> $GITHUB_ENV
 
-          # Try to get the current hash from the existing updates.json
-          if [ -f "docs/updates.json" ]; then
-            # Extract the update_link and version from the current updates.json using Bun
-            CURRENT_DATA=$(bun run -e 'const data = require("./docs/updates.json"); console.log(JSON.stringify({link: data.addons["feedfathom@smartrss"].updates[0].update_link, version: data.addons["feedfathom@smartrss"].updates[0].version}));')
-            CURRENT_UPDATE_LINK=$(echo "$CURRENT_DATA" | bun run -e 'const data = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(data.link);')
-            CURRENT_VERSION=$(echo "$CURRENT_DATA" | bun run -e 'const data = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(data.version);')
-            echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+          # Try to get the current manifest data from the server
+          CURRENT_DATA=$(bun run -e '
+            const fs = require("fs");
+            const https = require("https");
 
-            # Extract the hash from the URL
-            CURRENT_HASH=$(echo "$CURRENT_UPDATE_LINK" | grep -o 'hash=[^&]*' | cut -d'=' -f2)
-            if [ -z "$CURRENT_HASH" ]; then
-              CURRENT_HASH="none"
-            fi
-            echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
-            # Save the current updates.json content
-            cp docs/updates.json docs/updates.json.bak
-          else
-            echo "CURRENT_HASH=none" >> $GITHUB_ENV
-          fi
+            const url = `${process.env.PAGES_URL}/assets/updates.json`;
+
+            try {
+              const response = await fetch(url);
+              if (!response.ok) throw new Error("Failed to fetch");
+
+              const data = await response.json();
+              const update = data.addons["feedfathom@smartrss"].updates[0];
+              const hash = update.update_link.match(/hash=([^&]*)/)?.[1] || "none";
+
+              // Output version and hash on separate lines for easy parsing
+              console.log(update.version);
+              console.log(hash);
+            } catch (e) {
+              // If file doesn't exist or other error, output defaults
+              console.log("none");
+              console.log("none");
+            }
+          ')
+
+          # Parse the output (version is first line, hash is second)
+          CURRENT_VERSION=$(echo "$CURRENT_DATA" | head -n1)
+          CURRENT_HASH=$(echo "$CURRENT_DATA" | tail -n1)
+
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+          echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
 
           # Compare hashes and set environment variable
           if [ "$NEW_HASH" = "$CURRENT_HASH" ]; then
@@ -108,43 +123,38 @@ jobs:
           FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
           echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
 
-      # 7. Put files where they belong
+      # 7. Create Firefox update manifest
+      - name: Create Firefox update manifest
+        run: |
+          # Create or update updates.json using Bun
+          bun run -e '
+            const fs = require("fs");
+
+            const data = {
+              addons: {
+                "feedfathom@smartrss": {
+                  updates: [{
+                    version: process.env.FF_VERSION,
+                    update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi`,
+                    applications: {
+                      gecko: {
+                        strict_min_version: "120.0"
+                      }
+                    }
+                  }]
+                }
+              }
+            };
+
+            fs.writeFileSync("./docs/assets/updates.json", JSON.stringify(data, null, 2));
+          '
+
+      # 8. Put files where they belong
       - name: Copy extension to Jekyll assets
         run: |
           mkdir -p docs/assets/extension
           cp ext/FeedFathom_ff.zip docs/assets/extension/FeedFathom_ff.xpi
           cp ext/FeedFathom_ch.zip docs/assets/extension/FeedFathom_ch.zip
-
-      # 8. Create Firefox update manifest
-      - name: Create Firefox update manifest
-        run: |
-          if [ "$HASHES_MATCH" = "true" ] && [ -f "docs/updates.json.bak" ]; then
-            # Restore the previous updates.json if hashes match
-            cp docs/updates.json.bak docs/updates.json
-          else
-            # Create or update updates.json using Bun
-            bun run -e '
-              const fs = require("fs");
-
-              const data = {
-                addons: {
-                  "feedfathom@smartrss": {
-                    updates: [{
-                      version: process.env.FF_VERSION,
-                      update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi`,
-                      applications: {
-                        gecko: {
-                          strict_min_version: "120.0"
-                        }
-                      }
-                    }]
-                  }
-                }
-              };
-
-              fs.writeFileSync("./docs/updates.json", JSON.stringify(data, null, 2));
-            '
-          fi
 
       # 9. Update documentation
       - name: Update extension.md with template variables
