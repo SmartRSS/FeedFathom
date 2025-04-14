@@ -46,7 +46,7 @@ jobs:
           echo "PAGES_URL=$PAGES_URL" >> $GITHUB_ENV
 
           # Replace the template placeholder with the actual URL
-          sed -i "s|%UPDATE_URL%|$PAGES_URL/updates.json|g" src/extension/manifest.json
+          sed -i "s|%UPDATE_URL%|$PAGES_URL/assets/updates.json|g" src/extension/manifest.json
 
       # 4. Generate packages
       - name: Build extension
@@ -55,7 +55,8 @@ jobs:
       # 5. Calculate hashes and check if update is needed
       - name: Calculate and compare hashes
         run: |
-          # Ensure assets directory exists
+          # Ensure assets directories exist
+          mkdir -p docs/assets
           mkdir -p docs/assets/extension
 
           # Calculate hash of the new build
@@ -104,7 +105,6 @@ jobs:
       - name: Calculate extension version
         if: env.HASHES_MATCH != 'true'
         run: |
-          mkdir -p docs/assets/extension
           # Get date components for version
           YEAR=$(date +%Y)
           MONTH=$(date +%m)
@@ -124,18 +124,19 @@ jobs:
       - name: Create Firefox update manifest
         run: |
           # Create or update updates.json using Bun
-          bun run -e '
-            const fs = require("fs");
+          bun run -e "
+            const fs = require('fs');
 
             const data = {
               addons: {
-                "feedfathom@smartrss": {
+                'feedfathom@smartrss': {
                   updates: [{
                     version: process.env.FF_VERSION,
-                    update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi`,
+                    update_link: \`\${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi\`,
+                    update_hash: process.env.NEW_HASH,
                     applications: {
                       gecko: {
-                        strict_min_version: "120.0"
+                        strict_min_version: '120.0'
                       }
                     }
                   }]
@@ -143,8 +144,8 @@ jobs:
               }
             };
 
-            fs.writeFileSync("./docs/assets/updates.json", JSON.stringify(data, null, 2));
-          '
+            fs.writeFileSync('docs/assets/updates.json', JSON.stringify(data, null, 2));
+          "
 
       # 8. Put files where they belong
       - name: Copy extension to Jekyll assets
