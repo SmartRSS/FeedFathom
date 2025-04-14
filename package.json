@@ -7,7 +7,7 @@
     "build-extension": "bun ./bin/generate-packages.ts",
     "build-server": "export BUILD=true && bunx --bun svelte-kit sync && bunx --bun vite build",
     "build-worker": "bun build ./src/worker-entrypoint.ts --outdir=./build/ --target=bun --sourcemap",
-    "build-for-image": "mkdir -p build && bun build-extension && mkdir -p static/ext && mv ext/FeedFathom_ff.zip static/ext/FeedFathom_ff.xpi && mv ext/FeedFathom_ch.zip static/ext/FeedFathom_ch.zip && bun build-server && bun build-worker",
+    "build-for-image": "bun build-server && bun build-worker",
     "build-project": "rm -rf build && mkdir -p build && (bun build-server & bun build-worker & bun build-extension & wait)",
     "temp-build": "bun run bin/temp-build.js",
     "watch-server": "bunx --bun svelte-kit sync && bunx --bun vite dev --host",
