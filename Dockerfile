@@ -5,10 +5,14 @@ ENTRYPOINT ["/usr/local/bin/bun"]
 FROM --platform=$BUILDPLATFORM oven/bun:1.2.9-slim AS builder
 WORKDIR /app
 
+# Copy bin directory for extension building
+COPY bin /app/bin/
+
 COPY svelte.config.js vite.config.ts tsconfig.json /app/
 COPY drizzle /app/drizzle/
 
 COPY package.json bun.lock /app/
+
 
 # due to the way dependencies are resolved I marked quality tools as dev and build tools as base
 # I don't want to install quality tools during the build process so that's why I'm omitting them this way
@@ -20,9 +24,12 @@ COPY static /app/static
 COPY src/ /app/src/
 
 # Create build directory and build
-# store timestamp for versioning purposes
-# it is attached to UAS of performed requests for easier debugging
+# First build extensions and move to static/ext, then build server and worker
 RUN mkdir -p /app/build && \
+    bun build-extension && \
+    mkdir -p /app/static/ext && \
+    mv /app/ext/FeedFathom_ff.zip /app/static/ext/FeedFathom_ff.xpi && \
+    mv /app/ext/FeedFathom_ch.zip /app/static/ext/FeedFathom_ch.zip && \
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
     bun build-for-image && \
     echo "Build timestamp: $timestamp" && \
