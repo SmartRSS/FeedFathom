@@ -5,6 +5,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { isMimeText } from "../../util/is-mime-text.ts";
 import { isPlainText } from "../../util/is-plain-text.ts";
 import { logError } from "../../util/log.ts";
+import { browser } from "$app/environment";
 
 // Access props directly
 const { data } = $props();
@@ -69,6 +70,37 @@ function isValid() {
   }
   valid = passwordForm["password1"].value === passwordForm["password2"].value;
 }
+
+// Detect browser type
+function getBrowserType(): "firefox" | "chrome" | "other" {
+  if (browser) {
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes("firefox")) {
+      return "firefox";
+    } else if (userAgent.includes("chrome")) {
+      return "chrome";
+    }
+  }
+  return "other";
+}
+
+// Get download URL based on browser
+function getDownloadUrl(): string {
+  const browserType = getBrowserType();
+  const baseUrl = "https://feedfathom.github.io/FeedFathom";
+
+  if (browserType === "firefox") {
+    return `${baseUrl}/assets/extension/FeedFathom_ff.xpi`;
+  } else if (browserType === "chrome") {
+    return `${baseUrl}/assets/extension/FeedFathom_ch.zip`;
+  }
+  return baseUrl; // Fallback to base URL for other browsers
+}
+
+// Get browser name for display
+function getBrowserName(): string {
+  return "your browser";
+}
 </script>
 
 <div class="form-container">
@@ -76,6 +108,15 @@ function isValid() {
   {#if user.isAdmin}
     <a href="/admin">Admin Panel</a> <!-- Link to the admin panel -->
   {/if}
+
+  <div class="download-section">
+    <h3>Download Extension</h3>
+    <p>Get the FeedFathom extension for {getBrowserName()}:</p>
+    <a href={getDownloadUrl()} class="download-button" target="_blank" rel="noopener noreferrer">
+      Download Extension
+    </a>
+  </div>
+
   <form
     action="?/importOpml"
     class="import-form"
@@ -207,6 +248,41 @@ function isValid() {
   }
 
   .submit-block button:hover {
+    background-color: #0056b3;
+  }
+
+  .download-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 300px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin: 10px 0;
+    text-align: center;
+  }
+
+  .download-section h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+  }
+
+  .download-section p {
+    margin: 0 0 15px 0;
+    color: #666;
+  }
+
+  .download-button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.2s;
+  }
+
+  .download-button:hover {
     background-color: #0056b3;
   }
 </style>

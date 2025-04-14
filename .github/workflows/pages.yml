@@ -52,7 +52,37 @@ jobs:
       - name: Build extension
         run: bun build-extension
 
-      # 5. Calculate Firefox version
+      # 5. Calculate hashes and check if update is needed
+      - name: Calculate and compare hashes
+        run: |
+          # Calculate hash of the new build
+          NEW_HASH=$(sha256sum ext/FeedFathom_ff.zip | cut -d' ' -f1)
+          echo "NEW_HASH=$NEW_HASH" >> $GITHUB_ENV
+
+          # Try to get the current hash from the existing updates.json
+          if [ -f "docs/updates.json" ]; then
+            # Extract the update_link from the current updates.json using Bun
+            CURRENT_UPDATE_LINK=$(bun run -e 'const data = require("./docs/updates.json"); console.log(data.addons["feedfathom@smartrss"].updates[0].update_link);')
+            # Extract the hash from the URL
+            CURRENT_HASH=$(echo "$CURRENT_UPDATE_LINK" | grep -o 'hash=[^&]*' | cut -d'=' -f2)
+            if [ -z "$CURRENT_HASH" ]; then
+              CURRENT_HASH="none"
+            fi
+            echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
+            # Save the current updates.json content
+            cp docs/updates.json docs/updates.json.bak
+          else
+            echo "CURRENT_HASH=none" >> $GITHUB_ENV
+          fi
+
+          # Compare hashes and set environment variable
+          if [ "$NEW_HASH" = "$CURRENT_HASH" ]; then
+            echo "HASHES_MATCH=true" >> $GITHUB_ENV
+          else
+            echo "HASHES_MATCH=false" >> $GITHUB_ENV
+          fi
+
+      # 6. Calculate Firefox version
       - name: Calculate extension version
         run: |
           mkdir -p docs/assets/extension
@@ -71,38 +101,45 @@ jobs:
           FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
           echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
 
-      # 6. Put files where they belong
+      # 7. Put files where they belong
       - name: Copy extension to Jekyll assets
         run: |
           mkdir -p docs/assets/extension
           cp ext/FeedFathom_ff.zip docs/assets/extension/FeedFathom_ff.xpi
           cp ext/FeedFathom_ch.zip docs/assets/extension/FeedFathom_ch.zip
 
-      # 7. Create Firefox update manifest
+      # 8. Create Firefox update manifest
       - name: Create Firefox update manifest
         run: |
-          # Create updates.json for Firefox auto-updates
-          cat > docs/updates.json << EOF
-          {
-            "addons": {
-              "feedfathom@smartrss": {
-                "updates": [
-                  {
-                    "version": "$FF_VERSION",
-                    "update_link": "$PAGES_URL/assets/extension/FeedFathom_ff.xpi",
-                    "applications": {
-                      "gecko": {
-                        "strict_min_version": "120.0"
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          }
-          EOF
+          if [ "$HASHES_MATCH" = "true" ] && [ -f "docs/updates.json.bak" ]; then
+            # Restore the previous updates.json if hashes match
+            cp docs/updates.json.bak docs/updates.json
+          else
+            # Create or update updates.json using Bun
+            bun run -e '
+              const fs = require("fs");
 
-      # 8. Update documentation
+              const data = {
+                addons: {
+                  "feedfathom@smartrss": {
+                    updates: [{
+                      version: process.env.FF_VERSION,
+                      update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi?hash=${process.env.NEW_HASH}`,
+                      applications: {
+                        gecko: {
+                          strict_min_version: "120.0"
+                        }
+                      }
+                    }]
+                  }
+                }
+              };
+
+              fs.writeFileSync("./docs/updates.json", JSON.stringify(data, null, 2));
+            '
+          fi
+
+      # 9. Update documentation
       - name: Update extension.md with template variables
         run: |
           # Replace template variables in extension.md
@@ -114,7 +151,7 @@ jobs:
           # If CHROME_VERSION is used in the template, replace it with the same version
           sed -i "s|CHROME_VERSION|$FF_VERSION|g" docs/extension.md
 
-      # 9. Build the pages
+      # 10. Build the pages
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
