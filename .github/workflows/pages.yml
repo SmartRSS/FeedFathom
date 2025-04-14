@@ -144,7 +144,7 @@ jobs:
               }
             };
 
-            fs.writeFileSync('docs/_site/assets/updates.json', JSON.stringify(data, null, 2));
+            fs.writeFileSync('docs/assets/updates.json', JSON.stringify(data, null, 2));
           "
 
       # 8. Put files where they belong
