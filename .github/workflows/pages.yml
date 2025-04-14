@@ -56,8 +56,19 @@ jobs:
       - name: Calculate extension version
         run: |
           mkdir -p docs/assets/extension
-          TIMESTAMP=$(date +%Y%m%d%H%M)
-          FF_VERSION="1.$(echo $TIMESTAMP | cut -c1-4).$(echo $TIMESTAMP | cut -c5-8)"
+          # Get date components for version
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
+          DAY=$(date +%d)
+          HOUR=$(date +%H)
+          MINUTE=$(date +%M)
+
+          # Format: 1.YYYYMMDD.HHMM (semver compatible)
+          # Major.Minor.Patch format where:
+          # Major = 1 (fixed)
+          # Minor = YYYYMMDD (date)
+          # Patch = HHMM (time)
+          FF_VERSION="1.${YEAR}${MONTH}${DAY}.${HOUR}${MINUTE}"
           echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
 
       # 6. Put files where they belong
