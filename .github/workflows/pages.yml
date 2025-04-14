@@ -127,7 +127,7 @@ jobs:
       - name: Create Firefox update manifest
         run: |
           # Create or update updates.json using Bun
-          bun run -e "
+          bun -e "
             const fs = require('fs');
             const path = require('path');
 
