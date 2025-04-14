@@ -63,26 +63,26 @@ jobs:
           echo "NEW_HASH=$NEW_HASH" >> $GITHUB_ENV
 
           # Try to get the current manifest data from the server
-          CURRENT_DATA=$(bun run -e '
-            const url = `${process.env.PAGES_URL}/assets/updates.json`;
+          CURRENT_DATA=$(bun run -e "
+            const url = \`\${process.env.PAGES_URL}/assets/updates.json\`;
 
             try {
               const response = await fetch(url);
-              if (!response.ok) throw new Error("Failed to fetch");
+              if (!response.ok) throw new Error('Failed to fetch');
 
               const data = await response.json();
-              const update = data.addons["feedfathom@smartrss"].updates[0];
-              const hash = update.update_link.match(/hash=([^&]*)/)?.[1] || "none";
+              const update = data.addons['feedfathom@smartrss'].updates[0];
+              const hash = update.update_link.match(/hash=([^&]*)/)?.[1] || 'none';
 
               // Output version and hash on separate lines for easy parsing
               console.log(update.version);
               console.log(hash);
             } catch (e) {
               // If file doesn't exist or other error, output defaults
-              console.log("none");
-              console.log("none");
+              console.log('none');
+              console.log('none');
             }
-          ')
+          ")
 
           # Parse the output (version is first line, hash is second)
           CURRENT_VERSION=$(echo "$CURRENT_DATA" | head -n1)
