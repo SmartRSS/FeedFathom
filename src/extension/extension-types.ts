@@ -1,4 +1,4 @@
-import type { FeedData } from "./types.ts";
+import type { FeedData } from "../lib/scanners/feed-data-type.ts";
 
 export type Message = ListFeedsMessage | VisibilityLostMessage;
 

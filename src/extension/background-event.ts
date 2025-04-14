@@ -1,6 +1,6 @@
 import { ulid } from "ulid";
-import type { Message } from "./extensionTypes.ts";
-import type { FeedData } from "./types.ts";
+import type { FeedData } from "../lib/scanners/feed-data-type.ts";
+import type { Message } from "./extension-types.ts";
 
 // ===== URL Validation Functions =====
 

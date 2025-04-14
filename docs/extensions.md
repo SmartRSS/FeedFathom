@@ -6,6 +6,28 @@ nav_order: 4
 
 # Browser Extensions
 
+## Download Extensions
+
+Download our browser extensions to easily subscribe to feeds when browsing the web.
+
+<div class="download-container" markdown="1">
+### Firefox Extension
+
+**Version:** FIREFOX_VERSION
+
+[Download for Firefox](FIREFOX_DOWNLOAD_URL){: .btn .btn-primary }
+</div>
+
+<div class="download-container" markdown="1">
+### Chrome Extension
+
+**Version:** CHROME_VERSION
+
+[Download for Chrome](CHROME_DOWNLOAD_URL){: .btn .btn-primary }
+</div>
+
+<small>Last updated: BUILD_DATE</small>
+
 ## Building Extensions
 
 The browser extensions are built as part of the main build process:

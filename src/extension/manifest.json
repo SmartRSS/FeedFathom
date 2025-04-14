@@ -3,18 +3,19 @@
     "default_title": "FeedFathom"
   },
   "background": {
-    "scripts": ["bg.js"],
-    "service_worker": "bg.js"
+    "scripts": ["background-event.js"],
+    "service_worker": "background-event.js"
   },
   "browser_specific_settings": {
     "gecko": {
       "id": "feedfathom@smartrss",
-      "strict_min_version": "120.0"
+      "strict_min_version": "120.0",
+      "update_url": "%UPDATE_URL%"
     }
   },
   "content_scripts": [
     {
-      "js": ["contentscript.js"],
+      "js": ["content-script.js"],
       "matches": ["*://*/*"]
     }
   ],

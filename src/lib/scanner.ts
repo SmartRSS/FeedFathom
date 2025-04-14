@@ -1,5 +1,5 @@
-import type { FeedData } from "../types.ts";
 import { BitchuteScanner } from "./scanners/bitchute-scanner.ts";
+import type { FeedData } from "./scanners/feed-data-type.ts";
 import { GeneratorScanner } from "./scanners/generator-scanner.ts";
 import { GithubScanner } from "./scanners/github-scanner.ts";
 import { HeadScanner } from "./scanners/head-scanner.ts";

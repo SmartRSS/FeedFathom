@@ -1,4 +1,4 @@
-import type { FeedData } from "../../types.ts";
+import type { FeedData } from "./feed-data-type.ts";
 
 export type Scanner = {
   scan: (currentUrl: URL, document: Document) => FeedData[];

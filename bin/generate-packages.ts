@@ -8,12 +8,12 @@ process.chdir(parentDir);
 
 await $`bun install --frozen-lockfile`;
 await $`sh -c '[ -d ext ] && rm -rf ext/build*/ || true'`;
-await $`bun build src/bg.ts --outfile=ext/build-ff/bg.js`;
-await $`bun build src/contentscript.ts --outfile=ext/build-ff/contentscript.js`;
-await $`bun build src/options.ts --outfile=ext/build-ff/options.js`;
+await $`bun build src/extension/background-event.ts --outfile=ext/build-ff/background-event.js`;
+await $`bun build src/extension/content-script.ts --outfile=ext/build-ff/content-script.js`;
+await $`bun build src/extension/options.ts --outfile=ext/build-ff/options.js`;
 await $`cp src/lib/images/*-inverted-round.png ext/build-ff/`;
-await $`cp src/options.html ext/build-ff/options.html`;
-await $`cp src/we-manifest.json ext/build-ff/manifest.json`;
+await $`cp src/extension/options.html ext/build-ff/options.html`;
+await $`cp src/extension/manifest.json ext/build-ff/manifest.json`;
 
 async function createPackage(from: string, target: string) {
   const output = fs.createWriteStream(target);
@@ -30,21 +30,16 @@ async function createPackage(from: string, target: string) {
 
 await $`cp -r ext/build-ff/ ext/build-ch/`;
 
-const baseManifestJsonString = await fs.promises.readFile(
-  "src/we-manifest.json",
-  "utf-8",
-);
+const manifestFile = Bun.file("src/extension/manifest.json");
+const baseManifestJsonString = await manifestFile.text();
+
 const baseManifestData = JSON.parse(baseManifestJsonString);
 
 baseManifestData.background.scripts = undefined;
 baseManifestData.browser_specific_settings = undefined;
 
 const chromiumManifestString = JSON.stringify(baseManifestData, null, 2);
-await fs.promises.writeFile(
-  "ext/build-ch/manifest.json",
-  chromiumManifestString,
-  "utf-8",
-);
+await Bun.write("ext/build-ch/manifest.json", chromiumManifestString);
 
 await createPackage("ext/build-ff/", "ext/FeedFathom_ff.zip");
 await createPackage("ext/build-ch/", "ext/FeedFathom_ch.zip");

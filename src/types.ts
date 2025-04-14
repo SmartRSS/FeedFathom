@@ -29,11 +29,6 @@ export type ArticlesSelectedFunction = (
 
 export type DisplayModeChangedFunction = (displayMode: DisplayMode) => void;
 
-export type FeedData = {
-  title: string;
-  url: string;
-};
-
 export type FocusChangedFunction = (focusTarget: FocusTarget) => void;
 
 export type FocusTarget =

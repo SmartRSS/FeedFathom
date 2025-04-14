@@ -1,4 +1,4 @@
-import type { FeedData } from "../../types.ts";
+import type { FeedData } from "./feed-data-type.ts";
 import type { Scanner } from "./scanner-interface.ts";
 
 const feedUrlPatterns = [
