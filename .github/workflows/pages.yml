@@ -68,7 +68,7 @@ jobs:
           # Major = 1 (fixed)
           # Minor = YYYYMMDD (date)
           # Patch = HHMM (time)
-          FF_VERSION="1.${YEAR}${MONTH}${DAY}.${HOUR}${MINUTE}"
+          FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
           echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
 
       # 6. Put files where they belong
