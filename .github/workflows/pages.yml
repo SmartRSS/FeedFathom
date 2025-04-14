@@ -64,9 +64,6 @@ jobs:
 
           # Try to get the current manifest data from the server
           CURRENT_DATA=$(bun run -e '
-            const fs = require("fs");
-            const https = require("https");
-
             const url = `${process.env.PAGES_URL}/assets/updates.json`;
 
             try {
