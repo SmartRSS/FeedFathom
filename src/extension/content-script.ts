@@ -1,4 +1,4 @@
-import { scan } from "$lib/scanner";
+import { scan } from "../lib/scanner.ts";
 import type { FeedData } from "../lib/scanners/feed-data-type.ts";
 
 (() => {

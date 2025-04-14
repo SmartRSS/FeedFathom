@@ -8,9 +8,12 @@ process.chdir(parentDir);
 
 await $`bun install --frozen-lockfile`;
 await $`sh -c '[ -d ext ] && rm -rf ext/build*/ || true'`;
+
+// Build extension files
 await $`bun build src/extension/background-event.ts --outfile=ext/build-ff/background-event.js`;
 await $`bun build src/extension/content-script.ts --outfile=ext/build-ff/content-script.js`;
 await $`bun build src/extension/options.ts --outfile=ext/build-ff/options.js`;
+
 await $`cp src/lib/images/*-inverted-round.png ext/build-ff/`;
 await $`cp src/extension/options.html ext/build-ff/options.html`;
 await $`cp src/extension/manifest.json ext/build-ff/manifest.json`;
