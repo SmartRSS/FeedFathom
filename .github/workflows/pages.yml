@@ -144,7 +144,7 @@ jobs:
               }
             };
 
-            fs.writeFileSync('docs/_site/assets/updates.json', JSON.stringify(data, null, 2));
+            fs.writeFileSync('docs/assets/updates.json', JSON.stringify(data, null, 2));
           "
 
       # 8. Put files where they belong
@@ -169,11 +169,6 @@ jobs:
       # 10. Build the pages
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
-      # 11. Ensure updates.json is included in the build
-      - name: Create _config.yml for Jekyll
-        run: |
-          echo "include: [assets/updates.json]" > docs/_config.yml
 
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
