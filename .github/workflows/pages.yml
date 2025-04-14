@@ -61,8 +61,12 @@ jobs:
 
           # Try to get the current hash from the existing updates.json
           if [ -f "docs/updates.json" ]; then
-            # Extract the update_link from the current updates.json using Bun
-            CURRENT_UPDATE_LINK=$(bun run -e 'const data = require("./docs/updates.json"); console.log(data.addons["feedfathom@smartrss"].updates[0].update_link);')
+            # Extract the update_link and version from the current updates.json using Bun
+            CURRENT_DATA=$(bun run -e 'const data = require("./docs/updates.json"); console.log(JSON.stringify({link: data.addons["feedfathom@smartrss"].updates[0].update_link, version: data.addons["feedfathom@smartrss"].updates[0].version}));')
+            CURRENT_UPDATE_LINK=$(echo "$CURRENT_DATA" | bun run -e 'const data = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(data.link);')
+            CURRENT_VERSION=$(echo "$CURRENT_DATA" | bun run -e 'const data = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(data.version);')
+            echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+
             # Extract the hash from the URL
             CURRENT_HASH=$(echo "$CURRENT_UPDATE_LINK" | grep -o 'hash=[^&]*' | cut -d'=' -f2)
             if [ -z "$CURRENT_HASH" ]; then
@@ -78,12 +82,15 @@ jobs:
           # Compare hashes and set environment variable
           if [ "$NEW_HASH" = "$CURRENT_HASH" ]; then
             echo "HASHES_MATCH=true" >> $GITHUB_ENV
+            # Use the current version when hashes match
+            echo "FF_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           else
             echo "HASHES_MATCH=false" >> $GITHUB_ENV
           fi
 
-      # 6. Calculate Firefox version
+      # 6. Calculate Firefox version only if hash changed
       - name: Calculate extension version
+        if: env.HASHES_MATCH != 'true'
         run: |
           mkdir -p docs/assets/extension
           # Get date components for version
@@ -124,7 +131,7 @@ jobs:
                   "feedfathom@smartrss": {
                     updates: [{
                       version: process.env.FF_VERSION,
-                      update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi?hash=${process.env.NEW_HASH}`,
+                      update_link: `${process.env.PAGES_URL}/assets/extension/FeedFathom_ff.xpi`,
                       applications: {
                         gecko: {
                           strict_min_version: "120.0"
