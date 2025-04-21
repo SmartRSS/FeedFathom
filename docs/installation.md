@@ -37,7 +37,7 @@ FeedFathom uses several environment variables for configuration:
 
 ### Core Configuration
 - `ENABLE_REGISTRATION`: Enable new user registrations (default: false). Note: The first account can always be created regardless of this setting
-- `ALLOWED_EMAILS`: Comma-separated list of emails allowed to register
+- `ALLOWED_EMAILS`: Comma-separated list of emails allowed to register (optional, if empty all emails are allowed)
 
 ### Worker Configuration
 - `WORKER_CONCURRENCY`: Number of concurrent jobs (default: 25)
@@ -47,5 +47,7 @@ FeedFathom uses several environment variables for configuration:
 
 ### Scaling Configuration
 - `WORKER_REPLICAS`: Number of worker instances to run (default: 3)
+
+> **Note**: When running with Docker Compose, database and Redis connection settings are automatically configured. If running without Docker, you'll need to set up these services separately and configure their connection details.
 
 [Next: Running the Application](./running.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 } 

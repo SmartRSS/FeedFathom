@@ -38,7 +38,7 @@ bun run build-project
 
 This builds both the application and the browser extensions. The build process creates:
 
-- Zip files in the `build` directory: `FeedFathom_ff.zip` for Firefox and `FeedFathom_ch.zip` for Chromium
+- Zip files in the `ext` directory: `FeedFathom_ff.zip` for Firefox and `FeedFathom_ch.zip` for Chromium
 - Unpacked extension directories that are ready to use
 
 If you want to build only the extensions without rebuilding the entire project, you can use:

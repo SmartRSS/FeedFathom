@@ -84,7 +84,7 @@ bun run build-worker
 
 3. Building the browser extensions:
 ```bash
-bun run pack
+bun run build-extension
 ```
 
 You can also run these steps individually if you only need to build a specific component.
@@ -157,11 +157,12 @@ bun run svelte-check
 
 The complete lint process includes several steps that are run in sequence:
 1. Running tests
-2. Syncing Svelte Kit
-3. Running Biome checks
+2. Running Svelte Kit sync
+3. Running Biome checks 
 4. Running TypeScript type checking
 5. Running ESLint
 6. Running Svelte type checking
+7. Running Knip
 
 ## Environment Variables
 
@@ -190,10 +191,10 @@ FeedFathom supports the following environment variables for configuration:
 Browser extensions are built automatically as part of the main build process (`bun run build-project`). If you want to build only the extensions without rebuilding the entire project, run:
 
 ```bash
-bun run pack
+bun run build-extension
 ```
 
-This will create in the `build` directory:
+This will create in the `ext` directory:
 
 - Zip files: `FeedFathom_ff.zip` for Firefox and `FeedFathom_ch.zip` for Chromium.
 - Unpacked extension directories that are ready to use.
@@ -209,7 +210,7 @@ After packing the extension, you can load it into your browser as follows:
 1. Open Firefox and navigate to `about:debugging`.
 2. Click on `This Firefox` in the sidebar.
 3. Click `Load Temporary Add-on`.
-4. Select the `FeedFathom_ff.zip` file.
+4. Select the `FeedFathom_ff.zip` file from the `ext` directory.
 
 ### Chromium
 
@@ -217,7 +218,7 @@ After packing the extension, you can load it into your browser as follows:
 2. Navigate to `chrome://extensions/`.
 3. Enable `Developer mode`.
 4. Click `Load unpacked`.
-5. Select the `build/chromium` directory.
+5. Select the `ext/build-ch` directory.
 
 ---
 

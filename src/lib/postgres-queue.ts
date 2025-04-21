@@ -100,29 +100,31 @@ export class PostgresQueue {
   }
 
   /**
-   * Select and lock a job from the queue using an atomic operation
+   * Select and lock jobs from the queue using an atomic operation
    */
-  private async selectAndLockJob(tx: Transaction) {
+  private async selectAndLockJobs(tx: Transaction, limit: number) {
     const now = new Date();
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-    const result = await tx.execute(`
-      WITH selected_job AS (
+
+    // Optimized query with better indexing and batch processing
+    const results = await tx.execute(`
+      WITH selected_jobs AS (
         SELECT id
         FROM job_queue
         WHERE (locked_at IS NULL OR locked_at <= '${fiveMinutesAgo.toISOString()}')
           AND not_before <= '${now.toISOString()}'
-        ORDER BY not_before ASC
-        LIMIT 1
+        ORDER BY not_before ASC, id ASC
+        LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )
       UPDATE job_queue jq
       SET locked_at = '${now.toISOString()}'
-      FROM selected_job sj
+      FROM selected_jobs sj
       WHERE jq.id = sj.id
       RETURNING jq.*
     `);
 
-    return result?.[0] || null;
+    return results || [];
   }
 
   /**
@@ -151,64 +153,119 @@ export class PostgresQueue {
   }
 
   /**
-   * Pick a job from the queue using an atomic select-and-update operation
-   * This method uses a CTE (Common Table Expression) to atomically select and lock a job
+   * Pick jobs from the queue using an atomic select-and-update operation
+   * This method uses a CTE (Common Table Expression) to atomically select and lock jobs
    */
-  async pickJob() {
+  async pickJobs(limit: number): Promise<JobData[]> {
     // Use a transaction to ensure atomicity
     return await this.drizzleConnection.transaction(async (tx) => {
-      // Select and lock a job
-      const job = await this.selectAndLockJob(tx);
+      // Select and lock jobs
+      const jobs = await this.selectAndLockJobs(tx, limit);
 
-      if (!job) {
-        return null;
+      if (jobs.length === 0) {
+        return [];
       }
 
-      const jobData = {
-        generalId: job["general_id"] as string,
-        name: job["name"] as JobName,
-        payload: (typeof job["payload"] === "string"
-          ? JSON.parse(job["payload"])
-          : job["payload"]) as Record<string, unknown>,
-      };
+      const jobDataArray: JobData[] = [];
 
-      // Delete the job within the same transaction
-      await this.deleteJob(tx, job["id"]);
+      for (const job of jobs) {
+        const jobData = {
+          generalId: job["general_id"] as string,
+          name: job["name"] as JobName,
+          payload: (typeof job["payload"] === "string"
+            ? JSON.parse(job["payload"])
+            : job["payload"]) as Record<string, unknown>,
+        };
 
-      // Check if this is a scheduled job that needs to be rescheduled
-      await this.rescheduleJobIfNeeded(tx, jobData);
+        // Delete the job within the same transaction
+        await this.deleteJob(tx, job["id"]);
 
-      return jobData;
+        // Check if this is a scheduled job that needs to be rescheduled
+        await this.rescheduleJobIfNeeded(tx, jobData);
+
+        jobDataArray.push(jobData);
+      }
+
+      return jobDataArray;
     });
   }
 
   /**
-   * Process jobs from the queue
+   * Process jobs from the queue using a worker pool pattern
    */
-  async processJobs(handler: JobHandler): Promise<void> {
-    // If we're in a build process, don't start processing
+  async processJobsWithPool(
+    handler: JobHandler,
+    workerId: number,
+    numWorkers: number,
+  ): Promise<void> {
     if (this.isBuildProcess()) {
       this.processing = false;
       return;
     }
 
-    while (this.processing) {
-      try {
-        const jobData = await this.pickJob();
-        if (!jobData) {
-          await Bun.sleep(1000);
-          continue;
-        }
+    // Create a job queue to hold jobs waiting to be processed
+    const jobQueue: JobData[] = [];
+    let consecutiveEmptyPolls = 0;
+    const baseSleepTime = 100; // 100ms base sleep time
+    const batchSize = Math.max(5, numWorkers * 2); // Pull more jobs than workers to keep them busy
+    const minQueueSize = Math.max(3, Math.floor(numWorkers / 2)); // Threshold to trigger new job fetching
 
-        if (handler && typeof handler === "function") {
-          await handler(jobData);
+    // Job producer - continuously fetches jobs to keep the queue filled
+    const producer = async () => {
+      while (this.processing) {
+        try {
+          // Only fetch more jobs if queue is getting low
+          if (jobQueue.length <= minQueueSize) {
+            const jobs = await this.pickJobs(batchSize);
+            if (jobs.length > 0) {
+              jobQueue.push(...jobs);
+              consecutiveEmptyPolls = 0;
+            } else {
+              consecutiveEmptyPolls++;
+              // Use exponential backoff when no jobs are found
+              const sleepTime = Math.min(
+                baseSleepTime * 1.5 ** consecutiveEmptyPolls,
+                5000,
+              );
+              await Bun.sleep(sleepTime);
+            }
+          } else {
+            // Small sleep when queue is sufficiently filled
+            await Bun.sleep(100);
+          }
+        } catch (error) {
+          logError(`Error fetching jobs for worker ${workerId}:`, error);
+          consecutiveEmptyPolls++;
+          await Bun.sleep(1000); // Sleep on error to prevent rapid retries
         }
-      } catch (error) {
-        logError("Error in processJob:", error);
-      } finally {
-        await Bun.sleep(10);
       }
-    }
+    };
+
+    // Create worker pool - consumers that process jobs from the queue
+    const consumers = Array.from(
+      { length: numWorkers },
+      async (_, workerIndex) => {
+        while (this.processing) {
+          const jobData = jobQueue.shift();
+          if (!jobData) {
+            await Bun.sleep(50); // Small sleep when no jobs available
+            continue;
+          }
+
+          try {
+            await handler(jobData);
+          } catch (error) {
+            logError(
+              `Error processing job in worker ${workerId}.${workerIndex}:`,
+              error,
+            );
+          }
+        }
+      },
+    );
+
+    // Run producer and consumers concurrently
+    await Promise.all([producer(), ...consumers]);
   }
 
   /**
@@ -222,11 +279,10 @@ export class PostgresQueue {
 
     this.processing = true;
 
-    for (let i = 0; i < numWorkers; i++) {
-      this.processJobs(handler).catch((error) =>
-        logError("Worker error:", error),
-      );
-    }
+    // Start a single worker that manages a pool of subworkers
+    this.processJobsWithPool(handler, 0, numWorkers).catch((error: unknown) =>
+      logError("Worker pool error:", error),
+    );
   }
 
   /**
