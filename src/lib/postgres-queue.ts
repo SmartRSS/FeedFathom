@@ -206,18 +206,17 @@ export class PostgresQueue {
     // Create a job queue to hold jobs waiting to be processed
     const jobQueue: JobData[] = [];
     let consecutiveEmptyPolls = 0;
-    const MAX_EMPTY_POLLS = 10;
-    const BASE_SLEEP_TIME = 100; // 100ms base sleep time
-    const BATCH_SIZE = Math.max(5, numWorkers * 2); // Pull more jobs than workers to keep them busy
-    const MIN_QUEUE_SIZE = Math.max(3, Math.floor(numWorkers / 2)); // Threshold to trigger new job fetching
+    const baseSleepTime = 100; // 100ms base sleep time
+    const batchSize = Math.max(5, numWorkers * 2); // Pull more jobs than workers to keep them busy
+    const minQueueSize = Math.max(3, Math.floor(numWorkers / 2)); // Threshold to trigger new job fetching
 
     // Job producer - continuously fetches jobs to keep the queue filled
     const producer = async () => {
       while (this.processing) {
         try {
           // Only fetch more jobs if queue is getting low
-          if (jobQueue.length <= MIN_QUEUE_SIZE) {
-            const jobs = await this.pickJobs(BATCH_SIZE);
+          if (jobQueue.length <= minQueueSize) {
+            const jobs = await this.pickJobs(batchSize);
             if (jobs.length > 0) {
               jobQueue.push(...jobs);
               consecutiveEmptyPolls = 0;
@@ -225,7 +224,7 @@ export class PostgresQueue {
               consecutiveEmptyPolls++;
               // Use exponential backoff when no jobs are found
               const sleepTime = Math.min(
-                BASE_SLEEP_TIME * 1.5 ** consecutiveEmptyPolls,
+                baseSleepTime * 1.5 ** consecutiveEmptyPolls,
                 5000,
               );
               await Bun.sleep(sleepTime);
