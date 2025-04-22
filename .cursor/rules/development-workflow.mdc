@@ -1,0 +1,136 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Development Workflow Guidelines
+
+## Debugging Requirements
+- Local debugging is NOT supported or feasible due to:
+  - Resource intensive operations
+  - Extended runtime requirements (hours/days)
+  - Complex issue reproduction scenarios
+  - Limited local resources
+
+### Debugging Process
+1. Code Analysis First:
+   - Thoroughly review relevant code paths
+   - Identify potential race conditions or timing issues
+   - Look for resource management patterns
+   - Check error handling paths
+   - Review similar historical issues
+
+2. Strategic Logging:
+   - Add minimal, targeted logging statements
+   - Focus on state changes and decision points
+   - Be mindful of high-frequency operations:
+     - Avoid logging in tight loops
+     - Don't log routine successful operations
+     - Consider sampling for high-volume events
+   - Include contextual data:
+     - Relevant IDs and timestamps
+     - State changes
+     - Decision factors
+     - Error contexts
+
+3. Log Analysis:
+   - Monitor added logging points
+   - Look for patterns over time
+   - Correlate with system metrics
+   - Analyze timing patterns
+
+4. Issue Resolution:
+   - Document findings
+   - Create reproducible test cases when possible
+   - Update monitoring for similar future issues
+   - Remove or adjust debug logging after resolution
+
+## Local Development
+- Use provided development workflow commands:
+  ```bash
+  # Development
+  bun dev              # Start development environment with Docker
+  bun watch-server     # Watch and develop server with SvelteKit
+  bun watch-worker     # Watch and develop worker process
+
+  # Building
+  bun build-project    # Build all: server, worker, and extension
+  bun build-server     # Build server only
+  bun build-worker     # Build worker only
+  bun build-extension  # Build extension only
+
+  # Database
+  bun generate-migrations  # Generate new database migrations
+  ```
+
+## Code Quality Tools
+- Biome formatting and checks:
+  ```bash
+  bun format          # Format code with Biome
+  ```
+- ESLint checks:
+  ```bash
+  bun eslint         # Run ESLint
+  bun eslint:fix     # Auto-fix ESLint issues
+  ```
+- Type checking:
+  ```bash
+  bun svelte-check   # Check Svelte files
+  ```
+- Dependency analysis:
+  ```bash
+  bun knip          # Check for unused exports/dependencies
+  ```
+
+## Full Lint Process
+Run the complete lint suite with:
+```bash
+bun lint           # Run all checks: tests, type checking, Biome, ESLint, Svelte-check, and Knip
+```
+
+For fixing issues:
+```bash
+bun lint:fix       # Auto-fix ESLint and Biome issues
+```
+
+## Testing Requirements
+- Write unit tests for utility functions
+- Implement integration tests for features
+- Create E2E tests for critical paths
+- Test error states and edge cases
+- Run tests before pushing
+- Consider time-dependent test scenarios:
+  - Use mocks for time-sensitive operations
+  - Document long-running test requirements
+  - Set up proper test environments for extended runtime tests
+
+## Resource Management
+- Local development is limited by design
+- All resource-intensive operations must be run remotely
+- Monitor for:
+  - Memory leaks
+  - Performance degradation
+  - Race conditions
+  - Time-dependent bugs
+  - Load-related issues
+- Implement proper logging and monitoring
+- Set up alerts for resource exhaustion
+
+## Documentation
+- Keep documentation up-to-date
+- Document complex logic and business rules
+- Include examples for non-obvious code
+- Maintain clear API documentation
+- Document debugging procedures:
+  - Code analysis strategies
+  - Log analysis procedures
+  - Common issue patterns
+  - Resource monitoring guidelines
+
+## Build Process
+- Use Docker for development environment
+- Follow the multi-stage build process:
+  1. Server (SvelteKit)
+  2. Worker
+  3. Extension
+- Always run type checks and linting before builds
