@@ -54,7 +54,7 @@
     "axios": "^1.8.4",
     "axios-cache-interceptor": "^1.7.0",
     "dompurify": "^3.2.5",
-    "drizzle-orm": "^0.42.0",
+    "drizzle-orm": "^0.43.0",
     "fast-xml-parser": "^5.2.0",
     "jsdom": "^26.0.0",
     "mailparser": "^3.7.2",
