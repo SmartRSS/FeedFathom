@@ -15,7 +15,6 @@ dist
 
 # Development files
 *.log
-*.lock
 .env
 .env.*
 !.env.example
