@@ -62,10 +62,10 @@ services:
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
       test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
-      interval: 1s
+      interval: 5s
       timeout: 1s
-      retries: 5
-      start_period: 10s
+      retries: 2
+      start_period: 5s
     depends_on:
       redis:
         condition: service_healthy
@@ -101,10 +101,10 @@ services:
         monitor: 15s
     healthcheck:
       test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
-      interval: 1s
+      interval: 5s
       timeout: 1s
-      retries: 5
-      start_period: 10s
+      retries: 2
+      start_period: 5s
     depends_on:
       redis:
         condition: service_healthy
@@ -136,13 +136,15 @@ services:
         order: start-first
     healthcheck:
       test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
-      interval: 2s
+      interval: 5s
       timeout: 1s
-      retries: 5
+      retries: 2
       start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     tmpfs:
       - /tmp
     networks:
