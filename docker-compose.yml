@@ -14,7 +14,7 @@ services:
       - feedfathom
 
   postgres:
-    image: "postgres:17"
+    image: "pgautoupgrade/pgautoupgrade:17-bookworm"
     restart: always
     command: [ "-c", "max_connections=1000" ]
     environment:
