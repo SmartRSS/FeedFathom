@@ -2,6 +2,7 @@ import { type } from "arktype";
 import { type ExtractTablesWithRelations, eq } from "drizzle-orm";
 import type { BunSQLDatabase, BunSQLQueryResultHKT } from "drizzle-orm/bun-sql";
 import type { PgTransaction } from "drizzle-orm/pg-core";
+import type { MaintenanceState } from "../container.ts";
 import type { JobName } from "../types/job-name-enum.ts";
 import { logError } from "../util/log.ts";
 import { jobQueue } from "./schema.ts";
@@ -38,7 +39,7 @@ export class PostgresQueue {
 
   constructor(
     private readonly drizzleConnection: BunSQLDatabase,
-    private readonly isMaintenanceMode: boolean,
+    private readonly maintenanceState: MaintenanceState,
   ) {}
 
   /**
@@ -215,7 +216,7 @@ export class PostgresQueue {
 
     // Job producer - continuously fetches jobs to keep the queue filled
     const producer = async () => {
-      while (this.processing && !this.isMaintenanceMode) {
+      while (this.processing && !this.maintenanceState.isMaintenanceMode) {
         try {
           // Only fetch more jobs if queue is getting low
           if (jobQueue.length <= minQueueSize) {

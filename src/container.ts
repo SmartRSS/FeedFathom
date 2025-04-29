@@ -27,6 +27,18 @@ import { type AppConfig, config } from "./config.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
 import { PostgresQueue } from "./lib/postgres-queue.ts";
 
+export class MaintenanceState {
+  private _isMaintenanceMode = false;
+
+  get isMaintenanceMode(): boolean {
+    return this._isMaintenanceMode;
+  }
+
+  set isMaintenanceMode(value: boolean) {
+    this._isMaintenanceMode = value;
+  }
+}
+
 export type Dependencies = {
   articlesRepository: ArticlesRepository;
   axiosInstance: AxiosCacheInstance;
@@ -37,7 +49,7 @@ export type Dependencies = {
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
   initializer: Initializer;
-  isMaintenanceMode: boolean;
+  maintenanceState: MaintenanceState;
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
@@ -89,7 +101,7 @@ container.register({
   axiosInstance: asFunction(buildAxios).singleton(),
   commandBus: asClass(CommandBus).singleton(),
   opmlParser: asFunction(() => new OpmlParser()).singleton(),
-  isMaintenanceMode: asValue(false),
+  maintenanceState: asClass(MaintenanceState).singleton(),
 
   // Repositories
   articlesRepository: asClass(ArticlesRepository).singleton(),

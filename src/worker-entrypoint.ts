@@ -1,18 +1,15 @@
-import { asValue } from "awilix";
 import container from "./container.ts";
 import { logError } from "./util/log.ts";
 
 // Create a simple HTTP server for health checks
 Bun.serve({
   port: 3000,
-  async fetch(req) {
+  fetch(req) {
     const url = new URL(req.url);
 
     // Handle healthcheck requests
     if (url.pathname === "/healthcheck") {
-      const isMaintenanceMode = container.resolve("isMaintenanceMode");
-
-      if (isMaintenanceMode) {
+      if (container.cradle.maintenanceState.isMaintenanceMode) {
         return new Response(
           JSON.stringify({ status: "down for maintenance" }),
           {
@@ -31,18 +28,10 @@ Bun.serve({
     // Handle maintenance mode toggle
     if (url.pathname === "/maintenance" && req.method === "POST") {
       try {
-        const body = (await req.json()) as { maintenance?: boolean };
-        const newState = body.maintenance === true;
-
-        // Update the maintenance mode state
-        container.register({
-          isMaintenanceMode: asValue(newState),
-        });
-
+        container.cradle.maintenanceState.isMaintenanceMode = true;
         return new Response(
           JSON.stringify({
             status: "success",
-            maintenance: newState,
           }),
           {
             status: 200,
