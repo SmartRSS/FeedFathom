@@ -64,33 +64,13 @@
     "vite": "^6.3.3"
   },
   "type": "module",
-  "trustedDependencies": [
-    "@biomejs/biome"
-  ],
+  "trustedDependencies": ["@biomejs/biome"],
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
-    "entry": [
-      "src/**/*.{ts,svelte}",
-      "tests/**/*.ts",
-      "bin/**",
-      "rollout.js"
-    ],
-    "ignore": [
-      "build/**",
-      "ext/**",
-      "rollout.js"
-    ],
-    "ignoreBinaries": [
-      "export",
-      "build"
-    ],
-    "ignoreDependencies": [
-      "svelte-check",
-      "drizzle-kit"
-    ],
-    "ignoreUnresolved": [
-      "^\\$app/",
-      "^\\$service-worker"
-    ]
+    "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**", "rollout.js"],
+    "ignore": ["build/**", "ext/**", "rollout.js"],
+    "ignoreBinaries": ["export", "build"],
+    "ignoreDependencies": ["svelte-check", "drizzle-kit"],
+    "ignoreUnresolved": ["^\\$app/", "^\\$service-worker"]
   }
 }

@@ -37,6 +37,7 @@ export type Dependencies = {
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
   initializer: Initializer;
+  isMaintenanceMode: boolean;
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
@@ -88,6 +89,7 @@ container.register({
   axiosInstance: asFunction(buildAxios).singleton(),
   commandBus: asClass(CommandBus).singleton(),
   opmlParser: asFunction(() => new OpmlParser()).singleton(),
+  isMaintenanceMode: asValue(false),
 
   // Repositories
   articlesRepository: asClass(ArticlesRepository).singleton(),
