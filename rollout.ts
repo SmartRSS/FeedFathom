@@ -302,7 +302,7 @@ async function waitForContainerStatus(
           `Timeout waiting for container ${containerId} to become ${status}`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
+      await Bun.sleep(healthcheckInterval);
     }
     logInfo(`Container ${containerId} became ${status}`);
   }
@@ -334,7 +334,7 @@ async function gracefulShutdown(containers: string[]) {
   // Drain and stop the old containers
   await drainContainers(containers);
   await waitForContainerStatus(containers, "unhealthy");
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await Bun.sleep(2000);
   await stopDrainedContainers(containers);
 }
 
@@ -369,7 +369,7 @@ async function scaleService(service: string, replicas: number) {
   );
 
   // Wait a moment for containers to start
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await Bun.sleep(1000);
 
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
@@ -730,9 +730,7 @@ if (!isRunning) {
           break;
         }
 
-        await new Promise((resolve) =>
-          setTimeout(resolve, healthcheckInterval),
-        );
+        await Bun.sleep(healthcheckInterval);
       } catch (error) {
         logError(
           `Error checking container health: ${error instanceof Error ? error.message : String(error)}`,
