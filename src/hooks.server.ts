@@ -1,20 +1,32 @@
 import { type Handle, json, redirect } from "@sveltejs/kit";
 import container from "./container.ts";
 import { cookiesConfig } from "./util/cookies-config.ts";
+import { isInternalRequest } from "./util/security.ts";
 
-const pathsNotRequiringLogin = [
-  "/register",
-  "/login",
-  "/healthcheck",
-  "/maintenance",
-];
+const pathsNotRequiringLogin = ["/register", "/login"];
 
 export const handle: Handle = async ({ event, resolve }) => {
+  const isInternal = isInternalRequest({
+    headers: event.request.headers,
+    address: event.getClientAddress(),
+  });
+
   event.locals.dependencies = container.cradle;
   if (event.url.pathname === "/healthcheck") {
+    if (!isInternal) {
+      return json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    if (event.locals.dependencies.maintenanceState.isMaintenanceMode) {
+      return json({ status: "down for maintenance" }, { status: 503 });
+    }
     return json({ status: "ok" });
   }
   if (event.url.pathname === "/maintenance") {
+    if (!isInternal) {
+      return json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     event.locals.dependencies.maintenanceState.isMaintenanceMode = true;
     return json({ status: "ok" });
   }

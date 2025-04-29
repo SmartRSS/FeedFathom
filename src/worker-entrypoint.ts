@@ -1,11 +1,26 @@
 import container from "./container.ts";
 import { logError } from "./util/log.ts";
+import { isInternalRequest } from "./util/security.ts";
 
 // Create a simple HTTP server for health checks
 Bun.serve({
   port: 3000,
-  fetch(req) {
+  fetch(req, server) {
     const url = new URL(req.url);
+    const ip = server.requestIP(req)?.address ?? "";
+
+    // Reject all non-internal requests early
+    if (
+      !isInternalRequest({
+        headers: req.headers,
+        address: ip,
+      })
+    ) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // Handle healthcheck requests
     if (url.pathname === "/healthcheck") {

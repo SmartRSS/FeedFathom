@@ -322,7 +322,7 @@ async function drainContainers(containers: string[]) {
     try {
       // Send POST request to enable maintenance mode using bun -e
       await executeDockerCommand(
-        `docker exec ${containerId} bun -e 'fetch("http://localhost:3000/maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maintenance: true }) })'`,
+        `docker exec ${containerId} bun -e 'await fetch("http://localhost:3000/maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maintenance: true }) })'`,
       );
 
       logInfo(`Enabled maintenance mode for container ${containerId}`);
