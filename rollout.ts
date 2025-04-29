@@ -339,7 +339,6 @@ async function gracefulShutdown(containers: string[]) {
   // Drain and stop the old containers
   await drainContainers(containers);
   await waitForContainerStatus(containers, "unhealthy");
-  await Bun.sleep(2000);
   await stopDrainedContainers(containers);
 }
 
