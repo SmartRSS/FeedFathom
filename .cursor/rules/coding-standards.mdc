@@ -1,0 +1,42 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# TypeScript and Code Style Standards
+
+## Type Safety Requirements
+- All code must be written in TypeScript with strict mode enabled
+- Never use `any` types - always provide proper type definitions
+- Use `satisfies` operator instead of type assertions (`as`)
+- Implement branded types and const assertions where appropriate
+- State management should use discriminated unions
+- Variables must be used or prefixed with `_`
+
+## Code Formatting Rules
+- Indentation: 2 spaces
+- String quotes: Double quotes for strings, single quotes for JSX/Svelte attributes
+- Always include semicolons and trailing commas
+- Use `??` operator for nullish coalescing instead of `||`
+- Follow ESLint and Prettier configurations without exceptions
+
+## Code Organization
+- Keep files focused and single-responsibility
+- Group related functionality in appropriate directories
+- Follow the established project structure:
+  ```
+  src/
+    ├── lib/           # Shared utilities
+    ├── components/    # Reusable components
+    ├── routes/        # SvelteKit routes
+    ├── types/        # TypeScript types
+    └── util/         # Small utility functions
+  tests/              # Test files
+  ```
+
+## Quality Standards
+- Write unit tests for utilities
+- Implement integration tests for features
+- Include E2E tests for critical paths
+- Test error states and edge cases thoroughly
+- Document complex logic and business rules

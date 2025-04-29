@@ -1,0 +1,36 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Context7 MCP Integration Guidelines
+
+## API Communication
+- All external API calls must go through the Context7 MCP server
+- Implement proper error handling for MCP server responses
+- Use appropriate fallback mechanisms for failed requests
+- Cache responses when appropriate to reduce server load
+
+## Documentation Requirements
+- Always resolve library IDs before making documentation requests
+- Document all MCP server interactions with clear comments
+- Include error handling strategies in documentation
+- Maintain clear separation between MCP and application logic
+
+## Performance Guidelines
+- Implement proper caching strategies for documentation responses
+- Use batch requests when possible to reduce server load
+- Monitor response times and implement appropriate timeouts
+- Handle rate limiting gracefully
+
+## Error Handling
+- Implement graceful fallbacks for all MCP server errors
+- Log all errors with appropriate context
+- Provide user-friendly error messages
+- Maintain application stability during MCP server outages
+
+## Security Considerations
+- Validate all responses from MCP server
+- Implement proper authentication mechanisms
+- Follow secure data handling practices
+- Monitor and log suspicious activities

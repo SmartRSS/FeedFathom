@@ -1,0 +1,37 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Svelte Development Guidelines
+
+## Component Structure
+- One component per file
+- Props must be typed using TypeScript
+- Use proper cleanup in `onDestroy` for subscriptions and event listeners
+- Implement proper error boundaries
+
+## Component Patterns
+- Use actions for DOM event handling and lifecycle management
+- Leverage slots for flexible component composition
+- Implement reactive statements for derived state
+- Keep component logic separate from presentation
+- Use stores for shared state management
+
+## Performance Considerations
+- Avoid unnecessary reactivity
+- Use `{#key}` blocks for proper component resets
+- Implement proper cleanup in `onDestroy`
+- Use async data loading patterns appropriately
+
+## Template Guidelines
+- Use single quotes for HTML attributes
+- Keep template logic simple and readable
+- Extract complex logic to helper functions
+- Use proper TypeScript typing in template expressions
+
+## State Management
+- Use Svelte stores for global state
+- Implement proper unsubscribe patterns
+- Use reactive statements for derived data
+- Keep state transformations pure and predictable
