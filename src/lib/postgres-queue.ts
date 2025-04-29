@@ -36,7 +36,10 @@ interface ScheduleJobOptions {
 export class PostgresQueue {
   private processing = false;
 
-  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(
+    private readonly drizzleConnection: BunSQLDatabase,
+    private readonly isMaintenanceMode: boolean,
+  ) {}
 
   /**
    * Check if we're in a build process
@@ -212,7 +215,7 @@ export class PostgresQueue {
 
     // Job producer - continuously fetches jobs to keep the queue filled
     const producer = async () => {
-      while (this.processing) {
+      while (this.processing && !this.isMaintenanceMode) {
         try {
           // Only fetch more jobs if queue is getting low
           if (jobQueue.length <= minQueueSize) {

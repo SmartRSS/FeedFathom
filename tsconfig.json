@@ -30,7 +30,7 @@
     "noUnusedParameters": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
-    "types": ["chrome"]
+    "types": ["bun-types", "chrome"]
   },
   "include": [
     ".svelte-kit/ambient.d.ts",

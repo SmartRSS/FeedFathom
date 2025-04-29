@@ -14,7 +14,7 @@ services:
       - feedfathom
 
   postgres:
-    image: "postgres:17"
+    image: "pgautoupgrade/pgautoupgrade:17-bookworm"
     restart: always
     command: [ "-c", "max_connections=1000" ]
     environment:
@@ -61,7 +61,7 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: "bun -e \"if (require('fs').existsSync('/tmp/drain')) { console.log('drain'); process.exit(1); } try { const res = await fetch('http://localhost:3000/healthcheck'); if (!res.ok) {console.log('not ok'); process.exit(1); } console.log('ok'); process.exit(0); } catch { console.log('exception'); process.exit(1);}\""
+      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
       interval: 1s
       timeout: 1s
       retries: 5
@@ -100,7 +100,7 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: "bun -e \"if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
+      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
       interval: 1s
       timeout: 1s
       retries: 5
@@ -135,7 +135,7 @@ services:
         delay: 10s
         order: start-first
     healthcheck:
-      test: "bun -e \" if (require('fs').existsSync('/tmp/drain')) { process.exit(1); } process.exit(0)\""
+      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
       interval: 2s
       timeout: 1s
       retries: 5

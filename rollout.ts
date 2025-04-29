@@ -302,7 +302,7 @@ async function waitForContainerStatus(
           `Timeout waiting for container ${containerId} to become ${status}`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, healthcheckInterval));
+      await Bun.sleep(healthcheckInterval);
     }
     logInfo(`Container ${containerId} became ${status}`);
   }
@@ -317,13 +317,18 @@ async function drainContainers(containers: string[]) {
 
   logInfo(`Draining containers ${containers.join(" ")}`);
 
-  // Create drain files only in existing containers
+  // Set maintenance mode for each container
   for (const containerId of containers) {
     try {
-      await executeDockerCommand(`docker exec ${containerId} touch /tmp/drain`);
+      // Send POST request to enable maintenance mode using bun -e
+      await executeDockerCommand(
+        `docker exec ${containerId} bun -e 'fetch("http://localhost:3000/api/maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maintenance: true }) })'`,
+      );
+
+      logInfo(`Enabled maintenance mode for container ${containerId}`);
     } catch (error) {
       logError(
-        `Failed to create drain file in container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to enable maintenance mode for container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
     }
@@ -334,25 +339,38 @@ async function gracefulShutdown(containers: string[]) {
   // Drain and stop the old containers
   await drainContainers(containers);
   await waitForContainerStatus(containers, "unhealthy");
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await Bun.sleep(2000);
   await stopDrainedContainers(containers);
 }
 
 // Helper function to stop drained containers
 async function stopDrainedContainers(containers: string[]): Promise<void> {
-  if (containers.length === 0) {
+  if (!containers || containers.length === 0) {
     logInfo("No containers to stop");
     return;
   }
 
-  const containerIds = containers.join(" ");
-  logInfo(`Stopping and removing containers ${containerIds}`);
+  logInfo(`Stopping containers ${containers.join(" ")}`);
 
   // Stop the containers
-  await executeDockerCommand(`docker stop ${containerIds}`);
-  // Remove them immediately after stopping
-  await executeDockerCommand(`docker rm ${containerIds}`);
-  logInfo(`Successfully stopped and removed containers ${containerIds}`);
+  await executeDockerCommand(`docker stop ${containers.join(" ")}`);
+
+  // Disable maintenance mode for each container (for future reference)
+  for (const containerId of containers) {
+    try {
+      // Send POST request to disable maintenance mode using bun -e
+      await executeDockerCommand(
+        `docker exec ${containerId} bun -e 'fetch("http://localhost:3000/api/maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maintenance: false }) })'`,
+      );
+
+      logInfo(`Disabled maintenance mode for container ${containerId}`);
+    } catch (error) {
+      // Just log the error but don't fail the process
+      logError(
+        `Failed to disable maintenance mode for container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 }
 
 // Function to scale service
@@ -369,7 +387,7 @@ async function scaleService(service: string, replicas: number) {
   );
 
   // Wait a moment for containers to start
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await Bun.sleep(1000);
 
   const actualReplicas = await getCurrentReplicas(service);
   if (actualReplicas !== replicas) {
@@ -730,9 +748,7 @@ if (!isRunning) {
           break;
         }
 
-        await new Promise((resolve) =>
-          setTimeout(resolve, healthcheckInterval),
-        );
+        await Bun.sleep(healthcheckInterval);
       } catch (error) {
         logError(
           `Error checking container health: ${error instanceof Error ? error.message : String(error)}`,

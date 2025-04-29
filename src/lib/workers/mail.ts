@@ -68,6 +68,7 @@ export class MailWorker {
         })();
       },
       size: this.config.maxSizeBytes,
+      socketTimeout: 60000,
     });
 
     this.server.listen(25, () => {
