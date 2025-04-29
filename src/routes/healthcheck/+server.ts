@@ -1,7 +1,7 @@
 import { type RequestHandler, json } from "@sveltejs/kit";
 
 export const GET: RequestHandler = ({ locals }) => {
-  if (locals.dependencies.isMaintenanceMode) {
+  if (locals.dependencies.maintenanceState.isMaintenanceMode) {
     return json({ status: "down for maintenance" }, { status: 503 });
   }
 

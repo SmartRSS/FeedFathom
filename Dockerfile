@@ -13,7 +13,7 @@ COPY package.json bun.lock /app/
 # due to the way dependencies are resolved I marked quality tools as dev and build tools as base
 # I don't want to install quality tools during the build process so that's why I'm omitting them this way
 # node_modules aren't copied to the resulting image because the build bundles required libraries
-RUN bun install --omit=dev --frozen-lockfile
+RUN --mount=type=cache,target=/root/.npm bun install --omit=dev --frozen-lockfile
 
 # Copy source files
 COPY static /app/static

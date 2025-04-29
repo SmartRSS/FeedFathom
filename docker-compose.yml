@@ -61,7 +61,7 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
     healthcheck:
-      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
+      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
       interval: 5s
       timeout: 1s
       retries: 2
@@ -100,7 +100,7 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
+      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
       interval: 5s
       timeout: 1s
       retries: 2
@@ -135,7 +135,7 @@ services:
         delay: 10s
         order: start-first
     healthcheck:
-      test: "bun -e \"const res = await fetch('http://localhost:3000/healthcheck');if(!res.ok){process.exit(1);}process.exit(0);\""
+      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
       interval: 5s
       timeout: 1s
       retries: 2
