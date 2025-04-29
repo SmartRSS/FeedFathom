@@ -354,23 +354,6 @@ async function stopDrainedContainers(containers: string[]): Promise<void> {
 
   // Stop the containers
   await executeDockerCommand(`docker stop ${containers.join(" ")}`);
-
-  // Disable maintenance mode for each container (for future reference)
-  for (const containerId of containers) {
-    try {
-      // Send POST request to disable maintenance mode using bun -e
-      await executeDockerCommand(
-        `docker exec ${containerId} bun -e 'fetch("http://localhost:3000/api/maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maintenance: false }) })'`,
-      );
-
-      logInfo(`Disabled maintenance mode for container ${containerId}`);
-    } catch (error) {
-      // Just log the error but don't fail the process
-      logError(
-        `Failed to disable maintenance mode for container ${containerId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
 }
 
 // Function to scale service
