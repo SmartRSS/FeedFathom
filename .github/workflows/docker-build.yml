@@ -122,6 +122,12 @@ jobs:
           key: ${{ runner.os }}-verify-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-verify-
+          # Create the cache directory if it doesn't exist
+          enableCrossOsArchive: true
+          fail-on-cache-miss: false
+
+      - name: Create cache directory
+        run: mkdir -p /tmp/.buildx-cache
 
       - name: Build and start services
         run: |
