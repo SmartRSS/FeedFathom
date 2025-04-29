@@ -12,10 +12,17 @@ const pathsNotRequiringLogin = [
 export const handle: Handle = async ({ event, resolve }) => {
   event.locals.dependencies = container.cradle;
   if (event.url.pathname === "/healthcheck") {
+    if (event.locals.dependencies.maintenanceState.isMaintenanceMode) {
+      return json({ status: "down for maintenance" }, { status: 503 });
+    }
     return json({ status: "ok" });
   }
   if (event.url.pathname === "/maintenance") {
     event.locals.dependencies.maintenanceState.isMaintenanceMode = true;
+    console.log(
+      "maintenance mode enabled",
+      event.locals.dependencies.maintenanceState.isMaintenanceMode,
+    );
     return json({ status: "ok" });
   }
 
