@@ -9,9 +9,7 @@ Bun.serve({
 
     // Handle healthcheck requests
     if (url.pathname === "/healthcheck") {
-      const isMaintenanceMode = container.resolve("isMaintenanceMode");
-
-      if (isMaintenanceMode) {
+      if (container.cradle.maintenanceState.isMaintenanceMode) {
         return new Response(
           JSON.stringify({ status: "down for maintenance" }),
           {
