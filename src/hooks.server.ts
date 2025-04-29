@@ -2,11 +2,20 @@ import { type Handle, json, redirect } from "@sveltejs/kit";
 import container from "./container.ts";
 import { cookiesConfig } from "./util/cookies-config.ts";
 
-const pathsNotRequiringLogin = ["/register", "/login"];
+const pathsNotRequiringLogin = [
+  "/register",
+  "/login",
+  "/healthcheck",
+  "/maintenance",
+];
 
 export const handle: Handle = async ({ event, resolve }) => {
   event.locals.dependencies = container.cradle;
   if (event.url.pathname === "/healthcheck") {
+    return json({ status: "ok" });
+  }
+  if (event.url.pathname === "/maintenance") {
+    event.locals.dependencies.maintenanceState.isMaintenanceMode = true;
     return json({ status: "ok" });
   }
 
