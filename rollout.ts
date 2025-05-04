@@ -488,6 +488,16 @@ async function runOneOffService(service: string): Promise<void> {
   }
 }
 
+// Helper function to remove containers
+async function removeContainers(containers: string[]): Promise<void> {
+  if (!containers || containers.length === 0) {
+    logInfo("No containers to remove");
+    return;
+  }
+  logInfo(`Removing containers ${containers.join(" ")}`);
+  await executeDockerCommand(`docker rm ${containers.join(" ")}`);
+}
+
 // Main rollout function
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <explanation>
 async function rolloutService(service: string, targetReplicas: number) {
@@ -499,6 +509,30 @@ async function rolloutService(service: string, targetReplicas: number) {
   if (serviceType === "one-off") {
     // Handle one-off service
     await handleOneOffService(service);
+    return;
+  }
+
+  // Handle scale-to-zero case
+  if (targetReplicas === 0) {
+    logInfo(
+      `Target replicas for service ${service} is 0. Draining, stopping, and removing all containers.`,
+    );
+    // Get all running containers for the service
+    const runningContainers = await getOldestContainers(
+      service,
+      await getCurrentReplicas(service),
+    );
+    if (runningContainers.length > 0) {
+      await drainContainers(runningContainers);
+      await waitForContainerStatus(runningContainers, "unhealthy");
+      await stopDrainedContainers(runningContainers);
+      await removeContainers(runningContainers);
+      logInfo(
+        `Service ${service} successfully drained, stopped, and removed all containers.`,
+      );
+    } else {
+      logInfo(`No running containers found for service ${service}.`);
+    }
     return;
   }
 
