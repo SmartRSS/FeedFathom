@@ -2,10 +2,12 @@ import { type Handle, json, redirect } from "@sveltejs/kit";
 import container from "./container.ts";
 import { cookiesConfig } from "./util/cookies-config.ts";
 import { isInternalRequest } from "./util/security.ts";
+import { llog } from "./util/log.ts";
 
-const pathsNotRequiringLogin = ["/register", "/login", "api/mail"];
+const pathsNotRequiringLogin = ["/register", "/login", "/api/mail"];
 
 export const handle: Handle = async ({ event, resolve }) => {
+  llog(event.url.pathname);
   const isInternal = isInternalRequest({
     headers: event.request.headers,
     address: event.getClientAddress(),
@@ -36,14 +38,15 @@ export const handle: Handle = async ({ event, resolve }) => {
     return redirect(302, "/");
   }
 
+  // Allow public endpoints without authentication
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
     return await resolve(event);
   }
 
+  // Require authentication for all other endpoints
   const sid = event.cookies.get("sid");
   if (!sid) {
     event.cookies.delete("sid", { path: "/" });
-
     return redirect(302, "/login");
   }
 
@@ -52,15 +55,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   if (!user) {
     event.cookies.delete("sid", { path: "/" });
-
     return redirect(302, "/login");
   }
 
   event.locals.user = user;
   event.cookies.set("sid", sid, cookiesConfig);
-  if (!pathsNotRequiringLogin.includes(event.url.pathname)) {
-    return await resolve(event);
-  }
 
-  return redirect(302, "/login");
+  // Authenticated, proceed
+  return await resolve(event);
 };

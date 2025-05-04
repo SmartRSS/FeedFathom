@@ -12,9 +12,9 @@ FeedFathom is an efficient RSS feed reader paired with an extension intended for
 
 - **RSS Feed Management**: Efficiently manage and organize your RSS feeds
 - **Browser Extensions**: Support for both Firefox and Chromium-based browsers
-- **Newsletter Integration**: Unique email address generation for newsletter subscriptions
+- **Newsletter Integration**: Unique email address generation for newsletter subscriptions, with support for both built-in SMTP and Cloudflare Worker mail relay
 - **Background Updates**: Automated feed updates via background workers
-- **SMTP Server**: Built-in handling of newsletter subscriptions
+- **SMTP Server or Cloudflare Worker**: Built-in handling of newsletter subscriptions, or offload mail processing to a Cloudflare Worker relay
 
 ## Technology Stack
 
