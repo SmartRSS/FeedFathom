@@ -241,7 +241,7 @@ jobs:
             # Ensure PATH includes Bun's location
             export PATH="/home/${{ secrets.SSH_USER }}/.bun/bin:$PATH" && \
             export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && \
-            export MAIL_REPLICAS=1 && \
+            export MAIL_REPLICAS='${{ env.MAIL_REPLICAS }}' && \
             export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
             export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \
             export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && \
@@ -252,6 +252,7 @@ jobs:
             export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && \
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
+            export MAIL_ENABLED='${{ env.MAIL_ENABLED }}' && \
             docker compose -f docker-compose.yml pull migrator mail server worker && \
             bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml \
               migrator mail server worker

@@ -1,7 +1,7 @@
 import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import type { FeedPreview } from "$lib/feed-mapper";
 import { json } from "@sveltejs/kit";
-import { isMailEnabled } from "../../util/is-mail-enabled.ts";
+import { getMailFeatureState } from "../../util/is-mail-enabled.ts";
 import type { SubscribeRequest } from "./validator.ts";
 
 export const subscribeHandler = async ({
@@ -10,9 +10,11 @@ export const subscribeHandler = async ({
   url,
 }: ValidatedRequestEvent<SubscribeRequest>) => {
   const { sourceFolder, sourceName, sourceUrl } = body;
+  const { appConfig } = locals.dependencies;
+  const mailFeatureState = getMailFeatureState(appConfig);
 
-  // Check if email is provided as sourceUrl while !isMailEnabled
-  if (!isMailEnabled && sourceUrl.includes("@")) {
+  // Check if email is provided as sourceUrl while mail is not enabled
+  if (!mailFeatureState.enabled && sourceUrl.includes("@")) {
     return json(
       { error: "Email subscriptions are not allowed." },
       { status: 400 },
