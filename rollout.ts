@@ -340,6 +340,7 @@ async function gracefulShutdown(containers: string[]) {
   await drainContainers(containers);
   await waitForContainerStatus(containers, "unhealthy");
   await stopDrainedContainers(containers);
+  await removeContainers(containers);
 }
 
 // Helper function to stop drained containers
@@ -541,21 +542,9 @@ async function rolloutService(service: string, targetReplicas: number) {
       }
       if (runningContainers.length > 0) {
         logInfo(
-          `[rolloutService] Draining containers: ${runningContainers.join(", ")}`,
+          `[rolloutService] Gracefully shutting down containers: ${runningContainers.join(", ")}`,
         );
-        await drainContainers(runningContainers);
-        logInfo(
-          `[rolloutService] Waiting for containers to become unhealthy: ${runningContainers.join(", ")}`,
-        );
-        await waitForContainerStatus(runningContainers, "unhealthy");
-        logInfo(
-          `[rolloutService] Stopping containers: ${runningContainers.join(", ")}`,
-        );
-        await stopDrainedContainers(runningContainers);
-        logInfo(
-          `[rolloutService] Removing containers: ${runningContainers.join(", ")}`,
-        );
-        await removeContainers(runningContainers);
+        await gracefulShutdown(runningContainers);
         logInfo(
           `[rolloutService] Service ${service} successfully drained, stopped, and removed all containers.`,
         );
