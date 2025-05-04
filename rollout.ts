@@ -525,14 +525,20 @@ async function rolloutService(service: string, targetReplicas: number) {
         `[rolloutService] Target replicas for service ${service} is 0. Draining, stopping, and removing all containers.`,
       );
       // Get all running containers for the service
-      const currentReplicas = await getCurrentReplicas(service);
-      logInfo(
-        `[rolloutService] ${service} has ${currentReplicas} running containers`,
-      );
-      const runningContainers = await getOldestContainers(
-        service,
-        currentReplicas,
-      );
+      let currentReplicas = 0;
+      let runningContainers: string[] = [];
+      try {
+        currentReplicas = await getCurrentReplicas(service);
+        logInfo(
+          `[rolloutService] ${service} has ${currentReplicas} running containers`,
+        );
+        runningContainers = await getOldestContainers(service, currentReplicas);
+      } catch (error) {
+        logInfo(
+          `[rolloutService] Could not get running containers for ${service} (service may not be running): ${error instanceof Error ? error.message : String(error)}. Treating as zero running containers.`,
+        );
+        runningContainers = [];
+      }
       if (runningContainers.length > 0) {
         logInfo(
           `[rolloutService] Draining containers: ${runningContainers.join(", ")}`,
@@ -566,17 +572,28 @@ async function rolloutService(service: string, targetReplicas: number) {
 
     // Handle long-running service (existing logic)
     const step = calculateStep(targetReplicas);
-    const initialReplicas = await getCurrentReplicas(service);
-
-    logInfo(
-      `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
-    );
-
-    // Get all current containers
-    const oldContainers = await getOldestContainers(service, initialReplicas);
-    logInfo(
-      `[rolloutService] Identified ${oldContainers.length} old containers to be replaced`,
-    );
+    let initialReplicas = 0;
+    let oldContainers: string[] = [];
+    try {
+      initialReplicas = await getCurrentReplicas(service);
+      oldContainers = await getOldestContainers(service, initialReplicas);
+      logInfo(
+        `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
+      );
+      logInfo(
+        `[rolloutService] Identified ${oldContainers.length} old containers to be replaced`,
+      );
+    } catch (error) {
+      logInfo(
+        `[rolloutService] Could not get running containers for ${service} (service may not be running): ${error instanceof Error ? error.message : String(error)}. Treating as zero running containers.`,
+      );
+      initialReplicas = 0;
+      oldContainers = [];
+      logInfo(
+        `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: 0, Step size: ${step}`,
+      );
+      logInfo("[rolloutService] Identified 0 old containers to be replaced");
+    }
 
     // Phase 1: Scale down if we have more containers than target
     while (oldContainers.length > targetReplicas) {
