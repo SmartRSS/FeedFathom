@@ -60,6 +60,7 @@ services:
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
     healthcheck:
       test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
       interval: 5s

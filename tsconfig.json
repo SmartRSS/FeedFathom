@@ -39,7 +39,8 @@
     "src/**/*.ts",
     "src/**/*.svelte",
     "tests/**/*.ts",
-    "rollout.ts"
+    "rollout.ts",
+    "src/cloudflare/email-worker.js"
   ],
   "exclude": ["node_modules/*", "public/*", "migrations/*", "build/*", "ext/*"]
 

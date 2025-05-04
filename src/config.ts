@@ -19,6 +19,10 @@ const configSchema = type({
   GATHER_JOBS_INTERVAL: type("string.numeric.parse").default("1000"),
   // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
   APP_REPLICAS: type("string.numeric.parse").default("1"),
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  MAIL_ENABLED: type("string")
+    .pipe((s) => s === "true")
+    .default("false"),
   "INTEGRATION?": "'mail'|'migrator'|'worker'",
   "+": "delete",
 });
