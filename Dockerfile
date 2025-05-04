@@ -1,8 +1,8 @@
-FROM oven/bun:1.2.11-slim AS dev
+FROM oven/bun:1.2.12-slim AS dev
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/bun"]
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.11-slim AS builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.2.12-slim AS builder
 WORKDIR /app
 
 COPY svelte.config.js vite.config.ts tsconfig.json /app/
@@ -28,7 +28,7 @@ RUN mkdir -p /app/build && \
     echo "Build timestamp: $timestamp" && \
     echo "$timestamp" > /app/build/BUILD_TIME
 
-FROM oven/bun:1.2.11-slim AS release
+FROM oven/bun:1.2.12-slim AS release
 WORKDIR /app
 
 # drizzle files are needed for migrations
