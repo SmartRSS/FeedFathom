@@ -3,7 +3,7 @@ import container from "./container.ts";
 import { cookiesConfig } from "./util/cookies-config.ts";
 import { isInternalRequest } from "./util/security.ts";
 
-const pathsNotRequiringLogin = ["/register", "/login"];
+const pathsNotRequiringLogin = ["/register", "/login", "api/mail"];
 
 export const handle: Handle = async ({ event, resolve }) => {
   const isInternal = isInternalRequest({
