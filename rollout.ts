@@ -501,137 +501,186 @@ async function removeContainers(containers: string[]): Promise<void> {
 // Main rollout function
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <explanation>
 async function rolloutService(service: string, targetReplicas: number) {
-  logInfo(`Starting rollout for service: ${service}`);
-
-  // Determine service type
-  const serviceType = await getServiceType(service);
-
-  if (serviceType === "one-off") {
-    // Handle one-off service
-    await handleOneOffService(service);
-    return;
-  }
-
-  // Handle scale-to-zero case
-  if (targetReplicas === 0) {
-    logInfo(
-      `Target replicas for service ${service} is 0. Draining, stopping, and removing all containers.`,
-    );
-    // Get all running containers for the service
-    const runningContainers = await getOldestContainers(
-      service,
-      await getCurrentReplicas(service),
-    );
-    if (runningContainers.length > 0) {
-      await drainContainers(runningContainers);
-      await waitForContainerStatus(runningContainers, "unhealthy");
-      await stopDrainedContainers(runningContainers);
-      await removeContainers(runningContainers);
-      logInfo(
-        `Service ${service} successfully drained, stopped, and removed all containers.`,
-      );
-    } else {
-      logInfo(`No running containers found for service ${service}.`);
-    }
-    return;
-  }
-
-  // Handle long-running service (existing logic)
-  const step = calculateStep(targetReplicas);
-  const initialReplicas = await getCurrentReplicas(service);
-
   logInfo(
-    `Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
+    `[rolloutService] Enter: service=${service}, targetReplicas=${targetReplicas}`,
   );
+  try {
+    // Determine service type
+    const serviceType = await getServiceType(service);
+    logInfo(`[rolloutService] serviceType for ${service}: ${serviceType}`);
 
-  // Get all current containers
-  const oldContainers = await getOldestContainers(service, initialReplicas);
-  logInfo(`Identified ${oldContainers.length} old containers to be replaced`);
+    if (serviceType === "one-off") {
+      // Handle one-off service
+      logInfo(`[rolloutService] Handling one-off service: ${service}`);
+      await handleOneOffService(service);
+      logInfo(
+        `[rolloutService] One-off service ${service} handled successfully`,
+      );
+      return;
+    }
 
-  // Phase 1: Scale down if we have more containers than target
-  while (oldContainers.length > targetReplicas) {
-    const scaleDelta = Math.min(step, oldContainers.length - targetReplicas);
-    const toDrain = oldContainers.splice(0, scaleDelta);
+    // Handle scale-to-zero case
+    if (targetReplicas === 0) {
+      logInfo(
+        `[rolloutService] Target replicas for service ${service} is 0. Draining, stopping, and removing all containers.`,
+      );
+      // Get all running containers for the service
+      const currentReplicas = await getCurrentReplicas(service);
+      logInfo(
+        `[rolloutService] ${service} has ${currentReplicas} running containers`,
+      );
+      const runningContainers = await getOldestContainers(
+        service,
+        currentReplicas,
+      );
+      if (runningContainers.length > 0) {
+        logInfo(
+          `[rolloutService] Draining containers: ${runningContainers.join(", ")}`,
+        );
+        await drainContainers(runningContainers);
+        logInfo(
+          `[rolloutService] Waiting for containers to become unhealthy: ${runningContainers.join(", ")}`,
+        );
+        await waitForContainerStatus(runningContainers, "unhealthy");
+        logInfo(
+          `[rolloutService] Stopping containers: ${runningContainers.join(", ")}`,
+        );
+        await stopDrainedContainers(runningContainers);
+        logInfo(
+          `[rolloutService] Removing containers: ${runningContainers.join(", ")}`,
+        );
+        await removeContainers(runningContainers);
+        logInfo(
+          `[rolloutService] Service ${service} successfully drained, stopped, and removed all containers.`,
+        );
+      } else {
+        logInfo(
+          `[rolloutService] No running containers found for service ${service}.`,
+        );
+      }
+      logInfo(
+        `[rolloutService] Exit: service=${service}, targetReplicas=${targetReplicas}`,
+      );
+      return;
+    }
 
-    logInfo(`Phase 1: Scaling down by ${scaleDelta} containers`);
-    await gracefulShutdown(toDrain);
-  }
+    // Handle long-running service (existing logic)
+    const step = calculateStep(targetReplicas);
+    const initialReplicas = await getCurrentReplicas(service);
 
-  // Phase 2: Replace remaining containers with new ones
-  while (oldContainers.length > 0) {
-    const scaleDelta = Math.min(step, oldContainers.length);
-    // Scale up with new containers
-    const upScale = targetReplicas + scaleDelta;
     logInfo(
-      `Phase 2: Scaling up to ${upScale} replicas (adding ${scaleDelta} new containers)`,
+      `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
     );
 
-    await scaleService(service, upScale);
-
-    // Get and wait for the new containers to be healthy
-    const newContainers = await getLatestContainers(service, scaleDelta);
-    logInfo(`New containers created: ${newContainers.join(" ")}`);
-
-    try {
-      logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
-      await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("Timeout")) {
-        logError(
-          `Timeout waiting for containers to become healthy: ${error.message}`,
-        );
-        // Get current replicas to see what actually started
-        const currentReplicas = await getCurrentReplicas(service);
-        if (currentReplicas < upScale) {
-          logError(
-            `Only ${currentReplicas} containers started out of ${upScale} requested`,
-          );
-          throw new Error(
-            `Failed to start all containers: only ${currentReplicas} started`,
-          );
-        }
-      }
-      throw error;
-    }
-
-    await gracefulShutdown(oldContainers.splice(0, scaleDelta));
-  }
-
-  // Final adjustment if needed
-  const currentReplicas = await getCurrentReplicas(service);
-  if (currentReplicas !== targetReplicas) {
-    logInfo(`Final adjustment: scaling to ${targetReplicas} replicas`);
-    await scaleService(service, targetReplicas);
-    // Get and wait for the new containers to be healthy
-    const newContainers = await getLatestContainers(
-      service,
-      targetReplicas - currentReplicas,
+    // Get all current containers
+    const oldContainers = await getOldestContainers(service, initialReplicas);
+    logInfo(
+      `[rolloutService] Identified ${oldContainers.length} old containers to be replaced`,
     );
 
-    try {
-      logInfo(`Waiting for healthy containers ${newContainers.join(" ")}`);
-      await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("Timeout")) {
-        logError(
-          `Timeout waiting for containers to become healthy: ${error.message}`,
-        );
-        // Get current replicas to see what actually started
-        const actualReplicas = await getCurrentReplicas(service);
-        if (actualReplicas < targetReplicas) {
-          logError(
-            `Only ${actualReplicas} containers started out of ${targetReplicas} requested`,
-          );
-          throw new Error(
-            `Failed to start all containers: only ${actualReplicas} started`,
-          );
-        }
-      }
-      throw error;
-    }
-  }
+    // Phase 1: Scale down if we have more containers than target
+    while (oldContainers.length > targetReplicas) {
+      const scaleDelta = Math.min(step, oldContainers.length - targetReplicas);
+      const toDrain = oldContainers.splice(0, scaleDelta);
 
-  logInfo(`Rollout completed for service: ${service}`);
+      logInfo(
+        `[rolloutService] Phase 1: Scaling down by ${scaleDelta} containers`,
+      );
+      await gracefulShutdown(toDrain);
+    }
+
+    // Phase 2: Replace remaining containers with new ones
+    while (oldContainers.length > 0) {
+      const scaleDelta = Math.min(step, oldContainers.length);
+      // Scale up with new containers
+      const upScale = targetReplicas + scaleDelta;
+      logInfo(
+        `[rolloutService] Phase 2: Scaling up to ${upScale} replicas (adding ${scaleDelta} new containers)`,
+      );
+
+      await scaleService(service, upScale);
+
+      // Get and wait for the new containers to be healthy
+      const newContainers = await getLatestContainers(service, scaleDelta);
+      logInfo(
+        `[rolloutService] New containers created: ${newContainers.join(" ")}`,
+      );
+
+      try {
+        logInfo(
+          `[rolloutService] Waiting for healthy containers ${newContainers.join(" ")}`,
+        );
+        await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Timeout")) {
+          logError(
+            `[rolloutService] Timeout waiting for containers to become healthy: ${error.message}`,
+          );
+          // Get current replicas to see what actually started
+          const currentReplicas = await getCurrentReplicas(service);
+          if (currentReplicas < upScale) {
+            logError(
+              `[rolloutService] Only ${currentReplicas} containers started out of ${upScale} requested`,
+            );
+            throw new Error(
+              `[rolloutService] Failed to start all containers: only ${currentReplicas} started`,
+            );
+          }
+        }
+        throw error;
+      }
+
+      await gracefulShutdown(oldContainers.splice(0, scaleDelta));
+    }
+
+    // Final adjustment if needed
+    const currentReplicas = await getCurrentReplicas(service);
+    if (currentReplicas !== targetReplicas) {
+      logInfo(
+        `[rolloutService] Final adjustment: scaling to ${targetReplicas} replicas`,
+      );
+      await scaleService(service, targetReplicas);
+      // Get and wait for the new containers to be healthy
+      const newContainers = await getLatestContainers(
+        service,
+        targetReplicas - currentReplicas,
+      );
+
+      try {
+        logInfo(
+          `[rolloutService] Waiting for healthy containers ${newContainers.join(" ")}`,
+        );
+        await waitForContainerStatus(newContainers, "healthy", 30000); // 30 second timeout
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Timeout")) {
+          logError(
+            `[rolloutService] Timeout waiting for containers to become healthy: ${error.message}`,
+          );
+          // Get current replicas to see what actually started
+          const actualReplicas = await getCurrentReplicas(service);
+          if (actualReplicas < targetReplicas) {
+            logError(
+              `[rolloutService] Only ${actualReplicas} containers started out of ${targetReplicas} requested`,
+            );
+            throw new Error(
+              `[rolloutService] Failed to start all containers: only ${actualReplicas} started`,
+            );
+          }
+        }
+        throw error;
+      }
+    }
+
+    logInfo(`[rolloutService] Rollout completed for service: ${service}`);
+    logInfo(
+      `[rolloutService] Exit: service=${service}, targetReplicas=${targetReplicas}`,
+    );
+  } catch (error) {
+    logError(
+      `[rolloutService] Error for service ${service}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
 }
 
 // Function to handle one-off services
@@ -788,11 +837,18 @@ const targetReplicasMap = await getTargetReplicasMap(services);
 
 // Process each service
 for (const service of services) {
-  logInfo(`Processing service: ${service}`);
+  logInfo(`[main] Processing service: ${service}`);
   const targetReplicas = targetReplicasMap.get(service);
-  if (!targetReplicas) {
-    logError(`Target replicas not found for service: ${service}`);
+  if (!targetReplicas && targetReplicas !== 0) {
+    logError(`[main] Target replicas not found for service: ${service}`);
     process.exit(1);
   }
-  await rolloutService(service, targetReplicas);
+  try {
+    await rolloutService(service, targetReplicas);
+  } catch (error) {
+    logError(
+      `[main] Error during rollout for service ${service}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
 }
