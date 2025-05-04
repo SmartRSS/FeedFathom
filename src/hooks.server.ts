@@ -8,6 +8,7 @@ const pathsNotRequiringLogin = ["/register", "/login", "/api/mail"];
 
 export const handle: Handle = async ({ event, resolve }) => {
   llog(event.url);
+  llog(event.route);
   const isInternal = isInternalRequest({
     headers: event.request.headers,
     address: event.getClientAddress(),
