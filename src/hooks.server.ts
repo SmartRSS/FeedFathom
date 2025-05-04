@@ -7,7 +7,8 @@ import { isInternalRequest } from "./util/security.ts";
 const pathsNotRequiringLogin = ["/register", "/login", "/api/mail"];
 
 export const handle: Handle = async ({ event, resolve }) => {
-  llog(event.url.pathname);
+  llog(event.url);
+  llog(event.route);
   const isInternal = isInternalRequest({
     headers: event.request.headers,
     address: event.getClientAddress(),
