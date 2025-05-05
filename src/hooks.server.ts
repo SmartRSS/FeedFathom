@@ -7,8 +7,6 @@ import { isInternalRequest } from "./util/security.ts";
 const pathsNotRequiringLogin = ["/register", "/login", "/api/mail"];
 
 export const handle: Handle = async ({ event, resolve }) => {
-  llog(event.url);
-  llog(event.route);
   const isInternal = isInternalRequest({
     headers: event.request.headers,
     address: event.getClientAddress(),
@@ -38,6 +36,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname === "") {
     return redirect(302, "/");
   }
+  llog(event.url);
 
   // Allow public endpoints without authentication
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {
