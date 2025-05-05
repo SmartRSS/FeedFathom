@@ -9,7 +9,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      - "traefik.http.routers.feedfathom.rule=Host(${FEED_FATHOM_DOMAIN}`)"
+      - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
 
       - "traefik.http.routers.feedfathom-alt.rule=Host(`${FEED_FATHOM_ALT_DOMAIN:-example.com}`)"
