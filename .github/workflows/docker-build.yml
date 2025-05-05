@@ -215,6 +215,7 @@ jobs:
       WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
       WORKER_MEM_LIMIT: ${{ vars.WORKER_MEM_LIMIT }}
       FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
+      MAKIL_ENABLED: ${{ vars.MAIL_ENABLED }}
 
     steps:
       - name: Checkout repository
