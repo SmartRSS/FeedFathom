@@ -27,11 +27,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     if (body instanceof type.errors) {
       return json({ error: "Invalid body" }, { status: 400 });
     }
-    llog("body", body.raw);
 
     const rawBuffer = Buffer.from(body.raw, "base64");
 
     const parsed = await emailHandler.parseEmail(rawBuffer);
+    llog(JSON.stringify(parsed, null, 2));
     const sender = body.from;
 
     await emailHandler.processParsedEmail(parsed, sender);
