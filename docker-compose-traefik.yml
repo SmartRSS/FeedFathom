@@ -11,6 +11,11 @@ services:
       - "traefik.docker.network=traefik"
       - "traefik.http.routers.feedfathom.rule=Host(`${FEED_FATHOM_DOMAIN}`)"
       - "traefik.http.routers.feedfathom.entrypoints=web"
+
+      - "traefik.http.routers.feedfathom-alt.rule=Host(`${FEED_FATHOM_ALT_DOMAIN:example.com}`)"
+      - "traefik.http.routers.feedfathom-alt.entrypoints=web"
+      - "traefik.http.routers.feedfathom-alt.service=feedfathom"
+
       - "traefik.http.services.feedfathom.loadbalancer.server.port=3000"
   mail:
     networks:

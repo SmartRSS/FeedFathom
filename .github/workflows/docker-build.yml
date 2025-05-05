@@ -214,6 +214,7 @@ jobs:
       APP_REPLICAS: ${{ vars.APP_REPLICAS }}
       WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
       WORKER_MEM_LIMIT: ${{ vars.WORKER_MEM_LIMIT }}
+      FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
 
     steps:
       - name: Checkout repository
@@ -243,6 +244,7 @@ jobs:
             export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && \
             export MAIL_REPLICAS='${{ env.MAIL_REPLICAS }}' && \
             export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
+            export FEED_FATHOM_ALT_DOMAIN='${{ env.FEED_FATHOM_ALT_DOMAIN }}' && \
             export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \
             export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && \
             export ORIGIN='${{ env.ORIGIN }}' && \
