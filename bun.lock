@@ -29,7 +29,7 @@
         "@biomejs/biome": "^1.9.4",
         "@total-typescript/ts-reset": "^0.6.1",
         "@types/archiver": "^6.0.3",
-        "@types/chrome": "^0.0.319",
+        "@types/chrome": "^0.0.320",
         "@types/jsdom": "^21.1.7",
         "@types/mailparser": "^3.4.5",
         "@types/node": "^22.15.3",
@@ -259,7 +259,7 @@
 
     "@types/archiver": ["@types/archiver@6.0.3", "", { "dependencies": { "@types/readdir-glob": "*" } }, "sha512-a6wUll6k3zX6qs5KlxIggs1P1JcYJaTCx2gnlr+f0S1yd2DoaEwoIK10HmBaLnZwWneBz+JBm0dwcZu0zECBcQ=="],
 
-    "@types/chrome": ["@types/chrome@0.0.319", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-k+E1b3VrWEj7OqQ22cPxHs3o/jrYWEEDGaocwjlIGtul+WrAn1vaBANc0iurgm0aXkyIVs7aH3ce0lpr96XYhw=="],
+    "@types/chrome": ["@types/chrome@0.0.320", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-LD0O6hqayM4/InMUB2fOGSh7lFkUlusa40mk6iUAxs0RHfvRYjjsDoRGsDh2DEJWP4Ckccf00FVhkhDHHIqy7g=="],
 
     "@types/cookie": ["@types/cookie@0.6.0", "", {}, "sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA=="],
 
