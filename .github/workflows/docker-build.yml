@@ -16,7 +16,7 @@ on:
 
 jobs:
   build:
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2204
 
     steps:
       - name: Checkout repository
@@ -98,7 +98,7 @@ jobs:
         run: docker logout ghcr.io
 
   verify:
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     needs: build
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 10
@@ -197,7 +197,7 @@ jobs:
         run: docker compose down -v
 
   deploy:
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     needs: [build, verify]
     if: |
       (github.ref == 'refs/heads/main') ||
