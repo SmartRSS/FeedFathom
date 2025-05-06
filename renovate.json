@@ -12,5 +12,5 @@
       "automergeType": "pr"
     }
   ],
-  "schedule": ["every 3 hours"]
+  "schedule": ["0 */3 * * *"]
 }
