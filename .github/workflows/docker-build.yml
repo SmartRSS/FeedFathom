@@ -16,7 +16,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
 
     steps:
       - name: Checkout repository
@@ -29,7 +29,7 @@ jobs:
 
       # Cache Docker layers
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: useblacksmith/cache@v5
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -98,7 +98,7 @@ jobs:
         run: docker logout ghcr.io
 
   verify:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     needs: build
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 10
@@ -116,7 +116,7 @@ jobs:
 
       # Cache Docker layers for verification
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: useblacksmith/cache@v5
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-verify-${{ github.sha }}
@@ -197,7 +197,7 @@ jobs:
         run: docker compose down -v
 
   deploy:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     needs: [build, verify]
     if: |
       (github.ref == 'refs/heads/main') ||
