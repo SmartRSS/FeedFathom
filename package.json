@@ -21,7 +21,7 @@
     "knip": "knip",
     "generate-migrations": "bunx --bun drizzle-kit generate && bun lint:fix"
   },
-  "devDependencies": {
+  "peerDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/archiver": "^6.0.3",
@@ -41,7 +41,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1"
   },
-  "dependencies": {
+  "devDependencies": {
     "@extractus/article-extractor": "^8.0.17",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.0.2",

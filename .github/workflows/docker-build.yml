@@ -97,6 +97,58 @@ jobs:
       - name: Log out from GitHub Container Registry
         run: docker logout ghcr.io
 
+      - name: Build and push feedfathom-server image
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: .
+          target: feedfathom-server
+          platforms: linux/amd64,linux/arm64,linux/arm64/v8
+          push: true
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache
+            type=local,src=/tmp/.buildx-cache
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache,mode=max
+            type=local,dest=/tmp/.buildx-cache-new,mode=max
+          tags: |
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:latest
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ env.BRANCH_TAG }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          build-args: |
+            BUILDKIT_PROGRESS=plain
+            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
+            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
+            GITHUB_REPOSITORY=${{ github.repository }}
+
+      - name: Build and push feedfathom-worker image
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: .
+          target: feedfathom-worker
+          platforms: linux/amd64,linux/arm64,linux/arm64/v8
+          push: true
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache
+            type=local,src=/tmp/.buildx-cache
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache,mode=max
+            type=local,dest=/tmp/.buildx-cache-new,mode=max
+          tags: |
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:latest
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ env.BRANCH_TAG }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          build-args: |
+            BUILDKIT_PROGRESS=plain
+            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
+            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
+            GITHUB_REPOSITORY=${{ github.repository }}
+
   verify:
     runs-on: ubuntu-24.04
     needs: build
