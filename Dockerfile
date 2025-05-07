@@ -7,7 +7,7 @@ ENTRYPOINT ["/usr/local/bin/bun"]
 FROM --platform=$BUILDPLATFORM oven/bun:1.2.12-slim AS installer
 WORKDIR /app
 COPY package.json bun.lock svelte.config.js vite.config.ts tsconfig.json /app/
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --omit=peer --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # --- Server Builder ---
 FROM --platform=$BUILDPLATFORM oven/bun:1.2.12-slim AS builder-server
