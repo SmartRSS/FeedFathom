@@ -1,15 +1,15 @@
 import type { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
-import type { ArticlesRepository } from "$lib/db/article-repository";
-import type { SourcesRepository } from "$lib/db/source-repository";
-import { EmailProcessor } from "$lib/email-processor";
+import type { ArticlesRepository } from "$lib/db/article-repository.ts";
+import type { SourcesRepository } from "$lib/db/source-repository.ts";
+import { EmailProcessor } from "$lib/email-processor.ts";
 import {
   SMTPServer,
   type SMTPServerAddress,
   type SMTPServerSession,
 } from "smtp-server";
 import { logError as error_, llog } from "../../util/log.ts";
-import { EmailHandler } from "../email/email-handler";
+import { EmailHandler } from "../email/email-handler.ts";
 
 export type MailWorkerConfig = {
   allowedDomains?: string[] | undefined;

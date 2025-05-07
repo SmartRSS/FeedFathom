@@ -3,10 +3,10 @@ import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import type { SMTPServerAddress, SMTPServerSession } from "smtp-server";
-import type { Source } from "../../types/source-types";
-import type { ArticlesRepository } from "../db/article-repository";
-import type { SourcesRepository } from "../db/source-repository";
-import type { EmailProcessor } from "../email-processor";
+import type { Source } from "../../types/source-types.ts";
+import type { ArticlesRepository } from "../db/article-repository.ts";
+import type { SourcesRepository } from "../db/source-repository.ts";
+import type { EmailProcessor } from "../email-processor.ts";
 
 /**
  * Branded type for GUIDs used in articles.

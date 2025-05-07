@@ -33,10 +33,9 @@ services:
 
   migrator:
     init: true
-    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     environment:
       INTEGRATION: "migrator"
-    command: worker-entrypoint.js
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,9 +44,8 @@ services:
 
   server:
     init: true
-    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:-main}
     restart: always
-    command: index.js
     deploy:
       update_config:
         parallelism: 1
@@ -81,8 +79,7 @@ services:
 
   worker:
     init: true
-    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
-    command: worker-entrypoint.js
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     restart: always
     environment:
       DEBUG: bull:*
@@ -120,8 +117,7 @@ services:
 
   mail:
     init: true
-    image: ghcr.io/smartrss/feedfathom:${FEEDFATHOM_TAG:-main}
-    command: worker-entrypoint.js
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     ports:
       - "25:25"
     restart: always

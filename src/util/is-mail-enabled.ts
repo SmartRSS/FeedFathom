@@ -5,7 +5,7 @@
  * - If MAIL_REPLICAS is not set or any other value: All mail features are disabled.
  */
 
-import type { AppConfig } from "../config";
+import type { AppConfig } from "../config.ts";
 
 export type MailFeatureState =
   | { mode: "local"; enabled: true }

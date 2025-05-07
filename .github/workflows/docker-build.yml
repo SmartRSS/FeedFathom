@@ -36,11 +36,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -63,11 +58,13 @@ jobs:
             latest
             type=sha
 
-      - name: Build and push Docker image
+
+      - name: Build and push feedfathom-server image
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
           context: .
+          target: feedfathom-server
           platforms: linux/amd64,linux/arm64,linux/arm64/v8
           push: true
           cache-from: |
@@ -77,9 +74,9 @@ jobs:
             type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache,mode=max
             type=local,dest=/tmp/.buildx-cache-new,mode=max
           tags: |
-            ghcr.io/${{ env.REPO_NAME }}:latest
-            ghcr.io/${{ env.REPO_NAME }}:${{ github.sha }}
-            ghcr.io/${{ env.REPO_NAME }}:${{ env.BRANCH_TAG }}
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:latest
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ env.BRANCH_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
           build-args: |
@@ -88,7 +85,34 @@ jobs:
             BUILDKIT_STEP_LOG_MAX_SPEED=10485760
             GITHUB_REPOSITORY=${{ github.repository }}
 
-      # Move cache
+      - name: Build and push feedfathom-worker image
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: .
+          target: feedfathom-worker
+          platforms: linux/amd64,linux/arm64,linux/arm64/v8
+          push: true
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache
+            type=local,src=/tmp/.buildx-cache
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ env.REPO_NAME }}:buildcache,mode=max
+            type=local,dest=/tmp/.buildx-cache-new,mode=max
+          tags: |
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:latest
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ env.BRANCH_TAG }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          build-args: |
+            BUILDKIT_PROGRESS=plain
+            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
+            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
+            GITHUB_REPOSITORY=${{ github.repository }}
+
+            # Move cache
+
       - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
@@ -111,25 +135,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Cache Docker layers for verification
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-verify-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-verify-
-          # Create the cache directory if it doesn't exist
-          enableCrossOsArchive: true
-          fail-on-cache-miss: false
-
-      - name: Create cache directory
-        run: mkdir -p /tmp/.buildx-cache
-
-      - name: Build and start services
+      - name: Start services
         run: |
           export FEEDFATHOM_TAG=${{ github.sha }} && \
           docker compose pull && \
@@ -194,7 +200,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker compose down
 
   deploy:
     runs-on: ubuntu-24.04
