@@ -41,6 +41,7 @@ RUN mkdir -p /app/build && \
 FROM oven/bun:1.2.12-slim AS feedfathom-server
 USER 1000:1000
 WORKDIR /app
+COPY package.json /app/
 COPY --from=builder-server /app/build/ /app/build/
 ENTRYPOINT ["/usr/local/bin/bun", "run", "start-server"]
 
@@ -48,6 +49,7 @@ ENTRYPOINT ["/usr/local/bin/bun", "run", "start-server"]
 FROM oven/bun:1.2.12-slim AS feedfathom-worker
 USER 1000:1000
 WORKDIR /app
+COPY package.json /app/
 COPY --from=builder-worker /app/build/ /app/build/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
 ENTRYPOINT ["/usr/local/bin/bun", "run", "start-worker"]

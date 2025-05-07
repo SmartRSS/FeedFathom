@@ -33,7 +33,7 @@ services:
 
   migrator:
     init: true
-    image: ghcr.io/smartrss/feedfathom-worker:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     environment:
       INTEGRATION: "migrator"
     command: worker-entrypoint.js
@@ -45,7 +45,7 @@ services:
 
   server:
     init: true
-    image: ghcr.io/smartrss/feedfathom-server:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:-main}
     restart: always
     command: index.js
     deploy:
@@ -81,7 +81,7 @@ services:
 
   worker:
     init: true
-    image: ghcr.io/smartrss/feedfathom-worker:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     command: worker-entrypoint.js
     restart: always
     environment:
@@ -120,7 +120,7 @@ services:
 
   mail:
     init: true
-    image: ghcr.io/smartrss/feedfathom-worker:${FEEDFATHOM_TAG:-main}
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:-main}
     command: worker-entrypoint.js
     ports:
       - "25:25"

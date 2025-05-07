@@ -135,10 +135,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build and start services
+      - name: Start services
         run: |
           export FEEDFATHOM_TAG=${{ github.sha }} && \
           docker compose pull && \
@@ -203,7 +200,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v ; docker logout ghcr.io
+        run: docker compose down
 
   deploy:
     runs-on: ubuntu-24.04
