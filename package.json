@@ -67,10 +67,15 @@
   "trustedDependencies": ["@biomejs/biome"],
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
-    "entry": ["src/**/*.{ts,svelte}", "tests/**/*.ts", "bin/**", "rollout.js"],
+    "entry": [
+      "src/**/*.{ts,svelte}",
+      "tests/**/*.ts",
+      "bin/**",
+      "rollout.js",
+      "eslint.config.js"
+    ],
     "ignore": ["build/**", "ext/**", "rollout.js", "src/cloudflare/**"],
-    "ignoreBinaries": ["export", "build"],
-    "ignoreDependencies": ["svelte-check", "drizzle-kit"],
+    "ignoreBinaries": ["export", "build", "biome", "knip"],
     "ignoreUnresolved": ["^\\$app/", "^\\$service-worker"]
   }
 }
