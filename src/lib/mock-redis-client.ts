@@ -778,4 +778,11 @@ export class MockRedisClient implements RedisClient {
   ): Promise<string | null> {
     return await Promise.resolve(null);
   }
+
+  // Add missing getBuffer method to satisfy RedisClient interface
+  async getBuffer(
+    _key: string | ArrayBufferView | Blob,
+  ): Promise<Uint8Array<ArrayBuffer> | null> {
+    return await Promise.resolve(null);
+  }
 }

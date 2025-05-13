@@ -77,7 +77,7 @@
       "eslint.config.js"
     ],
     "ignore": ["build/**", "ext/**", "rollout.js", "src/cloudflare/**"],
-    "ignoreBinaries": ["export", "build", "biome", "knip"],
-    "ignoreUnresolved": ["^\\$app/", "^\\$service-worker"]
+    "ignoreBinaries": ["build", "biome", "knip"],
+    "ignoreUnresolved": ["^\\$service-worker"]
   }
 }
