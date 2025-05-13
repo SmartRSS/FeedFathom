@@ -1,6 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended",
+    "customManagers:biomeVersions",
+    "group:allNonMajor",
+    "replacements:all",
+    "schedule:automergeDaily"
+  ],
   "packageRules": [
     {
       "updateTypes": ["major"],
@@ -11,6 +17,5 @@
       "automerge": true,
       "automergeType": "pr"
     }
-  ],
-  "schedule": ["* 0-3 * * *"]
+  ]
 }
