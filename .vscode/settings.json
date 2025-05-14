@@ -9,5 +9,6 @@
   },
   "[svelte]": {
     "editor.defaultFormatter": "biomejs.biome"
-  }
+  },
+  "oxc.enable": true
 }

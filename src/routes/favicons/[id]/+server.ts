@@ -1,5 +1,6 @@
 import type { RequestHandler } from "@sveltejs/kit";
 import { logError } from "../../../util/log.ts";
+import feedPngUrl from "$lib/images/feed.png";
 
 function sniffContentType(bytes: Uint8Array): string {
   // Check for PNG
@@ -48,31 +49,52 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     return new Response(null, { status: 404 });
   }
 
+  // Helper to return the fallback image
+  async function returnFallback() {
+    try {
+      // Use fetch to get the file contents from the static asset URL
+      const response = await fetch(feedPngUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch fallback image");
+      }
+      const fallback = new Uint8Array(await response.arrayBuffer());
+      return new Response(fallback, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        } as HeadersInit,
+      });
+    } catch (error) {
+      logError("Failed to load fallback feed.png", { error });
+      return new Response(null, { status: 404 });
+    }
+  }
+
   try {
     const source = await locals.dependencies.sourcesRepository.findSourceById(
       Number.parseInt(sourceId, 10),
     );
 
     if (!source?.favicon) {
-      return new Response(null, { status: 404 });
+      return await returnFallback();
     }
 
     // Validate favicon data format
     if (!source.favicon.startsWith("data:image/")) {
       logError("Invalid favicon format for source", { sourceId });
-      return new Response(null, { status: 404 });
+      return await returnFallback();
     }
 
     const parts = source.favicon.split(",");
     if (parts.length !== 2) {
       logError("Invalid favicon data format for source", { sourceId });
-      return new Response(null, { status: 404 });
+      return await returnFallback();
     }
 
     const [, base64Data] = parts;
     if (!base64Data) {
       logError("Missing base64 data in favicon for source", { sourceId });
-      return new Response(null, { status: 404 });
+      return await returnFallback();
     }
 
     try {
@@ -97,10 +119,10 @@ export const GET: RequestHandler = async ({ locals, params }) => {
         sourceId,
         error,
       });
-      return new Response(null, { status: 404 });
+      return await returnFallback();
     }
   } catch (error) {
     logError("Error processing favicon request", { sourceId, error });
-    return new Response(null, { status: 404 });
+    return await returnFallback();
   }
 };
