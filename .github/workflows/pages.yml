@@ -52,20 +52,20 @@ jobs:
       - name: Build extension
         run: bun build-extension
 
-      # 5. Calculate hashes and check if update is needed
-      - name: Calculate and compare hashes
+      # 5. Setup directories and load manifest
+      - name: Setup and load manifest
         run: |
-          # Ensure assets directories exist
-          mkdir -p docs/assets
+          # Create required directories once
           mkdir -p docs/assets/extension
 
           # Calculate hash of the new build
           NEW_HASH=$(sha256sum ext/FeedFathom_ff.zip | cut -d' ' -f1)
           echo "NEW_HASH=$NEW_HASH" >> $GITHUB_ENV
 
-          # Try to get the current manifest data from the server
-          CURRENT_DATA=$(bun -e "
+          # Load current manifest data
+          MANIFEST_DATA=$(bun -e "
             const url = \`\${process.env.PAGES_URL}/assets/updates.json\`;
+            const defaultData = { version: 'none', hash: 'none' };
 
             try {
               const response = await fetch(url);
@@ -73,81 +73,65 @@ jobs:
 
               const data = await response.json();
               const update = data.addons['feedfathom@smartrss'].updates[0];
-              const hash = update.update_hash || 'none';
 
-              // Output version and hash on separate lines for easy parsing
-              console.log(update.version);
-              console.log(hash);
+              console.log(JSON.stringify({
+                version: update.version,
+                hash: update.update_hash
+              }));
             } catch (e) {
-              // If file doesn't exist or other error, output defaults
-              console.log('none');
-              console.log('none');
+              console.log(JSON.stringify(defaultData));
             }
           ")
 
-          # Parse the output (version is first line, hash is second)
-          CURRENT_VERSION=$(echo "$CURRENT_DATA" | head -n1)
-          CURRENT_HASH=$(echo "$CURRENT_DATA" | tail -n1)
+          # Parse JSON output into environment
+          CURRENT_VERSION=$(echo "$MANIFEST_DATA" | jq -r '.version')
+          CURRENT_HASH=$(echo "$MANIFEST_DATA" | jq -r '.hash')
 
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
 
-          # Compare hashes and set environment variable
-          if [ "sha256:$NEW_HASH" = "$CURRENT_HASH" ]; then
-            echo "HASHES_MATCH=true" >> $GITHUB_ENV
-            # Use the current version when hashes match
-            echo "FF_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+      # 6. Process version and build date
+      - name: Process version and build date
+        run: |
+          format_datetime() {
+            local year=$1
+            local month=$2
+            local day=$3
+            local hour=$4
+            local minute=$5
 
-            # Extract build date from current version
+            echo "FF_VERSION=1.${year}${month}.${day}${hour}${minute}" >> $GITHUB_ENV
+            echo "BUILD_DATE=${year}-${month}-${day} ${hour}:${minute} UTC" >> $GITHUB_ENV
+          }
+
+          if [ "sha256:$NEW_HASH" = "$CURRENT_HASH" ]; then
+            # Extract datetime components from current version
             VERSION_PARTS=(${CURRENT_VERSION//./ })
             YEAR_MONTH=${VERSION_PARTS[1]}
             DAY_TIME=${VERSION_PARTS[2]}
 
-            YEAR=${YEAR_MONTH:0:4}
-            MONTH=${YEAR_MONTH:4:2}
-            DAY=${DAY_TIME:0:2}
-            HOUR=${DAY_TIME:2:2}
-            MINUTE=${DAY_TIME:4:2}
-
-            BUILD_DATE="$YEAR-$MONTH-$DAY $HOUR:$MINUTE UTC"
-            echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
+            format_datetime "${YEAR_MONTH:0:4}" "${YEAR_MONTH:4:2}" \
+                          "${DAY_TIME:0:2}" "${DAY_TIME:2:2}" "${DAY_TIME:4:2}"
+            echo "Using existing version and build date"
           else
-            echo "HASHES_MATCH=false" >> $GITHUB_ENV
-            # Current time will be used for both version and build date
-            YEAR=$(date +%Y)
-            MONTH=$(date +%m)
-            DAY=$(date +%d)
-            HOUR=$(date +%H)
-            MINUTE=$(date +%M)
-
-            # Format version: 1.YYYYMM.DDHHMM
-            FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
-            echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
-
-            # Format build date
-            BUILD_DATE="${YEAR}-${MONTH}-${DAY} ${HOUR}:${MINUTE} UTC"
-            echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
+            # Use current datetime
+            format_datetime "$(date +%Y)" "$(date +%m)" "$(date +%d)" "$(date +%H)" "$(date +%M)"
+            echo "Using new version and build date"
           fi
 
-      # 6. Calculate Firefox version only if hash changed
-      - name: Calculate extension version
-        if: env.HASHES_MATCH != 'true'
+      # 7. Copy extension files
+      - name: Copy extension files
         run: |
-          # Version and build date are already set in the previous step
-          mkdir -p docs/assets
-          mkdir -p docs/assets/extension
+          cp ext/FeedFathom_ff.zip docs/assets/extension/FeedFathom_ff.xpi
+          cp ext/FeedFathom_ch.zip docs/assets/extension/FeedFathom_ch.zip
 
-      # 7. Create Firefox update manifest
+      # 8. Create Firefox update manifest
       - name: Create Firefox update manifest
         run: |
-          # Create or update updates.json using Bun
           bun -e "
             const fs = require('fs');
-            const path = require('path');
 
-            // If hashes match, we should keep the same version number
-            // If hashes don't match, we use the new version number
-            const data = {
+            const manifest = {
               addons: {
                 'feedfathom@smartrss': {
                   updates: [{
@@ -164,41 +148,23 @@ jobs:
               }
             };
 
-            const updatesPath = 'docs/assets/updates.json';
-            const resolvedPath = path.resolve(updatesPath);
-            console.log('Writing updates.json to:', resolvedPath);
-            console.log('Using version:', process.env.FF_VERSION);
-            console.log('Using hash:', process.env.NEW_HASH);
-            fs.writeFileSync(updatesPath, JSON.stringify(data, null, 2));
+            fs.writeFileSync('docs/assets/updates.json', JSON.stringify(manifest, null, 2));
+            console.log(\`Published manifest with version \${process.env.FF_VERSION}\`);
           "
 
-      # 8. Put files where they belong
-      - name: Copy extension to Jekyll assets
-        run: |
-          mkdir -p docs/assets/extension
-          cp ext/FeedFathom_ff.zip docs/assets/extension/FeedFathom_ff.xpi
-          cp ext/FeedFathom_ch.zip docs/assets/extension/FeedFathom_ch.zip
-          echo "Extension files copied to: $(realpath docs/assets/extension)"
-          ls -la docs/assets/extension/
-          echo "Updates.json location:"
-          ls -la docs/assets/
-
       # 9. Update documentation
-      - name: Update extension.md with template variables
+      - name: Update documentation
         run: |
-          # Replace template variables in extension.md
-          sed -i "s|FIREFOX_VERSION|$FF_VERSION|g" docs/extension.md
-          sed -i "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ff.xpi|g" docs/extension.md
-          sed -i "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ch.zip|g" docs/extension.md
+          # Update all placeholders in one go
+          sed -i \
+            -e "s|FIREFOX_VERSION|$FF_VERSION|g" \
+            -e "s|CHROME_VERSION|$FF_VERSION|g" \
+            -e "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ff.xpi|g" \
+            -e "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ch.zip|g" \
+            -e "s|BUILD_DATE|$BUILD_DATE|g" \
+            docs/extension.md
 
-          # Use the build date that was set earlier
-          sed -i "s|BUILD_DATE|$BUILD_DATE|g" docs/extension.md
-
-          # Use the same version for Chrome as Firefox
-          sed -i "s|CHROME_VERSION|$FF_VERSION|g" docs/extension.md
-
-          echo "Documentation updated with version: $FF_VERSION"
-          echo "Build date set to: $BUILD_DATE"
+          echo "Documentation updated with version $FF_VERSION (build: $BUILD_DATE)"
 
       # 10. Build the pages
       - name: Setup Pages
