@@ -102,6 +102,8 @@ jobs:
 
             echo "FF_VERSION=1.${year}${month}.${day}${hour}${minute}" >> $GITHUB_ENV
             echo "BUILD_DATE=${year}-${month}-${day} ${hour}:${minute} UTC" >> $GITHUB_ENV
+            echo "NEW_HASH=sha256:$NEW_HASH"
+            echo "CURRENT_HASH=$CURRENT_HASH"
           }
 
           if [ "sha256:$NEW_HASH" = "$CURRENT_HASH" ]; then
