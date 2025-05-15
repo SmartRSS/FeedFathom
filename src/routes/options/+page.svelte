@@ -87,7 +87,7 @@ function getBrowserType(): "firefox" | "chrome" | "other" {
 // Get download URL based on browser
 function getDownloadUrl(): string {
   const browserType = getBrowserType();
-  const baseUrl = "https://feedfathom.github.io/FeedFathom";
+  const baseUrl = "https://smartrss.github.io/FeedFathom";
 
   if (browserType === "firefox") {
     return `${baseUrl}/assets/extension/FeedFathom_ff.xpi`;
