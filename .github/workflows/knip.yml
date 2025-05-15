@@ -10,13 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Bun dependencies and Svelte output
+      - name: Restore node_modules cache
+        id: node_modules_cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.bun/install/cache
-            .svelte-kit
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-sveltekit-${{ hashFiles('svelte.config.js', 'tsconfig.json') }}
+          path: ./node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
@@ -24,10 +23,35 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
+        if: steps.node_modules_cache.outputs.cache-hit != 'true'
         run: bun install --frozen-lockfile
 
+      - name: Save node_modules cache
+        if: steps.node_modules_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ./node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      - name: Restore .svelte-kit cache
+        id: sveltekit_cache
+        uses: actions/cache@v4
+        with:
+          path: .svelte-kit
+          key: ${{ runner.os }}-sveltekit-${{ hashFiles('svelte.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-sveltekit-
+
       - name: SvelteKit sync
+        if: steps.sveltekit_cache.outputs.cache-hit != 'true'
         run: bunx --bun svelte-kit sync
+
+      - name: Save .svelte-kit cache
+        if: steps.sveltekit_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .svelte-kit
+          key: ${{ runner.os }}-sveltekit-${{ hashFiles('svelte.config.js', 'tsconfig.json') }}
 
       - name: Run Knip
         run: bun knip
