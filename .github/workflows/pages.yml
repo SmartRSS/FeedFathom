@@ -61,8 +61,7 @@ jobs:
 
           # Calculate hash of the new build
           NEW_HASH=$(sha256sum ext/FeedFathom_ff.zip | cut -d' ' -f1)
-          NEW_HASH_WITH_PREFIX="sha256:$NEW_HASH"
-          echo "NEW_HASH=$NEW_HASH_WITH_PREFIX" >> $GITHUB_ENV
+          echo "NEW_HASH=$NEW_HASH" >> $GITHUB_ENV
 
           # Try to get the current manifest data from the server
           CURRENT_DATA=$(bun -e "
@@ -94,35 +93,41 @@ jobs:
           echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
 
           # Compare hashes and set environment variable
-          if [ "$NEW_HASH_WITH_PREFIX" = "$CURRENT_HASH" ]; then
+          if [ "sha256:$NEW_HASH" = "$CURRENT_HASH" ]; then
             echo "HASHES_MATCH=true" >> $GITHUB_ENV
             # Use the current version when hashes match
             echo "FF_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           else
             echo "HASHES_MATCH=false" >> $GITHUB_ENV
+            # Only calculate new version if hashes don't match
+            if [ "$CURRENT_VERSION" = "none" ]; then
+              # Get date components for version
+              YEAR=$(date +%Y)
+              MONTH=$(date +%m)
+              DAY=$(date +%d)
+              HOUR=$(date +%H)
+              MINUTE=$(date +%M)
+              # Format: 1.YYYYMMDD.HHMM
+              FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
+              echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
+            else
+              # Increment the patch version of the current version
+              MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+              MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+              PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+              NEW_PATCH=$((PATCH + 1))
+              FF_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
+            fi
           fi
 
       # 6. Calculate Firefox version only if hash changed
       - name: Calculate extension version
         if: env.HASHES_MATCH != 'true'
         run: |
-          # Get date components for version
-          YEAR=$(date +%Y)
-          MONTH=$(date +%m)
-          DAY=$(date +%d)
-          HOUR=$(date +%H)
-          MINUTE=$(date +%M)
-
-          # Format: 1.YYYYMMDD.HHMM (semver compatible)
-          # Major.Minor.Patch format where:
-          # Major = 1 (fixed)
-          # Minor = YYYYMMDD (date)
-          # Patch = HHMM (time)
-          FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
-          echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
+          # Version is already set in the previous step
           mkdir -p docs/assets
           mkdir -p docs/assets/extension
-
 
       # 7. Create Firefox update manifest
       - name: Create Firefox update manifest
@@ -132,6 +137,8 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
+            // If hashes match, we should keep the same version number
+            // If hashes don't match, we use the new version number
             const data = {
               addons: {
                 'feedfathom@smartrss': {
@@ -152,6 +159,8 @@ jobs:
             const updatesPath = 'docs/assets/updates.json';
             const resolvedPath = path.resolve(updatesPath);
             console.log('Writing updates.json to:', resolvedPath);
+            console.log('Using version:', process.env.FF_VERSION);
+            console.log('Using hash:', process.env.NEW_HASH);
             fs.writeFileSync(updatesPath, JSON.stringify(data, null, 2));
           "
 
@@ -170,13 +179,16 @@ jobs:
       - name: Update extension.md with template variables
         run: |
           # Replace template variables in extension.md
+          # FF_VERSION is already set correctly based on whether hashes match
           sed -i "s|FIREFOX_VERSION|$FF_VERSION|g" docs/extension.md
           sed -i "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ff.xpi|g" docs/extension.md
           sed -i "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ch.zip|g" docs/extension.md
           sed -i "s|BUILD_DATE|$(date -u +"%Y-%m-%d %H:%M UTC")|g" docs/extension.md
 
-          # If CHROME_VERSION is used in the template, replace it with the same version
+          # Use the same version for Chrome as Firefox
           sed -i "s|CHROME_VERSION|$FF_VERSION|g" docs/extension.md
+
+          echo "Documentation updated with version: $FF_VERSION"
 
       # 10. Build the pages
       - name: Setup Pages
