@@ -179,16 +179,38 @@ jobs:
       - name: Update extension.md with template variables
         run: |
           # Replace template variables in extension.md
-          # FF_VERSION is already set correctly based on whether hashes match
           sed -i "s|FIREFOX_VERSION|$FF_VERSION|g" docs/extension.md
           sed -i "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ff.xpi|g" docs/extension.md
           sed -i "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ch.zip|g" docs/extension.md
-          sed -i "s|BUILD_DATE|$(date -u +"%Y-%m-%d %H:%M UTC")|g" docs/extension.md
+
+          # Handle build date based on whether there are changes
+          if [ "$HASHES_MATCH" = "true" ]; then
+            # Extract date components from version (format: 1.YYYYMM.DDHHMM)
+            VERSION_PARTS=(${FF_VERSION//./ })
+            YEAR_MONTH=${VERSION_PARTS[1]}
+            DAY_TIME=${VERSION_PARTS[2]}
+
+            YEAR=${YEAR_MONTH:0:4}
+            MONTH=${YEAR_MONTH:4:2}
+            DAY=${DAY_TIME:0:2}
+            HOUR=${DAY_TIME:2:2}
+            MINUTE=${DAY_TIME:4:2}
+
+            # Format the date string
+            BUILD_DATE="$YEAR-$MONTH-$DAY $HOUR:$MINUTE UTC"
+          else
+            # Use current time for new builds
+            BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          fi
+
+          # Update the build date
+          sed -i "s|BUILD_DATE|$BUILD_DATE|g" docs/extension.md
 
           # Use the same version for Chrome as Firefox
           sed -i "s|CHROME_VERSION|$FF_VERSION|g" docs/extension.md
 
           echo "Documentation updated with version: $FF_VERSION"
+          echo "Build date set to: $BUILD_DATE"
 
       # 10. Build the pages
       - name: Setup Pages
