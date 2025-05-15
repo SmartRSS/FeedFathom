@@ -97,35 +97,43 @@ jobs:
             echo "HASHES_MATCH=true" >> $GITHUB_ENV
             # Use the current version when hashes match
             echo "FF_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+
+            # Extract build date from current version
+            VERSION_PARTS=(${CURRENT_VERSION//./ })
+            YEAR_MONTH=${VERSION_PARTS[1]}
+            DAY_TIME=${VERSION_PARTS[2]}
+
+            YEAR=${YEAR_MONTH:0:4}
+            MONTH=${YEAR_MONTH:4:2}
+            DAY=${DAY_TIME:0:2}
+            HOUR=${DAY_TIME:2:2}
+            MINUTE=${DAY_TIME:4:2}
+
+            BUILD_DATE="$YEAR-$MONTH-$DAY $HOUR:$MINUTE UTC"
+            echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
           else
             echo "HASHES_MATCH=false" >> $GITHUB_ENV
-            # Only calculate new version if hashes don't match
-            if [ "$CURRENT_VERSION" = "none" ]; then
-              # Get date components for version
-              YEAR=$(date +%Y)
-              MONTH=$(date +%m)
-              DAY=$(date +%d)
-              HOUR=$(date +%H)
-              MINUTE=$(date +%M)
-              # Format: 1.YYYYMMDD.HHMM
-              FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
-              echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
-            else
-              # Increment the patch version of the current version
-              MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-              MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-              PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
-              NEW_PATCH=$((PATCH + 1))
-              FF_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-              echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
-            fi
+            # Current time will be used for both version and build date
+            YEAR=$(date +%Y)
+            MONTH=$(date +%m)
+            DAY=$(date +%d)
+            HOUR=$(date +%H)
+            MINUTE=$(date +%M)
+
+            # Format version: 1.YYYYMM.DDHHMM
+            FF_VERSION="1.${YEAR}${MONTH}.${DAY}${HOUR}${MINUTE}"
+            echo "FF_VERSION=$FF_VERSION" >> $GITHUB_ENV
+
+            # Format build date
+            BUILD_DATE="${YEAR}-${MONTH}-${DAY} ${HOUR}:${MINUTE} UTC"
+            echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
           fi
 
       # 6. Calculate Firefox version only if hash changed
       - name: Calculate extension version
         if: env.HASHES_MATCH != 'true'
         run: |
-          # Version is already set in the previous step
+          # Version and build date are already set in the previous step
           mkdir -p docs/assets
           mkdir -p docs/assets/extension
 
@@ -183,27 +191,7 @@ jobs:
           sed -i "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ff.xpi|g" docs/extension.md
           sed -i "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/FeedFathom_ch.zip|g" docs/extension.md
 
-          # Handle build date based on whether there are changes
-          if [ "$HASHES_MATCH" = "true" ]; then
-            # Extract date components from version (format: 1.YYYYMM.DDHHMM)
-            VERSION_PARTS=(${FF_VERSION//./ })
-            YEAR_MONTH=${VERSION_PARTS[1]}
-            DAY_TIME=${VERSION_PARTS[2]}
-
-            YEAR=${YEAR_MONTH:0:4}
-            MONTH=${YEAR_MONTH:4:2}
-            DAY=${DAY_TIME:0:2}
-            HOUR=${DAY_TIME:2:2}
-            MINUTE=${DAY_TIME:4:2}
-
-            # Format the date string
-            BUILD_DATE="$YEAR-$MONTH-$DAY $HOUR:$MINUTE UTC"
-          else
-            # Use current time for new builds
-            BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
-          fi
-
-          # Update the build date
+          # Use the build date that was set earlier
           sed -i "s|BUILD_DATE|$BUILD_DATE|g" docs/extension.md
 
           # Use the same version for Chrome as Firefox
