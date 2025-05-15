@@ -1,0 +1,33 @@
+name: ESLint
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  eslint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Bun dependencies and Svelte output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            .svelte-kit
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-sveltekit-${{ hashFiles('svelte.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: SvelteKit sync
+        run: bunx --bun svelte-kit sync
+
+      - name: Run ESLint
+        run: bun eslint
