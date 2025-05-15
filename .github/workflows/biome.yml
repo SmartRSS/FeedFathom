@@ -30,4 +30,4 @@ jobs:
         run: bunx --bun svelte-kit sync
 
       - name: Run Biome
-        run: biome check
+        run: bunx --bun biome check
