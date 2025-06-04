@@ -1,7 +1,7 @@
+import type { ServerLoad } from "@sveltejs/kit";
 import { getMailFeatureState } from "../../util/is-mail-enabled.ts";
-import type { PageServerLoad } from "./$types.ts";
 
-export const load: PageServerLoad = ({ locals }) => {
+export const load: ServerLoad = ({ locals }) => {
   const { appConfig } = locals.dependencies;
   const mailFeatureState = getMailFeatureState(appConfig);
   return {

@@ -7,8 +7,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "target": "ES2022",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
@@ -33,9 +33,6 @@
     "types": ["bun-types", "chrome"]
   },
   "include": [
-    ".svelte-kit/ambient.d.ts",
-    ".svelte-kit/non-ambient.d.ts",
-    ".svelte-kit/types/**/$types.d.ts",
     "src/**/*.ts",
     "src/**/*.svelte",
     "tests/**/*.ts",
