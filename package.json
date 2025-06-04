@@ -14,7 +14,7 @@
     "eslint": "eslint --config=eslint.config.js ./src/**/*.{ts,svelte,js} ./tests/**/*.ts",
     "eslint:fix": "bun eslint -- --fix",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
-    "lint": "bun test && svelte-kit sync && biome check && tsgo && bun svelte-check && bun knip && bun eslint",
+    "lint": "svelte-kit sync && bun test && biome check && tsgo && bun svelte-check && bun knip && bun eslint",
     "lint:fix": "svelte-kit sync && bun eslint:fix --fix && bun format",
     "format": "biome format --write",
     "knip": "knip",
