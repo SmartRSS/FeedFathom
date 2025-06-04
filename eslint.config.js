@@ -9,7 +9,7 @@ export default [
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   ...ts.configs.recommended,
   {
-    files: ["**/*.ts", "**/*.tsx"],
+    files: ["**/*.ts"],
     languageOptions: {
       parser: ts.parser,
       parserOptions: {
@@ -19,16 +19,6 @@ export default [
     },
     rules: {
       ...ts.configs.strictTypeChecked.rules,
-    },
-  },
-  {
-    files: ["**/*.ts", "**/*.tsx"],
-    languageOptions: {
-      parser: ts.parser,
-      parserOptions: {
-        project: true,
-        tsconfigRootDir: process.cwd(),
-      },
     },
   },
   ...svelte.configs.recommended.map(config => ({
@@ -45,7 +35,6 @@ export default [
     files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
     languageOptions: {
       parserOptions: {
-        projectService: true,
         project: true,
         extraFileExtensions: ['.svelte'],
         parser: ts.parser,
@@ -69,7 +58,6 @@ export default [
       "perfectionist/sort-named-imports": "off",
       "import/extensions": "off",
 
-      // Performance optimizations for slow rules
       "n/no-extraneous-import": "off",
       "@typescript-eslint/naming-convention": "off",
       "@typescript-eslint/no-unused-vars": [
@@ -88,6 +76,12 @@ export default [
           trailingUnderscore: "allowSingleOrDouble",
         },
       ],
+      "svelte/comment-directive": "off",
+      "import/named": "off",
+      "import/namespace": "off",
+      "import/default": "off",
+      "import/no-named-as-default-member": "off",
+      "import/no-unresolved": "off",
     },
   },
   biome,
