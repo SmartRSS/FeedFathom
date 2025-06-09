@@ -1,7 +1,6 @@
 import { type Handle, json, redirect } from "@sveltejs/kit";
 import container from "./container.ts";
 import { cookiesConfig } from "./util/cookies-config.ts";
-import { llog } from "./util/log.ts";
 import { isInternalRequest } from "./util/security.ts";
 
 const pathsNotRequiringLogin = ["/register", "/login", "/api/mail"];
@@ -36,7 +35,6 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname === "") {
     return redirect(302, "/");
   }
-  llog(event.url);
 
   // Allow public endpoints without authentication
   if (pathsNotRequiringLogin.includes(event.url.pathname)) {

@@ -12,6 +12,19 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun global cache
+        # This step caches Bun's dependencies on the CI runner's filesystem
+        uses: actions/cache@v4
+        with:
+          # The path to Bun's global cache directory on the runner
+          path: ~/.bun/install/cache
+          # The key ensures we get a cache hit only if the lockfile is unchanged
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          # The fallback key allows us to use a slightly stale cache
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: SvelteKit sync
