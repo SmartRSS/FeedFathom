@@ -24,6 +24,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Cache Bun global cache
+        # This step caches Bun's dependencies on the CI runner's filesystem
+        uses: actions/cache@v4
+        with:
+          # The path to Bun's global cache directory on the runner
+          path: ~/.bun/install/cache
+          # The key ensures we get a cache hit only if the lockfile is unchanged
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          # The fallback key allows us to use a slightly stale cache
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
