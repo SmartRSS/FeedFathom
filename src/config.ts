@@ -24,6 +24,12 @@ const configSchema = type({
     .pipe((s) => s === "true")
     .default("false"),
   "INTEGRATION?": "'mail'|'migrator'|'worker'",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  CLOUDFLARE_ACCOUNT_ID: "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  CLOUDFLARE_API_TOKEN: "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  MAIL_API_TOKEN: "string",
   "+": "delete",
 });
 

@@ -1,5 +1,10 @@
 export default {
   async email(message, env) {
+    const isSubscribed = await env.FEED_FATHOM.get(message.to);
+    if (!isSubscribed) {
+      return;
+    }
+
     const domain = env.MAIL_ENDPOINT_DOMAIN;
     const endpoint = `${domain}/api/mail`;
 
@@ -25,7 +30,7 @@ export default {
         headers: {
           "Content-Type": "application/json",
           ...cfAccessHeaders,
-          // "Authorization": `Basic ${token}`
+          "Authorization": `Bearer ${env.MAIL_API_TOKEN}`,
         },
         body: JSON.stringify(payload),
       });

@@ -31,6 +31,9 @@ export const subscribeHandler = async ({
         url: sourceUrl,
       },
     );
+
+    await locals.dependencies.cloudflareKv.put("feed_fathom", sourceUrl, 1);
+
     return json(true);
   }
 

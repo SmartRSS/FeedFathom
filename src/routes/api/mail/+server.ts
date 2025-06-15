@@ -15,6 +15,14 @@ const mailBody = type({
 export type MailBody = typeof mailBody.infer;
 
 export const POST: RequestHandler = async ({ request, locals }) => {
+  const { appConfig } = locals.dependencies;
+  const authHeader = request.headers.get("Authorization");
+  const expectedToken = `Bearer ${appConfig.MAIL_API_TOKEN}`;
+
+  if (!authHeader || authHeader !== expectedToken) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { articlesRepository, sourcesRepository } = locals.dependencies;
   const emailHandler = new EmailHandler(
     new EmailProcessor(),

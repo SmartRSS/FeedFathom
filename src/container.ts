@@ -24,6 +24,7 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
+import { CloudflareKv } from "./cloudflare/kv.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
 import { PostgresQueue } from "./lib/postgres-queue.ts";
 
@@ -45,6 +46,7 @@ export type Dependencies = {
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
+  cloudflareKv: CloudflareKv;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
   foldersRepository: FoldersRepository;
@@ -107,11 +109,14 @@ container.register({
   articlesRepository: asClass(ArticlesRepository).singleton(),
   foldersRepository: asClass(FoldersRepository).singleton(),
   sourcesRepository: asClass(SourcesRepository).singleton(),
-  userSourcesRepository: asClass(UserSourcesRepository).singleton(),
+  userSourcesRepository: asClass(UserSourcesRepository, {
+    lifetime: "SINGLETON",
+  }),
   usersRepository: asClass(UsersRepository).singleton(),
 
   // Services
   cli: asClass(Cli).singleton(),
+  cloudflareKv: asClass(CloudflareKv).singleton(),
   feedParser: asClass(FeedParser).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
 

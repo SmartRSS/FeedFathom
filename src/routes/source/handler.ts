@@ -6,10 +6,17 @@ export const deleteSourceHandler = async ({
   body,
   locals,
 }: ValidatedRequestEvent<DeleteSource>) => {
-  await locals.dependencies.userSourcesRepository.removeSourceFromUser(
-    locals.user.id,
-    body.removeSourceId,
-  );
+  const { userSourcesRepository, sourcesRepository, cloudflareKv } =
+    locals.dependencies;
+  const sourceId = body.removeSourceId;
 
-  return json(body.removeSourceId);
+  const source = await sourcesRepository.findSourceById(sourceId);
+
+  if (source?.url.includes("@")) {
+    await cloudflareKv.delete("feed_fathom", source.url);
+  }
+
+  await userSourcesRepository.removeSourceFromUser(locals.user.id, sourceId);
+
+  return json(sourceId);
 };
