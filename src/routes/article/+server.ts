@@ -1,6 +1,6 @@
 import { extractArticle } from "$lib/extract-article";
 import { DisplayMode } from "$lib/settings";
-import { type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
   const articlesRepository = locals.dependencies.articlesRepository;

@@ -3,8 +3,8 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { onMount } from "svelte";
 import { ulid } from "ulid";
-import type { Folder } from "../../types/folder-type.ts";
 import { logError } from "../../util/log.ts";
+    import type { UserFolder } from "../../lib/schema.ts";
 
 interface FoundFeed {
   url: string;
@@ -24,19 +24,19 @@ const { isMailEnabled } = data;
 let title = $state("");
 let link = $state("");
 let feedUrl = $state("");
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let isLoading = $state(false);
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
-let folders: Folder[] = $state([]);
-// biome-ignore lint/style/useConst: bound by Svelte
+
+let folders: UserFolder[] = $state([]);
+
 let folder = $state("");
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let foundFeeds: FoundFeed[] = $state([]);
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let selectingFeed = $state(false);
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let errorMessage = $state("");
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let clipboardMessage = $state("");
 
 onMount(async () => {
@@ -46,7 +46,7 @@ onMount(async () => {
   const foldersResponse = await fetch("folders");
   if (foldersResponse.ok) {
     try {
-      folders = (await foldersResponse.json()) as Folder[];
+      folders = (await foldersResponse.json()) as UserFolder[];
     } catch (jsonError) {
       logError("Failed to parseSource folders JSON:", jsonError);
       displayError("Failed to load folders.");
@@ -59,7 +59,7 @@ onMount(async () => {
   feedUrl ? await loadFeedPreview() : await findFeeds();
 });
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const isFormFilled = $derived(title && link && feedUrl);
 const mailLikeExpression = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidUrl(url: string): boolean {
@@ -142,7 +142,7 @@ async function findFeeds() {
   }
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function selectFeed(selectedFeedUrl: string) {
   selectingFeed = false;
   feedUrl = selectedFeedUrl;
@@ -150,7 +150,7 @@ function selectFeed(selectedFeedUrl: string) {
   loadFeedPreview();
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 async function save() {
   const response = await fetch("subscribe", {
     method: "post",
@@ -172,13 +172,13 @@ async function save() {
   }
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function cancel() {
   goto("/");
 }
 
 // Function to generate ULID email using current domain and copy to clipboard
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function generateAndCopyUlidEmail() {
   const currentDomain = window.location.hostname;
   const generatedUlid = ulid();
@@ -198,7 +198,7 @@ function generateAndCopyUlidEmail() {
   );
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function closeDialog() {
   selectingFeed = false;
   (document.getElementById("feed-dialog") as HTMLDialogElement)?.close();

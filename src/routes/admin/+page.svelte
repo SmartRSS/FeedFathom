@@ -1,26 +1,26 @@
 <script lang="ts">
 interface Source {
   url: string;
-  // biome-ignore lint/style/useNamingConvention: <explanation>
+
   created_at: string; // or Date if you prefer
-  // biome-ignore lint/style/useNamingConvention: <explanation>
+
   last_attempt: string; // or Date
-  // biome-ignore lint/style/useNamingConvention: <explanation>
+
   last_success: string; // or Date
-  // biome-ignore lint/style/useNamingConvention: <explanation>
+
   subscriber_count: number;
-  // biome-ignore lint/style/useNamingConvention: <explanation>
+
   recent_failure_details: string;
   failures: number;
 }
 
 const { data } = $props();
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let sources: Source[] = $state(data.sources) as Source[]; // Define the type of sources
 let order = "asc";
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let currentSourceUrl = ""; // Store the current source URL
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let newSourceUrl = $state(""); // Store the new source URL
 
 const fetchSortedSources = async (field: string) => {
@@ -31,13 +31,13 @@ const fetchSortedSources = async (field: string) => {
   }
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const sortSources = (field: string) => {
   order = order === "asc" ? "desc" : "asc"; // Toggle order
   fetchSortedSources(field);
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const updateSource = async (oldUrl: string, newUrl: string) => {
   const response = await fetch("/admin", {
     method: "POST",
@@ -53,7 +53,7 @@ const updateSource = async (oldUrl: string, newUrl: string) => {
   }
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const openModal = (sourceUrl: string) => {
   currentSourceUrl = sourceUrl; // Set the current source URL
   newSourceUrl = sourceUrl; // Pre-fill the new URL input
@@ -61,7 +61,7 @@ const openModal = (sourceUrl: string) => {
   dialog.showModal(); // Show the dialog
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const closeModal = () => {
   const dialog = document.getElementById("edit-dialog") as HTMLDialogElement;
   dialog.close(); // Close the dialog

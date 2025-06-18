@@ -1,6 +1,4 @@
 export const llog = (...args: unknown[]): void => {
-  // biome-ignore lint/suspicious/noConsoleLog: <explanation>
-  // biome-ignore lint/suspicious/noConsole: <explanation>
   console.log(...args);
 };
 
@@ -27,7 +25,7 @@ export const logError = (...args: unknown[]): void => {
       "Passed arguments: \n",
       ...argsWithNewlines,
     ];
-    // biome-ignore lint/suspicious/noConsole: required logger
+
     console.error(message.join(""));
   }
 };

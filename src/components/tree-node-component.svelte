@@ -1,30 +1,30 @@
 <script lang="ts">
 import { browser } from "$app/environment";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import arrowDown from "$lib/images/arrow-down.png";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import arrowRight from "$lib/images/arrow-right.png";
 import folder from "$lib/images/folder.png";
 import folderOpened from "$lib/images/folder_opened.png";
 import { onMount } from "svelte";
 import type { TreeNodeComponentProps } from "../types.ts";
 import { NodeType, type TreeNode } from "../types/source-types.ts";
-// biome-ignore lint/correctness/noUnusedImports: Svelte component
+
 import TreeNodeComponent from "./tree-node-component.svelte";
 
 let isOpen = $state(false);
 
 const {
   node,
-  // biome-ignore lint/correctness/noUnusedVariables: boud by Svelte
+
   selectedNodeUid,
-  // biome-ignore lint/correctness/noUnusedVariables: boud by Svelte
+
   nested,
   nodeSelected,
   nodeTouchStart,
   nodeHeld,
   nodeTouchEnd,
-  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
   nodeMouseLeave,
 }: TreeNodeComponentProps = $props();
 
@@ -50,7 +50,7 @@ function handleNodeSelected(e: Event) {
   return true;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function toggleOpen(e: MouseEvent) {
   if (browser) {
     window.localStorage.setItem(
@@ -65,7 +65,7 @@ function toggleOpen(e: MouseEvent) {
   return false;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function getIcon(node: TreeNode) {
   if (node.type === NodeType.Folder) {
     return isOpen ? folderOpened : folder;
@@ -73,14 +73,14 @@ function getIcon(node: TreeNode) {
   return `/favicons/${node.uid}`;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === "enter" || event.key === " ") {
     handleNodeSelected(event);
   }
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function getUnreadCount(node: TreeNode): number {
   if (node.type === NodeType.Folder) {
     return node.children.reduce((prev: number, curr: TreeNode) => {
@@ -93,7 +93,7 @@ function getUnreadCount(node: TreeNode): number {
   return 0;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function hasUnread(node: TreeNode) {
   if (node.type === NodeType.Folder) {
     return node.children.some(
@@ -104,12 +104,12 @@ function hasUnread(node: TreeNode) {
   return node.unreadCount > 0;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function isNodeSelected(node: TreeNode, selectedNodeUid: string) {
   return node.type + node.uid === selectedNodeUid;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const onTouchStart = (e: Event) => {
   e.stopImmediatePropagation();
   longPressDetected = false;
@@ -120,7 +120,7 @@ const onTouchStart = (e: Event) => {
   }, 1000);
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const onTouchEnd = (e: Event) => {
   e.stopImmediatePropagation();
   nodeTouchEnd(node);

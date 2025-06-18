@@ -1,6 +1,6 @@
-import { lookup } from "node:dns/promises";
 import type { ArticlesRepository } from "$lib/db/article-repository";
 import type { SourcesRepository } from "$lib/db/source-repository";
+import { lookup } from "node:dns/promises";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";

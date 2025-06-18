@@ -1,13 +1,13 @@
 <script lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+
 import { goto } from "$app/navigation";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import doubleCheck from "$lib/images/icons/System/check-double-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import config from "$lib/images/icons/System/settings-5-fill.svg";
 import { onMount } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
@@ -22,7 +22,7 @@ const {
   focusChanged,
   articlesRemoved,
   articlesLoaded,
-  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
   focusedColumn,
 }: ArticleListComponentProps = $props();
 
@@ -30,7 +30,7 @@ const {
 let selectedItems = $state(new SvelteSet<number>());
 let lastSelectedIndex: number | null = $state(null);
 let focusedIndex = $state(0);
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let isLoading = $state(false);
 let articles: Article[] = $state([]);
 
@@ -168,7 +168,7 @@ function handleDelete(event: KeyboardEvent) {
   deleteItems();
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function handleKeyDown(event: KeyboardEvent) {
   // Ignore modifier keys when pressed alone
   if (
@@ -304,7 +304,7 @@ function selectItem(index: number, event?: MouseEvent | KeyboardEvent) {
   focusChanged(".content-column");
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function handleBack() {
   focusChanged(".sources-column");
 }

@@ -1,23 +1,32 @@
 import Mailjet from "node-mailjet";
 import type { AppConfig } from "../../config.ts";
+import { llog } from "../../util/log.ts";
 
 export class MailSender {
-  private readonly mailjet: Mailjet;
+  private readonly mailjet?: Mailjet;
 
   constructor(private readonly appConfig: AppConfig) {
+    const { MAILJET_API_KEY, MAILJET_API_SECRET } = this.appConfig;
+
+    if (!(MAILJET_API_KEY && MAILJET_API_SECRET)) {
+      llog(
+        "Mailjet API key or secret is not set. MailSender will not be initialized.",
+      );
+      return;
+    }
+
     this.mailjet = new Mailjet({
-      apiKey: this.appConfig.MAILJET_API_KEY,
-      apiSecret: this.appConfig.MAILJET_API_SECRET,
+      apiKey: MAILJET_API_KEY,
+      apiSecret: MAILJET_API_SECRET,
     });
   }
 
   public async sendActivationEmail(email: string, token: string) {
-    const protocol = this.appConfig.FEED_FATHOM_DOMAIN.startsWith("localhost")
-      ? "http"
-      : "https";
-    const activationLink = `${protocol}://${this.appConfig.FEED_FATHOM_DOMAIN}/activate/${token}`;
+    const domain = this.appConfig.FEED_FATHOM_DOMAIN ?? "default-domain.com";
+    const protocol = domain.startsWith("localhost") ? "http" : "https";
+    const activationLink = `${protocol}://${domain}/activate/${token}`;
 
-    await this.mailjet.post("send", { version: "v3.1" }).request({
+    await this.mailjet?.post("send", { version: "v3.1" }).request({
       Messages: [
         {
           From: {

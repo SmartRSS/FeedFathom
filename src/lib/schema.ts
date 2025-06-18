@@ -75,6 +75,7 @@ export const userFolders = pgTable("user_folders", {
       { onDelete: "cascade" },
     ),
 });
+export type UserFolder = typeof userFolders.$inferSelect;
 
 export const userSources = pgTable(
   "user_sources",

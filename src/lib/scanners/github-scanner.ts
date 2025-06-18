@@ -1,5 +1,6 @@
 import type { FeedData } from "./feed-data-type.ts";
 import type { Scanner } from "./scanner-interface.ts";
+
 const baseUrl = "https://github.com/" as const;
 
 const repoPattern = new RegExp(`^${baseUrl}(.+/.+)$`, "u");

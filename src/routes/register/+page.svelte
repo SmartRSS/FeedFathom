@@ -12,19 +12,19 @@ const RegisterResponse = type({
   "+": "reject",
 });
 
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let username = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let email = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let password = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let passwordConfirm = "";
 let validationMessage = "";
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let isSubmitting = false;
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const handleSubmit = async (event: SubmitEvent) => {
   event.preventDefault();
 

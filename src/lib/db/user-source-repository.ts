@@ -38,8 +38,7 @@ export class UserSourcesRepository {
     const source = await this.sourcesRepository.findOrCreateSourceByUrl(
       sourcePayload.url,
       {
-        // biome-ignore lint/style/useNamingConvention: <explanation>
-        home_url: sourcePayload.homeUrl,
+        homeUrl: sourcePayload.homeUrl,
       },
     );
 

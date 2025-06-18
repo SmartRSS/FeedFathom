@@ -2,47 +2,23 @@
  * Command types enum
  */
 export enum CommandType {
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  BATCH_UPSERT_ARTICLES = "article.batch_upsert",
-  // System commands
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  CLEANUP = "system.cleanup",
-  // Article commands
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  CREATE_ARTICLE = "article.create",
-  // Folder commands
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  CREATE_FOLDER = "folder.create",
-  // Source commands
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  CREATE_SOURCE = "source.create",
-
-  // User commands
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  CREATE_USER = "user.create",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  DELETE_ARTICLE = "article.delete",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  DELETE_FOLDER = "folder.delete",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  DELETE_SOURCE = "source.delete",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  DELETE_USER = "user.delete",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  MAKE_USER_ADMIN = "user.make_admin",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  PARSE_SOURCE = "source.parse",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  REFRESH_SOURCE_FAVICON = "source.refresh_favicon",
-
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  UPDATE_ARTICLE = "article.update",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  UPDATE_FOLDER = "folder.update",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  UPDATE_SOURCE = "source.update",
-  // biome-ignore lint/style/useNamingConvention: <explanation>
-  UPDATE_USER = "user.update",
+  BatchUpsertArticles = "article.batch_upsert",
+  Cleanup = "system.cleanup",
+  CreateArticle = "article.create",
+  CreateFolder = "folder.create",
+  CreateSource = "source.create",
+  CreateUser = "user.create",
+  DeleteArticle = "article.delete",
+  DeleteFolder = "folder.delete",
+  DeleteSource = "source.delete",
+  DeleteUser = "user.delete",
+  MakeUserAdmin = "user.make_admin",
+  ParseSource = "source.parse",
+  RefreshSourceFavicon = "source.refresh_favicon",
+  UpdateArticle = "article.update",
+  UpdateFolder = "folder.update",
+  UpdateSource = "source.update",
+  UpdateUser = "user.update",
 }
 
 export type ArticleCommandResult = CommandResult & {
@@ -58,14 +34,14 @@ export type BatchUpsertArticlesCommand = Command & {
     title: string;
     url?: string;
   }>;
-  type: CommandType.BATCH_UPSERT_ARTICLES;
+  type: CommandType.BatchUpsertArticles;
 };
 
 /**
  * System command interfaces
  */
 export type CleanupCommand = Command & {
-  type: CommandType.CLEANUP;
+  type: CommandType.Cleanup;
 };
 
 /**
@@ -100,7 +76,7 @@ export type CreateArticleCommand = Command & {
   publishedAt?: Date;
   sourceId: string;
   title: string;
-  type: CommandType.CREATE_ARTICLE;
+  type: CommandType.CreateArticle;
   url?: string;
 };
 
@@ -109,7 +85,7 @@ export type CreateArticleCommand = Command & {
  */
 export type CreateFolderCommand = Command & {
   name: string;
-  type: CommandType.CREATE_FOLDER;
+  type: CommandType.CreateFolder;
   userId: string;
 };
 
@@ -118,7 +94,7 @@ export type CreateFolderCommand = Command & {
  */
 export type CreateSourceCommand = Command & {
   title?: string;
-  type: CommandType.CREATE_SOURCE;
+  type: CommandType.CreateSource;
   url: string;
 };
 
@@ -128,26 +104,26 @@ export type CreateSourceCommand = Command & {
 export type CreateUserCommand = Command & {
   email: string;
   password: string;
-  type: CommandType.CREATE_USER;
+  type: CommandType.CreateUser;
 };
 
 export type DeleteArticleCommand = Command & {
   articleId: string;
-  type: CommandType.DELETE_ARTICLE;
+  type: CommandType.DeleteArticle;
 };
 
 export type DeleteFolderCommand = Command & {
   folderId: string;
-  type: CommandType.DELETE_FOLDER;
+  type: CommandType.DeleteFolder;
 };
 
 export type DeleteSourceCommand = Command & {
   sourceId: string;
-  type: CommandType.DELETE_SOURCE;
+  type: CommandType.DeleteSource;
 };
 
 export type DeleteUserCommand = Command & {
-  type: CommandType.DELETE_USER;
+  type: CommandType.DeleteUser;
   userId: string;
 };
 
@@ -157,18 +133,18 @@ export type FolderCommandResult = CommandResult & {
 
 export type MakeUserAdminCommand = Command & {
   email: string;
-  type: CommandType.MAKE_USER_ADMIN;
+  type: CommandType.MakeUserAdmin;
 };
 
 export type ParseSourceCommand = Command & {
   sourceId: string;
-  type: CommandType.PARSE_SOURCE;
+  type: CommandType.ParseSource;
 };
 
 export type RefreshSourceFaviconCommand = Command & {
   homeUrl: string;
   sourceId: string;
-  type: CommandType.REFRESH_SOURCE_FAVICON;
+  type: CommandType.RefreshSourceFavicon;
 };
 
 /**
@@ -187,27 +163,27 @@ export type UpdateArticleCommand = Command & {
   content?: string;
   publishedAt?: Date;
   title?: string;
-  type: CommandType.UPDATE_ARTICLE;
+  type: CommandType.UpdateArticle;
   url?: string;
 };
 
 export type UpdateFolderCommand = Command & {
   folderId: string;
   name?: string;
-  type: CommandType.UPDATE_FOLDER;
+  type: CommandType.UpdateFolder;
 };
 
 export type UpdateSourceCommand = Command & {
   sourceId: string;
   title?: string;
-  type: CommandType.UPDATE_SOURCE;
+  type: CommandType.UpdateSource;
   url?: string;
 };
 
 export type UpdateUserCommand = Command & {
   email?: string;
   password?: string;
-  type: CommandType.UPDATE_USER;
+  type: CommandType.UpdateUser;
   userId: string;
 };
 

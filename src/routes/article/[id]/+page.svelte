@@ -3,7 +3,7 @@ import type { Article } from "../../../types/article-type.ts";
 import type { PageData } from "./$types.ts";
 
 export let data: PageData & { article: Article };
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const { article } = data;
 </script>
 

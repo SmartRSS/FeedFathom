@@ -105,7 +105,7 @@ export class MainWorker {
           >({
             sourceId: validatedPayload.id.toString(),
             timestamp: Date.now(),
-            type: CommandType.PARSE_SOURCE,
+            type: CommandType.ParseSource,
           });
           break;
         }

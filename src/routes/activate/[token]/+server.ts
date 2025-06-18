@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import type { RequestEvent } from "./$types";
+import type { RequestEvent } from "./$types.ts";
 
 export async function POST({ params, locals }: RequestEvent) {
   const { token } = params;

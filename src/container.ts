@@ -8,18 +8,18 @@ import { UserSourcesRepository } from "$lib/db/user-source-repository";
 import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
-// biome-ignore lint/style/noNamespaceImport: <explanation>
+
 import * as schema from "$lib/schema.ts";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
 import { MainWorker } from "$lib/workers/main";
 import {
-  InjectionMode,
   asClass,
   asFunction,
   asValue,
   createContainer,
+  InjectionMode,
 } from "awilix";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
@@ -124,5 +124,4 @@ container.register({
   postgresQueue: asClass(PostgresQueue).singleton(),
 });
 
-// biome-ignore lint/style/noDefaultExport: TODO
 export default container;

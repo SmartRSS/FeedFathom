@@ -4,7 +4,6 @@ import type { Dependencies } from "./container.ts";
 import type { User } from "./types/user-type.ts";
 
 declare global {
-  // biome-ignore lint/style/noNamespace: required to declare shape of Locals
   namespace App {
     // interface Error {}
 

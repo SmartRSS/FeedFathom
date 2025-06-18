@@ -24,7 +24,7 @@ const registerCommandHandlers = (
 
   // Register source command handlers
   commandBus.register(
-    CommandType.PARSE_SOURCE,
+    CommandType.ParseSource,
     createParseSourceHandler(feedParser, sourcesRepository),
   );
 

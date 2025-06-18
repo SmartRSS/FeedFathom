@@ -1,5 +1,5 @@
-import { EmailProcessor } from "$lib/email-processor";
 import { EmailHandler } from "$lib/email/email-handler";
+import { EmailProcessor } from "$lib/email-processor";
 import type { RequestHandler } from "@sveltejs/kit";
 import { json } from "@sveltejs/kit";
 import { type } from "arktype";

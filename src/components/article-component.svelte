@@ -1,12 +1,12 @@
 <script lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+
 import { goto } from "$app/navigation";
 import { browser } from "$app/environment";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import back from "$lib/images/icons/Arrows/arrow-left-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import config from "$lib/images/icons/System/settings-5-fill.svg";
 import type { DisplayMode } from "$lib/settings";
 import { onDestroy, onMount } from "svelte";
@@ -27,14 +27,14 @@ type ArticleComponentProps = {
   displayModeChanged: DisplayModeChangedFunction;
   focusedColumn: FocusTarget;
 };
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let {
   selectedArticleId,
   displayMode,
   articlesRemoved,
   focusChanged,
   displayModeChanged,
-  // biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
   focusedColumn,
 }: ArticleComponentProps = $props();
 
@@ -165,17 +165,17 @@ async function fetchData() {
   }
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function handleBack() {
   focusChanged(".articles-column");
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function deleteItem() {
   articlesRemoved([selectedArticle]);
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function handleChange() {
   displayModeChanged(displayMode);
 }
@@ -184,7 +184,7 @@ $effect(() => {
   void fetchData();
 });
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function shouldHide() {
   return browser && window.location.pathname.startsWith("/readArticle");
 }

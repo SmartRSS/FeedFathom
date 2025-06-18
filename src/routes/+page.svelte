@@ -1,14 +1,14 @@
 <script lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+
 import { goto } from "$app/navigation";
 import { browser } from "$app/environment";
 import { DisplayMode } from "$lib/settings";
 import { onDestroy, onMount } from "svelte";
-// biome-ignore lint/correctness/noUnusedImports: Svelte component
+
 import ArticleComponent from "../components/article-component.svelte";
-// biome-ignore lint/correctness/noUnusedImports: Svelte component
+
 import ArticlesListComponent from "../components/article-list-component.svelte";
-// biome-ignore lint/correctness/noUnusedImports: Svelte component
+
 import TreeNodeComponent from "../components/tree-node-component.svelte";
 import type {
   ArticlePromisesMap,
@@ -20,28 +20,28 @@ import type {
 } from "../types.ts";
 import type { Article } from "../types/article-type.ts";
 import { NodeType, type TreeNode } from "../types/source-types.ts";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import addFolder from "$lib/images/icons/Document/folder-add-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import add from "$lib/images/icons/System/add-box-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import properties from "$lib/images/icons/System/information-fill.svg";
-// biome-ignore lint/correctness/noUnusedImports: Svelte asset
+
 import config from "$lib/images/icons/System/settings-5-fill.svg";
   import { logError } from "../util/log.ts";
 
 const staleTile = 5 * 1000;
 const promisesMap: ArticlePromisesMap = new Map();
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let selectedSourcesList: string[] = $state([]);
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let sourceProperties: HTMLDialogElement | null = $state(null);
 let selectedNode: TreeNode | null = $state(null);
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let displayMode: DisplayMode = $state(DisplayMode.Feed);
 
 let focusedColumn: FocusTarget = $state(".sources-column");
@@ -107,7 +107,7 @@ function setFocusTo(selector: FocusTarget) {
   focusedColumn = selector;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function nodeSelected(node: TreeNode) {
   selectedSourcesList =
     node.type === NodeType.Folder
@@ -123,7 +123,7 @@ function nodeSelected(node: TreeNode) {
   setFocusTo(".articles-column");
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function nodeHeld(node: TreeNode) {
   selectedSourcesList =
     node.type === NodeType.Folder && node.children.length > 0
@@ -133,12 +133,12 @@ function nodeHeld(node: TreeNode) {
   selectedNode = node;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let selectedArticleId: number | null = $state(null);
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let selectedNodeUid: string = $state("");
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const articlesSelected: ArticlesSelectedFunction = (selectedArticleIdList) => {
   displayMode = DisplayMode.Feed;
   selectedArticleId =
@@ -147,12 +147,12 @@ const articlesSelected: ArticlesSelectedFunction = (selectedArticleIdList) => {
       : null;
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const focusChanged: FocusChangedFunction = (focusTarget) => {
   setFocusTo(focusTarget);
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const articlesRemoved: ArticlesRemovedFunction = (removedArticleList) => {
   if (removedArticleList.length > 0) {
     void fetch("./articles", {
@@ -199,12 +199,12 @@ $effect(() => {
   selectedNodeUid;
 });
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const handleSourceDetails = () => {
   sourceProperties!.showModal();
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const handleDeleteSource = () => {
   if (!selectedNode) {
     return;
@@ -242,12 +242,12 @@ const handleDeleteSource = () => {
   });
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function displayModeChanged(newDisplayMode: DisplayMode) {
   displayMode = newDisplayMode;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
   tree = tree.map((node) => {
     if (node.type === "folder") {
@@ -266,7 +266,7 @@ const articlesLoaded: ArticlesLoadedFunction = (sourcesArticlesMap) => {
   });
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 async function nodeTouchStart(node: TreeNode) {
   currentNode = node;
   const sources =
@@ -284,14 +284,14 @@ async function nodeTouchStart(node: TreeNode) {
   promisesMap.set(sources, { time: date, promise: fetchArticles(sources) });
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function nodeMouseLeave(node: TreeNode) {
   if (node.uid === currentNode?.uid && node.type === currentNode.type) {
     currentNode = null;
   }
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function nodeTouchEnd(node: TreeNode) {
   if (node.uid !== currentNode?.uid || node.type !== currentNode.type) {
     return;

@@ -1,4 +1,4 @@
-import { type RequestEvent, json } from "@sveltejs/kit";
+import { json, type RequestEvent } from "@sveltejs/kit";
 import { type Type, type } from "arktype";
 import type { User } from "../types/user-type.ts";
 

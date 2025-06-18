@@ -41,13 +41,10 @@ interface Container {
 
 // Centralized logging functions
 function logInfo(message: string): void {
-  // biome-ignore lint/suspicious/noConsole: Logging is intentional
-  // biome-ignore lint/suspicious/noConsoleLog: <explanation>
   console.log(message);
 }
 
 function logError(message: string): void {
-  // biome-ignore lint/suspicious/noConsole: Error logging is intentional
   console.error(message);
 }
 
@@ -500,7 +497,7 @@ async function removeContainers(containers: string[]): Promise<void> {
 }
 
 // Main rollout function
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <explanation>
+
 async function rolloutService(service: string, targetReplicas: number) {
   logInfo(
     `[rolloutService] Enter: service=${service}, targetReplicas=${targetReplicas}`,

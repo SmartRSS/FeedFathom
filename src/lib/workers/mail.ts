@@ -1,8 +1,8 @@
-import type { Readable } from "node:stream";
-import { finished } from "node:stream/promises";
 import type { ArticlesRepository } from "$lib/db/article-repository.ts";
 import type { SourcesRepository } from "$lib/db/source-repository.ts";
 import { EmailProcessor } from "$lib/email-processor.ts";
+import type { Readable } from "node:stream";
+import { finished } from "node:stream/promises";
 import {
   SMTPServer,
   type SMTPServerAddress,

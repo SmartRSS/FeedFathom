@@ -1,4 +1,4 @@
-import { type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 import {
   NodeType,
   type TreeNode,

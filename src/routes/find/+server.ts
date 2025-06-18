@@ -1,5 +1,5 @@
 import { scan } from "$lib/scanner";
-import { type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 import { JSDOM } from "jsdom";
 import { logError as error_ } from "../../util/log.ts";
 

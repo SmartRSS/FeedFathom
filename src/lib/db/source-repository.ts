@@ -4,6 +4,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { JobName } from "../../types/job-name-enum.ts";
 import { logError as error } from "../../util/log.ts";
 import { sources } from "../schema.ts";
+
 type SortField =
   | "created_at"
   | "failures"
@@ -56,8 +57,7 @@ export class SourcesRepository {
   public async findOrCreateSourceByUrl(
     url: string,
     payload: {
-      // biome-ignore lint/style/useNamingConvention: <explanation>
-      home_url: string;
+      homeUrl: string;
     },
   ) {
     const source = await this.findSourceByUrl(url);
@@ -66,7 +66,7 @@ export class SourcesRepository {
     }
 
     return await this.addSource({
-      homeUrl: payload.home_url,
+      homeUrl: payload.homeUrl,
       url,
     });
   }
