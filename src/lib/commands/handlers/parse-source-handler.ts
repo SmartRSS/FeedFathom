@@ -1,6 +1,6 @@
-import type { SourcesRepository } from "$lib/db/source-repository";
 import type { FeedParser } from "$lib/feed-parser";
 import { logError } from "../../../util/log.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type {
   CommandHandler,
   ParseSourceCommand,
@@ -13,7 +13,7 @@ import type {
 export class ParseSourceHandler {
   constructor(
     private readonly feedParser: FeedParser,
-    private readonly sourcesRepository: SourcesRepository,
+    private readonly sourcesDataService: SourcesDataService,
   ) {}
 
   /**
@@ -26,7 +26,7 @@ export class ParseSourceHandler {
   ): Promise<SourceCommandResult> {
     try {
       // Get the source from the repository
-      const source = await this.sourcesRepository.findSourceById(
+      const source = await this.sourcesDataService.findSourceById(
         Number(command.sourceId),
       );
 
@@ -62,9 +62,9 @@ export class ParseSourceHandler {
  */
 export const createParseSourceHandler = (
   feedParser: FeedParser,
-  sourcesRepository: SourcesRepository,
+  sourcesDataService: SourcesDataService,
 ): CommandHandler<ParseSourceCommand, SourceCommandResult> => {
-  const handler = new ParseSourceHandler(feedParser, sourcesRepository);
+  const handler = new ParseSourceHandler(feedParser, sourcesDataService);
   return async (command: ParseSourceCommand) => {
     return await handler.execute(command);
   };

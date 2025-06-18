@@ -11,7 +11,7 @@
     "build-project": "rm -rf build && mkdir -p build && (bun build-server & bun build-worker & bun build-extension & wait)",
     "watch-server": "svelte-kit sync && vite dev --host",
     "watch-worker": "svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
-    "eslint": "eslint --config=eslint.config.js ./src/**/*.{ts,svelte,js} ./tests/**/*.ts",
+    "eslint": "eslint --config=eslint.config.js",
     "eslint:fix": "bun eslint -- --fix",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "svelte-kit sync && bun test && biome check && tsc && bun svelte-check && bun knip && bun eslint",
@@ -78,13 +78,12 @@
       "src/**/*.{ts,svelte}",
       "tests/**/*.ts",
       "bin/**",
-      "rollout.js",
       "eslint.config.js"
     ],
     "ignore": [
       "build/**",
       "ext/**",
-      "rollout.js",
+      "rollout.ts",
       "src/cloudflare/**"
     ],
     "ignoreBinaries": [

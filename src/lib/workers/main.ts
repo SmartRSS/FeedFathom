@@ -4,14 +4,14 @@ import {
   type ParseSourceCommand,
   type SourceCommandResult,
 } from "$lib/commands/types";
-import type { SourcesRepository } from "$lib/db/source-repository";
-import type { UserSourcesRepository } from "$lib/db/user-source-repository";
 import type { FeedParser } from "$lib/feed-parser";
 import type { JobHandler, PostgresQueue } from "$lib/postgres-queue";
 import { type } from "arktype";
 import type { AppConfig } from "../../config.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import { llog, logError } from "../../util/log.ts";
+import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
+import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
 
 const parseSourcePayloadValidator = type({
   id: "number",
@@ -30,8 +30,8 @@ export class MainWorker {
   constructor(
     private readonly appConfig: AppConfig,
     private readonly feedParser: FeedParser,
-    private readonly sourcesRepository: SourcesRepository,
-    private readonly userSourcesRepository: UserSourcesRepository,
+    private readonly sourcesDataService: SourcesDataService,
+    private readonly userSourcesDataService: UserSourcesDataService,
     private readonly commandBus: CommandBus,
     private readonly postgresQueue: PostgresQueue,
   ) {}
@@ -43,7 +43,7 @@ export class MainWorker {
   }
 
   private async gatherParseSourceJobs() {
-    const sources = await this.sourcesRepository.getSourcesToProcess();
+    const sources = await this.sourcesDataService.getSourcesToProcess();
 
     for (const source of sources) {
       const jobId = `${JobName.ParseSource}:${source.id}`;
@@ -66,13 +66,13 @@ export class MainWorker {
     try {
       switch (jobName) {
         case JobName.Cleanup: {
-          await this.userSourcesRepository.cleanup();
+          await this.userSourcesDataService.cleanup();
           break;
         }
 
         case JobName.GatherFaviconJobs: {
           const successfullSources =
-            await this.sourcesRepository.getRecentlySuccessfulSources();
+            await this.sourcesDataService.getRecentlySuccessfulSources();
 
           for (const source of successfullSources) {
             const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;

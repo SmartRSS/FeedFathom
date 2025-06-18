@@ -1,8 +1,8 @@
-import type { UsersRepository } from "$lib/db/user-repository";
 import { llog } from "../../util/log.ts";
+import type { UsersDataService } from "../db/data-services/user-data-service.ts";
 
 export class Cli {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(private readonly usersDataService: UsersDataService) {}
 
   async execute(command: string, argument: string[]) {
     switch (command) {
@@ -12,7 +12,7 @@ export class Cli {
           throw new Error("No email provided");
         }
 
-        await this.usersRepository.makeAdmin(email);
+        await this.usersDataService.makeAdmin(email);
         llog(`User ${email} made admin`);
         break;
       }

@@ -9,7 +9,14 @@ declare global {
 
     interface Locals {
       dependencies: Dependencies;
-      user?: User;
+      user?: Omit<
+        User,
+        | "password"
+        | "activationToken"
+        | "activationTokenExpiresAt"
+        | "createdAt"
+        | "updatedAt"
+      >;
     }
 
     // interface PageData {}

@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { sessions, users } from "../schema.ts";
+import { sessions } from "../schemas/sessions";
+import { users } from "../schemas/users";
 
-export class UsersRepository {
+export class UsersDataService {
   constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async createSession(userId: number, userAgent?: null | string) {
@@ -72,10 +73,15 @@ export class UsersRepository {
   }
 
   public async getUserBySid(sid: string) {
-    const { password: _password, ...rest } = getTableColumns(users);
     return (
       await this.drizzleConnection
-        .select({ ...rest })
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          status: users.status,
+          isAdmin: users.isAdmin,
+        })
         .from(users)
         .where(eq(sessions.sid, sid))
         .leftJoin(sessions, eq(sessions.userId, users.id))

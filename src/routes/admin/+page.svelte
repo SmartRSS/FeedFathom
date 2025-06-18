@@ -1,22 +1,11 @@
 <script lang="ts">
-interface Source {
-  url: string;
+    import type { SourceWithSubscriberCount } from '../../lib/db/data-services/source-data-service.js';
 
-  created_at: string; // or Date if you prefer
 
-  last_attempt: string; // or Date
-
-  last_success: string; // or Date
-
-  subscriber_count: number;
-
-  recent_failure_details: string;
-  failures: number;
-}
 
 const { data } = $props();
 
-let sources: Source[] = $state(data.sources) as Source[]; // Define the type of sources
+let sources = $state(data.sources); // Define the type of sources
 let order = "asc";
 
 let currentSourceUrl = ""; // Store the current source URL
@@ -26,7 +15,7 @@ let newSourceUrl = $state(""); // Store the new source URL
 const fetchSortedSources = async (field: string) => {
   const response = await fetch(`/admin?sortBy=${field}&order=${order}`);
   if (response.ok) {
-    sources = (await response.json()) as Source[]; // Update sources with the new data
+    sources = (await response.json()) as SourceWithSubscriberCount[]; // Update sources with the new data
   } else {
   }
 };
@@ -94,12 +83,12 @@ const closeModal = () => {
           <td>
             {source.url}
           </td>
-          <td>{new Date(source["created_at"]).toISOString()}</td>
-          <td>{new Date(source["last_attempt"]).toISOString()}</td>
-          <td>{new Date(source["last_success"]).toISOString()}</td>
-          <td>{source["subscriber_count"]}</td>
-          <td>{source["failures"]}</td>
-          <td>{source["recent_failure_details"]}</td>
+          <td>{new Date(source.createdAt).toISOString()}</td>
+          <td>{source.lastAttempt ? new Date(source.lastAttempt).toISOString() : "N/A"}</td>
+          <td>{source.lastSuccess ? new Date(source.lastSuccess).toISOString() : "N/A"}</td>
+          <td>{source.subscriberCount}</td>
+          <td>{source.recentFailures}</td>
+          <td>{source.recentFailureDetails}</td>
         </tr>
       {/each}
     </tbody>

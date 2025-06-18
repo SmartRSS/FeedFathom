@@ -8,7 +8,7 @@ export const load = async ({ locals }: { locals: App.Locals }) => {
 
   // Fetch sources for the admin panel
   const sources = await locals.dependencies.sourcesRepository.listAllSources(
-    "created_at",
+    "createdAt",
     "desc",
   );
 

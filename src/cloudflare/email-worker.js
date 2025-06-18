@@ -1,4 +1,8 @@
 export default {
+  /**
+   * @param {{ raw: BodyInit | null | undefined; from: any; to: any; headers: { get: (arg0: string) => any; }; }} message
+   * @param {{ MAIL_ENDPOINT_DOMAIN: any; }} env
+   */
   async email(message, env) {
     const domain = env.MAIL_ENDPOINT_DOMAIN;
     const endpoint = `${domain}/api/mail`;
@@ -23,7 +27,6 @@ export default {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           ...cfAccessHeaders,
           // "Authorization": `Basic ${token}`
         },

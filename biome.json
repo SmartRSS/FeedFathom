@@ -8,7 +8,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/tests/**/*.test.ts", "!**/*.svelte"]
+    "includes": [
+      "**",
+      "*.js",
+      "*.ts",
+      "*.json",
+      "!**/tests/**/*.test.ts",
+      "!**/*.svelte"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -192,6 +199,9 @@
   },
   "linter": {
     "enabled": true,
+    "domains": {
+      "project": "recommended"
+    },
     "rules": {
       "complexity": {
         "useLiteralKeys": "off",
@@ -276,6 +286,9 @@
       },
       "suspicious": {
         "noEmptyBlockStatements": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
       }
     },
     "includes": [

@@ -3,7 +3,6 @@ import {
   type CommandRegistryDependencies,
   registerCommandHandlers,
 } from "$lib/commands/registry";
-import type { SourcesRepository } from "$lib/db/source-repository";
 import type { FeedParser } from "$lib/feed-parser";
 import type { MailWorker } from "$lib/workers/mail";
 import type { MainWorker } from "$lib/workers/main";
@@ -11,6 +10,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "../../config.ts";
 import { llog, logError } from "../../util/log.ts";
+import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { Cli } from "./cli.ts";
 
 // Schedule the next task function definition with a config object
@@ -22,7 +22,7 @@ export class Initializer {
     private readonly feedParser: FeedParser,
     private readonly mailWorker: MailWorker,
     private readonly mainWorker: MainWorker,
-    private readonly sourcesRepository: SourcesRepository,
+    private readonly sourcesDataService: SourcesDataService,
     private readonly appConfig: AppConfig,
   ) {}
 
@@ -75,7 +75,7 @@ export class Initializer {
       const commandDependencies: CommandRegistryDependencies = {
         commandBus: this.commandBus,
         feedParser: this.feedParser,
-        sourcesRepository: this.sourcesRepository,
+        sourcesDataService: this.sourcesDataService,
       };
 
       // Register command handlers

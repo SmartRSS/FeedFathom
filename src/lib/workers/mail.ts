@@ -1,5 +1,3 @@
-import type { ArticlesRepository } from "$lib/db/article-repository.ts";
-import type { SourcesRepository } from "$lib/db/source-repository.ts";
 import { EmailProcessor } from "$lib/email-processor.ts";
 import type { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
@@ -9,6 +7,8 @@ import {
   type SMTPServerSession,
 } from "smtp-server";
 import { logError as error_, llog } from "../../util/log.ts";
+import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
+import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { EmailHandler } from "../email/email-handler.ts";
 
 export type MailWorkerConfig = {
@@ -31,8 +31,8 @@ export class MailWorker {
   private server: SMTPServer | undefined;
 
   constructor(
-    private readonly sourcesRepository: SourcesRepository,
-    private readonly articlesRepository: ArticlesRepository,
+    private readonly sourcesDataService: SourcesDataService,
+    private readonly articlesDataService: ArticlesDataService,
     config: Partial<MailWorkerConfig> = {},
   ) {
     this.config = {
@@ -43,8 +43,8 @@ export class MailWorker {
     this.emailProcessor = new EmailProcessor();
     this.emailHandler = new EmailHandler(
       this.emailProcessor,
-      this.sourcesRepository,
-      this.articlesRepository,
+      this.sourcesDataService,
+      this.articlesDataService,
     );
   }
 
@@ -57,9 +57,9 @@ export class MailWorker {
         _session: SMTPServerSession,
         callback: (error?: Error) => void,
       ) => {
-        (async () => {
+        void (async () => {
           try {
-            const source = await this.sourcesRepository.findSourceByUrl(
+            const source = await this.sourcesDataService.findSourceByUrl(
               _address.address,
             );
             if (!source) {
@@ -104,7 +104,7 @@ export class MailWorker {
     session: SMTPServerSession,
     callback: (error?: Error) => void,
   ): void {
-    (async () => {
+    void (async () => {
       try {
         await this.processEmailStream(emailStream, session, callback);
       } catch (error: unknown) {

@@ -7,8 +7,8 @@ export const deleteArticlesHandler = async ({
   locals,
 }: ValidatedRequestEvent<DeleteArticles>) => {
   await locals.dependencies.articlesRepository.removeUserArticles(
-    body.removedArticleIdList,
     locals.user.id,
+    body.removedArticleIdList,
   );
 
   return json(body.removedArticleIdList);

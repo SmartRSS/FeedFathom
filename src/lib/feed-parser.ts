@@ -1,5 +1,3 @@
-import type { ArticlesRepository } from "$lib/db/article-repository";
-import type { SourcesRepository } from "$lib/db/source-repository";
 import { lookup } from "node:dns/promises";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
@@ -7,6 +5,8 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";
 import container from "../container.ts";
 import { logError as error } from "../util/log.ts";
+import type { ArticlesDataService } from "./db/data-services/article-data-service";
+import type { SourcesDataService } from "./db/data-services/source-data-service";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 
@@ -23,10 +23,10 @@ export class FeedParser {
   };
 
   constructor(
-    private readonly articlesRepository: ArticlesRepository,
+    private readonly articlesDataService: ArticlesDataService,
     private readonly axiosInstance: AxiosCacheInstance,
     private readonly redis: RedisClient,
-    private readonly sourcesRepository: SourcesRepository,
+    private readonly sourcesDataService: SourcesDataService,
   ) {}
 
   private formatErrorMessage(error_: unknown): string {
@@ -61,7 +61,7 @@ export class FeedParser {
       const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
 
       if (cached && !source.skipCache) {
-        await this.sourcesRepository.successSource(source.id, true);
+        await this.sourcesDataService.successSource(source.id);
         return;
       }
 
@@ -74,10 +74,20 @@ export class FeedParser {
         );
       });
 
-      await this.articlesRepository.batchUpsertArticles(articlePayloads);
+      const articlesToUpsert = articlePayloads.map((payload) => ({
+        guid: payload.guid,
+        sourceId: payload.sourceId,
+        title: payload.title,
+        url: payload.url,
+        author: payload.author,
+        publishedAt: payload.publishedAt ?? new Date(),
+        content: payload.content ?? "",
+        updatedAt: new Date(), // Assume updatedAt is always the current date
+      }));
+      await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
       articlePayloads.length = 0;
 
-      await this.sourcesRepository.successSource(source.id);
+      await this.sourcesDataService.successSource(source.id);
     } catch (error_: unknown) {
       if (error_ instanceof Error) {
         error("parseSource", error_.message);
@@ -86,7 +96,7 @@ export class FeedParser {
       }
 
       const message = this.formatErrorMessage(error_);
-      await this.sourcesRepository.failSource(source.id, message);
+      await this.sourcesDataService.failSource(source.id, message);
       error(`${source.url} failed`);
     }
   }
@@ -136,11 +146,11 @@ export class FeedParser {
           continue;
         }
 
-        await this.sourcesRepository.updateFavicon(
+        await this.sourcesDataService.updateFavicon(
           source.id,
           typeof response.data === "string"
             ? response.data
-            : Buffer.from(response.data),
+            : response.data.toString(),
         );
         // Exit loop after successful update
         break;

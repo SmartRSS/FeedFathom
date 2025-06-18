@@ -6,7 +6,7 @@ const config = {
   optimizeDeps: { exclude: ["@sveltejs/kit"] },
   csrf: { checkOrigin: false },
   kit: {
-    adapter: adapter({ precompress: false, prerender: false, ssr: false }),
+    adapter: adapter({ precompress: false }),
     prerender: {
       crawl: false,
       handleEntryGeneratorMismatch: "ignore",

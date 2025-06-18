@@ -7,7 +7,6 @@ export const deleteFolderHandler = async ({
   locals,
 }: ValidatedRequestEvent<DeleteFolder>) => {
   await locals.dependencies.foldersRepository.removeUserFolder(
-    locals.user.id,
     body.removeFolderId,
   );
 

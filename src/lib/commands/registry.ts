@@ -1,4 +1,4 @@
-import type { SourcesRepository } from "../db/source-repository.ts";
+import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { FeedParser } from "../feed-parser.ts";
 import type { CommandBus } from "./command-bus.ts";
 import { createParseSourceHandler } from "./handlers/parse-source-handler.ts";
@@ -10,7 +10,7 @@ import { CommandType } from "./types.ts";
 export type CommandRegistryDependencies = {
   commandBus: CommandBus;
   feedParser: FeedParser;
-  sourcesRepository: SourcesRepository;
+  sourcesDataService: SourcesDataService;
 };
 
 /**
@@ -20,19 +20,19 @@ export type CommandRegistryDependencies = {
 const registerCommandHandlers = (
   dependencies: CommandRegistryDependencies,
 ): void => {
-  const { commandBus, feedParser, sourcesRepository } = dependencies;
+  const { commandBus, feedParser, sourcesDataService } = dependencies;
 
   // Register source command handlers
   commandBus.register(
     CommandType.ParseSource,
-    createParseSourceHandler(feedParser, sourcesRepository),
+    createParseSourceHandler(feedParser, sourcesDataService),
   );
 
   // Register other command handlers here...
   // Example:
   // commandBus.register(
   //   CommandType.CREATE_SOURCE,
-  //   createCreateSourceHandler(sourcesRepository)
+  //   createCreateSourceHandler(sourcesDataService)
   // );
 };
 

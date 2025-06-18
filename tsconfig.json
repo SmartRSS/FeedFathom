@@ -1,9 +1,10 @@
 {
   "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "incremental": false,
-    "allowJs": false,
-    "checkJs": false,
+    "allowArbitraryExtensions": true,
+    "incremental": true,
+    "allowJs": true,
+    "checkJs": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
@@ -33,13 +34,21 @@
     "types": ["bun-types", "chrome"]
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.svelte",
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    "./types/**/$types.d.ts",
+    "vite.config.js",
+    "vite.config.ts",
+    "./src/**/*.js",
+    "./src/**/*.ts",
+    "./src/**/*.svelte",
+    "./tests/**/*.js",
     "tests/**/*.ts",
+    "tests/**/*.svelte",
     "rollout.ts",
-    "src/cloudflare/email-worker.js"
+    "svelte.config.js"
   ],
-  "exclude": ["node_modules/*", "public/*", "migrations/*", "build/*", "ext/*"]
+  "exclude": ["node_modules/**", "migrations/**", "build/**", "ext/**"]
 
   // Path aliases are handled by https://kit.svelte.dev/docs/configuration#alias
   //
