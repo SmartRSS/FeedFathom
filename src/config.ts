@@ -24,6 +24,16 @@ const configSchema = type({
     .pipe((s) => s === "true")
     .default("false"),
   "INTEGRATION?": "'mail'|'migrator'|'worker'",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  "MAILJET_API_KEY?": "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  "MAILJET_API_SECRET?": "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  "FEED_FATHOM_DOMAIN?": "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  "TURNSTILE_SITE_KEY?": "string",
+  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+  "TURNSTILE_SECRET_KEY?": "string",
   "+": "delete",
 });
 

@@ -199,7 +199,6 @@ jobs:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
       ENABLE_REGISTRATION: ${{ vars.ENABLE_REGISTRATION }}
-      ORIGIN: ${{ vars.ORIGIN }}
       WORKER_CONCURRENCY: ${{ vars.WORKER_CONCURRENCY }}
       LOCK_DURATION: ${{ vars.LOCK_DURATION }}
       CLEANUP_INTERVAL: ${{ vars.CLEANUP_INTERVAL }}
@@ -209,6 +208,11 @@ jobs:
       WORKER_MEM_LIMIT: ${{ vars.WORKER_MEM_LIMIT }}
       FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
       MAIL_ENABLED: ${{ vars.MAIL_ENABLED }}
+      MAIL_REPLICAS: ${{ vars.MAIL_REPLICAS }}
+      MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+      MAILJET_API_SECRET: ${{ secrets.MAILJET_API_SECRET }}
+      TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+      TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
 
     steps:
       - name: Checkout repository
@@ -241,7 +245,6 @@ jobs:
             export FEED_FATHOM_ALT_DOMAIN='${{ env.FEED_FATHOM_ALT_DOMAIN }}' && \
             export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \
             export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && \
-            export ORIGIN='${{ env.ORIGIN }}' && \
             export WORKER_CONCURRENCY='${{ env.WORKER_CONCURRENCY }}' && \
             export LOCK_DURATION='${{ env.LOCK_DURATION }}' && \
             export CLEANUP_INTERVAL='${{ env.CLEANUP_INTERVAL }}' && \
@@ -249,7 +252,10 @@ jobs:
             export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
             export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
             export MAIL_ENABLED='${{ env.MAIL_ENABLED }}' && \
-            docker compose -f docker-compose.yml pull migrator mail server worker && \
-            bun rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml \
-              migrator mail server worker
+            export MAILJET_API_KEY='${{ env.MAILJET_API_KEY }}' && \
+            export MAILJET_API_SECRET='${{ env.MAILJET_API_SECRET }}' && \
+            export TURNSTILE_SITE_KEY='${{ env.TURNSTILE_SITE_KEY }}' && \
+            export TURNSTILE_SECRET_KEY='${{ env.TURNSTILE_SECRET_KEY }}' && \
+            docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull migrator mail server worker && \
+            bun run rollout.ts
           EOF

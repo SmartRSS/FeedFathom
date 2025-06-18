@@ -13,6 +13,7 @@ import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
 import { MainWorker } from "$lib/workers/main";
+import { MailSender } from "$lib/email/mail-sender";
 import {
   InjectionMode,
   asClass,
@@ -50,6 +51,7 @@ export type Dependencies = {
   foldersRepository: FoldersRepository;
   initializer: Initializer;
   maintenanceState: MaintenanceState;
+  mailSender: MailSender;
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
@@ -113,6 +115,7 @@ container.register({
   // Services
   cli: asClass(Cli).singleton(),
   feedParser: asClass(FeedParser).singleton(),
+  mailSender: asClass(MailSender).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
 
   // Workers

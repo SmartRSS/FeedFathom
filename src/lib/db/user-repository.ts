@@ -20,6 +20,9 @@ export class UsersRepository {
     email: string;
     name: string;
     passwordHash: string;
+    status?: "active" | "inactive";
+    activationToken?: string;
+    activationTokenExpiresAt?: Date;
   }) {
     return (
       await this.drizzleConnection
@@ -28,6 +31,9 @@ export class UsersRepository {
           email: payload.email,
           name: payload.name,
           password: payload.passwordHash,
+          status: payload.status,
+          activationToken: payload.activationToken,
+          activationTokenExpiresAt: payload.activationTokenExpiresAt,
         })
         .returning()
     ).at(0);
@@ -41,6 +47,28 @@ export class UsersRepository {
         .where(eq(users.email, email))
         .limit(1)
     ).at(0);
+  }
+
+  public async findUserByActivationToken(token: string) {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(users)
+        .where(eq(users.activationToken, token))
+        .limit(1)
+    ).at(0);
+  }
+
+  public async activateUser(userId: number) {
+    return await this.drizzleConnection
+      .update(users)
+      .set({
+        status: "active",
+        activationToken: null,
+        activationTokenExpiresAt: null,
+      })
+      .where(eq(users.id, userId))
+      .execute();
   }
 
   public async getUserBySid(sid: string) {

@@ -1,6 +1,11 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { type } from "arktype";
+import { Turnstile } from "svelte-turnstile";
+import type { PageData } from "./$types";
+
+export let data: PageData;
+
 const RegisterResponse = type({
   success: "boolean",
   error: "string | null",
@@ -97,6 +102,10 @@ $: {
         <div class="validation-message" class:show={validationMessage}>
           {validationMessage}
         </div>
+
+        {#if data.turnstileSiteKey}
+          <Turnstile siteKey={data.turnstileSiteKey!} />
+        {/if}
 
         <div class="button-block">
           <button type="submit" disabled={isSubmitting}>
