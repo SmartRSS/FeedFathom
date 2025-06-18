@@ -1,9 +1,9 @@
+import crypto from "node:crypto";
 import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import { isDisposableEmail } from "disposable-email-domains-js";
 import { logError } from "../../util/log.ts";
 import type { RegisterRequest } from "./validator.ts";
-import crypto from "node:crypto";
-import { isDisposableEmail } from "disposable-email-domains-js";
 
 export const registerHandler = async ({
   body,

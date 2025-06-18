@@ -5,6 +5,7 @@ import { FoldersRepository } from "$lib/db/folder-repository";
 import { SourcesRepository } from "$lib/db/source-repository";
 import { UsersRepository } from "$lib/db/user-repository";
 import { UserSourcesRepository } from "$lib/db/user-source-repository";
+import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
 // biome-ignore lint/style/noNamespaceImport: <explanation>
@@ -13,7 +14,6 @@ import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
 import { MainWorker } from "$lib/workers/main";
-import { MailSender } from "$lib/email/mail-sender";
 import {
   InjectionMode,
   asClass,
