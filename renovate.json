@@ -5,17 +5,34 @@
     "customManagers:biomeVersions",
     "group:allNonMajor",
     "replacements:all",
-    "schedule:automergeDaily"
+    "schedule:automergeDaily",
+    "schedule:hourly",
+    ":approveMajorUpdates",
+    ":automergeMinor",
+    ":automergeRequireAllStatusChecks",
+    ":automergeTypes",
+    ":combinePatchMinorReleases",
+    ":ignoreUnstable",
+    ":pinVersions",
+    ":prImmediately",
+    ":separateMultipleMajorReleases"
   ],
   "packageRules": [
     {
       "updateTypes": ["major"],
-      "automerge": false
+      "automerge": false,
+      "separateMajorReleases": true
     },
     {
       "updateTypes": ["minor", "patch"],
       "automerge": true,
-      "automergeType": "pr"
+      "automergeType": "pr",
+      "groupName": "all non-major updates",
+      "stabilityDays": 1
     }
-  ]
+  ],
+  "rangeStrategy": "bump",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 3,
+  "retryCount": 3
 }
