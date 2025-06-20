@@ -257,5 +257,5 @@ jobs:
             export TURNSTILE_SITE_KEY='${{ env.TURNSTILE_SITE_KEY }}' && \
             export TURNSTILE_SECRET_KEY='${{ env.TURNSTILE_SECRET_KEY }}' && \
             docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull migrator mail server worker && \
-            bun run rollout.ts migrator mail server worker
+            bun run rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml migrator mail server worker
           EOF
