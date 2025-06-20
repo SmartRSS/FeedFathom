@@ -1,5 +1,6 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { getBoundaryDates, getDateGroup } from "../../../util/get-date-group";
 import { type ArticleInsert, articles } from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
 
@@ -27,28 +28,45 @@ export class ArticlesDataService {
   }
 
   public async getUserArticlesForSources(userId: number, sourceIds: number[]) {
-    return await this.drizzleConnection
+    if (sourceIds.length === 0) {
+      return [];
+    }
+
+    const loadedArticles = await this.drizzleConnection
       .select({
         author: articles.author,
-        content: articles.content,
-        guid: articles.guid,
         id: articles.id,
         publishedAt: articles.publishedAt,
         sourceId: articles.sourceId,
         title: articles.title,
-        updatedAt: articles.updatedAt,
         url: articles.url,
       })
       .from(articles)
-      .innerJoin(userArticles, eq(articles.id, userArticles.articleId))
+      .leftJoin(
+        userArticles,
+        and(
+          eq(articles.id, userArticles.articleId),
+          eq(userArticles.userId, userId),
+        ),
+      )
       .where(
         and(
-          eq(userArticles.userId, userId),
           inArray(articles.sourceId, sourceIds),
-          isNull(userArticles.deletedAt),
+          or(
+            isNull(userArticles.articleId),
+            gt(articles.updatedAt, userArticles.readAt),
+          ),
         ),
       )
       .orderBy(desc(articles.publishedAt));
+
+    const boundaryDates = getBoundaryDates();
+    return loadedArticles.map((item) => {
+      return {
+        group: getDateGroup(boundaryDates, item.publishedAt),
+        ...item,
+      };
+    });
   }
 
   public async batchUpsertArticles(articlePayloads: ArticleInsert[]) {

@@ -39,7 +39,7 @@ export class MailSender {
           Messages: [
             {
               From: {
-                Email: "activation@yourdomain.com", // TODO: Make this configurable
+                Email: `welcome@${domain}`,
                 Name: "FeedFathom",
               },
               To: [
