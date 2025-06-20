@@ -1,13 +1,18 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { logError } from "../../../util/log";
 import { getBoundaryDates, getDateGroup } from "../../../util/get-date-group";
-import { type ArticleInsert, articles } from "../schemas/articles";
+import {
+  type Article,
+  type ArticleInsert,
+  articles,
+} from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
 
 export class ArticlesDataService {
   constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
-  public async getArticleByGuid(guid: string) {
+  public async getArticleByGuid(guid: string): Promise<Article | undefined> {
     return (
       await this.drizzleConnection
         .select()
@@ -17,7 +22,7 @@ export class ArticlesDataService {
     ).at(0);
   }
 
-  public async getArticle(articleId: number) {
+  public async getArticle(articleId: number): Promise<Article | undefined> {
     return (
       await this.drizzleConnection
         .select()
@@ -27,7 +32,7 @@ export class ArticlesDataService {
     ).at(0);
   }
 
-  public async getUserArticlesForSources(userId: number, sourceIds: number[]) {
+  public async getUserArticlesForSources(sourceIds: number[], userId: number) {
     if (sourceIds.length === 0) {
       return [];
     }
@@ -70,42 +75,46 @@ export class ArticlesDataService {
   }
 
   public async batchUpsertArticles(articlePayloads: ArticleInsert[]) {
-    const articlesToInsert = articlePayloads.map((article) => ({
-      guid: article.guid,
-      sourceId: article.sourceId,
-      title: article.title,
-      url: article.url,
-      author: article.author,
-      publishedAt: article.publishedAt ?? new Date(),
-      content: article.content ?? "",
-      updatedAt: article.updatedAt ?? new Date(),
-    }));
+    if (articlePayloads.length === 0) {
+      return;
+    }
 
-    return await this.drizzleConnection
-      .insert(articles)
-      .values(articlesToInsert)
-      .onConflictDoUpdate({
-        target: articles.guid,
-        set: {
-          title: sql`excluded.title`,
-          content: sql`excluded.content`,
-          author: sql`excluded.author`,
-          publishedAt: sql`excluded.publishedAt`,
-          updatedAt: sql`excluded.updatedAt`,
-        },
-      })
-      .returning();
+    try {
+      await this.drizzleConnection
+        .insert(articles)
+        .values(articlePayloads)
+        .onConflictDoUpdate({
+          target: articles.guid,
+          set: {
+            title: sql`excluded.title`,
+            content: sql`excluded.content`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+        });
+    } catch (error) {
+      logError("Error upserting articles:", error);
+      throw error;
+    }
   }
 
-  public async removeUserArticles(userId: number, articleIds: number[]) {
-    return await this.drizzleConnection
-      .delete(userArticles)
-      .where(
-        and(
-          eq(userArticles.userId, userId),
-          inArray(userArticles.articleId, articleIds),
-        ),
-      )
-      .execute();
+  public async removeUserArticles(articleIdList: number[], userId: number) {
+    const now = new Date();
+    const values = articleIdList.map((articleId) => {
+      return {
+        articleId,
+        deletedAt: now,
+        userId,
+      };
+    });
+
+    await this.drizzleConnection.transaction(async (trx) => {
+      await trx
+        .insert(userArticles)
+        .values(values)
+        .onConflictDoUpdate({
+          set: { deletedAt: now },
+          target: [userArticles.userId, userArticles.articleId],
+        });
+    });
   }
 }

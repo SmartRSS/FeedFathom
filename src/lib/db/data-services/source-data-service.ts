@@ -2,6 +2,7 @@ import type { PostgresQueue } from "$lib/postgres-queue";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { JobName } from "../../../types/job-name-enum.ts";
+import { logError } from "../../../util/log.ts";
 import { type Source, sources } from "../schemas/sources.ts";
 
 // Define a type for the select statement in listAllSources
@@ -148,77 +149,90 @@ export class SourcesDataService {
         SELECT
             s.id,
             s.url,
-            s.home_url as homeUrl,
-            s.created_at as createdAt,
-            s.last_attempt as lastAttempt,
-            s.last_success as lastSuccess,
-            COALESCE(s.recent_failures, 0) as recentFailures,
-            COALESCE(sc.count, 0) AS subscriberCount,
-            s.recent_failure_details as recentFailureDetails
+            s.home_url as "homeUrl",
+            s.created_at as "createdAt",
+            s.last_attempt as "lastAttempt",
+            s.last_success as "lastSuccess",
+            COALESCE(s.recent_failures, 0) as "recentFailures",
+            COALESCE(sc.count, 0) AS "subscriberCount",
+            s.recent_failure_details as "recentFailureDetails"
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
-        ORDER BY ${validSortBy} ${validOrder}
+        ORDER BY "${validSortBy}" ${validOrder}
     `;
 
-    return (await this.drizzleConnection.execute(
-      query,
-    )) as SourceWithSubscriberCount[];
+    const result = await this.drizzleConnection.execute(sql.raw(query));
+
+    return result as unknown as SourceWithSubscriberCount[];
   }
 
   public async updateSourceUrl(oldUrl: string, newUrl: string) {
-    return await this.drizzleConnection
+    await this.drizzleConnection
       .update(sources)
-      .set({ url: newUrl })
-      .where(eq(sources.url, oldUrl))
-      .execute();
+      .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })
+      .where(eq(sources.url, oldUrl));
   }
 
-  public async successSource(sourceId: number) {
-    return await this.drizzleConnection
+  public async successSource(sourceId: number, cached = false) {
+    const now = new Date();
+    await this.drizzleConnection
       .update(sources)
-      .set({ lastSuccess: new Date() })
-      .where(eq(sources.id, sourceId))
-      .execute();
+      .set({
+        lastAttempt: now,
+        lastSuccess: now,
+        recentFailureDetails: cached ? "cached" : "not cached",
+        recentFailures: 0,
+      })
+      .where(eq(sources.id, sourceId));
   }
 
-  public async failSource(sourceId: number, message: string) {
-    return await this.drizzleConnection
-      .update(sources)
-      .set({ recentFailureDetails: message })
-      .where(eq(sources.id, sourceId))
-      .execute();
+  public async failSource(sourceId: number, reason = "") {
+    try {
+      await this.drizzleConnection
+        .update(sources)
+        .set({
+          lastAttempt: new Date(),
+          recentFailureDetails: reason,
+          recentFailures: sql`${sources.recentFailures} + 1`,
+        })
+        .where(eq(sources.id, sourceId));
+    } catch (error) {
+      logError("fail source", error);
+    }
   }
 
-  public async updateFavicon(sourceId: number, favicon: string) {
-    return await this.drizzleConnection
+  public async updateFavicon(sourceId: number, favicon: Buffer | string) {
+    let type: string;
+    let encoded: string;
+
+    if (Buffer.isBuffer(favicon)) {
+      type = "png";
+      encoded = favicon.toString("base64");
+    } else {
+      type = "svg+xml";
+      encoded = Buffer.from(favicon, "utf8").toString("base64");
+    }
+
+    await this.drizzleConnection
       .update(sources)
-      .set({ favicon })
-      .where(eq(sources.id, sourceId))
-      .execute();
+      .set({
+        favicon: `data:image/${type};base64,${encoded}`,
+      })
+      .where(eq(sources.id, sourceId));
   }
 
   public async findOrCreateSourceByUrl(
     url: string,
     payload: { homeUrl: string },
   ) {
-    // Attempt to find the source by URL
-    let source = await this.drizzleConnection
-      .select()
-      .from(sources)
-      .where(eq(sources.url, url))
-      .limit(1);
-
-    // If the source does not exist, create it
-    if (!source.length) {
-      source = await this.drizzleConnection
-        .insert(sources)
-        .values({
-          url,
-          homeUrl: payload.homeUrl,
-        })
-        .returning();
+    const source = await this.findSourceByUrl(url);
+    if (source) {
+      return source;
     }
 
-    return source[0];
+    return await this.addSource({
+      homeUrl: payload.homeUrl,
+      url,
+    });
   }
 }
