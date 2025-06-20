@@ -122,6 +122,7 @@ export class UserSourcesDataService {
       if (node.type === "folder") {
         await this.foldersDataService.createFolder(userId, node.name);
         if (node.children) {
+          // we don't support nested folders yet
           await this.insertTree(userId, node.children);
         }
       }
