@@ -127,6 +127,7 @@ export const registerHandler = async ({
 
   // 2. Check for disposable email
   if (isDisposableEmail(body.email)) {
+    // intentionally leave user in the dark, we don't want to give them any information about why they can't register
     return json({ success: true });
   }
 

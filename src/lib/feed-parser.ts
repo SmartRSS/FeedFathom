@@ -136,22 +136,36 @@ export class FeedParser {
         const response = await container.cradle.axiosInstance.get(url, {
           responseType: "arraybuffer",
         });
-        if (response.status !== 200) {
-          continue;
-        }
-        if (
-          typeof response.data !== "string" &&
-          !(response.data instanceof ArrayBuffer)
-        ) {
+
+        if (response.status !== 200 || !response.data) {
           continue;
         }
 
-        await this.sourcesDataService.updateFavicon(
-          source.id,
-          typeof response.data === "string"
-            ? response.data
-            : response.data.toString(),
-        );
+        let faviconPayload: string;
+
+        if (response.data instanceof ArrayBuffer) {
+          const buffer = Buffer.from(response.data);
+          // Ignore small responses, likely errors or blank images
+          if (buffer.length < 20) {
+            continue;
+          }
+          const contentType = response.headers["content-type"] ?? "image/png";
+          faviconPayload = `data:${contentType};base64,${buffer.toString(
+            "base64",
+          )}`;
+        } else if (typeof response.data === "string") {
+          // If it's a string, it must be a data URI, otherwise we don't know how to handle it.
+          if (response.data.startsWith("data:image")) {
+            faviconPayload = response.data;
+          } else {
+            continue;
+          }
+        } else {
+          // Unsupported type
+          continue;
+        }
+
+        await this.sourcesDataService.updateFavicon(source.id, faviconPayload);
         // Exit loop after successful update
         break;
       } catch {
