@@ -28,6 +28,9 @@ let isSubmitting = false;
 const handleSubmit = async (event: SubmitEvent) => {
   event.preventDefault();
 
+  const formData = new FormData(event.target as HTMLFormElement);
+  const turnstileToken = formData.get("cf-turnstile-response") as string;
+
   if (password !== passwordConfirm) {
     validationMessage = "Passwords do not match!";
     return;
@@ -38,7 +41,13 @@ const handleSubmit = async (event: SubmitEvent) => {
     const res = await fetch("/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, passwordConfirm }),
+      body: JSON.stringify({
+        username,
+        email,
+        password,
+        passwordConfirm,
+        "cf-turnstile-response": turnstileToken,
+      }),
     });
     const result = RegisterResponse(await res.json());
 

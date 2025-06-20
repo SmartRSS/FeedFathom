@@ -6,7 +6,7 @@ export const RegisterRequest = type({
   email: "string.email",
   password: "string",
   passwordConfirm: "string",
-  "secondaryToken?": "string",
+  "cf-turnstile-response?": "string",
   "+": "reject",
 })
   .narrow((n, ctx) => {
