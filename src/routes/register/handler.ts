@@ -2,8 +2,8 @@ import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import crypto from "node:crypto";
 import { json } from "@sveltejs/kit";
 import { isDisposableEmail } from "disposable-email-domains-js";
-import { llog } from "../../util/log.ts";
 import type { Dependencies } from "../../container.ts";
+import { llog } from "../../util/log.ts";
 import type { RegisterRequest } from "./validator.ts";
 
 async function validateCaptcha(
