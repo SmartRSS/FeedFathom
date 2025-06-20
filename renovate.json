@@ -6,7 +6,6 @@
     "group:allNonMajor",
     "replacements:all",
     "schedule:automergeDaily",
-    "schedule:hourly",
     ":automergeMinor",
     ":automergeRequireAllStatusChecks",
     ":automergeTypes",
