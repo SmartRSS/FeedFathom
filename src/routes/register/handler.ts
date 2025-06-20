@@ -3,15 +3,24 @@ import crypto from "node:crypto";
 import { json } from "@sveltejs/kit";
 import { isDisposableEmail } from "disposable-email-domains-js";
 import type { Dependencies } from "../../container.ts";
+import { llog } from "../../util/log.ts";
 import type { RegisterRequest } from "./validator.ts";
 
 async function validateCaptcha(
   turnstileToken: string,
   turnstileSecretKey: string,
 ): Promise<boolean> {
+  llog("Starting captcha validation");
+
   if (!turnstileToken) {
+    llog("Turnstile token not provided, failing captcha validation.");
     return false;
   }
+
+  llog("Performing captcha validation request.", {
+    turnstileSecretKeySet: !!turnstileSecretKey,
+  });
+
   const turnstileResponse = await fetch(
     "https://challenges.cloudflare.com/turnstile/v0/siteverify",
     {
@@ -25,7 +34,17 @@ async function validateCaptcha(
   );
   const turnstileData = (await turnstileResponse.json()) as {
     success: boolean;
+    "error-codes"?: string[];
   };
+
+  if (turnstileData.success) {
+    llog("Captcha validation successful.");
+  } else {
+    llog("Captcha validation failed.", {
+      errorCodes: turnstileData["error-codes"],
+    });
+  }
+
   return turnstileData.success;
 }
 
