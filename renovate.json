@@ -7,11 +7,9 @@
     "replacements:all",
     "schedule:automergeDaily",
     "schedule:hourly",
-    ":approveMajorUpdates",
     ":automergeMinor",
     ":automergeRequireAllStatusChecks",
     ":automergeTypes",
-    ":combinePatchMinorReleases",
     ":ignoreUnstable",
     ":pinVersions",
     ":prImmediately",
@@ -19,12 +17,7 @@
   ],
   "packageRules": [
     {
-      "updateTypes": ["major"],
-      "automerge": false,
-      "separateMajorReleases": true
-    },
-    {
-      "updateTypes": ["minor", "patch"],
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true,
       "automergeType": "pr",
       "groupName": "all non-major updates",
@@ -33,6 +26,5 @@
   ],
   "rangeStrategy": "bump",
   "prHourlyLimit": 0,
-  "prConcurrentLimit": 3,
-  "retryCount": 3
+  "prConcurrentLimit": 3
 }
