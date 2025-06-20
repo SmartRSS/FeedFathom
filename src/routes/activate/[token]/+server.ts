@@ -8,7 +8,7 @@ export async function POST({ params, locals }: RequestEvent) {
   }
 
   const user =
-    await locals.dependencies.usersRepository.findUserByActivationToken(token);
+    await locals.dependencies.usersDataService.findUserByActivationToken(token);
 
   if (!user) {
     return json({ error: "Invalid activation token." }, { status: 400 });
@@ -25,7 +25,7 @@ export async function POST({ params, locals }: RequestEvent) {
     return json({ error: "Activation token has expired." }, { status: 400 });
   }
 
-  await locals.dependencies.usersRepository.activateUser(user.id);
+  await locals.dependencies.usersDataService.activateUser(user.id);
 
   return json({ success: true });
 }

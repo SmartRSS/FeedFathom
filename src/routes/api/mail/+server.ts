@@ -15,11 +15,11 @@ const mailBody = type({
 export type MailBody = typeof mailBody.infer;
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  const { articlesRepository, sourcesRepository } = locals.dependencies;
+  const { articlesDataService, sourcesDataService } = locals.dependencies;
   const emailHandler = new EmailHandler(
     new EmailProcessor(),
-    sourcesRepository,
-    articlesRepository,
+    sourcesDataService,
+    articlesDataService,
   );
 
   try {

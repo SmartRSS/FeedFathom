@@ -25,7 +25,7 @@ export class ParseSourceHandler {
     command: ParseSourceCommand,
   ): Promise<SourceCommandResult> {
     try {
-      // Get the source from the repository
+      // Get the source from the DataService
       const source = await this.sourcesDataService.findSourceById(
         Number(command.sourceId),
       );

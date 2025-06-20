@@ -49,7 +49,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   const user =
-    await event.locals.dependencies.usersRepository.getUserBySid(sid);
+    await event.locals.dependencies.usersDataService.getUserBySid(sid);
 
   if (!user) {
     event.cookies.delete("sid", { path: "/" });

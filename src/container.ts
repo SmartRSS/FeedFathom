@@ -40,14 +40,14 @@ export class MaintenanceState {
 }
 
 export type Dependencies = {
-  articlesRepository: ArticlesDataService;
+  articlesDataService: ArticlesDataService;
   axiosInstance: AxiosCacheInstance;
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
-  foldersRepository: FoldersDataService;
+  foldersDataService: FoldersDataService;
   initializer: Initializer;
   maintenanceState: MaintenanceState;
   mailSender: MailSender;
@@ -55,9 +55,9 @@ export type Dependencies = {
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
   redis: RedisClient;
-  sourcesRepository: SourcesDataService;
-  userSourcesRepository: UserSourcesDataService;
-  usersRepository: UsersDataService;
+  sourcesDataService: SourcesDataService;
+  userSourcesDataService: UserSourcesDataService;
+  usersDataService: UsersDataService;
   postgresQueue: PostgresQueue;
 };
 
@@ -105,11 +105,11 @@ container.register({
   maintenanceState: asClass(MaintenanceState).singleton(),
 
   // Repositories
-  articlesRepository: asClass(ArticlesDataService).singleton(),
-  foldersRepository: asClass(FoldersDataService).singleton(),
-  sourcesRepository: asClass(SourcesDataService).singleton(),
-  userSourcesRepository: asClass(UserSourcesDataService).singleton(),
-  usersRepository: asClass(UsersDataService).singleton(),
+  articlesDataService: asClass(ArticlesDataService).singleton(),
+  foldersDataService: asClass(FoldersDataService).singleton(),
+  sourcesDataService: asClass(SourcesDataService).singleton(),
+  userSourcesDataService: asClass(UserSourcesDataService).singleton(),
+  usersDataService: asClass(UsersDataService).singleton(),
 
   // Services
   cli: asClass(Cli).singleton(),

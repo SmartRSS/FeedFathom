@@ -46,7 +46,7 @@ async function registerUser(
       return;
     }
 
-    await locals.dependencies.usersRepository.createUser({
+    await locals.dependencies.usersDataService.createUser({
       email: body.email,
       name: body.username,
       passwordHash: hash,
@@ -63,16 +63,16 @@ async function registerUser(
 
   if (existingUser) {
     // User exists and is inactive, update their password and activate them
-    await locals.dependencies.usersRepository.updatePassword(
+    await locals.dependencies.usersDataService.updatePassword(
       existingUser.id,
       hash,
     );
-    await locals.dependencies.usersRepository.activateUser(existingUser.id);
+    await locals.dependencies.usersDataService.activateUser(existingUser.id);
     return;
   }
 
   // Create a new, active user
-  await locals.dependencies.usersRepository.createUser({
+  await locals.dependencies.usersDataService.createUser({
     email: body.email,
     name: body.username,
     passwordHash: hash,
@@ -97,7 +97,7 @@ export const registerHandler = async ({
     return json({ error: "Invalid CAPTCHA", success: false }, { status: 400 });
   }
 
-  const userCount = await locals.dependencies.usersRepository.getUserCount();
+  const userCount = await locals.dependencies.usersDataService.getUserCount();
 
   if (userCount > 0 && !locals.dependencies.appConfig["ENABLE_REGISTRATION"]) {
     return json(
@@ -130,7 +130,7 @@ export const registerHandler = async ({
     return json({ success: true });
   }
 
-  const existingUser = await locals.dependencies.usersRepository.findUser(
+  const existingUser = await locals.dependencies.usersDataService.findUser(
     body.email,
   );
 

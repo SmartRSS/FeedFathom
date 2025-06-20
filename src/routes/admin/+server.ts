@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const order = (url.searchParams.get("order") ?? "asc") as "asc" | "desc";
 
   try {
-    const sources = await locals.dependencies.sourcesRepository.listAllSources(
+    const sources = await locals.dependencies.sourcesDataService.listAllSources(
       sortBy === "subscriberCount" ? "id" : sortBy,
       order,
     );

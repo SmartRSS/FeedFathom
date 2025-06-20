@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
   }
 
   const articles =
-    await locals.dependencies.articlesRepository.getUserArticlesForSources(
+    await locals.dependencies.articlesDataService.getUserArticlesForSources(
       locals.user.id,
       sourcesList,
     );

@@ -9,7 +9,7 @@ export const GET: RequestHandler = async ({ locals }: RequestEvent) => {
       return json([]);
     }
 
-    const folders = await locals.dependencies.foldersRepository.getUserFolders(
+    const folders = await locals.dependencies.foldersDataService.getUserFolders(
       locals.user.id,
     );
     return json(folders);
