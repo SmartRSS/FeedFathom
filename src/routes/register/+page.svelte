@@ -21,6 +21,7 @@ let password = "";
 
 let passwordConfirm = "";
 let validationMessage = "";
+let successMessage = "";
 
 let isSubmitting = false;
 
@@ -29,7 +30,12 @@ const handleSubmit = async (event: SubmitEvent) => {
   event.preventDefault();
 
   const formData = new FormData(event.target as HTMLFormElement);
-  const turnstileToken = formData.get("cf-turnstile-response") as string;
+  const turnstileToken = formData.get("cf-turnstile-response");
+
+  if (data.turnstileSiteKey && (typeof turnstileToken !== "string" || !turnstileToken)) {
+    validationMessage = "CAPTCHA validation failed. Please try again.";
+    return;
+  }
 
   if (password !== passwordConfirm) {
     validationMessage = "Passwords do not match!";
@@ -38,32 +44,42 @@ const handleSubmit = async (event: SubmitEvent) => {
 
   try {
     isSubmitting = true;
+
+    const body: Record<string, unknown> = {
+      username,
+      email,
+      password,
+      passwordConfirm,
+    };
+
+    if (data.turnstileSiteKey) {
+      body["cf-turnstile-response"] = turnstileToken;
+    }
+
     const res = await fetch("/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email,
-        password,
-        passwordConfirm,
-        "cf-turnstile-response": turnstileToken,
-      }),
+      body: JSON.stringify(body),
     });
     const result = RegisterResponse(await res.json());
 
     if (result instanceof type.errors) {
       validationMessage = "Unexpected server response";
+      isSubmitting = false;
       return;
     }
 
     if (res.ok) {
-      await goto("/login");
+      successMessage = "Registration successful! Redirecting to login...";
+      setTimeout(() => {
+        goto("/login");
+      }, 2000);
     } else {
-      validationMessage = "Registration failed. Please try again.";
+      validationMessage = result.error ?? "Registration failed. Please try again.";
+      isSubmitting = false;
     }
   } catch {
     validationMessage = "An error occurred. Please try again later.";
-  } finally {
     isSubmitting = false;
   }
 };
@@ -71,8 +87,8 @@ const handleSubmit = async (event: SubmitEvent) => {
 $: {
   if (password && passwordConfirm && password !== passwordConfirm) {
     validationMessage = "Passwords do not match!";
-  } else if (!validationMessage.includes("Registration")) {
-    // Only clear validation if it's not a server error
+  } else if (validationMessage === "Passwords do not match!") {
+    // Only clear validation if it's the password mismatch error
     validationMessage = "";
   }
 }
@@ -110,6 +126,10 @@ $: {
 
         <div class="validation-message" class:show={validationMessage}>
           {validationMessage}
+        </div>
+
+        <div class="success-message" class:show={successMessage}>
+          {successMessage}
         </div>
 
         {#if data.turnstileSiteKey}
@@ -184,6 +204,18 @@ $: {
   }
 
   .validation-message.show {
+    opacity: 1;
+  }
+
+  .success-message {
+    color: #28a745;
+    margin-bottom: 15px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .success-message.show {
     opacity: 1;
   }
 

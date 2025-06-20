@@ -22,27 +22,40 @@ export class MailSender {
   }
 
   public async sendActivationEmail(email: string, token: string) {
+    if (!this.mailjet) {
+      llog("Mailjet is not initialized. Cannot send activation email.");
+      return;
+    }
+
     const domain = this.appConfig.FEED_FATHOM_DOMAIN ?? "default-domain.com";
     const protocol = domain.startsWith("localhost") ? "http" : "https";
     const activationLink = `${protocol}://${domain}/activate/${token}`;
+    llog("Generated activation link.", { activationLink });
 
-    await this.mailjet?.post("send", { version: "v3.1" }).request({
-      Messages: [
-        {
-          From: {
-            Email: "activation@yourdomain.com", // TODO: Make this configurable
-            Name: "FeedFathom",
-          },
-          To: [
+    try {
+      const result = await this.mailjet
+        .post("send", { version: "v3.1" })
+        .request({
+          Messages: [
             {
-              Email: email,
+              From: {
+                Email: "activation@yourdomain.com", // TODO: Make this configurable
+                Name: "FeedFathom",
+              },
+              To: [
+                {
+                  Email: email,
+                },
+              ],
+              Subject: "Activate your FeedFathom account",
+              TextPart: `Please activate your account by clicking this link: ${activationLink}`,
+              HTMLPart: `<p>Please activate your account by clicking this link: <a href="${activationLink}">${activationLink}</a></p>`,
             },
           ],
-          Subject: "Activate your FeedFathom account",
-          TextPart: `Please activate your account by clicking this link: ${activationLink}`,
-          HTMLPart: `<p>Please activate your account by clicking this link: <a href="${activationLink}">${activationLink}</a></p>`,
-        },
-      ],
-    });
+        });
+      llog("Mailjet send request successful.", { result });
+    } catch (error) {
+      llog("Failed to send activation email via Mailjet.", { error });
+    }
   }
 }
