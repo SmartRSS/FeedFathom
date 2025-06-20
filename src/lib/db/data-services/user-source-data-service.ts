@@ -69,12 +69,11 @@ export class UserSourcesDataService {
   }
 
   public async removeSourceFromUser(userId: number, sourceId: number) {
-    return await this.drizzleConnection
+    await this.drizzleConnection
       .delete(userSources)
       .where(
         and(eq(userSources.userId, userId), eq(userSources.sourceId, sourceId)),
-      )
-      .execute();
+      );
   }
 
   public async getUserSources(userId: number) {
@@ -117,32 +116,25 @@ export class UserSourcesDataService {
       .orderBy(userSources.name);
   }
 
-  public async insertTree(userId: number, tree: OpmlNode[]) {
+  public async insertTree(userId: number, tree: OpmlNode[], parentId?: number) {
     for (const node of tree) {
       if (node.type === "folder") {
-        await this.foldersDataService.createFolder(userId, node.name);
-        if (node.children) {
-          // we don't support nested folders yet
-          await this.insertTree(userId, node.children);
+        const folder = await this.foldersDataService.createFolder(
+          userId,
+          node.name,
+        );
+        if ("children" in node && node.children) {
+          await this.insertTree(userId, node.children, folder.id);
         }
       }
 
       if (node.type === "source") {
-        // Look up or create a source ID based on the xmlUrl
-        const source = await this.sourcesDataService.findOrCreateSourceByUrl(
-          node.xmlUrl,
-          {
-            homeUrl: node.homeUrl,
-          },
-        );
-        if (source) {
-          await this.addSourceToUser(userId, {
-            homeUrl: node.homeUrl,
-            name: node.name,
-            parentId: null,
-            url: node.xmlUrl,
-          });
-        }
+        await this.addSourceToUser(userId, {
+          homeUrl: node.homeUrl,
+          name: node.name,
+          parentId: parentId ?? null,
+          url: node.xmlUrl,
+        });
       }
     }
   }

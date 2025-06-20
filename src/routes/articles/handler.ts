@@ -7,8 +7,8 @@ export const deleteArticlesHandler = async ({
   locals,
 }: ValidatedRequestEvent<DeleteArticles>) => {
   await locals.dependencies.articlesDataService.removeUserArticles(
-    locals.user.id,
     body.removedArticleIdList,
+    locals.user.id,
   );
 
   return json(body.removedArticleIdList);

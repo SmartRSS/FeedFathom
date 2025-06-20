@@ -29,8 +29,8 @@ export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
 
   const articles =
     await locals.dependencies.articlesDataService.getUserArticlesForSources(
-      locals.user.id,
       sourcesList,
+      locals.user.id,
     );
   return json(articles);
 };
