@@ -111,8 +111,8 @@ function setFocusTo(selector: FocusTarget) {
 function nodeSelected(node: TreeNode) {
   selectedSourcesList =
     node.type === NodeType.Folder
-      ? node.children.map((child) => child.uid.replace(/\\D/g, ""))
-      : [node.uid.replace(/\\D/g, "")];
+      ? node.children.map((child) => child.uid.replace(/\D/g, ""))
+      : [node.uid.replace(/\D/g, "")];
   selectedNodeUid = node.type + node.uid;
   selectedArticleId = null;
   selectedNode = node;
@@ -127,8 +127,8 @@ function nodeSelected(node: TreeNode) {
 function nodeHeld(node: TreeNode) {
   selectedSourcesList =
     node.type === NodeType.Folder && node.children.length > 0
-      ? node.children.map((child) => child.uid.replace(/\\D/g, ""))
-      : [node.uid.replace(/\\D/g, "")];
+      ? node.children.map((child) => child.uid.replace(/\D/g, ""))
+      : [node.uid.replace(/\D/g, "")];
   selectedNodeUid = node.type + node.uid;
   selectedNode = node;
 }
@@ -271,8 +271,8 @@ async function nodeTouchStart(node: TreeNode) {
   currentNode = node;
   const sources =
     node.type === NodeType.Folder
-      ? node.children.map((source: TreeNode) => source.uid.replace(/\\D/g, "")).join(",")
-      : node.uid.replace(/\\D/g, "");
+      ? node.children.map((source: TreeNode) => source.uid.replace(/\D/g, "")).join(",")
+      : node.uid.replace(/\D/g, "");
   if (!sources) {
     return;
   }
