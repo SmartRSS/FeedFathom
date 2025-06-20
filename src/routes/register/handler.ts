@@ -106,7 +106,7 @@ export const registerHandler = async ({
 }: UnauthenticatedRequestEvent<RegisterRequest>) => {
   const { TURNSTILE_SECRET_KEY, MAILJET_API_KEY, MAILJET_API_SECRET } =
     locals.dependencies.appConfig;
-  const turnstileToken = body["cf-turnstile-response"] ?? "";
+  const turnstileToken = body["secondaryToken"] ?? "";
 
   // 1. Conditionally validate Turnstile
   if (
