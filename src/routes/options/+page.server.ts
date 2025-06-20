@@ -45,7 +45,7 @@ export const actions: Actions = {
         };
       }
 
-      const user = await locals.dependencies.usersRepository.findUser(
+      const user = await locals.dependencies.usersDataService.findUser(
         locals.user.email,
       );
       if (!user) {
@@ -61,7 +61,7 @@ export const actions: Actions = {
       }
 
       const newHash = await Bun.password.hash(password1);
-      await locals.dependencies.usersRepository.updatePassword(
+      await locals.dependencies.usersDataService.updatePassword(
         user.id,
         newHash,
       );
@@ -111,7 +111,7 @@ export const actions: Actions = {
       }
 
       const tree = await locals.dependencies.opmlParser.parseOpml(content);
-      await locals.dependencies.userSourcesRepository.insertTree(
+      await locals.dependencies.userSourcesDataService.insertTree(
         locals.user.id,
         tree,
       );

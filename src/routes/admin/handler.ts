@@ -13,8 +13,8 @@ export const updateSourceHandler = async (
 
   const { newUrl, oldUrl } = body;
 
-  // Call the repository method to update the source using oldUrl as the key
-  await locals.dependencies.sourcesRepository.updateSourceUrl(oldUrl, newUrl);
+  // Call the DataService method to update the source using oldUrl as the key
+  await locals.dependencies.sourcesDataService.updateSourceUrl(oldUrl, newUrl);
 
   return json({ success: true });
 };

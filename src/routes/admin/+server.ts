@@ -1,23 +1,23 @@
 import { createRequestHandler } from "$lib/create-request-handler";
-import { type RequestHandler, json } from "@sveltejs/kit";
+import type { Source } from "$lib/db/schemas/sources";
+import { json, type RequestHandler } from "@sveltejs/kit";
 import { updateSourceHandler } from "./handler.ts";
 import { UpdateSourceRequest } from "./validator.ts";
 
 type SortField =
-  | "created_at"
-  | "failures"
-  | "last_attempt"
-  | "last_success"
-  | "subscriber_count"
-  | "url";
+  | keyof Pick<
+      Source,
+      "createdAt" | "recentFailures" | "lastAttempt" | "lastSuccess" | "url"
+    >
+  | "subscriberCount";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-  const sortBy = (url.searchParams.get("sortBy") ?? "created_at") as SortField;
+  const sortBy = (url.searchParams.get("sortBy") ?? "createdAt") as SortField;
   const order = (url.searchParams.get("order") ?? "asc") as "asc" | "desc";
 
   try {
-    const sources = await locals.dependencies.sourcesRepository.listAllSources(
-      sortBy,
+    const sources = await locals.dependencies.sourcesDataService.listAllSources(
+      sortBy === "subscriberCount" ? "id" : sortBy,
       order,
     );
     return json(sources);

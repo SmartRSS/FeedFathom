@@ -1,29 +1,29 @@
 import { buildAxios } from "$lib/cacheable-axios";
 import { CommandBus } from "$lib/commands/command-bus";
-import { ArticlesRepository } from "$lib/db/article-repository";
-import { FoldersRepository } from "$lib/db/folder-repository";
-import { SourcesRepository } from "$lib/db/source-repository";
-import { UsersRepository } from "$lib/db/user-repository";
-import { UserSourcesRepository } from "$lib/db/user-source-repository";
+import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
-// biome-ignore lint/style/noNamespaceImport: <explanation>
-import * as schema from "$lib/schema.ts";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
 import { MainWorker } from "$lib/workers/main";
 import {
-  InjectionMode,
   asClass,
   asFunction,
   asValue,
   createContainer,
+  InjectionMode,
 } from "awilix";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
+import { ArticlesDataService } from "./lib/db/data-services/article-data-service.ts";
+import { FoldersDataService } from "./lib/db/data-services/folder-data-service.ts";
+import { SourcesDataService } from "./lib/db/data-services/source-data-service.ts";
+import { UsersDataService } from "./lib/db/data-services/user-data-service.ts";
+import { UserSourcesDataService } from "./lib/db/data-services/user-source-data-service.ts";
+import * as schema from "./lib/db/schema.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
 import { PostgresQueue } from "./lib/postgres-queue.ts";
 
@@ -40,23 +40,24 @@ export class MaintenanceState {
 }
 
 export type Dependencies = {
-  articlesRepository: ArticlesRepository;
+  articlesDataService: ArticlesDataService;
   axiosInstance: AxiosCacheInstance;
   cli: Cli;
   commandBus: CommandBus;
   appConfig: AppConfig;
   drizzleConnection: BunSQLDatabase<typeof schema>;
   feedParser: FeedParser;
-  foldersRepository: FoldersRepository;
+  foldersDataService: FoldersDataService;
   initializer: Initializer;
   maintenanceState: MaintenanceState;
+  mailSender: MailSender;
   mailWorker: MailWorker;
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
   redis: RedisClient;
-  sourcesRepository: SourcesRepository;
-  userSourcesRepository: UserSourcesRepository;
-  usersRepository: UsersRepository;
+  sourcesDataService: SourcesDataService;
+  userSourcesDataService: UserSourcesDataService;
+  usersDataService: UsersDataService;
   postgresQueue: PostgresQueue;
 };
 
@@ -104,15 +105,16 @@ container.register({
   maintenanceState: asClass(MaintenanceState).singleton(),
 
   // Repositories
-  articlesRepository: asClass(ArticlesRepository).singleton(),
-  foldersRepository: asClass(FoldersRepository).singleton(),
-  sourcesRepository: asClass(SourcesRepository).singleton(),
-  userSourcesRepository: asClass(UserSourcesRepository).singleton(),
-  usersRepository: asClass(UsersRepository).singleton(),
+  articlesDataService: asClass(ArticlesDataService).singleton(),
+  foldersDataService: asClass(FoldersDataService).singleton(),
+  sourcesDataService: asClass(SourcesDataService).singleton(),
+  userSourcesDataService: asClass(UserSourcesDataService).singleton(),
+  usersDataService: asClass(UsersDataService).singleton(),
 
   // Services
   cli: asClass(Cli).singleton(),
   feedParser: asClass(FeedParser).singleton(),
+  mailSender: asClass(MailSender).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
 
   // Workers
@@ -121,5 +123,4 @@ container.register({
   postgresQueue: asClass(PostgresQueue).singleton(),
 });
 
-// biome-ignore lint/style/noDefaultExport: TODO
 export default container;

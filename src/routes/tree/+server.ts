@@ -1,4 +1,4 @@
-import { type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 import {
   NodeType,
   type TreeNode,
@@ -11,8 +11,8 @@ export const GET: RequestHandler = async ({ locals }) => {
   }
 
   const [userSources, userFolders] = await Promise.all([
-    locals.dependencies.userSourcesRepository.getUserSources(locals.user.id),
-    locals.dependencies.foldersRepository.getUserFolders(locals.user.id),
+    locals.dependencies.userSourcesDataService.getUserSources(locals.user.id),
+    locals.dependencies.foldersDataService.getUserFolders(locals.user.id),
   ]);
 
   const folderLookup: { [key: string]: TreeSource[] } = {};

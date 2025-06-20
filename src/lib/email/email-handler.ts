@@ -4,8 +4,8 @@ import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import type { SMTPServerAddress, SMTPServerSession } from "smtp-server";
 import type { Source } from "../../types/source-types.ts";
-import type { ArticlesRepository } from "../db/article-repository.ts";
-import type { SourcesRepository } from "../db/source-repository.ts";
+import type { ArticlesDataService } from "../db/data-services/article-data-service";
+import type { SourcesDataService } from "../db/data-services/source-data-service";
 import type { EmailProcessor } from "../email-processor.ts";
 
 /**
@@ -26,8 +26,8 @@ export type ProcessedArticles = {
 export class EmailHandler {
   constructor(
     private readonly emailProcessor: EmailProcessor,
-    private readonly sourcesRepository: SourcesRepository,
-    private readonly articlesRepository: ArticlesRepository,
+    private readonly sourcesDataService: SourcesDataService,
+    private readonly articlesDataService: ArticlesDataService,
   ) {}
 
   /**
@@ -68,7 +68,7 @@ export class EmailHandler {
     const sources = (
       await Promise.all(
         recipientMails.map(async (address) => {
-          return await this.sourcesRepository.findSourceByUrl(address);
+          return await this.sourcesDataService.findSourceByUrl(address);
         }),
       )
     ).filter((source): source is Source => source !== undefined);
@@ -123,7 +123,7 @@ export class EmailHandler {
   ): Promise<ProcessedArticles> {
     const sources = await this.getValidSources(email);
     const articles = this.createArticles(email, sources, senderAddress);
-    await this.articlesRepository.batchUpsertArticles(articles);
+    await this.articlesDataService.batchUpsertArticles(articles);
     return { articles, sender: senderAddress, sources, email };
   }
 }

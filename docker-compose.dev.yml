@@ -10,8 +10,14 @@ services:
     command: ["run", "watch-server"]
     environment:
       - ENABLE_REGISTRATION=true
+      - BROWSER=none
+      - FEED_FATHOM_DOMAIN=localhost:3456
+      - MAILJET_API_KEY=
+      - MAILJET_API_SECRET=
+      - TURNSTILE_SITE_KEY=
+      - TURNSTILE_SECRET_KEY=
     ports:
-      - 5173:5173
+      - "3456:5173"
 
   migrator:
     build:

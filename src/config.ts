@@ -1,29 +1,34 @@
+/** biome-ignore-all lint/style/useNamingConvention: ENV access */
 import { type } from "arktype";
 
 const configSchema = type({
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
   ALLOWED_EMAILS: type("string")
     .pipe((s) => s.split(",").filter(Boolean))
     .default(""),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   ENABLE_REGISTRATION: type("string")
     .pipe((s) => s === "true")
     .default("false"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   WORKER_CONCURRENCY: type("string.numeric.parse").default("1"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   LOCK_DURATION: type("string.numeric.parse").default("1000"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   CLEANUP_INTERVAL: type("string.numeric.parse").default("1000"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   GATHER_JOBS_INTERVAL: type("string.numeric.parse").default("1000"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   APP_REPLICAS: type("string.numeric.parse").default("1"),
-  // biome-ignore lint/style/useNamingConvention: environment variables are in uppercase
+
   MAIL_ENABLED: type("string")
     .pipe((s) => s === "true")
     .default("false"),
   "INTEGRATION?": "'mail'|'migrator'|'worker'",
+  "MAILJET_API_KEY?": "string",
+  "MAILJET_API_SECRET?": "string",
+  "FEED_FATHOM_DOMAIN?": "string",
+  "TURNSTILE_SITE_KEY?": "string",
+  "TURNSTILE_SECRET_KEY?": "string",
   "+": "delete",
 });
 

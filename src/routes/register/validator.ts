@@ -2,10 +2,11 @@ import { type } from "arktype";
 import { config } from "../../config.ts";
 
 export const RegisterRequest = type({
+  username: "string",
   email: "string.email",
   password: "string",
   passwordConfirm: "string",
-  username: "string",
+  "cf-turnstile-response?": "string",
   "+": "reject",
 })
   .narrow((n, ctx) => {

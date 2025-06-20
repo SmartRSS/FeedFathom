@@ -2,8 +2,8 @@ import domPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import container from "../container.ts";
 import { Extractus } from "./extractors/extractus.ts";
-import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain.ts";
 import { MozillaReadability } from "./extractors/mozilla-readability.ts";
+import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain.ts";
 import { Original } from "./extractors/original.ts";
 import { DisplayMode } from "./settings.ts";
 

@@ -11,41 +11,43 @@
     "build-project": "rm -rf build && mkdir -p build && (bun build-server & bun build-worker & bun build-extension & wait)",
     "watch-server": "svelte-kit sync && vite dev --host",
     "watch-worker": "svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
-    "eslint": "eslint --config=eslint.config.js ./src/**/*.{ts,svelte,js} ./tests/**/*.ts",
+    "eslint": "eslint --config=eslint.config.js",
     "eslint:fix": "bun eslint -- --fix",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
-    "lint": "svelte-kit sync && bun test && biome check && tsgo && bun svelte-check && bun knip && bun eslint",
+    "lint": "svelte-kit sync && bun test && biome check && tsc && bun svelte-check && bun knip && bun eslint",
     "lint:fix": "svelte-kit sync && bun eslint:fix --fix && bun format",
     "format": "biome format --write",
     "knip": "knip",
     "generate-migrations": "drizzle-kit generate && bun lint:fix"
   },
   "peerDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "2.0.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/archiver": "^6.0.3",
     "@types/chrome": "^0.0.326",
     "@types/jsdom": "^21.1.7",
     "@types/mailparser": "^3.4.6",
-    "@types/node": "^22.15.29 || ^24.0.0",
+    "@types/node": "^24.0.3",
     "@types/smtp-server": "^3.5.10",
-    "@typescript/native-preview": "^7.0.0-dev.20250604.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250617.1",
     "archiver": "^7.0.1",
-    "bun-types": "^1.2.15",
+    "bun-types": "^1.2.16",
     "drizzle-kit": "^0.31.1",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "eslint-config-biome": "^1.9.4",
-    "eslint-plugin-svelte": "^3.9.1",
+    "eslint-plugin-svelte": "^3.9.2",
     "globals": "^16.2.0",
-    "knip": "^5.60.0",
+    "knip": "^5.61.1",
     "svelte-check": "^4.2.1",
-    "typescript-eslint": "^8.33.1"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.12",
-    "@sveltejs/kit": "^2.21.2",
+    "@sveltejs/kit": "^2.22.0",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
-    "svelte": "^5.33.14",
+    "svelte": "^5.34.7",
+    "svelte-turnstile": "^0.11.0",
     "vite": "^6.3.5"
   },
   "dependencies": {
@@ -54,28 +56,36 @@
     "@rowanmanning/feed-parser": "^2.1.0",
     "arktype": "^2.1.20",
     "awilix": "^12.0.5",
-    "axios": "^1.9.0",
+    "axios": "^1.10.0",
     "axios-cache-interceptor": "^1.8.0",
+    "disposable-email-domains-js": "^1.12.0",
     "dompurify": "^3.2.6",
     "drizzle-orm": "^0.44.2",
-    "fast-xml-parser": "^5.2.3",
+    "fast-xml-parser": "^5.2.5",
     "jsdom": "^26.1.0",
     "mailparser": "^3.7.3",
+    "node-mailjet": "^6.0.8",
     "smtp-server": "^3.13.8",
-    "ulid": "^3.0.0"
+    "ulid": "^3.0.1"
   },
   "type": "module",
-  "trustedDependencies": ["@biomejs/biome"],
+  "trustedDependencies": [
+    "@biomejs/biome"
+  ],
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
     "entry": [
       "src/**/*.{ts,svelte}",
       "tests/**/*.ts",
       "bin/**",
-      "rollout.js",
       "eslint.config.js"
     ],
-    "ignore": ["build/**", "ext/**", "rollout.js", "src/cloudflare/**"],
+    "ignore": [
+      "build/**",
+      "ext/**",
+      "rollout.ts",
+      "src/cloudflare/**"
+    ],
     "ignoreBinaries": [
       "build",
       "biome",
@@ -86,6 +96,8 @@
       "tsgo",
       "drizzle-kit"
     ],
-    "ignoreUnresolved": ["^\\$service-worker"]
+    "ignoreUnresolved": [
+      "^\\$service-worker"
+    ]
   }
 }

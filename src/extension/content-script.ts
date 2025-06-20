@@ -115,7 +115,7 @@ import type { FeedData } from "../lib/scanners/feed-data-type.ts";
       }
 
       scanTimeoutRef = setTimeout(() => {
-        (async () => {
+        void (async () => {
           try {
             const updatedFeedsData = await scan(newHref, document);
             updateAvailableSourcesList(updatedFeedsData);

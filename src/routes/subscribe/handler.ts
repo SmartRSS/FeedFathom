@@ -22,7 +22,7 @@ export const subscribeHandler = async ({
   }
 
   if (sourceUrl.includes("@")) {
-    await locals.dependencies.userSourcesRepository.addSourceToUser(
+    await locals.dependencies.userSourcesDataService.addSourceToUser(
       locals.user.id,
       {
         homeUrl: url.origin,
@@ -42,7 +42,7 @@ export const subscribeHandler = async ({
       return json(false);
     }
 
-    await locals.dependencies.userSourcesRepository.addSourceToUser(
+    await locals.dependencies.userSourcesDataService.addSourceToUser(
       locals.user.id,
       {
         homeUrl: preview?.link ?? url.origin,

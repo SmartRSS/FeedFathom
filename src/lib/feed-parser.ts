@@ -1,12 +1,12 @@
 import { lookup } from "node:dns/promises";
-import type { ArticlesRepository } from "$lib/db/article-repository";
-import type { SourcesRepository } from "$lib/db/source-repository";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";
 import container from "../container.ts";
 import { logError as error } from "../util/log.ts";
+import type { ArticlesDataService } from "./db/data-services/article-data-service";
+import type { SourcesDataService } from "./db/data-services/source-data-service";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 
@@ -23,10 +23,10 @@ export class FeedParser {
   };
 
   constructor(
-    private readonly articlesRepository: ArticlesRepository,
+    private readonly articlesDataService: ArticlesDataService,
     private readonly axiosInstance: AxiosCacheInstance,
     private readonly redis: RedisClient,
-    private readonly sourcesRepository: SourcesRepository,
+    private readonly sourcesDataService: SourcesDataService,
   ) {}
 
   private formatErrorMessage(error_: unknown): string {
@@ -61,7 +61,7 @@ export class FeedParser {
       const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
 
       if (cached && !source.skipCache) {
-        await this.sourcesRepository.successSource(source.id, true);
+        await this.sourcesDataService.successSource(source.id);
         return;
       }
 
@@ -74,10 +74,20 @@ export class FeedParser {
         );
       });
 
-      await this.articlesRepository.batchUpsertArticles(articlePayloads);
+      const articlesToUpsert = articlePayloads.map((payload) => ({
+        guid: payload.guid,
+        sourceId: payload.sourceId,
+        title: payload.title,
+        url: payload.url,
+        author: payload.author,
+        publishedAt: payload.publishedAt ?? new Date(),
+        content: payload.content ?? "",
+        updatedAt: new Date(), // Assume updatedAt is always the current date
+      }));
+      await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
       articlePayloads.length = 0;
 
-      await this.sourcesRepository.successSource(source.id);
+      await this.sourcesDataService.successSource(source.id);
     } catch (error_: unknown) {
       if (error_ instanceof Error) {
         error("parseSource", error_.message);
@@ -86,7 +96,7 @@ export class FeedParser {
       }
 
       const message = this.formatErrorMessage(error_);
-      await this.sourcesRepository.failSource(source.id, message);
+      await this.sourcesDataService.failSource(source.id, message);
       error(`${source.url} failed`);
     }
   }
@@ -126,22 +136,36 @@ export class FeedParser {
         const response = await container.cradle.axiosInstance.get(url, {
           responseType: "arraybuffer",
         });
-        if (response.status !== 200) {
-          continue;
-        }
-        if (
-          typeof response.data !== "string" &&
-          !(response.data instanceof ArrayBuffer)
-        ) {
+
+        if (response.status !== 200 || !response.data) {
           continue;
         }
 
-        await this.sourcesRepository.updateFavicon(
-          source.id,
-          typeof response.data === "string"
-            ? response.data
-            : Buffer.from(response.data),
-        );
+        let faviconPayload: string;
+
+        if (response.data instanceof ArrayBuffer) {
+          const buffer = Buffer.from(response.data);
+          // Ignore small responses, likely errors or blank images
+          if (buffer.length < 20) {
+            continue;
+          }
+          const contentType = response.headers["content-type"] ?? "image/png";
+          faviconPayload = `data:${contentType};base64,${buffer.toString(
+            "base64",
+          )}`;
+        } else if (typeof response.data === "string") {
+          // If it's a string, it must be a data URI, otherwise we don't know how to handle it.
+          if (response.data.startsWith("data:image")) {
+            faviconPayload = response.data;
+          } else {
+            continue;
+          }
+        } else {
+          // Unsupported type
+          continue;
+        }
+
+        await this.sourcesDataService.updateFavicon(source.id, faviconPayload);
         // Exit loop after successful update
         break;
       } catch {

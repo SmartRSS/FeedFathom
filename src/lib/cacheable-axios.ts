@@ -3,10 +3,10 @@ import { Agent } from "node:https";
 import path from "node:path";
 import axios, { type AxiosInstance } from "axios";
 import {
-  type CacheRequestConfig,
-  type StorageValue,
   buildStorage,
+  type CacheRequestConfig,
   canStale,
+  type StorageValue,
   setupCache,
 } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";

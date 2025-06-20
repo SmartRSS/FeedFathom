@@ -1,25 +1,30 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { type } from "arktype";
+import { Turnstile } from "svelte-turnstile";
+import type { PageData } from "./$types";
+
+export let data: PageData;
+
 const RegisterResponse = type({
   success: "boolean",
   error: "string | null",
   "+": "reject",
 });
 
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let username = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let email = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let password = "";
-// biome-ignore lint/style/useConst: bound by Svelte
+
 let passwordConfirm = "";
 let validationMessage = "";
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let isSubmitting = false;
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const handleSubmit = async (event: SubmitEvent) => {
   event.preventDefault();
 
@@ -97,6 +102,10 @@ $: {
         <div class="validation-message" class:show={validationMessage}>
           {validationMessage}
         </div>
+
+        {#if data.turnstileSiteKey}
+          <Turnstile siteKey={data.turnstileSiteKey!} />
+        {/if}
 
         <div class="button-block">
           <button type="submit" disabled={isSubmitting}>

@@ -1,9 +1,9 @@
 import { extractArticle } from "$lib/extract-article";
 import { DisplayMode } from "$lib/settings";
-import { type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestHandler } from "@sveltejs/kit";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-  const articlesRepository = locals.dependencies.articlesRepository;
+  const articlesDataService = locals.dependencies.articlesDataService;
 
   const articleIdParameter = url.searchParams.get("article");
   if (!articleIdParameter) {
@@ -13,7 +13,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const articleId = Number.parseInt(articleIdParameter, 10);
 
   const dbStartTime = performance.now();
-  const article = await articlesRepository.getArticle(articleId);
+  const article = await articlesDataService.getArticle(articleId);
   const dbEndTime = performance.now();
   const dbExecutionTime = dbEndTime - dbStartTime;
 

@@ -10,7 +10,7 @@ export const loginHandler = async ({
   cookies,
   locals,
 }: UnauthenticatedRequestEvent<LoginRequest>) => {
-  const user = await locals.dependencies.usersRepository.findUser(body.email);
+  const user = await locals.dependencies.usersDataService.findUser(body.email);
   if (!user) {
     await Bun.password.hash(body.password);
     return json(
@@ -35,7 +35,7 @@ export const loginHandler = async ({
     );
   }
 
-  const sid = await locals.dependencies.usersRepository.createSession(
+  const sid = await locals.dependencies.usersDataService.createSession(
     user.id,
     "",
   );

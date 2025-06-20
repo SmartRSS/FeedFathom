@@ -6,10 +6,27 @@ import svelteConfig from "./svelte.config.js";
 
 
 export default [
+  {
+		ignores: [
+			"ext/**",
+			"build/**",
+			"migrations/**",
+			"dist/**",
+			".svelte-kit/**",
+			"drizzle/**",
+			"src/cloudflare/**",
+			"bin/**",
+			"drizzle.config.json",
+			"postcss.config.js",
+			"tailwind.config.js",
+      "eslint.config.js"
+		]
+	},
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   ...ts.configs.recommended,
+
   {
-    files: ["**/*.ts"],
+    files: ["./src/**/*.ts"],
     languageOptions: {
       parser: ts.parser,
       parserOptions: {
@@ -23,6 +40,14 @@ export default [
   },
   ...svelte.configs.recommended.map(config => ({
     ...config,
+    languageOptions: {
+      ...config?.languageOptions,
+      parserOptions: {
+        ...config.languageOptions?.parserOptions,
+        project: true,
+        tsconfigRootDir: process.cwd(),
+      },
+    },
     rules: {
       ...config.rules,
       "svelte/no-at-html-tags": "off",
@@ -32,7 +57,19 @@ export default [
     }
   })),
   {
-    files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
+    files: ['**/*.svelte.ts', '**/*.svelte.js'],
+    languageOptions: {
+      parserOptions: {
+        project: false,
+        extraFileExtensions: ['.svelte'],
+        parser: ts.parser,
+        svelteConfig,
+      }
+    }
+  },
+  {
+    files: ['**/*.svelte'],
+    processor: 'svelte/svelte',
     languageOptions: {
       parserOptions: {
         project: true,
@@ -68,13 +105,7 @@ export default [
         },
       ],
       "@typescript-eslint/naming-convention": [
-        "error",
-        {
-          format: ["camelCase", "UPPER_CASE", "PascalCase"],
-          selector: "variable",
-          leadingUnderscore: "allowSingleOrDouble",
-          trailingUnderscore: "allowSingleOrDouble",
-        },
+        "off",
       ],
       "svelte/comment-directive": "off",
       "import/named": "off",
@@ -82,6 +113,7 @@ export default [
       "import/default": "off",
       "import/no-named-as-default-member": "off",
       "import/no-unresolved": "off",
+      "@typescript-eslint/no-floating-promises": "off",
     },
   },
   biome,

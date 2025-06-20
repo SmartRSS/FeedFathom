@@ -1,5 +1,5 @@
 import { createRequestHandler } from "$lib/create-request-handler";
-import { type RequestEvent, type RequestHandler, json } from "@sveltejs/kit";
+import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 import { deleteArticlesHandler } from "./handler.ts";
 import { DeleteArticles } from "./validator.ts";
 
@@ -28,9 +28,9 @@ export const GET: RequestHandler = async ({ locals, url }: RequestEvent) => {
   }
 
   const articles =
-    await locals.dependencies.articlesRepository.getUserArticlesForSources(
-      sourcesList,
+    await locals.dependencies.articlesDataService.getUserArticlesForSources(
       locals.user.id,
+      sourcesList,
     );
   return json(articles);
 };

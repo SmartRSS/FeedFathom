@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { sessions, users } from "../schema.ts";
+import { sessions } from "../schemas/sessions";
+import { users } from "../schemas/users";
 
-export class UsersRepository {
+export class UsersDataService {
   constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async createSession(userId: number, userAgent?: null | string) {
@@ -20,6 +21,9 @@ export class UsersRepository {
     email: string;
     name: string;
     passwordHash: string;
+    status?: "active" | "inactive";
+    activationToken?: string;
+    activationTokenExpiresAt?: Date;
   }) {
     return (
       await this.drizzleConnection
@@ -28,6 +32,9 @@ export class UsersRepository {
           email: payload.email,
           name: payload.name,
           password: payload.passwordHash,
+          status: payload.status,
+          activationToken: payload.activationToken,
+          activationTokenExpiresAt: payload.activationTokenExpiresAt,
         })
         .returning()
     ).at(0);
@@ -43,11 +50,38 @@ export class UsersRepository {
     ).at(0);
   }
 
-  public async getUserBySid(sid: string) {
-    const { password: _password, ...rest } = getTableColumns(users);
+  public async findUserByActivationToken(token: string) {
     return (
       await this.drizzleConnection
-        .select({ ...rest })
+        .select()
+        .from(users)
+        .where(eq(users.activationToken, token))
+        .limit(1)
+    ).at(0);
+  }
+
+  public async activateUser(userId: number) {
+    return await this.drizzleConnection
+      .update(users)
+      .set({
+        status: "active",
+        activationToken: null,
+        activationTokenExpiresAt: null,
+      })
+      .where(eq(users.id, userId))
+      .execute();
+  }
+
+  public async getUserBySid(sid: string) {
+    return (
+      await this.drizzleConnection
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          status: users.status,
+          isAdmin: users.isAdmin,
+        })
         .from(users)
         .where(eq(sessions.sid, sid))
         .leftJoin(sessions, eq(sessions.userId, users.id))

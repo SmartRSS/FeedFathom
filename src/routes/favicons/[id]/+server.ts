@@ -71,7 +71,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   }
 
   try {
-    const source = await locals.dependencies.sourcesRepository.findSourceById(
+    const source = await locals.dependencies.sourcesDataService.findSourceById(
       Number.parseInt(sourceId, 10),
     );
 

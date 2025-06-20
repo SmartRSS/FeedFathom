@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: implementing external interface */
 import type { RedisClient } from "bun";
 
 interface GetExOptions {
@@ -128,7 +129,7 @@ export class MockRedisClient implements RedisClient {
     return await Promise.resolve(1);
   }
 
-  async ping() {
+  async ping(): Promise<"PONG"> {
     return await Promise.resolve("PONG");
   }
 
@@ -191,12 +192,10 @@ export class MockRedisClient implements RedisClient {
     return await Promise.resolve("OK");
   }
 
-  // biome-ignore lint/style/useNamingConvention: <explanation>
   async config_get(_parameter: string): Promise<Record<string, string>> {
     return await Promise.resolve({});
   }
 
-  // biome-ignore lint/style/useNamingConvention: <explanation>
   async config_set(_parameter: string, _value: string): Promise<"OK"> {
     return await Promise.resolve("OK");
   }
@@ -205,12 +204,10 @@ export class MockRedisClient implements RedisClient {
     return await Promise.resolve(0);
   }
 
-  // biome-ignore lint/style/useNamingConvention: <explanation>
   async debug_object(_key: string): Promise<string> {
     return await Promise.resolve("");
   }
 
-  // biome-ignore lint/style/useNamingConvention: <explanation>
   async debug_segfault(): Promise<never> {
     return await Promise.reject(new Error("Not implemented"));
   }

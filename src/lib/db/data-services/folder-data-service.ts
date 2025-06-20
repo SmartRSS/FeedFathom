@@ -1,23 +1,18 @@
 import { and, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { userFolders } from "../schema.ts";
+import { userFolders } from "../schemas/userFolders";
 
-export class FoldersRepository {
-  public constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+export class FoldersDataService {
+  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
 
   public async createFolder(userId: number, name: string) {
-    const [folder] = await this.drizzleConnection
+    return await this.drizzleConnection
       .insert(userFolders)
       .values({
-        name,
         userId,
+        name,
       })
       .returning();
-    if (!folder) {
-      throw new Error("couldn't create folder");
-    }
-
-    return folder;
   }
 
   public async getUserFolders(userId: number) {
@@ -28,8 +23,9 @@ export class FoldersRepository {
   }
 
   public async removeUserFolder(userId: number, folderId: number) {
-    await this.drizzleConnection
+    return await this.drizzleConnection
       .delete(userFolders)
-      .where(and(eq(userFolders.userId, userId), eq(userFolders.id, folderId)));
+      .where(and(eq(userFolders.id, folderId), eq(userFolders.userId, userId)))
+      .execute();
   }
 }

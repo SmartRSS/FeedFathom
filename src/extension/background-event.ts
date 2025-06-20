@@ -221,7 +221,7 @@ const handleFeedSubscription = async (
  * Handles context menu item clicks
  */
 chrome.contextMenus.onClicked.addListener((info) => {
-  (async () => {
+  void (async () => {
     const instance = await getInstanceUrl();
     if (!instance) {
       return;
@@ -281,7 +281,7 @@ chrome.runtime.onMessage.addListener(messageHandler);
  * Handles clicks on the browser action (extension icon)
  */
 chrome.action.onClicked.addListener(() => {
-  (async () => {
+  void (async () => {
     const instance = await getInstanceUrl();
     if (!(instance && isValidOrigin(instance))) {
       await chrome.runtime.openOptionsPage();

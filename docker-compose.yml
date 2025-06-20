@@ -59,6 +59,11 @@ services:
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_REPLICAS: ${MAIL_REPLICAS:-0}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-}
+      MAILJET_API_KEY: ${MAILJET_API_KEY}
+      MAILJET_API_SECRET: ${MAILJET_API_SECRET}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
     healthcheck:
       test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
       interval: 5s

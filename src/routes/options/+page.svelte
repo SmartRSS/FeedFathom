@@ -1,5 +1,5 @@
 <script lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: bound by Svelte
+
 import { enhance } from "$app/forms";
 import type { SubmitFunction } from "@sveltejs/kit";
 import { isMimeText } from "../../util/is-mime-text.ts";
@@ -9,10 +9,10 @@ import { browser } from "$app/environment";
 
 // Access props directly
 const { data } = $props();
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const { user } = data;
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
   const file = (formData as FormData).get("opml") as File;
   if (!file) {
@@ -44,7 +44,7 @@ const uploadOpml: SubmitFunction = async ({ formData, cancel }) => {
 };
 let passwordForm: HTMLFormElement;
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 const changePassword: SubmitFunction = ({ formData, cancel }) => {
   for (const field of ["oldPassword", "password1", "password2"]) {
     if (!formData.get(field)) {
@@ -55,10 +55,10 @@ const changePassword: SubmitFunction = ({ formData, cancel }) => {
   }
 };
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 let valid = $state(true);
 
-// biome-ignore lint/correctness/noUnusedVariables: bound by Svelte
+
 function isValid() {
   if (!passwordForm["password1"].value) {
     valid = true;

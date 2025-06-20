@@ -10,5 +10,9 @@
   "[svelte]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "oxc.enable": true
+  "oxc.enable": true,
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

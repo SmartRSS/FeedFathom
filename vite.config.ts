@@ -22,9 +22,6 @@ export default defineConfig({
     exclude: ["@sveltejs/kit", "jsdom"],
   },
   plugins: [sveltekit()],
-  experimental: {
-    enableNativePlugin: true,
-  },
   ssr: {
     external: ["jsdom"],
     noExternal: ["@mozilla/readability", "dompurify"],
