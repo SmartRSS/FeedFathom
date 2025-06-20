@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { userFolders } from "../schemas/userFolders";
 
@@ -22,10 +22,10 @@ export class FoldersDataService {
       .where(eq(userFolders.userId, userId));
   }
 
-  public async removeUserFolder(folderId: number) {
+  public async removeUserFolder(userId: number, folderId: number) {
     return await this.drizzleConnection
       .delete(userFolders)
-      .where(eq(userFolders.id, folderId))
+      .where(and(eq(userFolders.id, folderId), eq(userFolders.userId, userId)))
       .execute();
   }
 }

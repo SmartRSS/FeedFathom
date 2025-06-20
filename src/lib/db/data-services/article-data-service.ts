@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { type ArticleInsert, articles } from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
@@ -28,14 +28,27 @@ export class ArticlesDataService {
 
   public async getUserArticlesForSources(userId: number, sourceIds: number[]) {
     return await this.drizzleConnection
-      .select()
-      .from(userArticles)
+      .select({
+        author: articles.author,
+        content: articles.content,
+        guid: articles.guid,
+        id: articles.id,
+        publishedAt: articles.publishedAt,
+        sourceId: articles.sourceId,
+        title: articles.title,
+        updatedAt: articles.updatedAt,
+        url: articles.url,
+      })
+      .from(articles)
+      .innerJoin(userArticles, eq(articles.id, userArticles.articleId))
       .where(
         and(
           eq(userArticles.userId, userId),
-          inArray(userArticles.articleId, sourceIds),
+          inArray(articles.sourceId, sourceIds),
+          isNull(userArticles.deletedAt),
         ),
-      );
+      )
+      .orderBy(desc(articles.publishedAt));
   }
 
   public async batchUpsertArticles(articlePayloads: ArticleInsert[]) {
