@@ -5,7 +5,7 @@ import { isInternalRequest } from "./util/security.ts";
 // Create a simple HTTP server for health checks
 Bun.serve({
   port: 3000,
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
     const ip = server.requestIP(req)?.address ?? "";
 
@@ -43,7 +43,24 @@ Bun.serve({
     // Handle maintenance mode toggle
     if (url.pathname === "/maintenance" && req.method === "POST") {
       try {
-        container.cradle.maintenanceState.isMaintenanceMode = true;
+        const body = (await req.json()) as { maintenance?: boolean };
+
+        if (typeof body.maintenance !== "boolean") {
+          return new Response(
+            JSON.stringify({
+              status: "error",
+              message:
+                "Invalid request body: maintenance flag missing or not a boolean",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        container.cradle.maintenanceState.isMaintenanceMode = body.maintenance;
+
         return new Response(
           JSON.stringify({
             status: "success",
