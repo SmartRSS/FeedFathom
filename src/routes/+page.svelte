@@ -8,6 +8,7 @@ import { onDestroy, onMount } from "svelte";
 import ArticleComponent from "../components/article-component.svelte";
 
 import ArticlesListComponent from "../components/article-list-component.svelte";
+import ModalComponent from "../components/modal-component.svelte";
 
 import TreeNodeComponent from "../components/tree-node-component.svelte";
 import type {
@@ -30,7 +31,7 @@ import del from "$lib/images/icons/System/delete-bin-7-fill.svg";
 import properties from "$lib/images/icons/System/information-fill.svg";
 
 import config from "$lib/images/icons/System/settings-5-fill.svg";
-  import { logError } from "../util/log.ts";
+import { logError } from "../util/log.ts";
 
 const staleTile = 5 * 1000;
 const promisesMap: ArticlePromisesMap = new Map();
@@ -40,6 +41,10 @@ let selectedSourcesList: string[] = $state([]);
 
 let sourceProperties: HTMLDialogElement | null = $state(null);
 let selectedNode: TreeNode | null = $state(null);
+
+let showDeleteModal = $state(false);
+let showAlertModal = $state(false);
+let alertInfo = $state({ title: "", message: "" });
 
 
 let displayMode: DisplayMode = $state(DisplayMode.Feed);
@@ -209,12 +214,22 @@ const handleDeleteSource = () => {
   if (!selectedNode) {
     return;
   }
-  if (!confirm("Are you sure you want to delete this source?")) {
+  showDeleteModal = true;
+};
+
+const confirmDeleteSource = () => {
+  if (!selectedNode) {
     return;
   }
   if (selectedNode.type === NodeType.Folder) {
     if (selectedNode.children.length > 0) {
-      alert("folder has children");
+      showDeleteModal = false;
+      alertInfo = {
+        title: "Cannot Delete Folder",
+        message:
+          "This folder contains feeds. Please move or delete them before deleting the folder.",
+      };
+      showAlertModal = true;
       return;
     }
     void fetch("./folders", {
@@ -228,6 +243,7 @@ const handleDeleteSource = () => {
         ),
       }),
     });
+    showDeleteModal = false;
     return;
   }
 
@@ -240,6 +256,7 @@ const handleDeleteSource = () => {
       removeSourceId: Number.parseInt(selectedNode.uid.replace("source", "`")),
     }),
   });
+  showDeleteModal = false;
 };
 
 
@@ -323,6 +340,25 @@ function clearStalePromises() {
   }
 }
 </script>
+
+<svelte:head>
+  <title>FeedFathom</title>
+</svelte:head>
+
+<ModalComponent
+  show={showDeleteModal}
+  title="Confirm Deletion"
+  message="Are you sure you want to delete this source? This action cannot be undone."
+  onClose={() => (showDeleteModal = false)}
+  onConfirm={confirmDeleteSource}
+/>
+
+<ModalComponent
+  show={showAlertModal}
+  title={alertInfo.title}
+  message={alertInfo.message}
+  onClose={() => (showAlertModal = false)}
+/>
 
 <div class="container">
   <div
