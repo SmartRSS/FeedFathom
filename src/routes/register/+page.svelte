@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
   import { logError } from "../../util/log.ts";
 
   const { data } = $props();
@@ -10,7 +9,8 @@
   let password = $state("");
   let passwordConfirm = $state("");
 
-  const submit = async () => {
+  const submit = async (event: SubmitEvent) => {
+    event.preventDefault();
     if (!form) {
       return;
     }
@@ -18,11 +18,15 @@
     loading = true;
 
     const formData = new FormData(form);
+    const body = Object.fromEntries(formData.entries());
 
     try {
-      const res = await fetch(form.action, {
+      const res = await fetch("/register", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -98,14 +102,7 @@
 
       <form
         class="registration-form"
-        method="post"
-        action="/register"
-        use:enhance={() => {
-          return async ({ update }) => {
-            await submit();
-            await update();
-          };
-        }}
+        onsubmit={submit}
         bind:this={form}
       >
         <div class="form-group">
