@@ -1,257 +1,302 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
-import { type } from "arktype";
-import { Turnstile } from "svelte-turnstile";
-import type { PageData } from "./$types";
+  import { enhance } from "$app/forms";
+  import { logError } from "../../util/log.ts";
 
-export let data: PageData;
+  const { data } = $props();
 
-const RegisterResponse = type({
-  success: "boolean",
-  error: "string | null",
-  "+": "reject",
-});
+  let form: HTMLFormElement | undefined = $state(undefined);
+  let response: { success: boolean; error?: string } | null = $state(null);
+  let loading = $state(false);
+  let password = $state("");
+  let passwordConfirm = $state("");
 
-
-let username = "";
-
-let email = "";
-
-let password = "";
-
-let passwordConfirm = "";
-let validationMessage = "";
-let successMessage = "";
-
-let isSubmitting = false;
-
-
-const handleSubmit = async (event: SubmitEvent) => {
-  event.preventDefault();
-
-  const formData = new FormData(event.target as HTMLFormElement);
-  const turnstileToken = formData.get("cf-turnstile-response");
-
-  if (data.turnstileSiteKey && (typeof turnstileToken !== "string" || !turnstileToken)) {
-    validationMessage = "CAPTCHA validation failed. Please try again.";
-    return;
-  }
-
-  if (password !== passwordConfirm) {
-    validationMessage = "Passwords do not match!";
-    return;
-  }
-
-  try {
-    isSubmitting = true;
-
-    const body: Record<string, unknown> = {
-      username,
-      email,
-      password,
-      passwordConfirm,
-    };
-
-    if (data.turnstileSiteKey) {
-      body["cf-turnstile-response"] = turnstileToken;
-    }
-
-    const res = await fetch("/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = RegisterResponse(await res.json());
-
-    if (result instanceof type.errors) {
-      validationMessage = "Unexpected server response";
-      isSubmitting = false;
+  const submit = async () => {
+    if (!form) {
       return;
     }
 
-    if (res.ok) {
-      successMessage = "Registration successful! Redirecting to login...";
-      setTimeout(() => {
-        goto("/login");
-      }, 2000);
-    } else {
-      validationMessage = result.error ?? "Registration failed. Please try again.";
-      isSubmitting = false;
-    }
-  } catch {
-    validationMessage = "An error occurred. Please try again later.";
-    isSubmitting = false;
-  }
-};
+    loading = true;
 
-$: {
-  if (password && passwordConfirm && password !== passwordConfirm) {
-    validationMessage = "Passwords do not match!";
-  } else if (validationMessage === "Passwords do not match!") {
-    // Only clear validation if it's the password mismatch error
-    validationMessage = "";
-  }
-}
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch(form.action, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          response = {
+            success: false,
+            error: "An account with this email already exists",
+          };
+          return;
+        }
+
+        response = {
+          success: false,
+          error: "An unexpected error occurred. Please try again.",
+        };
+
+        return;
+      }
+
+      response = (await res.json()) as { success: boolean; error?: string };
+    } catch (error) {
+      logError("Registration form submission failed:", error);
+      response = {
+        success: false,
+        error: "Failed to connect to the server. Please try again later.",
+      };
+    } finally {
+      loading = false;
+    }
+  };
 </script>
 
-<main>
-  <div class="form-container">
-    <form on:submit={handleSubmit} class="register-form">
-      <fieldset>
-        <legend>Register</legend>
-        <div class="input-block">
-          <label for="username">Username:</label>
-          <input id="username" type="text" bind:value={username} required />
-        </div>
+<svelte:head>
+  <title>Register</title>
+  {#if data.turnstileSiteKey}
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      async
+      defer
+    ></script>
+  {/if}
+</svelte:head>
 
-        <div class="input-block">
-          <label for="email">Email:</label>
-          <input id="email" type="email" bind:value={email} required />
-        </div>
+<div class="container">
+  {#if response?.success}
+    <div class="registration-success">
+      <h2>Registration Successful!</h2>
+      <p>
+        Your account has been created. You can now
+        <a href="/login">log in</a>.
+      </p>
+    </div>
+  {:else}
+    {#if data.registrationStatus === "DISABLED"}
+      <div class="registration-disabled">
+        <h2>Registration Closed</h2>
+        <p>
+          New user registrations are currently not being accepted. Please
+          contact the administrator if you believe this is an error.
+        </p>
+      </div>
+    {:else}
+      {#if data.registrationStatus === "FIRST_USER"}
+        <h2>Create Administrator Account</h2>
+        <p class="sub-header">
+          Welcome! As the first user, your account will have administrative
+          privileges. After you register, new user registrations will be
+          disabled by default.
+        </p>
+      {:else}
+        <h2>Create an Account</h2>
+      {/if}
 
-        <div class="input-block">
-          <label for="password">Password:</label>
-          <input id="password" type="password" bind:value={password} required />
-        </div>
-
-        <div class="input-block">
-          <label for="passwordConfirm">Confirm Password:</label>
+      <form
+        class="registration-form"
+        method="post"
+        action="/register"
+        use:enhance={() => {
+          return async ({ update }) => {
+            await submit();
+            await update();
+          };
+        }}
+        bind:this={form}
+      >
+        <div class="form-group">
+          <label for="username">Username</label>
           <input
-            id="passwordConfirm"
-            type="password"
-            bind:value={passwordConfirm}
+            id="username"
+            name="username"
+            type="text"
             required
+            autocomplete="nickname"
           />
         </div>
 
-        <div class="validation-message" class:show={validationMessage}>
-          {validationMessage}
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+          />
         </div>
 
-        <div class="success-message" class:show={successMessage}>
-          {successMessage}
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            bind:value={password}
+            autocomplete="new-password"
+          />
         </div>
 
-        {#if data.turnstileSiteKey}
-          <Turnstile siteKey={data.turnstileSiteKey!} />
+        <div class="form-group">
+          <label for="password-confirm">Confirm Password</label>
+          <input
+            id="password-confirm"
+            name="password-confirm"
+            type="password"
+            required
+            bind:value={passwordConfirm}
+            autocomplete="new-password"
+          />
+        </div>
+        {#if password !== passwordConfirm}
+          <p class="error-message">Passwords do not match.</p>
         {/if}
 
-        <div class="button-block">
-          <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Registering..." : "Register"}
-          </button>
-        </div>
-
-        <a href="/login" class="login-link">Login</a>
-      </fieldset>
-    </form>
-  </div>
-</main>
+        {#if response && !response.success}
+          <p class="error-message">{response.error}</p>
+        {/if}
+        {#if data.turnstileSiteKey}
+          <div
+            class="cf-turnstile"
+            data-sitekey={data.turnstileSiteKey}
+            data-theme="light"
+          >
+          </div>
+        {/if}
+        <button
+          type="submit"
+          class="btn-submit"
+          disabled={loading || password !== passwordConfirm || !password}
+        >
+          {#if loading}
+            <span>Creating Account...</span>
+          {:else}
+            <span>Create Account</span>
+          {/if}
+        </button>
+      </form>
+      <div class="login-link">
+        <p>Already have an account? <a href="/login">Log in</a></p>
+      </div>
+    {/if}
+  {/if}
+</div>
 
 <style>
-  main {
+  .container {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    height: 100vh;
-    padding: 20px; /* Add some padding to the main container */
+    justify-content: center;
+    min-height: 100vh;
+    background-color: #f7f7f7;
+    padding: 2rem;
   }
 
-  .form-container {
-    width: 100%;
-    max-width: 768px; /* Increase the max-width to make the form wider */
-    margin: auto;
-    padding: 20px;
-    border: 1px solid #ddd;
+  h2 {
+    margin-bottom: 0.5rem;
+    color: #333;
+  }
+
+  .sub-header {
+    margin-bottom: 2rem;
+    color: #555;
+    text-align: center;
+    max-width: 400px;
+  }
+
+  .registration-form,
+  .registration-success,
+  .registration-disabled {
+    background: #fff;
+    padding: 2rem;
     border-radius: 8px;
-    background-color: white;
-  }
-
-  fieldset {
-    border: none;
-    padding: 0;
-  }
-
-  legend {
-    font-size: 1.5em;
-    margin-bottom: 10px;
-  }
-
-  .input-block {
-    margin-bottom: 15px;
-  }
-
-  .input-block label {
-    font-weight: bold;
-    margin-bottom: 5px;
-    display: inline-block;
-  }
-
-  .input-block input {
-    padding: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     width: 100%;
+    max-width: 400px;
+  }
+
+  .registration-disabled {
+    text-align: center;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #444;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"] {
+    width: 100%;
+    padding: 0.75rem;
     border: 1px solid #ccc;
     border-radius: 4px;
-    font-size: 1em;
+    box-sizing: border-box;
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
   }
 
-  .validation-message {
-    color: #d32f2f;
-    margin-bottom: 15px;
-    text-align: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+  input[type="text"]:focus,
+  input[type="email"]:focus,
+  input[type="password"]:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
 
-  .validation-message.show {
-    opacity: 1;
+  .btn-submit {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
   }
 
-  .success-message {
-    color: #28a745;
-    margin-bottom: 15px;
-    text-align: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  .success-message.show {
-    opacity: 1;
-  }
-
-  button:disabled {
-    background-color: #cccccc;
+  .btn-submit:disabled {
+    background-color: #a0cfff;
     cursor: not-allowed;
   }
 
-  .button-block {
-    text-align: center;
-    margin-top: 20px;
-  }
-
-  .button-block button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 4px;
-    border: none;
-    cursor: pointer;
-    width: 48%; /* Ensure buttons stay in line by assigning width */
-  }
-
-  .button-block button:hover {
+  .btn-submit:not(:disabled):hover {
     background-color: #0056b3;
   }
 
-  .login-link {
-    display: block;
-    margin-top: 20px;
-    text-align: center;
-    text-decoration: none;
-    color: #007bff;
+  .error-message {
+    color: #d93025;
+    margin-top: -1rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
   }
 
-  .login-link:hover {
+  .login-link {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  .login-link a {
+    color: #007bff;
+    text-decoration: none;
+  }
+
+  .login-link a:hover {
     text-decoration: underline;
   }
 </style>
