@@ -28,13 +28,16 @@
     loading = true;
 
     const formData = new FormData(form);
-    const body = {
+    const body: { [key: string]: unknown } = {
       username: formData.get("username"),
       email: formData.get("email"),
       password: formData.get("password"),
       passwordConfirm: formData.get("password-confirm"),
-      "cf-turnstile-response": turnstileToken,
     };
+
+    if (data.turnstileSiteKey) {
+      body["cf-turnstile-response"] = turnstileToken;
+    }
 
     try {
       const res = await fetch("/register", {
@@ -79,6 +82,9 @@
       return;
     }
 
+    let retryCount = 0;
+    const maxRetries = 50; // 5 seconds
+
     const renderTurnstile = () => {
       if (window.turnstile) {
         window.turnstile.render("#turnstile-widget", {
@@ -88,7 +94,12 @@
           },
         });
       } else {
-        setTimeout(renderTurnstile, 100);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          setTimeout(renderTurnstile, 100);
+        } else {
+          logError("Turnstile failed to load after several retries.");
+        }
       }
     };
 
