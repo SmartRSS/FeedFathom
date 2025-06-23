@@ -1,5 +1,6 @@
 <script lang="ts">
   import { logError } from "../../util/log.ts";
+  import { onMount } from "svelte";
 
   const { data } = $props();
 
@@ -8,10 +9,19 @@
   let loading = $state(false);
   let password = $state("");
   let passwordConfirm = $state("");
+  let turnstileToken: string | null = $state(null);
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!form) {
+      return;
+    }
+
+    if (data.turnstileSiteKey && !turnstileToken) {
+      response = {
+        success: false,
+        error: "Please complete the CAPTCHA before submitting.",
+      };
       return;
     }
 
@@ -23,7 +33,7 @@
       email: formData.get("email"),
       password: formData.get("password"),
       passwordConfirm: formData.get("password-confirm"),
-      "cf-turnstile-response": formData.get("cf-turnstile-response"),
+      "cf-turnstile-response": turnstileToken,
     };
 
     try {
@@ -63,6 +73,27 @@
       loading = false;
     }
   };
+
+  onMount(() => {
+    if (!data.turnstileSiteKey) {
+      return;
+    }
+
+    const renderTurnstile = () => {
+      if (window.turnstile) {
+        window.turnstile.render("#turnstile-widget", {
+          sitekey: data.turnstileSiteKey!,
+          callback: (token) => {
+            turnstileToken = token;
+          },
+        });
+      } else {
+        setTimeout(renderTurnstile, 100);
+      }
+    };
+
+    renderTurnstile();
+  });
 </script>
 
 <svelte:head>
@@ -164,12 +195,7 @@
           <p class="error-message">{response.error}</p>
         {/if}
         {#if data.turnstileSiteKey}
-          <div
-            class="cf-turnstile"
-            data-sitekey={data.turnstileSiteKey}
-            data-theme="light"
-          >
-          </div>
+          <div id="turnstile-widget"></div>
         {/if}
         <button
           type="submit"
