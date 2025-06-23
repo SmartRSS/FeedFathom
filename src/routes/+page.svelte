@@ -235,6 +235,7 @@ const confirmDeleteSource = () => {
         ),
       }),
     });
+    return;
   }
 
   void fetch("./source", {
