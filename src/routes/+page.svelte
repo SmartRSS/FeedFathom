@@ -43,6 +43,8 @@ let sourceProperties: HTMLDialogElement | null = $state(null);
 let selectedNode: TreeNode | null = $state(null);
 
 let showDeleteModal = $state(false);
+let showAlertModal = $state(false);
+let alertInfo = $state({ title: "", message: "" });
 
 
 let displayMode: DisplayMode = $state(DisplayMode.Feed);
@@ -221,7 +223,13 @@ const confirmDeleteSource = () => {
   }
   if (selectedNode.type === NodeType.Folder) {
     if (selectedNode.children.length > 0) {
-      logError("Attempted to delete a non-empty folder.");
+      showDeleteModal = false;
+      alertInfo = {
+        title: "Cannot Delete Folder",
+        message:
+          "This folder contains feeds. Please move or delete them before deleting the folder.",
+      };
+      showAlertModal = true;
       return;
     }
     void fetch("./folders", {
@@ -235,7 +243,6 @@ const confirmDeleteSource = () => {
         ),
       }),
     });
-    return;
   }
 
   void fetch("./source", {
@@ -247,6 +254,7 @@ const confirmDeleteSource = () => {
       removeSourceId: Number.parseInt(selectedNode.uid.replace("source", "`")),
     }),
   });
+  showDeleteModal = false;
 };
 
 
@@ -341,6 +349,13 @@ function clearStalePromises() {
   message="Are you sure you want to delete this source? This action cannot be undone."
   onClose={() => (showDeleteModal = false)}
   onConfirm={confirmDeleteSource}
+/>
+
+<ModalComponent
+  show={showAlertModal}
+  title={alertInfo.title}
+  message={alertInfo.message}
+  onClose={() => (showAlertModal = false)}
 />
 
 <div class="container">

@@ -55,9 +55,11 @@
     <h3>{title}</h3>
     <p>{message}</p>
     <div class="modal-actions">
-      <button onclick={onClose} class="btn btn-secondary">Cancel</button>
       {#if onConfirm}
+        <button onclick={onClose} class="btn btn-secondary">Cancel</button>
         <button onclick={handleConfirm} class="btn btn-primary">Confirm</button>
+      {:else}
+        <button onclick={onClose} class="btn btn-primary">OK</button>
       {/if}
     </div>
   </div>

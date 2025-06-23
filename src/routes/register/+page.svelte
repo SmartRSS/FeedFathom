@@ -82,6 +82,7 @@
       return;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let retryCount = 0;
     const maxRetries = 50; // 5 seconds
 
@@ -96,7 +97,7 @@
       } else {
         retryCount++;
         if (retryCount < maxRetries) {
-          setTimeout(renderTurnstile, 100);
+          timeoutId = setTimeout(renderTurnstile, 100);
         } else {
           logError("Turnstile failed to load after several retries.");
         }
@@ -104,6 +105,12 @@
     };
 
     renderTurnstile();
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   });
 </script>
 
