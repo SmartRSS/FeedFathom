@@ -18,7 +18,13 @@
     loading = true;
 
     const formData = new FormData(form);
-    const body = Object.fromEntries(formData.entries());
+    const body = {
+      username: formData.get("username"),
+      email: formData.get("email"),
+      password: formData.get("password"),
+      passwordConfirm: formData.get("password-confirm"),
+      "cf-turnstile-response": formData.get("cf-turnstile-response"),
+    };
 
     try {
       const res = await fetch("/register", {
