@@ -243,6 +243,8 @@ const confirmDeleteSource = () => {
         ),
       }),
     });
+    showDeleteModal = false;
+    return;
   }
 
   void fetch("./source", {
