@@ -21,7 +21,7 @@
     "generate-migrations": "drizzle-kit generate && bun lint:fix"
   },
   "peerDependencies": {
-    "@biomejs/biome": "^2.0.4",
+    "@biomejs/biome": "^2.0.5",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/archiver": "^6.0.3",
     "@types/chrome": "^0.0.326",
@@ -29,10 +29,10 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.0.3",
     "@types/smtp-server": "^3.5.10",
-    "@typescript/native-preview": "^7.0.0-dev.20250622.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250623.1",
     "archiver": "^7.0.1",
     "bun-types": "^1.2.17",
-    "drizzle-kit": "^0.31.1",
+    "drizzle-kit": "^0.31.2",
     "eslint": "^9.29.0",
     "eslint-config-biome": "^1.9.4",
     "eslint-plugin-svelte": "^3.9.3",
