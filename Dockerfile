@@ -39,16 +39,18 @@ RUN mkdir -p /app/build && \
 
 # --- Server Release ---
 FROM oven/bun:1.2.17-alpine AS feedfathom-server
-USER 1000:1000
 WORKDIR /app
+RUN apk add --no-cache curl
+USER 1000:1000
 COPY package.json /app/
 COPY --from=builder-server /app/build/ /app/
 ENTRYPOINT ["/usr/local/bin/bun"]
 CMD ["index.js"]
 # --- Worker Release ---
 FROM oven/bun:1.2.17-alpine AS feedfathom-worker
-USER 1000:1000
 WORKDIR /app
+RUN apk add --no-cache curl
+USER 1000:1000
 COPY package.json /app/
 COPY --from=builder-worker /app/build/ /app/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
