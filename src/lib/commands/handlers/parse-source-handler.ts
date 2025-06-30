@@ -1,6 +1,6 @@
 import type { FeedParser } from "$lib/feed-parser";
+import type { SourcesDataService } from "../../../db/data-services/source-data-service.ts";
 import { logError } from "../../../util/log.ts";
-import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type {
   CommandHandler,
   ParseSourceCommand,

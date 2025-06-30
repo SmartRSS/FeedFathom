@@ -18,12 +18,12 @@ import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import { type AppConfig, config } from "./config.ts";
-import { ArticlesDataService } from "./lib/db/data-services/article-data-service.ts";
-import { FoldersDataService } from "./lib/db/data-services/folder-data-service.ts";
-import { SourcesDataService } from "./lib/db/data-services/source-data-service.ts";
-import { UsersDataService } from "./lib/db/data-services/user-data-service.ts";
-import { UserSourcesDataService } from "./lib/db/data-services/user-source-data-service.ts";
-import * as schema from "./lib/db/schema.ts";
+import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
+import { FoldersDataService } from "./db/data-services/folder-data-service.ts";
+import { SourcesDataService } from "./db/data-services/source-data-service.ts";
+import { UsersDataService } from "./db/data-services/user-data-service.ts";
+import { UserSourcesDataService } from "./db/data-services/user-source-data-service.ts";
+import * as schema from "./db/schema.ts";
 import { MockRedisClient } from "./lib/mock-redis-client.ts";
 import { PostgresQueue } from "./lib/postgres-queue.ts";
 

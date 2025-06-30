@@ -9,8 +9,8 @@ import type { MainWorker } from "$lib/workers/main";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "../../config.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import { llog, logError } from "../../util/log.ts";
-import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { Cli } from "./cli.ts";
 
 // Schedule the next task function definition with a config object

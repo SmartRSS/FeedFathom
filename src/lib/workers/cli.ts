@@ -1,5 +1,5 @@
+import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
 import { llog } from "../../util/log.ts";
-import type { UsersDataService } from "../db/data-services/user-data-service.ts";
 
 export class Cli {
   constructor(private readonly usersDataService: UsersDataService) {}

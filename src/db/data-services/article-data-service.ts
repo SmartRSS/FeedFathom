@@ -1,13 +1,14 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getBoundaryDates, getDateGroup } from "../../../util/get-date-group";
-import { logError } from "../../../util/log";
+import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
+import { logError } from "../../util/log";
 import {
   type Article,
   type ArticleInsert,
   articles,
 } from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
+import { users } from "../schemas/users";
 
 export class ArticlesDataService {
   constructor(private readonly drizzleConnection: BunSQLDatabase) {}
@@ -37,6 +38,18 @@ export class ArticlesDataService {
       return [];
     }
 
+    const user = (
+      await this.drizzleConnection
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+    ).at(0);
+
+    if (!user) {
+      return [];
+    }
+
     const loadedArticles = await this.drizzleConnection
       .select({
         author: articles.author,
@@ -57,6 +70,7 @@ export class ArticlesDataService {
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
+          gt(articles.lastSeenInFeedAt, user.createdAt),
           or(
             isNull(userArticles.articleId),
             gt(articles.updatedAt, userArticles.readAt),
@@ -89,6 +103,7 @@ export class ArticlesDataService {
             title: sql`excluded.title`,
             content: sql`excluded.content`,
             updatedAt: sql`excluded.updated_at`,
+            lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
           },
         });
     } catch (error) {

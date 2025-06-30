@@ -1,4 +1,4 @@
-import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { FeedParser } from "../feed-parser.ts";
 import type { CommandBus } from "./command-bus.ts";
 import { createParseSourceHandler } from "./handlers/parse-source-handler.ts";

@@ -1,8 +1,8 @@
 import type { PostgresQueue } from "$lib/postgres-queue";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { JobName } from "../../../types/job-name-enum.ts";
-import { logError } from "../../../util/log.ts";
+import { JobName } from "../../types/job-name-enum.ts";
+import { logError } from "../../util/log.ts";
 import { type Source, sources } from "../schemas/sources.ts";
 
 // Define a type for the select statement in listAllSources

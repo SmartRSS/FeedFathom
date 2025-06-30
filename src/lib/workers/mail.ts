@@ -6,9 +6,9 @@ import {
   type SMTPServerAddress,
   type SMTPServerSession,
 } from "smtp-server";
+import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import { logError as error_, llog } from "../../util/log.ts";
-import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
-import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { EmailHandler } from "../email/email-handler.ts";
 
 export type MailWorkerConfig = {

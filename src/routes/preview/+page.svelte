@@ -4,7 +4,7 @@ import { page } from "$app/state";
 import { onMount } from "svelte";
 import { ulid } from "ulid";
 import { logError } from "../../util/log.ts";
-import type { UserFolder } from "../../lib/db/schemas/userFolders.ts";
+import type { UserFolder } from "../../db/schemas/userFolders.ts";
 
 interface FoundFeed {
   url: string;
