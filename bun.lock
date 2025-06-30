@@ -45,7 +45,7 @@
         "eslint-config-biome": "^1.9.4",
         "eslint-plugin-svelte": "^3.10.1",
         "globals": "^16.2.0",
-        "knip": "^5.61.2",
+        "knip": "^5.61.3",
         "svelte-check": "^4.2.2",
         "typescript": "^5.8.3",
         "typescript-eslint": "^8.35.0",
