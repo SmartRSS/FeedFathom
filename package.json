@@ -62,7 +62,7 @@
     "drizzle-orm": "^0.44.2",
     "fast-xml-parser": "^5.2.5",
     "jsdom": "^26.1.0",
-    "mailparser": "^3.7.3",
+    "mailparser": "^3.7.4",
     "node-mailjet": "^6.0.8",
     "smtp-server": "^3.14.0",
     "ulid": "^3.0.1"
