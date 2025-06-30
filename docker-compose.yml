@@ -65,11 +65,9 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
     healthcheck:
-      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
+      test: "curl -f http://localhost:3000/healthcheck || exit 1"
       interval: 5s
       timeout: 1s
-      retries: 2
-      start_period: 5s
     depends_on:
       redis:
         condition: service_healthy
@@ -93,9 +91,15 @@ services:
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
       GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-    mem_limit: ${WORKER_MEM_LIMIT:-1000M}
     deploy:
       replicas: ${WORKER_REPLICAS:-10}
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-0.50}"
+          memory: "${WORKER_MEM_LIMIT:-1500M}"
+        reservations:
+          cpus: "${WORKER_CPU_RESERVATION:-0.25}"
+          memory: "${WORKER_MEM_RESERVATION:-500M}"
       update_config:
         parallelism: 5
         delay: 15s
@@ -103,11 +107,9 @@ services:
         failure_action: rollback
         monitor: 15s
     healthcheck:
-      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
+      test: "curl -f http://localhost:3000/healthcheck || exit 1"
       interval: 5s
       timeout: 1s
-      retries: 2
-      start_period: 5s
     depends_on:
       redis:
         condition: service_healthy
@@ -137,11 +139,9 @@ services:
         delay: 10s
         order: start-first
     healthcheck:
-      test: "bun -e 'const res = await fetch(\"http://localhost:3000/healthcheck\");if(!res.ok){process.exit(1);}process.exit(0);'"
+      test: "curl -f http://localhost:3000/healthcheck || exit 1"
       interval: 5s
       timeout: 1s
-      retries: 2
-      start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy
