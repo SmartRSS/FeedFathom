@@ -1,7 +1,7 @@
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { OpmlNode } from "../../../types/opml-types";
-import { logError } from "../../../util/log";
+import type { OpmlNode } from "../../types/opml-types";
+import { logError } from "../../util/log";
 import { articles } from "../schemas/articles";
 import { sources } from "../schemas/sources";
 import { userArticles } from "../schemas/userArticles";

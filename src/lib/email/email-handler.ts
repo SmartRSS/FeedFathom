@@ -3,9 +3,9 @@ import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import type { SMTPServerAddress, SMTPServerSession } from "smtp-server";
+import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { Source } from "../../types/source-types.ts";
-import type { ArticlesDataService } from "../db/data-services/article-data-service";
-import type { SourcesDataService } from "../db/data-services/source-data-service";
 import type { EmailProcessor } from "../email-processor.ts";
 
 /**
@@ -97,6 +97,7 @@ export class EmailHandler {
       title: email.subject ?? "Untitled",
       updatedAt: date,
       url: `/article/${guid}`,
+      lastSeenInFeedAt: new Date(),
     };
   }
 

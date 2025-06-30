@@ -1,4 +1,4 @@
-import type * as schema from "../lib/db/schemas/sources";
+import type * as schema from "../db/schemas/sources";
 
 export enum NodeType {
   Folder = "folder",

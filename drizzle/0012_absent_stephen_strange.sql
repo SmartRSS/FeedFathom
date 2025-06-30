@@ -1,0 +1,1 @@
+ALTER TABLE "articles" ADD COLUMN "last_seen_in_feed_at" timestamp DEFAULT now() NOT NULL;

@@ -3,9 +3,9 @@ import { type ExtractTablesWithRelations, eq } from "drizzle-orm";
 import type { BunSQLDatabase, BunSQLQueryResultHKT } from "drizzle-orm/bun-sql";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { MaintenanceState } from "../container.ts";
+import { jobQueue } from "../db/schemas/jobQueue.ts";
 import type { JobName } from "../types/job-name-enum.ts";
 import { logError } from "../util/log.ts";
-import { jobQueue } from "./db/schemas/jobQueue.ts";
 
 const scheduledJobPayloadValidator = type({
   every: "number.integer",

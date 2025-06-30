@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { SourceWithSubscriberCount } from '../../lib/db/data-services/source-data-service.js';
+    import type { SourceWithSubscriberCount } from '../../db/data-services/source-data-service.ts';
 
 
 

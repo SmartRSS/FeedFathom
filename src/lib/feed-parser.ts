@@ -4,9 +4,9 @@ import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";
 import container from "../container.ts";
+import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
+import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { logError as error } from "../util/log.ts";
-import type { ArticlesDataService } from "./db/data-services/article-data-service";
-import type { SourcesDataService } from "./db/data-services/source-data-service";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 
@@ -82,7 +82,8 @@ export class FeedParser {
         author: payload.author,
         publishedAt: payload.publishedAt ?? new Date(),
         content: payload.content ?? "",
-        updatedAt: new Date(), // Assume updatedAt is always the current date
+        updatedAt: new Date(),
+        lastSeenInFeedAt: new Date(),
       }));
       await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
       articlePayloads.length = 0;
