@@ -794,7 +794,7 @@ if (!isRunning) {
     "Compose project is not running. Starting all services with 'docker compose up -d'",
   );
   try {
-    await executeComposeCommand("up -d > /dev/null 2>&1");
+    await executeComposeCommand("up -d");
     // Wait for all services to be healthy before proceeding
     logInfo("Waiting for all services to be healthy...");
     while (true) {
