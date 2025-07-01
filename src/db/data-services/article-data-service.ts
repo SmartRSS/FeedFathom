@@ -2,6 +2,7 @@ import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
 import { logError } from "../../util/log";
+import { userSources } from "../schema";
 import {
   type Article,
   type ArticleInsert,
@@ -67,14 +68,24 @@ export class ArticlesDataService {
           eq(userArticles.userId, userId),
         ),
       )
+      .leftJoin(
+        userSources,
+        and(
+          eq(userSources.userId, userId),
+          eq(userSources.sourceId, articles.sourceId),
+          gt(articles.lastSeenInFeedAt, userSources.createdAt),
+        ),
+      )
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
-          gt(articles.lastSeenInFeedAt, user.createdAt),
+          // Remove user.createdAt filter since userSources.createdAt is more restrictive
           or(
             isNull(userArticles.articleId),
             gt(articles.updatedAt, userArticles.readAt),
           ),
+          // Ensure the userSources join matched (article appeared after subscription)
+          sql`${userSources.createdAt} IS NOT NULL`,
         ),
       )
       .orderBy(desc(articles.publishedAt));

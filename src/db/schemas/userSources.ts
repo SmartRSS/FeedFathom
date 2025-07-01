@@ -1,4 +1,12 @@
-import { integer, pgTable, serial, unique, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  integer,
+  pgTable,
+  serial,
+  timestamp,
+  unique,
+  varchar,
+} from "drizzle-orm/pg-core";
 import { sources } from "./sources";
 import { userFolders } from "./userFolders";
 import { users } from "./users";
@@ -17,6 +25,9 @@ export const userSources = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .default(sql`'1970-01-01 00:00:00'::timestamp`),
   },
   (table) => [unique().on(table.userId, table.sourceId)],
 );
