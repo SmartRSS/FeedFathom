@@ -73,6 +73,7 @@ export class FeedParser {
           rewriteLinks,
         );
       });
+      const date = new Date();
 
       const articlesToUpsert = articlePayloads.map((payload) => ({
         guid: payload.guid,
@@ -80,10 +81,10 @@ export class FeedParser {
         title: payload.title,
         url: payload.url,
         author: payload.author,
-        publishedAt: payload.publishedAt ?? new Date(),
+        publishedAt: payload.publishedAt ?? date,
         content: payload.content ?? "",
-        updatedAt: new Date(),
-        lastSeenInFeedAt: new Date(),
+        updatedAt: date,
+        lastSeenInFeedAt: date,
       }));
       await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
       articlePayloads.length = 0;

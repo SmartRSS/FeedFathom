@@ -57,6 +57,7 @@ export class UserSourcesDataService {
           parentId: sourcePayload.parentId,
           sourceId: source.id,
           userId,
+          createdAt: new Date(),
         })
         .onConflictDoNothing({
           target: [userSources.sourceId, userSources.userId],
@@ -103,7 +104,7 @@ export class UserSourcesDataService {
         articles,
         and(
           eq(articles.sourceId, sources.id),
-          gt(articles.lastSeenInFeedAt, users.createdAt),
+          gt(articles.lastSeenInFeedAt, userSources.createdAt),
         ),
       )
       .leftJoin(
@@ -189,7 +190,35 @@ export class UserSourcesDataService {
           ),
         );
 
-      // Step 4: Clean up orphaned userArticles without corresponding articles
+      // Step 4: Clean up articles that no user will ever see (lastSeenInFeedAt before earliest subscription)
+      const articlesBeforeSubscription = this.drizzleConnection
+        .select({ id: articles.id })
+        .from(articles)
+        .leftJoin(
+          this.drizzleConnection
+            .select({
+              sourceId: userSources.sourceId,
+              earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
+                "earliest_subscription",
+              ),
+            })
+            .from(userSources)
+            .groupBy(userSources.sourceId)
+            .as("earliest_subs"),
+          eq(articles.sourceId, sql`earliest_subs.source_id`),
+        )
+        .where(
+          and(
+            sql`earliest_subs.source_id IS NOT NULL`,
+            sql`${articles.lastSeenInFeedAt} < earliest_subs.earliest_subscription`,
+          ),
+        );
+
+      await this.drizzleConnection
+        .delete(articles)
+        .where(inArray(articles.id, articlesBeforeSubscription));
+
+      // Step 5: Clean up orphaned userArticles without corresponding articles
       await this.drizzleConnection
         .delete(userArticles)
         .where(
