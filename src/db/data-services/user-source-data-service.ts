@@ -1,4 +1,4 @@
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "../../types/opml-types";
 import { logError } from "../../util/log";
@@ -6,6 +6,7 @@ import { articles } from "../schemas/articles";
 import { sources } from "../schemas/sources";
 import { userArticles } from "../schemas/userArticles";
 import { userSources } from "../schemas/userSources";
+import { users } from "../schemas/users";
 import type { FoldersDataService } from "./folder-data-service";
 import type { SourcesDataService } from "./source-data-service";
 
@@ -97,7 +98,14 @@ export class UserSourcesDataService {
       .from(userSources)
       .where(eq(userSources.userId, userId))
       .leftJoin(sources, eq(sources.id, userSources.sourceId))
-      .leftJoin(articles, eq(articles.sourceId, sources.id))
+      .leftJoin(users, eq(users.id, userId))
+      .leftJoin(
+        articles,
+        and(
+          eq(articles.sourceId, sources.id),
+          gt(articles.lastSeenInFeedAt, users.createdAt),
+        ),
+      )
       .leftJoin(
         userArticles,
         and(
@@ -112,6 +120,7 @@ export class UserSourcesDataService {
         sources.favicon,
         sources.url,
         sources.homeUrl,
+        users.createdAt,
       )
       .orderBy(userSources.name);
   }
