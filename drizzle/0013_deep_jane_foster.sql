@@ -1,0 +1,1 @@
+CREATE INDEX "last_seen_in_feed_at_idx" ON "articles" USING btree ("last_seen_in_feed_at");
