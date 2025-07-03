@@ -79,14 +79,14 @@ function displayError(message: string) {
   errorMessage = message;
   setTimeout(() => {
     errorMessage = "";
-  }, 3000); // Clear after 3 seconds
+  }, 3000);
 }
 
 function displayClipboardMessage(message: string) {
   clipboardMessage = message;
   setTimeout(() => {
     clipboardMessage = "";
-  }, 3000); // Clear after 3 seconds
+  }, 3000);
 }
 
 async function loadFeedPreview() {
