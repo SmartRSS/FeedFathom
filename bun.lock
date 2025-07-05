@@ -26,7 +26,7 @@
         "@sveltejs/kit": "^2.22.2",
         "@sveltejs/vite-plugin-svelte": "^5.1.0",
         "svelte": "^5.35.2",
-        "vite": "^7.0.1",
+        "vite": "^7.0.2",
       },
       "peerDependencies": {
         "@biomejs/biome": "^2.0.6",
@@ -37,7 +37,7 @@
         "@types/mailparser": "^3.4.6",
         "@types/node": "^24.0.10",
         "@types/smtp-server": "^3.5.10",
-        "@typescript/native-preview": "^7.0.0-dev.20250703.1",
+        "@typescript/native-preview": "^7.0.0-dev.20250704.1",
         "archiver": "^7.0.1",
         "bun-types": "^1.2.18",
         "drizzle-kit": "^0.31.4",
