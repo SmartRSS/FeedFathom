@@ -182,6 +182,31 @@ async function compareContainerStatus(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper – parse the "CreatedAt" field that Docker prints in
+// `docker compose ps --format json`.
+// Example format: "2025-04-03 09:30:05 +0200 CEST"
+// Returns a numeric timestamp (ms since epoch) or throws on malformed input.
+function parseDockerDate(dateStr: string | undefined): number {
+  if (!dateStr) {
+    throw new Error("Missing creation date");
+  }
+
+  // Replace first space with T to make the string ISO-like and strip the TZ suffix
+  // "2025-04-03 09:30:05 +0200 CEST" -> "2025-04-03T09:30:05"
+  const isoDate = dateStr.replace(" ", "T").split(" ")[0];
+  if (!isoDate) {
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+
+  const ts = new Date(isoDate).getTime();
+  if (Number.isNaN(ts)) {
+    throw new Error(`Unable to parse container creation date: ${dateStr}`);
+  }
+
+  return ts;
+}
+
 // Function to get containers sorted by age
 async function getContainersByAge(
   service: string,
@@ -202,20 +227,6 @@ async function getContainersByAge(
 
     const sortedContainers = runningContainers
       .sort((a, b) => {
-        // Parse the Docker date format: "2025-04-03 09:30:05 +0200 CEST"
-        const parseDockerDate = (dateStr: string | undefined): number => {
-          if (!dateStr) {
-            return 0;
-          }
-          // Replace first space with T, remove second space and everything after it
-          const isoDate = dateStr!.replace(" ", "T").split(" ")[0];
-          // Ensure we have a valid string before creating a Date object
-          if (!isoDate) {
-            throw new Error(`Invalid date format: ${dateStr}`);
-          }
-          return new Date(isoDate as string).getTime();
-        };
-
         try {
           const timeA = parseDockerDate(a.CreatedAt);
           const timeB = parseDockerDate(b.CreatedAt);
@@ -282,15 +293,6 @@ async function getOutdatedContainers(
   const result = await executeComposeCommand(`ps ${service} --format json`);
   const containers = parseJSONL<Container>(result, `service ${service}`);
 
-  const parseDockerDate = (dateStr: string | undefined): number => {
-    if (!dateStr) {
-      return 0;
-    }
-    // Same parsing approach as elsewhere in this file
-    const isoDate = dateStr!.replace(" ", "T").split(" ")[0];
-    return new Date(isoDate as string).getTime();
-  };
-
   const outdated: { id: string; created: number }[] = [];
   for (const container of containers) {
     if (container.State !== "running") continue;
@@ -301,10 +303,18 @@ async function getOutdatedContainers(
       )
     ).trim();
     if (imageId !== desiredImageId) {
-      outdated.push({
-        id: container.ID,
-        created: parseDockerDate(container.CreatedAt),
-      });
+      let createdTs: number;
+      try {
+        createdTs = parseDockerDate(container.CreatedAt);
+      } catch (error) {
+        // Log and skip containers with invalid timestamps to avoid unpredictable ordering
+        logError(
+          `Skipping container ${container.ID} due to invalid CreatedAt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        continue;
+      }
+
+      outdated.push({ id: container.ID, created: createdTs });
     }
   }
 
