@@ -662,15 +662,55 @@ async function rolloutService(service: string, targetReplicas: number) {
       logInfo("[rolloutService] Identified 0 old containers to be replaced");
     }
 
-    // Phase 1: Scale down if we have more containers than target
-    while (oldContainers.length > targetReplicas) {
-      const scaleDelta = Math.min(step, oldContainers.length - targetReplicas);
-      const toDrain = oldContainers.splice(0, scaleDelta);
+    // -------------------------------------------------------------------
+    // Phase 1 – SCALE DOWN to the desired replica count before we start
+    // replacing images. We prefer draining outdated containers first, but
+    // if there are still excess replicas beyond `targetReplicas`, we will
+    // gracefully drain up-to-date containers chosen from the oldest ones.
 
-      logInfo(
-        `[rolloutService] Phase 1: Scaling down by ${scaleDelta} containers`,
-      );
-      await gracefulShutdown(toDrain);
+    if (initialReplicas > targetReplicas) {
+      let remainingToDrain = initialReplicas - targetReplicas;
+
+      // Build a cache of all running containers ordered by age (oldest first)
+      let allByAge: string[] = [];
+
+      while (remainingToDrain > 0) {
+        const batch = Math.min(step, remainingToDrain);
+
+        // Take outdated containers first
+        const fromOutdated = oldContainers.splice(0, batch);
+
+        let toDrain = [...fromOutdated];
+
+        if (toDrain.length < batch) {
+          // Lazy-load the full list once – we only need it if we still have
+          // to choose additional replicas to drain.
+          if (allByAge.length === 0) {
+            allByAge = await getOldestContainers(service, initialReplicas);
+          }
+
+          const needed = batch - toDrain.length;
+          const extra = allByAge
+            .filter(
+              (id) => !toDrain.includes(id) && !oldContainers.includes(id),
+            )
+            .slice(0, needed);
+          toDrain.push(...extra);
+
+          // Ensure we don't drain the same container twice in subsequent batches
+          allByAge = allByAge.filter((id) => !toDrain.includes(id));
+        }
+
+        logInfo(
+          `[rolloutService] Phase 1: Scaling down by ${toDrain.length} containers`,
+        );
+        await gracefulShutdown(toDrain);
+
+        remainingToDrain -= toDrain.length;
+      }
+
+      // After scale-down, update bookkeeping variables
+      initialReplicas = targetReplicas;
     }
 
     // Phase 2: Replace remaining containers with new ones
@@ -785,154 +825,4 @@ async function handleOneOffService(service: string): Promise<void> {
 
     if (currentReplicas > 0) {
       logInfo(
-        `Service ${service} is already running with ${currentReplicas} replicas. Stopping existing containers.`,
-      );
-      await executeDockerCommand(`docker stop ${service}`);
-    }
-
-    // Run the one-off service
-    await runOneOffService(service);
-
-    logInfo(`One-off service ${service} rollout completed`);
-  } catch (error) {
-    logError(
-      `Failed to handle one-off service ${service}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw error;
-  }
-}
-
-// Function to check if the compose project is running
-async function isComposeProjectRunning(): Promise<boolean> {
-  try {
-    const result = await executeComposeCommand("ps --format json");
-    const containers = parseJSONL<Container>(result, "project status");
-    return containers.length > 0;
-  } catch (error) {
-    logInfo(
-      `Compose project appears to be not running: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return false;
-  }
-}
-
-function usage(code = 0) {
-  logInfo(`
-Usage: bun rollout.js [OPTIONS] SERVICE [SERVICE...]
-
-Gradually roll out updates to specified services.
-
-Options:
-  -h, --help                  Print usage
-  -f, --file FILE             Compose configuration files
-  -v, --version               Print version
-`);
-  process.exit(code);
-}
-
-// Parse compose files and services
-const services: string[] = [];
-const args = process.argv.slice(2);
-
-while (args.length > 0) {
-  const arg = args.shift();
-  switch (arg) {
-    case "-h":
-    case "--help":
-      usage();
-      break;
-    case "-f":
-    case "--file":
-      if (args.length > 0) {
-        const file = args.shift();
-        if (file) {
-          composeFiles.push(file);
-        }
-      }
-      break;
-    default:
-      if (arg?.startsWith("-")) {
-        logError(`Unknown option: ${arg}`);
-        usage(1);
-      } else if (arg) {
-        services.push(arg);
-      }
-  }
-}
-
-// Require at least one service
-if (services.length === 0) {
-  logError("At least one SERVICE is required");
-  usage();
-  process.exit(1);
-}
-
-// Check if the compose project is running
-const isRunning = await isComposeProjectRunning();
-
-if (!isRunning) {
-  logInfo(
-    "Compose project is not running. Starting all services with 'docker compose up -d'",
-  );
-  try {
-    await executeComposeCommand("up -d");
-    // Wait for all services to be healthy before proceeding
-    logInfo("Waiting for all services to be healthy...");
-    while (true) {
-      try {
-        const result = await executeComposeCommand("ps --format json");
-        const containers = parseJSONL<Container>(result, "project status");
-        const nonHealthyContainers = containers.filter(
-          (container): container is Container => {
-            if (container.State !== "running") {
-              return false;
-            }
-            return (
-              !container.Health || container.Health.toLowerCase() !== "healthy"
-            );
-          },
-        );
-
-        if (nonHealthyContainers.length === 0) {
-          break;
-        }
-
-        await Bun.sleep(healthcheckInterval);
-      } catch (error) {
-        logError(
-          `Error checking container health: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        throw error;
-      }
-    }
-
-    logInfo("All services started successfully");
-    process.exit(0);
-  } catch (error) {
-    logError(
-      `Failed to start services: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    process.exit(1);
-  }
-}
-
-// Get target replicas for all services at once
-const targetReplicasMap = await getTargetReplicasMap(services);
-
-// Process each service
-for (const service of services) {
-  logInfo(`[main] Processing service: ${service}`);
-  const targetReplicas = targetReplicasMap.get(service);
-  if (!targetReplicas && targetReplicas !== 0) {
-    logError(`[main] Target replicas not found for service: ${service}`);
-    process.exit(1);
-  }
-  try {
-    await rolloutService(service, targetReplicas);
-  } catch (error) {
-    logError(
-      `[main] Error during rollout for service ${service}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw error;
-  }
-}
+        `
