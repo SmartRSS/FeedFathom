@@ -203,17 +203,17 @@ async function getContainersByAge(
     const sortedContainers = runningContainers
       .sort((a, b) => {
         // Parse the Docker date format: "2025-04-03 09:30:05 +0200 CEST"
-        const parseDockerDate = (dateStr: string): number => {
+        const parseDockerDate = (dateStr: string | undefined): number => {
           if (!dateStr) {
-            throw new Error("Missing creation date");
+            return 0;
           }
           // Replace first space with T, remove second space and everything after it
-          const isoDate = dateStr.replace(" ", "T").split(" ")[0];
+          const isoDate = dateStr!.replace(" ", "T").split(" ")[0];
           // Ensure we have a valid string before creating a Date object
           if (!isoDate) {
             throw new Error(`Invalid date format: ${dateStr}`);
           }
-          return new Date(isoDate).getTime();
+          return new Date(isoDate as string).getTime();
         };
 
         try {
@@ -254,6 +254,63 @@ async function getLatestContainers(
   count: number,
 ): Promise<string[]> {
   return await getContainersByAge(service, count, false);
+}
+
+// NEW HELPER: Resolve the desired image ID (immutable digest) for a service
+async function getDesiredImageId(service: string): Promise<string> {
+  // docker compose config --images already performs env-var substitution
+  const repoAndTag = (
+    await executeComposeCommand(`config --images ${service}`)
+  ).trim();
+
+  // Turn the tag into its sha256 digest so we can compare reliably
+  const imageInspect = await executeDockerCommand(
+    `docker image inspect ${repoAndTag} --format '{{.Id}}'`,
+  );
+  const desiredImageId = imageInspect.trim();
+  if (!desiredImageId) {
+    throw new Error(`Could not resolve image ID for service ${service}`);
+  }
+  return desiredImageId;
+}
+
+// NEW HELPER: Return running containers whose ImageID differs from desired
+async function getOutdatedContainers(
+  service: string,
+  desiredImageId: string,
+): Promise<string[]> {
+  const result = await executeComposeCommand(`ps ${service} --format json`);
+  const containers = parseJSONL<Container>(result, `service ${service}`);
+
+  const parseDockerDate = (dateStr: string | undefined): number => {
+    if (!dateStr) {
+      return 0;
+    }
+    // Same parsing approach as elsewhere in this file
+    const isoDate = dateStr!.replace(" ", "T").split(" ")[0];
+    return new Date(isoDate as string).getTime();
+  };
+
+  const outdated: { id: string; created: number }[] = [];
+  for (const container of containers) {
+    if (container.State !== "running") continue;
+    // docker inspect returns the ImageID the container was started with
+    const imageId = (
+      await executeDockerCommand(
+        `docker inspect ${container.ID} --format '{{.Image}}'`,
+      )
+    ).trim();
+    if (imageId !== desiredImageId) {
+      outdated.push({
+        id: container.ID,
+        created: parseDockerDate(container.CreatedAt),
+      });
+    }
+  }
+
+  // Sort oldest first so rollout replaces oldest replicas first
+  outdated.sort((a, b) => a.created - b.created);
+  return outdated.map((o) => o.id);
 }
 
 async function waitForContainerStatus(
@@ -562,13 +619,27 @@ async function rolloutService(service: string, targetReplicas: number) {
     let oldContainers: string[] = [];
     try {
       initialReplicas = await getCurrentReplicas(service);
-      oldContainers = await getOldestContainers(service, initialReplicas);
+      const desiredImageId = await getDesiredImageId(service);
+      oldContainers = await getOutdatedContainers(service, desiredImageId);
       logInfo(
         `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
       );
       logInfo(
-        `[rolloutService] Identified ${oldContainers.length} old containers to be replaced`,
+        `[rolloutService] Identified ${oldContainers.length} out-of-date containers to be replaced`,
       );
+
+      // If desired replica count is already met *and* every running container is on the desired image,
+      // there is nothing to do for long-running services.  Otherwise continue so we can
+      // scale up/down or replace outdated replicas.
+      if (oldContainers.length === 0 && initialReplicas === targetReplicas) {
+        logInfo(
+          `[rolloutService] Service ${service} is already at ${targetReplicas} replicas running the desired image. Skipping rollout.`,
+        );
+        logInfo(
+          `[rolloutService] Exit: service=${service}, targetReplicas=${targetReplicas}`,
+        );
+        return;
+      }
     } catch (error) {
       logInfo(
         `[rolloutService] Could not get running containers for ${service} (service may not be running): ${error instanceof Error ? error.message : String(error)}. Treating as zero running containers.`,
