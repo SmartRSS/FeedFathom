@@ -241,28 +241,8 @@ jobs:
           SSH_DEST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
 
-          # Remote commands to execute (single-line string for safe YAML)
-          REMOTE_CMD="cd ${{ env.DEPLOY_PATH }} && \
-export PATH=\"/home/${{ secrets.SSH_USER }}/.bun/bin:\$PATH\" && \
-export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && \
-export MAIL_REPLICAS='${{ env.MAIL_REPLICAS }}' && \
-export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && \
-export FEED_FATHOM_ALT_DOMAIN='${{ env.FEED_FATHOM_ALT_DOMAIN }}' && \
-export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && \
-export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && \
-export WORKER_CONCURRENCY='${{ env.WORKER_CONCURRENCY }}' && \
-export LOCK_DURATION='${{ env.LOCK_DURATION }}' && \
-export CLEANUP_INTERVAL='${{ env.CLEANUP_INTERVAL }}' && \
-export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && \
-export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && \
-export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && \
-export MAIL_ENABLED='${{ env.MAIL_ENABLED }}' && \
-export MAILJET_API_KEY='${{ env.MAILJET_API_KEY }}' && \
-export MAILJET_API_SECRET='${{ env.MAILJET_API_SECRET }}' && \
-export TURNSTILE_SITE_KEY='${{ env.TURNSTILE_SITE_KEY }}' && \
-export TURNSTILE_SECRET_KEY='${{ env.TURNSTILE_SECRET_KEY }}' && \
-docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull migrator mail server worker && \
-bun run rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml migrator mail server worker"
+          # Remote command assembled as a single line to avoid YAML parsing issues
+          REMOTE_CMD="cd ${{ env.DEPLOY_PATH }} && export PATH=\"/home/${{ secrets.SSH_USER }}/.bun/bin:\$PATH\" && export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && export MAIL_REPLICAS='${{ env.MAIL_REPLICAS }}' && export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && export FEED_FATHOM_ALT_DOMAIN='${{ env.FEED_FATHOM_ALT_DOMAIN }}' && export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && export WORKER_CONCURRENCY='${{ env.WORKER_CONCURRENCY }}' && export LOCK_DURATION='${{ env.LOCK_DURATION }}' && export CLEANUP_INTERVAL='${{ env.CLEANUP_INTERVAL }}' && export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && export MAIL_ENABLED='${{ env.MAIL_ENABLED }}' && export MAILJET_API_KEY='${{ env.MAILJET_API_KEY }}' && export MAILJET_API_SECRET='${{ env.MAILJET_API_SECRET }}' && export TURNSTILE_SITE_KEY='${{ env.TURNSTILE_SITE_KEY }}' && export TURNSTILE_SECRET_KEY='${{ env.TURNSTILE_SECRET_KEY }}' && docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull migrator mail server worker && bun run rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml migrator mail server worker"
 
           MAX_RETRIES=10
           DELAY=30
