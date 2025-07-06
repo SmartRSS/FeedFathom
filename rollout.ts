@@ -851,6 +851,25 @@ async function isComposeProjectRunning(): Promise<boolean> {
   }
 }
 
+// Wait until every running container reports healthy status
+async function waitForAllServicesHealthy(): Promise<void> {
+  logInfo("Waiting for all services to be healthy...");
+  while (true) {
+    const result = await executeComposeCommand("ps --format json");
+    const containers = parseJSONL<Container>(result, "project status");
+
+    const unhealthy = containers.filter(
+      (c): c is Container =>
+        c.State === "running" &&
+        (!c.Health || c.Health.toLowerCase() !== "healthy"),
+    );
+
+    if (unhealthy.length === 0) break;
+
+    await Bun.sleep(healthcheckInterval);
+  }
+}
+
 function usage(code = 0): never {
   console.log(
     "\nUsage: bun rollout.ts [OPTIONS] SERVICE [SERVICE...]\n\nOptions:\n  -h, --help            Show help\n  -f, --file FILE       Additional compose file(s)\n",
@@ -897,7 +916,7 @@ const running = await isComposeProjectRunning();
 if (!running) {
   logInfo("Compose project not running – starting all services (up -d)…");
   await executeComposeCommand("up -d");
-  process.exit(0);
+  await waitForAllServicesHealthy();
 }
 
 const targetMap = await getTargetReplicasMap(services);
@@ -908,5 +927,12 @@ for (const svc of services) {
     logError(`[main] Target replicas not found for service ${svc}`);
     process.exit(1);
   }
-  await rolloutService(svc, trg);
+  try {
+    await rolloutService(svc, trg);
+  } catch (error) {
+    logError(
+      `[main] Error during rollout for service ${svc}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
 }
