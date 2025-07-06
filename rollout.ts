@@ -680,7 +680,7 @@ async function rolloutService(service: string, targetReplicas: number) {
         // Take outdated containers first
         const fromOutdated = oldContainers.splice(0, batch);
 
-        let toDrain = [...fromOutdated];
+        const toDrain = [...fromOutdated];
 
         if (toDrain.length < batch) {
           // Lazy-load the full list once – we only need it if we still have
@@ -812,12 +812,11 @@ async function handleOneOffService(service: string): Promise<void> {
   logInfo(`Handling one-off service: ${service}`);
 
   try {
-    // Check if the service is already running
+    // Determine if service is already running
     let currentReplicas = 0;
     try {
       currentReplicas = await getCurrentReplicas(service);
     } catch (error) {
-      // If we can't get replicas (service never run), assume 0 replicas
       logInfo(
         `Could not determine current replicas for ${service}, assuming 0 (${error instanceof Error ? error.message : String(error)})`,
       );
@@ -825,4 +824,89 @@ async function handleOneOffService(service: string): Promise<void> {
 
     if (currentReplicas > 0) {
       logInfo(
-        `
+        `Service ${service} is already running. Stopping existing containers before rerun.`,
+      );
+      await executeDockerCommand(`docker stop ${service}`);
+    }
+
+    // Run the one-off task
+    await runOneOffService(service);
+
+    logInfo(`One-off service ${service} rollout completed`);
+  } catch (error) {
+    logError(
+      `Failed to handle one-off service ${service}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
+}
+
+async function isComposeProjectRunning(): Promise<boolean> {
+  try {
+    const result = await executeComposeCommand("ps --format json");
+    const containers = parseJSONL<Container>(result, "project status");
+    return containers.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function usage(code = 0): never {
+  console.log(
+    "\nUsage: bun rollout.ts [OPTIONS] SERVICE [SERVICE...]\n\nOptions:\n  -h, --help            Show help\n  -f, --file FILE       Additional compose file(s)\n",
+  );
+  process.exit(code);
+}
+
+// ---------------------------- CLI Entry ----------------------------
+const services: string[] = [];
+const args = process.argv.slice(2);
+
+while (args.length) {
+  const arg = args.shift();
+  if (!arg) {
+    // This should not happen, but guards against undefined
+    continue;
+  }
+  if (arg === "-h" || arg === "--help") {
+    usage(0);
+  }
+
+  switch (arg) {
+    case "-f":
+    case "--file":
+      if (args.length === 0) usage(1);
+      {
+        const fileArg = args.shift();
+        if (!fileArg) usage(1);
+        composeFiles.push(fileArg);
+      }
+      break;
+    default:
+      if (arg.startsWith("-")) {
+        console.error(`Unknown option ${arg}`);
+        usage(1);
+      }
+      services.push(arg);
+  }
+}
+
+if (services.length === 0) usage(1);
+
+const running = await isComposeProjectRunning();
+if (!running) {
+  logInfo("Compose project not running – starting all services (up -d)…");
+  await executeComposeCommand("up -d");
+  process.exit(0);
+}
+
+const targetMap = await getTargetReplicasMap(services);
+
+for (const svc of services) {
+  const trg = targetMap.get(svc);
+  if (trg === undefined) {
+    logError(`[main] Target replicas not found for service ${svc}`);
+    process.exit(1);
+  }
+  await rolloutService(svc, trg);
+}
