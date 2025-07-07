@@ -8,6 +8,7 @@ import type { ArticlesDataService } from "../db/data-services/article-data-servi
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { logError as error } from "../util/log.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
+import { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 
 // const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
@@ -27,6 +28,7 @@ export class FeedParser {
     private readonly axiosInstance: AxiosCacheInstance,
     private readonly redis: RedisClient,
     private readonly sourcesDataService: SourcesDataService,
+    private readonly redirectMap: RedirectMap,
   ) {}
 
   private formatErrorMessage(error_: unknown): string {
@@ -104,7 +106,10 @@ export class FeedParser {
   }
 
   public async parseUrl(url: string) {
-    const urlObject = new URL(url);
+    // Check for redirect mapping first
+    const resolvedUrl = await this.redirectMap.resolveUrl(url);
+    
+    const urlObject = new URL(resolvedUrl);
     const lookupResult = await lookup(urlObject.hostname);
     if (!lookupResult.address) {
       throw new Error(`Failed to resolve ${urlObject.hostname}`);
@@ -112,8 +117,8 @@ export class FeedParser {
 
     // const chosenParser =
     //   parserStrategies[urlObject.origin] ?? this.parseGenericFeed;
-    // return await chosenParser.bind(this)(url);
-    return await this.parseGenericFeed(url);
+    // return await chosenParser.bind(this)(resolvedUrl);
+    return await this.parseGenericFeed(resolvedUrl);
   }
 
   public async preview(sourceUrl: string) {
@@ -209,6 +214,15 @@ export class FeedParser {
       throw new Error(
         `Failed to load data for ${url}, received status ${response.status.toString()}`,
       );
+    }
+
+    // Check if the final URL is different from the requested URL (redirect occurred)
+    // Note: axios-cache-interceptor handles redirects automatically, so we need to check
+    // if the response indicates a redirect occurred
+    const finalUrl = response.config?.url || url;
+    if (finalUrl !== url) {
+      // Store the redirect mapping
+      await this.redirectMap.setRedirect(url, finalUrl);
     }
 
     return { cached: response.cached, feed: parseFeed(response.data) };

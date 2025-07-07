@@ -3,6 +3,7 @@ import { CommandBus } from "$lib/commands/command-bus";
 import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
+import { RedirectMap } from "$lib/redirect-map";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
@@ -55,6 +56,7 @@ export type Dependencies = {
   mainWorker: MainWorker;
   opmlParser: OpmlParser;
   redis: RedisClient;
+  redirectMap: RedirectMap;
   sourcesDataService: SourcesDataService;
   userSourcesDataService: UserSourcesDataService;
   usersDataService: UsersDataService;
@@ -93,34 +95,35 @@ const container = createContainer<Dependencies>({
   strict: true,
 });
 
-// Register all dependencies in a single call
-container.register({
-  // Basic dependencies
-  appConfig: asValue(config),
-  redis: asValue(redisClient),
-  drizzleConnection: asValue(databaseConnection),
-  axiosInstance: asFunction(buildAxios).singleton(),
-  commandBus: asClass(CommandBus).singleton(),
-  opmlParser: asFunction(() => new OpmlParser()).singleton(),
-  maintenanceState: asClass(MaintenanceState).singleton(),
+  // Register all dependencies in a single call
+  container.register({
+    // Basic dependencies
+    appConfig: asValue(config),
+    redis: asValue(redisClient),
+    drizzleConnection: asValue(databaseConnection),
+    axiosInstance: asFunction(buildAxios).singleton(),
+    commandBus: asClass(CommandBus).singleton(),
+    opmlParser: asFunction(() => new OpmlParser()).singleton(),
+    maintenanceState: asClass(MaintenanceState).singleton(),
 
-  // Repositories
-  articlesDataService: asClass(ArticlesDataService).singleton(),
-  foldersDataService: asClass(FoldersDataService).singleton(),
-  sourcesDataService: asClass(SourcesDataService).singleton(),
-  userSourcesDataService: asClass(UserSourcesDataService).singleton(),
-  usersDataService: asClass(UsersDataService).singleton(),
+    // Repositories
+    articlesDataService: asClass(ArticlesDataService).singleton(),
+    foldersDataService: asClass(FoldersDataService).singleton(),
+    sourcesDataService: asClass(SourcesDataService).singleton(),
+    userSourcesDataService: asClass(UserSourcesDataService).singleton(),
+    usersDataService: asClass(UsersDataService).singleton(),
 
-  // Services
-  cli: asClass(Cli).singleton(),
-  feedParser: asClass(FeedParser).singleton(),
-  mailSender: asClass(MailSender).singleton(),
-  mailWorker: asClass(MailWorker).singleton(),
+    // Services
+    cli: asClass(Cli).singleton(),
+    feedParser: asClass(FeedParser).singleton(),
+    mailSender: asClass(MailSender).singleton(),
+    mailWorker: asClass(MailWorker).singleton(),
+    redirectMap: asClass(RedirectMap).singleton(),
 
-  // Workers
-  mainWorker: asClass(MainWorker).singleton(),
-  initializer: asClass(Initializer).singleton(),
-  postgresQueue: asClass(PostgresQueue).singleton(),
-});
+    // Workers
+    mainWorker: asClass(MainWorker).singleton(),
+    initializer: asClass(Initializer).singleton(),
+    postgresQueue: asClass(PostgresQueue).singleton(),
+  });
 
 export default container;
