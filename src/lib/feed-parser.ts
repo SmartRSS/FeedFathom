@@ -8,7 +8,7 @@ import type { ArticlesDataService } from "../db/data-services/article-data-servi
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { logError as error } from "../util/log.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
-import { RedirectMap } from "./redirect-map.ts";
+import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 
 // const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
@@ -108,7 +108,7 @@ export class FeedParser {
   public async parseUrl(url: string) {
     // Check for redirect mapping first
     const resolvedUrl = await this.redirectMap.resolveUrl(url);
-    
+
     const urlObject = new URL(resolvedUrl);
     const lookupResult = await lookup(urlObject.hostname);
     if (!lookupResult.address) {
@@ -217,9 +217,9 @@ export class FeedParser {
     }
 
     // Check if the final URL is different from the requested URL (redirect occurred)
-    // Note: axios-cache-interceptor handles redirects automatically, so we need to check
+    // Note: axios handles redirects automatically, so we need to check
     // if the response indicates a redirect occurred
-    const finalUrl = response.config?.url || url;
+    const finalUrl = `${response.request.protocol}//${response.request.host}${response.request.path}`;
     if (finalUrl !== url) {
       // Store the redirect mapping
       await this.redirectMap.setRedirect(url, finalUrl);

@@ -104,7 +104,7 @@ const closeModal = () => {
             </tr>
           </thead>
           <tbody>
-            {#each Object.entries(redirects) as [oldUrl, newUrl]}
+            {#each Object.entries(redirects) as [oldUrl, newUrl] (oldUrl)}
               <tr>
                 <td>{oldUrl}</td>
                 <td>{newUrl}</td>

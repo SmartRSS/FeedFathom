@@ -33,7 +33,8 @@ const cachedBuildTimestamp = getBuildTime();
 export const buildAxios = (redis: RedisClient) => {
   const axiosInstance: AxiosInstance = axios.create({
     headers: {
-      "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
+      Accept:
+        "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
       "Accept-Encoding": "gzip, deflate",
       "User-Agent": `SmartRSS/FeedFathom ${cachedBuildTimestamp}`,
     },

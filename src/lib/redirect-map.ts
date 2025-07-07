@@ -75,7 +75,7 @@ export class RedirectMap {
     try {
       const keys = await this.redis.keys(`${this.redisKeyPrefix}*`);
       const redirects: Record<string, string> = {};
-      
+
       for (const key of keys) {
         const oldUrl = key.replace(this.redisKeyPrefix, "");
         const newUrl = await this.redis.get(key);
@@ -83,11 +83,11 @@ export class RedirectMap {
           redirects[oldUrl] = newUrl;
         }
       }
-      
+
       return redirects;
     } catch (error) {
       error_("Failed to get all redirects:", error);
       return {};
     }
   }
-} 
+}
