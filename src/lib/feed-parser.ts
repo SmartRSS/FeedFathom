@@ -290,7 +290,6 @@ export class FeedParser {
         permanentRedirect = false;
       }
     }
-
     // If the final URL differs from the URL we fetched, store a mapping so that
     // future requests will directly hit the final destination.
     if (finalUrl !== fetchedUrl) {
