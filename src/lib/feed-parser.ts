@@ -60,7 +60,12 @@ export class FeedParser {
         return;
       }
 
-      const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
+      const {
+        cached,
+        feed: parsedFeed,
+        finalUrl,
+        permanentRedirect,
+      } = await this.parseUrl(source.url);
 
       if (cached && !source.skipCache) {
         // Mark this source as successfully processed using cached data
@@ -93,6 +98,23 @@ export class FeedParser {
       articlePayloads.length = 0;
 
       await this.sourcesDataService.successSource(source.id);
+
+      // If we encountered a permanent redirect (301/308) – rewrite the source
+      // URL so future fetches go directly to the canonical location.
+      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
+        try {
+          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
+          // Keep the in-memory object in sync to avoid duplicate work later in
+          // this method – especially important for the successSource call.
+          source.url = finalUrl;
+        } catch (updateError) {
+          // Non-critical – log and continue so feed parsing still succeeds.
+          error(
+            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
+            updateError,
+          );
+        }
+      }
     } catch (error_: unknown) {
       if (error_ instanceof Error) {
         error("parseSource", error_.message);
@@ -247,6 +269,28 @@ export class FeedParser {
       response.config.url ??
       fetchedUrl;
 
+    // ---------------------------------------------------------------------
+    // Detect whether the redirect was *permanent* (301 or 308). We perform
+    // a lightweight request with `maxRedirects: 0` so that we get the raw
+    // redirect response (and thus the status code) without following it.
+    // ---------------------------------------------------------------------
+    let permanentRedirect = false;
+    if (finalUrl !== fetchedUrl) {
+      try {
+        const redirectCheck = await this.axiosInstance.get(fetchedUrl, {
+          maxRedirects: 0,
+          validateStatus: (status) => status >= 300 && status < 400,
+        });
+
+        permanentRedirect =
+          redirectCheck.status === 301 || redirectCheck.status === 308;
+      } catch {
+        // If we fail to fetch the redirect headers (network error, 405, …) we
+        // treat it as non-permanent so we don't accidentally rewrite sources.
+        permanentRedirect = false;
+      }
+    }
+
     // If the final URL differs from the URL we fetched, store a mapping so that
     // future requests will directly hit the final destination.
     if (finalUrl !== fetchedUrl) {
@@ -261,6 +305,11 @@ export class FeedParser {
       await this.redirectMap.setRedirect(originalUrl, finalUrl);
     }
 
-    return { cached: response.cached, feed: parseFeed(response.data) };
+    return {
+      cached: response.cached,
+      feed: parseFeed(response.data),
+      finalUrl,
+      permanentRedirect,
+    };
   }
 }
