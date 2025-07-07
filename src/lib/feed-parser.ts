@@ -381,17 +381,22 @@ export class FeedParser {
       const domain = new URL(fetchedUrl).hostname;
       const retryAfter = err.response.headers["retry-after"];
       let waitUntil = Date.now();
+      let parsed = false;
       if (retryAfter) {
         const retryAfterSeconds = Number(retryAfter);
         if (!Number.isNaN(retryAfterSeconds)) {
           waitUntil += retryAfterSeconds * 1000;
+          parsed = true;
         } else {
           const date = Date.parse(retryAfter);
           if (!Number.isNaN(date)) {
             waitUntil = date;
+            parsed = true;
           }
         }
-      } else {
+      }
+      // Fallback: if Retry-After is missing or unparseable, use 5 minutes
+      if (!parsed) {
         waitUntil += 5 * 60 * 1000;
       }
       await this.redis.set(`rateLimitUntil:${domain}`, waitUntil.toString());
