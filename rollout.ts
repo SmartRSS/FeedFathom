@@ -182,6 +182,31 @@ async function compareContainerStatus(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper – parse the "CreatedAt" field that Docker prints in
+// `docker compose ps --format json`.
+// Example format: "2025-04-03 09:30:05 +0200 CEST"
+// Returns a numeric timestamp (ms since epoch) or throws on malformed input.
+function parseDockerDate(dateStr: string | undefined): number {
+  if (!dateStr) {
+    throw new Error("Missing creation date");
+  }
+
+  // Replace first space with T to make the string ISO-like and strip the TZ suffix
+  // "2025-04-03 09:30:05 +0200 CEST" -> "2025-04-03T09:30:05"
+  const isoDate = dateStr.replace(" ", "T").split(" ")[0];
+  if (!isoDate) {
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+
+  const ts = new Date(isoDate).getTime();
+  if (Number.isNaN(ts)) {
+    throw new Error(`Unable to parse container creation date: ${dateStr}`);
+  }
+
+  return ts;
+}
+
 // Function to get containers sorted by age
 async function getContainersByAge(
   service: string,
@@ -202,20 +227,6 @@ async function getContainersByAge(
 
     const sortedContainers = runningContainers
       .sort((a, b) => {
-        // Parse the Docker date format: "2025-04-03 09:30:05 +0200 CEST"
-        const parseDockerDate = (dateStr: string): number => {
-          if (!dateStr) {
-            throw new Error("Missing creation date");
-          }
-          // Replace first space with T, remove second space and everything after it
-          const isoDate = dateStr.replace(" ", "T").split(" ")[0];
-          // Ensure we have a valid string before creating a Date object
-          if (!isoDate) {
-            throw new Error(`Invalid date format: ${dateStr}`);
-          }
-          return new Date(isoDate).getTime();
-        };
-
         try {
           const timeA = parseDockerDate(a.CreatedAt);
           const timeB = parseDockerDate(b.CreatedAt);
@@ -254,6 +265,62 @@ async function getLatestContainers(
   count: number,
 ): Promise<string[]> {
   return await getContainersByAge(service, count, false);
+}
+
+// NEW HELPER: Resolve the desired image ID (immutable digest) for a service
+async function getDesiredImageId(service: string): Promise<string> {
+  // docker compose config --images already performs env-var substitution
+  const repoAndTag = (
+    await executeComposeCommand(`config --images ${service}`)
+  ).trim();
+
+  // Turn the tag into its sha256 digest so we can compare reliably
+  const imageInspect = await executeDockerCommand(
+    `docker image inspect ${repoAndTag} --format '{{.Id}}'`,
+  );
+  const desiredImageId = imageInspect.trim();
+  if (!desiredImageId) {
+    throw new Error(`Could not resolve image ID for service ${service}`);
+  }
+  return desiredImageId;
+}
+
+// NEW HELPER: Return running containers whose ImageID differs from desired
+async function getOutdatedContainers(
+  service: string,
+  desiredImageId: string,
+): Promise<string[]> {
+  const result = await executeComposeCommand(`ps ${service} --format json`);
+  const containers = parseJSONL<Container>(result, `service ${service}`);
+
+  const outdated: { id: string; created: number }[] = [];
+  for (const container of containers) {
+    if (container.State !== "running") continue;
+    // docker inspect returns the ImageID the container was started with
+    const imageId = (
+      await executeDockerCommand(
+        `docker inspect ${container.ID} --format '{{.Image}}'`,
+      )
+    ).trim();
+    if (imageId !== desiredImageId) {
+      let createdTs: number;
+      try {
+        createdTs = parseDockerDate(container.CreatedAt);
+      } catch (error) {
+        // Log and skip containers with invalid timestamps to avoid unpredictable ordering
+        logError(
+          `Skipping container ${container.ID} due to invalid CreatedAt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        continue;
+      }
+
+      outdated.push({ id: container.ID, created: createdTs });
+    }
+  }
+
+  // Sort oldest first so rollout replaces oldest replicas first
+  outdated.sort((a, b) => a.created - b.created);
+  return outdated.map((o) => o.id);
 }
 
 async function waitForContainerStatus(
@@ -562,13 +629,27 @@ async function rolloutService(service: string, targetReplicas: number) {
     let oldContainers: string[] = [];
     try {
       initialReplicas = await getCurrentReplicas(service);
-      oldContainers = await getOldestContainers(service, initialReplicas);
+      const desiredImageId = await getDesiredImageId(service);
+      oldContainers = await getOutdatedContainers(service, desiredImageId);
       logInfo(
         `[rolloutService] Target replicas: ${targetReplicas}, Current replicas: ${initialReplicas}, Step size: ${step}`,
       );
       logInfo(
-        `[rolloutService] Identified ${oldContainers.length} old containers to be replaced`,
+        `[rolloutService] Identified ${oldContainers.length} out-of-date containers to be replaced`,
       );
+
+      // If desired replica count is already met *and* every running container is on the desired image,
+      // there is nothing to do for long-running services.  Otherwise continue so we can
+      // scale up/down or replace outdated replicas.
+      if (oldContainers.length === 0 && initialReplicas === targetReplicas) {
+        logInfo(
+          `[rolloutService] Service ${service} is already at ${targetReplicas} replicas running the desired image. Skipping rollout.`,
+        );
+        logInfo(
+          `[rolloutService] Exit: service=${service}, targetReplicas=${targetReplicas}`,
+        );
+        return;
+      }
     } catch (error) {
       logInfo(
         `[rolloutService] Could not get running containers for ${service} (service may not be running): ${error instanceof Error ? error.message : String(error)}. Treating as zero running containers.`,
@@ -581,15 +662,55 @@ async function rolloutService(service: string, targetReplicas: number) {
       logInfo("[rolloutService] Identified 0 old containers to be replaced");
     }
 
-    // Phase 1: Scale down if we have more containers than target
-    while (oldContainers.length > targetReplicas) {
-      const scaleDelta = Math.min(step, oldContainers.length - targetReplicas);
-      const toDrain = oldContainers.splice(0, scaleDelta);
+    // -------------------------------------------------------------------
+    // Phase 1 – SCALE DOWN to the desired replica count before we start
+    // replacing images. We prefer draining outdated containers first, but
+    // if there are still excess replicas beyond `targetReplicas`, we will
+    // gracefully drain up-to-date containers chosen from the oldest ones.
 
-      logInfo(
-        `[rolloutService] Phase 1: Scaling down by ${scaleDelta} containers`,
-      );
-      await gracefulShutdown(toDrain);
+    if (initialReplicas > targetReplicas) {
+      let remainingToDrain = initialReplicas - targetReplicas;
+
+      // Build a cache of all running containers ordered by age (oldest first)
+      let allByAge: string[] = [];
+
+      while (remainingToDrain > 0) {
+        const batch = Math.min(step, remainingToDrain);
+
+        // Take outdated containers first
+        const fromOutdated = oldContainers.splice(0, batch);
+
+        const toDrain = [...fromOutdated];
+
+        if (toDrain.length < batch) {
+          // Lazy-load the full list once – we only need it if we still have
+          // to choose additional replicas to drain.
+          if (allByAge.length === 0) {
+            allByAge = await getOldestContainers(service, initialReplicas);
+          }
+
+          const needed = batch - toDrain.length;
+          const extra = allByAge
+            .filter(
+              (id) => !toDrain.includes(id) && !oldContainers.includes(id),
+            )
+            .slice(0, needed);
+          toDrain.push(...extra);
+
+          // Ensure we don't drain the same container twice in subsequent batches
+          allByAge = allByAge.filter((id) => !toDrain.includes(id));
+        }
+
+        logInfo(
+          `[rolloutService] Phase 1: Scaling down by ${toDrain.length} containers`,
+        );
+        await gracefulShutdown(toDrain);
+
+        remainingToDrain -= toDrain.length;
+      }
+
+      // After scale-down, update bookkeeping variables
+      initialReplicas = targetReplicas;
     }
 
     // Phase 2: Replace remaining containers with new ones
@@ -691,12 +812,11 @@ async function handleOneOffService(service: string): Promise<void> {
   logInfo(`Handling one-off service: ${service}`);
 
   try {
-    // Check if the service is already running
+    // Determine if service is already running
     let currentReplicas = 0;
     try {
       currentReplicas = await getCurrentReplicas(service);
     } catch (error) {
-      // If we can't get replicas (service never run), assume 0 replicas
       logInfo(
         `Could not determine current replicas for ${service}, assuming 0 (${error instanceof Error ? error.message : String(error)})`,
       );
@@ -704,12 +824,12 @@ async function handleOneOffService(service: string): Promise<void> {
 
     if (currentReplicas > 0) {
       logInfo(
-        `Service ${service} is already running with ${currentReplicas} replicas. Stopping existing containers.`,
+        `Service ${service} is already running. Stopping existing containers before rerun.`,
       );
       await executeDockerCommand(`docker stop ${service}`);
     }
 
-    // Run the one-off service
+    // Run the one-off task
     await runOneOffService(service);
 
     logInfo(`One-off service ${service} rollout completed`);
@@ -721,136 +841,97 @@ async function handleOneOffService(service: string): Promise<void> {
   }
 }
 
-// Function to check if the compose project is running
 async function isComposeProjectRunning(): Promise<boolean> {
   try {
     const result = await executeComposeCommand("ps --format json");
     const containers = parseJSONL<Container>(result, "project status");
     return containers.length > 0;
-  } catch (error) {
-    logInfo(
-      `Compose project appears to be not running: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  } catch {
     return false;
   }
 }
 
-function usage(code = 0) {
-  logInfo(`
-Usage: bun rollout.js [OPTIONS] SERVICE [SERVICE...]
+// Wait until every running container reports healthy status
+async function waitForAllServicesHealthy(): Promise<void> {
+  logInfo("Waiting for all services to be healthy...");
+  while (true) {
+    const result = await executeComposeCommand("ps --format json");
+    const containers = parseJSONL<Container>(result, "project status");
 
-Gradually roll out updates to specified services.
+    const unhealthy = containers.filter(
+      (c): c is Container =>
+        c.State === "running" &&
+        (!c.Health || c.Health.toLowerCase() !== "healthy"),
+    );
 
-Options:
-  -h, --help                  Print usage
-  -f, --file FILE             Compose configuration files
-  -v, --version               Print version
-`);
+    if (unhealthy.length === 0) break;
+
+    await Bun.sleep(healthcheckInterval);
+  }
+}
+
+function usage(code = 0): never {
+  console.log(
+    "\nUsage: bun rollout.ts [OPTIONS] SERVICE [SERVICE...]\n\nOptions:\n  -h, --help            Show help\n  -f, --file FILE       Additional compose file(s)\n",
+  );
   process.exit(code);
 }
 
-// Parse compose files and services
+// ---------------------------- CLI Entry ----------------------------
 const services: string[] = [];
 const args = process.argv.slice(2);
 
-while (args.length > 0) {
+while (args.length) {
   const arg = args.shift();
+  if (!arg) {
+    // This should not happen, but guards against undefined
+    continue;
+  }
+  if (arg === "-h" || arg === "--help") {
+    usage(0);
+  }
+
   switch (arg) {
-    case "-h":
-    case "--help":
-      usage();
-      break;
     case "-f":
     case "--file":
-      if (args.length > 0) {
-        const file = args.shift();
-        if (file) {
-          composeFiles.push(file);
-        }
+      if (args.length === 0) usage(1);
+      {
+        const fileArg = args.shift();
+        if (!fileArg) usage(1);
+        composeFiles.push(fileArg);
       }
       break;
     default:
-      if (arg?.startsWith("-")) {
-        logError(`Unknown option: ${arg}`);
+      if (arg.startsWith("-")) {
+        console.error(`Unknown option ${arg}`);
         usage(1);
-      } else if (arg) {
-        services.push(arg);
       }
+      services.push(arg);
   }
 }
 
-// Require at least one service
-if (services.length === 0) {
-  logError("At least one SERVICE is required");
-  usage();
-  process.exit(1);
+if (services.length === 0) usage(1);
+
+const running = await isComposeProjectRunning();
+if (!running) {
+  logInfo("Compose project not running – starting all services (up -d)…");
+  await executeComposeCommand("up -d");
+  await waitForAllServicesHealthy();
 }
 
-// Check if the compose project is running
-const isRunning = await isComposeProjectRunning();
+const targetMap = await getTargetReplicasMap(services);
 
-if (!isRunning) {
-  logInfo(
-    "Compose project is not running. Starting all services with 'docker compose up -d'",
-  );
-  try {
-    await executeComposeCommand("up -d");
-    // Wait for all services to be healthy before proceeding
-    logInfo("Waiting for all services to be healthy...");
-    while (true) {
-      try {
-        const result = await executeComposeCommand("ps --format json");
-        const containers = parseJSONL<Container>(result, "project status");
-        const nonHealthyContainers = containers.filter(
-          (container): container is Container => {
-            if (container.State !== "running") {
-              return false;
-            }
-            return (
-              !container.Health || container.Health.toLowerCase() !== "healthy"
-            );
-          },
-        );
-
-        if (nonHealthyContainers.length === 0) {
-          break;
-        }
-
-        await Bun.sleep(healthcheckInterval);
-      } catch (error) {
-        logError(
-          `Error checking container health: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        throw error;
-      }
-    }
-
-    logInfo("All services started successfully");
-    process.exit(0);
-  } catch (error) {
-    logError(
-      `Failed to start services: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    process.exit(1);
-  }
-}
-
-// Get target replicas for all services at once
-const targetReplicasMap = await getTargetReplicasMap(services);
-
-// Process each service
-for (const service of services) {
-  logInfo(`[main] Processing service: ${service}`);
-  const targetReplicas = targetReplicasMap.get(service);
-  if (!targetReplicas && targetReplicas !== 0) {
-    logError(`[main] Target replicas not found for service: ${service}`);
+for (const svc of services) {
+  const trg = targetMap.get(svc);
+  if (trg === undefined) {
+    logError(`[main] Target replicas not found for service ${svc}`);
     process.exit(1);
   }
   try {
-    await rolloutService(service, targetReplicas);
+    await rolloutService(svc, trg);
   } catch (error) {
     logError(
-      `[main] Error during rollout for service ${service}: ${error instanceof Error ? error.message : String(error)}`,
+      `[main] Error during rollout for service ${svc}: ${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;
   }

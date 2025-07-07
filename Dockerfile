@@ -1,16 +1,16 @@
 # dev image is used for development purposes
-FROM oven/bun:1.2.17-alpine AS dev
+FROM oven/bun:1.2.18-alpine AS dev
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Installer (shared dependencies) ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.17-alpine AS installer
+FROM --platform=$BUILDPLATFORM oven/bun:1.2.18-alpine AS installer
 WORKDIR /app
 COPY package.json bun.lock svelte.config.js vite.config.ts tsconfig.json /app/
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --omit=peer --frozen-lockfile
 
 # --- Server Builder ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.17-alpine AS builder-server
+FROM --platform=$BUILDPLATFORM oven/bun:1.2.18-alpine AS builder-server
 WORKDIR /app
 COPY svelte.config.js vite.config.ts tsconfig.json package.json /app/
 COPY static /app/static
@@ -23,7 +23,7 @@ RUN mkdir -p /app/build && \
     echo "$timestamp" > /app/build/BUILD_TIME
 
 # --- Worker Builder ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.17-alpine AS builder-worker
+FROM --platform=$BUILDPLATFORM oven/bun:1.2.18-alpine AS builder-worker
 WORKDIR /app
 COPY svelte.config.js vite.config.ts tsconfig.json package.json /app/
 COPY drizzle /app/drizzle/
@@ -38,7 +38,7 @@ RUN mkdir -p /app/build && \
     echo "$timestamp" > /app/build/BUILD_TIME
 
 # --- Server Release ---
-FROM oven/bun:1.2.17-alpine AS feedfathom-server
+FROM oven/bun:1.2.18-alpine AS feedfathom-server
 WORKDIR /app
 RUN apk add --no-cache curl
 USER 1000:1000
@@ -47,7 +47,7 @@ COPY --from=builder-server /app/build/ /app/
 ENTRYPOINT ["/usr/local/bin/bun"]
 CMD ["index.js"]
 # --- Worker Release ---
-FROM oven/bun:1.2.17-alpine AS feedfathom-worker
+FROM oven/bun:1.2.18-alpine AS feedfathom-worker
 WORKDIR /app
 RUN apk add --no-cache curl
 USER 1000:1000
