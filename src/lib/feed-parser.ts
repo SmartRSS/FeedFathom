@@ -215,6 +215,19 @@ export class FeedParser {
   private async canDomainBeProcessedAlready(domain: string): Promise<boolean> {
     const now = Date.now();
     const lastFetchKey = `lastFetchTimestamp:${domain}`;
+    const rateLimitKey = `rateLimitUntil:${domain}`;
+
+    // Check for dynamic rate limit (set by Retry-After or similar)
+    const rateLimitUntil = Number.parseInt(
+      (await this.redis.get(rateLimitKey)) ?? "0",
+      10,
+    );
+    if (now < rateLimitUntil) {
+      error(
+        `Domain ${domain} is rate limited until ${new Date(rateLimitUntil).toISOString()}`,
+      );
+      return false;
+    }
 
     const lastFetchTimestamp = Number.parseInt(
       (await this.redis.get(lastFetchKey)) ?? "0",
@@ -239,41 +252,111 @@ export class FeedParser {
    *                     the final one and avoid redirect chains.
    */
   private async parseGenericFeed(fetchedUrl: string, originalUrl?: string) {
-    const response = await this.axiosInstance.get(fetchedUrl);
+    let response: Awaited<ReturnType<AxiosCacheInstance["get"]>> & {
+      status: number;
+      data: unknown;
+      headers: Record<string, string>;
+      request?: { res?: { responseUrl?: string } };
+      config: { url?: string };
+      cached?: boolean;
+    };
+    try {
+      response = await this.axiosInstance.get(fetchedUrl);
+      const domain = new URL(fetchedUrl).hostname;
+      await this.handleUpcomingRateLimitHeaders(response, domain);
+      this.validateFeedResponse(response, fetchedUrl);
+      const finalUrl = this.getFinalUrl(response, fetchedUrl);
+      const permanentRedirect = await this.handleRedirects(
+        fetchedUrl,
+        finalUrl,
+      );
+      if (finalUrl !== fetchedUrl) {
+        await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
+      }
+      if (originalUrl && originalUrl !== finalUrl) {
+        await this.redirectMap.setRedirect(originalUrl, finalUrl);
+      }
+      return {
+        cached: response.cached ?? false,
+        feed: parseFeed(response.data as string),
+        finalUrl,
+        permanentRedirect,
+      };
+    } catch (err) {
+      await this.handleRateLimitError(err, fetchedUrl);
+      throw err;
+    }
+  }
 
-    // Validate response status and data type early so that we can bail out
-    // quickly in error scenarios. We keep this check close to the request so
-    // that the subsequent redirect-handling logic operates on guaranteed
-    // successful responses only.
+  // --- Helper methods ---
+
+  private async handleUpcomingRateLimitHeaders(
+    response: { headers: Record<string, string> },
+    domain: string,
+  ): Promise<void> {
+    const rateLimitReset = response.headers["x-ratelimit-reset"];
+    const rateLimitRemaining = response.headers["x-ratelimit-remaining"];
+    if (rateLimitRemaining !== undefined && rateLimitReset !== undefined) {
+      const remaining = Number(rateLimitRemaining);
+      const reset = Number(rateLimitReset);
+      if (!Number.isNaN(remaining) && remaining <= 1 && !Number.isNaN(reset)) {
+        const waitUntil = reset * 1000;
+        if (waitUntil > Date.now()) {
+          await this.redis.set(
+            `rateLimitUntil:${domain}`,
+            waitUntil.toString(),
+          );
+          error(
+            `Upcoming rate limit for ${domain}, pausing requests until ${new Date(waitUntil).toISOString()}`,
+          );
+        }
+      }
+    }
+  }
+
+  private validateFeedResponse(
+    response: { status: number; data: unknown },
+    fetchedUrl: string,
+  ): void {
     if (response.status !== 200) {
       error(`failed to load data for ${fetchedUrl}`);
       throw new Error(
         `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
       );
     }
-
     if (typeof response.data !== "string") {
       error(`failed to load data for ${fetchedUrl}`);
       throw new Error(
         `Failed to load data for ${fetchedUrl}, unexpected payload type`,
       );
     }
+  }
 
-    // Determine the final URL after all redirects handled by axios.
-    // In Node, axios uses the `follow-redirects` package which exposes the final
-    // URL on `response.request.res.responseUrl`. If that is not available, fall
-    // back to `response.config.url` which *should* contain the final URL after
-    // redirects. As a last resort use `fetchedUrl`.
-    const finalUrl: string =
-      (response.request?.res?.responseUrl as string | undefined) ??
+  private getFinalUrl(
+    response: {
+      request?: { res?: { responseUrl?: string } };
+      config: { url?: string };
+    },
+    fetchedUrl: string,
+  ): string {
+    return (
+      (response.request &&
+      typeof response.request === "object" &&
+      "res" in response.request &&
+      response.request.res &&
+      typeof response.request.res === "object" &&
+      "responseUrl" in response.request.res
+        ? (response.request.res.responseUrl as string | undefined)
+        : undefined) ??
       response.config.url ??
-      fetchedUrl;
+      fetchedUrl
+    );
+  }
 
-    // ---------------------------------------------------------------------
-    // Detect whether the redirect was *permanent* (301 or 308). We perform
-    // a lightweight request with `maxRedirects: 0` so that we get the raw
-    // redirect response (and thus the status code) without following it.
-    // ---------------------------------------------------------------------
+  private async handleRedirects(
+    fetchedUrl: string,
+    finalUrl: string,
+  ): Promise<boolean> {
     let permanentRedirect = false;
     if (finalUrl !== fetchedUrl) {
       try {
@@ -281,34 +364,43 @@ export class FeedParser {
           maxRedirects: 0,
           validateStatus: (status) => status >= 300 && status < 400,
         });
-
         permanentRedirect =
           redirectCheck.status === 301 || redirectCheck.status === 308;
       } catch {
-        // If we fail to fetch the redirect headers (network error, 405, …) we
-        // treat it as non-permanent so we don't accidentally rewrite sources.
         permanentRedirect = false;
       }
     }
-    // If the final URL differs from the URL we fetched, store a mapping so that
-    // future requests will directly hit the final destination.
-    if (finalUrl !== fetchedUrl) {
-      await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
-    }
+    return permanentRedirect;
+  }
 
-    // Additionally, if an `originalUrl` was supplied AND it differs from the
-    // final URL, store a mapping from the original URL directly to the final
-    // URL. This prevents creation of redirect chains (A -> B, B -> C) and
-    // instead keeps a flat mapping (A -> C).
-    if (originalUrl && originalUrl !== finalUrl) {
-      await this.redirectMap.setRedirect(originalUrl, finalUrl);
+  private async handleRateLimitError(
+    err: unknown,
+    fetchedUrl: string,
+  ): Promise<void> {
+    if (err instanceof AxiosError && err.response?.status === 429) {
+      const domain = new URL(fetchedUrl).hostname;
+      const retryAfter = err.response.headers["retry-after"];
+      let waitUntil = Date.now();
+      if (retryAfter) {
+        const retryAfterSeconds = Number(retryAfter);
+        if (!Number.isNaN(retryAfterSeconds)) {
+          waitUntil += retryAfterSeconds * 1000;
+        } else {
+          const date = Date.parse(retryAfter);
+          if (!Number.isNaN(date)) {
+            waitUntil = date;
+          }
+        }
+      } else {
+        waitUntil += 5 * 60 * 1000;
+      }
+      await this.redis.set(`rateLimitUntil:${domain}`, waitUntil.toString());
+      error(
+        `Received 429 for ${fetchedUrl}, rate limiting domain ${domain} until ${new Date(waitUntil).toISOString()}`,
+      );
+      throw new Error(
+        `Rate limited by ${domain}, retry after ${new Date(waitUntil).toISOString()}`,
+      );
     }
-
-    return {
-      cached: response.cached,
-      feed: parseFeed(response.data),
-      finalUrl,
-      permanentRedirect,
-    };
   }
 }
