@@ -63,7 +63,8 @@ export class FeedParser {
       const { cached, feed: parsedFeed } = await this.parseUrl(source.url);
 
       if (cached && !source.skipCache) {
-        await this.sourcesDataService.successSource(source.id);
+        // Mark this source as successfully processed using cached data
+        await this.sourcesDataService.successSource(source.id, true);
         return;
       }
 
