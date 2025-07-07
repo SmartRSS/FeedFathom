@@ -12,6 +12,10 @@ type SortField =
   | "subscriberCount";
 
 export const GET: RequestHandler = async ({ locals, url }) => {
+  if (!locals.user?.isAdmin) {
+    return json({ error: "Unauthorized" }, { status: 403 });
+  }
+
   const sortBy = (url.searchParams.get("sortBy") ?? "createdAt") as SortField;
   const order = (url.searchParams.get("order") ?? "asc") as "asc" | "desc";
 

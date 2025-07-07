@@ -12,6 +12,30 @@ let currentSourceUrl = ""; // Store the current source URL
 
 let newSourceUrl = $state(""); // Store the new source URL
 
+let redirects = $state<Record<string, string>>({});
+let showRedirects = $state(false);
+
+const fetchRedirects = async () => {
+  const response = await fetch("/admin/redirects");
+  if (response.ok) {
+    redirects = (await response.json()) as Record<string, string>;
+  }
+};
+
+const removeRedirect = async (oldUrl: string) => {
+  const response = await fetch("/admin/redirects", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ oldUrl }),
+  });
+
+  if (response.ok) {
+    await fetchRedirects();
+  }
+};
+
 const fetchSortedSources = async (field: string) => {
   const response = await fetch(`/admin?sortBy=${field}&order=${order}`);
   if (response.ok) {
@@ -59,7 +83,43 @@ const closeModal = () => {
 
 <div class="table-container">
   <h1>Admin Panel</h1>
-  <h2>Sources</h2>
+  
+  <div class="admin-sections">
+    <button 
+      class="section-toggle" 
+      onclick={() => { showRedirects = !showRedirects; if (showRedirects) fetchRedirects(); }}
+    >
+      {showRedirects ? 'Hide' : 'Show'} Redirect Management
+    </button>
+    
+    {#if showRedirects}
+      <div class="redirect-section">
+        <h2>Redirect Mappings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Old URL</th>
+              <th>New URL</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each Object.entries(redirects) as [oldUrl, newUrl] (oldUrl)}
+              <tr>
+                <td>{oldUrl}</td>
+                <td>{newUrl}</td>
+                <td>
+                  <button onclick={() => removeRedirect(oldUrl)}>Remove</button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+    
+        <h2>Sources</h2>
+  </div>
   <table>
     <thead>
       <tr>
@@ -159,6 +219,28 @@ const closeModal = () => {
     height: 100%;
     max-height: 100%;
     overflow: auto;
+  }
+
+  .admin-sections {
+    margin-bottom: 30px;
+  }
+
+  .section-toggle {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+
+  .section-toggle:hover {
+    background-color: #0056b3;
+  }
+
+  .redirect-section {
+    margin-bottom: 30px;
   }
 
   dialog {

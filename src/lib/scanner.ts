@@ -59,9 +59,11 @@ export const scan = async (address: string, document: Document) => {
   }
 
   if (feedDataList.length === 0) {
+    // Ensure we don't create malformed URLs with double protocols
+    const cleanAddress = address.replace(/^https?:\/\//, "");
     feedDataList.push({
       title: "Attempt to use OpenRSS",
-      url: `https://openrss.org/${address}`,
+      url: `https://openrss.org/${cleanAddress}`,
     });
   }
 
