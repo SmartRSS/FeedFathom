@@ -290,19 +290,20 @@ export class FeedParser {
         permanentRedirect = false;
       }
     }
+    if (!permanentRedirect) {
+      // If the final URL differs from the URL we fetched, store a mapping so that
+      // future requests will directly hit the final destination.
+      if (finalUrl !== fetchedUrl) {
+        await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
+      }
 
-    // If the final URL differs from the URL we fetched, store a mapping so that
-    // future requests will directly hit the final destination.
-    if (finalUrl !== fetchedUrl) {
-      await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
-    }
-
-    // Additionally, if an `originalUrl` was supplied AND it differs from the
-    // final URL, store a mapping from the original URL directly to the final
-    // URL. This prevents creation of redirect chains (A -> B, B -> C) and
-    // instead keeps a flat mapping (A -> C).
-    if (originalUrl && originalUrl !== finalUrl) {
-      await this.redirectMap.setRedirect(originalUrl, finalUrl);
+      // Additionally, if an `originalUrl` was supplied AND it differs from the
+      // final URL, store a mapping from the original URL directly to the final
+      // URL. This prevents creation of redirect chains (A -> B, B -> C) and
+      // instead keeps a flat mapping (A -> C).
+      if (originalUrl && originalUrl !== finalUrl) {
+        await this.redirectMap.setRedirect(originalUrl, finalUrl);
+      }
     }
 
     return {
