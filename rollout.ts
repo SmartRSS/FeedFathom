@@ -267,24 +267,6 @@ async function getLatestContainers(
   return await getContainersByAge(service, count, false);
 }
 
-// NEW HELPER: Resolve the desired image ID (immutable digest) for a service
-async function getDesiredImageId(service: string): Promise<string> {
-  // docker compose config --images already performs env-var substitution
-  const repoAndTag = (
-    await executeComposeCommand(`config --images ${service}`)
-  ).trim();
-
-  // Turn the tag into its sha256 digest so we can compare reliably
-  const imageInspect = await executeDockerCommand(
-    `docker image inspect ${repoAndTag} --format '{{.Id}}'`,
-  );
-  const desiredImageId = imageInspect.trim();
-  if (!desiredImageId) {
-    throw new Error(`Could not resolve image ID for service ${service}`);
-  }
-  return desiredImageId;
-}
-
 // NEW HELPER: Return running containers whose ImageID differs from desired
 async function getOutdatedContainers(
   service: string,
@@ -935,4 +917,44 @@ for (const svc of services) {
     );
     throw error;
   }
+}
+
+async function getDesiredImageId(service: string): Promise<string> {
+  // Parse the compose config as JSON so we can reliably pick the *single* image
+  // that belongs to the given service. `docker compose config --images` returns
+  // one image per *all* services, which breaks when we feed that output to
+  // `docker image inspect`. Parsing JSON avoids newline-separated lists and
+  // guarantees we only ever pass one reference to Docker.
+
+  const configRaw = await executeComposeCommand("config --format json");
+
+  let imageRef: string | undefined;
+  try {
+    const parsed = JSON.parse(configRaw) as {
+      services: Record<string, { image?: string }>;
+    };
+    imageRef = parsed.services[service]?.image;
+  } catch (error) {
+    throw new Error(
+      `Failed to parse compose config while resolving image for service ${service}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (!imageRef || typeof imageRef !== "string" || !imageRef.trim()) {
+    throw new Error(
+      `No image specified for service ${service} in compose config`,
+    );
+  }
+
+  // Convert the image tag/reference into its immutable sha256 digest so that we
+  // can compare containers reliably regardless of how the image was tagged.
+  const imageInspect = await executeDockerCommand(
+    `docker image inspect ${imageRef.trim()} --format '{{.Id}}'`,
+  );
+
+  const desiredImageId = imageInspect.trim();
+  if (!desiredImageId) {
+    throw new Error(`Could not resolve image ID for service ${service}`);
+  }
+  return desiredImageId;
 }
