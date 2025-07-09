@@ -21,7 +21,7 @@
     "generate-migrations": "drizzle-kit generate && bun biome:fix"
   },
   "peerDependencies": {
-    "@biomejs/biome": "^2.0.6",
+    "@biomejs/biome": "^2.1.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/archiver": "^6.0.3",
     "@types/chrome": "^0.0.329",
@@ -29,7 +29,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.0.10",
     "@types/smtp-server": "^3.5.10",
-    "@typescript/native-preview": "^7.0.0-dev.20250705.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250708.1",
     "archiver": "^7.0.1",
     "bun-types": "^1.2.18",
     "drizzle-kit": "^0.31.4",
@@ -40,14 +40,14 @@
     "knip": "^5.61.3",
     "svelte-check": "^4.2.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.35.1"
+    "typescript-eslint": "^8.36.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.12",
     "@sveltejs/kit": "^2.22.2",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
-    "svelte": "^5.35.2",
-    "vite": "^7.0.2"
+    "svelte": "^5.35.4",
+    "vite": "^7.0.3"
   },
   "dependencies": {
     "@extractus/article-extractor": "^8.0.19",
