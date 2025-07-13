@@ -37,7 +37,7 @@
         "@types/mailparser": "^3.4.6",
         "@types/node": "^24.0.13",
         "@types/smtp-server": "^3.5.10",
-        "@typescript/native-preview": "^7.0.0-dev.20250711.1",
+        "@typescript/native-preview": "^7.0.0-dev.20250712.1",
         "archiver": "^7.0.1",
         "bun-types": "^1.2.18",
         "drizzle-kit": "^0.31.4",
