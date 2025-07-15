@@ -9,7 +9,13 @@ export class GeneratorScanner implements Scanner {
     }
 
     if (generator.getAttribute("content")?.includes("WordPress")) {
-      return [{ title: "Wordpress Feed", url: `${currentUrl.origin}/feed` }];
+      return [
+        {
+          title: "Wordpress Feed",
+          url: `${currentUrl.origin}/feed`,
+          type: "rss",
+        },
+      ];
     }
 
     return [];

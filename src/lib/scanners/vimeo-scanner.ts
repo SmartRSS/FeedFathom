@@ -21,6 +21,7 @@ export class VimeoScanner implements Scanner {
         {
           title: "Channel feed",
           url: `https://vimeo.com/${channelNameFromLink}/videos/rss/`,
+          type: "rss",
         },
       ];
     }
@@ -29,6 +30,7 @@ export class VimeoScanner implements Scanner {
       {
         title: "Channel feed",
         url: `https://vimeo.com/${channelNameFromUrl}/videos/rss/`,
+        type: "rss",
       },
     ];
   }

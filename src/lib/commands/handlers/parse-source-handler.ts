@@ -37,8 +37,15 @@ export class ParseSourceHandler {
         };
       }
 
-      // Parse the source
-      await this.feedParser.parseSource(source);
+      // Parse the source with strategy information
+      await this.feedParser.parseSource({
+        id: source.id,
+        url: source.url,
+        strategyType: source.strategyType ?? undefined,
+        strategyConfig: source.strategyConfig ?? undefined,
+        sourceType:
+          (source.sourceType as "feed" | "newsletter" | "websub") ?? "feed",
+      });
 
       return {
         sourceId: source.id.toString(),

@@ -1,118 +1,162 @@
 import { describe, expect, it } from "bun:test";
-import { FeedParserStrategyRegistry } from "../src/lib/feed-strategies/index.ts";
 import { GenericFeedStrategy } from "../src/lib/feed-strategies/generic-feed-strategy.ts";
 import { JsonFeedStrategy } from "../src/lib/feed-strategies/json-feed-strategy.ts";
+import { FacebookFeedStrategy } from "../src/lib/feed-strategies/facebook-feed-strategy.ts";
 
 describe("Feed Strategies", () => {
-  it("should initialize with default strategies", () => {
-    const registry = new FeedParserStrategyRegistry({
-      axiosInstance: {} as any,
-      redis: {} as any,
-      redirectMap: {} as any,
+  describe("Rate Limiting Configuration", () => {
+    it("should provide rate limit config for Facebook strategy", () => {
+      const facebookStrategy = new FacebookFeedStrategy();
+      const config = facebookStrategy.getRateLimitConfig();
+
+      expect(config).toBeDefined();
+      expect(config?.minDelayMs).toBe(60 * 1000); // 1 minute
+      expect(config?.maxDelayMs).toBe(5 * 60 * 1000); // 5 minutes
+      expect(config?.randomize).toBe(true);
     });
 
-    expect(registry).toBeDefined();
-  });
+    it("should provide rate limit config for Generic strategy", () => {
+      const genericStrategy = new GenericFeedStrategy();
+      const config = genericStrategy.getRateLimitConfig();
 
-  it("should handle rate limiting as cross-cutting concern", async () => {
-    const registry = new FeedParserStrategyRegistry({
-      axiosInstance: {} as any,
-      redis: {} as any,
-      redirectMap: {} as any,
+      expect(config).toBeDefined();
+      expect(config?.minDelayMs).toBe(30 * 1000); // 30 seconds
+      expect(config?.maxDelayMs).toBe(2 * 60 * 1000); // 2 minutes
+      expect(config?.randomize).toBe(true);
     });
 
-    expect(registry).toBeDefined();
+    it("should not provide rate limit config for JSON strategy", () => {
+      const jsonStrategy = new JsonFeedStrategy();
+      // JSON strategy doesn't implement getRateLimitConfig
+      expect("getRateLimitConfig" in jsonStrategy).toBe(false);
+    });
   });
 
-  describe("Strategy Detection", () => {
+  describe("JsonFeedStrategy", () => {
     const jsonStrategy = new JsonFeedStrategy();
+
+    const validJsonFeed = JSON.stringify({
+      version: "https://jsonfeed.org/version/1",
+      title: "Test Feed",
+      items: [],
+    });
+
+    const invalidJson = "{ invalid json }";
+
+    describe("parse", () => {
+      it("should parse valid JSON feed", () => {
+        const mockResponse = {
+          data: validJsonFeed,
+          config: { url: "https://example.com/feed.json" },
+          status: 200,
+        } as any;
+
+        const result = jsonStrategy.parse({
+          response: mockResponse,
+          sourceId: 1,
+        });
+
+        expect(result.feedInfo.title).toBe("Test Feed");
+        expect(result.articles).toEqual([]);
+      });
+
+      it("should throw error for invalid JSON feed", () => {
+        const mockResponse = {
+          data: invalidJson,
+          config: { url: "https://example.com/feed.json" },
+          status: 200,
+        } as any;
+
+        expect(() =>
+          jsonStrategy.parse({
+            response: mockResponse,
+            sourceId: 1,
+          }),
+        ).toThrow();
+      });
+    });
+
+    describe("getInfoOnly", () => {
+      it("should return feed info for valid JSON feed", () => {
+        const mockResponse = {
+          data: validJsonFeed,
+          config: { url: "https://example.com/feed.json" },
+          status: 200,
+        } as any;
+
+        const result = jsonStrategy.getInfoOnly({ response: mockResponse });
+
+        expect(result.feedInfo.title).toBe("Test Feed");
+      });
+    });
+  });
+
+  describe("GenericFeedStrategy", () => {
     const genericStrategy = new GenericFeedStrategy();
 
-    describe("JSON Feed Strategy", () => {
-      it("should detect valid JSON Feed content", () => {
-        const validJsonFeed = JSON.stringify({
-          version: "https://jsonfeed.org/version/1.1",
-          title: "Test Feed",
-          items: [],
-        });
-
-        expect(jsonStrategy.canLikelyParse(validJsonFeed)).toBe(true);
-      });
-
-      it("should detect JSON Feed without version but with required fields", () => {
-        const jsonFeedWithoutVersion = JSON.stringify({
-          title: "Test Feed",
-          items: [],
-        });
-
-        expect(jsonStrategy.canLikelyParse(jsonFeedWithoutVersion)).toBe(true);
-      });
-
-      it("should reject non-JSON content", () => {
-        const xmlContent = "<rss><channel><title>RSS Feed</title></channel></rss>";
-        expect(jsonStrategy.canLikelyParse(xmlContent)).toBe(false);
-      });
-
-      it("should reject invalid JSON", () => {
-        const invalidJson = "{ invalid json }";
-        expect(jsonStrategy.canLikelyParse(invalidJson)).toBe(false);
-      });
-
-      it("should reject JSON without required fields", () => {
-        const jsonWithoutItems = JSON.stringify({
-          title: "Test Feed",
-          // Missing items array
-        });
-        expect(jsonStrategy.canLikelyParse(jsonWithoutItems)).toBe(false);
-      });
-    });
-
-    describe("Generic Feed Strategy", () => {
-      it("should detect RSS feeds", () => {
-        const rssContent = `<?xml version="1.0" encoding="UTF-8"?>
+    const rssContent = `<?xml version="1.0"?>
 <rss version="2.0">
   <channel>
-    <title>RSS Feed</title>
+    <title>Test RSS Feed</title>
     <item>
-      <title>Test Item</title>
+      <title>Test Article</title>
     </item>
   </channel>
 </rss>`;
 
-        expect(genericStrategy.canLikelyParse(rssContent)).toBe(true);
-      });
-
-      it("should detect Atom feeds", () => {
-        const atomContent = `<?xml version="1.0" encoding="UTF-8"?>
+    const atomContent = `<?xml version="1.0"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>Atom Feed</title>
+  <title>Test Atom Feed</title>
   <entry>
-    <title>Test Entry</title>
+    <title>Test Article</title>
   </entry>
 </feed>`;
 
-        expect(genericStrategy.canLikelyParse(atomContent)).toBe(true);
+    describe("parse", () => {
+      it("should parse RSS feed", () => {
+        const mockResponse = {
+          data: rssContent,
+          config: { url: "https://example.com/feed.xml" },
+          status: 200,
+        } as any;
+
+        const result = genericStrategy.parse({
+          response: mockResponse,
+          sourceId: 1,
+        });
+
+        expect(result.feedInfo.title).toBe("Test RSS Feed");
+        expect(result.articles).toHaveLength(1);
       });
 
-      it("should detect feeds starting with XML declaration", () => {
-        const xmlFeed = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <title>Test Feed</title>
-  </channel>
-</rss>`;
+      it("should parse Atom feed", () => {
+        const mockResponse = {
+          data: atomContent,
+          config: { url: "https://example.com/feed.xml" },
+          status: 200,
+        } as any;
 
-        expect(genericStrategy.canLikelyParse(xmlFeed)).toBe(true);
+        const result = genericStrategy.parse({
+          response: mockResponse,
+          sourceId: 1,
+        });
+
+        expect(result.feedInfo.title).toBe("Test Atom Feed");
+        expect(result.articles).toHaveLength(1);
       });
+    });
 
-      it("should reject non-feed content", () => {
-        const htmlContent = "<html><body><h1>Hello World</h1></body></html>";
-        expect(genericStrategy.canLikelyParse(htmlContent)).toBe(false);
-      });
+    describe("getInfoOnly", () => {
+      it("should return feed info for RSS feed", () => {
+        const mockResponse = {
+          data: rssContent,
+          config: { url: "https://example.com/feed.xml" },
+          status: 200,
+        } as any;
 
-      it("should reject plain text", () => {
-        const textContent = "This is just plain text content";
-        expect(genericStrategy.canLikelyParse(textContent)).toBe(false);
+        const result = genericStrategy.getInfoOnly({ response: mockResponse });
+
+        expect(result.feedInfo.title).toBe("Test RSS Feed");
       });
     });
   });

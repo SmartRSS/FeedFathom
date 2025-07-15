@@ -9,6 +9,7 @@ import type { UserFolder } from "../../db/schemas/userFolders.ts";
 interface FoundFeed {
   url: string;
   title: string;
+  type: string;
 }
 
 interface FeedPreview {
@@ -16,6 +17,8 @@ interface FeedPreview {
   description: string;
   link: string;
   feedUrl: string;
+  type?: string;
+  webSub?: { hub: string; self: string } | null;
 }
 
 const { data } = $props();
@@ -24,6 +27,8 @@ const { isMailEnabled } = data;
 let title = $state("");
 let link = $state("");
 let feedUrl = $state("");
+let feedType = $state<string | null>(null);
+let webSubInfo = $state<{ hub: string; self: string } | null>(null);
 
 let isLoading = $state(false);
 
@@ -111,6 +116,8 @@ async function loadFeedPreview() {
     title = data.title;
     link = data.link;
     feedUrl = data.feedUrl;
+    feedType = data.type || null;
+    webSubInfo = data.webSub || null;
   } catch (error) {
     logError("Error loading feed preview:", error);
     displayError("Failed to load feed preview.");
@@ -241,6 +248,22 @@ function closeDialog() {
             : "Enter a valid feed URL."}
         />
       </div>
+
+      {#if feedType}
+        <div class="input-block">
+          <label for="feedType">Feed Type:</label>
+          <div class="feed-type-display" id="feedType">{feedType.toUpperCase()}</div>
+        </div>
+      {/if}
+
+      {#if webSubInfo}
+        <div class="websub-info">
+          <h4>WebSub Information</h4>
+          <p><strong>Hub:</strong> {webSubInfo.hub}</p>
+          <p><strong>Self:</strong> {webSubInfo.self}</p>
+          <p class="websub-note">This feed supports WebSub push notifications</p>
+        </div>
+      {/if}
     </fieldset>
 
     <fieldset>
@@ -303,7 +326,7 @@ function closeDialog() {
         {#each foundFeeds as feed (feed.url)}
           <div>
             <button type="button" onclick={() => selectFeed(feed.url)}>
-              {feed.title} - {feed.url}
+              {feed.title} ({feed.type.toUpperCase()}) - {feed.url}
             </button>
           </div>
         {/each}
@@ -416,6 +439,30 @@ function closeDialog() {
     color: red;
     text-align: center;
     margin-bottom: 15px;
+  }
+
+  .websub-info {
+    background-color: #e8f4fd;
+    border: 1px solid #b3d9ff;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 10px;
+  }
+
+  .websub-info h4 {
+    margin: 0 0 10px 0;
+    color: #0066cc;
+  }
+
+  .websub-info p {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+
+  .websub-note {
+    color: #0066cc;
+    font-style: italic;
+    margin-top: 10px !important;
   }
 
   .clipboard-message {

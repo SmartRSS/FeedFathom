@@ -4,6 +4,14 @@ import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
 import { RedirectMap } from "$lib/redirect-map";
+import { WebSubService } from "$lib/websub-service";
+import { FeedParserStrategyRegistry } from "$lib/feed-strategies/strategy-registry";
+import { StrategyDetectionService } from "$lib/feed-strategies/strategy-detection-service";
+import { FeedRequestHandler } from "$lib/feed-strategies/feed-request-handler";
+import { GenericFeedStrategy } from "$lib/feed-strategies/generic-feed-strategy";
+import { JsonFeedStrategy } from "$lib/feed-strategies/json-feed-strategy";
+import { FacebookFeedStrategy } from "$lib/feed-strategies/facebook-feed-strategy";
+import { WebSubFeedStrategy } from "$lib/feed-strategies/websub-feed-strategy";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
@@ -60,6 +68,7 @@ export type Dependencies = {
   sourcesDataService: SourcesDataService;
   userSourcesDataService: UserSourcesDataService;
   usersDataService: UsersDataService;
+  webSubService: WebSubService;
   postgresQueue: PostgresQueue;
 };
 
@@ -119,6 +128,7 @@ container.register({
   mailSender: asClass(MailSender).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
   redirectMap: asClass(RedirectMap).singleton(),
+  webSubService: asClass(WebSubService).singleton(),
 
   // Workers
   mainWorker: asClass(MainWorker).singleton(),

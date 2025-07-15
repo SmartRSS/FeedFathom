@@ -1,21 +1,23 @@
-import type {
-  AxiosCacheInstance,
-  CacheAxiosResponse,
-} from "axios-cache-interceptor";
+import type { AxiosRequestConfig } from "axios";
+import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";
-import type {
-  ParseError,
-  RedisSetResult,
-} from "../../types/feed-parser-types.ts";
+import type { RedisSetResult } from "../../types/feed-parser-types.ts";
 import type {
   ParsedFeedInfo,
   ParsedFeedResult,
 } from "../../types/parsed-feed-result.ts";
 import { logError as error } from "../../util/log.ts";
 import type { RedirectMap } from "../redirect-map.ts";
-import type { FeedParserStrategy } from "./feed-parser-strategy.ts";
+import { FacebookFeedStrategy } from "./facebook-feed-strategy.ts";
+import type {
+  FeedParserStrategy,
+  RateLimitConfig,
+} from "./feed-parser-strategy.ts";
+import { FeedRequestHandler } from "./feed-request-handler.ts";
 import { GenericFeedStrategy } from "./generic-feed-strategy.ts";
 import { JsonFeedStrategy } from "./json-feed-strategy.ts";
+import { StrategyDetectionService } from "./strategy-detection-service.ts";
+import { WebSubFeedStrategy } from "./websub-feed-strategy.ts";
 
 export interface FeedParserStrategyContext {
   axiosInstance: AxiosCacheInstance;
@@ -25,15 +27,95 @@ export interface FeedParserStrategyContext {
 
 export class FeedParserStrategyRegistry {
   private strategies: FeedParserStrategy[];
+  private detectionService: StrategyDetectionService;
+  private requestHandler: FeedRequestHandler;
 
   constructor(private readonly context: FeedParserStrategyContext) {
-    this.strategies = [new JsonFeedStrategy(), new GenericFeedStrategy()];
+    this.strategies = [
+      new WebSubFeedStrategy(),
+      new JsonFeedStrategy(),
+      new FacebookFeedStrategy(),
+      new GenericFeedStrategy(),
+    ];
+
+    this.detectionService = new StrategyDetectionService(this.strategies);
+    this.requestHandler = new FeedRequestHandler(
+      this.context.axiosInstance,
+      this.context.redis,
+      this.context.redirectMap,
+    );
+  }
+
+  /**
+   * Gets rate limit configuration for a strategy
+   */
+  getRateLimitConfig(strategyName: string): RateLimitConfig | undefined {
+    const strategy = this.getStrategyByName(strategyName);
+    return strategy?.getRateLimitConfig?.();
+  }
+
+  /**
+   * Applies strategy-specific rate limiting
+   */
+  private async applyStrategyRateLimit(
+    strategyName: string,
+    domain: string,
+  ): Promise<void> {
+    const rateLimitConfig = this.getRateLimitConfig(strategyName);
+    if (!rateLimitConfig) {
+      return; // Use default rate limiting
+    }
+
+    const rlKey = `rateLimitUntil:${domain}:${strategyName}`;
+    const now = Date.now();
+
+    // Check if we're currently rate limited
+    const currentLimit = await this.context.redis.get(rlKey);
+    if (currentLimit) {
+      const waitUntil = Number.parseInt(currentLimit, 10);
+      if (now < waitUntil) {
+        const waitTime = waitUntil - now;
+        error(
+          `Strategy ${strategyName} rate limited for ${domain}, waiting ${Math.round(waitTime / 1000)}s`,
+        );
+        throw new Error(
+          `Rate limited by ${strategyName} strategy for ${domain}, retry after ${new Date(waitUntil).toISOString()}`,
+        );
+      }
+    }
+
+    // Calculate next rate limit window
+    let delayMs = rateLimitConfig.minDelayMs;
+    if (rateLimitConfig.randomize && rateLimitConfig.maxDelayMs) {
+      delayMs = Math.floor(
+        Math.random() *
+          (rateLimitConfig.maxDelayMs - rateLimitConfig.minDelayMs) +
+          rateLimitConfig.minDelayMs,
+      );
+    }
+
+    const nextLimit = now + delayMs;
+    const ttl = Math.max(1, delayMs);
+
+    await (this.context.redis as unknown as RedisSetResult).set(
+      rlKey,
+      nextLimit.toString(),
+      "PX",
+      ttl,
+      "NX",
+    );
+
+    error(
+      `Applied ${strategyName} rate limit for ${domain}: ${Math.round(delayMs / 1000)}s delay`,
+    );
   }
 
   async parseWithDetection(
     url: string,
     sourceId: number,
     originalUrl?: string,
+    storedStrategy?: string,
+    storedConfig?: string,
   ): Promise<{
     result: ParsedFeedResult;
     cached: boolean;
@@ -41,46 +123,55 @@ export class FeedParserStrategyRegistry {
     permanentRedirect: boolean;
   }> {
     try {
-      const response = await this.context.axiosInstance.get(url, {
-        responseType: "text",
-        timeout: 30000,
+      let strategyInfo: {
+        strategy: string;
+        config?: AxiosRequestConfig | undefined;
+      };
+
+      if (storedStrategy) {
+        // Use stored strategy directly
+        strategyInfo = {
+          strategy: storedStrategy,
+          config: storedConfig
+            ? (JSON.parse(storedConfig) as AxiosRequestConfig)
+            : undefined,
+        };
+      } else {
+        // Fallback to detection for new sources
+        const detectionResult = await this.detectionService.detectStrategy(url);
+        strategyInfo = {
+          strategy: detectionResult.strategy,
+          config: detectionResult.config,
+        };
+      }
+
+      // Apply strategy-specific rate limiting
+      const domain = new URL(url).hostname;
+      await this.applyStrategyRateLimit(strategyInfo.strategy, domain);
+
+      // Fetch with strategy-specific config
+      const { response, cached, finalUrl, permanentRedirect } =
+        await this.requestHandler.fetch(url, strategyInfo.config);
+
+      // Parse with detected strategy
+      const strategy = this.getStrategyByName(strategyInfo.strategy);
+      if (!strategy) {
+        throw new Error(`Strategy ${strategyInfo.strategy} not found`);
+      }
+
+      const result = await strategy.parse({
+        response,
+        sourceId,
+        ...(originalUrl !== undefined ? { originalUrl } : {}),
       });
-
-      // Handle rate limiting as a cross-cutting concern
-      await this.handleRateLimiting(response, url);
-
-      // Detect feed type and find appropriate strategy
-      const result = await this.detectStrategyWithFallback(
-        response.data,
-        async (strategy) =>
-          await Promise.resolve(
-            strategy.parse({
-              response,
-              sourceId,
-              ...(originalUrl !== undefined ? { originalUrl } : {}),
-            }),
-          ),
-      );
-
-      // Handle URL and redirect logic at registry level
-      const finalUrl = this.getFinalUrl(response, url);
-      const permanentRedirect = await this.handleRedirects(url, finalUrl);
-
-      if (finalUrl !== url) {
-        await this.context.redirectMap.setRedirect(url, finalUrl);
-      }
-      if (originalUrl && originalUrl !== finalUrl) {
-        await this.context.redirectMap.setRedirect(originalUrl, finalUrl);
-      }
 
       return {
         result,
-        cached: response.cached ?? false,
+        cached,
         finalUrl,
         permanentRedirect,
       };
     } catch (err) {
-      // Handle rate limit errors
       await this.handleRateLimitError(err, url);
       throw err;
     }
@@ -88,38 +179,61 @@ export class FeedParserStrategyRegistry {
 
   async getInfoWithDetection(
     url: string,
-    originalUrl?: string,
+    _originalUrl?: string,
+    storedStrategy?: string,
+    storedConfig?: string,
   ): Promise<{
     feedInfo: ParsedFeedInfo;
     cached: boolean;
     finalUrl: string;
     permanentRedirect: boolean;
+    strategyType: string;
   }> {
     try {
-      const response = await this.context.axiosInstance.get(url, {
-        responseType: "text",
-        timeout: 30000,
-      });
+      let strategyInfo: {
+        strategy: string;
+        config?: AxiosRequestConfig | undefined;
+      };
 
-      await this.handleRateLimiting(response, url);
-      const { feedInfo } = await this.detectStrategyWithFallback(
-        response.data,
-        async (strategy) =>
-          await Promise.resolve(strategy.getInfoOnly({ response })),
-      );
-      const finalUrl = this.getFinalUrl(response, url);
-      const permanentRedirect = await this.handleRedirects(url, finalUrl);
-      if (finalUrl !== url) {
-        await this.context.redirectMap.setRedirect(url, finalUrl);
+      if (storedStrategy) {
+        // Use stored strategy directly
+        strategyInfo = {
+          strategy: storedStrategy,
+          config: storedConfig
+            ? (JSON.parse(storedConfig) as AxiosRequestConfig)
+            : undefined,
+        };
+      } else {
+        // Fallback to detection for new sources
+        const detectionResult = await this.detectionService.detectStrategy(url);
+        strategyInfo = {
+          strategy: detectionResult.strategy,
+          config: detectionResult.config,
+        };
       }
-      if (originalUrl && originalUrl !== finalUrl) {
-        await this.context.redirectMap.setRedirect(originalUrl, finalUrl);
+
+      // Apply strategy-specific rate limiting
+      const domain = new URL(url).hostname;
+      await this.applyStrategyRateLimit(strategyInfo.strategy, domain);
+
+      // Fetch with strategy-specific config
+      const { response, cached, finalUrl, permanentRedirect } =
+        await this.requestHandler.fetch(url, strategyInfo.config);
+
+      // Get info with detected strategy
+      const strategy = this.getStrategyByName(strategyInfo.strategy);
+      if (!strategy) {
+        throw new Error(`Strategy ${strategyInfo.strategy} not found`);
       }
+
+      const { feedInfo } = await strategy.getInfoOnly({ response });
+
       return {
         feedInfo,
-        cached: response.cached ?? false,
+        cached,
         finalUrl,
         permanentRedirect,
+        strategyType: strategyInfo.strategy,
       };
     } catch (err) {
       await this.handleRateLimitError(err, url);
@@ -127,59 +241,40 @@ export class FeedParserStrategyRegistry {
     }
   }
 
-  private async handleRateLimiting(
-    response: CacheAxiosResponse<unknown>,
-    url: string,
-  ): Promise<void> {
-    const domain = new URL(url).hostname;
-    const normalizedHeaders = this.normalizeHeaders(response.headers);
-    const rateLimitReset = normalizedHeaders["x-ratelimit-reset"];
-    const rateLimitRemaining = normalizedHeaders["x-ratelimit-remaining"];
-
-    if (rateLimitRemaining !== undefined && rateLimitReset !== undefined) {
-      const remaining = Number(rateLimitRemaining);
-      const reset = Number(rateLimitReset);
-      if (!Number.isNaN(remaining) && remaining <= 1 && !Number.isNaN(reset)) {
-        const waitUntil = reset * 1000;
-        if (waitUntil > Date.now()) {
-          const rlKey = `rateLimitUntil:${domain}`;
-          const ttl = Math.max(1, waitUntil - Date.now());
-          await (this.context.redis as unknown as RedisSetResult).set(
-            rlKey,
-            waitUntil.toString(),
-            "PX",
-            ttl,
-            "NX",
-          );
-          error(
-            `Upcoming rate limit for ${domain}, pausing requests until ${new Date(waitUntil).toISOString()}`,
-          );
-        }
-      }
-    }
+  /**
+   * Gets strategy by name
+   */
+  private getStrategyByName(name: string): FeedParserStrategy | undefined {
+    return this.strategies.find(
+      (strategy) => strategy.constructor.name === name,
+    );
   }
 
-  private normalizeHeaders(headers: unknown): Record<string, string> {
-    const result: Record<string, string> = {};
-    if (headers && typeof headers === "object") {
-      for (const [key, value] of Object.entries(headers)) {
-        if (value === null || value === undefined) {
-          continue;
-        }
-        if (typeof value === "string") {
-          result[key] = value;
-        } else if (Array.isArray(value)) {
-          result[key] = value.join(", ");
-        } else if (typeof value === "number") {
-          result[key] = value.toString();
-        } else if (typeof value === "boolean") {
-          result[key] = value.toString();
-        } else {
-          result[key] = String(value);
-        }
-      }
-    }
-    return result;
+  /**
+   * Gets the source type for a URL
+   */
+  getSourceType(url: string): "feed" | "newsletter" | "websub" {
+    return this.detectionService.getSourceType(url);
+  }
+
+  /**
+   * Detects strategy for a URL (for initial source creation)
+   */
+  async detectStrategyForUrl(url: string): Promise<{
+    strategy: string;
+    config?: string | undefined;
+    sourceType: "feed" | "newsletter" | "websub";
+  }> {
+    const strategyInfo = await this.detectionService.detectStrategy(url);
+    const sourceType = this.detectionService.getSourceType(url);
+
+    return {
+      strategy: strategyInfo.strategy,
+      config: strategyInfo.config
+        ? JSON.stringify(strategyInfo.config)
+        : undefined,
+      sourceType,
+    };
   }
 
   private async handleRateLimitError(err: unknown, url: string): Promise<void> {
@@ -231,72 +326,5 @@ export class FeedParserStrategyRegistry {
         );
       }
     }
-  }
-
-  private async detectStrategyWithFallback<T>(
-    data: string,
-    tryParse: (strategy: FeedParserStrategy) => Promise<T>,
-  ): Promise<T> {
-    const candidates = this.strategies.filter((s) => s.canLikelyParse(data));
-    if (candidates.length === 0) {
-      const parseError: ParseError = new Error(
-        "No suitable strategy found for feed",
-      ) as ParseError;
-      parseError.code = "PARSE_ERROR";
-      parseError.strategy = "none";
-      parseError.data = data.substring(0, 100); // First 100 chars for debugging
-      throw parseError;
-    }
-    let lastError: ParseError | Error | unknown;
-    for (const strategy of candidates) {
-      try {
-        return await tryParse(strategy);
-      } catch (err) {
-        lastError = err;
-        // Try next
-      }
-    }
-    throw lastError ?? new Error("All strategies failed to parse feed");
-  }
-
-  private getFinalUrl(
-    response: {
-      request?: { res?: { responseUrl?: string } };
-      config: { url?: string };
-    },
-    fetchedUrl: string,
-  ): string {
-    return (
-      (response.request &&
-      typeof response.request === "object" &&
-      "res" in response.request &&
-      response.request.res &&
-      typeof response.request.res === "object" &&
-      "responseUrl" in response.request.res
-        ? (response.request.res.responseUrl as string | undefined)
-        : undefined) ??
-      response.config.url ??
-      fetchedUrl
-    );
-  }
-
-  private async handleRedirects(
-    fetchedUrl: string,
-    finalUrl: string,
-  ): Promise<boolean> {
-    let permanentRedirect = false;
-    if (finalUrl !== fetchedUrl) {
-      try {
-        const redirectCheck = await this.context.axiosInstance.get(fetchedUrl, {
-          maxRedirects: 0,
-          validateStatus: (status) => status >= 300 && status < 400,
-        });
-        permanentRedirect =
-          redirectCheck.status === 301 || redirectCheck.status === 308;
-      } catch {
-        permanentRedirect = false;
-      }
-    }
-    return permanentRedirect;
   }
 }

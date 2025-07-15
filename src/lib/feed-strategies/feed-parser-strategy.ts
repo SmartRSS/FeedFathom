@@ -15,14 +15,21 @@ export interface FeedParserStrategyContext {
   };
 }
 
+export interface RateLimitConfig {
+  /** Minimum delay between requests in milliseconds */
+  minDelayMs: number;
+  /** Maximum delay between requests in milliseconds (for randomization) */
+  maxDelayMs?: number;
+  /** Whether to randomize the delay between min and max */
+  randomize?: boolean;
+}
+
 export interface FeedParserStrategy {
   /**
-   * Check if this strategy can likely parse the given response data
-   *
-   * @param data - The response data to check
-   * @returns True if this strategy can likely parse the data, false otherwise
+   * Get rate limiting configuration for this strategy
+   * If not implemented, uses default rate limiting
    */
-  canLikelyParse(data: string): boolean;
+  getRateLimitConfig?(): RateLimitConfig;
 
   /**
    * Parse a feed from a given HTTP response

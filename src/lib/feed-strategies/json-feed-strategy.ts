@@ -1,3 +1,6 @@
+// The following interfaces intentionally use snake_case properties to match the JSON Feed specification:
+// https://jsonfeed.org/version/1.1. These names are required for compatibility and are not style violations.
+
 import type { AxiosResponse } from "axios";
 import type { ParsedArticle } from "../../types/feed-parser-types.ts";
 import type {
@@ -12,7 +15,9 @@ interface JsonFeed {
   version: string;
   title?: string;
   description?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   home_page_url?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   feed_url?: string;
   icon?: string;
   favicon?: string;
@@ -27,14 +32,19 @@ interface JsonFeed {
 interface JsonFeedItem {
   id?: string;
   url?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   external_url?: string;
   title?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   content_html?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   content_text?: string;
   summary?: string;
   image?: string;
   bannerImage?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   date_published?: string;
+  // biome-ignore lint/style/useNamingConvention: Required by JSON Feed spec
   date_modified?: string;
   authors?: Array<{ name?: string; url?: string }>;
   // Support both snake_case and camelCase for compatibility
@@ -46,10 +56,6 @@ interface JsonFeedItem {
 }
 
 export class JsonFeedStrategy implements FeedParserStrategy {
-  canLikelyParse(data: string): boolean {
-    return this.isJsonFeedContent(data);
-  }
-
   parse({
     response,
     sourceId,

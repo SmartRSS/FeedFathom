@@ -62,8 +62,20 @@ export class FeedParser {
     id: number;
     skipCache?: boolean;
     url: string;
+    strategyType?: string | undefined;
+    strategyConfig?: string | undefined;
+    sourceType?: "feed" | "newsletter" | "websub";
   }) {
     try {
+      // Skip processing for newsletters and websub sources
+      if (
+        source.sourceType === "newsletter" ||
+        source.sourceType === "websub"
+      ) {
+        logError(`Skipping ${source.sourceType} source: ${source.url}`);
+        return;
+      }
+
       const domainState = await this.canDomainBeProcessedAlready(
         new URL(source.url).hostname,
       );
@@ -72,8 +84,45 @@ export class FeedParser {
         return;
       }
 
+      // Detect strategy if not stored
+      if (!source.strategyType) {
+        try {
+          const strategyInfo = await this.strategyRegistry.detectStrategyForUrl(
+            source.url,
+          );
+          await this.sourcesDataService.updateStrategy(source.id, strategyInfo);
+
+          // Update source object with detected strategy
+          source.strategyType = strategyInfo.strategy;
+          source.strategyConfig = strategyInfo.config;
+          source.sourceType = strategyInfo.sourceType;
+
+          // Skip if detected as newsletter or websub
+          if (
+            strategyInfo.sourceType === "newsletter" ||
+            strategyInfo.sourceType === "websub"
+          ) {
+            logError(
+              `Source detected as ${strategyInfo.sourceType}, skipping: ${source.url}`,
+            );
+            return;
+          }
+        } catch (detectionError) {
+          logError(
+            `Strategy detection failed for ${source.url}:`,
+            detectionError,
+          );
+          // Continue with generic strategy as fallback
+        }
+      }
+
       const { cached, articles, finalUrl, permanentRedirect } =
-        await this.parseUrl(source.url, source.id);
+        await this.parseUrl(
+          source.url,
+          source.id,
+          source.strategyType,
+          source.strategyConfig,
+        );
 
       // Handle permanent redirects immediately so that we do not skip the
       // update when we exit early for a cache-hit.
@@ -117,7 +166,12 @@ export class FeedParser {
     }
   }
 
-  public async parseUrl(url: string, sourceId: number) {
+  public async parseUrl(
+    url: string,
+    sourceId: number,
+    storedStrategy?: string,
+    storedConfig?: string,
+  ) {
     // Remember the originally supplied URL so that we can create a direct mapping
     // from it to the final resolved URL (to avoid redirect chains).
 
@@ -136,12 +190,14 @@ export class FeedParser {
       throw networkError;
     }
 
-    // Use the strategy pattern with automatic detection to parse the feed
+    // Use the strategy pattern with stored strategy information
     const { result, cached, finalUrl, permanentRedirect } =
       await this.strategyRegistry.parseWithDetection(
         resolvedUrl,
         sourceId,
         url,
+        storedStrategy,
+        storedConfig,
       );
 
     return {
@@ -154,15 +210,21 @@ export class FeedParser {
 
   public async preview(sourceUrl: string) {
     try {
-      const { feedInfo } =
+      const { feedInfo, strategyType } =
         await this.strategyRegistry.getInfoWithDetection(sourceUrl);
-      return feedInfo;
+
+      return {
+        title: feedInfo.title,
+        description: feedInfo.description,
+        link: feedInfo.link,
+        feedUrl: sourceUrl,
+        type: strategyType,
+      };
     } catch (error: unknown) {
       const context: ErrorContext = {
         url: sourceUrl,
         timestamp: new Date(),
       };
-
       if (error instanceof Error) {
         logError("preview failed", error.message, context);
       } else {

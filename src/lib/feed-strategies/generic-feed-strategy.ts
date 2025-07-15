@@ -9,28 +9,18 @@ import type {
 } from "../../types/parsed-feed-result.ts";
 import { logError as error } from "../../util/log.ts";
 import { rewriteLinks } from "../rewrite-links.ts";
-import type { FeedParserStrategy } from "./feed-parser-strategy.ts";
+import type {
+  FeedParserStrategy,
+  RateLimitConfig,
+} from "./feed-parser-strategy.ts";
 
 export class GenericFeedStrategy implements FeedParserStrategy {
-  canLikelyParse(data: string): boolean {
-    const trimmed = data.trim();
-
-    // Check for XML-based feeds (RSS, Atom)
-    if (
-      trimmed.startsWith("<?xml") ||
-      trimmed.startsWith("<rss") ||
-      trimmed.startsWith("<feed")
-    ) {
-      return true;
-    }
-
-    // Check for common feed indicators
-    const hasRssElements = /<rss[^>]*>|<channel[^>]*>|<item[^>]*>/i.test(
-      trimmed,
-    );
-    const hasAtomElements = /<feed[^>]*>|<entry[^>]*>/i.test(trimmed);
-
-    return hasRssElements || hasAtomElements;
+  getRateLimitConfig(): RateLimitConfig {
+    return {
+      minDelayMs: 30 * 1000, // 30 seconds minimum
+      maxDelayMs: 2 * 60 * 1000, // 2 minutes maximum
+      randomize: true, // Randomize between 30s-2min
+    };
   }
 
   parse({
