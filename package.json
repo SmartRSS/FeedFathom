@@ -29,7 +29,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.0.14",
     "@types/smtp-server": "^3.5.10",
-    "@typescript/native-preview": "^7.0.0-dev.20250716.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250718.1",
     "archiver": "^7.0.1",
     "bun-types": "^1.2.18",
     "drizzle-kit": "^0.31.4",
@@ -37,16 +37,16 @@
     "eslint-config-biome": "^1.9.4",
     "eslint-plugin-svelte": "^3.11.0",
     "globals": "^16.3.0",
-    "knip": "^5.61.3",
+    "knip": "^5.62.0",
     "svelte-check": "^4.3.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.37.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.13",
-    "@sveltejs/kit": "^2.25.0",
+    "@sveltejs/kit": "^2.25.1",
     "@sveltejs/vite-plugin-svelte": "^6.1.0",
-    "svelte": "^5.36.7",
+    "svelte": "^5.36.8",
     "vite": "^7.0.5"
   },
   "dependencies": {
