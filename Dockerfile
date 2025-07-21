@@ -51,7 +51,7 @@ FROM oven/bun:1.2.19-alpine AS feedfathom-worker
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY package.json /app/
-RUN bun add jsdom --no-save
+# RUN bun add jsdom --no-save
 COPY --from=builder-worker /app/build/ /app/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
 USER 1000:1000
