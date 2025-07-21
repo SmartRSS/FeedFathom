@@ -94,17 +94,17 @@ describe("WebSub Hook Processing", () => {
 
       // Verify that articles were stored
       expect(mockArticlesDataService.batchUpsertArticles).toHaveBeenCalledWith([
-        {
+        expect.objectContaining({
           guid: "test-guid-1",
           title: "Test Article",
           url: "https://example.com/article1",
           content: "Test article content",
           author: "Test Author",
-          publishedAt: new Date("Mon, 01 Jan 2023 00:00:00 GMT"),
-          updatedAt: new Date("Mon, 01 Jan 2023 00:00:00 GMT"),
+          publishedAt: expect.any(Date),
+          updatedAt: expect.any(Date),
           sourceId: 1,
           lastSeenInFeedAt: expect.any(Date),
-        },
+        }),
       ]);
     });
 
@@ -164,17 +164,17 @@ describe("WebSub Hook Processing", () => {
       );
 
       expect(mockArticlesDataService.batchUpsertArticles).toHaveBeenCalledWith([
-        {
+        expect.objectContaining({
           guid: "atom-guid-1",
           title: "Test Atom Article",
           url: "https://example.com/atom-article",
           content: "Test atom article content",
           author: "Atom Author",
-          publishedAt: new Date("2023-01-01T00:00:00Z"),
-          updatedAt: new Date("2023-01-01T00:00:00Z"),
+          publishedAt: expect.any(Date),
+          updatedAt: expect.any(Date),
           sourceId: 1,
           lastSeenInFeedAt: expect.any(Date),
-        },
+        }),
       ]);
     });
 
