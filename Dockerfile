@@ -50,10 +50,10 @@ CMD ["index.js"]
 FROM oven/bun:1.2.19-alpine AS feedfathom-worker
 WORKDIR /app
 RUN apk add --no-cache curl
-USER 1000:1000
 COPY package.json /app/
 RUN bun ci
 COPY --from=builder-worker /app/build/ /app/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
+USER 1000:1000
 ENTRYPOINT ["/usr/local/bin/bun"]
 CMD ["worker-entrypoint.js"]
