@@ -1,29 +1,27 @@
 import { lookup } from "node:dns/promises";
+import { parseFeed } from "@rowanmanning/feed-parser";
 import { AxiosError } from "axios";
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import type { RedisClient } from "bun";
 import container from "../container.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
-import type {
-  DomainProcessingState,
-  ErrorContext,
-  FaviconPayload,
-  FaviconResponse,
-  FeedParserError,
-  NetworkError,
-  RedisSetResult,
-} from "../types/feed-parser-types.ts";
-import { logError } from "../util/log.ts";
-import { FeedParserStrategyRegistry } from "./feed-strategies/index.ts";
+import { logError as error } from "../util/log.ts";
+import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
 import type { RedirectMap } from "./redirect-map.ts";
+import { rewriteLinks } from "./rewrite-links.ts";
+
+// const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
+//   {};
 
 export class FeedParser {
   private readonly defaultDelay = 10_000;
 
-  private domainDelaySettings: Record<string, number> = {};
-
-  private readonly strategyRegistry: FeedParserStrategyRegistry;
+  private domainDelaySettings: Record<string, number> = {
+    "feeds.feedburner.com": 5_000,
+    "openrss.org": 2_500,
+    "youtube.com": 2_500,
+  };
 
   constructor(
     private readonly articlesDataService: ArticlesDataService,
@@ -31,17 +29,9 @@ export class FeedParser {
     private readonly redis: RedisClient,
     private readonly sourcesDataService: SourcesDataService,
     private readonly redirectMap: RedirectMap,
-  ) {
-    this.strategyRegistry = new FeedParserStrategyRegistry({
-      axiosInstance: this.axiosInstance,
-      redis: this.redis,
-      redirectMap: this.redirectMap,
-    });
-  }
+  ) {}
 
-  private formatErrorMessage(
-    error_: FeedParserError | Error | unknown,
-  ): string {
+  private formatErrorMessage(error_: unknown): string {
     if (error_ instanceof AxiosError) {
       return [
         error_.cause instanceof Object
@@ -62,81 +52,20 @@ export class FeedParser {
     id: number;
     skipCache?: boolean;
     url: string;
-    strategyType?: string | undefined;
-    strategyConfig?: string | undefined;
-    sourceType?: "feed" | "newsletter" | "websub";
   }) {
     try {
-      // Skip processing for newsletters and websub sources
       if (
-        source.sourceType === "newsletter" ||
-        source.sourceType === "websub"
+        !(await this.canDomainBeProcessedAlready(new URL(source.url).hostname))
       ) {
-        logError(`Skipping ${source.sourceType} source: ${source.url}`);
         return;
       }
 
-      const domainState = await this.canDomainBeProcessedAlready(
-        new URL(source.url).hostname,
-      );
-      if (!domainState.canProcess) {
-        logError(`Domain processing blocked: ${domainState.reason}`);
-        return;
-      }
-
-      // Detect strategy if not stored
-      if (!source.strategyType) {
-        try {
-          const strategyInfo = await this.strategyRegistry.detectStrategyForUrl(
-            source.url,
-          );
-          await this.sourcesDataService.updateStrategy(source.id, strategyInfo);
-
-          // Update source object with detected strategy
-          source.strategyType = strategyInfo.strategy;
-          source.strategyConfig = strategyInfo.config;
-          source.sourceType = strategyInfo.sourceType;
-
-          // Skip if detected as newsletter or websub
-          if (
-            strategyInfo.sourceType === "newsletter" ||
-            strategyInfo.sourceType === "websub"
-          ) {
-            logError(
-              `Source detected as ${strategyInfo.sourceType}, skipping: ${source.url}`,
-            );
-            return;
-          }
-        } catch (detectionError) {
-          logError(
-            `Strategy detection failed for ${source.url}:`,
-            detectionError,
-          );
-          // Continue with generic strategy as fallback
-        }
-      }
-
-      const { cached, articles, finalUrl, permanentRedirect } =
-        await this.parseUrl(
-          source.url,
-          source.id,
-          source.strategyType,
-          source.strategyConfig,
-        );
-
-      // Handle permanent redirects immediately so that we do not skip the
-      // update when we exit early for a cache-hit.
-      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
-        try {
-          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
-          source.url = finalUrl;
-        } catch (updateError) {
-          logError(
-            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
-            updateError,
-          );
-        }
-      }
+      const {
+        cached,
+        feed: parsedFeed,
+        finalUrl,
+        permanentRedirect,
+      } = await this.parseUrl(source.url);
 
       if (cached && !source.skipCache) {
         // Mark this source as successfully processed using cached data
@@ -144,34 +73,62 @@ export class FeedParser {
         return;
       }
 
-      await this.articlesDataService.batchUpsertArticles(articles);
+      const articlePayloads = parsedFeed.items.map((item) => {
+        return mapFeedItemToArticle(
+          item,
+          parsedFeed,
+          { id: source.id, url: source.url },
+          rewriteLinks,
+        );
+      });
+      const date = new Date();
+
+      const articlesToUpsert = articlePayloads.map((payload) => ({
+        guid: payload.guid,
+        sourceId: payload.sourceId,
+        title: payload.title,
+        url: payload.url,
+        author: payload.author,
+        publishedAt: payload.publishedAt ?? date,
+        content: payload.content ?? "",
+        updatedAt: date,
+        lastSeenInFeedAt: date,
+      }));
+      await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
+      articlePayloads.length = 0;
 
       await this.sourcesDataService.successSource(source.id);
-    } catch (error_: unknown) {
-      const context: ErrorContext = {
-        url: source.url,
-        sourceId: source.id,
-        timestamp: new Date(),
-      };
 
+      // If we encountered a permanent redirect (301/308) – rewrite the source
+      // URL so future fetches go directly to the canonical location.
+      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
+        try {
+          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
+          // Keep the in-memory object in sync to avoid duplicate work later in
+          // this method – especially important for the successSource call.
+          source.url = finalUrl;
+        } catch (updateError) {
+          // Non-critical – log and continue so feed parsing still succeeds.
+          error(
+            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
+            updateError,
+          );
+        }
+      }
+    } catch (error_: unknown) {
       if (error_ instanceof Error) {
-        logError("parseSource", error_.message, context);
+        error("parseSource", error_.message);
       } else {
-        logError("parseSource", error_, context);
+        error("parseSource", error_);
       }
 
       const message = this.formatErrorMessage(error_);
       await this.sourcesDataService.failSource(source.id, message);
-      logError(`${source.url} failed`);
+      error(`${source.url} failed`);
     }
   }
 
-  public async parseUrl(
-    url: string,
-    sourceId: number,
-    storedStrategy?: string,
-    storedConfig?: string,
-  ) {
+  public async parseUrl(url: string) {
     // Remember the originally supplied URL so that we can create a direct mapping
     // from it to the final resolved URL (to avoid redirect chains).
 
@@ -182,55 +139,25 @@ export class FeedParser {
     const urlObject = new URL(resolvedUrl);
     const lookupResult = await lookup(urlObject.hostname);
     if (!lookupResult.address) {
-      const networkError: NetworkError = new Error(
-        `Failed to resolve ${urlObject.hostname}`,
-      ) as NetworkError;
-      networkError.code = "NETWORK_ERROR";
-      networkError.url = url;
-      throw networkError;
+      throw new Error(`Failed to resolve ${urlObject.hostname}`);
     }
 
-    // Use the strategy pattern with stored strategy information
-    const { result, cached, finalUrl, permanentRedirect } =
-      await this.strategyRegistry.parseWithDetection(
-        resolvedUrl,
-        sourceId,
-        url,
-        storedStrategy,
-        storedConfig,
-      );
+    // const chosenParser =
+    //   parserStrategies[urlObject.origin] ?? this.parseGenericFeed;
+    // return await chosenParser.bind(this)(resolvedUrl);
 
-    return {
-      ...result,
-      cached,
-      finalUrl,
-      permanentRedirect,
-    };
+    // Pass along both the URL we are actually fetching (resolvedUrl) and the
+    // originally provided URL so that the parser can store proper redirect
+    // mappings without creating inefficient chains (A -> C instead of A -> B -> C).
+    return await this.parseGenericFeed(resolvedUrl, url);
   }
 
   public async preview(sourceUrl: string) {
     try {
-      const { feedInfo, strategyType } =
-        await this.strategyRegistry.getInfoWithDetection(sourceUrl);
-
-      return {
-        title: feedInfo.title,
-        description: feedInfo.description,
-        link: feedInfo.link,
-        feedUrl: sourceUrl,
-        type: strategyType,
-      };
-    } catch (error: unknown) {
-      const context: ErrorContext = {
-        url: sourceUrl,
-        timestamp: new Date(),
-      };
-      if (error instanceof Error) {
-        logError("preview failed", error.message, context);
-      } else {
-        logError("preview failed", error, context);
-      }
-      return null;
+      const { feed: parsedFeed } = await this.parseUrl(sourceUrl);
+      return mapFeedToPreview(parsedFeed, sourceUrl);
+    } catch {
+      return {};
     }
   }
 
@@ -244,112 +171,241 @@ export class FeedParser {
 
     for (const url of urls) {
       try {
-        const response = (await container.cradle.axiosInstance.get(url, {
+        const response = await container.cradle.axiosInstance.get(url, {
           responseType: "arraybuffer",
-        })) as FaviconResponse;
+        });
 
         if (response.status !== 200 || !response.data) {
           continue;
         }
 
-        const faviconPayload = this.processFaviconResponse(response);
-        if (faviconPayload) {
-          await this.sourcesDataService.updateFavicon(
-            source.id,
-            faviconPayload.dataUri,
-          );
-          // Exit loop after successful update
-          break;
-        }
-      } catch (error_: unknown) {
-        const context: ErrorContext = {
-          url,
-          sourceId: source.id,
-          timestamp: new Date(),
-        };
-        logError("Favicon refresh failed", error_, context);
-      }
-    }
-  }
+        let faviconPayload: string;
 
-  private processFaviconResponse(
-    response: FaviconResponse,
-  ): FaviconPayload | null {
-    try {
-      if (response.data instanceof ArrayBuffer) {
-        const buffer = Buffer.from(response.data);
-        // Ignore small responses, likely errors or blank images
-        if (buffer.length < 20) {
-          return null;
-        }
-        const contentType = response.headers["content-type"] ?? "image/png";
-        const dataUri = `data:${contentType};base64,${buffer.toString("base64")}`;
-        return { dataUri, contentType };
-      }
-
-      if (typeof response.data === "string") {
-        // If it's a string, it must be a data URI, otherwise we don't know how to handle it.
-        if (response.data.startsWith("data:image")) {
+        if (response.data instanceof ArrayBuffer) {
+          const buffer = Buffer.from(response.data);
+          // Ignore small responses, likely errors or blank images
+          if (buffer.length < 20) {
+            continue;
+          }
           const contentType = response.headers["content-type"] ?? "image/png";
-          return { dataUri: response.data, contentType };
+          faviconPayload = `data:${contentType};base64,${buffer.toString(
+            "base64",
+          )}`;
+        } else if (typeof response.data === "string") {
+          // If it's a string, it must be a data URI, otherwise we don't know how to handle it.
+          if (response.data.startsWith("data:image")) {
+            faviconPayload = response.data;
+          } else {
+            continue;
+          }
+        } else {
+          // Unsupported type
+          continue;
         }
-      }
 
-      return null;
-    } catch {
-      return null;
+        await this.sourcesDataService.updateFavicon(source.id, faviconPayload);
+        // Exit loop after successful update
+        break;
+      } catch {
+        // nop
+      }
     }
   }
 
-  private async canDomainBeProcessedAlready(
-    domain: string,
-  ): Promise<DomainProcessingState> {
+  private async canDomainBeProcessedAlready(domain: string): Promise<boolean> {
     const now = Date.now();
     const lastFetchKey = `lastFetchTimestamp:${domain}`;
     const rateLimitKey = `rateLimitUntil:${domain}`;
 
-    // 1. Short-circuit when the domain is explicitly rate-limited
+    // Check for dynamic rate limit (set by Retry-After or similar)
     const rateLimitUntil = Number.parseInt(
       (await this.redis.get(rateLimitKey)) ?? "0",
       10,
     );
     if (now < rateLimitUntil) {
-      logError(
+      error(
         `Domain ${domain} is rate limited until ${new Date(rateLimitUntil).toISOString()}`,
       );
-      return {
-        canProcess: false,
-        reason: `Rate limited until ${new Date(rateLimitUntil).toISOString()}`,
-        waitUntil: rateLimitUntil,
-      };
+      return false;
     }
 
-    // 2. Use SETNX as a lightweight distributed mutex so that only one worker
-    //    is allowed to fetch the domain within the configured delay window.
-    const delaySetting = String(
-      this.domainDelaySettings[domain] ?? this.defaultDelay,
+    const lastFetchTimestamp = Number.parseInt(
+      (await this.redis.get(lastFetchKey)) ?? "0",
+      10,
     );
 
-    // Attempt to set the mutex key with expiry in a single atomic operation.
-    // Redis returns null when the NX condition fails.
-    // The type signature on our Redis client mock does not include the "NX"
-    // flag, so we cast to `unknown` to satisfy TypeScript while still sending
-    // a valid command to the real server.
-    const setResult = await (this.redis as unknown as RedisSetResult).set(
-      lastFetchKey,
-      now.toString(),
-      "PX",
-      Number.parseInt(delaySetting, 10),
-      "NX",
-    );
-    if (setResult === null) {
-      // Mutex hit – another process has fetched this domain recently.
-      return {
-        canProcess: false,
-        reason: "Another process is currently processing this domain",
-      };
+    const delaySetting = this.domainDelaySettings[domain] ?? this.defaultDelay;
+    if (now < lastFetchTimestamp + delaySetting) {
+      return false;
     }
 
-    return { canProcess: true };
+    await this.redis.set(lastFetchKey, now.toString());
+    return true;
+  }
+
+  /**
+   * Generic feed parsing logic.
+   *
+   * @param fetchedUrl   The URL we are going to request (possibly already resolved by a previous redirect mapping).
+   * @param originalUrl  The URL originally supplied to `parseUrl`. This can be different from `fetchedUrl` when a redirect
+   *                     mapping already exists. Providing it allows us to store a direct mapping from the original URL to
+   *                     the final one and avoid redirect chains.
+   */
+  private async parseGenericFeed(fetchedUrl: string, originalUrl?: string) {
+    let response: Awaited<ReturnType<AxiosCacheInstance["get"]>> & {
+      status: number;
+      data: unknown;
+      headers: Record<string, string>;
+      request?: { res?: { responseUrl?: string } };
+      config: { url?: string };
+      cached?: boolean;
+    };
+    try {
+      response = await this.axiosInstance.get(fetchedUrl);
+      const domain = new URL(fetchedUrl).hostname;
+      await this.handleUpcomingRateLimitHeaders(response, domain);
+      this.validateFeedResponse(response, fetchedUrl);
+      const finalUrl = this.getFinalUrl(response, fetchedUrl);
+      const permanentRedirect = await this.handleRedirects(
+        fetchedUrl,
+        finalUrl,
+      );
+      if (finalUrl !== fetchedUrl) {
+        await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
+      }
+      if (originalUrl && originalUrl !== finalUrl) {
+        await this.redirectMap.setRedirect(originalUrl, finalUrl);
+      }
+      return {
+        cached: response.cached ?? false,
+        feed: parseFeed(response.data as string),
+        finalUrl,
+        permanentRedirect,
+      };
+    } catch (err) {
+      await this.handleRateLimitError(err, fetchedUrl);
+      throw err;
+    }
+  }
+
+  // --- Helper methods ---
+
+  private async handleUpcomingRateLimitHeaders(
+    response: { headers: Record<string, string> },
+    domain: string,
+  ): Promise<void> {
+    const rateLimitReset = response.headers["x-ratelimit-reset"];
+    const rateLimitRemaining = response.headers["x-ratelimit-remaining"];
+    if (rateLimitRemaining !== undefined && rateLimitReset !== undefined) {
+      const remaining = Number(rateLimitRemaining);
+      const reset = Number(rateLimitReset);
+      if (!Number.isNaN(remaining) && remaining <= 1 && !Number.isNaN(reset)) {
+        const waitUntil = reset * 1000;
+        if (waitUntil > Date.now()) {
+          await this.redis.set(
+            `rateLimitUntil:${domain}`,
+            waitUntil.toString(),
+          );
+          error(
+            `Upcoming rate limit for ${domain}, pausing requests until ${new Date(waitUntil).toISOString()}`,
+          );
+        }
+      }
+    }
+  }
+
+  private validateFeedResponse(
+    response: { status: number; data: unknown },
+    fetchedUrl: string,
+  ): void {
+    if (response.status !== 200) {
+      error(`failed to load data for ${fetchedUrl}`);
+      throw new Error(
+        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
+      );
+    }
+    if (typeof response.data !== "string") {
+      error(`failed to load data for ${fetchedUrl}`);
+      throw new Error(
+        `Failed to load data for ${fetchedUrl}, unexpected payload type`,
+      );
+    }
+  }
+
+  private getFinalUrl(
+    response: {
+      request?: { res?: { responseUrl?: string } };
+      config: { url?: string };
+    },
+    fetchedUrl: string,
+  ): string {
+    return (
+      (response.request &&
+      typeof response.request === "object" &&
+      "res" in response.request &&
+      response.request.res &&
+      typeof response.request.res === "object" &&
+      "responseUrl" in response.request.res
+        ? (response.request.res.responseUrl as string | undefined)
+        : undefined) ??
+      response.config.url ??
+      fetchedUrl
+    );
+  }
+
+  private async handleRedirects(
+    fetchedUrl: string,
+    finalUrl: string,
+  ): Promise<boolean> {
+    let permanentRedirect = false;
+    if (finalUrl !== fetchedUrl) {
+      try {
+        const redirectCheck = await this.axiosInstance.get(fetchedUrl, {
+          maxRedirects: 0,
+          validateStatus: (status) => status >= 300 && status < 400,
+        });
+        permanentRedirect =
+          redirectCheck.status === 301 || redirectCheck.status === 308;
+      } catch {
+        permanentRedirect = false;
+      }
+    }
+    return permanentRedirect;
+  }
+
+  private async handleRateLimitError(
+    err: unknown,
+    fetchedUrl: string,
+  ): Promise<void> {
+    if (err instanceof AxiosError && err.response?.status === 429) {
+      const domain = new URL(fetchedUrl).hostname;
+      const retryAfter = err.response.headers["retry-after"];
+      let waitUntil = Date.now();
+      let parsed = false;
+      if (retryAfter) {
+        const retryAfterSeconds = Number(retryAfter);
+        if (!Number.isNaN(retryAfterSeconds)) {
+          waitUntil += retryAfterSeconds * 1000;
+          parsed = true;
+        } else {
+          const date = Date.parse(retryAfter);
+          if (!Number.isNaN(date)) {
+            waitUntil = date;
+            parsed = true;
+          }
+        }
+      }
+      // Fallback: if Retry-After is missing or unparseable, use 5 minutes
+      if (!parsed) {
+        waitUntil += 5 * 60 * 1000;
+      }
+      await this.redis.set(`rateLimitUntil:${domain}`, waitUntil.toString());
+      error(
+        `Received 429 for ${fetchedUrl}, rate limiting domain ${domain} until ${new Date(waitUntil).toISOString()}`,
+      );
+      throw new Error(
+        `Rate limited by ${domain}, retry after ${new Date(waitUntil).toISOString()}`,
+      );
+    }
   }
 }

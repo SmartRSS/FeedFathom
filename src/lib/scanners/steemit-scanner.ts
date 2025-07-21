@@ -18,7 +18,6 @@ export class SteemitScanner implements Scanner {
       {
         title: "Channel feed",
         url: `https://www.hiverss.com/${channelName}/feed`,
-        type: "rss",
       },
     ];
   }

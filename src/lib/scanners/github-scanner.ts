@@ -33,7 +33,6 @@ export class GithubScanner implements Scanner {
       {
         title: `${repoName} - Releases`,
         url: `${base}/releases.atom`,
-        type: "atom",
       },
     ];
   }

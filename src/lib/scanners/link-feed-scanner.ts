@@ -1,10 +1,10 @@
-import type { FeedData, FeedSourceType } from "./feed-data-type.ts";
+import type { FeedData } from "./feed-data-type.ts";
 import type { Scanner } from "./scanner-interface.ts";
 
 const feedUrlPatterns = [
-  /\/(rss|feed|atom|feeds|json)\/?$/iu,
-  /\.(rss|xml|atom|json)$/iu,
-  /feeds?\/(rss|atom|json)/iu,
+  /\/(rss|feed|atom|feeds)\/?$/iu,
+  /\.(rss|xml|atom)$/iu,
+  /feeds?\/(rss|atom)/iu,
   /\/syndication\/?$/iu,
 ] as const;
 export class LinkFeedScanner implements Scanner {
@@ -30,17 +30,9 @@ export class LinkFeedScanner implements Scanner {
 
         // Check if URL matches common feed patterns
         if (this.isFeedUrl(feedUrl.pathname)) {
-          const type: FeedSourceType = /atom/i.test(feedUrl.pathname)
-            ? "atom"
-            : /json/i.test(feedUrl.pathname)
-              ? "jsonfeed"
-              : /(rss|xml)/i.test(feedUrl.pathname)
-                ? "rss"
-                : "unknown-xml";
           feeds.push({
             title: anchor.textContent?.trim() ?? "Untitled Feed",
             url: feedUrl.href,
-            type,
           });
         }
       } catch {}
