@@ -1,11 +1,5 @@
-function errorToString(e: unknown): string {
-  if (e instanceof Error) return e.stack ?? e.message;
-  if (typeof e === "object" && e !== null) return JSON.stringify(e);
-  return String(e);
-}
-
 export const llog = (...args: unknown[]): void => {
-  console.log(...args.map(errorToString));
+  console.log(...args);
 };
 
 export const logError = (...args: unknown[]): void => {
@@ -17,12 +11,9 @@ export const logError = (...args: unknown[]): void => {
       return `${line.trim()}\n`;
     });
 
-    const argsWithNewlines: string[] = [];
+    const argsWithNewlines: unknown[] = [];
     for (let index = 0; index < args.length; index++) {
-      const arg = args[index];
-      if (arg !== undefined) {
-        argsWithNewlines.push(errorToString(arg));
-      }
+      argsWithNewlines.push(args[index]);
       if (index < args.length - 1) {
         argsWithNewlines.push("\n");
       }

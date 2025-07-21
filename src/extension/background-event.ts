@@ -142,7 +142,7 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
         contexts: ["action"],
         id: feed.url,
         parentId: "FeedFathom",
-        title: `${feed.title} (${feed.type.toUpperCase()})`,
+        title: feed.title,
       });
     });
 

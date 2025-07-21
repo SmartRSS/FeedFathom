@@ -43,18 +43,14 @@ export class MainWorker {
   }
 
   private async gatherParseSourceJobs() {
-    const sources = await this.sourcesDataService.getProcessableSources();
+    const sources = await this.sourcesDataService.getSourcesToProcess();
 
     for (const source of sources) {
       const jobId = `${JobName.ParseSource}:${source.id}`;
       await this.postgresQueue.addJobToQueue({
         generalId: jobId,
         name: JobName.ParseSource,
-        payload: {
-          id: source.id,
-          url: source.url,
-          // skipCache can be included if needed, but do NOT include strategyType, strategyConfig, or sourceType
-        },
+        payload: source,
       });
     }
   }
