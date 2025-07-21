@@ -17,11 +17,7 @@ import { rewriteLinks } from "./rewrite-links.ts";
 export class FeedParser {
   private readonly defaultDelay = 10_000;
 
-  private domainDelaySettings: Record<string, number> = {
-    "feeds.feedburner.com": 5_000,
-    "openrss.org": 2_500,
-    "youtube.com": 2_500,
-  };
+  private domainDelaySettings: Record<string, number> = {};
 
   constructor(
     private readonly articlesDataService: ArticlesDataService,
@@ -67,6 +63,20 @@ export class FeedParser {
         permanentRedirect,
       } = await this.parseUrl(source.url);
 
+      // Handle permanent redirects immediately so that we do not skip the
+      // update when we exit early for a cache-hit.
+      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
+        try {
+          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
+          source.url = finalUrl;
+        } catch (updateError) {
+          error(
+            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
+            updateError,
+          );
+        }
+      }
+
       if (cached && !source.skipCache) {
         // Mark this source as successfully processed using cached data
         await this.sourcesDataService.successSource(source.id, true);
@@ -98,23 +108,6 @@ export class FeedParser {
       articlePayloads.length = 0;
 
       await this.sourcesDataService.successSource(source.id);
-
-      // If we encountered a permanent redirect (301/308) – rewrite the source
-      // URL so future fetches go directly to the canonical location.
-      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
-        try {
-          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
-          // Keep the in-memory object in sync to avoid duplicate work later in
-          // this method – especially important for the successSource call.
-          source.url = finalUrl;
-        } catch (updateError) {
-          // Non-critical – log and continue so feed parsing still succeeds.
-          error(
-            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
-            updateError,
-          );
-        }
-      }
     } catch (error_: unknown) {
       if (error_ instanceof Error) {
         error("parseSource", error_.message);
@@ -217,7 +210,7 @@ export class FeedParser {
     const lastFetchKey = `lastFetchTimestamp:${domain}`;
     const rateLimitKey = `rateLimitUntil:${domain}`;
 
-    // Check for dynamic rate limit (set by Retry-After or similar)
+    // 1. Short-circuit when the domain is explicitly rate-limited
     const rateLimitUntil = Number.parseInt(
       (await this.redis.get(rateLimitKey)) ?? "0",
       10,
@@ -229,17 +222,29 @@ export class FeedParser {
       return false;
     }
 
-    const lastFetchTimestamp = Number.parseInt(
-      (await this.redis.get(lastFetchKey)) ?? "0",
-      10,
+    // 2. Use SETNX as a lightweight distributed mutex so that only one worker
+    //    is allowed to fetch the domain within the configured delay window.
+    const delaySetting = String(
+      this.domainDelaySettings[domain] ?? this.defaultDelay,
     );
 
-    const delaySetting = this.domainDelaySettings[domain] ?? this.defaultDelay;
-    if (now < lastFetchTimestamp + delaySetting) {
+    // Attempt to set the mutex key with expiry in a single atomic operation.
+    // Redis returns null when the NX condition fails.
+    // The type signature on our Redis client mock does not include the "NX"
+    // flag, so we cast to `unknown` to satisfy TypeScript while still sending
+    // a valid command to the real server.
+    const setResult = await this.redis.set(
+      lastFetchKey,
+      now.toString(),
+      "PX",
+      delaySetting,
+      "NX",
+    );
+    if (setResult === null) {
+      // Mutex hit – another process has fetched this domain recently.
       return false;
     }
 
-    await this.redis.set(lastFetchKey, now.toString());
     return true;
   }
 
@@ -302,10 +307,19 @@ export class FeedParser {
       if (!Number.isNaN(remaining) && remaining <= 1 && !Number.isNaN(reset)) {
         const waitUntil = reset * 1000;
         if (waitUntil > Date.now()) {
-          await this.redis.set(
-            `rateLimitUntil:${domain}`,
-            waitUntil.toString(),
-          );
+          const rlKey = `rateLimitUntil:${domain}`;
+          const ttl = Math.max(1, waitUntil - Date.now());
+          await (
+            this.redis as unknown as {
+              set(
+                key: string,
+                value: string,
+                px: "PX",
+                ttl: number,
+                nx: "NX",
+              ): Promise<"OK" | null>;
+            }
+          ).set(rlKey, waitUntil.toString(), "PX", ttl, "NX");
           error(
             `Upcoming rate limit for ${domain}, pausing requests until ${new Date(waitUntil).toISOString()}`,
           );
@@ -399,7 +413,19 @@ export class FeedParser {
       if (!parsed) {
         waitUntil += 5 * 60 * 1000;
       }
-      await this.redis.set(`rateLimitUntil:${domain}`, waitUntil.toString());
+      const rlKey = `rateLimitUntil:${domain}`;
+      const ttl = Math.max(1, waitUntil - Date.now());
+      await (
+        this.redis as unknown as {
+          set(
+            key: string,
+            value: string,
+            px: "PX",
+            ttl: number,
+            nx: "NX",
+          ): Promise<"OK" | null>;
+        }
+      ).set(rlKey, waitUntil.toString(), "PX", ttl, "NX");
       error(
         `Received 429 for ${fetchedUrl}, rate limiting domain ${domain} until ${new Date(waitUntil).toISOString()}`,
       );
