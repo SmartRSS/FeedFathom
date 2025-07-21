@@ -54,6 +54,9 @@ COPY package.json /app/
 # RUN bun add jsdom --no-save
 COPY --from=builder-worker /app/build/ /app/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
+RUN mkdir -p /app/node_modules/jsdom/lib/jsdom/living/xhr/
+COPY --from=builder-worker /app/node_modules/jsdom/lib/jsdom/living/xhr/xhr-sync-worker.js \
+                     /app/node_modules/jsdom/lib/jsdom/living/xhr/xhr-sync-worker.js
 USER 1000:1000
 ENTRYPOINT ["/usr/local/bin/bun"]
 CMD ["worker-entrypoint.js"]
