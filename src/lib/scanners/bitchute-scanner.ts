@@ -18,8 +18,6 @@ export class BitchuteScanner implements Scanner {
 
     const channelName = channelLinkElement.textContent;
     const feedLink = `${this.feedBase}${channelName}`;
-    return [
-      { title: `Channel feed for ${channelName}`, url: feedLink, type: "rss" },
-    ];
+    return [{ title: `Channel feed for ${channelName}`, url: feedLink }];
   }
 }

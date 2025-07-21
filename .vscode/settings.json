@@ -14,14 +14,5 @@
   "[jsonc]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "[css]": {
-    "editor.defaultFormatter": "vscode.css-language-features"
-  },
-  "[html]": {
-    "editor.defaultFormatter": "vscode.html-language-features"
-  },
-  "[json]": {
-    "editor.defaultFormatter": "vscode.json-language-features"
-  }
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

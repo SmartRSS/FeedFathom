@@ -15,6 +15,6 @@ export class OdseeScanner implements Scanner {
 
     const channelName = channelNameMatch[1];
     const href = `https://lbryfeed.melroy.org/channel/${channelName}`;
-    return [{ title: "Channel feed", url: href, type: "rss" }];
+    return [{ title: "Channel feed", url: href }];
   }
 }

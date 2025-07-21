@@ -21,7 +21,6 @@ export class YoutubeScanner implements Scanner {
       youtubeFeeds.push({
         title: "User feed",
         url: `https://www.youtube.com/feeds/videos.xml?user=${userMatch[1]}`,
-        type: "rss",
       });
     }
 
@@ -30,16 +29,16 @@ export class YoutubeScanner implements Scanner {
       youtubeFeeds.push({
         title: "Channel feed",
         url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`,
-        type: "rss",
       });
     }
 
-    const channelMatch2 = new RegExp(`${addressUrl}\/(@.+)`, "u").exec(address);
+    const channelMatch2 = new RegExp(`${addressUrl}\\/(@.+)`, "u").exec(
+      address,
+    );
     if (channelMatch2) {
       youtubeFeeds.push({
         title: "Channel feed",
         url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch2[1]}`,
-        type: "rss",
       });
     }
 
@@ -48,7 +47,6 @@ export class YoutubeScanner implements Scanner {
       youtubeFeeds.push({
         title: "Current playlist feed",
         url: `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistMatch[1]}`,
-        type: "rss",
       });
     }
 

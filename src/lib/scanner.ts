@@ -54,8 +54,6 @@ export const scan = async (address: string, document: Document) => {
       feedDataList.push({
         title: feedData.title,
         url: normalizedUrl,
-        type: feedData.type,
-        webSub: feedData.webSub, // propagate WebSub info
       });
     }
   }
@@ -66,7 +64,6 @@ export const scan = async (address: string, document: Document) => {
     feedDataList.push({
       title: "Attempt to use OpenRSS",
       url: `https://openrss.org/${cleanAddress}`,
-      type: "rss",
     });
   }
 

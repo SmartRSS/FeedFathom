@@ -15,6 +15,6 @@ export class HiveblogScanner implements Scanner {
 
     const channelName = channelNameMatch[1];
     const href = `https://www.hiverss.com/${channelName}/feed`;
-    return [{ title: "Channel feed", url: href, type: "rss" }];
+    return [{ title: "Channel feed", url: href }];
   }
 }
