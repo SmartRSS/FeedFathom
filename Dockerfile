@@ -52,7 +52,7 @@ WORKDIR /app
 RUN apk add --no-cache curl
 USER 1000:1000
 COPY package.json /app/
-RUN bun add jsdom
+RUN bun add jsdom --no-save
 COPY --from=builder-worker /app/build/ /app/
 COPY --from=builder-worker /app/drizzle/ /app/drizzle/
 ENTRYPOINT ["/usr/local/bin/bun"]
