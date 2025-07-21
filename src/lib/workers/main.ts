@@ -43,14 +43,20 @@ export class MainWorker {
   }
 
   private async gatherParseSourceJobs() {
-    const sources = await this.sourcesDataService.getSourcesToProcess();
+    const sources = await this.sourcesDataService.getProcessableSources();
 
     for (const source of sources) {
       const jobId = `${JobName.ParseSource}:${source.id}`;
       await this.postgresQueue.addJobToQueue({
         generalId: jobId,
         name: JobName.ParseSource,
-        payload: source,
+        payload: {
+          id: source.id,
+          url: source.url,
+          strategyType: source.strategyType,
+          strategyConfig: source.strategyConfig,
+          sourceType: source.sourceType,
+        },
       });
     }
   }

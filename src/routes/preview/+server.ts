@@ -14,12 +14,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     });
   }
 
-  const source = await locals.dependencies.feedParser.preview(feedUrl);
-  if (!source) {
+  const preview = await locals.dependencies.feedParser.preview(feedUrl);
+  if (!preview) {
     return json({
       error: "Invalid feed url",
     });
   }
 
-  return json(source);
+  return json(preview);
 };

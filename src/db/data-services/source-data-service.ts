@@ -98,6 +98,10 @@ export class SourcesDataService {
       return sql`${sources.url} LIKE 'http%'`;
     };
 
+    const isNotWebSubSource = () => {
+      return sql`${sources.webSubHub} IS NULL`;
+    };
+
     const shouldProcessSource = () => {
       return or(
         or(
@@ -114,7 +118,7 @@ export class SourcesDataService {
         url: sources.url,
       })
       .from(sources)
-      .where(and(shouldProcessSource(), isWebSource()))
+      .where(and(shouldProcessSource(), isWebSource(), isNotWebSubSource()))
       .orderBy(asc(sources.lastAttempt))
       .limit(
         sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${sources})::int;` as unknown as number,
@@ -234,5 +238,139 @@ export class SourcesDataService {
       homeUrl: payload.homeUrl,
       url,
     });
+  }
+
+  public async updateWebSubInfo(
+    sourceId: number,
+    webSubInfo: { hub: string; self: string; topic?: string | undefined },
+  ) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        webSubHub: webSubInfo.hub,
+        webSubSelf: webSubInfo.self,
+        webSubTopic: webSubInfo.topic,
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  /**
+   * Updates strategy information for a source
+   */
+  public async updateStrategy(
+    sourceId: number,
+    strategyInfo: {
+      strategy: string;
+      config?: string | undefined;
+      sourceType: "feed" | "newsletter" | "websub";
+    },
+  ) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        strategyType: strategyInfo.strategy,
+        strategyConfig: strategyInfo.config,
+        sourceType: strategyInfo.sourceType,
+        lastStrategyDetection: new Date(),
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  /**
+   * Gets sources that need strategy detection (no strategy stored or old detection)
+   */
+  public async getSourcesNeedingStrategyDetection() {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    return await this.drizzleConnection
+      .select({
+        id: sources.id,
+        url: sources.url,
+        homeUrl: sources.homeUrl,
+        strategyType: sources.strategyType,
+        sourceType: sources.sourceType,
+      })
+      .from(sources)
+      .where(
+        or(
+          isNull(sources.strategyType),
+          isNull(sources.lastStrategyDetection),
+          lt(sources.lastStrategyDetection, fiveMinutesAgo),
+        ),
+      );
+  }
+
+  /**
+   * Gets sources by source type (for filtering newsletters, websub, etc.)
+   */
+  public async getSourcesByType(sourceType: "feed" | "newsletter" | "websub") {
+    return await this.drizzleConnection
+      .select({
+        id: sources.id,
+        url: sources.url,
+        homeUrl: sources.homeUrl,
+        strategyType: sources.strategyType,
+        strategyConfig: sources.strategyConfig,
+      })
+      .from(sources)
+      .where(eq(sources.sourceType, sourceType));
+  }
+
+  /**
+   * Gets sources that should be processed (excluding newsletters and websub)
+   */
+  public async getProcessableSources() {
+    return await this.drizzleConnection
+      .select({
+        id: sources.id,
+        url: sources.url,
+        homeUrl: sources.homeUrl,
+        strategyType: sources.strategyType,
+        strategyConfig: sources.strategyConfig,
+        sourceType: sources.sourceType,
+      })
+      .from(sources)
+      .where(
+        and(
+          eq(sources.sourceType, "feed"),
+          or(
+            isNull(sources.lastAttempt),
+            lt(sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`),
+          ),
+        ),
+      );
+  }
+
+  public async getWebSubSources() {
+    return await this.drizzleConnection
+      .select({
+        id: sources.id,
+        url: sources.url,
+        homeUrl: sources.homeUrl,
+        webSubHub: sources.webSubHub,
+        webSubSelf: sources.webSubSelf,
+        webSubTopic: sources.webSubTopic,
+      })
+      .from(sources)
+      .where(sql`${sources.webSubHub} IS NOT NULL`);
+  }
+
+  public async findWebSubSubscription(sourceId: number) {
+    return (
+      await this.drizzleConnection
+        .select({
+          id: sources.id,
+          url: sources.url,
+          homeUrl: sources.homeUrl,
+          webSubHub: sources.webSubHub,
+          webSubSelf: sources.webSubSelf,
+          webSubTopic: sources.webSubTopic,
+        })
+        .from(sources)
+        .where(
+          and(eq(sources.id, sourceId), sql`${sources.webSubHub} IS NOT NULL`),
+        )
+        .limit(1)
+    ).at(0);
   }
 }

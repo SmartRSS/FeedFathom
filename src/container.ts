@@ -4,6 +4,7 @@ import { MailSender } from "$lib/email/mail-sender";
 import { FeedParser } from "$lib/feed-parser";
 import { OpmlParser } from "$lib/opml-parser";
 import { RedirectMap } from "$lib/redirect-map";
+import { WebSubService } from "$lib/websub-service";
 import { Cli } from "$lib/workers/cli";
 import { Initializer } from "$lib/workers/initializer";
 import { MailWorker } from "$lib/workers/mail";
@@ -60,6 +61,7 @@ export type Dependencies = {
   sourcesDataService: SourcesDataService;
   userSourcesDataService: UserSourcesDataService;
   usersDataService: UsersDataService;
+  webSubService: WebSubService;
   postgresQueue: PostgresQueue;
 };
 
@@ -119,6 +121,7 @@ container.register({
   mailSender: asClass(MailSender).singleton(),
   mailWorker: asClass(MailWorker).singleton(),
   redirectMap: asClass(RedirectMap).singleton(),
+  webSubService: asClass(WebSubService).singleton(),
 
   // Workers
   mainWorker: asClass(MainWorker).singleton(),
