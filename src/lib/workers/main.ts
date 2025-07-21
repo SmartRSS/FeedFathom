@@ -53,9 +53,7 @@ export class MainWorker {
         payload: {
           id: source.id,
           url: source.url,
-          strategyType: source.strategyType,
-          strategyConfig: source.strategyConfig,
-          sourceType: source.sourceType,
+          // skipCache can be included if needed, but do NOT include strategyType, strategyConfig, or sourceType
         },
       });
     }
