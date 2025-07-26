@@ -29,7 +29,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.1.0",
     "@types/smtp-server": "^3.5.10",
-    "@typescript/native-preview": "^7.0.0-dev.20250722.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250724.1",
     "archiver": "^7.0.1",
     "bun-types": "^1.2.19",
     "drizzle-kit": "^0.31.4",
@@ -44,10 +44,10 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.13",
-    "@sveltejs/kit": "^2.25.1",
+    "@sveltejs/kit": "^2.26.0",
     "@sveltejs/vite-plugin-svelte": "^6.1.0",
-    "svelte": "^5.36.13",
-    "vite": "^7.0.5"
+    "svelte": "^5.36.16",
+    "vite": "^7.0.6"
   },
   "dependencies": {
     "@extractus/article-extractor": "^8.0.19",
@@ -55,7 +55,7 @@
     "@rowanmanning/feed-parser": "^2.1.1",
     "arktype": "^2.1.20",
     "awilix": "^12.0.5",
-    "axios": "^1.10.0",
+    "axios": "^1.11.0",
     "axios-cache-interceptor": "^1.8.0",
     "disposable-email-domains-js": "^1.14.0",
     "dompurify": "^3.2.6",
