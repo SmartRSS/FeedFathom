@@ -29,7 +29,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.1.0",
     "@types/smtp-server": "^3.5.11",
-    "@typescript/native-preview": "^7.0.0-dev.20250802.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250803.1",
     "archiver": "^7.0.1",
     "bun-types": "^1.2.19",
     "drizzle-kit": "^0.31.4",
@@ -38,7 +38,7 @@
     "eslint-plugin-svelte": "^3.11.0",
     "globals": "^16.3.0",
     "knip": "^5.62.0",
-    "svelte-check": "^4.3.0",
+    "svelte-check": "^4.3.1",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.38.0"
   },
@@ -46,7 +46,7 @@
     "@sveltejs/adapter-node": "^5.2.13",
     "@sveltejs/kit": "^2.27.0",
     "@sveltejs/vite-plugin-svelte": "^6.1.0",
-    "svelte": "^5.37.2",
+    "svelte": "^5.37.3",
     "vite": "^7.0.6"
   },
   "dependencies": {
@@ -57,7 +57,7 @@
     "awilix": "^12.0.5",
     "axios": "^1.11.0",
     "axios-cache-interceptor": "^1.8.0",
-    "disposable-email-domains-js": "^1.15.0",
+    "disposable-email-domains-js": "^1.16.0",
     "dompurify": "^3.2.6",
     "drizzle-orm": "^0.44.4",
     "fast-xml-parser": "^5.2.5",
