@@ -1,3 +1,4 @@
+import { type } from "arktype";
 import type { CommandBus } from "$lib/commands/command-bus";
 import {
   CommandType,
@@ -6,7 +7,6 @@ import {
 } from "$lib/commands/types";
 import type { FeedParser } from "$lib/feed-parser";
 import type { JobHandler, PostgresQueue } from "$lib/postgres-queue";
-import { type } from "arktype";
 import type { AppConfig } from "../../config.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";

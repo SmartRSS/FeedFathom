@@ -1,14 +1,6 @@
 /** biome-ignore-all lint/style/useNamingConvention: implementing external interface */
 import type { RedisClient } from "bun";
 
-interface GetExOptions {
-  EX?: number;
-  PX?: number;
-  EXAT?: number;
-  PXAT?: number;
-  PERSIST?: boolean;
-}
-
 // Mock Redis client for build process
 export class MockRedisClient implements RedisClient {
   connected = false;
@@ -769,9 +761,35 @@ export class MockRedisClient implements RedisClient {
     return await Promise.resolve(null);
   }
 
+  async getex(_key: string | ArrayBufferView | Blob): Promise<string | null>;
   async getex(
     _key: string | ArrayBufferView | Blob,
-    _options?: GetExOptions,
+    _ex: "EX",
+    _seconds: number,
+  ): Promise<string | null>;
+  async getex(
+    _key: string | ArrayBufferView | Blob,
+    _px: "PX",
+    _milliseconds: number,
+  ): Promise<string | null>;
+  async getex(
+    _key: string | ArrayBufferView | Blob,
+    _exat: "EXAT",
+    _timestampSeconds: number,
+  ): Promise<string | null>;
+  async getex(
+    _key: string | ArrayBufferView | Blob,
+    _pxat: "PXAT",
+    _timestampMilliseconds: number,
+  ): Promise<string | null>;
+  async getex(
+    _key: string | ArrayBufferView | Blob,
+    _persist: "PERSIST",
+  ): Promise<string | null>;
+  async getex(
+    _key: string | ArrayBufferView | Blob,
+    _mode?: "EX" | "PX" | "EXAT" | "PXAT" | "PERSIST",
+    _value?: number,
   ): Promise<string | null> {
     return await Promise.resolve(null);
   }

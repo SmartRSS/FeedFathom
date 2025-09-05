@@ -39,5 +39,3 @@ jobs:
         run: bun svelte-check
       - name: Run Knip
         run: bun knip
-      - name: Run ESLint
-        run: bun eslint

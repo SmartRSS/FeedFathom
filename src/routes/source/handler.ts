@@ -1,5 +1,5 @@
-import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import type { DeleteSource } from "./validator.ts";
 
 export const deleteSourceHandler = async ({

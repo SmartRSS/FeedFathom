@@ -1,5 +1,5 @@
-import { createRequestHandler } from "$lib/create-request-handler";
 import type { RequestHandler } from "@sveltejs/kit";
+import { createRequestHandler } from "$lib/create-request-handler";
 import { deleteSourceHandler } from "./handler.ts";
 import { DeleteSource } from "./validator.ts";
 
