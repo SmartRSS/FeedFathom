@@ -13,7 +13,7 @@
     "watch-worker": "svelte-kit sync && bun --watch ./src/worker-entrypoint.ts",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "svelte-kit sync && bun test && biome check && tsc && bun svelte-check && bun knip",
-    "lint:fix": "svelte-kit sync && bun eslint:fix --fix && bun biome:fix",
+    "lint:fix": "svelte-kit sync && bun biome:fix",
     "biome:fix": "biome check --write",
     "knip": "knip",
     "generate-migrations": "drizzle-kit generate && bun biome:fix"
@@ -37,14 +37,9 @@
     "archiver": "^7.0.1",
     "bun-types": "^1.2.21",
     "drizzle-kit": "^0.31.4",
-    "eslint": "^9.34.0",
-    "eslint-config-biome": "^2.1.3",
-    "eslint-plugin-svelte": "^3.12.1",
-    "globals": "^16.3.0",
     "knip": "^5.63.1",
     "svelte-check": "^4.3.1",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.42.0"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "@extractus/article-extractor": "^8.0.20",
@@ -82,14 +77,7 @@
       "src/cloudflare/**"
     ],
     "ignoreBinaries": [
-      "build",
-      "biome",
-      "knip",
-      "eslint",
-      "svelte-check",
-      "tsc",
-      "tsgo",
-      "drizzle-kit"
+      "build"
     ],
     "ignoreUnresolved": [
       "^\\$service-worker"
