@@ -1,5 +1,5 @@
-import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import type { UpdateSourceRequest } from "./validator.ts";
 
 export const updateSourceHandler = async (

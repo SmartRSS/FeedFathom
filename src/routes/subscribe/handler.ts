@@ -1,6 +1,6 @@
+import { json } from "@sveltejs/kit";
 import type { ValidatedRequestEvent } from "$lib/create-request-handler";
 import type { FeedPreview } from "$lib/feed-mapper";
-import { json } from "@sveltejs/kit";
 import { getMailFeatureState } from "../../util/is-mail-enabled.ts";
 import type { SubscribeRequest } from "./validator.ts";
 
