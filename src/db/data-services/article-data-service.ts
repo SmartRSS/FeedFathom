@@ -104,22 +104,38 @@ export class ArticlesDataService {
       return;
     }
 
-    try {
-      await this.drizzleConnection
-        .insert(articles)
-        .values(articlePayloads)
-        .onConflictDoUpdate({
-          target: articles.guid,
-          set: {
-            title: sql`excluded.title`,
-            content: sql`excluded.content`,
-            updatedAt: sql`excluded.updated_at`,
-            lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
-          },
-        });
-    } catch (error) {
-      logError("Error upserting articles:", error);
-      throw error;
+    // Process articles in batches to avoid hitting database parameter limits
+    const BATCH_SIZE = 10;
+    const batches = [];
+
+    for (let i = 0; i < articlePayloads.length; i += BATCH_SIZE) {
+      batches.push(articlePayloads.slice(i, i + BATCH_SIZE));
+    }
+
+    for (const [batchIndex, batch] of batches.entries()) {
+      try {
+        await this.drizzleConnection
+          .insert(articles)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: articles.guid,
+            set: {
+              title: sql`excluded.title`,
+              content: sql`excluded.content`,
+              updatedAt: sql`excluded.updated_at`,
+              lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
+            },
+          });
+      } catch (error) {
+        logError(
+          `Error upserting articles batch ${batchIndex + 1}/${batches.length}:`,
+          error,
+        );
+        logError(
+          `Batch size: ${batch.length}, Total articles: ${articlePayloads.length}`,
+        );
+        throw error;
+      }
     }
   }
 
