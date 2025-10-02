@@ -105,11 +105,11 @@ export class ArticlesDataService {
     }
 
     // Process articles in batches to avoid hitting database parameter limits
-    const BATCH_SIZE = 10;
+    const batchSize = 10;
     const batches = [];
 
-    for (let i = 0; i < articlePayloads.length; i += BATCH_SIZE) {
-      batches.push(articlePayloads.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < articlePayloads.length; i += batchSize) {
+      batches.push(articlePayloads.slice(i, i + batchSize));
     }
 
     for (const [batchIndex, batch] of batches.entries()) {

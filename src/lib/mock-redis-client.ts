@@ -800,4 +800,45 @@ export class MockRedisClient implements RedisClient {
   ): Promise<Uint8Array<ArrayBuffer> | null> {
     return await Promise.resolve(null);
   }
+
+  // Add missing pub/sub methods to satisfy RedisClient interface
+  async publish(
+    _channel: string | ArrayBufferView | Blob,
+    _message: string | ArrayBufferView | Blob,
+  ): Promise<number> {
+    return await Promise.resolve(0);
+  }
+
+  async subscribe(
+    _channel: string,
+    _listener: (message: string, channel: string) => void,
+  ): Promise<number>;
+  async subscribe(
+    _channels: string[],
+    _listener: (message: string, channel: string) => void,
+  ): Promise<number>;
+  async subscribe(
+    _channelOrChannels: string | string[],
+    _listener: (message: string, channel: string) => void,
+  ): Promise<number> {
+    return await Promise.resolve(0);
+  }
+
+  async unsubscribe(_channel: string): Promise<void>;
+  async unsubscribe(
+    _channel: string,
+    _listener: (message: string, channel: string) => void,
+  ): Promise<void>;
+  async unsubscribe(): Promise<void>;
+  async unsubscribe(_channels: string[]): Promise<void>;
+  async unsubscribe(
+    _channelOrChannels?: string | string[],
+    _listener?: (message: string, channel: string) => void,
+  ): Promise<void> {
+    return await Promise.resolve();
+  }
+
+  async duplicate(): Promise<MockRedisClient> {
+    return await Promise.resolve(new MockRedisClient());
+  }
 }
