@@ -1,5 +1,5 @@
-import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { json } from "@sveltejs/kit";
+import type { UnauthenticatedRequestEvent } from "$lib/create-request-handler";
 import { cookiesConfig } from "../../util/cookies-config.ts";
 import type { LoginRequest } from "./validator.ts";
 

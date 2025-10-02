@@ -1,13 +1,3 @@
-import { buildAxios } from "$lib/cacheable-axios";
-import { CommandBus } from "$lib/commands/command-bus";
-import { MailSender } from "$lib/email/mail-sender";
-import { FeedParser } from "$lib/feed-parser";
-import { OpmlParser } from "$lib/opml-parser";
-import { RedirectMap } from "$lib/redirect-map";
-import { Cli } from "$lib/workers/cli";
-import { Initializer } from "$lib/workers/initializer";
-import { MailWorker } from "$lib/workers/mail";
-import { MainWorker } from "$lib/workers/main";
 import {
   asClass,
   asFunction,
@@ -18,6 +8,16 @@ import {
 import type { AxiosCacheInstance } from "axios-cache-interceptor";
 import { RedisClient } from "bun";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
+import { buildAxios } from "$lib/cacheable-axios";
+import { CommandBus } from "$lib/commands/command-bus";
+import { MailSender } from "$lib/email/mail-sender";
+import { FeedParser } from "$lib/feed-parser";
+import { OpmlParser } from "$lib/opml-parser";
+import { RedirectMap } from "$lib/redirect-map";
+import { Cli } from "$lib/workers/cli";
+import { Initializer } from "$lib/workers/initializer";
+import { MailWorker } from "$lib/workers/mail";
+import { MainWorker } from "$lib/workers/main";
 import { type AppConfig, config } from "./config.ts";
 import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
 import { FoldersDataService } from "./db/data-services/folder-data-service.ts";

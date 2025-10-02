@@ -1,8 +1,8 @@
-import { EmailHandler } from "$lib/email/email-handler";
-import { EmailProcessor } from "$lib/email-processor";
 import type { RequestHandler } from "@sveltejs/kit";
 import { json } from "@sveltejs/kit";
 import { type } from "arktype";
+import { EmailHandler } from "$lib/email/email-handler";
+import { EmailProcessor } from "$lib/email-processor";
 import { llog, logError } from "../../../util/log.ts";
 
 const mailBody = type({
