@@ -1,4 +1,10 @@
-import { integer, pgTable, primaryKey, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { articles } from "./articles";
 import { users } from "./users";
 
@@ -17,7 +23,13 @@ export const userArticles = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.articleId] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.articleId] }),
+    index("user_articles_user_id_idx").on(table.userId),
+    index("user_articles_article_id_idx").on(table.articleId),
+    index("user_articles_user_read_idx").on(table.userId, table.readAt),
+    index("user_articles_user_article_idx").on(table.userId, table.articleId),
+  ],
 );
 
 export type UserArticle = typeof userArticles.$inferSelect;

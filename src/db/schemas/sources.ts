@@ -29,6 +29,12 @@ export const sources = pgTable(
   (table) => [
     index("last_attempt_idx").on(table.lastAttempt),
     index("recent_failures_idx").on(table.recentFailures),
+    index("sources_url_idx").on(table.url),
+    index("sources_last_success_idx").on(table.lastSuccess),
+    index("sources_attempt_failures_idx").on(
+      table.lastAttempt,
+      table.recentFailures,
+    ),
   ],
 );
 

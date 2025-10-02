@@ -29,7 +29,18 @@ export const articles = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (table) => [index("last_seen_in_feed_at_idx").on(table.lastSeenInFeedAt)],
+  (table) => [
+    index("last_seen_in_feed_at_idx").on(table.lastSeenInFeedAt),
+    index("articles_source_published_idx").on(
+      table.sourceId,
+      table.publishedAt,
+    ),
+    index("articles_updated_at_idx").on(table.updatedAt),
+    index("articles_source_last_seen_idx").on(
+      table.sourceId,
+      table.lastSeenInFeedAt,
+    ),
+  ],
 );
 
 export type Article = typeof articles.$inferSelect;
