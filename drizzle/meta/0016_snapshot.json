@@ -1,6 +1,6 @@
 {
-  "id": "bc11aeda-ce98-4741-b5f7-b855567f9639",
-  "prevId": "51bd595d-73a9-40c5-a7e9-7d1516f83c8e",
+  "id": "ed9901b7-aabf-477c-8d34-a81c14ecb763",
+  "prevId": "bc11aeda-ce98-4741-b5f7-b855567f9639",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -74,6 +74,63 @@
         "last_seen_in_feed_at_idx": {
           "name": "last_seen_in_feed_at_idx",
           "columns": [
+            {
+              "expression": "last_seen_in_feed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "articles_source_published_idx": {
+          "name": "articles_source_published_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "articles_updated_at_idx": {
+          "name": "articles_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "articles_source_last_seen_idx": {
+          "name": "articles_source_last_seen_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "last_seen_in_feed_at",
               "isExpression": false,
@@ -371,6 +428,57 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "sources_url_idx": {
+          "name": "sources_url_idx",
+          "columns": [
+            {
+              "expression": "url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sources_last_success_idx": {
+          "name": "sources_last_success_idx",
+          "columns": [
+            {
+              "expression": "last_success",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sources_attempt_failures_idx": {
+          "name": "sources_attempt_failures_idx",
+          "columns": [
+            {
+              "expression": "last_attempt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recent_failures",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -409,7 +517,80 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_articles_user_id_idx": {
+          "name": "user_articles_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_articles_article_id_idx": {
+          "name": "user_articles_article_id_idx",
+          "columns": [
+            {
+              "expression": "article_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_articles_user_read_idx": {
+          "name": "user_articles_user_read_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_articles_user_article_idx": {
+          "name": "user_articles_user_article_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "article_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "user_articles_article_id_articles_id_fk": {
           "name": "user_articles_article_id_articles_id_fk",
@@ -489,7 +670,23 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_folders_user_id_idx": {
+          "name": "user_folders_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "user_folders_user_id_users_id_fk": {
           "name": "user_folders_user_id_users_id_fk",
@@ -598,7 +795,110 @@
           "default": "'1970-01-01 00:00:00'::timestamp"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_sources_user_id_idx": {
+          "name": "user_sources_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_sources_source_id_idx": {
+          "name": "user_sources_source_id_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_sources_user_source_idx": {
+          "name": "user_sources_user_source_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_sources_parent_id_idx": {
+          "name": "user_sources_parent_id_idx",
+          "columns": [
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_sources_created_at_idx": {
+          "name": "user_sources_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_sources_user_created_idx": {
+          "name": "user_sources_user_created_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "user_sources_parent_id_user_folders_id_fk": {
           "name": "user_sources_parent_id_user_folders_id_fk",
