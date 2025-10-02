@@ -1,5 +1,5 @@
-import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 import { createRequestHandler } from "$lib/create-request-handler";
+import { json, type RequestEvent, type RequestHandler } from "@sveltejs/kit";
 import { deleteArticlesHandler } from "./handler.ts";
 import { DeleteArticles } from "./validator.ts";
 

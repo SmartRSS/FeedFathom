@@ -1,5 +1,3 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { CommandBus } from "$lib/commands/command-bus";
 import {
   type CommandRegistryDependencies,
@@ -8,6 +6,8 @@ import {
 import type { FeedParser } from "$lib/feed-parser";
 import type { MailWorker } from "$lib/workers/mail";
 import type { MainWorker } from "$lib/workers/main";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "../../config.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import { llog, logError } from "../../util/log.ts";

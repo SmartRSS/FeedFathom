@@ -1,5 +1,5 @@
-import type { RequestHandler } from "@sveltejs/kit";
 import feedPngUrl from "$lib/images/feed.png";
+import type { RequestHandler } from "@sveltejs/kit";
 import { logError } from "../../../util/log.ts";
 
 function sniffContentType(bytes: Uint8Array): string {
