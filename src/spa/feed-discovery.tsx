@@ -12,6 +12,15 @@ import {
 } from "../contracts/responses";
 import back from "../lib/images/icons/Arrows/arrow-left-fill.svg";
 
+const schemePattern = /^[a-z][a-z0-9+.-]*:\/\//iu;
+
+function withScheme(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || schemePattern.test(trimmed) || trimmed.includes("@"))
+    return trimmed;
+  return `https://${trimmed}`;
+}
+
 export function FeedDiscovery(props: {
   backPane(): void;
   close(): void;
@@ -75,7 +84,7 @@ export function FeedDiscovery(props: {
   function websiteIsValid() {
     if (!websiteInput) return false;
     try {
-      const protocol = new URL(link()).protocol;
+      const protocol = new URL(withScheme(link())).protocol;
       websiteInput.setCustomValidity(
         protocol === "http:" || protocol === "https:"
           ? ""
@@ -94,7 +103,7 @@ export function FeedDiscovery(props: {
     setProgress("Finding feeds…");
     try {
       const found = await api(
-        `/find?link=${encodeURIComponent(link())}`,
+        `/find?link=${encodeURIComponent(withScheme(link()))}`,
         foundFeedsResponse,
       );
       if (request !== latestRequest) return;
@@ -119,7 +128,7 @@ export function FeedDiscovery(props: {
     setTitle("");
     try {
       const result = await api(
-        `/preview?feedUrl=${encodeURIComponent(url)}`,
+        `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
       );
       if (request !== latestRequest) return;
@@ -167,7 +176,7 @@ export function FeedDiscovery(props: {
         body: JSON.stringify({
           sourceFolder: folderId() ? Number(folderId()) : null,
           sourceName: title(),
-          sourceUrl: feedUrl(),
+          sourceUrl: withScheme(feedUrl()),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",

@@ -1,4 +1,5 @@
 import { Elysia, NotFound, ValidationError } from "elysia";
+import { DecodeError } from "typebox/value";
 import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
@@ -71,6 +72,9 @@ export async function createServerApp(
       }
       if (error instanceof NotFound || error instanceof ValidationError) {
         return undefined;
+      }
+      if (error instanceof DecodeError) {
+        return Response.json({ error: "Invalid request." }, { status: 400 });
       }
       console.error(`Unhandled error on ${path}:`, error);
       return Response.json({ error: "Internal Server Error" }, { status: 500 });
