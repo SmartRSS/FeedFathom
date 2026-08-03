@@ -97,13 +97,15 @@ export function FeedDiscovery(props: {
   }
 
   async function findFeeds() {
+    const normalizedLink = withScheme(link());
+    if (normalizedLink !== link()) setLink(normalizedLink);
     if (!websiteIsValid()) return;
     const request = ++latestRequest;
     setLoading(true);
     setProgress("Finding feeds…");
     try {
       const found = await api(
-        `/find?link=${encodeURIComponent(withScheme(link()))}`,
+        `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
       );
       if (request !== latestRequest) return;
