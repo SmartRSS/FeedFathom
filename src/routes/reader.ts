@@ -24,7 +24,6 @@ import { extractArticle } from "../lib/extract-article.ts";
 import { safeArticleUrl } from "../lib/feed-mapper.ts";
 import type { FeedParser } from "../lib/feed-parser.ts";
 import {
-  deserializeFeedPreview,
   type FeedPreviewCache,
   serializeFeedPreview,
 } from "../lib/feed-preview-cache.ts";
@@ -46,10 +45,7 @@ function decodedSubscriptionTarget(
 export type ReaderRouteDependencies = {
   articlesDataService: Pick<
     ArticlesDataService,
-    | "batchUpsertArticles"
-    | "getUserArticle"
-    | "getUserArticlesForSources"
-    | "removeUserArticles"
+    "getUserArticle" | "getUserArticlesForSources" | "removeUserArticles"
   >;
   usersDataService: Pick<UsersDataService, "getUserBySid">;
   feedParser: Pick<FeedParser, "preview">;
@@ -62,10 +58,7 @@ export type ReaderRouteDependencies = {
     get(url: string): Promise<{ data: string }>;
   };
   mailEnabled: boolean;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "enqueueSource" | "getFavicon" | "successSource"
-  >;
+  sourcesDataService: Pick<SourcesDataService, "enqueueSource" | "getFavicon">;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     | "addSourceToUser"
@@ -316,54 +309,18 @@ export const createReaderRoutes = ({
             409,
           );
 
-        const preview =
-          subscription.initializationSnapshot === null
-            ? undefined
-            : subscription.initializationSnapshot === undefined
-              ? cachedPreview
-              : deserializeFeedPreview(
-                  subscription.initializationSnapshot,
-                  sourceUrl.value,
-                );
-        if (subscription.initializationSnapshot && !preview) {
-          if (subscriptionId !== undefined && claimed !== true)
-            await userSourcesDataService.releaseSubscriptionInitialization?.(
-              subscriptionId,
-              claimed,
-            );
-          throw new Error("Stored subscription snapshot is invalid");
-        }
-
         try {
-          if (preview) {
-            try {
-              await articlesDataService.batchUpsertArticles(
-                preview.articles.map((article) => ({
-                  author: article.author,
-                  content: article.content,
-                  guid: article.guid,
-                  lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  publishedAt: article.publishedAt,
-                  sourceId: subscription.source.id,
-                  title: article.title,
-                  updatedAt:
-                    article.updatedAt === undefined
-                      ? article.publishedAt
-                      : article.updatedAt,
-                  url: article.url,
-                })),
-              );
-              await sourcesDataService.successSource(
-                subscription.source.id,
-                true,
-                new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
-              );
-            } catch {
-              await sourcesDataService.enqueueSource(subscription.source);
-            }
-          } else {
-            await sourcesDataService.enqueueSource(subscription.source);
-          }
+          // Always hand off to the worker, even when a cached preview is
+          // available: ingesting it inline here would mean doing synchronous
+          // article upserts + unread-count recomputation in the
+          // request/response cycle, and it previously skipped the recompute
+          // entirely, leaving newly subscribed sources stuck at "0 unread"
+          // until their next scheduled poll. The worker's `parseSource`
+          // already does upsert + recompute + successSource correctly (see
+          // feed-parser.ts), so route both the cache-hit and cache-miss
+          // cases through the same `enqueueSource` path and let it run
+          // off-request.
+          await sourcesDataService.enqueueSource(subscription.source);
           if (subscriptionId !== undefined && claimed !== true) {
             const completed =
               await userSourcesDataService.completeSubscriptionInitialization?.(

@@ -47,9 +47,6 @@ function createDependencies(): ServerDependencies {
 
   return {
     articlesDataService: {
-      async batchUpsertArticles() {
-        return unexpected("articlesDataService.batchUpsertArticles");
-      },
       async getUserArticle() {
         return undefined;
       },
@@ -127,7 +124,6 @@ function createDependencies(): ServerDependencies {
       async listAllSources() {
         return [];
       },
-      async successSource() {},
       async updateSourceUrl() {},
     },
     usersDataService: {
@@ -500,18 +496,12 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(await invalid.json()).toEqual({ error: "Invalid feed url" });
 });
 
-test("persists a cached preview without reparsing or trusting browser articles", async () => {
+test("queues cache-hit subscriptions instead of ingesting inline", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const subscriptionCreatedAt = new Date("2026-07-20T12:00:00.000Z");
   const additions: Parameters<
     ServerDependencies["userSourcesDataService"]["addSourceToUser"]
-  >[] = [];
-  const upserts: Parameters<
-    ServerDependencies["articlesDataService"]["batchUpsertArticles"]
-  >[0][] = [];
-  const successes: Parameters<
-    ServerDependencies["sourcesDataService"]["successSource"]
   >[] = [];
   const enqueues: Parameters<
     ServerDependencies["sourcesDataService"]["enqueueSource"]
@@ -528,12 +518,6 @@ test("persists a cached preview without reparsing or trusting browser articles",
   ) => {
     additions.push(parameters);
     return { source: subscriptionSource, subscriptionCreatedAt };
-  };
-  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
-    upserts.push(articles);
-  };
-  dependencies.sourcesDataService.successSource = async (...parameters) => {
-    successes.push(parameters);
   };
   dependencies.sourcesDataService.enqueueSource = async (source) => {
     enqueues.push(source);
@@ -563,28 +547,7 @@ test("persists a cached preview without reparsing or trusting browser articles",
       false,
     ],
   ]);
-  expect(upserts).toHaveLength(1);
-  const upsertedArticle = upserts[0]?.[0];
-  const cachedArticle = cachedPreview.articles[0];
-  if (
-    !upsertedArticle?.lastSeenInFeedAt ||
-    !upsertedArticle.updatedAt ||
-    !cachedArticle
-  )
-    throw new Error("Cached article was not persisted");
-  expect(upsertedArticle).toMatchObject({
-    author: "Cached author",
-    content: "Cached content",
-    guid: "cached-guid",
-    sourceId: 91,
-    title: "Cached article",
-  });
-  expect(upsertedArticle.lastSeenInFeedAt).toEqual(subscriptionCreatedAt);
-  expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
-  expect(successes).toHaveLength(1);
-  expect(successes[0]?.slice(0, 2)).toEqual([91, true]);
-  expect(successes[0]?.[2]).toBeInstanceOf(Date);
-  expect(enqueues).toEqual([]);
+  expect(enqueues).toEqual([subscriptionSource]);
 });
 
 test("queues URL cache misses and email subscriptions", async () => {
@@ -638,36 +601,6 @@ test("queues URL cache misses and email subscriptions", async () => {
     [91, subscriptionSource.url],
     [92, "newsletter@example.com"],
   ]);
-});
-
-test("queues a cached subscription when synchronous persistence fails", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  const enqueues: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
-  >[0][] = [];
-
-  dependencies.feedPreviewCache.get = async () => cachedPreview;
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
-    source: subscriptionSource,
-    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
-  });
-  dependencies.articlesDataService.batchUpsertArticles = async () => {
-    throw new Error("Database unavailable");
-  };
-  dependencies.sourcesDataService.enqueueSource = async (source) => {
-    enqueues.push(source);
-  };
-  const app = await appFor(dependencies);
-
-  const response = await subscribe(app, {
-    sourceFolder: null,
-    sourceName: "URL feed",
-    sourceUrl: subscriptionSource.url,
-  });
-
-  expect(await response.json()).toEqual({ sourceId: 91 });
-  expect(enqueues).toEqual([subscriptionSource]);
 });
 
 test("protects nonempty folders and deletes empty owned folders", async () => {
