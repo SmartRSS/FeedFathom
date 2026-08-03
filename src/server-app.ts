@@ -74,6 +74,7 @@ export async function createServerApp(
         return undefined;
       }
       if (error instanceof DecodeError) {
+        console.error(`Decode error on ${path}:`, error);
         return Response.json({ error: "Invalid request." }, { status: 400 });
       }
       console.error(`Unhandled error on ${path}:`, error);
