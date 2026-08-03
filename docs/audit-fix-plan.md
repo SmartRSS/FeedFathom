@@ -41,7 +41,11 @@ apply their (verified) feedback → repeat until both come back clean → move o
       connection after every queue operation, and logout switched to
       `open()+clear()` on the object store (doesn't need exclusive access
       the way `deleteDatabase` does). sw-v4.js -> sw-v5.js.
-- [ ] `removeUserArticles` has no ownership check on article IDs
+- [x] `removeUserArticles` has no ownership check on article IDs — fixed and
+      deployed. Inner-joins against `userSources` (same pattern as
+      `getUserArticle`), returns only the authorized subset; verified live
+      against the dev DB that a user cannot soft-delete another user's
+      articles.
 - [ ] Job failures for everything except `ParseSource` vanish with no durable record
 - [ ] `cleanup()`'s empty-subquery mass-delete risk on `sources`
 - [ ] Literal NUL byte in `article-data-service.ts`'s dedupe key

@@ -190,15 +190,16 @@ export const createReaderRoutes = ({
       "/api/articles",
       { body: removeArticlesRequest },
       async ({ body, user }) => {
-        const affectedSourceIds = await articlesDataService.removeUserArticles(
-          body.removedArticleIdList,
-          user.id,
-        );
+        const { articleIds, sourceIds } =
+          await articlesDataService.removeUserArticles(
+            body.removedArticleIdList,
+            user.id,
+          );
         await userSourcesDataService.recomputeUnreadCountsForUser(
           user.id,
-          affectedSourceIds,
+          sourceIds,
         );
-        return json(body.removedArticleIdList);
+        return json(articleIds);
       },
     )
     .get("/api/folders", async ({ user }) =>
