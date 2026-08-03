@@ -34,7 +34,13 @@ apply their (verified) feedback → repeat until both come back clean → move o
       does `new Date(retryAt).toISOString()` eagerly. Not reachable today
       (the one caller that could pass NaN validates first), but worth a
       guard if a future call site skips that validation.
-- [ ] Cross-account leak: offline mutation IndexedDB queue not cleared on logout
+- [x] Cross-account leak: offline mutation IndexedDB queue not cleared on logout —
+      fixed and deployed (2 review rounds). Round 1's `deleteDatabase()` call
+      silently no-op'd (`onblocked` treated as success) since the SW never
+      closed its own IndexedDB connections. Round 2: SW now closes its
+      connection after every queue operation, and logout switched to
+      `open()+clear()` on the object store (doesn't need exclusive access
+      the way `deleteDatabase` does). sw-v4.js -> sw-v5.js.
 - [ ] `removeUserArticles` has no ownership check on article IDs
 - [ ] Job failures for everything except `ParseSource` vanish with no durable record
 - [ ] `cleanup()`'s empty-subquery mass-delete risk on `sources`

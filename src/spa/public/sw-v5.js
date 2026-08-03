@@ -1,7 +1,7 @@
 // File name, CACHE_VERSION, and the register() call in main.tsx must all bump
 // together on changes: renaming makes any CDN-cached copy of the old file
 // irrelevant instead of relying on cache headers alone.
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 const SHELL_REQUEST_INIT = {
@@ -92,40 +92,58 @@ function openQueueDb() {
   });
 }
 
+// Every call opens then immediately closes its connection once the
+// transaction settles, rather than holding it open: an app-side logout
+// clears this same database (see options-admin.tsx), and a lingering SW
+// connection would block that deletion indefinitely (IndexedDB requires
+// every connection closed before a database can actually be deleted).
+
 async function queueAdd(entry) {
   const db = await openQueueDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(QUEUE_STORE, "readwrite");
-    tx.objectStore(QUEUE_STORE).add(entry);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(QUEUE_STORE, "readwrite");
+      tx.objectStore(QUEUE_STORE).add(entry);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function queueAll() {
   const db = await openQueueDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(QUEUE_STORE, "readonly");
-    const cursorRequest = tx.objectStore(QUEUE_STORE).openCursor();
-    const entries = [];
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result;
-      if (!cursor) return resolve(entries);
-      entries.push({ key: cursor.key, value: cursor.value });
-      cursor.continue();
-    };
-    cursorRequest.onerror = () => reject(cursorRequest.error);
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(QUEUE_STORE, "readonly");
+      const cursorRequest = tx.objectStore(QUEUE_STORE).openCursor();
+      const entries = [];
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor) return resolve(entries);
+        entries.push({ key: cursor.key, value: cursor.value });
+        cursor.continue();
+      };
+      cursorRequest.onerror = () => reject(cursorRequest.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function queueDelete(key) {
   const db = await openQueueDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(QUEUE_STORE, "readwrite");
-    tx.objectStore(QUEUE_STORE).delete(key);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(QUEUE_STORE, "readwrite");
+      tx.objectStore(QUEUE_STORE).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function flushQueue() {

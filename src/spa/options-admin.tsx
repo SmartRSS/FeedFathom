@@ -56,6 +56,39 @@ export function Options(props: {
             .map((key) => caches.delete(key)),
         );
       }
+      if ("indexedDB" in window) {
+        try {
+          // Clearing the object store (rather than deleteDatabase) works
+          // even while the service worker holds its own open connection to
+          // this same database -- deleteDatabase requires every connection
+          // closed first and would otherwise block indefinitely if the SW
+          // is mid-flushQueue().
+          await new Promise<void>((resolve, reject) => {
+            const openRequest = window.indexedDB.open("mutation-queue", 1);
+            openRequest.onupgradeneeded = () => {
+              openRequest.result.createObjectStore("mutations", {
+                autoIncrement: true,
+              });
+            };
+            openRequest.onsuccess = () => {
+              const db = openRequest.result;
+              const tx = db.transaction("mutations", "readwrite");
+              tx.objectStore("mutations").clear();
+              tx.oncomplete = () => {
+                db.close();
+                resolve();
+              };
+              tx.onerror = () => {
+                db.close();
+                reject(tx.error);
+              };
+            };
+            openRequest.onerror = () => reject(openRequest.error);
+          });
+        } catch {
+          // Ignore: a queue clear failure must not block logout.
+        }
+      }
       props.navigate("/login");
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;

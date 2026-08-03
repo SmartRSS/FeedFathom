@@ -146,7 +146,7 @@ function Router(props: {
 }
 
 if ("serviceWorker" in navigator) {
-  void navigator.serviceWorker.register("/sw-v4.js");
+  void navigator.serviceWorker.register("/sw-v5.js");
 }
 
 render(() => <App />, document.querySelector("#app")!);
