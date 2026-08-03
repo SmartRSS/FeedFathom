@@ -239,7 +239,10 @@ export class FeedParser {
         mapFeedToPreview(parsedFeed, sourceUrl, rewriteLinks),
         { freshUntil },
       );
-    } catch {
+    } catch (error_: unknown) {
+      if (error_ instanceof HttpDeferredError) {
+        throw error_;
+      }
       return undefined;
     }
   }

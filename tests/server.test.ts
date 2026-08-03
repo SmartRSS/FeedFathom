@@ -4,6 +4,7 @@ import { Value } from "typebox/value";
 import { createServerApp, type ServerDependencies } from "../src/server-app.ts";
 import { sessionResponse } from "../src/contracts/responses.ts";
 import { serializeFeedPreview } from "../src/lib/feed-preview-cache.ts";
+import { HttpDeferredError } from "../src/lib/http-client.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../src/spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
@@ -501,6 +502,39 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toEqual({ error: "Invalid feed url" });
+});
+
+test("preview and find return a dynamic Retry-After when the host is throttled", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedParser.preview = async () => {
+    throw new HttpDeferredError(Date.now() + 2_500);
+  };
+  dependencies.httpClient.get = async () => {
+    throw new HttpDeferredError(Date.now() + 5 * 60_000);
+  };
+  const app = await appFor(dependencies);
+
+  const preview = await app.handle(
+    new Request(
+      "http://localhost/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+  const find = await app.handle(
+    new Request("http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+
+  expect(preview.status).toBe(429);
+  expect(preview.headers.get("Retry-After")).toBe("3");
+  expect((await preview.json()).error).toContain("3s");
+
+  expect(find.status).toBe(429);
+  const findRetryAfter = Number(find.headers.get("Retry-After"));
+  expect(findRetryAfter).toBeGreaterThan(290);
+  expect(findRetryAfter).toBeLessThanOrEqual(300);
 });
 
 test("persists a cached preview inline and recomputes unread counts, without reparsing or trusting browser articles", async () => {

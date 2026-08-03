@@ -18,9 +18,22 @@ apply their (verified) feedback → repeat until both come back clean → move o
 
 ## Status
 
-- [x] Reverse tabnabbing (`target=_blank` without `rel=noopener`) — fixed once
-      already, lost in the recovery incident, redoing now.
-- [ ] Bound `HttpClient`'s interactive wait for `/api/preview` and `/api/find`
+- [x] Reverse tabnabbing (`target=_blank` without `rel=noopener`) — fixed and
+      deployed. Took 3 review rounds: initial fix missed email content and
+      only allowlisted `rel` as a name (not value); round 2's conditional
+      fix was bypassable via `target="_BLANK"`/whitespace; final fix forces
+      `rel="noopener noreferrer"` unconditionally on every `<a>`.
+- [x] Bound `HttpClient`'s interactive wait for `/api/preview` and `/api/find` —
+      fixed and deployed (3 review rounds). `interactiveWaitMs` 11s -> 2.5s;
+      `HttpDeferredError` now surfaces a real `Retry-After`/message computed
+      from `retryAt` instead of a static "few seconds" (which was wrong by
+      up to 2 orders of magnitude for genuine upstream rate-limit blocks),
+      clamped to 1h. Known pre-existing, currently-unreachable landmine not
+      fixed (out of scope): `new HttpDeferredError(NaN)` throws a raw
+      `RangeError` instead of constructing cleanly, because the constructor
+      does `new Date(retryAt).toISOString()` eagerly. Not reachable today
+      (the one caller that could pass NaN validates first), but worth a
+      guard if a future call site skips that validation.
 - [ ] Cross-account leak: offline mutation IndexedDB queue not cleared on logout
 - [ ] `removeUserArticles` has no ownership check on article IDs
 - [ ] Job failures for everything except `ParseSource` vanish with no durable record

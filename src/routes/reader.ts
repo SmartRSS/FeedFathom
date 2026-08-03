@@ -23,6 +23,7 @@ import type { UsersDataService } from "../db/data-services/user-data-service.ts"
 import { extractArticle } from "../lib/extract-article.ts";
 import { safeArticleUrl } from "../lib/feed-mapper.ts";
 import type { FeedParser } from "../lib/feed-parser.ts";
+import { HttpDeferredError } from "../lib/http-client.ts";
 import {
   deserializeFeedPreview,
   type FeedPreviewCache,
@@ -30,6 +31,23 @@ import {
 } from "../lib/feed-preview-cache.ts";
 import { scanHtml } from "../lib/scanner.ts";
 import { json, userFor } from "./shared.ts";
+
+function deferredResponse(error: HttpDeferredError) {
+  // Clamped to an hour: retryAt can come from an upstream Retry-After
+  // header with no sanity check of its own, so an unbounded/malicious
+  // value shouldn't be echoed straight back to the client.
+  const retryAfterSeconds = Math.min(
+    Math.max(1, Math.ceil((error.retryAt - Date.now()) / 1000)),
+    3_600,
+  );
+  return json(
+    {
+      error: `This feed's server was just checked — try again in ${retryAfterSeconds}s.`,
+    },
+    429,
+    { "Retry-After": retryAfterSeconds.toString() },
+  );
+}
 
 // Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
 // string -> {kind,value} transform) in some environments but not others, so
@@ -225,7 +243,13 @@ export const createReaderRoutes = ({
     )
     .get("/api/preview", { query: previewQuery }, async ({ query, user }) => {
       const decoded = Value.Decode(previewQuery, query);
-      const source = await feedParser.preview(decoded.feedUrl);
+      let source;
+      try {
+        source = await feedParser.preview(decoded.feedUrl);
+      } catch (error_: unknown) {
+        if (error_ instanceof HttpDeferredError) return deferredResponse(error_);
+        throw error_;
+      }
       if (!source) return json({ error: "Invalid feed url" }, 400);
       await feedPreviewCache.save(user.id, decoded.feedUrl, source);
       return json({
@@ -252,7 +276,8 @@ export const createReaderRoutes = ({
         return feeds.length
           ? json(feeds)
           : json({ error: "Invalid feed url" }, 400);
-      } catch {
+      } catch (error_: unknown) {
+        if (error_ instanceof HttpDeferredError) return deferredResponse(error_);
         return json({ error: "Invalid feed url" }, 400);
       }
     })
