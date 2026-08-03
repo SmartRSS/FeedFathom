@@ -1,5 +1,5 @@
 import { articles } from "./schemas/articles";
-import { jobQueue } from "./schemas/jobQueue";
+import { opmlImports } from "./schemas/opmlImports";
 import { sessions } from "./schemas/sessions";
 import { sources } from "./schemas/sources";
 import { userArticles } from "./schemas/userArticles";
@@ -10,6 +10,7 @@ import { users } from "./schemas/users";
 
 export {
   users,
+  opmlImports,
   sources,
   userFolders,
   userSources,
@@ -17,5 +18,4 @@ export {
   articles,
   userArticles,
   sessions,
-  jobQueue,
 };

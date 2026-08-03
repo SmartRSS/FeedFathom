@@ -1,42 +1,28 @@
-import type { ParsedMail } from "mailparser";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
+import { dateType } from "./typebox-policy.ts";
 
-export class EmailProcessor {
-  /**
-   * Extracts email addresses from the recipient list
-   * @param email The parsed email object
-   * @returns Array of recipient email addresses
-   */
-  public extractRecipientAddresses(email: ParsedMail): string[] {
-    const recipients = Array.isArray(email.to) ? email.to : [email.to];
-    const recipientMails: string[] = [];
+const externalProjection = { additionalProperties: true } as const;
+const parsedMailProjection = Type.Object(
+  {
+    date: Type.Optional(Type.Union([dateType, Type.Undefined()])),
+    html: Type.Union([Type.String(), Type.Literal(false)]),
+    subject: Type.Optional(Type.Union([Type.String(), Type.Undefined()])),
+    textAsHtml: Type.Optional(Type.Union([Type.String(), Type.Undefined()])),
+  },
+  externalProjection,
+);
+const parsedMailProjectionCheck = Schema.Compile(parsedMailProjection);
 
-    for (const addressObject of recipients) {
-      if (Array.isArray(addressObject?.value)) {
-        for (const value of addressObject.value) {
-          if (value.address) {
-            recipientMails.push(value.address);
-          }
-        }
-      }
-    }
-
-    return recipientMails;
+export function validateParsedMail(value: unknown) {
+  if (!parsedMailProjectionCheck.Check(value)) {
+    throw new Error("Mail parser returned an invalid message projection");
   }
-
-  /**
-   * Gets the content of the email, preferring HTML content
-   * @param email The parsed email object
-   * @returns The email content as HTML string
-   */
-  public getEmailContent(email: ParsedMail): string {
-    if (typeof email.html === "string") {
-      return email.html;
-    }
-
-    if (typeof email.textAsHtml === "string") {
-      return email.textAsHtml;
-    }
-
-    return "No content.";
-  }
+  return value;
 }
+
+export const getEmailContent = (email: unknown): string => {
+  const parsed = validateParsedMail(email);
+  if (typeof parsed.html === "string") return parsed.html;
+  return parsed.textAsHtml ?? "No content.";
+};

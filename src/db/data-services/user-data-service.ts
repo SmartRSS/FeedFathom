@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type * as schema from "../schema.ts";
 import { sessions } from "../schemas/sessions";
 import { users } from "../schemas/users";
 
 export class UsersDataService {
-  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(
+    private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
+  ) {}
 
   public async createSession(userId: number, userAgent?: null | string) {
     const uuid = crypto.randomUUID();
@@ -17,6 +20,10 @@ export class UsersDataService {
     return uuid;
   }
 
+  public async deleteSession(sid: string) {
+    await this.drizzleConnection.delete(sessions).where(eq(sessions.sid, sid));
+  }
+
   public async createUser(payload: {
     email: string;
     name: string;
@@ -25,19 +32,29 @@ export class UsersDataService {
     activationToken?: string;
     activationTokenExpiresAt?: Date;
   }) {
-    return (
-      await this.drizzleConnection
-        .insert(users)
-        .values({
-          email: payload.email,
-          name: payload.name,
-          password: payload.passwordHash,
-          status: payload.status,
-          activationToken: payload.activationToken,
-          activationTokenExpiresAt: payload.activationTokenExpiresAt,
-        })
-        .returning()
-    ).at(0);
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`lock table ${users} in share row exclusive mode`,
+      );
+      const existingUser = (
+        await transaction.select({ id: users.id }).from(users).limit(1)
+      ).at(0);
+
+      return (
+        await transaction
+          .insert(users)
+          .values({
+            email: payload.email,
+            name: payload.name,
+            password: payload.passwordHash,
+            status: payload.status,
+            activationToken: payload.activationToken,
+            activationTokenExpiresAt: payload.activationTokenExpiresAt,
+            isAdmin: !existingUser,
+          })
+          .returning()
+      ).at(0);
+    });
   }
 
   public async findUser(email: string) {
@@ -97,14 +114,6 @@ export class UsersDataService {
       .from(users);
 
     return Number(result[0]?.count ?? 0);
-  }
-
-  public async makeAdmin(email: string) {
-    return await this.drizzleConnection
-      .update(users)
-      .set({ isAdmin: true })
-      .where(eq(users.email, email))
-      .execute();
   }
 
   public async updatePassword(userId: number, passwordHash: string) {

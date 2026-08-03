@@ -1,18 +1,32 @@
-import { and, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "../../types/opml-types";
-import { logError } from "../../util/log";
+import type * as schema from "../schema.ts";
 import { articles } from "../schemas/articles";
-import { sources } from "../schemas/sources";
-import { userArticles } from "../schemas/userArticles";
+import { opmlImports } from "../schemas/opmlImports";
+import { type Source, sources } from "../schemas/sources";
+import { userFolders } from "../schemas/userFolders";
 import { userSources } from "../schemas/userSources";
-import { users } from "../schemas/users";
 import type { FoldersDataService } from "./folder-data-service";
 import type { SourcesDataService } from "./source-data-service";
 
+type SubscriptionResult = {
+  created?: boolean;
+  initialized?: boolean;
+  initializationSnapshot?: null | string;
+  source: Source;
+  subscriptionCreatedAt: Date;
+  subscriptionId?: number;
+};
+
+type PendingImportNode = {
+  node: OpmlNode;
+  parentId: null | number;
+};
+
 export class UserSourcesDataService {
   constructor(
-    private readonly drizzleConnection: BunSQLDatabase,
+    private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
     private readonly foldersDataService: FoldersDataService,
     private readonly sourcesDataService: SourcesDataService,
   ) {}
@@ -21,11 +35,13 @@ export class UserSourcesDataService {
     userId: number,
     sourcePayload: {
       homeUrl: string;
+      initializationSnapshot?: null | string;
       name: string;
       parentId: null | number;
       url: string;
     },
-  ) {
+    enqueue = true,
+  ): Promise<SubscriptionResult | undefined> {
     if (sourcePayload.parentId) {
       const folders = await this.foldersDataService.getUserFolders(userId);
       if (
@@ -33,8 +49,8 @@ export class UserSourcesDataService {
           return folder.id === sourcePayload.parentId;
         })
       ) {
-        logError("no folder", folders[0]);
-        return;
+        console.error("no folder", folders[0]);
+        return undefined;
       }
     }
 
@@ -49,10 +65,12 @@ export class UserSourcesDataService {
       throw new Error("Source not found or created");
     }
 
-    const userSource = (
+    const inserted = (
       await this.drizzleConnection
         .insert(userSources)
         .values({
+          initializedAt: null,
+          initializationSnapshot: sourcePayload.initializationSnapshot ?? null,
           name: sourcePayload.name,
           parentId: sourcePayload.parentId,
           sourceId: source.id,
@@ -64,10 +82,108 @@ export class UserSourcesDataService {
         })
         .returning()
     ).at(0);
+    const userSource =
+      inserted ??
+      (
+        await this.drizzleConnection
+          .select()
+          .from(userSources)
+          .where(
+            and(
+              eq(userSources.sourceId, source.id),
+              eq(userSources.userId, userId),
+            ),
+          )
+          .limit(1)
+      ).at(0);
 
-    if (!userSource) {
-      throw new Error("no user source");
+    if (!userSource)
+      throw new Error("Subscription conflict resolved without a row");
+
+    const created = inserted !== undefined;
+    let initialized = userSource.initializedAt !== null;
+    if (enqueue && !initialized) {
+      const claim = await this.claimSubscriptionInitialization(userSource.id);
+      if (claim) {
+        try {
+          await this.sourcesDataService.enqueueSource(source);
+          initialized = await this.completeSubscriptionInitialization(
+            userSource.id,
+            claim,
+          );
+        } catch (error) {
+          await this.releaseSubscriptionInitialization(userSource.id, claim);
+          throw error;
+        }
+      }
     }
+    return {
+      created,
+      initialized,
+      initializationSnapshot: userSource.initializationSnapshot,
+      source,
+      subscriptionCreatedAt: userSource.createdAt,
+      subscriptionId: userSource.id,
+    };
+  }
+
+  public async claimSubscriptionInitialization(subscriptionId: number) {
+    const owner = Bun.randomUUIDv7();
+    return (
+      await this.drizzleConnection
+        .update(userSources)
+        .set({ initializationOwner: owner, initializingAt: sql`NOW()` })
+        .where(
+          and(
+            eq(userSources.id, subscriptionId),
+            isNull(userSources.initializedAt),
+            or(
+              isNull(userSources.initializingAt),
+              lt(userSources.initializingAt, sql`NOW() - INTERVAL '5 minutes'`),
+            ),
+          ),
+        )
+        .returning({ initializationOwner: userSources.initializationOwner })
+    ).at(0)?.initializationOwner;
+  }
+
+  public async completeSubscriptionInitialization(
+    subscriptionId: number,
+    owner: string,
+  ) {
+    const completed = await this.drizzleConnection
+      .update(userSources)
+      .set({
+        initializedAt: sql`NOW()`,
+        initializationOwner: null,
+        initializationSnapshot: null,
+        initializingAt: null,
+      })
+      .where(
+        and(
+          eq(userSources.id, subscriptionId),
+          eq(userSources.initializationOwner, owner),
+          isNull(userSources.initializedAt),
+        ),
+      )
+      .returning({ id: userSources.id });
+    return completed.length > 0;
+  }
+
+  public async releaseSubscriptionInitialization(
+    subscriptionId: number,
+    owner: string,
+  ) {
+    await this.drizzleConnection
+      .update(userSources)
+      .set({ initializationOwner: null, initializingAt: null })
+      .where(
+        and(
+          eq(userSources.id, subscriptionId),
+          eq(userSources.initializationOwner, owner),
+          isNull(userSources.initializedAt),
+        ),
+      );
   }
 
   public async removeSourceFromUser(userId: number, sourceId: number) {
@@ -81,94 +197,186 @@ export class UserSourcesDataService {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
-        favicon: sources.favicon,
         homeUrl: sources.homeUrl,
         id: sources.id,
         name: userSources.name,
         parentId: userSources.parentId,
-        unreadArticlesCount: sql<number>`(
-          coalesce(count(articles.id), 0) -
-          coalesce(count(CASE
-            WHEN user_articles.deleted_at IS NOT NULL
-            OR user_articles.read_at >= articles.updated_at
-            THEN 1
-          END), 0)
-        )::int`,
+        unreadArticlesCount: userSources.unreadCount,
         url: sources.url,
       })
       .from(userSources)
       .where(eq(userSources.userId, userId))
       .leftJoin(sources, eq(sources.id, userSources.sourceId))
-      .leftJoin(users, eq(users.id, userId))
-      .leftJoin(
-        articles,
-        and(
-          eq(articles.sourceId, sources.id),
-          gt(articles.lastSeenInFeedAt, userSources.createdAt),
-        ),
-      )
-      .leftJoin(
-        userArticles,
-        and(
-          eq(userArticles.userId, userId),
-          eq(userArticles.articleId, articles.id),
-        ),
-      )
-      .groupBy(
-        sources.id,
-        userSources.name,
-        userSources.parentId,
-        sources.favicon,
-        sources.url,
-        sources.homeUrl,
-        users.createdAt,
-      )
       .orderBy(userSources.name);
   }
 
-  public async insertTree(userId: number, tree: OpmlNode[], parentId?: number) {
-    for (const node of tree) {
-      if (node.type === "folder") {
-        const folder = await this.foldersDataService.createFolder(
-          userId,
-          node.name,
-        );
-        if ("children" in node && node.children) {
-          await this.insertTree(userId, node.children, folder.id);
-        }
-      }
+  /**
+   * Recomputes and stores unreadCount for every subscriber of the given
+   * sources. Call after articles change (new/updated) for those sources.
+   */
+  public async recomputeUnreadCounts(sourceIds: number[]) {
+    if (sourceIds.length === 0) return;
+    await this.drizzleConnection.execute(sql`
+      UPDATE user_sources us
+      SET unread_count = counts.unread
+      FROM (
+        SELECT us2.id,
+          (
+            coalesce(count(a.id), 0) -
+            coalesce(count(CASE
+              WHEN ua.deleted_at IS NOT NULL
+              OR (
+                ua.read_at IS NOT NULL
+                AND (a.updated_at IS NULL OR ua.read_at >= a.updated_at)
+              )
+              THEN 1
+            END), 0)
+          )::int AS unread
+        FROM user_sources us2
+        LEFT JOIN articles a
+          ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
+        LEFT JOIN user_articles ua
+          ON ua.user_id = us2.user_id AND ua.article_id = a.id
+        WHERE us2.source_id IN ${sourceIds}
+        GROUP BY us2.id
+      ) counts
+      WHERE us.id = counts.id
+    `);
+  }
 
-      if (node.type === "source") {
-        await this.addSourceToUser(userId, {
-          homeUrl: node.homeUrl,
-          name: node.name,
-          parentId: parentId ?? null,
-          url: node.xmlUrl,
-        });
-      }
-    }
+  /**
+   * Recomputes and stores unreadCount for one user's subscriptions to the
+   * given sources. Call after a user's own read/delete state changes.
+   */
+  public async recomputeUnreadCountsForUser(
+    userId: number,
+    sourceIds: number[],
+  ) {
+    if (sourceIds.length === 0) return;
+    await this.drizzleConnection.execute(sql`
+      UPDATE user_sources us
+      SET unread_count = counts.unread
+      FROM (
+        SELECT us2.id,
+          (
+            coalesce(count(a.id), 0) -
+            coalesce(count(CASE
+              WHEN ua.deleted_at IS NOT NULL
+              OR (
+                ua.read_at IS NOT NULL
+                AND (a.updated_at IS NULL OR ua.read_at >= a.updated_at)
+              )
+              THEN 1
+            END), 0)
+          )::int AS unread
+        FROM user_sources us2
+        LEFT JOIN articles a
+          ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
+        LEFT JOIN user_articles ua
+          ON ua.user_id = us2.user_id AND ua.article_id = a.id
+        WHERE us2.user_id = ${userId} AND us2.source_id IN ${sourceIds}
+        GROUP BY us2.id
+      ) counts
+      WHERE us.id = counts.id
+    `);
+  }
+
+  public async insertTree(
+    userId: number,
+    tree: OpmlNode[],
+    contentHash?: string,
+  ) {
+    if (!contentHash || !/^[a-f\d]{64}$/.test(contentHash))
+      throw new Error("Valid OPML content hash is required");
+    const sourcesToQueue = await this.drizzleConnection.transaction(
+      async (transaction) => {
+        await transaction.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`feedfathom:opml:${userId}`}, 0))`,
+        );
+        const imported = (
+          await transaction
+            .insert(opmlImports)
+            .values({ contentHash, userId })
+            .onConflictDoNothing()
+            .returning({ contentHash: opmlImports.contentHash })
+        ).at(0);
+        if (!imported) return [];
+
+        const pending: PendingImportNode[] = tree
+          .toReversed()
+          .map((node) => ({ node, parentId: null }));
+        const queued = new Map<number, Source>();
+        /* eslint-disable no-await-in-loop -- Import order determines folder membership. */
+        while (pending.length) {
+          const current = pending.pop();
+          if (!current) break;
+
+          if (current.node.type === "folder") {
+            const folder = (
+              await transaction
+                .insert(userFolders)
+                .values({ name: current.node.name, userId })
+                .returning({ id: userFolders.id })
+            ).at(0);
+            if (!folder) throw new Error("Failed to create OPML folder");
+            for (const child of current.node.children.toReversed())
+              pending.push({ node: child, parentId: folder.id });
+            continue;
+          }
+
+          const insertedSource = (
+            await transaction
+              .insert(sources)
+              .values({
+                homeUrl: current.node.homeUrl,
+                url: current.node.xmlUrl,
+              })
+              .onConflictDoNothing({ target: sources.url })
+              .returning()
+          ).at(0);
+          const source =
+            insertedSource ??
+            (
+              await transaction
+                .select()
+                .from(sources)
+                .where(eq(sources.url, current.node.xmlUrl))
+                .limit(1)
+            ).at(0);
+          if (!source) throw new Error("Failed to resolve OPML source");
+
+          const subscription = (
+            await transaction
+              .insert(userSources)
+              .values({
+                createdAt: new Date(),
+                initializedAt: sql`NOW()`,
+                name: current.node.name,
+                parentId: current.parentId,
+                sourceId: source.id,
+                userId,
+              })
+              .onConflictDoNothing({
+                target: [userSources.sourceId, userSources.userId],
+              })
+              .returning({ id: userSources.id })
+          ).at(0);
+          if (subscription) queued.set(source.id, source);
+        }
+        /* eslint-enable no-await-in-loop */
+        return [...queued.values()];
+      },
+    );
+
+    await Promise.all(
+      sourcesToQueue.map((source) =>
+        this.sourcesDataService.enqueueSource(source),
+      ),
+    );
   }
 
   public async cleanup() {
     try {
-      // Step 1: Clean up orphaned userArticles that belong to a user not subscribing their source anymore
-      const subscribedSourceIds = this.drizzleConnection
-        .select({ sourceId: userSources.sourceId })
-        .from(userSources);
-
-      // Query to find all articles whose sourceIds are not in the subscribed sourceIds
-      const orphanedArticleIds = this.drizzleConnection
-        .select({ id: articles.id })
-        .from(articles)
-        .where(notInArray(articles.sourceId, subscribedSourceIds));
-
-      // Delete userArticles where articleId is in the orphaned articles list
-      await this.drizzleConnection
-        .delete(userArticles)
-        .where(inArray(userArticles.articleId, orphanedArticleIds))
-        .execute();
-
-      // Step 2: Clean up orphaned sources that nobody subscribes to anymore
       await this.drizzleConnection
         .delete(sources)
         .where(
@@ -180,17 +388,6 @@ export class UserSourcesDataService {
           ),
         );
 
-      // Step 3: Clean up orphaned articles that have no source now
-      await this.drizzleConnection
-        .delete(articles)
-        .where(
-          notInArray(
-            articles.sourceId,
-            this.drizzleConnection.select({ id: sources.id }).from(sources),
-          ),
-        );
-
-      // Step 4: Clean up articles that no user will ever see (lastSeenInFeedAt before earliest subscription)
       const articlesBeforeSubscription = this.drizzleConnection
         .select({ id: articles.id })
         .from(articles)
@@ -217,18 +414,8 @@ export class UserSourcesDataService {
       await this.drizzleConnection
         .delete(articles)
         .where(inArray(articles.id, articlesBeforeSubscription));
-
-      // Step 5: Clean up orphaned userArticles without corresponding articles
-      await this.drizzleConnection
-        .delete(userArticles)
-        .where(
-          notInArray(
-            userArticles.articleId,
-            this.drizzleConnection.select({ id: articles.id }).from(articles),
-          ),
-        );
     } catch (error) {
-      logError("cleanup", error);
+      console.error("cleanup", error);
     }
   }
 }

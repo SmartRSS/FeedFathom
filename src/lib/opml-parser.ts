@@ -1,126 +1,125 @@
-import { type } from "arktype";
-import { XMLParser } from "fast-xml-parser";
-import type { OpmlFolder, OpmlSource } from "../types/opml-types.ts";
-import { logError } from "../util/log.ts";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import type { OpmlFolder, OpmlNode, OpmlSource } from "../types/opml-types.ts";
 
-const outlineItem = type({
-  "@_": {
-    "title?": "string",
-    "text?": "string",
-    "type?": "string",
-    "xmlUrl?": "string",
-    "htmlUrl?": "string",
-    "[string]": "string",
-  },
-  "[string]": "unknown",
-});
+const maximumDepth = 32;
+const maximumNodes = 10_000;
+const sourceTypes = new Set(["atom", "jsonfeed", "rdf", "rss"]);
 
-const outlineFolder = type({
-  "@_": {
-    "title?": "string",
-    "text?": "string",
-  },
-  "outline?": outlineItem.array(),
-});
-const outline = outlineItem.or(outlineFolder);
+type RecordValue = Record<string, unknown>;
+type RawOutline = {
+  attributes: RecordValue;
+  children: unknown[];
+};
+type PendingOutline = {
+  depth: number;
+  target: OpmlNode[];
+  value: unknown;
+};
 
-const outlineSchema = type({
-  "@_": {
-    "title?": "string",
-    "text?": "string",
-    "type?": "string",
-    "xmlUrl?": "string",
-    "htmlUrl?": "string",
-    "[string]": "string",
-  },
-  "[string]": "unknown",
-  "outline?": outline.array(),
-});
+const isRecord = (value: unknown): value is RecordValue =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-type Outline = typeof outlineSchema.infer;
+const stringAttribute = (attributes: RecordValue, name: string): string => {
+  const value = attributes[name];
+  return typeof value === "string" ? value : "";
+};
 
-const opmlSchema = type({
-  opml: {
-    body: {
-      outline: outlineSchema.array(),
-    },
-  },
-});
+const rawOutline = (value: unknown): RawOutline => {
+  if (!isRecord(value) || !isRecord(value["@_"]))
+    throw new Error("Invalid OPML outline");
+  const children = value["outline"];
+  if (children !== undefined && !Array.isArray(children))
+    throw new Error("Invalid OPML outline children");
+  return { attributes: value["@_"], children: children ?? [] };
+};
+
+const webUrl = (value: string): URL | undefined => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 export class OpmlParser {
-  parseOpml(opml: string): Array<OpmlFolder | OpmlSource> {
+  parseOpml(opml: string): OpmlNode[] {
+    if (XMLValidator.validate(opml) !== true)
+      throw new Error("Invalid OPML XML");
     const parser = new XMLParser({
       allowBooleanAttributes: true,
       alwaysCreateTextNode: true,
       attributeNamePrefix: "",
       attributesGroupName: "@_",
       ignoreAttributes: false,
-      isArray: (name) => {
-        return name === "outline";
-      },
+      isArray: (name) => name === "outline",
     });
-    try {
-      const object = parser.parse(opml) as unknown;
-      if (typeof object !== "object" || object === null) {
-        return [];
-      }
-
-      const result = opmlSchema(object);
-      if (result instanceof type.errors) {
-        return [];
-      }
-
-      const mainOutline = result.opml.body.outline;
-
-      return mainOutline.map((outline: Outline) => {
-        return this.processOutline(outline);
-      });
-    } catch (error) {
-      logError("Error while parsing OPML:", error);
-      throw error;
-    }
+    const parsed: unknown = parser.parse(opml);
+    if (!isRecord(parsed) || !isRecord(parsed["opml"]))
+      throw new Error("Invalid OPML document");
+    const body = parsed["opml"]["body"];
+    if (!isRecord(body)) throw new Error("Invalid OPML body");
+    const outlines = body["outline"];
+    if (outlines === undefined) return [];
+    if (!Array.isArray(outlines)) throw new Error("Invalid OPML outlines");
+    return this.processOutlines(outlines);
   }
 
-  processOutline(outline: Outline): OpmlFolder | OpmlSource {
-    const title = outline["@_"]["title"] ?? outline["@_"]["text"] ?? "Unknown";
-    const type = outline["@_"]["type"] ?? "";
-    const xmlUrl = outline["@_"]["xmlUrl"] ?? "";
-    const homeUrl = outline["@_"]["htmlUrl"] ?? "";
+  processOutline(outline: unknown): OpmlFolder | OpmlSource {
+    const [result] = this.processOutlines([outline]);
+    if (!result) throw new Error("Invalid OPML outline");
+    return result;
+  }
 
-    if (["atom", "jsonfeed", "rdf", "rss"].includes(type) || xmlUrl) {
-      return {
-        homeUrl: (() => {
-          if (homeUrl) {
-            return homeUrl;
-          }
+  private processOutlines(outlines: unknown[]): OpmlNode[] {
+    const result: OpmlNode[] = [];
+    const pending: PendingOutline[] = outlines
+      .toReversed()
+      .map((value) => ({ depth: 1, target: result, value }));
+    let nodes = 0;
 
-          if (URL.canParse(xmlUrl)) {
-            return new URL(xmlUrl).origin;
-          }
+    while (pending.length) {
+      const current = pending.pop();
+      if (!current) break;
+      nodes++;
+      if (nodes > maximumNodes) throw new Error("OPML contains too many nodes");
+      if (current.depth > maximumDepth)
+        throw new Error("OPML nesting is too deep");
 
-          return "";
-        })(),
-        name: title,
-        type: "source",
-        xmlUrl,
-      };
-    }
+      const outline = rawOutline(current.value);
+      const title =
+        stringAttribute(outline.attributes, "title") ||
+        stringAttribute(outline.attributes, "text") ||
+        "Unknown";
+      const type = stringAttribute(outline.attributes, "type").toLowerCase();
+      const xmlUrl = stringAttribute(outline.attributes, "xmlUrl");
 
-    let children: Array<OpmlFolder | OpmlSource> = [];
-    if (outline.outline) {
-      if (Array.isArray(outline.outline)) {
-        children = outline.outline.map((child: Outline) => {
-          return this.processOutline(child);
+      if (sourceTypes.has(type) || xmlUrl) {
+        const parsedXmlUrl = webUrl(xmlUrl);
+        if (!parsedXmlUrl) throw new Error(`Invalid OPML feed URL: ${xmlUrl}`);
+        const homeUrl = stringAttribute(outline.attributes, "htmlUrl");
+        const parsedHomeUrl = webUrl(homeUrl);
+        current.target.push({
+          homeUrl: parsedHomeUrl ? homeUrl : parsedXmlUrl.origin,
+          name: title,
+          type: "source",
+          xmlUrl,
         });
-      } else {
-        children = [this.processOutline(outline.outline)];
+        continue;
       }
+
+      const folder: OpmlFolder = { children: [], name: title, type: "folder" };
+      current.target.push(folder);
+      for (const child of outline.children.toReversed())
+        pending.push({
+          depth: current.depth + 1,
+          target: folder.children,
+          value: child,
+        });
     }
 
-    return {
-      children,
-      name: title,
-      type: "folder",
-    };
+    return result;
   }
 }

@@ -1,5 +1,20 @@
-import type { Feed } from "@rowanmanning/feed-parser/lib/feed/base";
-import type { FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
+type FeedMapperItem = {
+  authors: readonly { name: string | null }[];
+  content: string | null;
+  description: string | null;
+  id: string | null;
+  published: Date | null;
+  title: string | null;
+  updated: Date | null;
+  url: string | null;
+};
+
+type FeedMapperInput = {
+  description: string | null;
+  items: readonly FeedMapperItem[];
+  title: string | null;
+  url: string | null;
+};
 
 export type ArticlePayload = {
   author: string;
@@ -8,15 +23,27 @@ export type ArticlePayload = {
   publishedAt: Date;
   sourceId: number;
   title: string;
-  updatedAt: Date;
+  updatedAt: Date | null;
+  url: string;
+};
+
+type FeedPreviewArticle = {
+  author: string;
+  content: string;
+  guid: string;
+  publishedAt: Date;
+  title: string;
+  updatedAt?: Date | null;
   url: string;
 };
 
 export type FeedPreview = {
+  articles: FeedPreviewArticle[];
   description: string | undefined;
   feedUrl: string;
+  freshUntil?: number | null;
   link: string | undefined;
-  title: string | undefined;
+  title: string;
 };
 
 export type Source = {
@@ -25,8 +52,8 @@ export type Source = {
 };
 
 const generateArticleGuid = (
-  item: FeedItem,
-  parsedFeed: Feed,
+  item: FeedMapperItem,
+  parsedFeed: FeedMapperInput,
   sourceUrl: string,
 ): string => {
   if (item.id) {
@@ -50,11 +77,30 @@ const generateArticleGuid = (
   return Bun.hash(hashInput).toString(36);
 };
 
+const safeHttpUrl = (value: string, baseUrl: string): string => {
+  if (!value) return "";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    try {
+      url = new URL(value, baseUrl);
+    } catch {
+      return "";
+    }
+  }
+  return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+};
+
+export const safeArticleUrl = (value: string, baseUrl: string): string =>
+  value.startsWith("/article/") ? value : safeHttpUrl(value, baseUrl);
+
 export const mapFeedItemToArticle = (
-  item: FeedItem,
-  parsedFeed: Feed,
+  item: FeedMapperItem,
+  parsedFeed: FeedMapperInput,
   source: Source,
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
+  now = Date.now(),
 ): ArticlePayload => {
   return {
     author:
@@ -64,22 +110,46 @@ export const mapFeedItemToArticle = (
       item.url ?? "",
     ),
     guid: generateArticleGuid(item, parsedFeed, source.url),
-    publishedAt: new Date(item.published ?? Date.now()),
+    publishedAt: new Date(item.published ?? now),
     sourceId: source.id,
     title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-    updatedAt: new Date(item.updated ?? item.published ?? Date.now()),
-    url: item.url ?? "",
+    updatedAt:
+      item.updated || item.published
+        ? new Date(item.updated ?? item.published ?? now)
+        : null,
+    url: safeHttpUrl(item.url ?? "", parsedFeed.url ?? source.url),
   };
 };
 
 export const mapFeedToPreview = (
-  parsedFeed: Feed,
+  parsedFeed: FeedMapperInput,
   sourceUrl: string,
+  rewriteLinksFunction: (content: string, baseUrl: string) => string,
+  now = Date.now(),
 ): FeedPreview => {
+  const source = { id: 0, url: sourceUrl };
   return {
+    articles: parsedFeed.items.map((item) => {
+      const article = mapFeedItemToArticle(
+        item,
+        parsedFeed,
+        source,
+        rewriteLinksFunction,
+        now,
+      );
+      return {
+        author: article.author,
+        content: article.content,
+        guid: article.guid,
+        publishedAt: article.publishedAt,
+        title: article.title,
+        updatedAt: article.updatedAt,
+        url: safeHttpUrl(article.url, parsedFeed.url ?? sourceUrl),
+      };
+    }),
     description: parsedFeed.description ?? undefined,
     feedUrl: sourceUrl,
-    link: parsedFeed.url ?? undefined,
-    title: parsedFeed.title ?? undefined,
+    link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
+    title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
   };
 };

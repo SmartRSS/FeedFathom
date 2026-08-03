@@ -1,174 +1,246 @@
-import { type } from "arktype";
-import type { CommandBus } from "$lib/commands/command-bus";
-import {
-  CommandType,
-  type ParseSourceCommand,
-  type SourceCommandResult,
-} from "$lib/commands/types";
-import type { FeedParser } from "$lib/feed-parser";
-import type { JobHandler, PostgresQueue } from "$lib/postgres-queue";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
+import { DelayedError } from "bullmq";
 import type { AppConfig } from "../../config.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { JobName } from "../../types/job-name-enum.ts";
-import { llog, logError } from "../../util/log.ts";
+import type { FeedParser } from "../feed-parser.ts";
+import { HttpDeferredError } from "../http-client.ts";
+import { webUrlPolicy } from "../typebox-policy.ts";
 
-const parseSourcePayloadValidator = type({
-  id: "number",
-  skipCache: "boolean?",
-  url: "string?",
-  "+": "reject",
-});
+const emptyJobData = Type.Object({}, { additionalProperties: false });
+const sourceUrl = Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]);
+const mainWorkerJobData = Type.Union([
+  Type.Object({
+    data: emptyJobData,
+    name: Type.Literal(JobName.Cleanup),
+  }),
+  Type.Object({
+    data: emptyJobData,
+    name: Type.Literal(JobName.GatherFaviconJobs),
+  }),
+  Type.Object({
+    data: emptyJobData,
+    name: Type.Literal(JobName.GatherJobs),
+  }),
+  Type.Object({
+    data: Type.Object({
+      id: Type.Integer({ minimum: 1 }),
+      skipCache: Type.Optional(Type.Boolean()),
+      url: Type.Optional(sourceUrl),
+    }),
+    name: Type.Literal(JobName.ParseSource),
+  }),
+  Type.Object({
+    data: Type.Object({
+      homeUrl: sourceUrl,
+      id: Type.Integer({ minimum: 1 }),
+    }),
+    name: Type.Literal(JobName.RefreshFavicon),
+  }),
+]);
+const mainWorkerJobCheck = Schema.Compile(mainWorkerJobData);
 
-const refreshFaviconPayloadValidator = type({
-  homeUrl: "string",
-  id: "number",
-  "+": "reject",
-});
+type QueueOptions = {
+  jobId?: string;
+  removeOnComplete?: { count: number };
+  removeOnFail?: { count: number };
+  repeat?: { every: number };
+};
+
+type QueueJob = {
+  data: unknown;
+  name: string;
+  opts?: QueueOptions;
+};
+
+export type MainWorkerQueue = {
+  add(name: string, data: unknown, options?: QueueOptions): Promise<unknown>;
+  addBulk(jobs: QueueJob[]): Promise<unknown>;
+};
+
+export type MainWorkerJob = {
+  data: unknown;
+  moveToDelayed(timestamp: number, token?: string): Promise<unknown>;
+  name: string;
+  token?: string;
+};
+
+type WorkerControls = {
+  close(): Promise<unknown>;
+  onFailed(
+    listener: (job: { id?: string } | undefined, error: unknown) => void,
+  ): void;
+};
+
+export type MainWorkerFactory = (
+  processor: (job: MainWorkerJob) => Promise<void>,
+  options: { concurrency: number; lockDuration: number },
+) => WorkerControls;
+
+type MainWorkerConfig = Pick<
+  AppConfig,
+  | "CLEANUP_INTERVAL"
+  | "GATHER_JOBS_INTERVAL"
+  | "LOCK_DURATION"
+  | "WORKER_CONCURRENCY"
+>;
+
+type MainWorkerSources = Pick<
+  SourcesDataService,
+  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
+>;
 
 export class MainWorker {
+  private worker: WorkerControls | undefined;
+
   constructor(
-    private readonly appConfig: AppConfig,
-    private readonly feedParser: FeedParser,
-    private readonly sourcesDataService: SourcesDataService,
-    private readonly userSourcesDataService: UserSourcesDataService,
-    private readonly commandBus: CommandBus,
-    private readonly postgresQueue: PostgresQueue,
+    private readonly appConfig: MainWorkerConfig,
+    private readonly bullmqQueue: MainWorkerQueue,
+    private readonly feedParser: Pick<
+      FeedParser,
+      "parseSource" | "refreshFavicon"
+    >,
+    private readonly sourcesDataService: MainWorkerSources,
+    private readonly userSourcesDataService: Pick<
+      UserSourcesDataService,
+      "cleanup"
+    >,
+    private readonly createWorker: MainWorkerFactory,
   ) {}
 
   async initialize() {
-    this.setSignalHandlers();
     await this.setupScheduledTasks();
+    await this.bullmqQueue.addBulk(await this.gatherParseSourceJobs());
     this.startWorker();
+  }
+
+  async cleanup() {
+    await this.worker?.close();
   }
 
   private async gatherParseSourceJobs() {
     const sources = await this.sourcesDataService.getSourcesToProcess();
 
-    for (const source of sources) {
-      const jobId = `${JobName.ParseSource}:${source.id}`;
-      await this.postgresQueue.addJobToQueue({
-        generalId: jobId,
-        name: JobName.ParseSource,
-        payload: source,
-      });
-    }
+    return sources.map((source) => ({
+      data: source,
+      name: JobName.ParseSource,
+      opts: {
+        jobId: `${JobName.ParseSource}-${source.id}`,
+        removeOnComplete: { count: 0 },
+        removeOnFail: { count: 0 },
+      },
+    }));
   }
 
-  private handleJobError(error: unknown) {
-    logError("Error processing job:", error);
-  }
-
-  private readonly processJob: JobHandler = async (jobData) => {
-    const jobName = jobData.name;
-    const data = jobData.payload;
-
+  private readonly processJob = async (job: MainWorkerJob) => {
     try {
-      switch (jobName) {
+      const input = { data: job.data, name: job.name };
+      if (!mainWorkerJobCheck.Check(input)) {
+        throw new Error(`Invalid job payload for type: ${job.name}`);
+      }
+
+      switch (input.name) {
         case JobName.Cleanup: {
           await this.userSourcesDataService.cleanup();
           break;
         }
 
         case JobName.GatherFaviconJobs: {
-          const successfullSources =
+          const successfulSources =
             await this.sourcesDataService.getRecentlySuccessfulSources();
 
-          for (const source of successfullSources) {
-            const jobId = `${JobName.RefreshFavicon}:${source.homeUrl}`;
-            await this.postgresQueue.addJobToQueue({
-              generalId: jobId,
-              name: JobName.RefreshFavicon,
-              payload: source,
-            });
-          }
+          await Promise.all(
+            successfulSources.map((source) => {
+              const jobId = `${JobName.RefreshFavicon}-${source.id}`;
+              return this.bullmqQueue.add(JobName.RefreshFavicon, source, {
+                jobId,
+                removeOnComplete: { count: 0 },
+                removeOnFail: { count: 0 },
+              });
+            }),
+          );
 
           break;
         }
 
         case JobName.GatherJobs: {
-          await this.gatherParseSourceJobs();
+          await this.bullmqQueue.addBulk(await this.gatherParseSourceJobs());
           break;
         }
 
         case JobName.ParseSource: {
-          const validatedPayload = parseSourcePayloadValidator(data);
-          if (validatedPayload instanceof type.errors) {
-            throw new Error(
-              `Invalid ParseSource payload: ${JSON.stringify(validatedPayload)}`,
-            );
+          const source = await this.sourcesDataService.findSourceById(
+            input.data.id,
+          );
+          if (!source) {
+            throw new Error(`Source with ID ${input.data.id} not found`);
           }
-          // Use the command bus instead of directly calling the feed parser
-          await this.commandBus.execute<
-            ParseSourceCommand,
-            SourceCommandResult
-          >({
-            sourceId: validatedPayload.id.toString(),
-            timestamp: Date.now(),
-            type: CommandType.ParseSource,
+          await this.feedParser.parseSource({
+            ...source,
+            ...(input.data.skipCache === undefined
+              ? {}
+              : { skipCache: input.data.skipCache }),
           });
           break;
         }
 
         case JobName.RefreshFavicon: {
-          const validatedPayload = refreshFaviconPayloadValidator(data);
-          if (validatedPayload instanceof type.errors) {
-            throw new Error(
-              `Invalid RefreshFavicon payload: ${JSON.stringify(validatedPayload)}`,
-            );
-          }
-          await this.feedParser.refreshFavicon(validatedPayload);
+          await this.feedParser.refreshFavicon(input.data);
           break;
         }
-
-        default:
-          throw new Error(`Unknown job type: ${jobName}`);
       }
     } catch (error: unknown) {
-      this.handleJobError(error);
-      // intentionally, no need to put the failed job back on the queue as it will be scheduled to be performed again in due time
+      if (error instanceof HttpDeferredError) {
+        await job.moveToDelayed(error.retryAt, job.token);
+        throw new DelayedError();
+      }
+      console.error("Error processing job:", error);
     }
   };
 
-  private setSignalHandlers() {
-    process.on("SIGTERM", () => {
-      (() => {
-        this.postgresQueue.stopProcessing();
-        llog("Worker closed gracefully");
-      })();
-    });
-  }
-
   private async setupScheduledTasks() {
-    await this.postgresQueue.scheduleJob({
-      generalId: JobName.Cleanup,
-      name: JobName.Cleanup,
-      every: this.appConfig["CLEANUP_INTERVAL"],
-      payload: {},
-    });
+    await this.bullmqQueue.add(
+      JobName.Cleanup,
+      {},
+      {
+        jobId: JobName.Cleanup,
+        repeat: { every: this.appConfig.CLEANUP_INTERVAL * 1_000 },
+      },
+    );
 
-    await this.postgresQueue.scheduleJob({
-      generalId: JobName.GatherJobs,
-      name: JobName.GatherJobs,
-      every: this.appConfig["GATHER_JOBS_INTERVAL"],
-      payload: {},
-    });
+    await this.bullmqQueue.add(
+      JobName.GatherJobs,
+      {},
+      {
+        jobId: JobName.GatherJobs,
+        repeat: { every: this.appConfig.GATHER_JOBS_INTERVAL * 1_000 },
+      },
+    );
 
-    await this.postgresQueue.scheduleJob({
-      generalId: JobName.GatherFaviconJobs,
-      name: JobName.GatherFaviconJobs,
-      every: 24 * 60 * 60, // 24 hours in seconds
-      payload: {},
-    });
+    await this.bullmqQueue.add(
+      JobName.GatherFaviconJobs,
+      {},
+      {
+        jobId: JobName.GatherFaviconJobs,
+        repeat: { every: 86_400_000 },
+      },
+    );
   }
 
   private startWorker() {
-    const workerConcurrency = this.appConfig["WORKER_CONCURRENCY"];
-    llog(`Setting up worker with concurrency: ${workerConcurrency}`);
+    const workerConcurrency = this.appConfig.WORKER_CONCURRENCY;
+    console.log(`Setting up worker with concurrency: ${workerConcurrency}`);
 
-    // Create a worker pool with the specified concurrency
-    this.postgresQueue.startProcessing(this.processJob, workerConcurrency);
+    this.worker = this.createWorker(this.processJob, {
+      concurrency: workerConcurrency,
+      lockDuration: this.appConfig.LOCK_DURATION * 1_000,
+    });
+    this.worker.onFailed((job, error) => {
+      console.error(`Worker job failed: ${job?.id ?? "unknown"}`, error);
+    });
 
-    llog("Worker pool setup complete");
+    console.log("Worker pool setup complete");
   }
 }

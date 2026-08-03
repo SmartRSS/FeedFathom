@@ -1,0 +1,144 @@
+name: feedfathom-smoke
+
+services:
+  redis:
+    image: redis
+    restart: always
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: "redis-cli ping | grep PONG || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_storage:/data
+    networks:
+      - feedfathom
+
+  postgres:
+    image: pgautoupgrade/pgautoupgrade:17-bookworm
+    restart: always
+    command: ["-c", "max_connections=1000"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    healthcheck:
+      test: 'pg_isready --username=${POSTGRES_USER:-postgres} && psql --username=${POSTGRES_USER:-postgres} -c "SELECT * FROM postgres.pg_catalog.pg_database;"'
+      interval: 1s
+      timeout: 1s
+      retries: 25
+      start_period: 1s
+    volumes:
+      - postgres_storage_17:/var/lib/postgresql/data
+    networks:
+      - feedfathom
+
+  migrator:
+    init: true
+    image: ghcr.io/smartrss/feedfathom/feedfathom-migrator:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to a full immutable commit SHA}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: feedfathom-migrator
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - feedfathom
+
+  server:
+    init: true
+    image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to a full immutable commit SHA}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: feedfathom-server
+    restart: always
+    ports:
+      - "127.0.0.1:${FEEDFATHOM_SMOKE_PORT:-3456}:3000"
+    environment:
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-}
+      MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-local-smoke-relay-secret}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/bun",
+          "-e",
+          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 2
+      start_period: 5s
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    tmpfs:
+      - /tmp
+    networks:
+      - feedfathom
+
+  worker:
+    init: true
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to a full immutable commit SHA}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: feedfathom-worker
+    restart: always
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
+      DEBUG: bull:*
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
+      LOCK_DURATION: ${LOCK_DURATION:-60}
+      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
+      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/bun",
+          "-e",
+          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 2
+      start_period: 5s
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    tmpfs:
+      - /tmp
+    networks:
+      - feedfathom
+
+volumes:
+  redis_storage:
+    driver: local
+  postgres_storage_17:
+    driver: local
+
+networks:
+  feedfathom:
+    driver: bridge

@@ -1,9 +1,25 @@
-import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { type Static, Type } from "typebox";
+import Schema from "typebox/schema";
+import { eq, gt, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { PostgresQueue } from "$lib/postgres-queue";
+import { sourceSortSchema } from "../../contracts/requests.ts";
+import { dateType } from "../../lib/typebox-policy.ts";
 import { JobName } from "../../types/job-name-enum.ts";
-import { logError } from "../../util/log.ts";
+import type * as schema from "../schema.ts";
 import { type Source, sources } from "../schemas/sources.ts";
+
+type SourceQueue = {
+  add(
+    name: JobName,
+    data: { id: number; skipCache: boolean; url: string },
+    options: {
+      jobId: string;
+      lifo: boolean;
+      removeOnComplete: { count: number };
+      removeOnFail: { count: number };
+    },
+  ): Promise<unknown>;
+};
 
 // Define a type for the select statement in listAllSources
 export interface SourceWithSubscriberCount {
@@ -18,33 +34,111 @@ export interface SourceWithSubscriberCount {
   recentFailureDetails: string;
 }
 
+const exact = { additionalProperties: false } as const;
+type SourceSort = Static<typeof sourceSortSchema>;
+const sourceOrderSchema = Type.Union([
+  Type.Literal("asc"),
+  Type.Literal("desc"),
+]);
+const sourceSortCheck = Schema.Compile(sourceSortSchema);
+const sourceOrderCheck = Schema.Compile(sourceOrderSchema);
+const sourceSortSql = {
+  createdAt: "s.created_at",
+  lastAttempt: "s.last_attempt",
+  lastSuccess: "s.last_success",
+  recentFailures: "s.recent_failures",
+  subscriberCount: '"subscriberCount"',
+  url: "s.url",
+} as const;
+const sourceOrderSql = { asc: "ASC", desc: "DESC" } as const;
+const sourceListRowsSchema = Type.Array(
+  Type.Object(
+    {
+      createdAt: dateType,
+      homeUrl: Type.String(),
+      id: Type.Integer(),
+      lastAttempt: Type.Union([dateType, Type.Null()]),
+      lastSuccess: Type.Union([dateType, Type.Null()]),
+      recentFailureDetails: Type.String(),
+      recentFailures: Type.Integer(),
+      subscriberCount: Type.Integer({ minimum: 0 }),
+      url: Type.String(),
+    },
+    exact,
+  ),
+);
+const sourceListRowsCheck = Schema.Compile(sourceListRowsSchema);
+const sourcesToProcessRowsSchema = Type.Array(
+  Type.Object({ id: Type.Integer(), url: Type.String() }, exact),
+);
+const sourcesToProcessRowsCheck = Schema.Compile(sourcesToProcessRowsSchema);
+
+export function parseSourceListRows(
+  value: unknown,
+): SourceWithSubscriberCount[] {
+  if (!sourceListRowsCheck.Check(value)) {
+    throw new Error("Database returned invalid source list rows");
+  }
+  return value;
+}
+
+export function resolveSourceListOrder(sortBy: string, order: string) {
+  const validSortBy = sourceSortCheck.Check(sortBy) ? sortBy : "createdAt";
+  const validOrder = sourceOrderCheck.Check(order) ? order : "asc";
+  return {
+    order: sourceOrderSql[validOrder],
+    sort: sourceSortSql[validSortBy],
+  };
+}
+
+const isUniqueViolation = (error: unknown, depth = 0): boolean => {
+  if (typeof error !== "object" || error === null || depth > 3) return false;
+  const code = "code" in error ? error.code : undefined;
+  const errno = "errno" in error ? error.errno : undefined;
+  if (code === "23505" || errno === "23505") return true;
+  return "cause" in error && isUniqueViolation(error.cause, depth + 1);
+};
+
+export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
+
 export class SourcesDataService {
   constructor(
-    private readonly drizzleConnection: BunSQLDatabase,
-    private readonly postgresQueue: PostgresQueue,
+    private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
+    private readonly bullmqQueue: SourceQueue,
   ) {}
 
-  public async addSource(payload: { homeUrl: string; url: string }) {
-    const source = (
-      await this.drizzleConnection.insert(sources).values(payload).returning()
+  public async addSource(payload: {
+    homeUrl: string;
+    url: string;
+  }): Promise<Source> {
+    const inserted = (
+      await this.drizzleConnection
+        .insert(sources)
+        .values(payload)
+        .onConflictDoNothing({ target: sources.url })
+        .returning()
     ).at(0);
-    if (!source) {
-      throw new Error("failed");
-    }
+    if (inserted) return inserted;
 
-    await this.postgresQueue.addJobToQueue({
-      generalId: `${JobName.ParseSource}:${source.id}`,
-      name: JobName.ParseSource,
-      payload: {
-        id: source.id,
-        skipCache: true,
-        url: source.url,
-      },
-    });
-    return source;
+    const existing = await this.findSourceByUrl(payload.url);
+    if (!existing) throw new Error("Source conflict resolved without a row");
+    return existing;
   }
 
-  public async findSourceById(sourceId: number) {
+  public async enqueueSource(source: { id: number; url: string }) {
+    await this.bullmqQueue.add(
+      JobName.ParseSource,
+      { id: source.id, skipCache: true, url: source.url },
+      {
+        jobId: `${JobName.ParseSource}-${source.id}`,
+        lifo: true,
+        removeOnComplete: { count: 0 },
+        removeOnFail: { count: 0 },
+      },
+    );
+  }
+
+  public async findSourceById(sourceId: number): Promise<Source | undefined> {
     return (
       await this.drizzleConnection
         .select()
@@ -74,69 +168,43 @@ export class SourcesDataService {
   }
 
   public async getSourcesToProcess() {
-    const noRecentFailures = () => {
-      return eq(sources.recentFailures, 0);
-    };
-
-    const failedRecently = () => {
-      return gt(sources.recentFailures, 0);
-    };
-
-    const failedAttemptTimeout = () => {
-      return sql`${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)`;
-    };
-
-    const lastAttemptTimeout = () => {
-      return lt(sources.lastAttempt, sql`NOW() - INTERVAL '5 minutes'`);
-    };
-
-    const isLastAttemptNull = () => {
-      return isNull(sources.lastAttempt);
-    };
-
-    const isWebSource = () => {
-      return sql`${sources.url} LIKE 'http%'`;
-    };
-
-    const shouldProcessSource = () => {
-      return or(
-        or(
-          and(noRecentFailures(), lastAttemptTimeout()),
-          and(failedRecently(), failedAttemptTimeout()),
-        ),
-        isLastAttemptNull(),
-      );
-    };
-
-    return await this.drizzleConnection
-      .select({
-        id: sources.id,
-        url: sources.url,
-      })
-      .from(sources)
-      .where(and(shouldProcessSource(), isWebSource()))
-      .orderBy(asc(sources.lastAttempt))
-      .limit(
-        sql`(SELECT CEIL(COUNT(*) * 0.1)::int FROM ${sources})::int;` as unknown as number,
-      );
+    const result: unknown = await this.drizzleConnection.execute(sql`
+      WITH "due_sources" AS (
+        SELECT ${sources.id} AS "id", ${sources.url} AS "url", ${sources.lastAttempt} AS "last_attempt"
+        FROM ${sources}
+        WHERE (${sources.nextCheckAt} IS NULL OR ${sources.nextCheckAt} <= NOW())
+          AND (
+            ${sources.lastAttempt} IS NULL
+            OR (
+              ${sources.recentFailures} = 0
+              AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes'
+            )
+            OR (
+              ${sources.recentFailures} > 0
+              AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)
+            )
+          )
+          AND ${sources.url} LIKE 'http%'
+      )
+      SELECT "id", "url"
+      FROM "due_sources"
+      ORDER BY "last_attempt" ASC NULLS FIRST
+      LIMIT GREATEST(
+        1,
+        (SELECT CEIL(COUNT(*) * 0.1)::int FROM "due_sources")
+      )
+    `);
+    if (!sourcesToProcessRowsCheck.Check(result)) {
+      throw new Error("Database returned invalid source processing rows");
+    }
+    return result;
   }
 
   public async listAllSources(
-    sortBy: string,
+    sortBy: SourceSort,
     order: "asc" | "desc",
   ): Promise<SourceWithSubscriberCount[]> {
-    // Validate sortBy and order to prevent SQL injection, TS can't enforce runtime safety without this
-    const validSortBy = [
-      "created_at",
-      "failures",
-      "last_attempt",
-      "last_success",
-      "subscriber_count",
-      "url",
-    ].includes(sortBy)
-      ? sortBy
-      : "created_at";
-    const validOrder = ["asc", "desc"].includes(order) ? order : "asc";
+    const resolved = resolveSourceListOrder(sortBy, order);
 
     const query = `
         WITH subscriber_counts AS (
@@ -158,28 +226,44 @@ export class SourcesDataService {
             s.recent_failure_details as "recentFailureDetails"
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
-        ORDER BY "${validSortBy}" ${validOrder}
+        ORDER BY ${resolved.sort} ${resolved.order}
     `;
 
-    const result = await this.drizzleConnection.execute(sql.raw(query));
-
-    return result as unknown as SourceWithSubscriberCount[];
+    const result: unknown = await this.drizzleConnection.execute(
+      sql.raw(query),
+    );
+    return parseSourceListRows(result);
   }
 
-  public async updateSourceUrl(oldUrl: string, newUrl: string) {
-    await this.drizzleConnection
-      .update(sources)
-      .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })
-      .where(eq(sources.url, oldUrl));
+  public async updateSourceUrl(
+    oldUrl: string,
+    newUrl: string,
+  ): Promise<SourceUrlUpdateResult> {
+    try {
+      const updated = await this.drizzleConnection
+        .update(sources)
+        .set({ recentFailureDetails: "", recentFailures: 0, url: newUrl })
+        .where(eq(sources.url, oldUrl))
+        .returning({ id: sources.id });
+      return updated.length > 0 ? "updated" : "not-found";
+    } catch (error) {
+      if (isUniqueViolation(error)) return "conflict";
+      throw error;
+    }
   }
 
-  public async successSource(sourceId: number, cached = false) {
+  public async successSource(
+    sourceId: number,
+    cached = false,
+    nextCheckAt = new Date(Date.now() + 5 * 60_000),
+  ) {
     const now = new Date();
     await this.drizzleConnection
       .update(sources)
       .set({
         lastAttempt: now,
         lastSuccess: now,
+        nextCheckAt,
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,
       })
@@ -197,39 +281,36 @@ export class SourcesDataService {
         })
         .where(eq(sources.id, sourceId));
     } catch (error) {
-      logError("fail source", error);
+      console.error("fail source", error);
     }
   }
 
-  public async updateFavicon(sourceId: number, favicon: Buffer | string) {
-    let type: string;
-    let encoded: string;
-
-    if (Buffer.isBuffer(favicon)) {
-      type = "png";
-      encoded = favicon.toString("base64");
-    } else {
-      type = "svg+xml";
-      encoded = Buffer.from(favicon, "utf8").toString("base64");
-    }
-
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer,
+    contentType: string,
+  ) {
     await this.drizzleConnection
       .update(sources)
       .set({
-        favicon: `data:image/${type};base64,${encoded}`,
+        favicon: `data:${contentType};base64,${favicon.toString("base64")}`,
       })
       .where(eq(sources.id, sourceId));
+  }
+
+  public async getFavicon(sourceId: number) {
+    const [row] = await this.drizzleConnection
+      .select({ favicon: sources.favicon })
+      .from(sources)
+      .where(eq(sources.id, sourceId))
+      .limit(1);
+    return row?.favicon ?? null;
   }
 
   public async findOrCreateSourceByUrl(
     url: string,
     payload: { homeUrl: string },
   ) {
-    const source = await this.findSourceByUrl(url);
-    if (source) {
-      return source;
-    }
-
     return await this.addSource({
       homeUrl: payload.homeUrl,
       url,

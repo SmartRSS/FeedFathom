@@ -35,17 +35,70 @@ describe("OpmlParser", () => {
         const { input } = await import(
           path.join(process.cwd(), inputDirectory, `${testFile}.ts`)
         );
+        if (testFile.includes("invalid")) {
+          expect(() => parser.processOutline(input)).toThrow(
+            "Invalid OPML feed URL",
+          );
+          return;
+        }
+
         const { expected } = await import(
           path.join(process.cwd(), expectedDirectory, `${testFile}.ts`)
         );
-
-        const result = parser.processOutline(input);
-        expect(result).toEqual(expected);
+        expect(parser.processOutline(input)).toEqual(expected);
       });
     }
   });
 
   describe("parseOpml", () => {
+    test("parses recursively nested outlines with arbitrary XML data", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline text="Root" custom="kept">
+              <description>Folder metadata</description>
+              <outline text="Nested">
+                <outline text="Feed" xmlUrl="https://example.com/feed.xml" customFeed="kept" />
+              </outline>
+            </outline>
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          children: [
+            {
+              children: [
+                {
+                  homeUrl: "https://example.com",
+                  name: "Feed",
+                  type: "source",
+                  xmlUrl: "https://example.com/feed.xml",
+                },
+              ],
+              name: "Nested",
+              type: "folder",
+            },
+          ],
+          name: "Root",
+          type: "folder",
+        },
+      ]);
+    });
+
+    test("returns an empty list without outlines", () => {
+      expect(
+        parser.parseOpml("<opml><body><not-outline /></body></opml>"),
+      ).toEqual([]);
+    });
+
+    test("rejects a non-OPML root", () => {
+      expect(() => parser.parseOpml("<different-root />")).toThrow(
+        "Invalid OPML document",
+      );
+    });
+
     const inputDirectory = path.join(TEST_CASES_DIR, "inputs", "parse-opml");
     const expectedDirectory = path.join(
       TEST_CASES_DIR,

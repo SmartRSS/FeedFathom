@@ -1,14 +1,12 @@
-import { relations } from "drizzle-orm";
 import {
   index,
   integer,
   pgTable,
   serial,
   timestamp,
+  unique,
   varchar,
 } from "drizzle-orm/pg-core";
-import { articles } from "./articles";
-import { userSources } from "./userSources";
 
 export const sources = pgTable(
   "sources",
@@ -19,6 +17,7 @@ export const sources = pgTable(
     id: serial("id").primaryKey(),
     lastAttempt: timestamp("last_attempt"),
     lastSuccess: timestamp("last_success"),
+    nextCheckAt: timestamp("next_check_at"),
     recentFailureDetails: varchar("recent_failure_details")
       .notNull()
       .default(""),
@@ -28,21 +27,13 @@ export const sources = pgTable(
   },
   (table) => [
     index("last_attempt_idx").on(table.lastAttempt),
+    index("next_check_at_idx").on(table.nextCheckAt),
     index("recent_failures_idx").on(table.recentFailures),
+    unique("sources_url_unique").on(table.url),
   ],
 );
 
-export type Source = typeof sources.$inferSelect;
-export type SourceInsert = typeof sources.$inferInsert;
-
-export const sourceArticlesRelation = relations(sources, ({ many }) => {
-  return {
-    articles: many(articles),
-  };
-});
-
-export const sourcesUserSourcesRelation = relations(sources, ({ many }) => {
-  return {
-    userSources: many(userSources),
-  };
-});
+type SourceRow = typeof sources.$inferSelect;
+export type Source = Omit<SourceRow, "nextCheckAt"> & {
+  nextCheckAt?: Date | null;
+};

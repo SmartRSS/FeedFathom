@@ -1,11 +1,20 @@
-import type { RedisClient } from "bun";
-import { logError as error_ } from "../util/log.ts";
+type RedirectRedis = {
+  del(key: string): Promise<number>;
+  get(key: string): Promise<string | null>;
+  keys(pattern: string): Promise<string[]>;
+  set(
+    key: string,
+    value: string,
+    expiration: "PX",
+    milliseconds: number,
+  ): Promise<unknown>;
+};
 
 export class RedirectMap {
   private readonly redisKeyPrefix = "redirect_map:";
   private readonly ttl = 24 * 60 * 60 * 1000; // 24 hours
 
-  constructor(private readonly redis: RedisClient) {}
+  constructor(private readonly redis: RedirectRedis) {}
 
   /**
    * Store a redirect mapping from old URL to new URL
@@ -14,9 +23,9 @@ export class RedirectMap {
     try {
       const key = `${this.redisKeyPrefix}${this.normalizeUrl(oldUrl)}`;
       await this.redis.set(key, newUrl, "PX", this.ttl);
-      error_(`Redirect map: ${oldUrl} -> ${newUrl}`);
+      console.error(`Redirect map: ${oldUrl} -> ${newUrl}`);
     } catch (error) {
-      error_("Failed to set redirect map:", error);
+      console.error("Failed to set redirect map:", error);
     }
   }
 
@@ -29,7 +38,7 @@ export class RedirectMap {
       const redirectUrl = await this.redis.get(key);
       return redirectUrl;
     } catch (error) {
-      error_("Failed to get redirect map:", error);
+      console.error("Failed to get redirect map:", error);
       return null;
     }
   }
@@ -50,7 +59,7 @@ export class RedirectMap {
       const key = `${this.redisKeyPrefix}${this.normalizeUrl(url)}`;
       await this.redis.del(key);
     } catch (error) {
-      error_("Failed to remove redirect map:", error);
+      console.error("Failed to remove redirect map:", error);
     }
   }
 
@@ -74,19 +83,19 @@ export class RedirectMap {
   async getAllRedirects(): Promise<Record<string, string>> {
     try {
       const keys = await this.redis.keys(`${this.redisKeyPrefix}*`);
+      const entries = await Promise.all(
+        keys.map(async (key) => ({
+          newUrl: await this.redis.get(key),
+          oldUrl: key.replace(this.redisKeyPrefix, ""),
+        })),
+      );
       const redirects: Record<string, string> = {};
-
-      for (const key of keys) {
-        const oldUrl = key.replace(this.redisKeyPrefix, "");
-        const newUrl = await this.redis.get(key);
-        if (newUrl) {
-          redirects[oldUrl] = newUrl;
-        }
-      }
+      for (const { newUrl, oldUrl } of entries)
+        if (newUrl) redirects[oldUrl] = newUrl;
 
       return redirects;
     } catch (error) {
-      error_("Failed to get all redirects:", error);
+      console.error("Failed to get all redirects:", error);
       return {};
     }
   }

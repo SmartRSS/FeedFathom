@@ -1,45 +1,41 @@
-import { BitchuteScanner } from "./scanners/bitchute-scanner.ts";
+import {
+  scannerPageFromDocument,
+  scannerPageFromHtml,
+  type ScannerPage,
+} from "./scanner-page.ts";
+import { scanBitchute } from "./scanners/bitchute-scanner.ts";
 import type { FeedData } from "./scanners/feed-data-type.ts";
-import { GeneratorScanner } from "./scanners/generator-scanner.ts";
-import { GithubScanner } from "./scanners/github-scanner.ts";
-import { HeadScanner } from "./scanners/head-scanner.ts";
-import { HiveblogScanner } from "./scanners/hiveblog-scanner.ts";
-import { LinkFeedScanner } from "./scanners/link-feed-scanner.ts";
-import { OdseeScanner } from "./scanners/odsee-scanner.ts";
-import type { Scanner } from "./scanners/scanner-interface.ts";
-import { SteemitScanner } from "./scanners/steemit-scanner.ts";
-import { VimeoScanner } from "./scanners/vimeo-scanner.ts";
-import { XmlScanner } from "./scanners/xml-scanner.ts";
-import { YoutubeScanner } from "./scanners/youtube-scanner.ts";
+import { scanGenerator } from "./scanners/generator-scanner.ts";
+import { scanGithub } from "./scanners/github-scanner.ts";
+import { scanHead } from "./scanners/head-scanner.ts";
+import { scanHiveblog } from "./scanners/hiveblog-scanner.ts";
+import { scanLinkFeed } from "./scanners/link-feed-scanner.ts";
+import { scanOdsee } from "./scanners/odsee-scanner.ts";
+import { scanSteemit } from "./scanners/steemit-scanner.ts";
+import { scanVimeo } from "./scanners/vimeo-scanner.ts";
+import { scanXml } from "./scanners/xml-scanner.ts";
+import { scanYoutube } from "./scanners/youtube-scanner.ts";
 
-const scanners: Scanner[] = [
-  new XmlScanner(),
-  new HeadScanner(),
-  new BitchuteScanner(),
-  new GithubScanner(),
-  new HiveblogScanner(),
-  new OdseeScanner(),
-  new SteemitScanner(),
-  new VimeoScanner(),
-  new YoutubeScanner(),
-  new GeneratorScanner(),
-  new LinkFeedScanner(),
+const scanners = [
+  scanXml,
+  scanHead,
+  scanBitchute,
+  scanGithub,
+  scanHiveblog,
+  scanOdsee,
+  scanSteemit,
+  scanVimeo,
+  scanYoutube,
+  scanGenerator,
+  scanLinkFeed,
 ];
 
-export const scan = async (address: string, document: Document) => {
+const scanPage = (address: string, page: ScannerPage) => {
   const feedDataList: FeedData[] = [];
   const addressUrl = new URL(address);
   const seenUrls = new Set<string>();
 
-  const results = await Promise.all(
-    scanners.map((scanner) => {
-      return scanner.scan(addressUrl, document);
-      // Each scanner is expected to check applicability for the given address or document.
-      // If the address is not relevant (e.g., wrong platform or unsupported content),
-      // the scanner should early exit (return []) without performing unnecessary computation
-      // or network requests. This ensures efficient resource usage and scalability as more scanners are added.
-    }),
-  );
+  const results = scanners.map((scanner) => scanner(addressUrl, page));
 
   for (const result of results) {
     for (const feedData of result) {
@@ -69,3 +65,9 @@ export const scan = async (address: string, document: Document) => {
 
   return feedDataList;
 };
+
+export const scan = (address: string, document_: Document) =>
+  scanPage(address, scannerPageFromDocument(address, document_));
+
+export const scanHtml = (address: string, html: string) =>
+  scanPage(address, scannerPageFromHtml(address, html));

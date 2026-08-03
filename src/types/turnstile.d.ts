@@ -1,4 +1,4 @@
-interface Turnstile {
+export interface Turnstile {
   render(
     container: string | HTMLElement,
     options: {
@@ -10,6 +10,8 @@ interface Turnstile {
   ): void;
 }
 
-interface Window {
-  turnstile?: Turnstile;
+declare global {
+  interface Window {
+    turnstile?: Turnstile;
+  }
 }

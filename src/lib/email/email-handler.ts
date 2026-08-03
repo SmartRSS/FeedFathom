@@ -1,96 +1,97 @@
-import type { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
-import type { SMTPServerAddress, SMTPServerSession } from "smtp-server";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
-import type { Source } from "../../types/source-types.ts";
-import type { EmailProcessor } from "../email-processor.ts";
+import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
+import { getEmailContent, validateParsedMail } from "../email-processor.ts";
 
-/**
- * Branded type for GUIDs used in articles.
- */
-export type ArticleGuid = string & { readonly __brand: unique symbol };
+export type TrustedMailEnvelope = {
+  from: string;
+  to: string;
+};
 
-/**
- * Result of processing an email into articles.
- */
-export type ProcessedArticles = {
-  articles: ReturnType<EmailHandler["createArticles"]>;
-  sender: string;
-  sources: Source[];
-  email: ParsedMail;
+const sha256 = (value: Buffer | string): string =>
+  createHash("sha256").update(value).digest("hex");
+
+const emailGuid = (
+  email: ParsedMail,
+  raw: Buffer,
+  sourceId: number,
+): string => {
+  const messageId = email.messageId
+    ?.trim()
+    .replace(/^<|>$/g, "")
+    .trim()
+    .toLowerCase();
+  return messageId
+    ? `email:${sourceId}:message-id:${sha256(messageId)}`
+    : `email:${sourceId}:raw:${sha256(raw)}`;
+};
+
+const readEmail = async (input: Readable | Buffer): Promise<Buffer> => {
+  if (Buffer.isBuffer(input)) return input;
+  const chunks: Buffer[] = [];
+  for await (const value of input) {
+    const chunk: unknown = value;
+    if (chunk instanceof Uint8Array) chunks.push(Buffer.from(chunk));
+    else throw new Error("Email stream must emit raw bytes");
+  }
+  return Buffer.concat(chunks);
 };
 
 export class EmailHandler {
   constructor(
-    private readonly emailProcessor: EmailProcessor,
-    private readonly sourcesDataService: SourcesDataService,
-    private readonly articlesDataService: ArticlesDataService,
+    private readonly sourcesDataService: Pick<
+      SourcesDataService,
+      "findSourceByUrl"
+    >,
+    private readonly articlesDataService: Pick<
+      ArticlesDataService,
+      "batchUpsertArticles"
+    >,
+    private readonly userSourcesDataService: Pick<
+      UserSourcesDataService,
+      "recomputeUnreadCounts"
+    >,
   ) {}
 
-  /**
-   * Parses a raw email stream or buffer into a ParsedMail object.
-   */
-  public async parseEmail(input: Readable | Buffer): Promise<ParsedMail> {
-    return await simpleParser(input);
-  }
+  public async processEmail(
+    input: Readable | Buffer,
+    envelope: TrustedMailEnvelope,
+  ): Promise<void> {
+    const raw = await readEmail(input);
+    const email = await simpleParser(raw);
+    validateParsedMail(email);
+    const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
+    if (!source) throw new Error("No recipients known");
 
-  /**
-   * Validates the sender from the SMTP session.
-   * Throws if sender is missing.
-   */
-  public validateSender(session: SMTPServerSession): SMTPServerAddress {
-    const senderAddress = session.envelope.mailFrom;
-    if (!senderAddress) {
-      throw new Error("Unknown sender");
-    }
-    return senderAddress;
-  }
-
-  /**
-   * Extracts recipient addresses from a parsed email.
-   */
-  public extractRecipientAddresses(email: ParsedMail): string[] {
-    return this.emailProcessor.extractRecipientAddresses(email);
-  }
-
-  /**
-   * Finds valid sources for the given email recipients.
-   * Throws if no valid sources or too many recipients.
-   */
-  public async getValidSources(email: ParsedMail): Promise<Source[]> {
-    const recipientMails = this.extractRecipientAddresses(email);
-    if (recipientMails.length > 10) {
-      throw new Error("Too many recipients");
-    }
-    const sources = (
-      await Promise.all(
-        recipientMails.map(async (address) => {
-          return await this.sourcesDataService.findSourceByUrl(address);
-        }),
-      )
-    ).filter((source): source is Source => source !== undefined);
-    if (sources.length === 0) {
-      throw new Error("No recipients known");
-    }
-    return sources;
+    const article = this.createArticleFromEmail(
+      email,
+      emailGuid(email, raw, source.id),
+      source.id,
+      envelope.from,
+    );
+    await this.articlesDataService.batchUpsertArticles([article]);
+    await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
   }
 
   /**
    * Creates an article object from a parsed email and source.
    */
-  public createArticleFromEmail(
+  private createArticleFromEmail(
     email: ParsedMail,
+    guid: string,
     sourceId: number,
     senderAddress: string,
   ) {
-    const guid = Bun.randomUUIDv7() as ArticleGuid;
+    validateParsedMail(email);
     const date = email.date ?? new Date();
     return {
       author: senderAddress,
-      content: this.emailProcessor.getEmailContent(email),
+      content: getEmailContent(email),
       guid,
       publishedAt: date,
       sourceId,
@@ -99,32 +100,5 @@ export class EmailHandler {
       url: `/article/${guid}`,
       lastSeenInFeedAt: new Date(),
     };
-  }
-
-  /**
-   * Creates articles for all valid sources from a parsed email.
-   */
-  public createArticles(
-    email: ParsedMail,
-    sources: Source[],
-    senderAddress: string,
-  ) {
-    return sources.map((feed) =>
-      this.createArticleFromEmail(email, feed.id, senderAddress),
-    );
-  }
-
-  /**
-   * Processes a parsed email and upserts articles for all valid sources.
-   * Returns the processed articles and context.
-   */
-  public async processParsedEmail(
-    email: ParsedMail,
-    senderAddress: string,
-  ): Promise<ProcessedArticles> {
-    const sources = await this.getValidSources(email);
-    const articles = this.createArticles(email, sources, senderAddress);
-    await this.articlesDataService.batchUpsertArticles(articles);
-    return { articles, sender: senderAddress, sources, email };
   }
 }

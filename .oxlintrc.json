@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true,
+    "typeCheck": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "ignorePatterns": [
+    "**/*.js",
+    "**/node_modules/**",
+    "**/.claude/worktrees/**",
+    "**/dist/**",
+    "**/bin/**",
+    "**/vite.config.ts",
+    "**/ext/**",
+    "**/build/**"
+  ],
+  "rules": {
+    "no-control-regex": "off",
+    "no-unassigned-vars": "off",
+    "no-unused-expressions": "off",
+    "typescript/await-thenable": "off",
+    "typescript/no-floating-promises": ["error", { "ignoreVoid": true }],
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off"
+  }
+}

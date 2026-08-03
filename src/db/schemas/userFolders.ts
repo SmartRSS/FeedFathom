@@ -16,6 +16,3 @@ export const userFolders = pgTable("user_folders", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
 });
-
-export type UserFolder = typeof userFolders.$inferSelect;
-export type UserFolderInsert = typeof userFolders.$inferInsert;

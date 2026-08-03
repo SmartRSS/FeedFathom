@@ -9,6 +9,3 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
 });
-
-export type Session = typeof sessions.$inferSelect;
-export type SessionInsert = typeof sessions.$inferInsert;

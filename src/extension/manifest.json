@@ -8,21 +8,24 @@
   },
   "browser_specific_settings": {
     "gecko": {
+      "data_collection_permissions": {
+        "required": ["none"]
+      },
       "id": "feedfathom@smartrss",
-      "strict_min_version": "120.0",
-      "update_url": "%UPDATE_URL%"
+      "strict_min_version": "140.0"
     }
   },
   "content_scripts": [
     {
       "js": ["content-script.js"],
-      "matches": ["*://*/*"]
+      "matches": ["*://*/*"],
+      "run_at": "document_start"
     }
   ],
   "content_security_policy": {
-    "extension_pages": "default-src 'self'"
+    "extension_pages": "default-src 'self'; connect-src http: https:"
   },
-  "description": "Extension making it easier to find RSS and Atom feeds over the web. Additionally it integrates with FeedFathom service if you want",
+  "description": "Companion for your FeedFathom instance.",
   "host_permissions": ["*://*/*"],
   "icons": {
     "48": "48-inverted-round.png",
@@ -36,6 +39,6 @@
     "open_in_tab": true,
     "page": "options.html"
   },
-  "permissions": ["tabs", "contextMenus", "storage"],
+  "permissions": ["contextMenus", "storage"],
   "version": "0.1"
 }

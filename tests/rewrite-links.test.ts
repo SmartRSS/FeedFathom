@@ -1,13 +1,19 @@
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import { rewriteLinks } from "../src/lib/rewrite-links";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-type TestCase = {
-  content: string;
-  description: string;
-  expected: string;
-};
+const testCaseSchema = Type.Object(
+  {
+    content: Type.String(),
+    description: Type.String(),
+    expected: Type.String(),
+  },
+  { additionalProperties: false },
+);
+const testCaseCheck = Schema.Compile(testCaseSchema);
 
 describe("rewriteLinks", () => {
   const articleUrl = "https://example.com/article";
@@ -15,7 +21,7 @@ describe("rewriteLinks", () => {
     .filter((file) => {
       return file.endsWith(".json");
     })
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       return a.localeCompare(b);
     });
 
@@ -24,7 +30,10 @@ describe("rewriteLinks", () => {
       join("tests/rewrite-links/cases", file),
       "utf8",
     );
-    const testCase = JSON.parse(content) as TestCase;
+    const testCase: unknown = JSON.parse(content);
+    if (!testCaseCheck.Check(testCase)) {
+      throw new Error(`Invalid rewrite-links fixture: ${file}`);
+    }
 
     test(testCase.description, () => {
       const result = rewriteLinks(testCase.content, articleUrl);

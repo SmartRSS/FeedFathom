@@ -1,4 +1,4 @@
-name: Build, Push, and Deploy Docker Image
+name: Build, Verify, and Deploy Docker Images
 
 on:
   push:
@@ -10,13 +10,29 @@ on:
   workflow_dispatch:
     inputs:
       deploy_tag:
-        description: 'Tag to deploy (defaults to latest commit SHA)'
-        required: false
+        description: Full 40-character lowercase commit SHA already published to GHCR
+        required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  pr_smoke:
+    name: Build and smoke internal PR images
+    needs: quality
+    if: >-
+      needs.quality.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOCKER_DEFAULT_PLATFORM: linux/amd64
+      FEEDFATHOM_TAG: ${{ github.sha }}
 
     steps:
       - name: Checkout repository
@@ -24,245 +40,489 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Cache Bun global cache
-        # This step caches Bun's dependencies on the CI runner's filesystem
-        uses: actions/cache@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          # The path to Bun's global cache directory on the runner
-          path: ~/.bun/install/cache
-          # The key ensures we get a cache hit only if the lockfile is unchanged
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-          # The fallback key allows us to use a slightly stale cache
-          restore-keys: |
-            ${{ runner.os }}-bun-
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hardened Images registry
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
+      - name: Build and load exact PR images
+        run: docker compose -f deploy/compose.smoke.yml build migrator server worker
+
+      - name: Pull smoke infrastructure images
+        run: docker compose -f deploy/compose.smoke.yml pull redis postgres
+
+      - name: Start exact local images without pulling
+        run: docker compose -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never
+
+      - name: Run production browser smoke test
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3456
+        run: bun run test:smoke
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          printf '%s\n' 'Verification failed. Printing logs for all services:'
+          docker compose -f deploy/compose.smoke.yml logs migrator worker server
+          printf '%s\n' 'Current container status:'
+          docker compose -f deploy/compose.smoke.yml ps
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f deploy/compose.smoke.yml down
+
+  build:
+    name: Publish ${{ matrix.target }} immutable image
+    needs: quality
+    if: >-
+      needs.quality.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - feedfathom-server
+          - feedfathom-worker
+          - feedfathom-migrator
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hardened Images registry
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase repository name
+        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Build and publish immutable ${{ matrix.target }} image
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          tags: ghcr.io/${{ env.REPO_NAME }}/${{ matrix.target }}:${{ github.sha }}
+          provenance: false
+
+  validate_deploy_tag:
+    name: Validate existing deployment manifests
+    needs: quality
+    if: >-
+      needs.quality.result == 'success' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_TAG: ${{ inputs.deploy_tag }}
+
+    steps:
+      - name: Require a full immutable commit SHA
+        run: |
+          if [[ ! "$DEPLOY_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            printf '%s\n' 'deploy_tag must be exactly 40 lowercase hexadecimal characters' >&2
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set repository name in lowercase
-        id: prep
+      - name: Set lowercase repository name
+        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Verify all exact-tag manifests exist
         run: |
-          echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          # Sanitize branch name for docker tag
-          BRANCH_TAG=$(echo ${{ github.ref_name }} | sed -e 's/[^a-zA-Z0-9.]/-/g')
-          echo "BRANCH_TAG=$BRANCH_TAG" >> $GITHUB_ENV
+          set -euo pipefail
+          for target in feedfathom-server feedfathom-worker feedfathom-migrator; do
+            docker buildx imagetools inspect "ghcr.io/${REPO_NAME}/${target}:${DEPLOY_TAG}" >/dev/null
+          done
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ env.REPO_NAME }}
-          tags: |
-            latest
-            type=sha
-
-      - name: Build and push feedfathom-server image
-        uses: docker/build-push-action@v6
-        timeout-minutes: 30
-        with:
-          context: .
-          target: feedfathom-server
-          platforms: linux/amd64,linux/arm64,linux/arm64/v8
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:latest
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ github.sha }}
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-server:${{ env.BRANCH_TAG }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
-          build-args: |
-            BUILDKIT_PROGRESS=plain
-            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
-            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
-            GITHUB_REPOSITORY=${{ github.repository }}
-
-      - name: Build and push feedfathom-worker image
-        uses: docker/build-push-action@v6
-        timeout-minutes: 30
-        with:
-          context: .
-          target: feedfathom-worker
-          platforms: linux/amd64,linux/arm64,linux/arm64/v8
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:latest
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ github.sha }}
-            ghcr.io/${{ env.REPO_NAME }}/feedfathom-worker:${{ env.BRANCH_TAG }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
-          build-args: |
-            BUILDKIT_PROGRESS=plain
-            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
-            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
-            GITHUB_REPOSITORY=${{ github.repository }}
-
-
-      - name: Log out from GitHub Container Registry
-        run: docker logout ghcr.io
-
-  verify:
+  release_smoke:
+    name: Smoke exact published images
+    needs: [quality, build, validate_deploy_tag]
+    if: >-
+      always() &&
+      needs.quality.result == 'success' &&
+      ((github.event_name == 'push' && needs.build.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && needs.validate_deploy_tag.result == 'success'))
     runs-on: ubuntu-24.04
-    needs: build
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
     env:
-      WORKER_REPLICAS: 1
+      FEEDFATHOM_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_tag || github.sha }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_tag || github.sha }}
 
-      - name: Start services
-        run: |
-          export FEEDFATHOM_TAG=${{ github.sha }} && \
-          docker compose pull && \
-          docker compose up -d
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
 
-      - name: Wait for services to be healthy
-        run: |
-          echo "Waiting for services to be healthy..."
-          MAX_ATTEMPTS=150
-          attempts=0
-          until ! docker compose ps | grep -v "(healthy)" | grep -q "Up"; do
-            attempts=$((attempts + 1))
-            if [ $attempts -ge $MAX_ATTEMPTS ]; then
-              echo "Timeout waiting for services to become healthy after 5 minutes" >&2
-              echo "Current status:" >&2
-              docker compose ps >&2
-              exit 1
-            fi
-            echo "Waiting for all services to be healthy... (attempt $attempts/$MAX_ATTEMPTS)"
-            sleep 2
-          done
-          echo "All services are now healthy"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - name: Verify web server is responding
-        run: |
-          echo "Verifying web server response..."
-          MAX_ATTEMPTS=30
-          attempts=0
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
 
-          # First check if the server container is running
-          echo "Checking server container status..."
-          docker compose ps server
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-          until RESPONSE=$(curl -v -s -w "\n%{http_code}" http://localhost:3456 2>&1) && STATUS_CODE=$(echo "$RESPONSE" | tail -n1) && echo "$STATUS_CODE" | grep -q "^[23]"; do
-            attempts=$((attempts + 1))
-            if [ $attempts -ge $MAX_ATTEMPTS ]; then
-              echo "Timeout waiting for web server to respond with non-error status after 1 minute" >&2
-              echo "Current response:" >&2
-              echo "$RESPONSE" >&2
-              echo "Server container logs:" >&2
-              docker compose logs server >&2
-              echo "Server container status:" >&2
-              docker compose ps server >&2
-              exit 1
-            fi
-            echo "Waiting for web server to respond with non-error status... (attempt $attempts/$MAX_ATTEMPTS)"
-            echo "Current response:" >&2
-            echo "$RESPONSE" >&2
-            sleep 2
-          done
-          echo "Web server response body:"
-          echo "$RESPONSE" | sed '$d'
-          echo "Web server is responding with status code: $STATUS_CODE"
+      - name: Pull exact release images
+        run: docker compose -f deploy/compose.smoke.yml pull migrator server worker redis postgres
+
+      - name: Start exact release images without rebuilding or pulling
+        run: docker compose -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never
+
+      - name: Run production browser smoke test
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3456
+        run: bun run test:smoke
 
       - name: Print logs on failure
         if: failure()
         run: |
-          echo "Verification failed. Printing logs for all services:"
-          docker compose logs migrator worker mail server
-          echo "Current container status:"
-          docker compose ps
+          printf '%s\n' 'Verification failed. Printing logs for all services:'
+          docker compose -f deploy/compose.smoke.yml logs migrator worker server
+          printf '%s\n' 'Current container status:'
+          docker compose -f deploy/compose.smoke.yml ps
 
       - name: Cleanup
         if: always()
-        run: docker compose down
+        run: docker compose -f deploy/compose.smoke.yml down
+
+  promote:
+    name: Promote verified ${{ matrix.target }} manifest to latest
+    needs: [quality, build, release_smoke]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.quality.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.release_smoke.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - feedfathom-server
+          - feedfathom-worker
+          - feedfathom-migrator
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase repository name
+        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Promote exact verified manifest
+        run: |
+          docker buildx imagetools create \
+            --tag "ghcr.io/${REPO_NAME}/${{ matrix.target }}:latest" \
+            "ghcr.io/${REPO_NAME}/${{ matrix.target }}:${GITHUB_SHA}"
 
   deploy:
     runs-on: ubuntu-24.04
-    needs: [build, verify]
-    if: |
-      (github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch')
+    needs: [quality, build, validate_deploy_tag, release_smoke, promote]
+    if: >-
+      always() &&
+      vars.ENABLE_SWARM_DEPLOYMENT == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      needs.quality.result == 'success' &&
+      needs.release_smoke.result == 'success' &&
+      ((github.event_name == 'push' &&
+        needs.build.result == 'success' &&
+        needs.validate_deploy_tag.result == 'skipped' &&
+        needs.promote.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' &&
+        needs.build.result == 'skipped' &&
+        needs.validate_deploy_tag.result == 'success' &&
+        needs.promote.result == 'skipped'))
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    environment: production
+    concurrency:
+      group: production
+      cancel-in-progress: false
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      FEEDFATHOM_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_tag || github.sha }}
+      STACK_NAME: ${{ vars.STACK_NAME }}
+      POSTGRES_VOLUME_NAME: ${{ vars.POSTGRES_VOLUME_NAME }}
+      REDIS_VOLUME_NAME: ${{ vars.REDIS_VOLUME_NAME }}
+      TRAEFIK_NETWORK_NAME: ${{ vars.TRAEFIK_NETWORK_NAME }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      FEED_FATHOM_DOMAIN: ${{ secrets.FEED_FATHOM_DOMAIN }}
+      FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
       ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
       ENABLE_REGISTRATION: ${{ vars.ENABLE_REGISTRATION }}
+      APP_REPLICAS: ${{ vars.APP_REPLICAS }}
+      WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
       WORKER_CONCURRENCY: ${{ vars.WORKER_CONCURRENCY }}
       LOCK_DURATION: ${{ vars.LOCK_DURATION }}
       CLEANUP_INTERVAL: ${{ vars.CLEANUP_INTERVAL }}
       GATHER_JOBS_INTERVAL: ${{ vars.GATHER_JOBS_INTERVAL }}
-      APP_REPLICAS: ${{ vars.APP_REPLICAS }}
-      WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
+      WORKER_CPU_LIMIT: ${{ vars.WORKER_CPU_LIMIT }}
       WORKER_MEM_LIMIT: ${{ vars.WORKER_MEM_LIMIT }}
-      FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
+      WORKER_CPU_RESERVATION: ${{ vars.WORKER_CPU_RESERVATION }}
+      WORKER_MEM_RESERVATION: ${{ vars.WORKER_MEM_RESERVATION }}
       MAIL_ENABLED: ${{ vars.MAIL_ENABLED }}
-      MAIL_REPLICAS: ${{ vars.MAIL_REPLICAS }}
+      MAIL_RELAY_SECRET: ${{ secrets.MAIL_RELAY_SECRET }}
       MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
       MAILJET_API_SECRET: ${{ secrets.MAILJET_API_SECRET }}
       TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
       TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout deployment stack
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_tag || github.sha }}
           sparse-checkout: |
-            docker-compose.yml
-            docker-compose-traefik.yml
-            rollout.ts
+            deploy/stack.yml
+            deploy/stack.traefik.yml
+          sparse-checkout-cone-mode: false
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy Docker Compose files and rollout script to server
-        run: |
-          scp -o StrictHostKeyChecking=no docker-compose.yml docker-compose-traefik.yml rollout.ts ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
-
-      - name: Deploy to server (with auto-retry on SSH disconnect)
-        timeout-minutes: 60
+      - name: Configure trusted SSH hosts
         run: |
           set -euo pipefail
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
-          SSH_DEST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+      - name: Generate protected deployment environment
+        run: |
+          set -euo pipefail
+          umask 077
+          variables=(
+            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME TRAEFIK_NETWORK_NAME
+            DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FEED_FATHOM_DOMAIN FEED_FATHOM_ALT_DOMAIN
+            ALLOWED_EMAILS ENABLE_REGISTRATION APP_REPLICAS WORKER_REPLICAS WORKER_CONCURRENCY
+            LOCK_DURATION CLEANUP_INTERVAL GATHER_JOBS_INTERVAL WORKER_CPU_LIMIT WORKER_MEM_LIMIT
+            WORKER_CPU_RESERVATION WORKER_MEM_RESERVATION MAIL_ENABLED MAIL_RELAY_SECRET
+            MAILJET_API_KEY MAILJET_API_SECRET TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY
+          )
+          for name in "${variables[@]}"; do
+            printf '%s=%q\n' "$name" "${!name}"
+          done > deployment.env
+          chmod 600 deployment.env
 
-          # Remote command assembled as a single line to avoid YAML parsing issues
-          REMOTE_CMD="cd ${{ env.DEPLOY_PATH }} && export PATH=\"/home/${{ secrets.SSH_USER }}/.bun/bin:\$PATH\" && export FEEDFATHOM_TAG=${{ github.event.inputs.deploy_tag || github.sha }} && export MAIL_REPLICAS='${{ env.MAIL_REPLICAS }}' && export FEED_FATHOM_DOMAIN='${{ secrets.FEED_FATHOM_DOMAIN }}' && export FEED_FATHOM_ALT_DOMAIN='${{ env.FEED_FATHOM_ALT_DOMAIN }}' && export ALLOWED_EMAILS='${{ env.ALLOWED_EMAILS }}' && export ENABLE_REGISTRATION='${{ env.ENABLE_REGISTRATION }}' && export WORKER_CONCURRENCY='${{ env.WORKER_CONCURRENCY }}' && export LOCK_DURATION='${{ env.LOCK_DURATION }}' && export CLEANUP_INTERVAL='${{ env.CLEANUP_INTERVAL }}' && export GATHER_JOBS_INTERVAL='${{ env.GATHER_JOBS_INTERVAL }}' && export WORKER_REPLICAS='${{ env.WORKER_REPLICAS }}' && export WORKER_MEM_LIMIT='${{ env.WORKER_MEM_LIMIT }}' && export MAIL_ENABLED='${{ env.MAIL_ENABLED }}' && export MAILJET_API_KEY='${{ env.MAILJET_API_KEY }}' && export MAILJET_API_SECRET='${{ env.MAILJET_API_SECRET }}' && export TURNSTILE_SITE_KEY='${{ env.TURNSTILE_SITE_KEY }}' && export TURNSTILE_SECRET_KEY='${{ env.TURNSTILE_SECRET_KEY }}' && docker compose -f docker-compose.yml -f docker-compose-traefik.yml pull migrator mail server worker && bun run rollout.ts -f docker-compose.yml -f docker-compose-traefik.yml migrator mail server worker"
+      - name: Transfer deployment files
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          SSH_DEST="${SSH_USER}@${SSH_HOST}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+          printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
+          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "install -d -m 700 -- $DEPLOY_PATH_Q"
+          scp "${SSH_OPTS[@]}" deploy/stack.yml deploy/stack.traefik.yml deployment.env "$SSH_DEST:$DEPLOY_PATH/"
+          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "chmod 600 -- $DEPLOY_PATH_Q/deployment.env"
 
-          MAX_RETRIES=10
-          DELAY=30
-          for attempt in $(seq 1 $MAX_RETRIES); do
-            echo "🚀 Deployment attempt $attempt/$MAX_RETRIES"
-            # shellcheck disable=SC2029
-            if ssh $SSH_OPTS "$SSH_DEST" "${REMOTE_CMD}"; then
-              echo "✅ Deployment succeeded on attempt $attempt"
-              exit 0
+      - name: Deploy Swarm stack
+        run: |
+          set -euo pipefail
+          SSH_DEST="${SSH_USER}@${SSH_HOST}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+          printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
+          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "bash -s -- $DEPLOY_PATH_Q" <<'REMOTE'
+          set -Eeuo pipefail
+          cd "$1"
+          chmod 600 deployment.env
+          set -a
+          source ./deployment.env
+          set +a
+
+          [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+          [[ "$FEEDFATHOM_TAG" =~ ^[0-9a-f]{40}$ ]]
+          if ! command -v timeout >/dev/null || ! timeout -k 1s 1s true >/dev/null 2>&1; then
+            printf '%s\n' 'A timeout command supporting -k is required' >&2
+            exit 1
+          fi
+
+          SERVER_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG}"
+          WORKER_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG}"
+          MIGRATOR_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-migrator:${FEEDFATHOM_TAG}"
+          MIGRATION_SERVICE="${STACK_NAME}_migration"
+          MIGRATION_CREATED=false
+
+          remove_migration() {
+            if [[ "$MIGRATION_CREATED" == true ]]; then
+              docker service rm "$MIGRATION_SERVICE"
+              MIGRATION_CREATED=false
             fi
+          }
 
+          diagnose() {
             rc=$?
-            if [[ $rc -ne 255 ]]; then
-              echo "❌ Deployment failed with exit-code $rc (not an SSH disconnect)"
-              exit $rc
+            trap - ERR
+            printf '%s\n' 'Deployment failed; collecting Swarm state' >&2
+            docker stack services "$STACK_NAME" || true
+            docker stack ps --no-trunc "$STACK_NAME" || true
+            docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker" || true
+            if docker service inspect "$MIGRATION_SERVICE" >/dev/null 2>&1; then
+              docker service ps --no-trunc "$MIGRATION_SERVICE" || true
+              docker service logs "$MIGRATION_SERVICE" || true
             fi
+            if [[ "$MIGRATION_CREATED" == true ]]; then
+              docker service rm "$MIGRATION_SERVICE" || true
+            fi
+            exit "$rc"
+          }
+          trap diagnose ERR
 
-            echo "⚠️  SSH connection lost (exit-code 255). Waiting $DELAY s before retry…"
-            sleep "$DELAY"
+          wait_for_migration() {
+            local deadline=$((SECONDS + 600))
+            local state
+            local -a tasks
+            while ((SECONDS < deadline)); do
+              mapfile -t tasks < <(docker service ps --no-trunc --format '{{.ID}}' "$MIGRATION_SERVICE")
+              if ((${#tasks[@]} > 1)); then
+                printf '%s\n' 'Migration job created more than one task' >&2
+                return 1
+              fi
+              if ((${#tasks[@]} == 1)); then
+                state=$(docker inspect --format '{{.Status.State}}' "${tasks[0]}")
+                case "$state" in
+                  complete) return 0 ;;
+                  failed|rejected|orphaned|remove|shutdown)
+                    printf 'Migration task stopped in state: %s\n' "$state" >&2
+                    return 1
+                    ;;
+                esac
+              fi
+              sleep 1
+            done
+            printf '%s\n' 'Migration job timed out' >&2
+            return 1
+          }
+
+          docker stack config -c stack.yml -c stack.traefik.yml >/dev/null
+          docker pull "$SERVER_IMAGE"
+          docker pull "$WORKER_IMAGE"
+          docker pull "$MIGRATOR_IMAGE"
+          MIGRATOR_REPOSITORY="${MIGRATOR_IMAGE%:*}"
+          MIGRATOR_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$MIGRATOR_IMAGE")
+          [[ "$MIGRATOR_DIGEST" == "$MIGRATOR_REPOSITORY"@sha256:* ]]
+          [[ "${MIGRATOR_DIGEST#*@sha256:}" =~ ^[0-9a-f]{64}$ ]]
+
+          docker service create \
+            --detach=true \
+            --env "DATABASE_URL=$DATABASE_URL" \
+            --max-concurrent 1 \
+            --mode replicated-job \
+            --name "$MIGRATION_SERVICE" \
+            --network "${STACK_NAME}_backend" \
+            --replicas 1 \
+            --restart-condition none \
+            --with-registry-auth \
+            "$MIGRATOR_DIGEST" >/dev/null
+          MIGRATION_CREATED=true
+          wait_for_migration
+
+          timeout -k 15s 600s docker stack deploy --detach=false --with-registry-auth --prune -c stack.yml -c stack.traefik.yml "$STACK_NAME"
+
+          for specification in \
+            "${STACK_NAME}_server|$SERVER_IMAGE" \
+            "${STACK_NAME}_worker|$WORKER_IMAGE"
+          do
+            IFS='|' read -r service expected <<< "$specification"
+            actual=$(docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' "$service")
+            if [[ "$actual" != "$expected" && "$actual" != "${expected}@"* ]]; then
+              printf '%s converged to %s, expected %s\n' "$service" "$actual" "$expected" >&2
+              false
+            fi
           done
 
-          echo "❌ Deployment failed after $MAX_RETRIES retries due to repeated SSH disconnects."
-          exit 1
+          docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker"
+          docker stack services "$STACK_NAME"
+          SPA_HTML=$(curl --fail-with-body --location --retry 10 --retry-delay 3 --retry-all-errors --connect-timeout 5 --max-time 10 --show-error "http://${FEED_FATHOM_DOMAIN}/")
+          if ! grep -Fq 'id="app"' <<< "$SPA_HTML"; then
+            printf '%s\n' 'Public root did not contain the expected SPA app marker' >&2
+            false
+          fi
+          remove_migration
+          trap - ERR
+          REMOTE

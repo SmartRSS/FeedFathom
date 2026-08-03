@@ -1,4 +1,3 @@
-import { relations } from "drizzle-orm";
 import {
   boolean,
   pgTable,
@@ -7,8 +6,6 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
-import { userArticles } from "./userArticles";
-import { userSources } from "./userSources";
 
 export const users = pgTable(
   "users",
@@ -28,18 +25,3 @@ export const users = pgTable(
   },
   (table) => [unique().on(table.activationToken)],
 );
-
-export type User = typeof users.$inferSelect;
-export type UserInsert = typeof users.$inferInsert;
-
-export const userArticlesRelation = relations(users, ({ many }) => {
-  return {
-    userArticles: many(userArticles),
-  };
-});
-
-export const userSourcesRelation = relations(users, ({ many }) => {
-  return {
-    userSources: many(userSources),
-  };
-});

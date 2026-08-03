@@ -1,0 +1,384 @@
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import { installApiFixture } from "./api-fixture";
+
+const browserFailures = new WeakMap<Page, string[]>();
+const guardedResources = new Set(["document", "script", "stylesheet"]);
+
+function guardBrowser(page: Page) {
+  const failures: string[] = [];
+  browserFailures.set(page, failures);
+  page.on("pageerror", (error) => failures.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error")
+      failures.push(`console.error: ${message.text()}`);
+  });
+  page.on("requestfailed", (request) => {
+    if (guardedResources.has(request.resourceType()))
+      failures.push(`request failed: ${request.url()}`);
+  });
+  page.on("response", (response) => {
+    const request: Request = response.request();
+    if (guardedResources.has(request.resourceType()) && !response.ok())
+      failures.push(`response ${response.status()}: ${response.url()}`);
+  });
+}
+
+async function installReaderResponder(
+  context: BrowserContext,
+  available: boolean,
+) {
+  await context.addInitScript((isAvailable) => {
+    window.addEventListener("message", (event) => {
+      const request = event.data;
+      if (
+        event.source !== window ||
+        request?.channel !== "feedfathom-reader" ||
+        request?.type !== "request" ||
+        request?.version !== 1
+      )
+        return;
+
+      if (request.action === "capabilities") {
+        window.postMessage(
+          isAvailable
+            ? {
+                action: "capabilities",
+                available: true,
+                channel: "feedfathom-reader",
+                id: request.id,
+                ok: true,
+                type: "response",
+                version: 1,
+              }
+            : {
+                action: "capabilities",
+                channel: "feedfathom-reader",
+                error: "UNAVAILABLE",
+                id: request.id,
+                ok: false,
+                type: "response",
+                version: 1,
+              },
+          location.origin,
+        );
+      } else if (isAvailable && request.action === "fetch") {
+        window.postMessage(
+          {
+            action: "fetch",
+            channel: "feedfathom-reader",
+            finalUrl: "https://articles.example/first",
+            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p></article></body></html>`,
+            id: request.id,
+            ok: true,
+            type: "response",
+            version: 1,
+          },
+          location.origin,
+        );
+      }
+    });
+  }, available);
+}
+
+const selectSource = async (page: Page, name = "Tech News") => {
+  await page.locator("button.source").filter({ hasText: name }).click();
+};
+
+test.beforeEach(async ({ page }) => {
+  guardBrowser(page);
+});
+
+test.afterEach(async ({ page }) => {
+  expect(browserFailures.get(page) ?? []).toEqual([]);
+});
+
+test("boots Solid and renders the authenticated nested tree", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await expect(page.locator("#app")).not.toBeEmpty();
+  await expect(page.getByText("Reading", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+});
+
+test("surfaces folder creation failures without refreshing the tree", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { folderCreateFailure: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  page.once("dialog", (dialog) => dialog.accept("Saved"));
+  await page.getByRole("button", { name: "add folder" }).click();
+
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid response from /api/folders",
+  );
+  expect(state.treeRequests).toBe(1);
+});
+
+test("keeps folder state usable when localStorage throws", async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.getItem = () => {
+      throw new Error("storage blocked");
+    };
+    Storage.prototype.setItem = () => {
+      throw new Error("storage blocked");
+    };
+  });
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await page.getByAltText("toggle folder").click();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeHidden();
+});
+
+test("preserves an unauthenticated deep link through login", async ({
+  page,
+}) => {
+  await installApiFixture(page, { authenticated: false });
+  const next = "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml";
+  await page.goto(next);
+
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe(next);
+
+  await page.getByLabel("Email").fill("reader@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login" }).click();
+
+  await expect
+    .poll(() => {
+      const url = new URL(page.url());
+      return url.pathname + url.search;
+    })
+    .toBe(next);
+  await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
+  await expect(
+    page.getByRole("heading", { name: "Preview article" }),
+  ).toBeVisible();
+});
+
+test("shows the current account and logs out", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/options");
+
+  await expect(page.getByText("Reader (reader@example.com)")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Logout" }).click();
+
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/login");
+  expect(state.authenticated).toBe(false);
+});
+
+test("loads articles and content from a selected source", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  const option = page.getByRole("option", { name: /First article/ });
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("heading", { name: "First article" }),
+  ).toBeVisible();
+  await expect(page.getByText("Feed article content")).toBeVisible();
+});
+
+test("uses three desktop panes and mobile history navigation", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await expect(page.locator(".sources-pane")).toBeVisible();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  await expect(page.locator(".reader-pane")).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".sources-pane")).toBeVisible();
+  await expect(page.locator(".articles-pane")).toBeHidden();
+  await expect(page.locator(".reader-pane")).toBeHidden();
+
+  await selectSource(page);
+  await expect(page.locator(".sources-pane")).toBeHidden();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+
+  await page.getByRole("option", { name: /First article/ }).click();
+  await expect(page.locator(".articles-pane")).toBeHidden();
+  await expect(page.locator(".reader-pane")).toBeVisible();
+
+  await page
+    .locator(".reader-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  await page
+    .locator(".articles-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+});
+
+test("validates Website URLs before discovery", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/preview");
+  const website = page.getByLabel("Website");
+
+  await website.fill("ftp://preview.example/");
+  await page.getByRole("button", { name: "Find feeds" }).click();
+  expect(state.findRequests).toBe(0);
+  expect(
+    await website.evaluate(
+      (input) => input instanceof HTMLInputElement && input.validity.valid,
+    ),
+  ).toBe(false);
+
+  await website.fill("https://preview.example/");
+  await page.getByRole("button", { name: "Find feeds" }).click();
+  await expect(
+    page.getByRole("button", { name: /Tech Preview/ }),
+  ).toBeVisible();
+  expect(state.findRequests).toBe(1);
+});
+
+test("keeps the newest discovery preview response", async ({ page }) => {
+  await installApiFixture(page, { discoveryRace: true });
+  await page.goto("/preview");
+  await page.getByLabel("Website").fill("https://preview.example/");
+  await page.getByRole("button", { name: "Find feeds" }).click();
+
+  await page.getByRole("button", { name: /Slow feed/ }).click();
+  await page.getByRole("button", { name: /Fast feed/ }).click();
+
+  await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
+  await page.waitForTimeout(250);
+  await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
+  await expect(
+    page.getByRole("heading", { name: "Fast feed article" }),
+  ).toBeVisible();
+});
+
+test("keeps preview usable when folder startup fails", async ({ page }) => {
+  await installApiFixture(page, { foldersFailure: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+
+  await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid response from /api/folders",
+  );
+});
+
+test("previews and subscribes with the exact payload", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+
+  await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
+  await expect(page.getByLabel("Folder")).toContainText("Reading");
+  await expect(
+    page.getByRole("heading", { name: "Preview article" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Folder").selectOption("7");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Subscribed article" }),
+  ).toBeVisible();
+  expect(state.subscriptionBodies).toEqual([
+    {
+      sourceFolder: 7,
+      sourceName: "Tech Preview",
+      sourceUrl: "https://preview.example/feed.xml",
+    },
+  ]);
+  expect(state.treeRequests).toBe(2);
+});
+
+test("exposes Reader modes only when the bridge is available", async ({
+  context,
+  page,
+}) => {
+  await installReaderResponder(context, true);
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  const modes = page.getByRole("combobox");
+  await expect(modes).toContainText("Reader plain");
+  await modes.selectOption("READABILITY");
+  await expect(
+    page.getByText("Reader bridge content.", { exact: false }),
+  ).toBeVisible();
+});
+
+test("keeps Feed mode when the Reader bridge is unavailable", async ({
+  page,
+}) => {
+  await installReaderResponder(page.context(), false);
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(page.getByText("Feed article content")).toBeVisible();
+});
+
+test("surfaces malformed sessions without redirecting to login", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { sessionFailure: true });
+  await page.goto("/");
+
+  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid response from /api/session",
+  );
+  await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
+  expect(state.treeRequests).toBe(0);
+});
+
+test("redirects expired protected requests to login", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await expect(page.getByText("Reading", { exact: true })).toBeVisible();
+
+  state.authenticated = false;
+  await selectSource(page);
+
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/");
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+  ]);
+  failures.length = 0;
+});
+
+test("surfaces tree failures without masquerading as logout", async ({
+  page,
+}) => {
+  await installApiFixture(page, { treeFailure: true });
+  await page.goto("/");
+
+  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid response from /api/tree",
+  );
+  await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
+});

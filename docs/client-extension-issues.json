@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "statuses": ["open", "in_progress", "verified", "accepted_constraint"],
+  "issues": [
+    {
+      "id": "CE-01",
+      "title": "Extension feed menus become stale after SPA navigation",
+      "status": "verified",
+      "scope": ["src/extension/content-script.ts"],
+      "acceptanceCriteria": [
+        "Navigation rescans publish only the latest page feeds",
+        "Visibility restoration republishes the latest feed list",
+        "Listeners, timers, and observers are installed once and cleaned up"
+      ],
+      "verification": [
+        "bun run build-extension && bunx playwright test --config tests/browser/playwright.config.ts tests/browser/reader-extension.spec.ts (3 passed)"
+      ]
+    },
+    {
+      "id": "CE-02",
+      "title": "Discovery responses can overwrite newer state",
+      "status": "verified",
+      "scope": ["src/spa/feed-discovery.tsx"],
+      "acceptanceCriteria": [
+        "Older find or preview completions cannot mutate newer discovery state"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (13 passed)"
+      ]
+    },
+    {
+      "id": "CE-03",
+      "title": "Discovery startup errors are unhandled",
+      "status": "verified",
+      "scope": ["src/spa/feed-discovery.tsx"],
+      "acceptanceCriteria": [
+        "Folder and initial-preview failures are handled independently without page errors"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (14 passed)"
+      ]
+    },
+    {
+      "id": "CE-04",
+      "title": "Folder creation errors are unhandled",
+      "status": "verified",
+      "scope": ["src/spa/dashboard.tsx"],
+      "acceptanceCriteria": [
+        "Folder creation and tree refresh failures are visible and do not reject unhandled"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (15 passed)"
+      ]
+    },
+    {
+      "id": "CE-05",
+      "title": "Dashboard errors can be hidden on mobile",
+      "status": "verified",
+      "scope": [
+        "src/spa/dashboard.tsx",
+        "src/spa/feed-discovery.tsx",
+        "src/spa/style.css"
+      ],
+      "acceptanceCriteria": [
+        "Common errors remain visible regardless of the focused mobile pane"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (15 passed with mobile folder and discovery failure cases)"
+      ]
+    },
+    {
+      "id": "CE-06",
+      "title": "Expired sessions are treated as ordinary operation failures",
+      "status": "verified",
+      "scope": [
+        "src/spa/api.ts",
+        "src/spa/dashboard.tsx",
+        "src/spa/feed-discovery.tsx",
+        "src/spa/options-admin.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Protected-operation 401 responses navigate to login while preserving the return path"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/spa-api.test.ts tests/spa-behavior.test.ts (30 passed)",
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (10 passed after expected-401 console assertion was added)"
+      ]
+    },
+    {
+      "id": "CE-07",
+      "title": "Framework validation errors are reported as malformed payloads",
+      "status": "verified",
+      "scope": ["src/spa/api.ts"],
+      "acceptanceCriteria": [
+        "Known Elysia validation payloads retain their useful message without accepting arbitrary errors"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/spa-api.test.ts (14 passed)"
+      ]
+    },
+    {
+      "id": "CE-08",
+      "title": "Website discovery bypasses native URL validity",
+      "status": "verified",
+      "scope": ["src/spa/feed-discovery.tsx"],
+      "acceptanceCriteria": [
+        "Malformed Website URLs do not invoke discovery while email subscription targets remain valid"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (16 passed)"
+      ]
+    },
+    {
+      "id": "CE-09",
+      "title": "Extension instance transport policy is inconsistent",
+      "status": "verified",
+      "scope": [
+        "src/extension/url-helpers.ts",
+        "src/extension/reader-fetch.ts"
+      ],
+      "acceptanceCriteria": [
+        "All extension surfaces accept HTTPS instances and loopback-only HTTP instances"
+      ],
+      "verification": [
+        "bun test tests/extension-url-helpers.test.ts tests/extension-reader-fetch.test.ts (55 passed)",
+        "bun run build-extension && bunx playwright test --config tests/browser/playwright.config.ts tests/browser/reader-extension.spec.ts (3 passed)"
+      ]
+    },
+    {
+      "id": "CE-10",
+      "title": "Extension Reader cannot validate and pin DNS resolution",
+      "status": "accepted_constraint",
+      "scope": ["src/extension/reader-fetch.ts"],
+      "acceptanceCriteria": [
+        "Reader fetching remains distributed across clients",
+        "Literal private-address and redirect validation remain enforced",
+        "Residual public-hostname-to-private-address resolution risk is documented without claiming DNS pinning"
+      ],
+      "decision": "Keep article pulls in the client extension to avoid centralizing publisher traffic and server load. Browser fetch does not expose or pin DNS answers, so the residual DNS-rebinding/public-to-private resolution risk is accepted as a platform constraint.",
+      "verification": [
+        "bun run build-extension && bunx playwright test --config tests/browser/playwright.config.ts tests/browser/reader-extension.spec.ts (literal private targets and redirect validation passed)"
+      ]
+    },
+    {
+      "id": "CE-11",
+      "title": "Turnstile keys can be configured independently",
+      "status": "verified",
+      "scope": ["src/config.ts"],
+      "acceptanceCriteria": [
+        "Configuration accepts both Turnstile keys or neither and rejects blank or one-sided values"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/config.test.ts (19 passed)"
+      ]
+    },
+    {
+      "id": "CE-12",
+      "title": "localStorage exceptions can break folder rendering",
+      "status": "verified",
+      "scope": ["src/spa/dashboard.tsx"],
+      "acceptanceCriteria": [
+        "Folder rendering and toggling continue when storage reads or writes throw"
+      ],
+      "verification": [
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (12 passed)"
+      ]
+    },
+    {
+      "id": "CE-13",
+      "title": "Response contracts accept arbitrary date strings",
+      "status": "verified",
+      "scope": ["src/lib/typebox-policy.ts", "src/contracts/responses.ts"],
+      "acceptanceCriteria": [
+        "Response contracts reject invalid and noncanonical JSON date strings"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/typebox-policy.test.ts tests/spa-api.test.ts (28 passed)"
+      ]
+    },
+    {
+      "id": "CE-14",
+      "title": "Large folders create oversized article query URLs",
+      "status": "verified",
+      "scope": [
+        "src/contracts/requests.ts",
+        "src/routes/reader.ts",
+        "src/spa/dashboard.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Article source IDs are sent in a JSON request body rather than a query string"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/server.test.ts (48 passed)",
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (9 passed)"
+      ]
+    },
+    {
+      "id": "CE-15",
+      "title": "Session lifecycle lacks logout and account UI",
+      "status": "verified",
+      "scope": [
+        "src/db/data-services/user-data-service.ts",
+        "src/routes/public-auth.ts",
+        "src/spa/options-admin.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Users can view their identity, end the current session, and return to login"
+      ],
+      "verification": [
+        "DATABASE_URL=postgresql://localhost/feedfathom_test bun test tests/server.test.ts (49 passed)",
+        "bunx playwright test --config tests/browser/playwright.config.ts tests/browser/spa.spec.ts (11 passed)"
+      ]
+    }
+  ]
+}

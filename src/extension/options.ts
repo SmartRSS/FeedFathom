@@ -1,28 +1,37 @@
+import { storedInstance } from "./extension-types.ts";
+import { canonicalizeInstance } from "./url-helpers.ts";
+
 void (async () => {
-  const storedInstance = await chrome.storage.sync.get("instance");
-  const instanceInput = document.querySelector(
-    "#instance",
-  ) as HTMLInputElement | null;
-  if (!instanceInput) {
+  const storedValue =
+    storedInstance(await chrome.storage.sync.get("instance")) ?? "";
+  const instanceInput = document.querySelector("#instance");
+  if (!(instanceInput instanceof HTMLInputElement)) {
     return;
   }
 
-  instanceInput.value =
-    typeof storedInstance["instance"] === "string"
-      ? storedInstance["instance"]
-      : "";
-  instanceInput.addEventListener("change", (event: Event) => {
-    if (!event.target) {
-      return;
-    }
+  let displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
+  instanceInput.value = displayedValue;
 
-    const instanceAddress = (event.target as HTMLInputElement).value;
-    if (!URL.canParse(instanceAddress)) {
-      alert("bad URL");
-    }
+  instanceInput.addEventListener("change", () => {
+    void (async () => {
+      const value = instanceInput.value;
+      if (value.trim() === "") {
+        await chrome.storage.sync.remove("instance");
+        displayedValue = "";
+        instanceInput.value = displayedValue;
+        return;
+      }
 
-    void chrome.storage.sync.set({ instance: instanceAddress });
+      const canonicalInstance = canonicalizeInstance(value);
+      if (!canonicalInstance) {
+        alert("bad URL");
+        instanceInput.value = displayedValue;
+        return;
+      }
+
+      await chrome.storage.sync.set({ instance: canonicalInstance });
+      displayedValue = canonicalInstance;
+      instanceInput.value = displayedValue;
+    })();
   });
 })();
-
-export {};
