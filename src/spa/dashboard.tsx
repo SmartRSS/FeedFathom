@@ -847,7 +847,24 @@ export function Dashboard(props: {
               }
               nodes.push(...(node.type === "folder" ? node.children : []));
             }
-            if (savedNode) await select(savedNode);
+            if (!savedNode) return;
+            await select(savedNode);
+            // Subscribing only queues the feed fetch (the worker does the
+            // actual network request), so the article list can still be
+            // empty right after subscribing. Poll briefly rather than
+            // leaving the user looking at a blank pane; bail out if they've
+            // navigated elsewhere in the meantime.
+            for (
+              let attempt = 0;
+              attempt < 5 &&
+              articles().length === 0 &&
+              selectedNode()?.uid === savedNode.uid;
+              attempt++
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+              if (selectedNode()?.uid !== savedNode.uid) break;
+              await select(savedNode);
+            }
           }}
         />
       </Show>
