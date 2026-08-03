@@ -567,7 +567,7 @@ export function Dashboard(props: {
       for (const index of selectedIndexes()) {
         const value = articles()[index]?.url;
         const url = value ? safeArticleUrl(value, window.location.href) : "";
-        if (url) window.open(url, "_blank");
+        if (url) window.open(url, "_blank", "noopener");
       }
     }
   }
