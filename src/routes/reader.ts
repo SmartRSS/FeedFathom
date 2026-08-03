@@ -1,6 +1,10 @@
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import {
+  normalizedSubscriptionTarget,
+  type SubscriptionTarget,
+} from "../lib/typebox-policy.ts";
+import {
   articleQuery,
   articlesRequest,
   createFolderRequest,
@@ -26,6 +30,18 @@ import {
 } from "../lib/feed-preview-cache.ts";
 import { scanHtml } from "../lib/scanner.ts";
 import { json, userFor } from "./shared.ts";
+
+// Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
+// string -> {kind,value} transform) in some environments but not others, so
+// this normalizes either shape rather than depending on that being decoded
+// already.
+function decodedSubscriptionTarget(
+  value: SubscriptionTarget | string,
+): SubscriptionTarget {
+  return typeof value === "string"
+    ? Value.Decode(normalizedSubscriptionTarget, value)
+    : value;
+}
 
 export type ReaderRouteDependencies = {
   articlesDataService: Pick<
@@ -260,14 +276,14 @@ export const createReaderRoutes = ({
       "/api/subscribe",
       { body: subscribeRequest },
       async ({ body, request, user }) => {
-        const decoded = Value.Decode(subscribeRequest, body);
-        const isEmail = decoded.sourceUrl.kind === "email";
+        const sourceUrl = decodedSubscriptionTarget(body.sourceUrl);
+        const isEmail = sourceUrl.kind === "email";
         if (!mailEnabled && isEmail)
           return json({ error: "Email subscriptions are not allowed." }, 400);
         let homeUrl = new URL(request.url).origin;
         const cachedPreview = isEmail
           ? undefined
-          : await feedPreviewCache.get(user.id, decoded.sourceUrl.value);
+          : await feedPreviewCache.get(user.id, sourceUrl.value);
         if (cachedPreview?.link) homeUrl = cachedPreview.link;
         const subscription = await userSourcesDataService.addSourceToUser(
           user.id,
@@ -276,9 +292,9 @@ export const createReaderRoutes = ({
             initializationSnapshot: cachedPreview
               ? serializeFeedPreview(cachedPreview)
               : null,
-            name: decoded.sourceName,
-            parentId: decoded.sourceFolder,
-            url: decoded.sourceUrl.value,
+            name: body.sourceName,
+            parentId: body.sourceFolder,
+            url: sourceUrl.value,
           },
           false,
         );
@@ -307,7 +323,7 @@ export const createReaderRoutes = ({
               ? cachedPreview
               : deserializeFeedPreview(
                   subscription.initializationSnapshot,
-                  decoded.sourceUrl.value,
+                  sourceUrl.value,
                 );
         if (subscription.initializationSnapshot && !preview) {
           if (subscriptionId !== undefined && claimed !== true)
