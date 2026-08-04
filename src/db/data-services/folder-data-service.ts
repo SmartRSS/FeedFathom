@@ -32,7 +32,10 @@ export class FoldersDataService {
       .where(eq(userFolders.userId, userId));
   }
 
-  public async removeEmptyUserFolder(userId: number, folderId: number) {
+  public async removeEmptyUserFolder(
+    userId: number,
+    folderId: number,
+  ): Promise<"not-empty" | "not-found" | "removed"> {
     const removed = await this.drizzleConnection
       .delete(userFolders)
       .where(
@@ -48,6 +51,17 @@ export class FoldersDataService {
         ),
       )
       .returning({ id: userFolders.id });
-    return removed.length > 0;
+    if (removed.length > 0) return "removed";
+
+    // The delete's own conditions can't tell "doesn't exist/not owned"
+    // apart from "exists but isn't empty" (both affect zero rows) -- a
+    // follow-up existence check (ignoring emptiness) distinguishes them
+    // for the caller.
+    const [existing] = await this.drizzleConnection
+      .select({ id: userFolders.id })
+      .from(userFolders)
+      .where(and(eq(userFolders.id, folderId), eq(userFolders.userId, userId)))
+      .limit(1);
+    return existing ? "not-empty" : "not-found";
   }
 }

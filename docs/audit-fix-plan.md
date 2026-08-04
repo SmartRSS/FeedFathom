@@ -160,7 +160,16 @@ apply their (verified) feedback → repeat until both come back clean → move o
       notification-delivery failure is isolated in its own try/catch so
       it can't be mistaken for "still offline" and wrongly abort
       processing the rest of the queue.
-- [ ] Ambiguous 409 vs 404 on folder deletion (not-found vs not-empty conflated)
+- [x] Ambiguous 409 vs 404 on folder deletion (not-found vs not-empty
+      conflated) — fixed and deployed. `removeEmptyUserFolder` returns
+      `"removed" | "not-empty" | "not-found"`: it still attempts the
+      original atomic ownership+emptiness DELETE first, and only runs a
+      follow-up existence-only check (still filtered by userId, so no
+      cross-account leak) if that deletes zero rows. Verified against
+      live Postgres for all three outcomes. A narrow TOCTOU window exists
+      between the failed DELETE and the follow-up check (a folder could
+      become empty in between) but is benign -- worst case is a stale
+      409 the user can retry, not a correctness or security issue.
 - [ ] Duplicate feed URLs silently dropped in extension's context menu
 
 Deprioritized / reconsidered, not scheduled unless asked:

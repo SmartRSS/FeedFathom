@@ -725,7 +725,9 @@ test("protects nonempty folders and deletes empty owned folders", async () => {
     folderId,
   ) => {
     deletions.push([userId, folderId]);
-    return folderId !== 7;
+    if (folderId === 7) return "not-empty";
+    if (folderId === 9) return "not-found";
+    return "removed";
   };
   const app = await appFor(dependencies);
   const removeFolder = (folderId: number) =>
@@ -751,6 +753,15 @@ test("protects nonempty folders and deletes empty owned folders", async () => {
   expect(deletions).toEqual([
     [42, 7],
     [42, 8],
+  ]);
+
+  const missing = await removeFolder(9);
+  expect(missing.status).toBe(404);
+  expect(await missing.json()).toEqual({ error: "Folder not found" });
+  expect(deletions).toEqual([
+    [42, 7],
+    [42, 8],
+    [42, 9],
   ]);
 });
 

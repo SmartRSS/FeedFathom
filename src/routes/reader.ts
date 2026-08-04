@@ -221,12 +221,13 @@ export const createReaderRoutes = ({
       "/api/folders",
       { body: removeFolderRequest },
       async ({ body, user }) => {
-        if (
-          !(await foldersDataService.removeEmptyUserFolder(
-            user.id,
-            body.removeFolderId,
-          ))
-        )
+        const result = await foldersDataService.removeEmptyUserFolder(
+          user.id,
+          body.removeFolderId,
+        );
+        if (result === "not-found")
+          return json({ error: "Folder not found" }, 404);
+        if (result === "not-empty")
           return json({ error: "Folder is not empty" }, 409);
         return json(body.removeFolderId);
       },
