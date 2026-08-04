@@ -252,6 +252,9 @@ export function Dashboard(props: {
   let latestArticleRequest = 0;
   let latestCapabilityProbe = 0;
   let latestTreeRequest = 0;
+  let articleAbortController: AbortController | undefined;
+  let treeAbortController: AbortController | undefined;
+  let treeRequestPromise: Promise<TreeNode[]> | undefined;
   const disableReader = (message: string) => {
     latestArticleRequest++;
     setReaderAvailable(false);
@@ -278,8 +281,49 @@ export function Dashboard(props: {
     const request = ++latestTreeRequest;
     const preload = window.__treePreload;
     delete window.__treePreload;
-    const nextTree = (await api("/tree", treeResponse, undefined, preload))
-      .tree;
+    treeAbortController?.abort();
+    const controller = new AbortController();
+    treeAbortController = controller;
+    const attempt: Promise<TreeNode[]> = (async () => {
+      try {
+        return (
+          await api(
+            "/tree",
+            treeResponse,
+            { signal: controller.signal },
+            preload,
+          )
+        ).tree;
+      } catch (cause) {
+        // Only treat this as "superseded, defer to whoever's current"
+        // when THIS request's own signal is what caused the failure --
+        // a newer loadTree() aborting this one shouldn't surface an
+        // unrelated "Could not create folder"/"Could not subscribe"
+        // toast, but a genuine failure must still propagate even if
+        // another loadTree() happened to start around the same time.
+        // Deferring to the shared in-flight promise (rather than reading
+        // the `tree` signal) matters because abort() settles before the
+        // superseding request's own network round trip finishes, so the
+        // signal can't yet hold that request's result.
+        //
+        // Checking `cause` itself (not just `controller.signal.aborted`)
+        // matters too: a controller can be aborted AFTER its fetch
+        // already resolved, while a later step (JSON parsing, schema
+        // validation) is still throwing a genuine, unrelated error --
+        // `signal.aborted` alone can't tell those apart and would mask
+        // a real bug as a silent supersession.
+        if (
+          cause instanceof DOMException &&
+          cause.name === "AbortError" &&
+          request !== latestTreeRequest
+        ) {
+          return treeRequestPromise ?? Promise.reject(cause);
+        }
+        throw cause;
+      }
+    })();
+    treeRequestPromise = attempt;
+    const nextTree = await attempt;
     if (request !== latestTreeRequest) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
@@ -319,6 +363,7 @@ export function Dashboard(props: {
   async function select(node: TreeNode) {
     props.focusPane("articles");
     const selection = ++latestSelection;
+    articleAbortController?.abort();
     const ids = sourceIds(node);
     if (!ids.length) {
       setArticles([]);
@@ -329,6 +374,8 @@ export function Dashboard(props: {
       return;
     }
     setArticlesLoading(true);
+    const controller = new AbortController();
+    articleAbortController = controller;
     try {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
@@ -336,6 +383,7 @@ export function Dashboard(props: {
         body: JSON.stringify({ sources: ids }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
+        signal: controller.signal,
       });
       if (selection !== latestSelection) return;
       setArticles(nextArticles);

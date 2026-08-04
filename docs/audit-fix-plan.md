@@ -128,7 +128,26 @@ apply their (verified) feedback → repeat until both come back clean → move o
       `refreshFavicon` uses `"background"` HTTP priority (fails fast, no
       blocking poll) against third-party favicon hosts, not the source's
       own throttled hostname.
-- [ ] No `AbortController` on superseded tree/article requests
+- [x] No `AbortController` on superseded tree/article requests — fixed and
+      deployed (3 review rounds). `select()`'s article fetch and
+      `loadTree()`'s tree fetch each abort the previous in-flight request
+      of the same kind. `loadTree()` needed two further rounds: reviewers
+      found swallowing the abort and returning the `tree()` signal was
+      wrong (the signal can't yet hold a still-in-flight superseding
+      call's result -- abort() settles before that request's own network
+      round trip finishes), which silently broke `FeedDiscovery`'s
+      `saved` callback (couldn't find the newly-subscribed source, no
+      visible error). Fixed with a shared single-flight promise that
+      superseded calls defer to instead of guessing from a signal,
+      verified both with an isolated simulation script (3 scenarios:
+      2-way supersede, 3-way chain, genuine-failure propagation) and by
+      reviewers reading the real code's execution-order guarantees. Round
+      3 fixed a remaining gap: checking `controller.signal.aborted`
+      wasn't enough to identify "this failure was caused by abort" (a
+      controller can be aborted after its fetch already resolved, while
+      a later step like schema validation throws a genuine unrelated
+      bug) -- now checks `cause instanceof DOMException && cause.name
+      === "AbortError"` instead.
 - [ ] `flushQueue()` retries permanently-failed mutations forever, no user-visible failure
 - [ ] Ambiguous 409 vs 404 on folder deletion (not-found vs not-empty conflated)
 - [ ] Duplicate feed URLs silently dropped in extension's context menu
