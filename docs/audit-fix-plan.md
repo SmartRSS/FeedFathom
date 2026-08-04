@@ -76,7 +76,10 @@ apply their (verified) feedback → repeat until both come back clean → move o
       statement, verified against real Postgres (rolled back) for both
       the empty-table case (0 deleted) and the genuine-orphan case (only
       unsubscribed sources deleted).
-- [ ] Literal NUL byte in `article-data-service.ts`'s dedupe key
+- [x] Literal NUL byte in `article-data-service.ts`'s dedupe key — fixed and
+      deployed. Single stray byte (0x00 -> 0x20) at a fixed offset; whole
+      file registered as binary to `file` until fixed. Confirmed no other
+      corrupted bytes anywhere else in the file.
 - [ ] `batchUpsertArticles` partial-batch failure skips recompute for committed batches
 - [ ] OPML import aborts entirely on one malformed outline instead of skipping it
 - [ ] `createUser` takes a full-table lock on every registration, not just first-admin bootstrap
