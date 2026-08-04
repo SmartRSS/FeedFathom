@@ -1,4 +1,14 @@
-import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "../../types/opml-types";
 import type * as schema from "../schema.ts";
@@ -376,14 +386,26 @@ export class UserSourcesDataService {
   }
 
   public async cleanup() {
+    // "Delete sources nobody subscribes to" is, by construction, "delete
+    // every source" whenever user_sources is empty -- true whether that's
+    // expressed as NOT IN or as a correlated NOT EXISTS per source row.
+    // If nobody has ever subscribed to anything (last subscription just
+    // removed) deleting every source is correct; if user_sources is
+    // empty for any other, transient reason, it isn't. Since this method
+    // can't tell those apart, guard with an uncorrelated existence check
+    // on the whole table, in the same statement so there's no separate
+    // check-then-delete round trip to race against.
     await this.drizzleConnection
       .delete(sources)
       .where(
-        notInArray(
-          sources.id,
-          this.drizzleConnection
-            .selectDistinct({ id: userSources.sourceId })
-            .from(userSources),
+        and(
+          exists(this.drizzleConnection.select({ id: userSources.id }).from(userSources)),
+          notExists(
+            this.drizzleConnection
+              .select({ id: userSources.id })
+              .from(userSources)
+              .where(eq(userSources.sourceId, sources.id)),
+          ),
         ),
       );
 

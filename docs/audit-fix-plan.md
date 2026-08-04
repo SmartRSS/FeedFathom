@@ -46,8 +46,36 @@ apply their (verified) feedback → repeat until both come back clean → move o
       `getUserArticle`), returns only the authorized subset; verified live
       against the dev DB that a user cannot soft-delete another user's
       articles.
-- [ ] Job failures for everything except `ParseSource` vanish with no durable record
-- [ ] `cleanup()`'s empty-subquery mass-delete risk on `sources`
+- [x] Job failures for everything except `ParseSource` vanish with no durable record —
+      fixed and deployed. Took 7 review rounds, each finding a narrower
+      unguarded-throw path in `processJob`'s catch block than the last (an
+      adversarial/poisoned job error must never itself cause `processJob` to
+      reject, or BullMQ would see the job as failed instead of the failure
+      living in Postgres per this codebase's "always acknowledge"
+      convention): record() unguarded -> message construction unguarded ->
+      console.error unguarded (poisoned inspect symbol) -> the
+      `HttpDeferredError` instanceof check itself unguarded (poisoned
+      prototype) -> using the classification (retryAt getter /
+      moveToDelayed) unguarded -> the `DelayedError` instanceof check in
+      that fallback unguarded. New `job_failures` table (migration 0019),
+      hand-written and validated in a rolled-back transaction. Deployed via
+      the manual Oracle pipeline (image rebuild + Swarm service update +
+      one-off migrator job) since the CI/CD pipeline described in
+      docs/running.md was mid-migration on this branch. Note: a concurrent
+      session was found actively modifying this branch/deployment host
+      during this item; a test-file revert it caused mid-review was
+      recovered and re-verified.
+- [x] `cleanup()`'s empty-subquery mass-delete risk on `sources` — fixed and
+      deployed. 3 attempts: a separate existence-check query before the
+      delete was TOCTOU-vulnerable (not atomic with the delete); rewriting
+      `notInArray` as a correlated `notExists` didn't fix anything (still
+      deletes everything when `user_sources` is globally empty -- caught
+      by testing directly against Postgres before committing); final fix
+      combines an uncorrelated `exists(user_sources has any row)` guard
+      with the correlated per-row `notExists` check in one DELETE
+      statement, verified against real Postgres (rolled back) for both
+      the empty-table case (0 deleted) and the genuine-orphan case (only
+      unsubscribed sources deleted).
 - [ ] Literal NUL byte in `article-data-service.ts`'s dedupe key
 - [ ] `batchUpsertArticles` partial-batch failure skips recompute for committed batches
 - [ ] OPML import aborts entirely on one malformed outline instead of skipping it
