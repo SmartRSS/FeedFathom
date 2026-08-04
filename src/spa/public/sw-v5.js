@@ -146,6 +146,18 @@ async function queueDelete(key) {
   }
 }
 
+async function notifyMutationFailed(value, status) {
+  const clients = await self.clients.matchAll({ type: "window" });
+  for (const client of clients) {
+    client.postMessage({
+      method: value.method,
+      status,
+      type: "queued-mutation-failed",
+      url: value.url,
+    });
+  }
+}
+
 async function flushQueue() {
   const entries = await queueAll();
   for (const { key, value } of entries) {
@@ -157,8 +169,38 @@ async function flushQueue() {
         headers: { "Content-Type": "application/json" },
         method: value.method,
       });
-      // eslint-disable-next-line no-await-in-loop -- replay must preserve order
-      if (response.ok) await queueDelete(key);
+      if (response.ok) {
+        // eslint-disable-next-line no-await-in-loop -- replay must preserve order
+        await queueDelete(key);
+        continue;
+      }
+      // A 4xx means the server processed and definitively rejected this
+      // request (e.g. the article/source/folder no longer exists, or the
+      // folder isn't empty) -- it will never succeed by retrying, so stop
+      // queueing it forever and tell the page, since the optimistic
+      // response already told the user this action had succeeded. 401 is
+      // excluded: a session that expired while offline isn't a rejection
+      // of the mutation itself, and the old retry-forever behavior lets
+      // it succeed once the user re-authenticates. 5xx is presumed
+      // transient and also keeps the old retry-forever behavior.
+      if (
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 401
+      ) {
+        // eslint-disable-next-line no-await-in-loop -- replay must preserve order
+        await queueDelete(key);
+        try {
+          // A failure here (matchAll/postMessage) isn't a connectivity
+          // problem and must not be mistaken for "still offline" by the
+          // outer catch below -- that would wrongly stop processing the
+          // rest of the queue over a best-effort notification failing.
+          // eslint-disable-next-line no-await-in-loop -- best-effort notify per entry
+          await notifyMutationFailed(value, response.status);
+        } catch {
+          // Best-effort: the entry is already dequeued either way.
+        }
+      }
     } catch {
       break; // still offline, stop and retry on the next successful request or sync event
     }

@@ -148,7 +148,18 @@ apply their (verified) feedback → repeat until both come back clean → move o
       a later step like schema validation throws a genuine unrelated
       bug) -- now checks `cause instanceof DOMException && cause.name
       === "AbortError"` instead.
-- [ ] `flushQueue()` retries permanently-failed mutations forever, no user-visible failure
+- [x] `flushQueue()` retries permanently-failed mutations forever, no
+      user-visible failure — fixed and deployed (2 review rounds). A
+      definitive 4xx now dequeues the mutation and notifies open tabs via
+      `postMessage`, since the user was already told (optimistically)
+      that the offline action succeeded. 401 is explicitly excluded from
+      "permanent" -- a session that expired while offline isn't a
+      rejection of the mutation itself, and retrying after
+      re-authentication should still work. 5xx/network failures keep the
+      original retry-forever behavior (presumed transient). A
+      notification-delivery failure is isolated in its own try/catch so
+      it can't be mistaken for "still offline" and wrongly abort
+      processing the rest of the queue.
 - [ ] Ambiguous 409 vs 404 on folder deletion (not-found vs not-empty conflated)
 - [ ] Duplicate feed URLs silently dropped in extension's context menu
 

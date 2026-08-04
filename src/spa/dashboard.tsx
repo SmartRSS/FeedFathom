@@ -272,9 +272,30 @@ export function Dashboard(props: {
       disableReader("The Reader extension is unavailable. Showing Feed mode.");
   };
   const focusReaderProbe = () => void probeReader();
+  const handleServiceWorkerMessage = (event: MessageEvent) => {
+    const data: unknown = event.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "type" in data &&
+      data.type === "queued-mutation-failed"
+    ) {
+      // The service worker already told the user this action succeeded
+      // (an optimistic response) before discovering, once back online,
+      // that the server definitively rejected it -- nothing else lets
+      // the user find out, so surface it here.
+      setError(
+        "A change made while offline could not be applied and was discarded. Reload to see the current state.",
+      );
+    }
+  };
   onCleanup(() => {
     latestCapabilityProbe++;
     removeEventListener("focus", focusReaderProbe);
+    navigator.serviceWorker?.removeEventListener(
+      "message",
+      handleServiceWorkerMessage,
+    );
     readerBridge.dispose();
   });
   async function loadTree(): Promise<TreeNode[]> {
@@ -349,6 +370,10 @@ export function Dashboard(props: {
   }
   onMount(async () => {
     addEventListener("focus", focusReaderProbe);
+    navigator.serviceWorker?.addEventListener(
+      "message",
+      handleServiceWorkerMessage,
+    );
     void probeReader();
     try {
       await loadTree();
