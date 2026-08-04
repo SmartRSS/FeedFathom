@@ -93,7 +93,19 @@ apply their (verified) feedback → repeat until both come back clean → move o
       interfaces like `MainWorker` does, so mocking would require `as
       unknown` casts; verified instead via two rounds of reviewers
       explicitly tracing all 4 success/failure combinations.
-- [ ] OPML import aborts entirely on one malformed outline instead of skipping it
+- [x] OPML import aborts entirely on one malformed outline instead of
+      skipping it — fixed and deployed. A single bad `xmlUrl` or
+      structurally malformed outline no longer aborts the whole import
+      (`admin-options.ts`'s OPML upload route returned a blanket 400 for
+      the entire file). A reviewer found the initial fix still dropped an
+      outline's entire child subtree when only the outline's OWN
+      attributes were malformed (e.g. a bare attribute-less `<outline>`
+      wrapper folder) since children were never queued before the skip.
+      Fixed by making `rawOutline` tolerant of missing attributes/non-array
+      children (falls back to `{}`/`[]`) instead of throwing, so only a
+      genuinely non-object entry is now unrecoverable. `maximumNodes`/
+      `maximumDepth` DoS guards and top-level document-structure checks
+      are untouched and still abort the whole import as before.
 - [ ] `createUser` takes a full-table lock on every registration, not just first-admin bootstrap
 - [ ] `GatherFaviconJobs` has no concurrency cap, can starve `ParseSource`
 - [ ] No `AbortController` on superseded tree/article requests

@@ -25,12 +25,16 @@ const stringAttribute = (attributes: RecordValue, name: string): string => {
 };
 
 const rawOutline = (value: unknown): RawOutline => {
-  if (!isRecord(value) || !isRecord(value["@_"]))
-    throw new Error("Invalid OPML outline");
+  if (!isRecord(value)) throw new Error("Invalid OPML outline");
+  // Missing/malformed attributes or a non-array children list don't make
+  // the node unrecoverable -- fall back to empty rather than losing this
+  // node's (and its children's) entire subtree over one bad property.
+  const attributes = isRecord(value["@_"]) ? value["@_"] : {};
   const children = value["outline"];
-  if (children !== undefined && !Array.isArray(children))
-    throw new Error("Invalid OPML outline children");
-  return { attributes: value["@_"], children: children ?? [] };
+  return {
+    attributes,
+    children: Array.isArray(children) ? children : [],
+  };
 };
 
 const webUrl = (value: string): URL | undefined => {
@@ -88,7 +92,14 @@ export class OpmlParser {
       if (current.depth > maximumDepth)
         throw new Error("OPML nesting is too deep");
 
-      const outline = rawOutline(current.value);
+      let outline: RawOutline;
+      try {
+        outline = rawOutline(current.value);
+      } catch {
+        // A single malformed outline node shouldn't abort the whole
+        // import -- skip it and keep processing the rest of the file.
+        continue;
+      }
       const title =
         stringAttribute(outline.attributes, "title") ||
         stringAttribute(outline.attributes, "text") ||
@@ -98,7 +109,9 @@ export class OpmlParser {
 
       if (sourceTypes.has(type) || xmlUrl) {
         const parsedXmlUrl = webUrl(xmlUrl);
-        if (!parsedXmlUrl) throw new Error(`Invalid OPML feed URL: ${xmlUrl}`);
+        // A single malformed feed URL shouldn't abort the whole import --
+        // skip just this outline and keep processing the rest of the file.
+        if (!parsedXmlUrl) continue;
         const homeUrl = stringAttribute(outline.attributes, "htmlUrl");
         const parsedHomeUrl = webUrl(homeUrl);
         current.target.push({

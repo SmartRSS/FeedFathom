@@ -36,8 +36,12 @@ describe("OpmlParser", () => {
           path.join(process.cwd(), inputDirectory, `${testFile}.ts`)
         );
         if (testFile.includes("invalid")) {
+          // A malformed outline is skipped rather than aborting the whole
+          // import (see opml-parser.ts) -- processOutline's single-node
+          // wrapper then has nothing to return, so it falls back to its
+          // own "no result" error instead of a feed-URL-specific one.
           expect(() => parser.processOutline(input)).toThrow(
-            "Invalid OPML feed URL",
+            "Invalid OPML outline",
           );
           return;
         }
@@ -97,6 +101,60 @@ describe("OpmlParser", () => {
       expect(() => parser.parseOpml("<different-root />")).toThrow(
         "Invalid OPML document",
       );
+    });
+
+    test("skips a malformed outline instead of aborting the whole import", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline text="Good feed" type="rss" xmlUrl="https://example.com/feed.xml" />
+            <outline text="Bad feed" type="rss" xmlUrl="not-a-valid-url" />
+            <outline text="Another good feed" type="rss" xmlUrl="https://example.org/feed.xml" />
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          homeUrl: "https://example.com",
+          name: "Good feed",
+          type: "source",
+          xmlUrl: "https://example.com/feed.xml",
+        },
+        {
+          homeUrl: "https://example.org",
+          name: "Another good feed",
+          type: "source",
+          xmlUrl: "https://example.org/feed.xml",
+        },
+      ]);
+    });
+
+    test("keeps valid children nested under an attribute-less outline wrapper", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline>
+              <outline text="Nested feed" type="rss" xmlUrl="https://example.com/feed.xml" />
+            </outline>
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          children: [
+            {
+              homeUrl: "https://example.com",
+              name: "Nested feed",
+              type: "source",
+              xmlUrl: "https://example.com/feed.xml",
+            },
+          ],
+          name: "Unknown",
+          type: "folder",
+        },
+      ]);
     });
 
     const inputDirectory = path.join(TEST_CASES_DIR, "inputs", "parse-opml");
