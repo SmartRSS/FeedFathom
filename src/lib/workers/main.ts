@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { DelayedError } from "bullmq";
 import type { AppConfig } from "../../config.ts";
+import type { JobFailuresDataService } from "../../db/data-services/job-failure-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { JobName } from "../../types/job-name-enum.ts";
@@ -107,6 +108,10 @@ export class MainWorker {
       UserSourcesDataService,
       "cleanup"
     >,
+    private readonly jobFailuresDataService: Pick<
+      JobFailuresDataService,
+      "record"
+    >,
     private readonly createWorker: MainWorkerFactory,
   ) {}
 
@@ -192,11 +197,57 @@ export class MainWorker {
         }
       }
     } catch (error: unknown) {
-      if (error instanceof HttpDeferredError) {
-        await job.moveToDelayed(error.retryAt, job.token);
-        throw new DelayedError();
+      // `instanceof` can itself throw (a Proxy with a poisoned
+      // getPrototypeOf trap), so this check can't be trusted unguarded
+      // either -- same reasoning as the block below.
+      const deferredError = (() => {
+        try {
+          return error instanceof HttpDeferredError ? error : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+      if (deferredError) {
+        try {
+          await job.moveToDelayed(deferredError.retryAt, job.token);
+          throw new DelayedError();
+        } catch (moveError) {
+          const isDelayed = (() => {
+            try {
+              return moveError instanceof DelayedError;
+            } catch {
+              return false;
+            }
+          })();
+          if (isDelayed) {
+            throw moveError;
+          }
+          // moveToDelayed itself failed (e.g. a genuine Redis/BullMQ
+          // error, or a poisoned retryAt getter) -- fall through to the
+          // guarded failure-recording path below instead of letting this
+          // propagate and fail the job in BullMQ's own state.
+        }
       }
-      console.error("Error processing job:", error);
+      try {
+        // Everything here -- logging the error, building its message, and
+        // recording it -- must never itself become a job failure, or a
+        // sufficiently adversarial thrown value (a poisoned `message`
+        // getter, a poisoned custom-inspect symbol console.error relies
+        // on, ...) would put the job into BullMQ's failure state instead
+        // of always acknowledging and keeping outcomes in Postgres, which
+        // is this codebase's established convention. Rather than guard
+        // each statement individually (this has already needed three
+        // rounds of narrowing), the whole block is one try/catch.
+        console.error("Error processing job:", error);
+        const message =
+          error instanceof Error ? error.message : String(error);
+        await this.jobFailuresDataService.record(job.name, message);
+      } catch {
+        // Deliberately swallowed with no further logging: logging the
+        // original failure already failed once in this block, so trying
+        // to log *that* failure risks the exact same unguarded-throw
+        // problem all over again. There's nothing more we can safely do.
+      }
     }
   };
 

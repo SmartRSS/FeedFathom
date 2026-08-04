@@ -5,6 +5,7 @@ import { config } from "./config.ts";
 import { createDrizzleConnection } from "./db/connection.ts";
 import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
 import { FoldersDataService } from "./db/data-services/folder-data-service.ts";
+import { JobFailuresDataService } from "./db/data-services/job-failure-data-service.ts";
 import { SourcesDataService } from "./db/data-services/source-data-service.ts";
 import { UsersDataService } from "./db/data-services/user-data-service.ts";
 import { UserSourcesDataService } from "./db/data-services/user-source-data-service.ts";
@@ -38,6 +39,7 @@ export async function createFeedRuntime() {
     bullmqQueue,
   );
   const usersDataService = new UsersDataService(drizzleConnection);
+  const jobFailuresDataService = new JobFailuresDataService(drizzleConnection);
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
     foldersDataService,
@@ -70,6 +72,7 @@ export async function createFeedRuntime() {
     feedParser,
     foldersDataService,
     httpClient,
+    jobFailuresDataService,
     redirectMap,
     redis,
     sourcesDataService,

@@ -127,6 +127,13 @@
       "when": 1785765117033,
       "tag": "0018_reflective_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785869000000,
+      "tag": "0019_curly_gargoyle",
+      "breakpoints": true
     }
   ]
 }

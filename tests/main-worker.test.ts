@@ -50,6 +50,10 @@ const idleUserSources = {
   async cleanup() {},
 };
 
+const idleJobFailures = {
+  async record() {},
+};
+
 const noopWorkerFactory: MainWorkerFactory = () => ({
   async close() {},
   onFailed() {},
@@ -80,6 +84,7 @@ test("initialize schedules configured intervals and starts the worker", async ()
     idleParser,
     idleSources,
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
 
@@ -112,6 +117,7 @@ test("captured processor parses the queued source", async () => {
     },
     idleSources,
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
 
@@ -143,6 +149,7 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
     },
     idleSources,
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
   await worker.initialize();
@@ -179,6 +186,7 @@ test("refreshes favicons only for validated job data", async () => {
     },
     idleSources,
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
   await worker.initialize();
@@ -223,6 +231,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
       },
     },
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
   await worker.initialize();
@@ -298,6 +307,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
         downstreamCalls.push("cleanup");
       },
     },
+    idleJobFailures,
     createWorker,
   );
   await worker.initialize();
@@ -349,6 +359,7 @@ test("cleanup delegates to the worker", async () => {
     idleParser,
     idleSources,
     idleUserSources,
+    idleJobFailures,
     createWorker,
   );
   await worker.initialize();
@@ -356,4 +367,247 @@ test("cleanup delegates to the worker", async () => {
   await worker.cleanup();
 
   expect(closeCalls).toBe(1);
+});
+
+test("records a durable failure for non-ParseSource job errors", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recorded: [string, string][] = [];
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    idleParser,
+    idleSources,
+    {
+      async cleanup() {
+        throw new Error("cleanup exploded");
+      },
+    },
+    {
+      async record(jobType, errorMessage) {
+        recorded.push([jobType, errorMessage]);
+      },
+    },
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await processor({
+    data: {},
+    async moveToDelayed() {},
+    name: JobName.Cleanup,
+  });
+
+  expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
+});
+
+test("a failure while recording a job failure doesn't itself fail the job", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    idleParser,
+    idleSources,
+    {
+      async cleanup() {
+        throw new Error("cleanup exploded");
+      },
+    },
+    {
+      async record() {
+        throw new Error("database unavailable");
+      },
+    },
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  // Must resolve, not reject -- BullMQ should always see the job as
+  // acknowledged, even if persisting the failure record itself fails.
+  await expect(
+    processor({ data: {}, async moveToDelayed() {}, name: JobName.Cleanup }),
+  ).resolves.toBeUndefined();
+});
+
+test("a poisoned error whose message getter throws doesn't fail the job either", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  class PoisonedError extends Error {
+    override get message(): string {
+      throw new Error("message getter exploded");
+    }
+  }
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    idleParser,
+    idleSources,
+    {
+      async cleanup() {
+        throw new PoisonedError();
+      },
+    },
+    idleJobFailures,
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await expect(
+    processor({ data: {}, async moveToDelayed() {}, name: JobName.Cleanup }),
+  ).resolves.toBeUndefined();
+});
+
+test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recorded: [string, string][] = [];
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const evilDeferredError = Object.create(HttpDeferredError.prototype, {
+    retryAt: {
+      get() {
+        throw new Error("poisoned retryAt getter");
+      },
+    },
+  }) as HttpDeferredError;
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource() {
+        throw evilDeferredError;
+      },
+      async refreshFavicon() {},
+    },
+    idleSources,
+    idleUserSources,
+    {
+      async record(jobType, errorMessage) {
+        recorded.push([jobType, errorMessage]);
+      },
+    },
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await expect(
+    processor({
+      data: { id: source.id, url: source.url },
+      async moveToDelayed() {
+        throw new Error("should never be called with a poisoned retryAt");
+      },
+      name: JobName.ParseSource,
+      token: "worker-token",
+    }),
+  ).resolves.toBeUndefined();
+  expect(recorded).toEqual([[JobName.ParseSource, ""]]);
+});
+
+test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail the job", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recorded: [string, string][] = [];
+  const retryAt = Date.now() + 60_000;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource() {
+        throw new HttpDeferredError(retryAt);
+      },
+      async refreshFavicon() {},
+    },
+    idleSources,
+    idleUserSources,
+    {
+      async record(jobType, errorMessage) {
+        recorded.push([jobType, errorMessage]);
+      },
+    },
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await expect(
+    processor({
+      data: { id: source.id, url: source.url },
+      async moveToDelayed() {
+        throw new Error("Redis connection lost");
+      },
+      name: JobName.ParseSource,
+      token: "worker-token",
+    }),
+  ).resolves.toBeUndefined();
+  expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
+  expect(recorded[0]?.[1]).toStartWith("Request deferred until ");
+});
+
+test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recorded: [string, string][] = [];
+  const retryAt = Date.now() + 60_000;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = new MainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource() {
+        throw new HttpDeferredError(retryAt);
+      },
+      async refreshFavicon() {},
+    },
+    idleSources,
+    idleUserSources,
+    {
+      async record(jobType, errorMessage) {
+        recorded.push([jobType, errorMessage]);
+      },
+    },
+    createWorker,
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  const poisonedMoveError = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        throw new Error("poisoned getPrototypeOf trap");
+      },
+    },
+  );
+
+  await expect(
+    processor({
+      data: { id: source.id, url: source.url },
+      async moveToDelayed() {
+        throw poisonedMoveError;
+      },
+      name: JobName.ParseSource,
+      token: "worker-token",
+    }),
+  ).resolves.toBeUndefined();
+  expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
 });

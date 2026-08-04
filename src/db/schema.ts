@@ -1,4 +1,5 @@
 import { articles } from "./schemas/articles";
+import { jobFailures } from "./schemas/jobFailures";
 import { opmlImports } from "./schemas/opmlImports";
 import { sessions } from "./schemas/sessions";
 import { sources } from "./schemas/sources";
@@ -18,4 +19,5 @@ export {
   articles,
   userArticles,
   sessions,
+  jobFailures,
 };

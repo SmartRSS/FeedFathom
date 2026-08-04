@@ -25,6 +25,7 @@ async function runWorker() {
     runtime.feedParser,
     runtime.sourcesDataService,
     runtime.userSourcesDataService,
+    runtime.jobFailuresDataService,
     createWorker,
   );
   let shutdownPromise: Promise<void> | undefined;

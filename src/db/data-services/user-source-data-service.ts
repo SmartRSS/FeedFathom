@@ -376,46 +376,42 @@ export class UserSourcesDataService {
   }
 
   public async cleanup() {
-    try {
-      await this.drizzleConnection
-        .delete(sources)
-        .where(
-          notInArray(
-            sources.id,
-            this.drizzleConnection
-              .selectDistinct({ id: userSources.sourceId })
-              .from(userSources),
-          ),
-        );
-
-      const articlesBeforeSubscription = this.drizzleConnection
-        .select({ id: articles.id })
-        .from(articles)
-        .leftJoin(
+    await this.drizzleConnection
+      .delete(sources)
+      .where(
+        notInArray(
+          sources.id,
           this.drizzleConnection
-            .select({
-              sourceId: userSources.sourceId,
-              earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
-                "earliest_subscription",
-              ),
-            })
-            .from(userSources)
-            .groupBy(userSources.sourceId)
-            .as("earliest_subs"),
-          eq(articles.sourceId, sql`earliest_subs.source_id`),
-        )
-        .where(
-          and(
-            sql`earliest_subs.source_id IS NOT NULL`,
-            sql`${articles.lastSeenInFeedAt} < earliest_subs.earliest_subscription`,
-          ),
-        );
+            .selectDistinct({ id: userSources.sourceId })
+            .from(userSources),
+        ),
+      );
 
-      await this.drizzleConnection
-        .delete(articles)
-        .where(inArray(articles.id, articlesBeforeSubscription));
-    } catch (error) {
-      console.error("cleanup", error);
-    }
+    const articlesBeforeSubscription = this.drizzleConnection
+      .select({ id: articles.id })
+      .from(articles)
+      .leftJoin(
+        this.drizzleConnection
+          .select({
+            sourceId: userSources.sourceId,
+            earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
+              "earliest_subscription",
+            ),
+          })
+          .from(userSources)
+          .groupBy(userSources.sourceId)
+          .as("earliest_subs"),
+        eq(articles.sourceId, sql`earliest_subs.source_id`),
+      )
+      .where(
+        and(
+          sql`earliest_subs.source_id IS NOT NULL`,
+          sql`${articles.lastSeenInFeedAt} < earliest_subs.earliest_subscription`,
+        ),
+      );
+
+    await this.drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, articlesBeforeSubscription));
   }
 }
