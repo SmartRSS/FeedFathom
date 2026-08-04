@@ -370,25 +370,39 @@ export const createReaderRoutes = ({
             // subscribe fast without the async round-trip through the
             // worker. Falls back to enqueueing if anything here fails.
             try {
-              await articlesDataService.batchUpsertArticles(
-                preview.articles.map((article) => ({
-                  author: article.author,
-                  content: article.content,
-                  guid: article.guid,
-                  lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  publishedAt: article.publishedAt,
-                  sourceId: subscription.source.id,
-                  title: article.title,
-                  updatedAt:
-                    article.updatedAt === undefined
-                      ? article.publishedAt
-                      : article.updatedAt,
-                  url: article.url,
-                })),
-              );
+              // batchUpsertArticles processes batches sequentially and a
+              // later batch can fail after earlier ones already
+              // committed -- recompute regardless of that outcome so
+              // committed articles aren't left counted as unread-stale,
+              // then let the original failure fall through to the
+              // enqueue fallback below.
+              let upsertError: unknown;
+              try {
+                await articlesDataService.batchUpsertArticles(
+                  preview.articles.map((article) => ({
+                    author: article.author,
+                    content: article.content,
+                    guid: article.guid,
+                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
+                    publishedAt: article.publishedAt,
+                    sourceId: subscription.source.id,
+                    title: article.title,
+                    updatedAt:
+                      article.updatedAt === undefined
+                        ? article.publishedAt
+                        : article.updatedAt,
+                    url: article.url,
+                  })),
+                );
+              } catch (error) {
+                upsertError = error;
+              }
               await userSourcesDataService.recomputeUnreadCounts([
                 subscription.source.id,
               ]);
+              if (upsertError !== undefined) {
+                throw upsertError;
+              }
               await sourcesDataService.successSource(
                 subscription.source.id,
                 true,

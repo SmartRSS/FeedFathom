@@ -80,7 +80,19 @@ apply their (verified) feedback → repeat until both come back clean → move o
       deployed. Single stray byte (0x00 -> 0x20) at a fixed offset; whole
       file registered as binary to `file` until fixed. Confirmed no other
       corrupted bytes anywhere else in the file.
-- [ ] `batchUpsertArticles` partial-batch failure skips recompute for committed batches
+- [x] `batchUpsertArticles` partial-batch failure skips recompute for
+      committed batches — fixed and deployed (2 review rounds). Both call
+      sites (`feed-parser.ts`'s `parseSource`, `reader.ts`'s subscribe
+      fast path) now recompute unconditionally regardless of upsert
+      outcome. Round 2 fixed a masking issue a reviewer found: if
+      recompute itself then failed, its error silently replaced the
+      original (more actionable) upsert error in what got recorded via
+      `failSource` -- now the upsert error always wins when both fail,
+      with the recompute failure only logged. No automated test added:
+      `FeedParser`'s constructor takes concrete class types, not `Pick<>`
+      interfaces like `MainWorker` does, so mocking would require `as
+      unknown` casts; verified instead via two rounds of reviewers
+      explicitly tracing all 4 success/failure combinations.
 - [ ] OPML import aborts entirely on one malformed outline instead of skipping it
 - [ ] `createUser` takes a full-table lock on every registration, not just first-admin bootstrap
 - [ ] `GatherFaviconJobs` has no concurrency cap, can starve `ParseSource`

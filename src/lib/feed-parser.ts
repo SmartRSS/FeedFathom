@@ -202,8 +202,32 @@ export class FeedParser {
           { lastSeenInFeedAt: observedAt },
         ),
       );
-      await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
-      await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+      // batchUpsertArticles processes batches sequentially and a later
+      // batch can fail after earlier ones already committed -- recompute
+      // regardless of that outcome so committed articles aren't left
+      // counted as unread-stale, then re-raise the original failure.
+      let upsertError: unknown;
+      try {
+        await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
+      } catch (error) {
+        upsertError = error;
+      }
+      try {
+        await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+      } catch (recomputeError) {
+        // The upsert failure is the more actionable root cause -- don't
+        // let a recompute failure silently replace it.
+        if (upsertError === undefined) {
+          throw recomputeError;
+        }
+        console.error(
+          "recomputeUnreadCounts failed after batchUpsertArticles error:",
+          recomputeError,
+        );
+      }
+      if (upsertError !== undefined) {
+        throw upsertError;
+      }
 
       await this.sourcesDataService.successSource(
         source.id,
