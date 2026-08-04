@@ -32,6 +32,36 @@ export class UsersDataService {
     activationToken?: string;
     activationTokenExpiresAt?: Date;
   }) {
+    const values = (isAdmin: boolean) => ({
+      email: payload.email,
+      name: payload.name,
+      password: payload.passwordHash,
+      status: payload.status,
+      activationToken: payload.activationToken,
+      activationTokenExpiresAt: payload.activationTokenExpiresAt,
+      isAdmin,
+    });
+
+    // The table-lock below only exists to resolve the "first user becomes
+    // admin" race under concurrent registrations -- once any user exists,
+    // there's no bootstrap race left to resolve, so skip straight to a
+    // plain insert instead of serializing every registration behind a
+    // whole-table lock.
+    const usersExist = (
+      await this.drizzleConnection
+        .select({ id: users.id })
+        .from(users)
+        .limit(1)
+    ).at(0);
+    if (usersExist) {
+      return (
+        await this.drizzleConnection
+          .insert(users)
+          .values(values(false))
+          .returning()
+      ).at(0);
+    }
+
     return await this.drizzleConnection.transaction(async (transaction) => {
       await transaction.execute(
         sql`lock table ${users} in share row exclusive mode`,
@@ -43,15 +73,7 @@ export class UsersDataService {
       return (
         await transaction
           .insert(users)
-          .values({
-            email: payload.email,
-            name: payload.name,
-            password: payload.passwordHash,
-            status: payload.status,
-            activationToken: payload.activationToken,
-            activationTokenExpiresAt: payload.activationTokenExpiresAt,
-            isAdmin: !existingUser,
-          })
+          .values(values(!existingUser))
           .returning()
       ).at(0);
     });

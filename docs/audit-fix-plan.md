@@ -106,7 +106,16 @@ apply their (verified) feedback → repeat until both come back clean → move o
       genuinely non-object entry is now unrecoverable. `maximumNodes`/
       `maximumDepth` DoS guards and top-level document-structure checks
       are untouched and still abort the whole import as before.
-- [ ] `createUser` takes a full-table lock on every registration, not just first-admin bootstrap
+- [x] `createUser` takes a full-table lock on every registration, not just
+      first-admin bootstrap — fixed and deployed. A fast unlocked
+      existence check now skips the lock/transaction entirely once any
+      user exists; only a genuinely-empty table falls through to the
+      original lock-and-recheck path. Verified race-safe under Postgres
+      READ COMMITTED semantics: the fast path can only be entered once a
+      first user is already committed (an uncommitted bootstrap
+      transaction is invisible to it), and it never assigns admin itself
+      (hardcoded `isAdmin: false`), so it cannot create a false admin or
+      let two concurrent first-registrations both become admin.
 - [ ] `GatherFaviconJobs` has no concurrency cap, can starve `ParseSource`
 - [ ] No `AbortController` on superseded tree/article requests
 - [ ] `flushQueue()` retries permanently-failed mutations forever, no user-visible failure
