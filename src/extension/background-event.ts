@@ -83,9 +83,15 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
       return;
     }
 
-    // Create child menu items
+    // Create child menu items. chrome.contextMenus.create() rejects on a
+    // duplicate id, and feed.url is used as the id -- a page listing the
+    // same feed URL twice would otherwise silently drop that menu entry
+    // when its create() call rejects.
+    const uniqueFeedsData = [
+      ...new Map(feedsData.map((feed) => [feed.url, feed])).values(),
+    ];
     await Promise.all(
-      feedsData.map((feed) =>
+      uniqueFeedsData.map((feed) =>
         createContextMenu({
           contexts: ["action"],
           id: feed.url,

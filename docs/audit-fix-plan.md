@@ -170,7 +170,17 @@ apply their (verified) feedback → repeat until both come back clean → move o
       between the failed DELETE and the follow-up check (a folder could
       become empty in between) but is benign -- worst case is a stale
       409 the user can retry, not a correctness or security issue.
-- [ ] Duplicate feed URLs silently dropped in extension's context menu
+- [x] Duplicate feed URLs silently dropped in extension's context menu —
+      fixed and deployed. `chrome.contextMenus.create()` rejects on a
+      duplicate `id` (`feed.url`), and the whole batch's errors were
+      silently swallowed, so a duplicate would lose its menu entry with
+      no indication. Deduped `feedsData` by URL before building menu
+      items. Reviewers found `src/lib/scanner.ts` already dedupes by
+      normalized URL upstream (first-wins) before anything reaches
+      `updateContextMenus`, so this scenario isn't currently reachable
+      via the normal content-script path -- the fix is correct, cheap,
+      harmless defense-in-depth against a future regression or an
+      alternate message sender, not closing an active hole.
 
 Deprioritized / reconsidered, not scheduled unless asked:
 - Moving OPML import and inbound-email processing to the worker queue. Given
