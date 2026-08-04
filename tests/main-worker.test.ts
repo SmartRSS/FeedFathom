@@ -207,10 +207,12 @@ test("starts every favicon queue addition before awaiting completion", async () 
   const started: string[] = [];
   const allStarted = Promise.withResolvers<void>();
   const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  const priorities: (number | undefined)[] = [];
   const queue: MainWorkerQueue = {
     async add(_name, _data, options) {
       if (!blockFaviconAdds) return;
       started.push(options?.jobId ?? "");
+      priorities.push(options?.priority);
       if (started.length === gates.length) allStarted.resolve();
       await gates[started.length - 1]?.promise;
     },
@@ -249,6 +251,10 @@ test("starts every favicon queue addition before awaiting completion", async () 
     `${JobName.RefreshFavicon}-1`,
     `${JobName.RefreshFavicon}-2`,
   ]);
+  // RefreshFavicon jobs must carry an explicit (nonzero) priority so
+  // BullMQ never lets a favicon-refresh backlog crowd out ParseSource,
+  // which is added with no priority.
+  expect(priorities).toEqual([10, 10]);
 
   let finished = false;
   void processing.then(() => {

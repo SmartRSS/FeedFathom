@@ -116,7 +116,18 @@ apply their (verified) feedback → repeat until both come back clean → move o
       transaction is invisible to it), and it never assigns admin itself
       (hardcoded `isAdmin: false`), so it cannot create a false admin or
       let two concurrent first-registrations both become admin.
-- [ ] `GatherFaviconJobs` has no concurrency cap, can starve `ParseSource`
+- [x] `GatherFaviconJobs` has no concurrency cap, can starve `ParseSource` —
+      fixed and deployed. `RefreshFavicon` jobs now get an explicit
+      `priority: 10`; `ParseSource`/`Cleanup`/`GatherJobs` keep BullMQ's
+      default (no explicit priority = 0). Verified against BullMQ's actual
+      Lua job-selection script (not just its docs): every worker slot
+      drains the plain wait list completely before touching the
+      prioritized list, so a favicon-refresh burst can never sit ahead of
+      waiting `ParseSource` jobs. Already-active favicon jobs still finish
+      naturally (no preemption), but confirmed bounded/fast since
+      `refreshFavicon` uses `"background"` HTTP priority (fails fast, no
+      blocking poll) against third-party favicon hosts, not the source's
+      own throttled hostname.
 - [ ] No `AbortController` on superseded tree/article requests
 - [ ] `flushQueue()` retries permanently-failed mutations forever, no user-visible failure
 - [ ] Ambiguous 409 vs 404 on folder deletion (not-found vs not-empty conflated)

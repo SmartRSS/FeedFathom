@@ -45,6 +45,7 @@ const mainWorkerJobCheck = Schema.Compile(mainWorkerJobData);
 
 type QueueOptions = {
   jobId?: string;
+  priority?: number;
   removeOnComplete?: { count: number };
   removeOnFail?: { count: number };
   repeat?: { every: number };
@@ -161,6 +162,11 @@ export class MainWorker {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
               return this.bullmqQueue.add(JobName.RefreshFavicon, source, {
                 jobId,
+                // Jobs with no explicit priority (ParseSource, Cleanup,
+                // GatherJobs) are always processed before prioritized
+                // jobs in BullMQ, so a large favicon-refresh run queued
+                // here can never crowd out feed parsing.
+                priority: 10,
                 removeOnComplete: { count: 0 },
                 removeOnFail: { count: 0 },
               });
