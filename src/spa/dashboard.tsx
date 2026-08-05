@@ -541,31 +541,35 @@ export function Dashboard(props: {
     }
     return open(article, selection);
   }
-  async function removeSelected() {
+  function removeSelected() {
     const items = articles();
     const indexes = new Set(
       [...selectedIndexes()].filter((index) => items[index]),
     );
     const ids = [...indexes].map((index) => items[index]!.id);
     if (!ids.length) return;
-    try {
-      setError("");
-      await api("/articles", removedArticlesResponse, {
-        body: JSON.stringify({ removedArticleIdList: ids }),
-        headers: { "Content-Type": "application/json" },
-        method: "DELETE",
-      });
-    } catch (cause) {
-      reportError(cause, "Could not delete articles");
-      return;
-    }
+    setError("");
 
+    // Fire the request first so network time overlaps with the local UI
+    // work below instead of waiting for it; everything after this reads
+    // as background work via .then/.catch, not a blocking await.
+    const deletion = api("/articles", removedArticlesResponse, {
+      body: JSON.stringify({ removedArticleIdList: ids }),
+      headers: { "Content-Type": "application/json" },
+      method: "DELETE",
+    });
+
+    // Update the UI immediately; the delete request runs in the background
+    // so removing a batch of articles doesn't block on a round trip.
     const remaining = items.filter((_, index) => !indexes.has(index));
     const nextIndex = Math.min(Math.min(...indexes), remaining.length - 1);
     const nextArticle = remaining[nextIndex];
     setArticles(remaining);
     const openNext = setArticleSelection(
       new Set(nextArticle ? [nextIndex] : []),
+    );
+    openNext?.catch((cause) =>
+      reportError(cause, "Could not refresh articles"),
     );
     setFocusedIndex(nextArticle ? nextIndex : 0);
     setSelectionAnchor(nextArticle ? nextIndex : undefined);
@@ -584,20 +588,30 @@ export function Dashboard(props: {
     if (current) {
       setSelectedNode(findNode(tree(), current.type, current.uid));
     }
-    loadTree().catch((cause) => reportError(cause, "Could not refresh tree"));
-
-    if (openNext) {
-      try {
-        await openNext;
-      } catch (cause) {
-        reportError(cause, "Could not refresh articles");
-      }
-    }
     // The removed rows' DOM nodes are gone, which drops focus to
     // document.body; restore it to the list so keyboard nav keeps working.
     queueMicrotask(() =>
       document.querySelector<HTMLElement>(".article-list")?.focus(),
     );
+
+    deletion
+      .then(() =>
+        loadTree().catch((cause) =>
+          reportError(cause, "Could not refresh tree"),
+        ),
+      )
+      .catch((cause) => {
+        // The delete failed after the optimistic update already applied;
+        // resync from the server instead of hand-reverting local state.
+        reportError(cause, "Could not delete articles");
+        setArticles(items);
+        void setArticleSelection(new Set(indexes));
+        setFocusedIndex(Math.min(...indexes));
+        setSelectionAnchor(Math.min(...indexes));
+        loadTree().catch((reloadCause) =>
+          reportError(reloadCause, "Could not refresh tree"),
+        );
+      });
   }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
