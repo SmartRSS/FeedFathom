@@ -14,6 +14,10 @@ export async function userFor(
   return user?.status === "active" ? user : null;
 }
 
+// The shape route handlers see as `user` once createAuthPlugin has run --
+// handler files import this instead of re-deriving it from UsersDataService.
+export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
+
 /**
  * 'plugin' scope: visible to this instance's own routes and to whichever
  * single parent composes it via `.use()` (e.g. reader.ts), but doesn't leak

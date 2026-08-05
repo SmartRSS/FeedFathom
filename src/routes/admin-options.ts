@@ -1,4 +1,10 @@
 import { Elysia } from "elysia";
+import {
+  adminQuery,
+  passwordRequest,
+  redirectDeletionRequest,
+  sourceUrlReplacementRequest,
+} from "../contracts/requests.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
@@ -7,11 +13,18 @@ import type { UsersDataService } from "../db/data-services/user-data-service.ts"
 import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
 import type { OpmlParser } from "../lib/opml-parser.ts";
 import type { RedirectMap } from "../lib/redirect-map.ts";
-import { createAdminRedirectsRoute } from "./admin-options/admin-redirects.ts";
-import { createAdminRoute } from "./admin-options/admin.ts";
-import { createOptionsOpmlRoute } from "./admin-options/options-opml.ts";
-import { createOptionsPasswordRoute } from "./admin-options/options-password.ts";
-import { createOptionsRoute } from "./admin-options/options.ts";
+import {
+  deleteAdminRedirectsHandler,
+  getAdminRedirectsHandler,
+} from "./admin-options/admin-redirects.ts";
+import { getAdminHandler, postAdminHandler } from "./admin-options/admin.ts";
+import {
+  opmlRequest,
+  postOptionsOpmlHandler,
+} from "./admin-options/options-opml.ts";
+import { postOptionsPasswordHandler } from "./admin-options/options-password.ts";
+import { getOptionsHandler } from "./admin-options/options.ts";
+import { createAuthPlugin } from "./shared.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
@@ -36,10 +49,27 @@ export type AdminOptionsRouteDependencies = {
   userSourcesDataService: Pick<UserSourcesDataService, "insertTree">;
 };
 
-export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
+export const createAdminOptionsRoutes = (
+  deps: AdminOptionsRouteDependencies,
+) =>
   new Elysia()
-    .use(createOptionsRoute(deps))
-    .use(createOptionsPasswordRoute(deps))
-    .use(createOptionsOpmlRoute(deps))
-    .use(createAdminRoute(deps))
-    .use(createAdminRedirectsRoute(deps));
+    .use(createAuthPlugin(deps.usersDataService))
+    .get("/api/options", (ctx) => getOptionsHandler(ctx))
+    .post("/api/options/password", { body: passwordRequest }, (ctx) =>
+      postOptionsPasswordHandler(ctx, deps),
+    )
+    .post("/api/options/opml", { body: opmlRequest }, (ctx) =>
+      postOptionsOpmlHandler(ctx, deps),
+    )
+    .get("/api/admin", { query: adminQuery }, (ctx) =>
+      getAdminHandler(ctx, deps),
+    )
+    .post("/api/admin", { body: sourceUrlReplacementRequest }, (ctx) =>
+      postAdminHandler(ctx, deps),
+    )
+    .get("/api/admin/redirects", (ctx) => getAdminRedirectsHandler(ctx, deps))
+    .delete(
+      "/api/admin/redirects",
+      { body: redirectDeletionRequest },
+      (ctx) => deleteAdminRedirectsHandler(ctx, deps),
+    );
