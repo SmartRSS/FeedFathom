@@ -1,3 +1,4 @@
+import { Elysia } from "elysia";
 import type { UsersDataService } from "../db/data-services/user-data-service.ts";
 
 export function json(value: unknown, status = 200, headers?: HeadersInit) {
@@ -11,4 +12,18 @@ export async function userFor(
   if (typeof sid !== "string" || !sid) return null;
   const user = await usersDataService.getUserBySid(sid);
   return user?.status === "active" ? user : null;
+}
+
+/**
+ * 'plugin' scope: visible to this instance's own routes and to whichever
+ * single parent composes it via `.use()` (e.g. reader.ts), but doesn't leak
+ * further up into unrelated sibling route groups composed in server-app.ts.
+ */
+export function createAuthPlugin(
+  usersDataService: Pick<UsersDataService, "getUserBySid">,
+) {
+  return new Elysia().derive("plugin", async ({ cookie, status }) => {
+    const user = await userFor(cookie["sid"]?.value, usersDataService);
+    return user ? { user } : status(401, { error: "Unauthorized" });
+  });
 }
