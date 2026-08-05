@@ -81,6 +81,9 @@
       "tests/**/*.ts",
       "bin/**/*.ts"
     ],
-    "ignoreUnresolved": []
+    "ignoreUnresolved": [],
+    "ignoreDependencies": [
+      "@sinclair/typebox"
+    ]
   }
 }

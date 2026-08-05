@@ -1,4 +1,4 @@
-import { Type, type Static, type TSchema } from "typebox";
+import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { isDisposableEmail } from "disposable-email-domains-js";
 import { isPlainText } from "../util/is-plain-text.ts";
@@ -117,5 +117,4 @@ export const normalizedSubscriptionTarget = Type.Codec(
   })
   .Encode((value) => value.value);
 
-export type { PasswordChange, PasswordPair, SubscriptionTarget };
-export type { Static };
+export type { SubscriptionTarget };
