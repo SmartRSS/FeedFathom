@@ -22,6 +22,7 @@
   ],
   "rules": {
     "no-control-regex": "off",
+    "no-underscore-dangle": ["warn", { "allow": ["__treePreload"] }],
     "no-unassigned-vars": "off",
     "no-unused-expressions": "off",
     "typescript/await-thenable": "off",

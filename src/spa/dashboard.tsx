@@ -948,8 +948,13 @@ export function Dashboard(props: {
               selectedNode()?.uid === savedNode.uid;
               attempt++
             ) {
+              // Deliberately sequential: each attempt waits out the delay,
+              // then rechecks state before re-selecting -- not independent
+              // work that Promise.all could parallelize.
+              // oxlint-disable-next-line no-await-in-loop
               await new Promise((resolve) => setTimeout(resolve, 3000));
               if (selectedNode()?.uid !== savedNode.uid) break;
+              // oxlint-disable-next-line no-await-in-loop
               await select(savedNode);
             }
           }}

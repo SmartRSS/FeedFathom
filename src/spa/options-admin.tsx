@@ -65,25 +65,27 @@ export function Options(props: {
           // is mid-flushQueue().
           await new Promise<void>((resolve, reject) => {
             const openRequest = window.indexedDB.open("mutation-queue", 1);
-            openRequest.onupgradeneeded = () => {
+            openRequest.addEventListener("upgradeneeded", () => {
               openRequest.result.createObjectStore("mutations", {
                 autoIncrement: true,
               });
-            };
-            openRequest.onsuccess = () => {
+            });
+            openRequest.addEventListener("success", () => {
               const db = openRequest.result;
               const tx = db.transaction("mutations", "readwrite");
               tx.objectStore("mutations").clear();
-              tx.oncomplete = () => {
+              tx.addEventListener("complete", () => {
                 db.close();
                 resolve();
-              };
-              tx.onerror = () => {
+              });
+              tx.addEventListener("error", () => {
                 db.close();
                 reject(tx.error);
-              };
-            };
-            openRequest.onerror = () => reject(openRequest.error);
+              });
+            });
+            openRequest.addEventListener("error", () =>
+              reject(openRequest.error),
+            );
           });
         } catch {
           // Ignore: a queue clear failure must not block logout.

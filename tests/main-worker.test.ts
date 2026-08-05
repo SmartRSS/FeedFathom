@@ -483,6 +483,10 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
     processor = value;
     return noopWorkerFactory(value, options);
   };
+  // Deliberately malformed: a real HttpDeferredError with a throwing getter,
+  // to prove the code under test survives a poisoned retryAt read. There's
+  // no type-safe way to construct that.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const evilDeferredError = Object.create(HttpDeferredError.prototype, {
     retryAt: {
       get() {
