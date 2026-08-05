@@ -146,6 +146,19 @@ function Router(props: {
 }
 
 if ("serviceWorker" in navigator) {
+  // The new worker calls clients.claim() on activate, so an already-open tab
+  // can end up with its fetches controlled by a worker version its already-
+  // loaded JS bundle doesn't match. Reload once to bring both back in sync --
+  // but only when a controller is being *replaced*: a page's first-ever
+  // controllerchange (going from uncontrolled to controlled) fires too, and
+  // that one needs no reload since nothing has changed under it yet.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
   void navigator.serviceWorker.register("/sw-v5.js");
 }
 
