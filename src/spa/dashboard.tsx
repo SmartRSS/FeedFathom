@@ -642,7 +642,7 @@ export function Dashboard(props: {
       selectArticle(focusedIndex(), event);
     } else if (event.key === "Delete") {
       event.preventDefault();
-      void removeSelected();
+      removeSelected();
     } else if (
       event.key.toLowerCase() === "a" &&
       (event.ctrlKey || event.metaKey)
@@ -760,7 +760,7 @@ export function Dashboard(props: {
             <button
               aria-label="delete articles"
               disabled={selectedIndexes().size === 0}
-              onClick={() => void removeSelected()}
+              onClick={() => removeSelected()}
             >
               <img alt="" src={remove} />
             </button>
@@ -849,7 +849,7 @@ export function Dashboard(props: {
             <button
               aria-label="delete article"
               disabled={!selected()}
-              onClick={() => void removeSelected()}
+              onClick={() => removeSelected()}
             >
               <img alt="" src={remove} />
             </button>
