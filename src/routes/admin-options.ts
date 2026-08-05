@@ -49,9 +49,7 @@ export type AdminOptionsRouteDependencies = {
   userSourcesDataService: Pick<UserSourcesDataService, "insertTree">;
 };
 
-export const createAdminOptionsRoutes = (
-  deps: AdminOptionsRouteDependencies,
-) =>
+export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
   new Elysia()
     .use(createAuthPlugin(deps.usersDataService))
     .get("/api/options", (ctx) => getOptionsHandler(ctx))
@@ -68,8 +66,6 @@ export const createAdminOptionsRoutes = (
       postAdminHandler(ctx, deps),
     )
     .get("/api/admin/redirects", (ctx) => getAdminRedirectsHandler(ctx, deps))
-    .delete(
-      "/api/admin/redirects",
-      { body: redirectDeletionRequest },
-      (ctx) => deleteAdminRedirectsHandler(ctx, deps),
+    .delete("/api/admin/redirects", { body: redirectDeletionRequest }, (ctx) =>
+      deleteAdminRedirectsHandler(ctx, deps),
     );

@@ -22,7 +22,10 @@ export async function getFoldersHandler(
 }
 
 export async function postFoldersHandler(
-  { body, user }: { body: Static<typeof createFolderRequest>; user: AuthedUser },
+  {
+    body,
+    user,
+  }: { body: Static<typeof createFolderRequest>; user: AuthedUser },
   { foldersDataService }: FoldersRouteDependencies,
 ) {
   // Elysia 2.0-beta validates body shape but doesn't run Codec .Decode()
@@ -32,7 +35,10 @@ export async function postFoldersHandler(
 }
 
 export async function deleteFoldersHandler(
-  { body, user }: { body: Static<typeof removeFolderRequest>; user: AuthedUser },
+  {
+    body,
+    user,
+  }: { body: Static<typeof removeFolderRequest>; user: AuthedUser },
   { foldersDataService }: FoldersRouteDependencies,
 ) {
   const result = await foldersDataService.removeEmptyUserFolder(

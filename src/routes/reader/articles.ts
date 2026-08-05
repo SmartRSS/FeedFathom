@@ -24,7 +24,11 @@ export async function postArticlesHandler(
     body,
     request,
     user,
-  }: { body: Static<typeof articlesRequest>; request: Request; user: AuthedUser },
+  }: {
+    body: Static<typeof articlesRequest>;
+    request: Request;
+    user: AuthedUser;
+  },
   { articlesDataService }: ArticlesRouteDependencies,
 ) {
   if (!body.sources.length) return json([]);
@@ -48,13 +52,11 @@ export async function deleteArticlesHandler(
   }: { body: Static<typeof removeArticlesRequest>; user: AuthedUser },
   { articlesDataService, userSourcesDataService }: ArticlesRouteDependencies,
 ) {
-  const { articleIds, sourceIds } = await articlesDataService.removeUserArticles(
-    body.removedArticleIdList,
-    user.id,
-  );
-  await userSourcesDataService.recomputeUnreadCountsForUser(
-    user.id,
-    sourceIds,
-  );
+  const { articleIds, sourceIds } =
+    await articlesDataService.removeUserArticles(
+      body.removedArticleIdList,
+      user.id,
+    );
+  await userSourcesDataService.recomputeUnreadCountsForUser(user.id, sourceIds);
   return json(articleIds);
 }

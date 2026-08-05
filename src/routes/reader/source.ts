@@ -8,7 +8,10 @@ export type SourceRouteDependencies = {
 };
 
 export async function deleteSourceHandler(
-  { body, user }: { body: Static<typeof removeSourceRequest>; user: AuthedUser },
+  {
+    body,
+    user,
+  }: { body: Static<typeof removeSourceRequest>; user: AuthedUser },
   { userSourcesDataService }: SourceRouteDependencies,
 ) {
   await userSourcesDataService.removeSourceFromUser(

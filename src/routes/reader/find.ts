@@ -20,7 +20,9 @@ export async function getFindHandler(
   try {
     const response = await httpClient.get(decoded.link);
     const feeds = scanHtml(decoded.link, response.data);
-    return feeds.length ? json(feeds) : json({ error: "Invalid feed url" }, 400);
+    return feeds.length
+      ? json(feeds)
+      : json({ error: "Invalid feed url" }, 400);
   } catch (error_: unknown) {
     if (error_ instanceof HttpDeferredError) return deferredResponse(error_);
     return json({ error: "Invalid feed url" }, 400);

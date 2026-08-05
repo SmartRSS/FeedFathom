@@ -14,10 +14,7 @@ export type PreviewRouteDependencies = {
 };
 
 export async function getPreviewHandler(
-  {
-    query,
-    user,
-  }: { query: Static<typeof previewQuery>; user: AuthedUser },
+  { query, user }: { query: Static<typeof previewQuery>; user: AuthedUser },
   { feedParser, feedPreviewCache }: PreviewRouteDependencies,
 ) {
   const decoded = Value.Decode(previewQuery, query);

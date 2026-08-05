@@ -18,7 +18,10 @@ import type { UsersDataService } from "../db/data-services/user-data-service.ts"
 import type { FeedParser } from "../lib/feed-parser.ts";
 import type { FeedPreviewCache } from "../lib/feed-preview-cache.ts";
 import { getArticleHandler } from "./reader/article.ts";
-import { deleteArticlesHandler, postArticlesHandler } from "./reader/articles.ts";
+import {
+  deleteArticlesHandler,
+  postArticlesHandler,
+} from "./reader/articles.ts";
 import { getFaviconHandler } from "./reader/favicon.ts";
 import { getFindHandler } from "./reader/find.ts";
 import {

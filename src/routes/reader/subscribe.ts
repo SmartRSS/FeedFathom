@@ -19,7 +19,10 @@ export type SubscribeRouteDependencies = {
   articlesDataService: Pick<ArticlesDataService, "batchUpsertArticles">;
   feedPreviewCache: Pick<FeedPreviewCache, "get">;
   mailEnabled: boolean;
-  sourcesDataService: Pick<SourcesDataService, "enqueueSource" | "successSource">;
+  sourcesDataService: Pick<
+    SourcesDataService,
+    "enqueueSource" | "successSource"
+  >;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     "addSourceToUser" | "recomputeUnreadCounts"
