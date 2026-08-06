@@ -1,9 +1,29 @@
-import { and, eq, exists, inArray, notExists, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  lte,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "./schema.ts";
 import { articles } from "./schemas/articles";
 import { sources } from "./schemas/sources";
+import { userArticles } from "./schemas/userArticles";
 import { userSources } from "./schemas/userSources";
+
+// A source's last_success is stamped strictly after its articles' upsert
+// (see FeedParser.parseSource), so last_seen_in_feed_at < last_success is
+// true for EVERY article on EVERY successful fetch -- including ones that
+// were just confirmed present -- by construction, not just for ones that
+// are actually missing. This buffer must be far larger than any real gap
+// between a fetch's upsert and its own success stamp (milliseconds) so the
+// comparison only fires once an article has survived many real fetch
+// cycles without appearing (sources.nextCheckAt defaults to +5 minutes).
+const confirmedGoneFromFeedBuffer = sql`INTERVAL '1 day'`;
 
 export async function cleanupOrphanedData(
   drizzleConnection: BunSQLDatabase<typeof schema>,
@@ -59,4 +79,51 @@ export async function cleanupOrphanedData(
   await drizzleConnection
     .delete(articles)
     .where(inArray(articles.id, articlesBeforeSubscription));
+
+  // The above only prunes articles no CURRENT subscriber could ever have
+  // seen. This catches the complement: articles current subscribers COULD
+  // see, but which are gone for good -- confirmed absent across many
+  // consecutive successful fetches of their source (see
+  // confirmedGoneFromFeedBuffer above), and every subscriber who could
+  // have seen it has already deleted it. "Could have seen it" is scoped to
+  // subscribers who joined before it disappeared -- someone who
+  // subscribed later never had the chance to see or delete it, so their
+  // absence of a deletion row doesn't block the prune.
+  const articlesUnreachableByAnyone = drizzleConnection
+    .select({ id: articles.id })
+    .from(articles)
+    .innerJoin(sources, eq(sources.id, articles.sourceId))
+    .where(
+      and(
+        isNotNull(sources.lastSuccess),
+        sql`${articles.lastSeenInFeedAt} < ${sources.lastSuccess} - ${confirmedGoneFromFeedBuffer}`,
+        notExists(
+          drizzleConnection
+            .select({ id: userSources.id })
+            .from(userSources)
+            .where(
+              and(
+                eq(userSources.sourceId, articles.sourceId),
+                lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                notExists(
+                  drizzleConnection
+                    .select({ userId: userArticles.userId })
+                    .from(userArticles)
+                    .where(
+                      and(
+                        eq(userArticles.userId, userSources.userId),
+                        eq(userArticles.articleId, articles.id),
+                        isNotNull(userArticles.deletedAt),
+                      ),
+                    ),
+                ),
+              ),
+            ),
+        ),
+      ),
+    );
+
+  await drizzleConnection
+    .delete(articles)
+    .where(inArray(articles.id, articlesUnreachableByAnyone));
 }
