@@ -191,11 +191,6 @@ a {
 .tree.skeleton {
   overflow: hidden;
 }
-.tree.skeleton li {
-  padding: 0 0.5rem 0 1.4rem;
-  min-height: 1.2rem;
-  line-height: 1.2rem;
-}
 .skeleton-row {
   display: block;
   height: 0.7rem;
@@ -246,14 +241,7 @@ a {
   flex: 0 0 auto;
 }
 .article-list.skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding-top: 0.4rem;
   overflow: hidden;
-}
-.article-list.skeleton .article {
-  gap: 0.4rem;
 }
 .source em {
   margin-left: auto;
@@ -344,17 +332,6 @@ a {
 }
 .reader pre {
   overflow: auto;
-}
-.reader.skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  overflow: hidden;
-}
-.reader.skeleton .skeleton-row.title {
-  height: 1.4rem;
-  width: 60%;
-  margin-bottom: 0.4rem;
 }
 .reader-plain {
   white-space: pre-wrap;
