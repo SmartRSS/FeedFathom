@@ -14,6 +14,7 @@ import { articles } from "./schemas/articles";
 import { sources } from "./schemas/sources";
 import { userArticles } from "./schemas/userArticles";
 import { userSources } from "./schemas/userSources";
+import { users } from "./schemas/users";
 
 // A source's last_success is stamped strictly after its articles' upsert
 // (see FeedParser.parseSource), so last_seen_in_feed_at < last_success is
@@ -25,9 +26,26 @@ import { userSources } from "./schemas/userSources";
 // cycles without appearing (sources.nextCheckAt defaults to +5 minutes).
 const confirmedGoneFromFeedBuffer = sql`INTERVAL '1 day'`;
 
+const daysInterval = (days: number) => sql`(${days} * INTERVAL '1 day')`;
+
 export async function cleanupOrphanedData(
   drizzleConnection: BunSQLDatabase<typeof schema>,
+  userDormantAfterDays: number,
+  articleStaleAfterDays: number,
+  userExpiryDays: number,
 ) {
+  // Account expiry runs first: it shrinks the "current subscriber" set
+  // (via cascade on user_sources) before every rule below evaluates it, so
+  // an expired user's own subscriptions never need special-casing further
+  // down -- they're simply gone, the same as if they'd never subscribed.
+  if (userExpiryDays > 0) {
+    await drizzleConnection
+      .delete(users)
+      .where(
+        sql`${users.lastSeenAt} < NOW() - ${daysInterval(userExpiryDays)}`,
+      );
+  }
+
   // "Delete sources nobody subscribes to" is, by construction, "delete
   // every source" whenever user_sources is empty -- true whether that's
   // expressed as NOT IN or as a correlated NOT EXISTS per source row.
@@ -126,4 +144,41 @@ export async function cleanupOrphanedData(
   await drizzleConnection
     .delete(articles)
     .where(inArray(articles.id, articlesUnreachableByAnyone));
+
+  // Neither rule above accounts for dormancy: a subscriber who hasn't made
+  // a request in a long time still counts as a full "current subscriber"
+  // for both. This catches articles old enough (articleStaleAfterDays)
+  // that no subscriber who could have seen them is still active --
+  // independent of whether anyone deleted them, since a dormant
+  // subscriber's undeleted article isn't evidence anyone still wants it.
+  // Either threshold at 0 turns this rule off entirely: 0 always means
+  // "disabled", never "no requirement" (a 0-day staleness floor would
+  // defeat the reason that guard exists in the first place).
+  if (userDormantAfterDays > 0 && articleStaleAfterDays > 0) {
+    const articlesOnlyDormantCouldSee = drizzleConnection
+      .select({ id: articles.id })
+      .from(articles)
+      .where(
+        and(
+          sql`${articles.lastSeenInFeedAt} < NOW() - ${daysInterval(articleStaleAfterDays)}`,
+          notExists(
+            drizzleConnection
+              .select({ id: userSources.id })
+              .from(userSources)
+              .innerJoin(users, eq(users.id, userSources.userId))
+              .where(
+                and(
+                  eq(userSources.sourceId, articles.sourceId),
+                  lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                  sql`${users.lastSeenAt} > NOW() - ${daysInterval(userDormantAfterDays)}`,
+                ),
+              ),
+          ),
+        ),
+      );
+
+    await drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, articlesOnlyDormantCouldSee));
+  }
 }

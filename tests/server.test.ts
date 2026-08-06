@@ -44,6 +44,7 @@ const account = {
 function createDependencies(): ServerDependencies {
   const appConfig: ServerDependencies["config"] = {
     ALLOWED_EMAILS: [],
+    ARTICLE_STALE_AFTER_DAYS: 365,
     CLEANUP_INTERVAL: 1_000,
     DATABASE_URL: "postgres://feedfathom:feedfathom@localhost/feedfathom",
     DB_POOL_MAX: 10,
@@ -51,6 +52,8 @@ function createDependencies(): ServerDependencies {
     GATHER_JOBS_INTERVAL: 1_000,
     LOCK_DURATION: 1_000,
     MAIL_ENABLED: false,
+    USER_DORMANT_AFTER_DAYS: 365,
+    USER_EXPIRY_DAYS: 730,
     WORKER_CONCURRENCY: 1,
   };
 

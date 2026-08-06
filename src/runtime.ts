@@ -76,7 +76,13 @@ export async function createFeedRuntime() {
     articlesDataService,
     bullmqQueue,
     bullmqRedis,
-    cleanupOrphanedData: () => cleanupOrphanedData(drizzleConnection),
+    cleanupOrphanedData: () =>
+      cleanupOrphanedData(
+        drizzleConnection,
+        config.USER_DORMANT_AFTER_DAYS,
+        config.ARTICLE_STALE_AFTER_DAYS,
+        config.USER_EXPIRY_DAYS,
+      ),
     close,
     drizzleConnection,
     feedParser,

@@ -60,6 +60,32 @@ const configSchema = Type.Object(
     DB_POOL_MAX: integerString("DB_POOL_MAX", "10", 1, 100),
     LOCK_DURATION: integerString("LOCK_DURATION", "1000", 1, 86_400),
     CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "1000", 20, 2_592_000),
+    // Days since a user's last request before they count as dormant for
+    // article-pruning purposes. 0 disables dormancy-based pruning.
+    USER_DORMANT_AFTER_DAYS: integerString(
+      "USER_DORMANT_AFTER_DAYS",
+      "365",
+      0,
+      36_500,
+    ),
+    // How stale an article must be (days since last seen in its feed)
+    // before dormancy alone can make it prunable -- guards against
+    // deleting something published yesterday just because its only
+    // subscriber happens to be dormant. 0 disables dormancy-based pruning
+    // (same as USER_DORMANT_AFTER_DAYS=0; either alone turns the rule off).
+    ARTICLE_STALE_AFTER_DAYS: integerString(
+      "ARTICLE_STALE_AFTER_DAYS",
+      "365",
+      0,
+      36_500,
+    ),
+    // Days since a user's last request before their account is deleted
+    // outright. Measured from the same last-activity timestamp as
+    // USER_DORMANT_AFTER_DAYS, not from when they crossed that threshold --
+    // dormancy isn't a separate stateful event, just an earlier point on
+    // the same clock, so a second clock would be redundant. 0 disables
+    // account expiry entirely.
+    USER_EXPIRY_DAYS: integerString("USER_EXPIRY_DAYS", "730", 0, 36_500),
     DATABASE_URL: databaseUrl,
     GATHER_JOBS_INTERVAL: integerString(
       "GATHER_JOBS_INTERVAL",
