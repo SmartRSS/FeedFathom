@@ -194,27 +194,30 @@ a {
 .skeleton-row,
 .skeleton-text {
   border-radius: 0.2rem;
-  background: linear-gradient(
+  background-image: linear-gradient(
     90deg,
     var(--grey-20) 25%,
     var(--grey-10) 37%,
     var(--grey-20) 63%
   );
-  background-size: 400% 100%;
+  background-repeat: no-repeat;
   animation: skeleton-shimmer 1.4s ease infinite;
 }
 .skeleton-row {
   display: block;
   height: 0.7rem;
+  background-size: 400% 100%;
 }
 /* Applied to the real text-bearing element itself (not a stand-in bar):
    the text stays, invisible, so the box keeps its exact real line-height,
    font metrics, and truncation behavior -- the shimmer background shows
-   through in its place instead of approximating those dimensions by hand. */
+   through in its place instead of approximating those dimensions by hand.
+   The gradient is drawn shorter than the line box and centered on it, so
+   it spans roughly ascender-top to baseline instead of the full
+   ascender-to-descender line height. */
 .skeleton-text {
   color: transparent;
-  background-clip: text;
-  -webkit-background-clip: text;
+  background-size: 400% 0.75em;
   user-select: none;
 }
 @keyframes skeleton-shimmer {
