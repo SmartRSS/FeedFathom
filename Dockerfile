@@ -18,6 +18,7 @@ FROM --platform=$BUILDPLATFORM dhi.io/bun:1.3.14-alpine3.22-dev AS builder-base
 WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
+COPY bin/ /app/bin/
 COPY --from=installer /app/node_modules /app/node_modules
 
 # --- Server Builder ---
