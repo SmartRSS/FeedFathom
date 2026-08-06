@@ -11,7 +11,9 @@ export const opmlImports = pgTable(
   "opml_imports",
   {
     contentHash: varchar("content_hash", { length: 64 }).notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

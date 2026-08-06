@@ -11,18 +11,22 @@ import {
 export const sources = pgTable(
   "sources",
   {
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     favicon: varchar("favicon"),
     homeUrl: varchar("home_url").notNull(),
     id: serial("id").primaryKey(),
-    lastAttempt: timestamp("last_attempt"),
-    lastSuccess: timestamp("last_success"),
-    nextCheckAt: timestamp("next_check_at"),
+    lastAttempt: timestamp("last_attempt", { withTimezone: true }),
+    lastSuccess: timestamp("last_success", { withTimezone: true }),
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
     recentFailureDetails: varchar("recent_failure_details")
       .notNull()
       .default(""),
     recentFailures: integer("recent_failures").notNull().default(0),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     url: varchar("url").notNull(),
   },
   (table) => [

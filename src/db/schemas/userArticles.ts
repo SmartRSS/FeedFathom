@@ -17,8 +17,8 @@ export const userArticles = pgTable(
         onUpdate: "cascade",
       })
       .notNull(),
-    deletedAt: timestamp("deleted_at"),
-    readAt: timestamp("read_at"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    readAt: timestamp("read_at", { withTimezone: true }),
     userId: integer("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),

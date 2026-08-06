@@ -19,14 +19,14 @@ export const articles = pgTable(
     content: text("content").notNull(),
     guid: varchar("guid").notNull(),
     id: serial("id").primaryKey(),
-    publishedAt: timestamp("published_at").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
     sourceId: integer("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     title: varchar("title").notNull(),
-    updatedAt: timestamp("updated_at"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
     url: varchar("url").notNull(),
-    lastSeenInFeedAt: timestamp("last_seen_in_feed_at")
+    lastSeenInFeedAt: timestamp("last_seen_in_feed_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
   },

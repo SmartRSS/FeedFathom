@@ -134,6 +134,13 @@
       "when": 1785869000000,
       "tag": "0019_curly_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786004903011,
+      "tag": "0020_panoramic_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }
