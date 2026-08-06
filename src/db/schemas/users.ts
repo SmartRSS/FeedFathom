@@ -16,6 +16,9 @@ export const users = pgTable(
     email: varchar("email").notNull().unique(),
     id: serial("id").primaryKey(),
     isAdmin: boolean("is_admin").notNull().default(false),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     name: varchar("name").notNull(),
     password: varchar("password").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })

@@ -34,6 +34,7 @@ const account = {
   email: sessionUser.email,
   id: sessionUser.id,
   isAdmin: false,
+  lastSeenAt: new Date("2026-07-20T12:00:00.000Z"),
   name: sessionUser.name,
   password: "hashed-password",
   status: "active" as const,
@@ -166,6 +167,7 @@ function createDependencies(): ServerDependencies {
       async getUserCount() {
         return 0;
       },
+      async touchLastSeen() {},
       async updatePassword() {
         return unexpected("usersDataService.updatePassword");
       },

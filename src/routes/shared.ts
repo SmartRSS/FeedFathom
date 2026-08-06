@@ -24,10 +24,12 @@ export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
  * further up into unrelated sibling route groups composed in server-app.ts.
  */
 export function createAuthPlugin(
-  usersDataService: Pick<UsersDataService, "getUserBySid">,
+  usersDataService: Pick<UsersDataService, "getUserBySid" | "touchLastSeen">,
 ) {
   return new Elysia().derive("plugin", async ({ cookie, status }) => {
     const user = await userFor(cookie["sid"]?.value, usersDataService);
-    return user ? { user } : status(401, { error: "Unauthorized" });
+    if (!user) return status(401, { error: "Unauthorized" });
+    await usersDataService.touchLastSeen(user.id);
+    return { user };
   });
 }

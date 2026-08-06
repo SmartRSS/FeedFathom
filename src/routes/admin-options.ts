@@ -45,6 +45,9 @@ export type AdminOptionsRouteDependencies = {
   usersDataService: {
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
     getUserBySid(sid: string): ReturnType<UsersDataService["getUserBySid"]>;
+    touchLastSeen(
+      userId: number,
+    ): ReturnType<UsersDataService["touchLastSeen"]>;
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;
   };
 };

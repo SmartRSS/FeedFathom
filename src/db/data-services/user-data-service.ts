@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "../schema.ts";
 import { sessions } from "../schemas/sessions";
@@ -123,6 +123,22 @@ export class UsersDataService {
         .leftJoin(sessions, eq(sessions.userId, users.id))
         .limit(1)
     ).at(0);
+  }
+
+  // Self-guarding: the WHERE clause makes this a no-op write on every
+  // request except roughly once per day per active user, so it's safe to
+  // call unconditionally from the auth plugin without checking staleness
+  // in application code first.
+  public async touchLastSeen(userId: number) {
+    await this.drizzleConnection
+      .update(users)
+      .set({ lastSeenAt: sql`NOW()` })
+      .where(
+        and(
+          eq(users.id, userId),
+          sql`${users.lastSeenAt} < NOW() - INTERVAL '1 day'`,
+        ),
+      );
   }
 
   public async getUserCount(): Promise<number> {
