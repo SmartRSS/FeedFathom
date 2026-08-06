@@ -213,6 +213,8 @@ a {
    through in its place instead of approximating those dimensions by hand. */
 .skeleton-text {
   color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
   user-select: none;
 }
 @keyframes skeleton-shimmer {
