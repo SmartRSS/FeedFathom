@@ -100,8 +100,26 @@ function preloadFavicons(tree: TreeNode[]): Promise<void> {
   return Promise.race([loaded, timeout]);
 }
 
-const READER_SKELETON_LINE_WIDTHS = ["95%", "88%", "92%", "70%", "90%", "60%"];
-const TREE_SKELETON_LINE_WIDTHS = ["70%", "45%", "60%", "50%"];
+const READER_SKELETON_PARAGRAPHS = [
+  "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod",
+  "Tempor incididunt ut labore et dolore magna aliqua ut enim ad minim",
+  "Veniam quis nostrud exercitation ullamco laboris nisi ut aliquip",
+  "Ex ea commodo consequat duis aute irure dolor",
+  "In reprehenderit in voluptate velit esse cillum dolore eu fugiat",
+  "Nulla pariatur excepteur sint occaecat",
+];
+const TREE_SKELETON_NAMES = [
+  "Example Feed Name",
+  "A Longer Podcast Title",
+  "Short Blog",
+  "Weekly Newsletter Digest",
+];
+const ARTICLE_SKELETON_TITLES = [
+  "An Example Article Headline Goes Here",
+  "Shorter Headline",
+  "A Somewhat Longer Article Title About Something",
+  "Another Example Headline",
+];
 
 function withDecrementedUnread(
   nodes: TreeNode[],
@@ -759,15 +777,13 @@ export function Dashboard(props: {
                     <li>
                       <div class="source">
                         <span class="node-icon skeleton-row" />
-                        <span
-                          class="skeleton-row"
-                          style={{
-                            width:
-                              TREE_SKELETON_LINE_WIDTHS[
-                                index % TREE_SKELETON_LINE_WIDTHS.length
-                              ],
-                          }}
-                        />
+                        <span class="skeleton-text">
+                          {
+                            TREE_SKELETON_NAMES[
+                              index % TREE_SKELETON_NAMES.length
+                            ]
+                          }
+                        </span>
                       </div>
                     </li>
                   )}
@@ -836,30 +852,20 @@ export function Dashboard(props: {
               when={!articlesLoading()}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
-                  <div class="date-group">
-                    <span
-                      class="skeleton-row"
-                      style={{
-                        display: "inline-block",
-                        width: "3rem",
-                        height: "0.7rem",
-                      }}
-                    />
-                  </div>
+                  <div class="date-group skeleton-text">Today</div>
                   <For each={[...Array(30).keys()]}>
-                    {() => (
+                    {(index) => (
                       <div class="article">
-                        <span class="title" style={{ height: "1rem" }}>
-                          <span
-                            class="skeleton-row"
-                            style={{ height: "0.8rem", width: "70%" }}
-                          />
+                        <span class="title skeleton-text">
+                          {
+                            ARTICLE_SKELETON_TITLES[
+                              index % ARTICLE_SKELETON_TITLES.length
+                            ]
+                          }
                         </span>
-                        <span class="details" style={{ height: "1rem" }}>
-                          <span
-                            class="skeleton-row"
-                            style={{ height: "0.75rem", width: "40%" }}
-                          />
+                        <span class="details">
+                          <span class="skeleton-text">Jane Doe</span>
+                          <time class="skeleton-text">Jan 1, 2026</time>
                         </span>
                       </div>
                     )}
@@ -969,16 +975,13 @@ export function Dashboard(props: {
                     </p>
                   }
                 >
-                  <h1 aria-hidden="true">
-                    <span
-                      class="skeleton-row"
-                      style={{ height: "1rem", width: "60%" }}
-                    />
+                  <h1 class="skeleton-text" aria-hidden="true">
+                    An Example Article Headline
                   </h1>
-                  <For each={READER_SKELETON_LINE_WIDTHS}>
-                    {(width) => (
-                      <p aria-hidden="true">
-                        <span class="skeleton-row" style={{ width }} />
+                  <For each={READER_SKELETON_PARAGRAPHS}>
+                    {(paragraph) => (
+                      <p class="skeleton-text" aria-hidden="true">
+                        {paragraph}
                       </p>
                     )}
                   </For>

@@ -191,9 +191,8 @@ a {
 .tree.skeleton {
   overflow: hidden;
 }
-.skeleton-row {
-  display: block;
-  height: 0.7rem;
+.skeleton-row,
+.skeleton-text {
   border-radius: 0.2rem;
   background: linear-gradient(
     90deg,
@@ -203,6 +202,18 @@ a {
   );
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skeleton-row {
+  display: block;
+  height: 0.7rem;
+}
+/* Applied to the real text-bearing element itself (not a stand-in bar):
+   the text stays, invisible, so the box keeps its exact real line-height,
+   font metrics, and truncation behavior -- the shimmer background shows
+   through in its place instead of approximating those dimensions by hand. */
+.skeleton-text {
+  color: transparent;
+  user-select: none;
 }
 @keyframes skeleton-shimmer {
   0% {
