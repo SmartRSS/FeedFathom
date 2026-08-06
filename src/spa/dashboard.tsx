@@ -849,11 +849,17 @@ export function Dashboard(props: {
                   <For each={[...Array(30).keys()]}>
                     {() => (
                       <div class="article">
-                        <span class="title">
-                          <span class="skeleton-row" style={{ width: "70%" }} />
+                        <span class="title" style={{ height: "1rem" }}>
+                          <span
+                            class="skeleton-row"
+                            style={{ height: "0.8rem", width: "70%" }}
+                          />
                         </span>
-                        <span class="details">
-                          <span class="skeleton-row" style={{ width: "40%" }} />
+                        <span class="details" style={{ height: "1rem" }}>
+                          <span
+                            class="skeleton-row"
+                            style={{ height: "0.75rem", width: "40%" }}
+                          />
                         </span>
                       </div>
                     )}
