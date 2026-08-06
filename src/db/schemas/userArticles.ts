@@ -26,7 +26,11 @@ export const userArticles = pgTable(
   (table) => [
     primaryKey({ columns: [table.userId, table.articleId] }),
     index("user_articles_user_id_idx").on(table.userId),
-    index("user_articles_article_id_idx").on(table.articleId),
+    // Composite, not just (article_id): getUserArticlesForSources joins on
+    // both columns together, and article_id alone (this index's former
+    // shape) forced a per-row filter after the index lookup instead of an
+    // exact match.
+    index("user_articles_article_user_idx").on(table.articleId, table.userId),
     index("user_articles_user_read_idx").on(table.userId, table.readAt),
   ],
 );

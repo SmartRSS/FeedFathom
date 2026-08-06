@@ -141,6 +141,13 @@
       "when": 1786004903011,
       "tag": "0020_panoramic_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786019269655,
+      "tag": "0021_sudden_mattie_franklin",
+      "breakpoints": true
     }
   ]
 }

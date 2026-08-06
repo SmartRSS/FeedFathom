@@ -64,6 +64,18 @@ const migration0017Indexes: readonly LegacyIndex[] = [
   },
 ] as const;
 
+// Migration 0021 replaces the single-column article_id index with a
+// composite (article_id, user_id) index -- same populated-table concern as
+// 0015/0017, so it gets the same concurrent-prebuild treatment.
+const migration0021Timestamp = 1_786_019_269_655;
+const migration0021Indexes: readonly LegacyIndex[] = [
+  {
+    create:
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "user_articles_article_user_idx" ON "user_articles" USING btree ("article_id", "user_id")',
+    name: "user_articles_article_user_idx",
+  },
+] as const;
+
 async function shouldPrebuildMigration0015Indexes(client: ReservedSQL) {
   const [tables] = await client<
     { targetTablesExist: boolean }[]
@@ -124,6 +136,33 @@ async function shouldPrebuildMigration0017Indexes(client: ReservedSQL) {
   return !migration?.migration0017Journaled;
 }
 
+async function shouldPrebuildMigration0021Indexes(client: ReservedSQL) {
+  const [tables] = await client<
+    { targetTableExists: boolean }[]
+  >`SELECT to_regclass('public.user_articles') IS NOT NULL AS "targetTableExists"`;
+  if (!tables?.targetTableExists) return false;
+
+  const [contents] = await client<
+    { targetTableContainsData: boolean }[]
+  >`SELECT EXISTS (SELECT 1 FROM "user_articles") AS "targetTableContainsData"`;
+  if (!contents?.targetTableContainsData) return false;
+
+  const [journal] = await client<
+    { migrationJournalExists: boolean }[]
+  >`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL
+      AS "migrationJournalExists"`;
+  if (!journal?.migrationJournalExists) return true;
+
+  const [migration] = await client<
+    { migration0021Journaled: boolean }[]
+  >`SELECT EXISTS (
+      SELECT 1
+      FROM "drizzle"."__drizzle_migrations"
+      WHERE "created_at" = ${migration0021Timestamp}
+    ) AS "migration0021Journaled"`;
+  return !migration?.migration0021Journaled;
+}
+
 async function prebuildIndexesConcurrently(
   client: ReservedSQL,
   indexes: readonly LegacyIndex[],
@@ -168,6 +207,8 @@ async function prebuildLegacyIndexes(client: ReservedSQL) {
     await prebuildIndexesConcurrently(client, migration0015Indexes);
   if (await shouldPrebuildMigration0017Indexes(client))
     await prebuildIndexesConcurrently(client, migration0017Indexes);
+  if (await shouldPrebuildMigration0021Indexes(client))
+    await prebuildIndexesConcurrently(client, migration0021Indexes);
 }
 
 export async function migrateDatabase(

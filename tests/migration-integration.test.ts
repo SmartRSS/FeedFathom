@@ -20,7 +20,7 @@ const expectedIndexNames = [
   "articles_updated_at_idx",
   "articles_source_last_seen_idx",
   "user_articles_user_id_idx",
-  "user_articles_article_id_idx",
+  "user_articles_article_user_idx",
   "user_articles_user_read_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
