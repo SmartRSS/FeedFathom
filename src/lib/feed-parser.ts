@@ -5,7 +5,11 @@ import type { ArticlesDataService } from "../db/data-services/article-data-servi
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
-import { type HttpClient, HttpDeferredError } from "./http-client.ts";
+import {
+  type HttpClient,
+  HttpDeferredError,
+  isHttpDeferredError,
+} from "./http-client.ts";
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 import { dateType, webUrlPolicy } from "./typebox-policy.ts";
@@ -235,7 +239,7 @@ export class FeedParser {
         new Date(freshUntil ?? Date.now() + 5 * 60_000),
       );
     } catch (error_: unknown) {
-      if (error_ instanceof HttpDeferredError) {
+      if (isHttpDeferredError(error_)) {
         throw error_;
       }
       console.error("parseSource", error_);
@@ -264,7 +268,7 @@ export class FeedParser {
         { freshUntil },
       );
     } catch (error_: unknown) {
-      if (error_ instanceof HttpDeferredError) {
+      if (isHttpDeferredError(error_)) {
         throw error_;
       }
       return undefined;
@@ -285,7 +289,7 @@ export class FeedParser {
     let earliestRetryAt: number | undefined;
     for (const result of results) {
       if (result.status === "rejected") {
-        if (result.reason instanceof HttpDeferredError) {
+        if (isHttpDeferredError(result.reason)) {
           earliestRetryAt = Math.min(
             earliestRetryAt ?? Infinity,
             result.reason.retryAt,

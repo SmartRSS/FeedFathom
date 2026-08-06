@@ -9,8 +9,8 @@ import type {
   SourcesDataService,
   SourceUrlUpdateResult,
 } from "../db/data-services/source-data-service.ts";
+import type { OpmlImportService } from "../db/data-services/opml-import-service.ts";
 import type { UsersDataService } from "../db/data-services/user-data-service.ts";
-import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
 import type { OpmlParser } from "../lib/opml-parser.ts";
 import type { RedirectMap } from "../lib/redirect-map.ts";
 import {
@@ -32,6 +32,7 @@ type Password = {
 };
 
 export type AdminOptionsRouteDependencies = {
+  opmlImportService: Pick<OpmlImportService, "insertTree">;
   opmlParser: Pick<OpmlParser, "parseOpml">;
   password: Password;
   redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;
@@ -46,7 +47,6 @@ export type AdminOptionsRouteDependencies = {
     getUserBySid(sid: string): ReturnType<UsersDataService["getUserBySid"]>;
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;
   };
-  userSourcesDataService: Pick<UserSourcesDataService, "insertTree">;
 };
 
 export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>

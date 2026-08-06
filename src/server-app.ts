@@ -26,6 +26,20 @@ export type ServerAppOptions = {
   spaDirectory?: string;
 };
 
+// A 404 for a browser navigation (not an API call, not a static asset) means
+// the SolidJS router should handle the path client-side, so serve the SPA
+// shell instead of a bare 404.
+function wantsSpaShellFallback(request: Request, path: string): boolean {
+  return (
+    request.method === "GET" &&
+    (request.headers.get("accept")?.includes("text/html") ?? false) &&
+    path !== "/api" &&
+    !path.startsWith("/api/") &&
+    !path.startsWith("/assets/") &&
+    !path.split("/").at(-1)?.includes(".")
+  );
+}
+
 export async function createServerApp(
   dependencies: ServerDependencies,
   options: ServerAppOptions = {},
@@ -61,12 +75,7 @@ export async function createServerApp(
       if (
         error instanceof NotFound &&
         production &&
-        request.method === "GET" &&
-        request.headers.get("accept")?.includes("text/html") &&
-        path !== "/api" &&
-        !path.startsWith("/api/") &&
-        !path.startsWith("/assets/") &&
-        !path.split("/").at(-1)?.includes(".")
+        wantsSpaShellFallback(request, path)
       ) {
         return new Response(Bun.file(`${spaDirectory}/index.html`));
       }

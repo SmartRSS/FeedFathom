@@ -25,16 +25,10 @@ export type SubscribeRouteDependencies = {
   >;
   userSourcesDataService: Pick<
     UserSourcesDataService,
-    "addSourceToUser" | "recomputeUnreadCounts"
-  > &
-    Partial<
-      Pick<
-        UserSourcesDataService,
-        | "claimSubscriptionInitialization"
-        | "completeSubscriptionInitialization"
-        | "releaseSubscriptionInitialization"
-      >
-    >;
+    | "addSourceToUser"
+    | "recomputeUnreadCounts"
+    | "withSubscriptionInitializationLease"
+  >;
 };
 
 // Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
@@ -78,33 +72,18 @@ export async function postSubscribeHandler(
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
   if (cachedPreview?.link) homeUrl = cachedPreview.link;
-  const subscription = await userSourcesDataService.addSourceToUser(
-    user.id,
-    {
-      homeUrl,
-      initializationSnapshot: cachedPreview
-        ? serializeFeedPreview(cachedPreview)
-        : null,
-      name: body.sourceName,
-      parentId: body.sourceFolder,
-      url: sourceUrl.value,
-    },
-    false,
-  );
+  const subscription = await userSourcesDataService.addSourceToUser(user.id, {
+    homeUrl,
+    initializationSnapshot: cachedPreview
+      ? serializeFeedPreview(cachedPreview)
+      : null,
+    name: body.sourceName,
+    parentId: body.sourceFolder,
+    url: sourceUrl.value,
+  });
   if (!subscription) return json({ error: "Invalid folder" }, 400);
   if (subscription.initialized === true)
     return json({ sourceId: subscription.source.id });
-
-  const subscriptionId = subscription.subscriptionId;
-  const claimed =
-    subscriptionId === undefined ||
-    userSourcesDataService.claimSubscriptionInitialization === undefined
-      ? true
-      : await userSourcesDataService.claimSubscriptionInitialization(
-          subscriptionId,
-        );
-  if (!claimed)
-    return json({ error: "Subscription initialization in progress" }, 409);
 
   const preview =
     subscription.initializationSnapshot === null
@@ -116,84 +95,69 @@ export async function postSubscribeHandler(
             sourceUrl.value,
           );
   if (subscription.initializationSnapshot && !preview) {
-    if (subscriptionId !== undefined && claimed !== true)
-      await userSourcesDataService.releaseSubscriptionInitialization?.(
-        subscriptionId,
-        claimed,
-      );
     throw new Error("Stored subscription snapshot is invalid");
   }
 
-  try {
-    if (preview) {
-      // A cached preview means the feed was already fetched and
-      // parsed moments ago (e.g. during "load preview" in feed
-      // discovery) -- inserting those already-parsed articles is a
-      // plain DB upsert, no network fetch, so doing it inline keeps
-      // subscribe fast without the async round-trip through the
-      // worker. Falls back to enqueueing if anything here fails.
-      try {
-        // batchUpsertArticles processes batches sequentially and a
-        // later batch can fail after earlier ones already
-        // committed -- recompute regardless of that outcome so
-        // committed articles aren't left counted as unread-stale,
-        // then let the original failure fall through to the
-        // enqueue fallback below.
-        let upsertError: unknown;
-        try {
-          await articlesDataService.batchUpsertArticles(
-            preview.articles.map((article) => ({
-              author: article.author,
-              content: article.content,
-              guid: article.guid,
-              lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-              publishedAt: article.publishedAt,
-              sourceId: subscription.source.id,
-              title: article.title,
-              updatedAt:
-                article.updatedAt === undefined
-                  ? article.publishedAt
-                  : article.updatedAt,
-              url: article.url,
-            })),
-          );
-        } catch (error) {
-          upsertError = error;
+  const lease =
+    await userSourcesDataService.withSubscriptionInitializationLease(
+      subscription.subscriptionId,
+      async () => {
+        if (preview) {
+          // A cached preview means the feed was already fetched and
+          // parsed moments ago (e.g. during "load preview" in feed
+          // discovery) -- inserting those already-parsed articles is a
+          // plain DB upsert, no network fetch, so doing it inline keeps
+          // subscribe fast without the async round-trip through the
+          // worker. Falls back to enqueueing if anything here fails.
+          try {
+            // batchUpsertArticles processes batches sequentially and a
+            // later batch can fail after earlier ones already
+            // committed -- recompute regardless of that outcome so
+            // committed articles aren't left counted as unread-stale,
+            // then let the original failure fall through to the
+            // enqueue fallback below.
+            let upsertError: unknown;
+            try {
+              await articlesDataService.batchUpsertArticles(
+                preview.articles.map((article) => ({
+                  author: article.author,
+                  content: article.content,
+                  guid: article.guid,
+                  lastSeenInFeedAt: subscription.subscriptionCreatedAt,
+                  publishedAt: article.publishedAt,
+                  sourceId: subscription.source.id,
+                  title: article.title,
+                  updatedAt:
+                    article.updatedAt === undefined
+                      ? article.publishedAt
+                      : article.updatedAt,
+                  url: article.url,
+                })),
+              );
+            } catch (error) {
+              upsertError = error;
+            }
+            await userSourcesDataService.recomputeUnreadCounts([
+              subscription.source.id,
+            ]);
+            if (upsertError !== undefined) {
+              throw upsertError;
+            }
+            await sourcesDataService.successSource(
+              subscription.source.id,
+              true,
+              new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
+            );
+          } catch {
+            await sourcesDataService.enqueueSource(subscription.source);
+          }
+        } else {
+          await sourcesDataService.enqueueSource(subscription.source);
         }
-        await userSourcesDataService.recomputeUnreadCounts([
-          subscription.source.id,
-        ]);
-        if (upsertError !== undefined) {
-          throw upsertError;
-        }
-        await sourcesDataService.successSource(
-          subscription.source.id,
-          true,
-          new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
-        );
-      } catch {
-        await sourcesDataService.enqueueSource(subscription.source);
-      }
-    } else {
-      await sourcesDataService.enqueueSource(subscription.source);
-    }
-    if (subscriptionId !== undefined && claimed !== true) {
-      const completed =
-        await userSourcesDataService.completeSubscriptionInitialization?.(
-          subscriptionId,
-          claimed,
-        );
-      if (completed === false)
-        throw new Error("Subscription initialization lease expired");
-    }
-  } catch (error) {
-    if (subscriptionId !== undefined && claimed !== true)
-      await userSourcesDataService.releaseSubscriptionInitialization?.(
-        subscriptionId,
-        claimed,
-      );
-    throw error;
-  }
+      },
+    );
+  if (lease.outcome === "in-progress")
+    return json({ error: "Subscription initialization in progress" }, 409);
 
   return json({ sourceId: subscription.source.id });
 }

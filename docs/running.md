@@ -68,6 +68,14 @@ The Docker workflow calls the reusable quality workflow before every event-speci
 
 The protected `production` GitHub environment deploys both stack files only when the repository variable `ENABLE_SWARM_DEPLOYMENT` is exactly `true`. Main-push deployment additionally requires successful `latest` promotion; manual deployment uses the same verified `deploy_tag` and does not update `latest`. The production stack defaults to `1` server replica (`APP_REPLICAS`) and `10` worker replicas (`WORKER_REPLICAS`). All three standalone deployment files set worker concurrency to `25`, lock duration to `60` seconds, cleanup interval to `20` seconds, and job-gathering interval to `20` seconds. These deployment values, rather than the bare-process fallbacks in `src/config.ts`, are authoritative for the supported Docker workflows.
 
+### Sizing for a smaller host
+
+`stack.yml` defaults are deliberately generous (sized for a host with room to spare, not for a minimal footprint). To run on a smaller VPS, shrink these together rather than independently:
+
+- `WORKER_CONCURRENCY` — max simultaneous feed-parses per worker replica; the bare-process fallback is `1`, and it's safe to run that low in production too.
+- `DB_POOL_MAX` — Postgres connections opened per server/worker replica (default `10`, matching Bun's SQL client default).
+- `POSTGRES_MAX_CONNECTIONS` — Postgres's own connection ceiling (`stack.yml` default `1000`, far more than a small deployment needs). Size it against the other two: roughly `1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX`, which leaves room for connection churn during a rolling update without reserving memory for thousands of unused slots. For example, 1 server + 1 worker replica at the `DB_POOL_MAX` default of `10` needs `1.5 * 2 * 10 = 30`.
+
 Before the first cutover, keep that gate disabled and complete these operator-owned steps:
 
 1. Back up PostgreSQL and Redis, then record the actual existing volume names from `docker volume ls`. Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to those exact names; do not infer them from the Compose keys and do not delete or recreate the volumes.

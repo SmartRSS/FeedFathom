@@ -6,6 +6,7 @@ const config = (overrides: Partial<AppConfig> = {}): AppConfig => ({
   ALLOWED_EMAILS: [],
   CLEANUP_INTERVAL: 1_000,
   DATABASE_URL: "postgresql://localhost/feedfathom_test",
+  DB_POOL_MAX: 10,
   ENABLE_REGISTRATION: false,
   GATHER_JOBS_INTERVAL: 1_000,
   LOCK_DURATION: 1_000,

@@ -1,21 +1,7 @@
-import {
-  and,
-  eq,
-  exists,
-  inArray,
-  isNull,
-  lt,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { OpmlNode } from "../../types/opml-types";
 import type * as schema from "../schema.ts";
-import { articles } from "../schemas/articles";
-import { opmlImports } from "../schemas/opmlImports";
 import { type Source, sources } from "../schemas/sources";
-import { userFolders } from "../schemas/userFolders";
 import { userSources } from "../schemas/userSources";
 import type { FoldersDataService } from "./folder-data-service";
 import type { SourcesDataService } from "./source-data-service";
@@ -26,12 +12,7 @@ type SubscriptionResult = {
   initializationSnapshot?: null | string;
   source: Source;
   subscriptionCreatedAt: Date;
-  subscriptionId?: number;
-};
-
-type PendingImportNode = {
-  node: OpmlNode;
-  parentId: null | number;
+  subscriptionId: number;
 };
 
 export class UserSourcesDataService {
@@ -50,7 +31,6 @@ export class UserSourcesDataService {
       parentId: null | number;
       url: string;
     },
-    enqueue = true,
   ): Promise<SubscriptionResult | undefined> {
     if (sourcePayload.parentId) {
       const folders = await this.foldersDataService.getUserFolders(userId);
@@ -111,22 +91,7 @@ export class UserSourcesDataService {
       throw new Error("Subscription conflict resolved without a row");
 
     const created = inserted !== undefined;
-    let initialized = userSource.initializedAt !== null;
-    if (enqueue && !initialized) {
-      const claim = await this.claimSubscriptionInitialization(userSource.id);
-      if (claim) {
-        try {
-          await this.sourcesDataService.enqueueSource(source);
-          initialized = await this.completeSubscriptionInitialization(
-            userSource.id,
-            claim,
-          );
-        } catch (error) {
-          await this.releaseSubscriptionInitialization(userSource.id, claim);
-          throw error;
-        }
-      }
-    }
+    const initialized = userSource.initializedAt !== null;
     return {
       created,
       initialized,
@@ -137,7 +102,50 @@ export class UserSourcesDataService {
     };
   }
 
-  public async claimSubscriptionInitialization(subscriptionId: number) {
+  /**
+   * Runs `work` under the subscription's initialization lease: claim, run
+   * work, then complete (or release on failure). Returns "in-progress" when
+   * another caller currently holds the lease, "already-initialized" when the
+   * subscription was already initialized before this call, or the result of
+   * `work` when this call claimed and completed the lease itself.
+   */
+  public async withSubscriptionInitializationLease<T>(
+    subscriptionId: number,
+    work: () => Promise<T>,
+  ): Promise<
+    | { outcome: "already-initialized" }
+    | { outcome: "claimed"; result: T }
+    | { outcome: "in-progress" }
+  > {
+    const owner = await this.claimSubscriptionInitialization(subscriptionId);
+    if (!owner) {
+      const row = (
+        await this.drizzleConnection
+          .select({ initializedAt: userSources.initializedAt })
+          .from(userSources)
+          .where(eq(userSources.id, subscriptionId))
+          .limit(1)
+      ).at(0);
+      return {
+        outcome: row?.initializedAt ? "already-initialized" : "in-progress",
+      };
+    }
+    try {
+      const result = await work();
+      const completed = await this.completeSubscriptionInitialization(
+        subscriptionId,
+        owner,
+      );
+      if (!completed)
+        throw new Error("Subscription initialization lease expired");
+      return { outcome: "claimed", result };
+    } catch (error) {
+      await this.releaseSubscriptionInitialization(subscriptionId, owner);
+      throw error;
+    }
+  }
+
+  private async claimSubscriptionInitialization(subscriptionId: number) {
     const owner = Bun.randomUUIDv7();
     return (
       await this.drizzleConnection
@@ -157,7 +165,7 @@ export class UserSourcesDataService {
     ).at(0)?.initializationOwner;
   }
 
-  public async completeSubscriptionInitialization(
+  private async completeSubscriptionInitialization(
     subscriptionId: number,
     owner: string,
   ) {
@@ -180,7 +188,7 @@ export class UserSourcesDataService {
     return completed.length > 0;
   }
 
-  public async releaseSubscriptionInitialization(
+  private async releaseSubscriptionInitialization(
     subscriptionId: number,
     owner: string,
   ) {
@@ -221,11 +229,15 @@ export class UserSourcesDataService {
   }
 
   /**
-   * Recomputes and stores unreadCount for every subscriber of the given
-   * sources. Call after articles change (new/updated) for those sources.
+   * Recomputes and stores unreadCount for subscriptions to the given
+   * sources -- for every subscriber when `userId` is omitted (call after
+   * articles change for those sources), or for just that user's own
+   * subscriptions when given (call after their read/delete state changes).
    */
-  public async recomputeUnreadCounts(sourceIds: number[]) {
+  public async recomputeUnreadCounts(sourceIds: number[], userId?: number) {
     if (sourceIds.length === 0) return;
+    const userFilter =
+      userId === undefined ? sql`` : sql`AND us2.user_id = ${userId}`;
     await this.drizzleConnection.execute(sql`
       UPDATE user_sources us
       SET unread_count = counts.unread
@@ -247,193 +259,10 @@ export class UserSourcesDataService {
           ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
         LEFT JOIN user_articles ua
           ON ua.user_id = us2.user_id AND ua.article_id = a.id
-        WHERE us2.source_id IN ${sourceIds}
+        WHERE us2.source_id IN ${sourceIds} ${userFilter}
         GROUP BY us2.id
       ) counts
       WHERE us.id = counts.id
     `);
-  }
-
-  /**
-   * Recomputes and stores unreadCount for one user's subscriptions to the
-   * given sources. Call after a user's own read/delete state changes.
-   */
-  public async recomputeUnreadCountsForUser(
-    userId: number,
-    sourceIds: number[],
-  ) {
-    if (sourceIds.length === 0) return;
-    await this.drizzleConnection.execute(sql`
-      UPDATE user_sources us
-      SET unread_count = counts.unread
-      FROM (
-        SELECT us2.id,
-          (
-            coalesce(count(a.id), 0) -
-            coalesce(count(CASE
-              WHEN ua.deleted_at IS NOT NULL
-              OR (
-                ua.read_at IS NOT NULL
-                AND (a.updated_at IS NULL OR ua.read_at >= a.updated_at)
-              )
-              THEN 1
-            END), 0)
-          )::int AS unread
-        FROM user_sources us2
-        LEFT JOIN articles a
-          ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
-        LEFT JOIN user_articles ua
-          ON ua.user_id = us2.user_id AND ua.article_id = a.id
-        WHERE us2.user_id = ${userId} AND us2.source_id IN ${sourceIds}
-        GROUP BY us2.id
-      ) counts
-      WHERE us.id = counts.id
-    `);
-  }
-
-  public async insertTree(
-    userId: number,
-    tree: OpmlNode[],
-    contentHash?: string,
-  ) {
-    if (!contentHash || !/^[a-f\d]{64}$/.test(contentHash))
-      throw new Error("Valid OPML content hash is required");
-    const sourcesToQueue = await this.drizzleConnection.transaction(
-      async (transaction) => {
-        await transaction.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`feedfathom:opml:${userId}`}, 0))`,
-        );
-        const imported = (
-          await transaction
-            .insert(opmlImports)
-            .values({ contentHash, userId })
-            .onConflictDoNothing()
-            .returning({ contentHash: opmlImports.contentHash })
-        ).at(0);
-        if (!imported) return [];
-
-        const pending: PendingImportNode[] = tree
-          .toReversed()
-          .map((node) => ({ node, parentId: null }));
-        const queued = new Map<number, Source>();
-        /* eslint-disable no-await-in-loop -- Import order determines folder membership. */
-        while (pending.length) {
-          const current = pending.pop();
-          if (!current) break;
-
-          if (current.node.type === "folder") {
-            const folder = (
-              await transaction
-                .insert(userFolders)
-                .values({ name: current.node.name, userId })
-                .returning({ id: userFolders.id })
-            ).at(0);
-            if (!folder) throw new Error("Failed to create OPML folder");
-            for (const child of current.node.children.toReversed())
-              pending.push({ node: child, parentId: folder.id });
-            continue;
-          }
-
-          const insertedSource = (
-            await transaction
-              .insert(sources)
-              .values({
-                homeUrl: current.node.homeUrl,
-                url: current.node.xmlUrl,
-              })
-              .onConflictDoNothing({ target: sources.url })
-              .returning()
-          ).at(0);
-          const source =
-            insertedSource ??
-            (
-              await transaction
-                .select()
-                .from(sources)
-                .where(eq(sources.url, current.node.xmlUrl))
-                .limit(1)
-            ).at(0);
-          if (!source) throw new Error("Failed to resolve OPML source");
-
-          const subscription = (
-            await transaction
-              .insert(userSources)
-              .values({
-                createdAt: new Date(),
-                initializedAt: sql`NOW()`,
-                name: current.node.name,
-                parentId: current.parentId,
-                sourceId: source.id,
-                userId,
-              })
-              .onConflictDoNothing({
-                target: [userSources.sourceId, userSources.userId],
-              })
-              .returning({ id: userSources.id })
-          ).at(0);
-          if (subscription) queued.set(source.id, source);
-        }
-        /* eslint-enable no-await-in-loop */
-        return [...queued.values()];
-      },
-    );
-
-    await Promise.all(
-      sourcesToQueue.map((source) =>
-        this.sourcesDataService.enqueueSource(source),
-      ),
-    );
-  }
-
-  public async cleanup() {
-    // "Delete sources nobody subscribes to" is, by construction, "delete
-    // every source" whenever user_sources is empty -- true whether that's
-    // expressed as NOT IN or as a correlated NOT EXISTS per source row.
-    // If nobody has ever subscribed to anything (last subscription just
-    // removed) deleting every source is correct; if user_sources is
-    // empty for any other, transient reason, it isn't. Since this method
-    // can't tell those apart, guard with an uncorrelated existence check
-    // on the whole table, in the same statement so there's no separate
-    // check-then-delete round trip to race against.
-    await this.drizzleConnection
-      .delete(sources)
-      .where(
-        and(
-          exists(this.drizzleConnection.select({ id: userSources.id }).from(userSources)),
-          notExists(
-            this.drizzleConnection
-              .select({ id: userSources.id })
-              .from(userSources)
-              .where(eq(userSources.sourceId, sources.id)),
-          ),
-        ),
-      );
-
-    const articlesBeforeSubscription = this.drizzleConnection
-      .select({ id: articles.id })
-      .from(articles)
-      .leftJoin(
-        this.drizzleConnection
-          .select({
-            sourceId: userSources.sourceId,
-            earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
-              "earliest_subscription",
-            ),
-          })
-          .from(userSources)
-          .groupBy(userSources.sourceId)
-          .as("earliest_subs"),
-        eq(articles.sourceId, sql`earliest_subs.source_id`),
-      )
-      .where(
-        and(
-          sql`earliest_subs.source_id IS NOT NULL`,
-          sql`${articles.lastSeenInFeedAt} < earliest_subs.earliest_subscription`,
-        ),
-      );
-
-    await this.drizzleConnection
-      .delete(articles)
-      .where(inArray(articles.id, articlesBeforeSubscription));
   }
 }

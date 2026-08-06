@@ -15,3 +15,17 @@ export function createDrizzleConnection(
 ) {
   return drizzle(client, { schema });
 }
+
+export function createPooledDrizzleConnection(
+  databaseUrl: AppConfig["DATABASE_URL"],
+  poolMax: number,
+) {
+  return createDrizzleConnection(
+    databaseUrl,
+    new SQL(databaseUrl, {
+      idleTimeout: 60,
+      max: poolMax,
+      maxLifetime: 1_800,
+    }),
+  );
+}

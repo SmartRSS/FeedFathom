@@ -52,6 +52,12 @@ const configSchema = Type.Object(
       .Encode((value) => value.join(",")),
     ENABLE_REGISTRATION: booleanString(),
     WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "1", 1, 128),
+    // Per-process Postgres connection pool size. Matches Bun's SQL client
+    // default (10) so this is a no-op until an operator sizes it against
+    // Postgres's own max_connections: roughly
+    // 1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX. See
+    // docs/running.md.
+    DB_POOL_MAX: integerString("DB_POOL_MAX", "10", 1, 100),
     LOCK_DURATION: integerString("LOCK_DURATION", "1000", 1, 86_400),
     CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "1000", 20, 2_592_000),
     DATABASE_URL: databaseUrl,

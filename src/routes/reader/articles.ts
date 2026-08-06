@@ -13,10 +13,7 @@ export type ArticlesRouteDependencies = {
     ArticlesDataService,
     "getUserArticlesForSources" | "removeUserArticles"
   >;
-  userSourcesDataService: Pick<
-    UserSourcesDataService,
-    "recomputeUnreadCountsForUser"
-  >;
+  userSourcesDataService: Pick<UserSourcesDataService, "recomputeUnreadCounts">;
 };
 
 export async function postArticlesHandler(
@@ -57,6 +54,6 @@ export async function deleteArticlesHandler(
       body.removedArticleIdList,
       user.id,
     );
-  await userSourcesDataService.recomputeUnreadCountsForUser(user.id, sourceIds);
+  await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
   return json(articleIds);
 }

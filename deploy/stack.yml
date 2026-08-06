@@ -20,7 +20,7 @@ services:
 
   postgres:
     image: pgautoupgrade/pgautoupgrade:17-bookworm
-    command: ["-c", "max_connections=1000"]
+    command: ["-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-1000}"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -47,6 +47,7 @@ services:
     environment:
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
@@ -95,6 +96,7 @@ services:
     image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to the immutable image tag}
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       DEBUG: "bull:*"
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
       LOCK_DURATION: ${LOCK_DURATION:-60}

@@ -13,6 +13,12 @@ const unexpected = (name: string): never => {
   throw new Error(`Unexpected dependency call: ${name}`);
 };
 
+const runLease: ServerDependencies["userSourcesDataService"]["withSubscriptionInitializationLease"] =
+  async (_subscriptionId, work) => ({
+    outcome: "claimed",
+    result: await work(),
+  });
+
 const sessionUser = {
   email: "reader@example.com",
   id: 42,
@@ -39,6 +45,7 @@ function createDependencies(): ServerDependencies {
     ALLOWED_EMAILS: [],
     CLEANUP_INTERVAL: 1_000,
     DATABASE_URL: "postgres://feedfathom:feedfathom@localhost/feedfathom",
+    DB_POOL_MAX: 10,
     ENABLE_REGISTRATION: false,
     GATHER_JOBS_INTERVAL: 1_000,
     LOCK_DURATION: 1_000,
@@ -100,6 +107,11 @@ function createDependencies(): ServerDependencies {
     },
     mailSender: {
       async sendActivationEmail() {},
+    },
+    opmlImportService: {
+      async insertTree() {
+        return unexpected("opmlImportService.insertTree");
+      },
     },
     opmlParser: {
       parseOpml() {
@@ -165,19 +177,16 @@ function createDependencies(): ServerDependencies {
       async getUserSources() {
         return [];
       },
-      async insertTree() {
-        return unexpected("userSourcesDataService.insertTree");
-      },
       async recomputeUnreadCounts() {
         return unexpected("userSourcesDataService.recomputeUnreadCounts");
       },
-      async recomputeUnreadCountsForUser() {
-        return unexpected(
-          "userSourcesDataService.recomputeUnreadCountsForUser",
-        );
-      },
       async removeSourceFromUser() {
         return unexpected("userSourcesDataService.removeSourceFromUser");
+      },
+      async withSubscriptionInitializationLease() {
+        return unexpected(
+          "userSourcesDataService.withSubscriptionInitializationLease",
+        );
       },
     },
   };
@@ -522,9 +531,12 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
     ),
   );
   const find = await app.handle(
-    new Request("http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F", {
-      headers: { cookie: "sid=test" },
-    }),
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      {
+        headers: { cookie: "sid=test" },
+      },
+    ),
   );
 
   expect(preview.status).toBe(429);
@@ -567,8 +579,14 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     ...parameters
   ) => {
     additions.push(parameters);
-    return { source: subscriptionSource, subscriptionCreatedAt };
+    return {
+      source: subscriptionSource,
+      subscriptionCreatedAt,
+      subscriptionId: 1,
+    };
   };
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
   dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
     upserts.push(articles);
   };
@@ -605,7 +623,6 @@ test("persists a cached preview inline and recomputes unread counts, without rep
         parentId: null,
         url: subscriptionSource.url,
       },
-      false,
     ],
   ]);
   expect(upserts).toHaveLength(1);
@@ -644,7 +661,10 @@ test("falls back to queueing when inline persistence fails", async () => {
   dependencies.userSourcesDataService.addSourceToUser = async () => ({
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
   });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
   dependencies.articlesDataService.batchUpsertArticles = async () => {
     throw new Error("Database unavailable");
   };
@@ -689,8 +709,11 @@ test("queues URL cache misses and email subscriptions", async () => {
         url: sourceUrl,
       },
       subscriptionCreatedAt: new Date(),
+      subscriptionId: sourceUrl.includes("@") ? 2 : 1,
     };
   };
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
   dependencies.sourcesDataService.enqueueSource = async (source) => {
     enqueues.push([source.id, source.url]);
   };
@@ -709,7 +732,6 @@ test("queues URL cache misses and email subscriptions", async () => {
   expect(await web.json()).toEqual({ sourceId: 91 });
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
-  expect(additions.map((addition) => addition[2])).toEqual([false, false]);
   expect(enqueues).toEqual([
     [91, subscriptionSource.url],
     [92, "newsletter@example.com"],
@@ -1224,7 +1246,7 @@ test("validates OPML files and checks plain-text content before parsing", async 
     parsed.push(content);
     return [];
   };
-  dependencies.userSourcesDataService.insertTree = async () => {
+  dependencies.opmlImportService.insertTree = async () => {
     inserts++;
   };
   const app = await appFor(dependencies);

@@ -2,13 +2,15 @@ import { Queue } from "bullmq";
 import { RedisClient } from "bun";
 import Redis from "ioredis";
 import { config } from "./config.ts";
-import { createDrizzleConnection } from "./db/connection.ts";
+import { createPooledDrizzleConnection } from "./db/connection.ts";
 import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
 import { FoldersDataService } from "./db/data-services/folder-data-service.ts";
 import { JobFailuresDataService } from "./db/data-services/job-failure-data-service.ts";
+import { OpmlImportService } from "./db/data-services/opml-import-service.ts";
 import { SourcesDataService } from "./db/data-services/source-data-service.ts";
 import { UsersDataService } from "./db/data-services/user-data-service.ts";
 import { UserSourcesDataService } from "./db/data-services/user-source-data-service.ts";
+import { cleanupOrphanedData } from "./db/maintenance.ts";
 import { FeedParser } from "./lib/feed-parser.ts";
 import { HttpClient } from "./lib/http-client.ts";
 import { RedirectMap } from "./lib/redirect-map.ts";
@@ -31,7 +33,10 @@ export async function createFeedRuntime() {
     port: 6379,
   });
   const bullmqQueue = new Queue("tasks", { connection: bullmqRedis });
-  const drizzleConnection = createDrizzleConnection(config.DATABASE_URL);
+  const drizzleConnection = createPooledDrizzleConnection(
+    config.DATABASE_URL,
+    config.DB_POOL_MAX,
+  );
   const articlesDataService = new ArticlesDataService(drizzleConnection);
   const foldersDataService = new FoldersDataService(drizzleConnection);
   const sourcesDataService = new SourcesDataService(
@@ -43,6 +48,10 @@ export async function createFeedRuntime() {
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
     foldersDataService,
+    sourcesDataService,
+  );
+  const opmlImportService = new OpmlImportService(
+    drizzleConnection,
     sourcesDataService,
   );
   const httpClient = new HttpClient(redis);
@@ -67,12 +76,14 @@ export async function createFeedRuntime() {
     articlesDataService,
     bullmqQueue,
     bullmqRedis,
+    cleanupOrphanedData: () => cleanupOrphanedData(drizzleConnection),
     close,
     drizzleConnection,
     feedParser,
     foldersDataService,
     httpClient,
     jobFailuresDataService,
+    opmlImportService,
     redirectMap,
     redis,
     sourcesDataService,

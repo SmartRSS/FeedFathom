@@ -99,6 +99,19 @@ export class HttpDeferredError extends Error {
   }
 }
 
+// `instanceof` can itself throw (e.g. a Proxy with a poisoned
+// getPrototypeOf trap), so callers that can't trust their caught value
+// should go through this guard instead of a bare `instanceof` check.
+export function isHttpDeferredError(
+  error: unknown,
+): error is HttpDeferredError {
+  try {
+    return error instanceof HttpDeferredError;
+  } catch {
+    return false;
+  }
+}
+
 class HttpDeadlineError extends Error {
   constructor() {
     super("HTTP request exceeded its 30 second deadline");

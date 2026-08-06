@@ -71,6 +71,15 @@ export function transitionArticleSelection(
   return { anchor, indexes };
 }
 
+export function removalOutcome<T>(
+  items: readonly T[],
+  indexes: ReadonlySet<number>,
+): { nextIndex: number; remaining: T[] } {
+  const remaining = items.filter((_, index) => !indexes.has(index));
+  const nextIndex = Math.min(Math.min(...indexes), remaining.length - 1);
+  return { nextIndex, remaining };
+}
+
 export function soleSelectedIndex(
   selectedIndexes: ReadonlySet<number>,
 ): number | undefined {

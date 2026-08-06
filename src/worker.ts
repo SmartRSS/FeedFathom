@@ -24,7 +24,7 @@ async function runWorker() {
     runtime.bullmqQueue,
     runtime.feedParser,
     runtime.sourcesDataService,
-    runtime.userSourcesDataService,
+    runtime.cleanupOrphanedData,
     runtime.jobFailuresDataService,
     createWorker,
   );

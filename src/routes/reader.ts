@@ -63,17 +63,9 @@ export type ReaderRouteDependencies = {
     | "addSourceToUser"
     | "recomputeUnreadCounts"
     | "getUserSources"
-    | "recomputeUnreadCountsForUser"
     | "removeSourceFromUser"
-  > &
-    Partial<
-      Pick<
-        UserSourcesDataService,
-        | "claimSubscriptionInitialization"
-        | "completeSubscriptionInitialization"
-        | "releaseSubscriptionInitialization"
-      >
-    >;
+    | "withSubscriptionInitializationLease"
+  >;
 };
 
 export const createReaderRoutes = (deps: ReaderRouteDependencies) =>

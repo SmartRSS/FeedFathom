@@ -48,10 +48,7 @@ export class UsersDataService {
     // plain insert instead of serializing every registration behind a
     // whole-table lock.
     const usersExist = (
-      await this.drizzleConnection
-        .select({ id: users.id })
-        .from(users)
-        .limit(1)
+      await this.drizzleConnection.select({ id: users.id }).from(users).limit(1)
     ).at(0);
     if (usersExist) {
       return (

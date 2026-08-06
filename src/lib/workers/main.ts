@@ -4,10 +4,9 @@ import { DelayedError } from "bullmq";
 import type { AppConfig } from "../../config.ts";
 import type { JobFailuresDataService } from "../../db/data-services/job-failure-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
-import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import type { FeedParser } from "../feed-parser.ts";
-import { HttpDeferredError } from "../http-client.ts";
+import { isHttpDeferredError } from "../http-client.ts";
 import { webUrlPolicy } from "../typebox-policy.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
@@ -105,10 +104,7 @@ export class MainWorker {
       "parseSource" | "refreshFavicon"
     >,
     private readonly sourcesDataService: MainWorkerSources,
-    private readonly userSourcesDataService: Pick<
-      UserSourcesDataService,
-      "cleanup"
-    >,
+    private readonly cleanupOrphanedData: () => Promise<void>,
     private readonly jobFailuresDataService: Pick<
       JobFailuresDataService,
       "record"
@@ -149,7 +145,7 @@ export class MainWorker {
 
       switch (input.name) {
         case JobName.Cleanup: {
-          await this.userSourcesDataService.cleanup();
+          await this.cleanupOrphanedData();
           break;
         }
 
@@ -203,19 +199,9 @@ export class MainWorker {
         }
       }
     } catch (error: unknown) {
-      // `instanceof` can itself throw (a Proxy with a poisoned
-      // getPrototypeOf trap), so this check can't be trusted unguarded
-      // either -- same reasoning as the block below.
-      const deferredError = (() => {
+      if (isHttpDeferredError(error)) {
         try {
-          return error instanceof HttpDeferredError ? error : undefined;
-        } catch {
-          return undefined;
-        }
-      })();
-      if (deferredError) {
-        try {
-          await job.moveToDelayed(deferredError.retryAt, job.token);
+          await job.moveToDelayed(error.retryAt, job.token);
           throw new DelayedError();
         } catch (moveError) {
           const isDelayed = (() => {
@@ -245,8 +231,7 @@ export class MainWorker {
         // each statement individually (this has already needed three
         // rounds of narrowing), the whole block is one try/catch.
         console.error("Error processing job:", error);
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         await this.jobFailuresDataService.record(job.name, message);
       } catch {
         // Deliberately swallowed with no further logging: logging the

@@ -10,6 +10,14 @@ import {
 } from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
 
+function userArticleAccessJoin(userId: number) {
+  return and(
+    eq(userSources.userId, userId),
+    eq(userSources.sourceId, articles.sourceId),
+    gte(articles.lastSeenInFeedAt, userSources.createdAt),
+  );
+}
+
 export class ArticlesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
@@ -23,14 +31,7 @@ export class ArticlesDataService {
       await this.drizzleConnection
         .select({ article: articles })
         .from(articles)
-        .innerJoin(
-          userSources,
-          and(
-            eq(userSources.userId, userId),
-            eq(userSources.sourceId, articles.sourceId),
-            gte(articles.lastSeenInFeedAt, userSources.createdAt),
-          ),
-        )
+        .innerJoin(userSources, userArticleAccessJoin(userId))
         .where(eq(articles.id, articleId))
         .limit(1)
     ).at(0)?.article;
@@ -58,14 +59,7 @@ export class ArticlesDataService {
           eq(userArticles.userId, userId),
         ),
       )
-      .leftJoin(
-        userSources,
-        and(
-          eq(userSources.userId, userId),
-          eq(userSources.sourceId, articles.sourceId),
-          gte(articles.lastSeenInFeedAt, userSources.createdAt),
-        ),
-      )
+      .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
@@ -207,14 +201,7 @@ export class ArticlesDataService {
           sourceId: articles.sourceId,
         })
         .from(articles)
-        .innerJoin(
-          userSources,
-          and(
-            eq(userSources.userId, userId),
-            eq(userSources.sourceId, articles.sourceId),
-            gte(articles.lastSeenInFeedAt, userSources.createdAt),
-          ),
-        )
+        .innerJoin(userSources, userArticleAccessJoin(userId))
         .where(inArray(articles.id, articleIdList));
 
       if (authorizedArticles.length === 0) {

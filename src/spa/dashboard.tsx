@@ -7,10 +7,12 @@ import {
   Show,
 } from "solid-js";
 import {
+  removalOutcome,
   soleSelectedIndex,
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior";
+import { createSupersessionGuard } from "./supersession";
 import { api } from "./api";
 import {
   articleResponse,
@@ -248,15 +250,15 @@ export function Dashboard(props: {
   createEffect(() => {
     if (props.initialDiscovery) setShowDiscovery(true);
   });
-  let latestSelection = 0;
-  let latestArticleRequest = 0;
-  let latestCapabilityProbe = 0;
-  let latestTreeRequest = 0;
+  const selectionGuard = createSupersessionGuard();
+  const articleRequestGuard = createSupersessionGuard();
+  const capabilityProbeGuard = createSupersessionGuard();
+  const treeRequestGuard = createSupersessionGuard();
   let articleAbortController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   const disableReader = (message: string) => {
-    latestArticleRequest++;
+    articleRequestGuard.start();
     setReaderAvailable(false);
     setDisplayMode("FEED");
     setReaderContent(undefined);
@@ -264,9 +266,9 @@ export function Dashboard(props: {
     setError(message);
   };
   const probeReader = async () => {
-    const probe = ++latestCapabilityProbe;
+    const probe = capabilityProbeGuard.start();
     const available = await readerBridge.available();
-    if (probe !== latestCapabilityProbe) return;
+    if (!capabilityProbeGuard.isCurrent(probe)) return;
     setReaderAvailable(available);
     if (!available && displayMode() !== "FEED")
       disableReader("The Reader extension is unavailable. Showing Feed mode.");
@@ -290,7 +292,7 @@ export function Dashboard(props: {
     }
   };
   onCleanup(() => {
-    latestCapabilityProbe++;
+    capabilityProbeGuard.start();
     removeEventListener("focus", focusReaderProbe);
     navigator.serviceWorker?.removeEventListener(
       "message",
@@ -299,7 +301,7 @@ export function Dashboard(props: {
     readerBridge.dispose();
   });
   async function loadTree(): Promise<TreeNode[]> {
-    const request = ++latestTreeRequest;
+    const request = treeRequestGuard.start();
     const preload = window.__treePreload;
     delete window.__treePreload;
     treeAbortController?.abort();
@@ -336,7 +338,7 @@ export function Dashboard(props: {
         if (
           cause instanceof DOMException &&
           cause.name === "AbortError" &&
-          request !== latestTreeRequest
+          !treeRequestGuard.isCurrent(request)
         ) {
           return treeRequestPromise ?? Promise.reject(cause);
         }
@@ -345,7 +347,7 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (request !== latestTreeRequest) return nextTree;
+    if (!treeRequestGuard.isCurrent(request)) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
@@ -387,7 +389,7 @@ export function Dashboard(props: {
   });
   async function select(node: TreeNode) {
     props.focusPane("articles");
-    const selection = ++latestSelection;
+    const selection = selectionGuard.start();
     articleAbortController?.abort();
     const ids = sourceIds(node);
     if (!ids.length) {
@@ -410,7 +412,7 @@ export function Dashboard(props: {
         method: "POST",
         signal: controller.signal,
       });
-      if (selection !== latestSelection) return;
+      if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
@@ -421,10 +423,10 @@ export function Dashboard(props: {
         document.querySelector<HTMLElement>(".article-list")?.focus(),
       );
     } catch (cause) {
-      if (selection !== latestSelection) return;
+      if (!selectionGuard.isCurrent(selection)) return;
       reportError(cause, "Could not load articles");
     } finally {
-      if (selection === latestSelection) setArticlesLoading(false);
+      if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
     }
   }
   function showProperties() {
@@ -469,14 +471,17 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
-  async function open(article: ArticleSummary, selection = latestSelection) {
-    const request = ++latestArticleRequest;
+  async function open(
+    article: ArticleSummary,
+    selection = selectionGuard.current(),
+  ) {
+    const request = articleRequestGuard.start();
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
       return (
-        request === latestArticleRequest &&
-        selection === latestSelection &&
+        articleRequestGuard.isCurrent(request) &&
+        selectionGuard.isCurrent(selection) &&
         mode === displayMode() &&
         selectedIndex !== undefined &&
         articles()[selectedIndex]?.id === article.id
@@ -522,12 +527,12 @@ export function Dashboard(props: {
       }
       reportError(cause, "Could not load article");
     } finally {
-      if (request === latestArticleRequest) setLoadingArticle(false);
+      if (articleRequestGuard.isCurrent(request)) setLoadingArticle(false);
     }
   }
   function setArticleSelection(
     indexes: Set<number>,
-    selection = latestSelection,
+    selection = selectionGuard.current(),
   ): Promise<void> | undefined {
     setSelectedIndexes(indexes);
     setOpenedArticle(undefined);
@@ -535,7 +540,7 @@ export function Dashboard(props: {
     const index = soleSelectedIndex(indexes);
     const article = index === undefined ? undefined : articles()[index];
     if (!article) {
-      latestArticleRequest++;
+      articleRequestGuard.start();
       setLoadingArticle(false);
       return undefined;
     }
@@ -561,8 +566,7 @@ export function Dashboard(props: {
 
     // Update the UI immediately; the delete request runs in the background
     // so removing a batch of articles doesn't block on a round trip.
-    const remaining = items.filter((_, index) => !indexes.has(index));
-    const nextIndex = Math.min(Math.min(...indexes), remaining.length - 1);
+    const { nextIndex, remaining } = removalOutcome(items, indexes);
     const nextArticle = remaining[nextIndex];
     setArticles(remaining);
     const openNext = setArticleSelection(
