@@ -159,7 +159,12 @@ if ("serviceWorker" in navigator) {
     reloaded = true;
     location.reload();
   });
-  void navigator.serviceWorker.register("/sw-v5.js");
+  // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
+  // VITE_SW_FILENAME for production builds, and Vite's dev server serves
+  // public/ files at their literal path anyway.
+  void navigator.serviceWorker.register(
+    import.meta.env["VITE_SW_FILENAME"] ?? "/sw.js",
+  );
 }
 
 render(() => <App />, document.querySelector("#app")!);

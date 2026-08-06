@@ -1,6 +1,11 @@
-// File name, CACHE_VERSION, and the register() call in main.tsx must all bump
-// together on changes: renaming makes any CDN-cached copy of the old file
-// irrelevant instead of relying on cache headers alone.
+// The served filename is a content hash of this file, computed and injected
+// by bin/build-spa.ts -- Cloudflare sits in front of production and can hold
+// a cached copy past what Cache-Control alone would suggest, so a changed
+// file getting a new URL (rather than relying on cache headers) is what
+// actually forces clients onto it. CACHE_VERSION is a separate, unrelated
+// knob: bump it only to force-purge every cached entry (a change to the
+// caching scheme itself, not just app code) -- everyday content changes
+// don't need it touched, since the filename hash already changes for those.
 const CACHE_VERSION = "v5";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
@@ -250,6 +255,28 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+// Favicons rarely change and aren't hash-named like /assets/, so a cached
+// copy is worth serving instantly rather than waiting on a network round
+// trip every time (unlike the rest of /api/*, where a stale response is
+// actually wrong, not just slow) -- but they're not truly immutable either
+// (RefreshFavicon can update one in place), so the cache still gets
+// refreshed in the background for next time instead of kept forever.
+async function staleWhileRevalidate(event, request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const revalidated = fetch(request)
+    .then((response) => {
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => undefined);
+  // Without waitUntil, the browser can idle the worker the instant this
+  // function's response resolves -- killing the background refetch above
+  // before it ever reaches the network, silently defeating "next time".
+  event.waitUntil(revalidated);
+  return cached ?? (await revalidated) ?? Response.error();
+}
+
 async function shell() {
   const cache = await caches.open(SHELL_CACHE);
   try {
@@ -277,6 +304,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.pathname.startsWith("/api/favicon/")) {
+    event.respondWith(staleWhileRevalidate(event, request, API_CACHE));
+    return;
+  }
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(networkFirst(request, API_CACHE));
     return;

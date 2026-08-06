@@ -50,7 +50,7 @@ export async function createServerApp(
     ? new Elysia().get("/*", async ({ path }) => {
         const file = Bun.file(`${spaDirectory}${path}`);
         if (!(await file.exists())) throw new NotFound();
-        if (/^\/sw-v\d+\.js$/.test(path)) {
+        if (/^\/sw-[a-f0-9]+\.js$/.test(path)) {
           return new Response(file, {
             headers: { "Cache-Control": "public, max-age=3600" },
           });

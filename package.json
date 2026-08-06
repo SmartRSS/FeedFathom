@@ -13,7 +13,7 @@
     "build-worker": "bun build ./src/worker.ts --outdir=./build/ --target=bun --sourcemap",
     "build-project": "rm -rf build && mkdir -p build && bun run build-server && bun run build-migrator && bun run build-worker && bun run build-extension && bun run build-cloudflare-email-worker",
     "watch-worker": "bun --watch ./src/worker.ts",
-    "build-spa": "vite build --config src/spa/vite.config.ts",
+    "build-spa": "bun ./bin/build-spa.ts",
     "watch-spa": "vite --config src/spa/vite.config.ts",
     "watch-spa-api": "PORT=3001 bun --watch src/server.ts",
     "test:unit": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/feedfathom_test} bun test --path-ignore-patterns='tests/browser/**' --path-ignore-patterns='tests/migration-integration.test.ts'",
