@@ -11,6 +11,9 @@ export async function getTreeHandler(
   { user }: { user: AuthedUser },
   { foldersDataService, userSourcesDataService }: TreeRouteDependencies,
 ) {
+  // TEMPORARY: artificial delay so the tree skeleton is actually visible for
+  // a visual QA pass. Remove once that's done -- not meant to ship.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   const [sources, folders] = await Promise.all([
     userSourcesDataService.getUserSources(user.id),
     foldersDataService.getUserFolders(user.id),

@@ -28,6 +28,9 @@ export async function postArticlesHandler(
   },
   { articlesDataService }: ArticlesRouteDependencies,
 ) {
+  // TEMPORARY: artificial delay so the article-list skeleton is actually
+  // visible for a visual QA pass. Remove once that's done -- not meant to ship.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   if (!body.sources.length) return json([]);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
