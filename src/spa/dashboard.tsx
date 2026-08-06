@@ -67,6 +67,41 @@ function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
+function faviconUrls(node: TreeNode): string[] {
+  return node.type === "source"
+    ? node.favicon
+      ? [node.favicon]
+      : []
+    : (node.children ?? []).flatMap(faviconUrls);
+}
+
+// Favicons already go through the service worker's own cache, so once warm
+// this resolves near-instantly -- the point isn't to add a real wait, it's
+// to stop the tree's text and its icons from painting a couple of frames
+// apart. The timeout bounds the one case where that's not true (a cold
+// cache, or a slow/broken favicon): don't hold the skeleton hostage to a
+// handful of image fetches when showing the tree without them is better
+// than not showing it at all.
+const FAVICON_PRELOAD_TIMEOUT_MS = 500;
+
+function preloadFavicons(tree: TreeNode[]): Promise<void> {
+  const urls = tree.flatMap(faviconUrls);
+  if (!urls.length) return Promise.resolve();
+  const loaded = Promise.all(
+    urls.map((url) => {
+      const image = new Image();
+      image.src = url;
+      return image.decode().catch(() => {});
+    }),
+  ).then(() => {});
+  const timeout = new Promise<void>((resolve) =>
+    setTimeout(resolve, FAVICON_PRELOAD_TIMEOUT_MS),
+  );
+  return Promise.race([loaded, timeout]);
+}
+
+const READER_SKELETON_LINE_WIDTHS = ["95%", "88%", "92%", "70%", "90%", "60%"];
+
 function withDecrementedUnread(
   nodes: TreeNode[],
   deltas: Map<string, number>,
@@ -347,6 +382,8 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
+    if (!treeRequestGuard.isCurrent(request)) return nextTree;
+    await preloadFavicons(nextTree);
     if (!treeRequestGuard.isCurrent(request)) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
@@ -716,7 +753,7 @@ export function Dashboard(props: {
             when={!treeLoading()}
             fallback={
               <ul class="tree skeleton" aria-hidden="true">
-                <For each={[...Array(10).keys()]}>
+                <For each={[...Array(50).keys()]}>
                   {() => (
                     <li>
                       <span class="skeleton-row" />
@@ -787,7 +824,7 @@ export function Dashboard(props: {
               when={!articlesLoading()}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
-                  <For each={[...Array(8).keys()]}>
+                  <For each={[...Array(30).keys()]}>
                     {() => (
                       <div class="article">
                         <span class="skeleton-row" style={{ width: "70%" }} />
@@ -883,17 +920,34 @@ export function Dashboard(props: {
               <img alt="" src={settings} />
             </button>
           </div>
-          <div class="reader">
+          <div
+            class="reader"
+            classList={{ skeleton: loadingArticle() && !displayedArticle() }}
+          >
             <Show
               when={displayedArticle()}
               fallback={
-                <p>
-                  {loadingArticle()
-                    ? "Loading article…"
-                    : selected()
-                      ? "Reader content unavailable."
-                      : "Select an article."}
-                </p>
+                <Show
+                  when={loadingArticle()}
+                  fallback={
+                    <p>
+                      {selected()
+                        ? "Reader content unavailable."
+                        : "Select an article."}
+                    </p>
+                  }
+                >
+                  <span class="skeleton-row title" aria-hidden="true" />
+                  <For each={READER_SKELETON_LINE_WIDTHS}>
+                    {(width) => (
+                      <span
+                        class="skeleton-row"
+                        style={{ width }}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </For>
+                </Show>
               }
             >
               {(item) => (

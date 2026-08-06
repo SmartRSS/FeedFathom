@@ -188,6 +188,9 @@ a {
 .tree.nested {
   padding: 0;
 }
+.tree.skeleton {
+  overflow: hidden;
+}
 .tree.skeleton li {
   padding: 0 0.5rem 0 1.4rem;
   min-height: 1.2rem;
@@ -247,6 +250,7 @@ a {
   flex-direction: column;
   gap: 0.6rem;
   padding-top: 0.4rem;
+  overflow: hidden;
 }
 .article-list.skeleton .article {
   gap: 0.4rem;
@@ -340,6 +344,17 @@ a {
 }
 .reader pre {
   overflow: auto;
+}
+.reader.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow: hidden;
+}
+.reader.skeleton .skeleton-row.title {
+  height: 1.4rem;
+  width: 60%;
+  margin-bottom: 0.4rem;
 }
 .reader-plain {
   white-space: pre-wrap;
