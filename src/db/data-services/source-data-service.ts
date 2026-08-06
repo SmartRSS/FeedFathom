@@ -256,13 +256,19 @@ export class SourcesDataService {
     sourceId: number,
     cached = false,
     nextCheckAt = new Date(Date.now() + 5 * 60_000),
+    // Defaults to a fresh timestamp for callers that don't care, but
+    // parseSource passes its own observedAt here so this stamp exactly
+    // matches the last_seen_in_feed_at it just wrote for this fetch's
+    // articles -- letting cleanupOrphanedData tell "not in this fetch"
+    // apart from "just fetched a moment ago" instead of the two always
+    // differing by whatever this function's own call latency happens to be.
+    observedAt = new Date(),
   ) {
-    const now = new Date();
     await this.drizzleConnection
       .update(sources)
       .set({
-        lastAttempt: now,
-        lastSuccess: now,
+        lastAttempt: observedAt,
+        lastSuccess: observedAt,
         nextCheckAt,
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,

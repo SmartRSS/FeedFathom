@@ -237,6 +237,7 @@ export class FeedParser {
         source.id,
         cached,
         new Date(freshUntil ?? Date.now() + 5 * 60_000),
+        observedAt,
       );
     } catch (error_: unknown) {
       if (isHttpDeferredError(error_)) {
