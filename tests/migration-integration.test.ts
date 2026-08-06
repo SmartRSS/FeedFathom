@@ -10,6 +10,7 @@ import { createDrizzleConnection } from "../src/db/connection.ts";
 import { migrateDatabase } from "../src/migrator.ts";
 
 const migration0015Timestamp = 1_757_673_513_000;
+const migration0017Timestamp = 1_785_498_799_957;
 const migration0016Timestamp = journal.entries.at(-1)?.when;
 const currentMigrationsFolder = fileURLToPath(
   new URL("../drizzle", import.meta.url),
@@ -17,6 +18,7 @@ const currentMigrationsFolder = fileURLToPath(
 const expectedIndexNames = [
   "articles_source_published_idx",
   "articles_updated_at_idx",
+  "articles_source_last_seen_idx",
   "user_articles_user_id_idx",
   "user_articles_article_id_idx",
   "user_articles_user_read_idx",
@@ -297,6 +299,7 @@ test("migrates legacy and fresh databases without deleting unmanaged queue data"
 
     await expectIndexesValid(client);
     await expectMigrationJournaledOnce(client, migration0015Timestamp);
+    await expectMigrationJournaledOnce(client, migration0017Timestamp);
     await expectMigrationJournaledOnce(client, migration0016Timestamp);
     const [queueTable] = await client<
       { exists: boolean }[]
@@ -322,6 +325,7 @@ test("migrates legacy and fresh databases without deleting unmanaged queue data"
     await migrateDatabase(databaseUrl, currentMigrationsFolder);
     await expectIndexesValid(client);
     await expectMigrationJournaledOnce(client, migration0015Timestamp);
+    await expectMigrationJournaledOnce(client, migration0017Timestamp);
     await expectMigrationJournaledOnce(client, migration0016Timestamp);
     const [articleCount] = await client<
       { count: number }[]

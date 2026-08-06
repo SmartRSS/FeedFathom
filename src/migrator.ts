@@ -3,8 +3,10 @@ import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "./config.ts";
 import { createDrizzleConnection } from "./db/connection.ts";
 
+type LegacyIndex = { create: string; name: string };
+
 const migration0015Timestamp = 1_757_673_513_000;
-const legacyIndexes = [
+const migration0015Indexes: readonly LegacyIndex[] = [
   {
     create:
       'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_published_idx" ON "articles" USING btree ("source_id", "published_at")',
@@ -47,7 +49,22 @@ const legacyIndexes = [
   },
 ] as const;
 
-async function shouldPrebuildLegacyIndexes(client: ReservedSQL) {
+// Migration 0017 added this index with a plain (blocking) CREATE INDEX --
+// same problem 0015 had, so it gets the same concurrent-prebuild treatment.
+// 0016 also adds an index (sources.next_check_at), but that migration
+// already takes an ACCESS EXCLUSIVE lock across sources/articles/
+// user_sources/user_source_settings/user_articles for a dedup pass, so its
+// trailing CREATE INDEX adds no additional blocking and doesn't need this.
+const migration0017Timestamp = 1_785_498_799_957;
+const migration0017Indexes: readonly LegacyIndex[] = [
+  {
+    create:
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_last_seen_idx" ON "articles" USING btree ("source_id", "last_seen_in_feed_at")',
+    name: "articles_source_last_seen_idx",
+  },
+] as const;
+
+async function shouldPrebuildMigration0015Indexes(client: ReservedSQL) {
   const [tables] = await client<
     { targetTablesExist: boolean }[]
   >`SELECT to_regclass('public.articles') IS NOT NULL
@@ -80,10 +97,38 @@ async function shouldPrebuildLegacyIndexes(client: ReservedSQL) {
   return !migration?.migration0015Journaled;
 }
 
-async function prebuildLegacyIndexes(client: ReservedSQL) {
-  if (!(await shouldPrebuildLegacyIndexes(client))) return;
+async function shouldPrebuildMigration0017Indexes(client: ReservedSQL) {
+  const [tables] = await client<
+    { targetTableExists: boolean }[]
+  >`SELECT to_regclass('public.articles') IS NOT NULL AS "targetTableExists"`;
+  if (!tables?.targetTableExists) return false;
 
-  for (const index of legacyIndexes) {
+  const [contents] = await client<
+    { targetTableContainsData: boolean }[]
+  >`SELECT EXISTS (SELECT 1 FROM "articles") AS "targetTableContainsData"`;
+  if (!contents?.targetTableContainsData) return false;
+
+  const [journal] = await client<
+    { migrationJournalExists: boolean }[]
+  >`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL
+      AS "migrationJournalExists"`;
+  if (!journal?.migrationJournalExists) return true;
+
+  const [migration] = await client<
+    { migration0017Journaled: boolean }[]
+  >`SELECT EXISTS (
+      SELECT 1
+      FROM "drizzle"."__drizzle_migrations"
+      WHERE "created_at" = ${migration0017Timestamp}
+    ) AS "migration0017Journaled"`;
+  return !migration?.migration0017Journaled;
+}
+
+async function prebuildIndexesConcurrently(
+  client: ReservedSQL,
+  indexes: readonly LegacyIndex[],
+) {
+  for (const index of indexes) {
     // eslint-disable-next-line no-await-in-loop -- Concurrent index maintenance must run sequentially on the reserved session.
     const [state] = await client<{ exists: boolean; valid: boolean }[]>`SELECT
         EXISTS (
@@ -116,6 +161,13 @@ async function prebuildLegacyIndexes(client: ReservedSQL) {
       await client.unsafe(index.create);
     }
   }
+}
+
+async function prebuildLegacyIndexes(client: ReservedSQL) {
+  if (await shouldPrebuildMigration0015Indexes(client))
+    await prebuildIndexesConcurrently(client, migration0015Indexes);
+  if (await shouldPrebuildMigration0017Indexes(client))
+    await prebuildIndexesConcurrently(client, migration0017Indexes);
 }
 
 export async function migrateDatabase(
