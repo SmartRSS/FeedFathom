@@ -16,6 +16,51 @@
   font-family: sans-serif;
 }
 
+/* Overrides the same custom properties everything else already reads --
+   selected rows, borders, focus indicators, and links all follow along
+   automatically instead of needing their own high-contrast variants. */
+:root.high-contrast {
+  --blue-40: #001a4d;
+  --blue-50: #001333;
+  --blue-60: #000d24;
+  --grey-10: #fff;
+  --grey-20: #d0d0d0;
+  --grey-30: #4d4d4d;
+  --grey-40: #1a1a1a;
+  --grey-50: #000;
+  --grey-90: #000;
+  --border: 2px solid #000;
+}
+:root.high-contrast .source:focus,
+:root.high-contrast .article:focus {
+  box-shadow: inset 0 0 0 3px var(--grey-50);
+}
+
+.skip-link {
+  position: absolute;
+  top: -3rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: var(--white);
+  border: var(--border);
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -34,6 +34,7 @@ import {
   type ReaderMode,
 } from "./extension-reader";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
+import { highContrast } from "./preferences";
 import addFolder from "../lib/images/icons/Document/folder-add-fill.svg";
 import add from "../lib/images/icons/System/add-box-fill.svg";
 import settings from "../lib/images/icons/System/settings-5-fill.svg";
@@ -323,6 +324,12 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
+  // There's no way to detect whether a screen reader is actually running,
+  // so this is always rendered (see the aria-live region below) -- it's
+  // visually hidden either way, and only gets real text (and so only gets
+  // announced) when high contrast mode happens to be off.
+  const [accessibilityAnnouncement, setAccessibilityAnnouncement] =
+    createSignal("");
   const [displayMode, setDisplayMode] = createSignal<"FEED" | ReaderMode>(
     "FEED",
   );
@@ -489,6 +496,17 @@ export function Dashboard(props: {
         document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
       );
     }
+    // Delayed, and only set (not already present at mount) so a screen
+    // reader treats it as a live-region change and actually announces it,
+    // rather than silently including it in the page's first read-through.
+    if (!highContrast())
+      setTimeout(
+        () =>
+          setAccessibilityAnnouncement(
+            "A high-contrast display mode is available in accessibility settings.",
+          ),
+        2000,
+      );
   });
   async function select(node: TreeNode) {
     props.focusPane("articles");
@@ -797,6 +815,9 @@ export function Dashboard(props: {
   }
   return (
     <main class="dashboard">
+      <div aria-live="polite" class="sr-only" role="status">
+        {accessibilityAnnouncement()}
+      </div>
       <Show when={error()}>
         {(message) => (
           <p class="dashboard-alert" role="alert">

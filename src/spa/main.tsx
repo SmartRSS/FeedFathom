@@ -1,4 +1,5 @@
 import {
+  createEffect,
   createSignal,
   Match,
   onCleanup,
@@ -19,6 +20,7 @@ import { Activate, Login, Register } from "./account-flows";
 import { Dashboard } from "./dashboard";
 import { Admin, Options } from "./options-admin";
 import { isUnauthorizedError } from "./api";
+import { highContrast } from "./preferences";
 import "./style.css";
 
 const currentPath = () => location.pathname + location.search;
@@ -29,6 +31,10 @@ function App() {
   const initialRoute = resolveRoute(initialPath);
   const [path, setPath] = createSignal(initialPath);
   const [pane, setPane] = createSignal<DashboardPane>("sources");
+
+  createEffect(() => {
+    document.documentElement.classList.toggle("high-contrast", highContrast());
+  });
 
   if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
     history.replaceState(withDashboardPane(history.state, "sources"), "");
@@ -66,21 +72,33 @@ function App() {
   onCleanup(() => removeEventListener("popstate", popstate));
 
   return (
-    <Show
-      when={loginRoute()}
-      fallback={
-        <Router
-          route={route()}
-          navigate={navigate}
-          handleUnauthorized={handleUnauthorized}
-          pane={pane}
-          focusPane={focusPane}
-          backPane={backPane}
-        />
-      }
-    >
-      {(login) => <Login navigate={navigate} next={login().next} />}
-    </Show>
+    <>
+      <a
+        class="skip-link"
+        href="/options"
+        onClick={(event) => {
+          event.preventDefault();
+          navigate("/options");
+        }}
+      >
+        Skip to accessibility settings
+      </a>
+      <Show
+        when={loginRoute()}
+        fallback={
+          <Router
+            route={route()}
+            navigate={navigate}
+            handleUnauthorized={handleUnauthorized}
+            pane={pane}
+            focusPane={focusPane}
+            backPane={backPane}
+          />
+        }
+      >
+        {(login) => <Login navigate={navigate} next={login().next} />}
+      </Show>
+    </>
   );
 }
 

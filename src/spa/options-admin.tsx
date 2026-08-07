@@ -7,6 +7,7 @@ import {
   successResponse,
 } from "../contracts/responses";
 import { loginPath } from "./behavior";
+import { highContrast, setHighContrast } from "./preferences";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -171,6 +172,17 @@ export function Options(props: {
       >
         Home
       </a>
+      <section class="options-card">
+        <h2>Accessibility</h2>
+        <label>
+          <input
+            checked={highContrast()}
+            type="checkbox"
+            onChange={(event) => setHighContrast(event.currentTarget.checked)}
+          />
+          High-contrast display mode
+        </label>
+      </section>
       <Show when={user()}>
         {(account) => (
           <section class="options-card">
