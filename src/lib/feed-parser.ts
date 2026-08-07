@@ -169,6 +169,22 @@ function imageDimensions(
   return undefined;
 }
 
+// Prefers the smallest candidate that still meets `target`, over always
+// grabbing the biggest available -- falls back to the biggest undersized
+// candidate only when nothing meets the target at all.
+export function isBetterFavicon(
+  candidateSize: number,
+  bestSize: number,
+  target: number,
+): boolean {
+  const candidateMeetsTarget = candidateSize >= target;
+  const bestMeetsTarget = bestSize >= target;
+  if (candidateMeetsTarget && bestMeetsTarget) return candidateSize < bestSize;
+  if (candidateMeetsTarget) return true;
+  if (bestMeetsTarget) return false;
+  return candidateSize > bestSize;
+}
+
 export class FeedParser {
   constructor(
     private readonly articlesDataService: ArticlesDataService,
@@ -276,6 +292,15 @@ export class FeedParser {
     }
   }
 
+  // The tree shows favicons at 1.5cap -- a few dozen CSS px even at a 2x
+  // pixel density -- and since a warm favicon now gets embedded as base64
+  // directly in the /api/tree response (see sw.js), every extra byte here
+  // is paid on every tree load, not just once. 64px covers that display
+  // size with headroom; prefer the smallest candidate that clears it over
+  // always grabbing the biggest available, falling back to the biggest
+  // undersized one when nothing meets the target at all.
+  private static readonly TARGET_FAVICON_SIZE = 64;
+
   private async bestFavicon(urls: string[]) {
     const results = await Promise.allSettled(
       urls.map((url) =>
@@ -309,7 +334,10 @@ export class FeedParser {
       if (!dimensions) continue;
 
       const size = Math.max(dimensions.width, dimensions.height);
-      if (!best || size > best.size) {
+      if (
+        !best ||
+        isBetterFavicon(size, best.size, FeedParser.TARGET_FAVICON_SIZE)
+      ) {
         best = {
           buffer,
           contentType: response.headers.get("content-type") ?? "image/png",
@@ -322,10 +350,12 @@ export class FeedParser {
   }
 
   public async refreshFavicon(source: { homeUrl: string; id: number }) {
-    // Query the free providers concurrently and keep the largest valid image
-    // — an earlier one can succeed with a smaller icon while a later one has
-    // a bigger one. unavatar.io is capped at 25 requests/day on the free
-    // tier, so it's only used as a last resort when nothing else has an icon.
+    // Query the free providers concurrently and keep the smallest valid
+    // image that still meets TARGET_FAVICON_SIZE (falling back to the
+    // biggest available if none do) -- an earlier one can succeed with a
+    // smaller icon while a later one has a bigger one. unavatar.io is
+    // capped at 25 requests/day on the free tier, so it's only used as a
+    // last resort when nothing else has an icon.
     let hostname: string;
     try {
       hostname = new URL(source.homeUrl).hostname;
@@ -333,7 +363,7 @@ export class FeedParser {
       return;
     }
     const primaryUrls = [
-      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=128`,
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=${FeedParser.TARGET_FAVICON_SIZE}`,
       `https://favicon.im/${source.homeUrl}`,
       `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
     ];
@@ -342,7 +372,7 @@ export class FeedParser {
     let result = primary;
     if (!primary.best) {
       const fallback = await this.bestFavicon([
-        `https://unavatar.io/domain/${hostname}?size=128`,
+        `https://unavatar.io/domain/${hostname}?size=${FeedParser.TARGET_FAVICON_SIZE}`,
       ]);
       result = {
         best: fallback.best,
