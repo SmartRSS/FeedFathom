@@ -75,26 +75,20 @@ function faviconUrls(node: TreeNode): string[] {
 }
 
 // Only used for the very first tree render (see onMount): keeps the tree
-// skeleton up until every favicon has loaded, capped so a slow/broken icon
-// can't hold the whole tree hostage. Later reloads (subscribe, folder
-// edits) skip this entirely and reveal immediately -- the per-icon
-// skeleton-row fallback in TreeItem covers stragglers there instead.
-const INITIAL_FAVICON_WAIT_MS = 100;
-
+// skeleton up until every favicon has settled (loaded or failed). A failed
+// image still resolves via the .catch() below, so this can't hang on a
+// broken favicon -- only on a request that never settles at all, which the
+// browser's own network timeout bounds anyway.
 function preloadFavicons(tree: TreeNode[]): Promise<void> {
   const urls = tree.flatMap(faviconUrls);
   if (!urls.length) return Promise.resolve();
-  const loaded = Promise.all(
+  return Promise.all(
     urls.map((url) => {
       const image = new Image();
       image.src = url;
       return image.decode().catch(() => {});
     }),
   ).then(() => {});
-  const timeout = new Promise<void>((resolve) =>
-    setTimeout(resolve, INITIAL_FAVICON_WAIT_MS),
-  );
-  return Promise.race([loaded, timeout]);
 }
 
 const READER_SKELETON_PARAGRAPHS = [
