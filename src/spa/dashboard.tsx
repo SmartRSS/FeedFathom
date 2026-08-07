@@ -704,22 +704,48 @@ export function Dashboard(props: {
     setSelectionAnchor(next.anchor);
     void setArticleSelection(next.indexes);
   }
-  function moveSelection(offset: number, event: KeyboardEvent) {
-    if (!articles().length) return;
-    event.preventDefault();
-    const index =
-      (focusedIndex() + offset + articles().length) % articles().length;
-    selectArticle(index, event);
+  function focusArticleAt(index: number) {
+    setFocusedIndex(index);
     document
       .querySelector(`[data-index="${index}"]`)
       ?.scrollIntoView({ block: "nearest" });
   }
+  // Ctrl/Cmd held: move the focus cursor only, selection stays exactly as
+  // it was -- Space is what commits a change at the new position. Without
+  // the modifier, movement acts like a click: select just this row.
+  function moveTo(index: number, event: KeyboardEvent) {
+    if (!articles().length) return;
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) focusArticleAt(index);
+    else {
+      selectArticle(index, event);
+      document
+        .querySelector(`[data-index="${index}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    }
+  }
+  function moveSelection(offset: number, event: KeyboardEvent) {
+    moveTo(
+      (focusedIndex() + offset + articles().length) % articles().length,
+      event,
+    );
+  }
+  function toggleSelectionAtCursor() {
+    const index = focusedIndex();
+    const indexes = new Set(selectedIndexes());
+    if (indexes.has(index)) indexes.delete(index);
+    else indexes.add(index);
+    setSelectionAnchor(index);
+    void setArticleSelection(indexes);
+  }
   function handleArticleKeys(event: KeyboardEvent) {
     if (event.key === "ArrowDown") moveSelection(1, event);
     else if (event.key === "ArrowUp") moveSelection(-1, event);
+    else if (event.key === "Home") moveTo(0, event);
+    else if (event.key === "End") moveTo(articles().length - 1, event);
     else if (event.key === " ") {
       event.preventDefault();
-      selectArticle(focusedIndex(), event);
+      toggleSelectionAtCursor();
     } else if (event.key === "Delete") {
       event.preventDefault();
       removeSelected();
