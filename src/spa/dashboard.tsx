@@ -66,6 +66,37 @@ function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
+function faviconUrls(node: TreeNode): string[] {
+  return node.type === "source"
+    ? node.favicon
+      ? [node.favicon]
+      : []
+    : (node.children ?? []).flatMap(faviconUrls);
+}
+
+// Only used for the very first tree render (see onMount): keeps the tree
+// skeleton up until every favicon has loaded, capped so a slow/broken icon
+// can't hold the whole tree hostage. Later reloads (subscribe, folder
+// edits) skip this entirely and reveal immediately -- the per-icon
+// skeleton-row fallback in TreeItem covers stragglers there instead.
+const INITIAL_FAVICON_WAIT_MS = 100;
+
+function preloadFavicons(tree: TreeNode[]): Promise<void> {
+  const urls = tree.flatMap(faviconUrls);
+  if (!urls.length) return Promise.resolve();
+  const loaded = Promise.all(
+    urls.map((url) => {
+      const image = new Image();
+      image.src = url;
+      return image.decode().catch(() => {});
+    }),
+  ).then(() => {});
+  const timeout = new Promise<void>((resolve) =>
+    setTimeout(resolve, INITIAL_FAVICON_WAIT_MS),
+  );
+  return Promise.race([loaded, timeout]);
+}
+
 const READER_SKELETON_PARAGRAPHS = [
   "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod",
   "Tempor incididunt ut labore et dolore magna aliqua ut enim ad minim",
@@ -402,7 +433,8 @@ export function Dashboard(props: {
     );
     void probeReader();
     try {
-      await loadTree();
+      const nextTree = await loadTree();
+      await preloadFavicons(nextTree);
       setAuthenticated(true);
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
