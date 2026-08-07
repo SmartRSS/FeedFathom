@@ -27,14 +27,10 @@ const backPane = () => history.back();
 function App() {
   const initialPath = currentPath();
   const initialRoute = resolveRoute(initialPath);
-  const initialPane = parseDashboardPane(history.state);
   const [path, setPath] = createSignal(initialPath);
-  const [pane, setPane] = createSignal<DashboardPane>(initialPane ?? "sources");
+  const [pane, setPane] = createSignal<DashboardPane>("sources");
 
-  if (
-    (initialRoute.name === "dashboard" || initialRoute.name === "preview") &&
-    initialPane === undefined
-  )
+  if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
     history.replaceState(withDashboardPane(history.state, "sources"), "");
 
   const navigate = (to: string) => {
