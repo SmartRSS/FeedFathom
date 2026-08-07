@@ -54,6 +54,10 @@ function ReaderBody(props: { content: ReaderContent }) {
   );
 }
 
+function treeNodeKey(node: TreeNode): string {
+  return `${node.type}:${node.uid}`;
+}
+
 function sourceIds(node: TreeNode): number[] {
   return node.type === "source"
     ? [Number(node.uid)]
@@ -179,7 +183,10 @@ function moveTreeFocus(current: HTMLElement, offset: number) {
 }
 
 function TreeItem(props: {
+  focused: boolean;
+  focusedKey: string | undefined;
   node: TreeNode;
+  onFocus(node: TreeNode): void;
   select(node: TreeNode): void;
   selected: TreeNode | undefined;
 }) {
@@ -224,15 +231,20 @@ function TreeItem(props: {
   return (
     <li>
       <button
+        aria-expanded={isFolder() ? open() : undefined}
+        aria-selected={props.selected === props.node}
         class="source"
         classList={{
           folder: isFolder(),
           selected: props.selected === props.node,
           unread: unread() > 0,
         }}
-        data-tree-key={`${props.node.type}:${props.node.uid}`}
+        data-tree-key={treeNodeKey(props.node)}
         onClick={() => props.select(props.node)}
         onKeyDown={handleKeyDown}
+        role="treeitem"
+        tabIndex={props.focused ? 0 : -1}
+        onFocus={() => props.onFocus(props.node)}
       >
         <Show
           when={isFolder()}
@@ -251,7 +263,7 @@ function TreeItem(props: {
           }
         >
           <img
-            alt="toggle folder"
+            alt=""
             class="chevron"
             src={open() ? arrowDown : arrowRight}
             onClick={(event) => {
@@ -265,11 +277,14 @@ function TreeItem(props: {
         <Show when={unread()}>{(count) => <em>{count()}</em>}</Show>
       </button>
       <Show when={isFolder() && open()}>
-        <ul class="tree nested">
+        <ul class="tree nested" role="group">
           <For each={children()}>
             {(child) => (
               <TreeItem
+                focused={props.focusedKey === treeNodeKey(child)}
+                focusedKey={props.focusedKey}
                 node={child}
+                onFocus={props.onFocus}
                 select={props.select}
                 selected={props.selected}
               />
@@ -305,6 +320,9 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  // Roving tabindex for the tree: only the last-focused row is a Tab stop,
+  // so Tab moves in and out of the whole tree instead of through every row.
+  const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
   const [displayMode, setDisplayMode] = createSignal<"FEED" | ReaderMode>(
     "FEED",
   );
@@ -777,9 +795,7 @@ export function Dashboard(props: {
       event.preventDefault();
       props.focusPane("sources");
       document
-        .querySelector<HTMLElement>(
-          `[data-tree-key="${node.type}:${node.uid}"]`,
-        )
+        .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
         ?.focus();
     }
   }
@@ -856,11 +872,14 @@ export function Dashboard(props: {
               </ul>
             }
           >
-            <ul class="tree">
+            <ul class="tree" role="tree">
               <For each={tree()}>
                 {(node) => (
                   <TreeItem
+                    focused={focusedTreeKey() === treeNodeKey(node)}
+                    focusedKey={focusedTreeKey()}
                     node={node}
+                    onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
                     select={(item) => void select(item)}
                     selected={selectedNode()}
                   />
@@ -902,6 +921,10 @@ export function Dashboard(props: {
             </button>
           </div>
           <div
+            aria-activedescendant={
+              articles().length ? `article-${focusedIndex()}` : undefined
+            }
+            aria-multiselectable="true"
             class="article-list"
             role="listbox"
             tabIndex={0}
@@ -948,6 +971,7 @@ export function Dashboard(props: {
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
+                      id={`article-${index()}`}
                       onClick={(event) => {
                         event.preventDefault();
                         selectArticle(index(), event);
