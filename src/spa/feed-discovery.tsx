@@ -12,6 +12,14 @@ import {
 } from "../contracts/responses";
 import back from "../lib/images/icons/Arrows/arrow-left-fill.svg";
 
+export function BackButton(props: { backPane(): void }) {
+  return (
+    <button aria-label="back" class="only-mobile" onClick={props.backPane}>
+      <img alt="" src={back} />
+    </button>
+  );
+}
+
 const schemePattern = /^[a-z][a-z0-9+.-]*:\/\//iu;
 
 function withScheme(value: string): string {
@@ -301,13 +309,7 @@ export function FeedDiscovery(props: {
         classList={{ "focused-pane": props.pane() === "articles" }}
       >
         <div class="toolbar">
-          <button
-            aria-label="back"
-            class="only-mobile"
-            onClick={props.backPane}
-          >
-            <img alt="" src={back} />
-          </button>
+          <BackButton backPane={props.backPane} />
           <strong>{title() || "Preview"}</strong>
           <span />
         </div>
@@ -344,13 +346,7 @@ export function FeedDiscovery(props: {
         classList={{ "focused-pane": props.pane() === "reader" }}
       >
         <div class="toolbar">
-          <button
-            aria-label="back"
-            class="only-mobile"
-            onClick={props.backPane}
-          >
-            <img alt="" src={back} />
-          </button>
+          <BackButton backPane={props.backPane} />
           <span />
         </div>
         <div class="reader">

@@ -33,8 +33,7 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader";
-import { FeedDiscovery } from "./feed-discovery";
-import back from "../lib/images/icons/Arrows/arrow-left-fill.svg";
+import { BackButton, FeedDiscovery } from "./feed-discovery";
 import addFolder from "../lib/images/icons/Document/folder-add-fill.svg";
 import add from "../lib/images/icons/System/add-box-fill.svg";
 import settings from "../lib/images/icons/System/settings-5-fill.svg";
@@ -809,13 +808,7 @@ export function Dashboard(props: {
           classList={{ "focused-pane": props.pane() === "articles" }}
         >
           <div class="toolbar">
-            <button
-              aria-label="back"
-              class="only-mobile"
-              onClick={props.backPane}
-            >
-              <img alt="" src={back} />
-            </button>
+            <BackButton backPane={props.backPane} />
             <button
               aria-label="select all"
               onClick={() =>
@@ -918,13 +911,7 @@ export function Dashboard(props: {
           classList={{ "focused-pane": props.pane() === "reader" }}
         >
           <div class="toolbar">
-            <button
-              aria-label="back"
-              class="only-mobile"
-              onClick={props.backPane}
-            >
-              <img alt="" src={back} />
-            </button>
+            <BackButton backPane={props.backPane} />
             <button
               aria-label="delete article"
               disabled={!selected()}
