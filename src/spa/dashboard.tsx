@@ -492,6 +492,7 @@ export function Dashboard(props: {
   });
   async function select(node: TreeNode) {
     props.focusPane("articles");
+    setSelectedNode(node);
     const selection = selectionGuard.start();
     articleAbortController?.abort();
     const ids = sourceIds(node);
@@ -500,7 +501,6 @@ export function Dashboard(props: {
       void setArticleSelection(new Set<number>(), selection);
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
-      setSelectedNode(node);
       return;
     }
     setArticlesLoading(true);
@@ -520,7 +520,6 @@ export function Dashboard(props: {
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(nextArticles.length ? 0 : undefined);
-      setSelectedNode(node);
       queueMicrotask(() => focusArticleAt(0));
     } catch (cause) {
       if (!selectionGuard.isCurrent(selection)) return;
