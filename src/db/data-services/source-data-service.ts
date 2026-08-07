@@ -210,7 +210,7 @@ export class SourcesDataService {
         WITH subscriber_counts AS (
             SELECT
                 us.source_id,
-                COUNT(us.user_id) AS count
+                COUNT(us.user_id)::int AS count
             FROM user_sources AS us
             GROUP BY us.source_id
         )
