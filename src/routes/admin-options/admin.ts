@@ -2,6 +2,7 @@ import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import {
   adminQuery,
+  removeSourceRequest,
   sourceUrlReplacementRequest,
 } from "../../contracts/requests.ts";
 import type {
@@ -11,7 +12,10 @@ import type {
 import { type AuthedUser, json } from "../shared.ts";
 
 export type AdminRouteDependencies = {
-  sourcesDataService: Pick<SourcesDataService, "listAllSources"> & {
+  sourcesDataService: Pick<
+    SourcesDataService,
+    "deleteSource" | "listAllSources"
+  > & {
     updateSourceUrl(
       oldUrl: string,
       newUrl: string,
@@ -48,4 +52,16 @@ export async function postAdminHandler(
   if (result === "not-found")
     return json({ error: "Source URL not found" }, 404);
   return json({ success: true });
+}
+
+export async function deleteAdminHandler(
+  {
+    body,
+    user,
+  }: { body: Static<typeof removeSourceRequest>; user: AuthedUser },
+  { sourcesDataService }: AdminRouteDependencies,
+) {
+  if (!user.isAdmin) return json({ error: "Unauthorized" }, 403);
+  await sourcesDataService.deleteSource(body.removeSourceId);
+  return json(body.removeSourceId);
 }

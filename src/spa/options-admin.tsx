@@ -3,6 +3,7 @@ import type { Static } from "typebox";
 import { api } from "./api";
 import {
   adminSourcesResponse,
+  removedIdResponse,
   sessionResponse,
   successResponse,
 } from "../contracts/responses";
@@ -294,10 +295,6 @@ const ADMIN_COLUMNS: { label: string; sort: SourceSort }[] = [
   { label: "Created", sort: "createdAt" },
 ];
 
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : "—";
-}
-
 export function Admin(props: {
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
@@ -349,6 +346,26 @@ export function Admin(props: {
     }
   }
 
+  async function removeSource(source: AdminSource) {
+    if (
+      !confirm(`Delete "${source.url}"? This removes it for every subscriber.`)
+    )
+      return;
+    try {
+      await api("/admin", removedIdResponse, {
+        body: JSON.stringify({ removeSourceId: source.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "DELETE",
+      });
+      await load();
+    } catch (cause) {
+      if (props.handleUnauthorized(cause)) return;
+      setMessage(
+        cause instanceof Error ? cause.message : "Could not delete source.",
+      );
+    }
+  }
+
   return (
     <main class="admin-page">
       <h1>Admin</h1>
@@ -391,6 +408,7 @@ export function Admin(props: {
                   </th>
                 )}
               </For>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -398,20 +416,31 @@ export function Admin(props: {
               {(source) => (
                 <tr>
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => void replaceUrl(source.url)}
-                    >
+                    <a href={source.url} rel="noreferrer" target="_blank">
                       {source.url}
-                    </button>
+                    </a>
                   </td>
                   <td>{source.subscriberCount}</td>
                   <td title={source.recentFailureDetails}>
                     {source.recentFailures}
                   </td>
-                  <td>{formatDate(source.lastAttempt)}</td>
-                  <td>{formatDate(source.lastSuccess)}</td>
-                  <td>{formatDate(source.createdAt)}</td>
+                  <td>{source.lastAttempt ?? "—"}</td>
+                  <td>{source.lastSuccess ?? "—"}</td>
+                  <td>{source.createdAt}</td>
+                  <td class="admin-table-actions">
+                    <button
+                      type="button"
+                      onClick={() => void replaceUrl(source.url)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeSource(source)}
+                    >
+                      Remove
+                    </button>
+                  </td>
                 </tr>
               )}
             </For>

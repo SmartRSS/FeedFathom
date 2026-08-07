@@ -235,6 +235,13 @@ export class SourcesDataService {
     return parseSourceListRows(result);
   }
 
+  // Cascades via FK (articles, user_sources, and everything beneath them)
+  // -- an admin-level delete regardless of who's subscribed, distinct from
+  // a user just unsubscribing (UserSourcesDataService.removeSourceFromUser).
+  public async deleteSource(id: number) {
+    await this.drizzleConnection.delete(sources).where(eq(sources.id, id));
+  }
+
   public async updateSourceUrl(
     oldUrl: string,
     newUrl: string,

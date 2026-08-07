@@ -155,12 +155,13 @@ form,
   font: inherit;
   font-weight: 700;
 }
-.admin-table td button {
-  padding: 0;
-  background: transparent;
-  color: var(--blue);
+.admin-table-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.admin-table-actions button {
+  padding: 0.2rem 0.5rem;
   font: inherit;
-  text-decoration: underline;
 }
 
 label {

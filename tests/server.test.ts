@@ -137,6 +137,7 @@ function createDependencies(): ServerDependencies {
       async removeRedirect() {},
     },
     sourcesDataService: {
+      async deleteSource() {},
       async enqueueSource() {},
       async getFavicon() {
         return null;

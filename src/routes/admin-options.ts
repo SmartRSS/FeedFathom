@@ -3,6 +3,7 @@ import {
   adminQuery,
   passwordRequest,
   redirectDeletionRequest,
+  removeSourceRequest,
   sourceUrlReplacementRequest,
 } from "../contracts/requests.ts";
 import type {
@@ -17,7 +18,11 @@ import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,
 } from "./admin-options/admin-redirects.ts";
-import { getAdminHandler, postAdminHandler } from "./admin-options/admin.ts";
+import {
+  deleteAdminHandler,
+  getAdminHandler,
+  postAdminHandler,
+} from "./admin-options/admin.ts";
 import {
   opmlRequest,
   postOptionsOpmlHandler,
@@ -36,7 +41,10 @@ export type AdminOptionsRouteDependencies = {
   opmlParser: Pick<OpmlParser, "parseOpml">;
   password: Password;
   redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;
-  sourcesDataService: Pick<SourcesDataService, "listAllSources"> & {
+  sourcesDataService: Pick<
+    SourcesDataService,
+    "deleteSource" | "listAllSources"
+  > & {
     updateSourceUrl(
       oldUrl: string,
       newUrl: string,
@@ -67,6 +75,9 @@ export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
     )
     .post("/api/admin", { body: sourceUrlReplacementRequest }, (ctx) =>
       postAdminHandler(ctx, deps),
+    )
+    .delete("/api/admin", { body: removeSourceRequest }, (ctx) =>
+      deleteAdminHandler(ctx, deps),
     )
     .get("/api/admin/redirects", (ctx) => getAdminRedirectsHandler(ctx, deps))
     .delete("/api/admin/redirects", { body: redirectDeletionRequest }, (ctx) =>
