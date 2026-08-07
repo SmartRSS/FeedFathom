@@ -162,6 +162,22 @@ function storeFolderOpen(uid: string, open: boolean) {
   } catch {}
 }
 
+// Reads visible row order straight from the DOM instead of tracking it in
+// state -- closed folders' children simply aren't rendered, so a plain
+// query already reflects exactly what's visible, with no separate
+// flattened-tree bookkeeping to keep in sync with each TreeItem's own
+// open/closed signal.
+function moveTreeFocus(current: HTMLElement, offset: number) {
+  const items = [
+    ...document.querySelectorAll<HTMLElement>(".sources-pane .source"),
+  ];
+  const index = items.indexOf(current);
+  if (index === -1) return;
+  const next = items[(index + offset + items.length) % items.length];
+  next?.focus();
+  next?.scrollIntoView({ block: "nearest" });
+}
+
 function TreeItem(props: {
   node: TreeNode;
   select(node: TreeNode): void;
@@ -180,6 +196,22 @@ function TreeItem(props: {
     setOpen(next);
     storeFolderOpen(props.node.uid, next);
   }
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (event.currentTarget instanceof HTMLElement)
+        moveTreeFocus(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === " " && isFolder()) {
+      event.preventDefault();
+      toggle();
+    } else if (event.key === "ArrowRight" && isFolder() && !open()) {
+      event.preventDefault();
+      toggle();
+    } else if (event.key === "ArrowLeft" && isFolder() && open()) {
+      event.preventDefault();
+      toggle();
+    }
+  }
   return (
     <li>
       <button
@@ -189,7 +221,9 @@ function TreeItem(props: {
           selected: props.selected === props.node,
           unread: unread() > 0,
         }}
+        data-tree-key={`${props.node.type}:${props.node.uid}`}
         onClick={() => props.select(props.node)}
+        onKeyDown={handleKeyDown}
       >
         <Show
           when={isFolder()}
@@ -696,6 +730,16 @@ export function Dashboard(props: {
         const url = value ? safeArticleUrl(value, window.location.href) : "";
         if (url) window.open(url, "_blank", "noopener");
       }
+    } else if (event.key === "ArrowLeft") {
+      const node = selectedNode();
+      if (!node) return;
+      event.preventDefault();
+      props.focusPane("sources");
+      document
+        .querySelector<HTMLElement>(
+          `[data-tree-key="${node.type}:${node.uid}"]`,
+        )
+        ?.focus();
     }
   }
   return (
