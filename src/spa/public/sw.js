@@ -255,6 +255,58 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+function treeFaviconUrls(node) {
+  return node.type === "source"
+    ? node.favicon
+      ? [node.favicon]
+      : []
+    : (node.children ?? []).flatMap(treeFaviconUrls);
+}
+
+// The page only starts fetching favicons once its own JS has parsed the
+// tree response and rendered -- this parses it here instead, on the SW's
+// own thread, so favicon requests can go out while the page is still
+// booting (bundle parse, schema validation, first render) rather than
+// after. Best-effort: any failure here just means no head start, the
+// page's own preloadFavicons() still fetches everything itself.
+async function warmTreeFavicons(response, cache) {
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    return;
+  }
+  const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
+  await Promise.all(
+    urls.map(async (path) => {
+      if (await cache.match(path)) return;
+      try {
+        const faviconResponse = await fetch(path);
+        if (faviconResponse.ok) await cache.put(path, faviconResponse);
+      } catch {
+        // best-effort; the page's own load will just fetch it normally
+      }
+    }),
+  );
+}
+
+async function treeWithFaviconWarming(event, request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
+      void flushQueue();
+      event.waitUntil(warmTreeFavicons(response.clone(), cache));
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
 // Favicons rarely change and aren't hash-named like /assets/, so a cached
 // copy is worth serving instantly rather than waiting on a network round
 // trip every time (unlike the rest of /api/*, where a stale response is
@@ -306,6 +358,10 @@ self.addEventListener("fetch", (event) => {
 
   if (url.pathname.startsWith("/api/favicon/")) {
     event.respondWith(staleWhileRevalidate(event, request, API_CACHE));
+    return;
+  }
+  if (url.pathname === "/api/tree") {
+    event.respondWith(treeWithFaviconWarming(event, request, API_CACHE));
     return;
   }
   if (url.pathname.startsWith("/api/")) {
