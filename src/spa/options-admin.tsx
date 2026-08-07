@@ -276,22 +276,81 @@ export function Options(props: {
   );
 }
 
+type AdminSource = Static<typeof adminSourcesResponse>[number];
+type SourceSort =
+  | "createdAt"
+  | "lastAttempt"
+  | "lastSuccess"
+  | "recentFailures"
+  | "subscriberCount"
+  | "url";
+
+const ADMIN_COLUMNS: { label: string; sort: SourceSort }[] = [
+  { label: "URL", sort: "url" },
+  { label: "Subscribers", sort: "subscriberCount" },
+  { label: "Failures", sort: "recentFailures" },
+  { label: "Last attempt", sort: "lastAttempt" },
+  { label: "Last success", sort: "lastSuccess" },
+  { label: "Created", sort: "createdAt" },
+];
+
+function formatDate(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : "—";
+}
+
 export function Admin(props: {
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
 }) {
-  const [sources, setSources] = createSignal<{ url: string }[]>([]);
+  const [sources, setSources] = createSignal<AdminSource[]>([]);
   const [message, setMessage] = createSignal("");
-  onMount(async () => {
+  const [sortBy, setSortBy] = createSignal<SourceSort>("createdAt");
+  const [order, setOrder] = createSignal<"asc" | "desc">("asc");
+
+  async function load() {
     try {
-      setSources(await api("/admin", adminSourcesResponse));
+      setSources(
+        await api(
+          `/admin?sortBy=${sortBy()}&order=${order()}`,
+          adminSourcesResponse,
+        ),
+      );
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setMessage(cause instanceof Error ? cause.message : "Unauthorized");
     }
-  });
+  }
+  onMount(load);
+
+  function sortByColumn(column: SourceSort) {
+    if (sortBy() === column) setOrder(order() === "asc" ? "desc" : "asc");
+    else {
+      setSortBy(column);
+      setOrder("asc");
+    }
+    void load();
+  }
+
+  async function replaceUrl(oldUrl: string) {
+    const newUrl = prompt("New URL", oldUrl);
+    if (!newUrl || newUrl === oldUrl) return;
+    try {
+      await api("/admin", successResponse, {
+        body: JSON.stringify({ newUrl, oldUrl }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await load();
+    } catch (cause) {
+      if (props.handleUnauthorized(cause)) return;
+      setMessage(
+        cause instanceof Error ? cause.message : "Could not update URL.",
+      );
+    }
+  }
+
   return (
-    <main>
+    <main class="admin-page">
       <h1>Admin</h1>
       <a
         href="/"
@@ -302,10 +361,63 @@ export function Admin(props: {
       >
         Home
       </a>
-      <p>{message()}</p>
-      <ul>
-        <For each={sources()}>{(source) => <li>{source.url}</li>}</For>
-      </ul>
+      <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
+      <div class="admin-table-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <For each={ADMIN_COLUMNS}>
+                {(column) => (
+                  <th
+                    aria-sort={
+                      sortBy() === column.sort
+                        ? order() === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => sortByColumn(column.sort)}
+                    >
+                      {column.label}
+                      {sortBy() === column.sort
+                        ? order() === "asc"
+                          ? " ▲"
+                          : " ▼"
+                        : ""}
+                    </button>
+                  </th>
+                )}
+              </For>
+            </tr>
+          </thead>
+          <tbody>
+            <For each={sources()}>
+              {(source) => (
+                <tr>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => void replaceUrl(source.url)}
+                    >
+                      {source.url}
+                    </button>
+                  </td>
+                  <td>{source.subscriberCount}</td>
+                  <td title={source.recentFailureDetails}>
+                    {source.recentFailures}
+                  </td>
+                  <td>{formatDate(source.lastAttempt)}</td>
+                  <td>{formatDate(source.lastSuccess)}</td>
+                  <td>{formatDate(source.createdAt)}</td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }
