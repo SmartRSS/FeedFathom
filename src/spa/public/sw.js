@@ -263,40 +263,84 @@ function treeFaviconUrls(node) {
     : (node.children ?? []).flatMap(treeFaviconUrls);
 }
 
-// The page only starts fetching favicons once its own JS has parsed the
-// tree response and rendered -- this parses it here instead, on the SW's
-// own thread, so favicon requests can go out while the page is still
-// booting (bundle parse, schema validation, first render) rather than
-// after. Best-effort: any failure here just means no head start, the
-// page's own preloadFavicons() still fetches everything itself.
-async function warmTreeFavicons(response, cache) {
+function withInlinedFavicon(node, dataUrlByPath) {
+  if (node.type === "source") {
+    const inlined = node.favicon && dataUrlByPath.get(node.favicon);
+    return inlined ? { ...node, favicon: inlined } : node;
+  }
+  return {
+    ...node,
+    children: (node.children ?? []).map((child) =>
+      withInlinedFavicon(child, dataUrlByPath),
+    ),
+  };
+}
+
+async function responseToDataUrl(response) {
+  const contentType =
+    response.headers.get("Content-Type") ?? "application/octet-stream";
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${contentType};base64,${btoa(binary)}`;
+}
+
+async function warmFavicon(cache, path) {
+  if (await cache.match(path)) return;
+  try {
+    const response = await fetch(path);
+    if (response.ok) await cache.put(path, response);
+  } catch {
+    // best-effort; the page's own <img> will just fetch it normally
+  }
+}
+
+// Inlines whichever favicons are already cached -- a plain cache.match()
+// per URL, no network involved, so this never makes the tree wait. Anything
+// not yet cached is left as a plain /api/favicon/:id URL so the response
+// returns immediately; the page's existing per-icon skeleton (see
+// dashboard.tsx TreeItem) covers those exactly as if this didn't run at
+// all. Misses get fetched in the background so next load has them inlined.
+async function inlineTreeFavicons(event, response, cache) {
   let data;
   try {
     data = await response.json();
   } catch {
-    return;
+    return null;
   }
-  const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
-  await Promise.all(
+  const urls = [...new Set((data.tree ?? []).flatMap(treeFaviconUrls))];
+  const dataUrlByPath = new Map();
+  const misses = [];
+  await Promise.allSettled(
     urls.map(async (path) => {
-      if (await cache.match(path)) return;
-      try {
-        const faviconResponse = await fetch(path);
-        if (faviconResponse.ok) await cache.put(path, faviconResponse);
-      } catch {
-        // best-effort; the page's own load will just fetch it normally
-      }
+      const cached = await cache.match(path);
+      if (cached) dataUrlByPath.set(path, await responseToDataUrl(cached));
+      else misses.push(path);
     }),
   );
+  if (misses.length)
+    event.waitUntil(
+      Promise.allSettled(misses.map((path) => warmFavicon(cache, path))),
+    );
+  if (dataUrlByPath.size === 0) return null;
+  const patched = {
+    ...data,
+    tree: (data.tree ?? []).map((node) =>
+      withInlinedFavicon(node, dataUrlByPath),
+    ),
+  };
+  return new Response(JSON.stringify(patched), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // Set by shell() the moment a dashboard-bound navigation comes in, so the
 // tree fetch starts before the page's own JS bundle has even loaded --
-// treeWithFaviconWarming below then reuses it instead of firing a second
+// treeWithInlineFavicons below then reuses it instead of firing a second
 // network round trip once the page actually asks for /api/tree.
 let treePreload;
 
-async function treeWithFaviconWarming(event, request, cacheName) {
+async function treeWithInlineFavicons(event, request, cacheName) {
   const cache = await caches.open(cacheName);
   const preload = treePreload;
   treePreload = undefined;
@@ -305,7 +349,8 @@ async function treeWithFaviconWarming(event, request, cacheName) {
     if (response.ok) {
       cache.put(request, response.clone());
       void flushQueue();
-      event.waitUntil(warmTreeFavicons(response.clone(), cache));
+      const patched = await inlineTreeFavicons(event, response.clone(), cache);
+      if (patched) return patched;
     }
     return response;
   } catch (error) {
@@ -378,7 +423,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname === "/api/tree") {
-    event.respondWith(treeWithFaviconWarming(event, request, API_CACHE));
+    event.respondWith(treeWithInlineFavicons(event, request, API_CACHE));
     return;
   }
   if (url.pathname.startsWith("/api/")) {
