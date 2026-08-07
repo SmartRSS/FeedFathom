@@ -66,39 +66,6 @@ function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
-function faviconUrls(node: TreeNode): string[] {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(faviconUrls);
-}
-
-// Favicons already go through the service worker's own cache, so once warm
-// this resolves near-instantly -- the point isn't to add a real wait, it's
-// to stop the tree's text and its icons from painting a couple of frames
-// apart. The timeout bounds the one case where that's not true (a cold
-// cache, or a slow/broken favicon): don't hold the skeleton hostage to a
-// handful of image fetches when showing the tree without them is better
-// than not showing it at all.
-const FAVICON_PRELOAD_TIMEOUT_MS = 500;
-
-function preloadFavicons(tree: TreeNode[]): Promise<void> {
-  const urls = tree.flatMap(faviconUrls);
-  if (!urls.length) return Promise.resolve();
-  const loaded = Promise.all(
-    urls.map((url) => {
-      const image = new Image();
-      image.src = url;
-      return image.decode().catch(() => {});
-    }),
-  ).then(() => {});
-  const timeout = new Promise<void>((resolve) =>
-    setTimeout(resolve, FAVICON_PRELOAD_TIMEOUT_MS),
-  );
-  return Promise.race([loaded, timeout]);
-}
-
 const READER_SKELETON_PARAGRAPHS = [
   "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod",
   "Tempor incididunt ut labore et dolore magna aliqua ut enim ad minim",
@@ -182,6 +149,7 @@ function TreeItem(props: {
   selected: TreeNode | undefined;
 }) {
   const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
+  const [faviconLoaded, setFaviconLoaded] = createSignal(false);
   const isFolder = () => props.node.type === "folder";
   const children = () =>
     props.node.type === "folder" ? props.node.children : [];
@@ -210,8 +178,11 @@ function TreeItem(props: {
             <img
               alt=""
               class="node-icon"
+              classList={{ "skeleton-row": !faviconLoaded() }}
               src={favicon() ?? feed}
+              onLoad={() => setFaviconLoaded(true)}
               onError={(event) => {
+                setFaviconLoaded(true);
                 event.currentTarget.src = feed;
               }}
             />
@@ -400,8 +371,6 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (!treeRequestGuard.isCurrent(request)) return nextTree;
-    await preloadFavicons(nextTree);
     if (!treeRequestGuard.isCurrent(request)) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
