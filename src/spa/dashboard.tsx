@@ -936,11 +936,9 @@ export function Dashboard(props: {
                 <Show
                   when={loadingArticle()}
                   fallback={
-                    <p>
-                      {selected()
-                        ? "Reader content unavailable."
-                        : "Select an article."}
-                    </p>
+                    <Show when={selected()}>
+                      <p>Reader content unavailable.</p>
+                    </Show>
                   }
                 >
                   <h1 class="skeleton-text" aria-hidden="true">
