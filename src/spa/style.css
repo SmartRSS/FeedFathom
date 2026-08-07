@@ -238,6 +238,10 @@ a {
   font-size: 0.85rem;
   line-height: 1.2rem;
 }
+.source:focus {
+  outline: 0;
+  box-shadow: inset 0 0 0 1px var(--grey-40);
+}
 .source.folder {
   padding-left: 0.1rem;
 }
