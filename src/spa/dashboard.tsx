@@ -196,6 +196,12 @@ function TreeItem(props: {
     setOpen(next);
     storeFolderOpen(props.node.uid, next);
   }
+  function openFolder() {
+    if (!open()) toggle();
+  }
+  function closeFolder() {
+    if (open()) toggle();
+  }
   function handleKeyDown(event: KeyboardEvent) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -204,12 +210,15 @@ function TreeItem(props: {
     } else if (event.key === " " && isFolder()) {
       event.preventDefault();
       toggle();
-    } else if (event.key === "ArrowRight" && isFolder() && !open()) {
+    } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      toggle();
-    } else if (event.key === "ArrowLeft" && isFolder() && open()) {
+      // Can't open further (it's a source, or an already-open folder) ->
+      // fall back to the same action Enter takes: load its articles.
+      if (isFolder() && !open()) openFolder();
+      else props.select(props.node);
+    } else if (event.key === "ArrowLeft" && isFolder()) {
       event.preventDefault();
-      toggle();
+      closeFolder();
     }
   }
   return (
