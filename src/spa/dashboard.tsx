@@ -229,7 +229,7 @@ function TreeItem(props: {
     }
   }
   return (
-    <li>
+    <li role="none">
       <button
         aria-expanded={isFolder() ? open() : undefined}
         aria-selected={props.selected === props.node}
@@ -519,12 +519,9 @@ export function Dashboard(props: {
       setArticles(nextArticles);
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
-      setFocusedIndex(0);
       setSelectionAnchor(nextArticles.length ? 0 : undefined);
       setSelectedNode(node);
-      queueMicrotask(() =>
-        document.querySelector<HTMLElement>(".article-list")?.focus(),
-      );
+      queueMicrotask(() => focusArticleAt(0));
     } catch (cause) {
       if (!selectionGuard.isCurrent(selection)) return;
       reportError(cause, "Could not load articles");
@@ -678,7 +675,7 @@ export function Dashboard(props: {
     openNext?.catch((cause) =>
       reportError(cause, "Could not refresh articles"),
     );
-    setFocusedIndex(nextArticle ? nextIndex : 0);
+    const restoreIndex = nextArticle ? nextIndex : 0;
     setSelectionAnchor(nextArticle ? nextIndex : undefined);
 
     // Every article in the list is unread by construction (the server only
@@ -697,9 +694,7 @@ export function Dashboard(props: {
     }
     // The removed rows' DOM nodes are gone, which drops focus to
     // document.body; restore it to the list so keyboard nav keeps working.
-    queueMicrotask(() =>
-      document.querySelector<HTMLElement>(".article-list")?.focus(),
-    );
+    queueMicrotask(() => focusArticleAt(restoreIndex));
 
     deletion
       .then(() =>
@@ -720,6 +715,19 @@ export function Dashboard(props: {
         );
       });
   }
+  // Real DOM focus, same roving-tabindex mechanism as the tree: each row
+  // carries its own tabindex (0 for the current one, -1 otherwise, see the
+  // JSX below), so the browser announces the newly focused row on its own
+  // -- no aria-activedescendant plumbing, no dependency on a screen
+  // reader's support for it.
+  function focusArticleAt(index: number) {
+    setFocusedIndex(index);
+    const element = document.querySelector<HTMLElement>(
+      `[data-index="${index}"]`,
+    );
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ block: "nearest" });
+  }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
       selectedIndexes(),
@@ -727,15 +735,9 @@ export function Dashboard(props: {
       selectionAnchor(),
       event,
     );
-    setFocusedIndex(index);
+    focusArticleAt(index);
     setSelectionAnchor(next.anchor);
     void setArticleSelection(next.indexes);
-  }
-  function focusArticleAt(index: number) {
-    setFocusedIndex(index);
-    document
-      .querySelector(`[data-index="${index}"]`)
-      ?.scrollIntoView({ block: "nearest" });
   }
   // Ctrl/Cmd held: move the focus cursor only, selection stays exactly as
   // it was -- Space is what commits a change at the new position. Without
@@ -744,12 +746,7 @@ export function Dashboard(props: {
     if (!articles().length) return;
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) focusArticleAt(index);
-    else {
-      selectArticle(index, event);
-      document
-        .querySelector(`[data-index="${index}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-    }
+    else selectArticle(index, event);
   }
   function moveSelection(offset: number, event: KeyboardEvent) {
     moveTo(
@@ -921,13 +918,9 @@ export function Dashboard(props: {
             </button>
           </div>
           <div
-            aria-activedescendant={
-              articles().length ? `article-${focusedIndex()}` : undefined
-            }
             aria-multiselectable="true"
             class="article-list"
             role="listbox"
-            tabIndex={0}
             onKeyDown={handleArticleKeys}
           >
             <Show
@@ -971,13 +964,13 @@ export function Dashboard(props: {
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
-                      id={`article-${index()}`}
                       onClick={(event) => {
                         event.preventDefault();
                         selectArticle(index(), event);
                         props.focusPane("reader");
                       }}
                       role="option"
+                      tabIndex={focusedIndex() === index() ? 0 : -1}
                       aria-selected={selectedIndexes().has(index())}
                     >
                       <span class="title">{article.title}</span>
