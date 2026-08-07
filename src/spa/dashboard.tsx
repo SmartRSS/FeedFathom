@@ -455,6 +455,12 @@ export function Dashboard(props: {
       reportError(cause, "Unable to load feeds.");
     } finally {
       setTreeLoading(false);
+      // Land keyboard focus on the tree without calling select() -- that
+      // would also kick off an articles load, which isn't wanted just from
+      // landing on the page.
+      queueMicrotask(() =>
+        document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
+      );
     }
   });
   async function select(node: TreeNode) {
