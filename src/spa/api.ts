@@ -52,9 +52,8 @@ export async function api<T extends TSchema>(
   path: string,
   schema: T,
   init?: RequestInit,
-  preloaded?: Promise<Response>,
 ): Promise<StaticDecode<T>> {
-  const response = await (preloaded ?? fetch(`/api${path}`, init));
+  const response = await fetch(`/api${path}`, init);
   const payload = await responseJson(path, response);
 
   if (!response.ok) {

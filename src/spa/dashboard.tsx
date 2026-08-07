@@ -46,12 +46,6 @@ import feed from "../lib/images/icons/System/rss-fill.svg";
 import folder from "../lib/images/icons/Document/folder-fill.svg";
 import folderOpened from "../lib/images/icons/Document/folder-open-fill.svg";
 
-declare global {
-  interface Window {
-    __treePreload?: Promise<Response>;
-  }
-}
-
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
     <div innerHTML={props.content.content} />
@@ -351,21 +345,13 @@ export function Dashboard(props: {
   });
   async function loadTree(): Promise<TreeNode[]> {
     const request = treeRequestGuard.start();
-    const preload = window.__treePreload;
-    delete window.__treePreload;
     treeAbortController?.abort();
     const controller = new AbortController();
     treeAbortController = controller;
     const attempt: Promise<TreeNode[]> = (async () => {
       try {
-        return (
-          await api(
-            "/tree",
-            treeResponse,
-            { signal: controller.signal },
-            preload,
-          )
-        ).tree;
+        return (await api("/tree", treeResponse, { signal: controller.signal }))
+          .tree;
       } catch (cause) {
         // Only treat this as "superseded, defer to whoever's current"
         // when THIS request's own signal is what caused the failure --

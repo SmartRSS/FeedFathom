@@ -290,10 +290,18 @@ async function warmTreeFavicons(response, cache) {
   );
 }
 
+// Set by shell() the moment a dashboard-bound navigation comes in, so the
+// tree fetch starts before the page's own JS bundle has even loaded --
+// treeWithFaviconWarming below then reuses it instead of firing a second
+// network round trip once the page actually asks for /api/tree.
+let treePreload;
+
 async function treeWithFaviconWarming(event, request, cacheName) {
   const cache = await caches.open(cacheName);
+  const preload = treePreload;
+  treePreload = undefined;
   try {
-    const response = await fetch(request);
+    const response = await (preload ?? fetch(request));
     if (response.ok) {
       cache.put(request, response.clone());
       void flushQueue();
@@ -329,11 +337,20 @@ async function staleWhileRevalidate(event, request, cacheName) {
   return cached ?? (await revalidated) ?? Response.error();
 }
 
-async function shell() {
+// Routes that never show the dashboard tree -- mirrors the check the page
+// itself used to do before firing its own early tree fetch.
+const TREE_PRELOAD_EXCLUDED_PATHS =
+  /^\/(admin|login|options|preview|register|activate\/)/;
+
+async function shell(event, path) {
   const cache = await caches.open(SHELL_CACHE);
   try {
     const response = await fetch("/", SHELL_REQUEST_INIT);
     if (response.ok) cache.put("/", response.clone());
+    if (!TREE_PRELOAD_EXCLUDED_PATHS.test(path)) {
+      treePreload = fetch("/api/tree", { credentials: "same-origin" });
+      event.waitUntil(treePreload.catch(() => {}));
+    }
     return response;
   } catch (error) {
     const cached = await cache.match("/");
@@ -369,7 +386,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.mode === "navigate") {
-    event.respondWith(shell());
+    event.respondWith(shell(event, url.pathname));
     return;
   }
   if (url.pathname.startsWith("/assets/")) {

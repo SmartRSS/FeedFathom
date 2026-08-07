@@ -2,17 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      if (
-        !/^\/(admin|login|options|preview|register|activate\/)/.test(
-          location.pathname,
-        )
-      ) {
-        window.__treePreload = fetch("/api/tree", {
-          credentials: "same-origin",
-        });
-      }
-    </script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
