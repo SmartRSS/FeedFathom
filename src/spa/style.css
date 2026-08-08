@@ -49,6 +49,25 @@
   top: 0.5rem;
 }
 
+.update-banner {
+  position: fixed;
+  z-index: 200;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--grey-90);
+  color: var(--white);
+  border-radius: 0.5rem;
+}
+.update-banner button {
+  padding: 0.3rem 0.6rem;
+  color: inherit;
+  background: var(--blue-60);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

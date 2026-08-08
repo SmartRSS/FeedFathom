@@ -25,6 +25,7 @@ import "./style.css";
 
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
+const [updateAvailable, setUpdateAvailable] = createSignal(false);
 
 function App() {
   const initialPath = currentPath();
@@ -83,6 +84,14 @@ function App() {
       >
         Skip to accessibility settings
       </a>
+      <Show when={updateAvailable()}>
+        <div class="update-banner" role="status">
+          <span>A new version is available.</span>
+          <button type="button" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      </Show>
       <Show
         when={loginRoute()}
         fallback={
@@ -162,16 +171,14 @@ function Router(props: {
 if ("serviceWorker" in navigator) {
   // The new worker calls clients.claim() on activate, so an already-open tab
   // can end up with its fetches controlled by a worker version its already-
-  // loaded JS bundle doesn't match. Reload once to bring both back in sync --
-  // but only when a controller is being *replaced*: a page's first-ever
-  // controllerchange (going from uncontrolled to controlled) fires too, and
-  // that one needs no reload since nothing has changed under it yet.
+  // loaded JS bundle doesn't match. Surface it instead of forcing a reload
+  // mid-session -- but only when a controller is being *replaced*: a page's
+  // first-ever controllerchange (going from uncontrolled to controlled)
+  // fires too, and that one needs no prompt since nothing's changed yet.
   const hadController = Boolean(navigator.serviceWorker.controller);
-  let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController || reloaded) return;
-    reloaded = true;
-    location.reload();
+    if (!hadController) return;
+    setUpdateAvailable(true);
   });
   // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
   // VITE_SW_FILENAME for production builds, and Vite's dev server serves
