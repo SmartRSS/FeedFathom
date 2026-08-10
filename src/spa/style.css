@@ -18,8 +18,10 @@
   --selected-fg: var(--grey-10);
   --icon-invert: 0;
   --selected-border: transparent;
+  --radius: 0.5rem;
+  --font-family: sans-serif;
   color: var(--grey-90);
-  font-family: sans-serif;
+  font-family: var(--font-family);
 }
 
 /* Selectable themes (Options -> Appearance), one attribute drives all of
@@ -27,16 +29,39 @@
    OS history, picked apart wherever the default listbox highlight
    actually changed. High contrast is its own theme rather than a
    separate toggle, since it's just another point in the same "which
-   selection/border colors are active" space. */
+   selection/border colors are active" space.
+
+   Beyond the selection color, each also carries its era's characteristic
+   surface color (--grey-10/--grey-20, used for toolbars/cards/panels),
+   border color (--grey-30), corner radius, and system font -- a period-
+   correct selection color alone still read as "off" sitting inside this
+   app's otherwise-unchanged flat modern chrome, so those needed to move
+   too. --grey-90 (body text) is left alone in all of them: every surface
+   color below is light enough that the existing dark text stays legible
+   without a second per-theme contrast pass. Real 3D bevel button edges
+   are the one thing deliberately skipped -- CSS can't cheaply fake those
+   without restructuring every button into per-side border colors, and a
+   flat approximation of the surface/border/font/radius already carries
+   most of the period feel. */
 :root[data-theme="classic"] {
   --selected-bg: #000080;
   --selected-fg: #fff;
   --icon-invert: 1;
+  --grey-10: #c0c0c0;
+  --grey-20: #c0c0c0;
+  --grey-30: #808080;
+  --radius: 0;
+  --font-family: "MS Sans Serif", Tahoma, sans-serif;
 }
 :root[data-theme="millennial"] {
   --selected-bg: #316ac5;
   --selected-fg: #fff;
   --icon-invert: 1;
+  --grey-10: #ece9d8;
+  --grey-20: #ece9d8;
+  --grey-30: #aca899;
+  --radius: 0.35rem;
+  --font-family: Tahoma, Verdana, sans-serif;
 }
 /* Sampled directly from a real Windows 7 screenshot (Start Menu search
    result selection, a keyboard-focused item rather than a hover/unfocused
@@ -50,11 +75,21 @@
   --selected-fg: #000;
   --icon-invert: 0;
   --selected-border: #4598e6;
+  --grey-10: #eaf3fc;
+  --grey-20: #eaf3fc;
+  --grey-30: #a9c4e0;
+  --radius: 0.4rem;
+  --font-family: "Segoe UI", Tahoma, sans-serif;
 }
 :root[data-theme="modern"] {
   --selected-bg: #0067b8;
   --selected-fg: #fff;
   --icon-invert: 1;
+  --grey-10: #f2f2f2;
+  --grey-20: #f2f2f2;
+  --grey-30: #c8c8c8;
+  --radius: 0;
+  --font-family: "Segoe UI", Tahoma, sans-serif;
 }
 /* Overrides the same custom properties everything else already reads --
    selected rows, borders, focus indicators, and links all follow along
@@ -112,7 +147,7 @@
   padding: 0.5rem 0.75rem;
   background: var(--grey-90);
   color: var(--white);
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
 }
 .update-banner button {
   padding: 0.3rem 0.6rem;
@@ -161,7 +196,7 @@ form,
   margin: 8vh auto;
   padding: 2rem;
   border: var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
 }
 .account-result {
   text-align: center;
@@ -185,7 +220,7 @@ form,
   margin: 0;
   padding: 1.5rem;
   border: var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
 }
 .options-card h2 {
   margin: 0;
@@ -201,7 +236,7 @@ form,
 .admin-table-scroll {
   overflow: auto;
   border: var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
 }
 .admin-table {
   width: 100%;
