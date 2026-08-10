@@ -34,7 +34,7 @@ import {
   type ReaderMode,
 } from "./extension-reader";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
-import { highContrast } from "./preferences";
+import { theme } from "./preferences";
 import addFolder from "../lib/images/icons/Document/folder-add-fill.svg";
 import add from "../lib/images/icons/System/add-box-fill.svg";
 import settings from "../lib/images/icons/System/settings-5-fill.svg";
@@ -499,11 +499,11 @@ export function Dashboard(props: {
     // Delayed, and only set (not already present at mount) so a screen
     // reader treats it as a live-region change and actually announces it,
     // rather than silently including it in the page's first read-through.
-    if (!highContrast())
+    if (theme() !== "high-contrast")
       setTimeout(
         () =>
           setAccessibilityAnnouncement(
-            "A high-contrast display mode is available in accessibility settings.",
+            "A high-contrast theme is available in accessibility settings.",
           ),
         2000,
       );

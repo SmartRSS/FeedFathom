@@ -12,19 +12,49 @@
   --border: 1px solid var(--grey-30);
   --blue: var(--blue-60);
   --muted: var(--grey-50);
-  /* Classic Windows 95 listbox selection: navy background, white text --
-     kept as its own token rather than reusing --blue-60 so this doesn't
-     also recolor links. */
-  --selected-bg: #000080;
-  --selected-fg: #fff;
+  /* Kept as their own tokens rather than reusing --blue-60 so selection
+     doesn't also recolor links; overridden per [data-theme] below. */
+  --selected-bg: var(--blue-60);
+  --selected-fg: var(--grey-10);
+  --icon-invert: 0;
   color: var(--grey-90);
   font-family: sans-serif;
 }
 
+/* Selectable themes (Options -> Appearance), one attribute drives all of
+   them. Windows versions collapse to whichever of these actually
+   changed the default listbox highlight: 95/98/Me/2000 (and XP's
+   "Windows Classic" mode) all shipped the same navy "Windows Standard"
+   scheme; XP's out-of-box Luna theme changed it to a lighter blue;
+   Vista/7's Aero swapped to a pale highlight with dark text instead of
+   white; 8/8.1/10/11 settled on a flat saturated blue that's stayed
+   since Windows 8 dropped Aero's glass/gradient look. High contrast is
+   its own theme rather than a separate toggle, since it's just another
+   point in the same "which selection/border colors are active" space. */
+:root[data-theme="win95"] {
+  --selected-bg: #000080;
+  --selected-fg: #fff;
+  --icon-invert: 1;
+}
+:root[data-theme="winxp"] {
+  --selected-bg: #316ac5;
+  --selected-fg: #fff;
+  --icon-invert: 1;
+}
+:root[data-theme="winvista7"] {
+  --selected-bg: #cbe8f6;
+  --selected-fg: #000;
+  --icon-invert: 0;
+}
+:root[data-theme="win8plus"] {
+  --selected-bg: #0067b8;
+  --selected-fg: #fff;
+  --icon-invert: 1;
+}
 /* Overrides the same custom properties everything else already reads --
    selected rows, borders, focus indicators, and links all follow along
    automatically instead of needing their own high-contrast variants. */
-:root.high-contrast {
+:root[data-theme="high-contrast"] {
   --blue-40: #001a4d;
   --blue-50: #001333;
   --blue-60: #000d24;
@@ -37,18 +67,19 @@
   --border: 2px solid #000;
   --selected-bg: #000d24;
   --selected-fg: #fff;
+  --icon-invert: 1;
 }
 /* Classic Win95 focus rect: a dotted outline drawn just inside the item's
    edge, not a modern glow/shadow. White dots on selected (navy/dark)
    rows so the rect stays visible there too -- black dots read as
    invisible on a dark background. */
-:root.high-contrast .source:focus,
-:root.high-contrast .article.active {
+:root[data-theme="high-contrast"] .source:focus,
+:root[data-theme="high-contrast"] .article.active {
   outline: 2px dotted var(--grey-90);
   outline-offset: -2px;
 }
-:root.high-contrast .source.selected:focus,
-:root.high-contrast .article.selected.active {
+:root[data-theme="high-contrast"] .source.selected:focus,
+:root[data-theme="high-contrast"] .article.selected.active {
   outline: 2px dotted var(--selected-fg);
   outline-offset: -2px;
 }
@@ -315,8 +346,23 @@ a {
      Chromium/Firefox only as of writing; Safari ignores the property and
      is back to the old (overlay, no reserved gutter) behavior there. */
   scrollbar-gutter: stable;
+  /* scrollbar-gutter alone only fixes browsers that support it; styling
+     the scrollbar itself directly removes the OS/browser variability
+     that scrollbar-gutter can't reach (Safari, or an OS scrollbar
+     that's simply wider than the reserved gutter expects). */
+  scrollbar-width: thin;
   padding: 0.5rem 0;
   list-style: none;
+}
+.tree::-webkit-scrollbar {
+  width: 10px;
+}
+.tree::-webkit-scrollbar-thumb {
+  background: var(--grey-40);
+  border-radius: 0.25rem;
+}
+.tree::-webkit-scrollbar-track {
+  background: transparent;
 }
 .tree.nested {
   padding: 0;
@@ -392,6 +438,15 @@ a {
   width: 1.5cap;
   height: 1.5cap;
   flex: 0 0 auto;
+}
+/* Folder icons are fixed-color art, not currentColor-aware SVGs, so a
+   dark-on-light icon disappears against a dark selected-row background
+   -- flip it via --icon-invert (set per theme) instead. Scoped to
+   .folder specifically: a source row's .node-icon is its real favicon,
+   an arbitrary image that inverting would just discolor. */
+.source.folder.selected .node-icon,
+.source.folder.selected .chevron {
+  filter: invert(var(--icon-invert));
 }
 .article-list.skeleton {
   overflow: hidden;

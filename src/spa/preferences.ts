@@ -1,21 +1,41 @@
 import { createSignal } from "solid-js";
 
-const HIGH_CONTRAST_KEY = "high-contrast";
+export type Theme =
+  | "high-contrast"
+  | "modern"
+  | "win8plus"
+  | "win95"
+  | "winvista7"
+  | "winxp";
+const THEMES: readonly Theme[] = [
+  "modern",
+  "win95",
+  "winxp",
+  "winvista7",
+  "win8plus",
+  "high-contrast",
+];
+const THEME_KEY = "theme";
 
-function readHighContrast(): boolean {
+export function isTheme(value: string): value is Theme {
+  return (THEMES as readonly string[]).includes(value);
+}
+
+function readTheme(): Theme {
   try {
-    return localStorage.getItem(HIGH_CONTRAST_KEY) === "true";
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored && isTheme(stored) ? stored : "modern";
   } catch {
-    return false;
+    return "modern";
   }
 }
 
-const [highContrast, setHighContrastSignal] = createSignal(readHighContrast());
-export { highContrast };
+const [theme, setThemeSignal] = createSignal<Theme>(readTheme());
+export { theme };
 
-export function setHighContrast(value: boolean) {
-  setHighContrastSignal(value);
+export function setTheme(value: Theme) {
+  setThemeSignal(value);
   try {
-    localStorage.setItem(HIGH_CONTRAST_KEY, value ? "true" : "false");
+    localStorage.setItem(THEME_KEY, value);
   } catch {}
 }

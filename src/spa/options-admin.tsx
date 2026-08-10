@@ -8,7 +8,7 @@ import {
   successResponse,
 } from "../contracts/responses";
 import { loginPath } from "./behavior";
-import { highContrast, setHighContrast } from "./preferences";
+import { isTheme, setTheme, theme } from "./preferences";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -174,14 +174,23 @@ export function Options(props: {
         Home
       </a>
       <section class="options-card">
-        <h2>Accessibility</h2>
+        <h2>Appearance</h2>
         <label>
-          <input
-            checked={highContrast()}
-            type="checkbox"
-            onChange={(event) => setHighContrast(event.currentTarget.checked)}
-          />
-          High-contrast display mode
+          Theme
+          <select
+            value={theme()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isTheme(value)) setTheme(value);
+            }}
+          >
+            <option value="modern">Modern</option>
+            <option value="win95">Windows 95 / 98 / Me / 2000</option>
+            <option value="winxp">Windows XP</option>
+            <option value="winvista7">Windows Vista / 7</option>
+            <option value="win8plus">Windows 8 / 8.1 / 10 / 11</option>
+            <option value="high-contrast">High contrast (accessibility)</option>
+          </select>
         </label>
       </section>
       <Show when={user()}>
