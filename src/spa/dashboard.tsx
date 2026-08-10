@@ -41,11 +41,18 @@ import settings from "../lib/images/icons/System/settings-5-fill.svg";
 import details from "../lib/images/icons/System/information-fill.svg";
 import remove from "../lib/images/icons/System/delete-bin-7-fill.svg";
 import selectAll from "../lib/images/icons/System/check-double-fill.svg";
-import arrowDown from "../lib/images/icons/Arrows/chevron-down-fill.svg";
-import arrowRight from "../lib/images/icons/Arrows/chevron-right-fill.svg";
 import feed from "../lib/images/icons/System/rss-fill.svg";
-import folder from "../lib/images/icons/Document/folder-fill.svg";
-import folderOpened from "../lib/images/icons/Document/folder-open-fill.svg";
+// Inlined as raw markup (not <img src>) rather than the shared node-icon
+// image pattern: these are stroke/fill="currentColor" SVGs specifically
+// so a folder row's icon automatically matches its own text color (grey
+// by default, --selected-fg when selected) with no per-theme "is this
+// background light or dark" guessing -- currentColor only resolves that
+// way when the SVG is actually in the page's DOM, not loaded as an
+// external image resource.
+import arrowDownRaw from "../lib/images/icons/Arrows/chevron-down-fill.svg?raw";
+import arrowRightRaw from "../lib/images/icons/Arrows/chevron-right-fill.svg?raw";
+import folderRaw from "../lib/images/icons/Document/folder-fill.svg?raw";
+import folderOpenedRaw from "../lib/images/icons/Document/folder-open-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
@@ -263,16 +270,20 @@ function TreeItem(props: {
             />
           }
         >
-          <img
-            alt=""
+          <span
+            aria-hidden="true"
             class="chevron"
-            src={open() ? arrowDown : arrowRight}
+            innerHTML={open() ? arrowDownRaw : arrowRightRaw}
             onClick={(event) => {
               event.stopPropagation();
               toggle();
             }}
           />
-          <img alt="" class="node-icon" src={open() ? folderOpened : folder} />
+          <span
+            aria-hidden="true"
+            class="node-icon"
+            innerHTML={open() ? folderOpenedRaw : folderRaw}
+          />
         </Show>
         <span>{props.node.name}</span>
         <Show when={unread()}>{(count) => <em>{count()}</em>}</Show>

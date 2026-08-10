@@ -16,7 +16,6 @@
      doesn't also recolor links; overridden per [data-theme] below. */
   --selected-bg: var(--blue-60);
   --selected-fg: var(--grey-10);
-  --icon-invert: 0;
   --selected-border: transparent;
   --radius: 0.5rem;
   --font-family: sans-serif;
@@ -33,12 +32,12 @@
    color") so they're declared second, overriding Highlight/HighlightText
    wherever a browser recognizes them -- an unrecognized keyword makes
    only that one declaration invalid, leaving the earlier one in effect,
-   so this degrades safely instead of breaking. Left at --icon-invert: 0
-   and the default surface colors: no reliable way to know from CSS
-   alone whether the resolved accent color is light or dark enough to
-   need icon inversion, and touching surfaces risks a dark OS accent
-   landing on this app's fixed dark body text with no dark-mode support
-   to match it -- narrower but safe beats broad but risky here. */
+   so this degrades safely instead of breaking. Surfaces are left alone:
+   touching them risks a dark OS accent landing on this app's fixed dark
+   body text with no dark-mode support to match it. Folder icons don't
+   need a per-theme override here either -- they're inlined SVGs using
+   currentColor directly (see dashboard.tsx / .chevron svg, .node-icon
+   svg below) instead of guessing light/dark. */
 :root[data-theme="auto"] {
   --selected-bg: Highlight;
   --selected-bg: AccentColor;
@@ -68,7 +67,6 @@
 :root[data-theme="classic"] {
   --selected-bg: #000080;
   --selected-fg: #fff;
-  --icon-invert: 1;
   --grey-10: #c0c0c0;
   --grey-20: #c0c0c0;
   --grey-30: #808080;
@@ -78,7 +76,6 @@
 :root[data-theme="millennial"] {
   --selected-bg: #316ac5;
   --selected-fg: #fff;
-  --icon-invert: 1;
   --grey-10: #ece9d8;
   --grey-20: #ece9d8;
   --grey-30: #aca899;
@@ -95,7 +92,6 @@
 :root[data-theme="aero"] {
   --selected-bg: #309afe;
   --selected-fg: #000;
-  --icon-invert: 0;
   --selected-border: #4598e6;
   --grey-10: #eaf3fc;
   --grey-20: #eaf3fc;
@@ -106,7 +102,6 @@
 :root[data-theme="modern"] {
   --selected-bg: #0067b8;
   --selected-fg: #fff;
-  --icon-invert: 1;
   --grey-10: #f2f2f2;
   --grey-20: #f2f2f2;
   --grey-30: #c8c8c8;
@@ -129,7 +124,6 @@
   --border: 2px solid #000;
   --selected-bg: #000d24;
   --selected-fg: #fff;
-  --icon-invert: 1;
 }
 /* A dotted outline drawn just inside the item's edge, not a glow/shadow.
    White dots on selected (navy/dark) rows so the rect stays visible
@@ -500,14 +494,21 @@ a {
   height: 1.5cap;
   flex: 0 0 auto;
 }
-/* Folder icons are fixed-color art, not currentColor-aware SVGs, so a
-   dark-on-light icon disappears against a dark selected-row background
-   -- flip it via --icon-invert (set per theme) instead. Scoped to
-   .folder specifically: a source row's .node-icon is its real favicon,
-   an arbitrary image that inverting would just discolor. */
-.source.folder.selected .node-icon,
-.source.folder.selected .chevron {
-  filter: invert(var(--icon-invert));
+/* The folder chevron/node-icon (never a source row's real favicon --
+   that stays a plain <img>) are inlined as raw SVG markup (see
+   dashboard.tsx) rather than loaded as an external <img src>
+   specifically so their fill/stroke="currentColor" resolves against
+   this page's own text color -- automatically matching the row's text
+   (grey by default, var(--selected-fg) when selected) with no
+   per-theme "is this background light or dark" guess needed, exact
+   even for auto where the resolved system color isn't known in
+   advance. The inlined <svg> itself has no explicit width/height (only
+   a viewBox), so it needs to be told to fill its wrapper. */
+.chevron svg,
+.node-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .article-list.skeleton {
   overflow: hidden;
