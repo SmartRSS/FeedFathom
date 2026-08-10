@@ -20,7 +20,7 @@ import { Activate, Login, Register } from "./account-flows";
 import { Dashboard } from "./dashboard";
 import { Admin, Options } from "./options-admin";
 import { isUnauthorizedError } from "./api";
-import { theme } from "./preferences";
+import { resolvedTheme } from "./preferences";
 import "./style.css";
 
 const currentPath = () => location.pathname + location.search;
@@ -34,7 +34,7 @@ function App() {
   const [pane, setPane] = createSignal<DashboardPane>("sources");
 
   createEffect(() => {
-    document.documentElement.dataset["theme"] = theme();
+    document.documentElement.dataset["theme"] = resolvedTheme();
   });
 
   if (initialRoute.name === "dashboard" || initialRoute.name === "preview")

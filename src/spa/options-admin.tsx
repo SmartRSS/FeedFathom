@@ -184,6 +184,7 @@ export function Options(props: {
               if (isTheme(value)) setTheme(value);
             }}
           >
+            <option value="auto">Auto (match OS accessibility setting)</option>
             <option value="smart">Smart</option>
             <option value="classic">Classic</option>
             <option value="millennial">Millennial</option>

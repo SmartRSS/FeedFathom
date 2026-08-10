@@ -34,7 +34,7 @@ import {
   type ReaderMode,
 } from "./extension-reader";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
-import { theme } from "./preferences";
+import { resolvedTheme } from "./preferences";
 import addFolder from "../lib/images/icons/Document/folder-add-fill.svg";
 import add from "../lib/images/icons/System/add-box-fill.svg";
 import settings from "../lib/images/icons/System/settings-5-fill.svg";
@@ -499,7 +499,7 @@ export function Dashboard(props: {
     // Delayed, and only set (not already present at mount) so a screen
     // reader treats it as a live-region change and actually announces it,
     // rather than silently including it in the page's first read-through.
-    if (theme() !== "high-contrast")
+    if (resolvedTheme() !== "high-contrast")
       setTimeout(
         () =>
           setAccessibilityAnnouncement(
