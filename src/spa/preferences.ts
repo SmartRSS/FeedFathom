@@ -1,18 +1,18 @@
 import { createSignal } from "solid-js";
 
 export type Theme =
+  | "aero"
+  | "classic"
   | "high-contrast"
+  | "millennial"
   | "modern"
-  | "win8plus"
-  | "win95"
-  | "winvista7"
-  | "winxp";
+  | "smart";
 const THEMES: readonly Theme[] = [
+  "smart",
+  "classic",
+  "millennial",
+  "aero",
   "modern",
-  "win95",
-  "winxp",
-  "winvista7",
-  "win8plus",
   "high-contrast",
 ];
 const THEME_KEY = "theme";
@@ -24,9 +24,9 @@ export function isTheme(value: string): value is Theme {
 function readTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    return stored && isTheme(stored) ? stored : "modern";
+    return stored && isTheme(stored) ? stored : "smart";
   } catch {
-    return "modern";
+    return "smart";
   }
 }
 

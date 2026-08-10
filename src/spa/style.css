@@ -22,31 +22,27 @@
 }
 
 /* Selectable themes (Options -> Appearance), one attribute drives all of
-   them. Windows versions collapse to whichever of these actually
-   changed the default listbox highlight: 95/98/Me/2000 (and XP's
-   "Windows Classic" mode) all shipped the same navy "Windows Standard"
-   scheme; XP's out-of-box Luna theme changed it to a lighter blue;
-   Vista/7's Aero swapped to a pale highlight with dark text instead of
-   white; 8/8.1/10/11 settled on a flat saturated blue that's stayed
-   since Windows 8 dropped Aero's glass/gradient look. High contrast is
-   its own theme rather than a separate toggle, since it's just another
-   point in the same "which selection/border colors are active" space. */
-:root[data-theme="win95"] {
+   them: each is a distinct selection color/contrast era from desktop
+   OS history, picked apart wherever the default listbox highlight
+   actually changed. High contrast is its own theme rather than a
+   separate toggle, since it's just another point in the same "which
+   selection/border colors are active" space. */
+:root[data-theme="classic"] {
   --selected-bg: #000080;
   --selected-fg: #fff;
   --icon-invert: 1;
 }
-:root[data-theme="winxp"] {
+:root[data-theme="millennial"] {
   --selected-bg: #316ac5;
   --selected-fg: #fff;
   --icon-invert: 1;
 }
-:root[data-theme="winvista7"] {
+:root[data-theme="aero"] {
   --selected-bg: #cce8ff;
   --selected-fg: #000;
   --icon-invert: 0;
 }
-:root[data-theme="win8plus"] {
+:root[data-theme="modern"] {
   --selected-bg: #0067b8;
   --selected-fg: #fff;
   --icon-invert: 1;
@@ -69,10 +65,9 @@
   --selected-fg: #fff;
   --icon-invert: 1;
 }
-/* Classic Win95 focus rect: a dotted outline drawn just inside the item's
-   edge, not a modern glow/shadow. White dots on selected (navy/dark)
-   rows so the rect stays visible there too -- black dots read as
-   invisible on a dark background. */
+/* A dotted outline drawn just inside the item's edge, not a glow/shadow.
+   White dots on selected (navy/dark) rows so the rect stays visible
+   there too -- black dots read as invisible on a dark background. */
 :root[data-theme="high-contrast"] .source:focus,
 :root[data-theme="high-contrast"] .article.active {
   outline: 2px dotted var(--grey-90);
@@ -468,12 +463,12 @@ a {
 .article.selected .details {
   color: inherit;
 }
-/* Windows list/tree controls render a selected item's text in a single
-   HighlightText color (COLOR_HIGHLIGHTTEXT) -- there's no separate
-   "muted" sub-color for secondary text within a selected row. --muted
+/* Classic desktop list/tree controls render a selected item's text in
+   a single highlight-text color -- there's no separate "muted"
+   sub-color for secondary text within a selected row. --muted
    (grey-50/near-black in most of these themes) measured well under
-   1.5:1 against every theme's selected background, e.g. modern 1.18:1,
-   win95 3.38:1, winxp 1.11:1, high-contrast 1.08:1 -- all fail. */
+   1.5:1 against every theme's selected background, e.g. smart 1.18:1,
+   classic 3.38:1, millennial 1.11:1, high-contrast 1.08:1 -- all fail. */
 .source.selected em {
   color: inherit;
 }
@@ -484,10 +479,11 @@ a {
   outline: 1px dotted var(--grey-90);
   outline-offset: -1px;
 }
-/* Win95's focus rect on a selected item used white dots (an XOR-drawn
-   pattern CSS can't replicate, but this gets the same result): black
-   dots disappear against the navy selected background, so the rect
-   needs to switch to the selected-row's own light text color there. */
+/* The classic focus rect on a selected item used white dots (an
+   XOR-drawn pattern CSS can't replicate, but this gets the same
+   result): black dots disappear against the navy selected background,
+   so the rect needs to switch to the selected-row's own light text
+   color there. */
 .source.selected:focus,
 .article.selected.active {
   outline-color: var(--selected-fg);

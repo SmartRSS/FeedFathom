@@ -184,11 +184,11 @@ export function Options(props: {
               if (isTheme(value)) setTheme(value);
             }}
           >
-            <option value="modern">Smart</option>
-            <option value="win95">Classic (95 / 98 / Me / 2000)</option>
-            <option value="winxp">Millennial (XP)</option>
-            <option value="winvista7">Aero (Vista / 7)</option>
-            <option value="win8plus">Modern (8 / 8.1 / 10 / 11)</option>
+            <option value="smart">Smart</option>
+            <option value="classic">Classic</option>
+            <option value="millennial">Millennial</option>
+            <option value="aero">Aero</option>
+            <option value="modern">Modern</option>
             <option value="high-contrast">High contrast (accessibility)</option>
           </select>
         </label>
