@@ -468,6 +468,15 @@ a {
 .article.selected .details {
   color: inherit;
 }
+/* Windows list/tree controls render a selected item's text in a single
+   HighlightText color (COLOR_HIGHLIGHTTEXT) -- there's no separate
+   "muted" sub-color for secondary text within a selected row. --muted
+   (grey-50/near-black in most of these themes) measured well under
+   1.5:1 against every theme's selected background, e.g. modern 1.18:1,
+   win95 3.38:1, winxp 1.11:1, high-contrast 1.08:1 -- all fail. */
+.source.selected em {
+  color: inherit;
+}
 .article:focus {
   outline: 0;
 }
