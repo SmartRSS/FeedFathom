@@ -584,6 +584,12 @@ export function Dashboard(props: {
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
       await loadTree();
+      // The deleted row's DOM node (and the now-disabled toolbar button) is
+      // gone, dropping focus to document.body -- land it back on the tree
+      // instead of leaving keyboard/screen-reader users stranded.
+      queueMicrotask(() =>
+        document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
+      );
     } catch (cause) {
       reportError(cause, "Could not delete item");
     }
@@ -1104,6 +1110,12 @@ export function Dashboard(props: {
           close={() => {
             setShowDiscovery(false);
             if (props.initialDiscovery) props.navigate("/");
+            else
+              queueMicrotask(() =>
+                document
+                  .querySelector<HTMLElement>('[aria-label="add source"]')
+                  ?.focus(),
+              );
           }}
           saved={async (sourceId) => {
             setShowDiscovery(false);

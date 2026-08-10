@@ -79,8 +79,18 @@ export async function createServerApp(
       ) {
         return new Response(Bun.file(`${spaDirectory}/index.html`));
       }
-      if (error instanceof NotFound || error instanceof ValidationError) {
+      if (error instanceof NotFound) {
         return undefined;
+      }
+      if (error instanceof ValidationError) {
+        // Elysia's own default body (a raw {type, detail, ...} dump of
+        // internal validation state) doesn't match anything the client's
+        // api() helper knows how to read, so every validation failure --
+        // not just one endpoint's -- surfaced as "malformed error payload".
+        return Response.json(
+          { error: error.message || "Invalid request." },
+          { status: 422 },
+        );
       }
       if (error instanceof DecodeError) {
         console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));

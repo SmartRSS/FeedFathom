@@ -147,6 +147,10 @@ export function Register(props: { navigate(to: string): void; next: string }) {
 
   async function submit(event: Event) {
     event.preventDefault();
+    if (password() !== confirm()) {
+      setMessage("Passwords do not match.");
+      return;
+    }
     const sitekey = registration()?.turnstileSiteKey;
     if (sitekey && !turnstileToken()) {
       setMessage("Please complete the CAPTCHA before submitting.");

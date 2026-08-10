@@ -22,7 +22,7 @@ export async function postOptionsPasswordHandler(
 ) {
   const account = await usersDataService.findUser(user.email);
   if (!account || !(await password.verify(body.oldPassword, account.password)))
-    return json({ success: false }, 400);
+    return json({ error: "Current password is incorrect." }, 400);
   await usersDataService.updatePassword(
     account.id,
     await password.hash(body.password1),

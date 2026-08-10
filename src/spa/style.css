@@ -32,8 +32,17 @@
   --border: 2px solid #000;
 }
 :root.high-contrast .source:focus,
-:root.high-contrast .article:focus {
+:root.high-contrast .article:focus,
+:root.high-contrast .article.active {
   box-shadow: inset 0 0 0 3px var(--grey-50);
+}
+/* A light ring on a light background (or the reverse) disappears --
+   selected rows swap to a dark background, so their focus/active ring
+   needs to be light regardless of theme; --grey-10 already serves as
+   the selected-row text color for exactly that reason. */
+:root.high-contrast .source.selected:focus,
+:root.high-contrast .article.selected.active {
+  box-shadow: inset 0 0 0 3px var(--grey-10);
 }
 
 .skip-link {
@@ -348,7 +357,7 @@ a {
 }
 .source:focus {
   outline: 0;
-  box-shadow: inset 0 0 0 1px var(--grey-40);
+  box-shadow: inset 0 0 0 1px var(--grey-50);
 }
 .source.folder {
   padding-left: 0.1rem;
@@ -383,13 +392,21 @@ a {
 .source.selected,
 .article.selected {
   color: var(--grey-10);
-  background: var(--blue-40);
+  background: var(--blue-60);
 }
 .article.selected .details {
   color: inherit;
 }
 .article.active {
-  box-shadow: inset 0 0 0 1px var(--grey-40);
+  box-shadow: inset 0 0 0 1px var(--grey-50);
+}
+/* A light ring on a light background (or the reverse) disappears --
+   selected rows swap to a dark background, so their focus/active ring
+   needs to be light regardless of theme; --grey-10 already serves as
+   the selected-row text color for exactly that reason. */
+.source.selected:focus,
+.article.selected.active {
+  box-shadow: inset 0 0 0 1px var(--grey-10);
 }
 .article:focus {
   outline: 0;
