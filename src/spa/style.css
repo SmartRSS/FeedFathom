@@ -17,6 +17,7 @@
   --selected-bg: var(--blue-60);
   --selected-fg: var(--grey-10);
   --icon-invert: 0;
+  --selected-border: transparent;
   color: var(--grey-90);
   font-family: sans-serif;
 }
@@ -37,10 +38,18 @@
   --selected-fg: #fff;
   --icon-invert: 1;
 }
+/* Sampled directly from a real Windows 7 screenshot (Start Menu search
+   result selection, a keyboard-focused item rather than a hover/unfocused
+   one -- Windows used a notably more saturated fill for that state than
+   the pale Explorer-listview tone an earlier pass used here): solid fill
+   #309AFE, black text (measured 7.18:1 -- a lighter fill needed the
+   inverse and would have failed at 2.93:1), with a subtle 1px border
+   sampled from the fill/background edge transition. */
 :root[data-theme="aero"] {
-  --selected-bg: #cce8ff;
+  --selected-bg: #309afe;
   --selected-fg: #000;
   --icon-invert: 0;
+  --selected-border: #4598e6;
 }
 :root[data-theme="modern"] {
   --selected-bg: #0067b8;
@@ -459,6 +468,9 @@ a {
 .article.selected {
   color: var(--selected-fg);
   background: var(--selected-bg);
+  /* inset, not a real border, so it can't shift row height/layout --
+     transparent (the default) is invisible, only Aero sets one. */
+  box-shadow: inset 0 0 0 1px var(--selected-border);
 }
 .article.selected .details {
   color: inherit;
