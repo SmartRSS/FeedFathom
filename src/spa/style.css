@@ -42,7 +42,7 @@
   --icon-invert: 1;
 }
 :root[data-theme="winvista7"] {
-  --selected-bg: #cbe8f6;
+  --selected-bg: #cce8ff;
   --selected-fg: #000;
   --icon-invert: 0;
 }
