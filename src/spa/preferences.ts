@@ -8,9 +8,6 @@ export type Theme =
   | "millennial"
   | "modern"
   | "smart";
-// ResolvedTheme excludes "auto" -- it's a request ("follow the OS"), never
-// itself a set of CSS custom-property values to apply.
-export type ResolvedTheme = Exclude<Theme, "auto">;
 const THEMES: readonly Theme[] = [
   "auto",
   "smart",
@@ -74,11 +71,16 @@ if (typeof matchMedia === "function") {
   }
 }
 
-// What actually drives the app's [data-theme] attribute: "auto" resolves
-// live against the OS signal above (falling back to "smart" when it's
-// off), every other value is already concrete and passes through as-is.
-export function resolvedTheme(): ResolvedTheme {
+// What actually drives the app's [data-theme] attribute. "auto" normally
+// passes straight through -- its own CSS block (see style.css) reads the
+// browser's live system-color keywords (Highlight/AccentColor) so the
+// selection color actually is whatever the OS's current accent color is,
+// not a value this code chooses -- but switches to the app's own
+// (contrast-verified) high-contrast theme when the OS signal above says
+// the user needs that instead. Every other value is already concrete and
+// passes through unconditionally.
+export function resolvedTheme(): Theme {
   const current = theme();
-  if (current !== "auto") return current;
-  return osHighContrast() ? "high-contrast" : "smart";
+  if (current === "auto" && osHighContrast()) return "high-contrast";
+  return current;
 }

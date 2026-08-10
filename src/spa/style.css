@@ -24,6 +24,28 @@
   font-family: var(--font-family);
 }
 
+/* "auto" (the default): CSS system-color keywords, resolved live by the
+   browser to the OS's actual current accent/selection color -- not a
+   value this app picks, whatever the user's real OS theme says right
+   now. Highlight/HighlightText have been supported since CSS2; the
+   newer AccentColor/AccentColorText are more semantically exact (the
+   OS's chosen accent color specifically, not just "the selection
+   color") so they're declared second, overriding Highlight/HighlightText
+   wherever a browser recognizes them -- an unrecognized keyword makes
+   only that one declaration invalid, leaving the earlier one in effect,
+   so this degrades safely instead of breaking. Left at --icon-invert: 0
+   and the default surface colors: no reliable way to know from CSS
+   alone whether the resolved accent color is light or dark enough to
+   need icon inversion, and touching surfaces risks a dark OS accent
+   landing on this app's fixed dark body text with no dark-mode support
+   to match it -- narrower but safe beats broad but risky here. */
+:root[data-theme="auto"] {
+  --selected-bg: Highlight;
+  --selected-bg: AccentColor;
+  --selected-fg: HighlightText;
+  --selected-fg: AccentColorText;
+}
+
 /* Selectable themes (Options -> Appearance), one attribute drives all of
    them: each is a distinct selection color/contrast era from desktop
    OS history, picked apart wherever the default listbox highlight
