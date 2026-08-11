@@ -938,11 +938,18 @@ export function Dashboard(props: {
             <BackButton backPane={props.backPane} />
             <button
               aria-label="select all"
-              onClick={() =>
+              onClick={() => {
+                // Clicking this button focuses it natively, same as any
+                // button -- which sits outside .article-list, so its own
+                // Delete/arrow-key handling (handleArticleKeys) never fires
+                // afterward. Ctrl+A doesn't have this problem since it's
+                // triggered from within the list already; this mirrors that
+                // by moving focus back into the list right after selecting.
                 void setArticleSelection(
                   new Set(articles().map((_, index) => index)),
-                )
-              }
+                );
+                if (articles().length) focusArticleAt(0);
+              }}
             >
               <Icon raw={selectAllRaw} />
             </button>
