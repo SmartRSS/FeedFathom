@@ -510,11 +510,19 @@ export class FeedParser {
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
       : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
+    // Only remember original -> final when *this* fetch actually redirected
+    // (finalUrl !== fetchedUrl). Otherwise, once a cached redirect target
+    // stops redirecting further -- e.g. the origin's redirect was a
+    // transient glitch and has since reverted -- this would keep
+    // rewriting the same stale mapping back into the cache forever, since
+    // fetchedUrl was already pre-substituted from that same cache entry.
+    // Leaving it unrefreshed lets it expire on its own TTL and fall back to
+    // the real original URL.
     if (finalUrl !== fetchedUrl) {
       await rememberRedirect(fetchedUrl, finalUrl);
-    }
-    if (originalUrl !== finalUrl) {
-      await rememberRedirect(originalUrl, finalUrl);
+      if (originalUrl !== fetchedUrl) {
+        await rememberRedirect(originalUrl, finalUrl);
+      }
     }
     const text = decodeFeedBody(
       response.data,
