@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import { isBlockedHostname } from "./private-network-guard.ts";
 
 const subscribeTimeoutMs = 15_000;
@@ -8,6 +10,21 @@ const supportedSignatureAlgorithms = new Set([
   "sha384",
   "sha512",
 ]);
+
+const jsonFeedHubsProjection = Type.Object(
+  {
+    hubs: Type.Optional(
+      Type.Array(
+        Type.Object(
+          { type: Type.String(), url: Type.String() },
+          { additionalProperties: true },
+        ),
+      ),
+    ),
+  },
+  { additionalProperties: true },
+);
+const jsonFeedHubsProjectionCheck = Schema.Compile(jsonFeedHubsProjection);
 
 export type WebSubDiscovery = { hubUrl: string; topicUrl: string };
 
@@ -43,6 +60,22 @@ function scanFeedBodyRels(xml: string): Map<string, string> {
   return rels;
 }
 
+// JSON Feed (https://www.jsonfeed.org/) has its own hub advertisement --
+// a `hubs` array in the feed body -- rather than a Link header or an XML
+// <link rel="hub">. Same protocol underneath (a `hubs[].type` of "WebSub"
+// means exactly what an XML feed's rel="hub" link means), just a different
+// place to look for it.
+function jsonFeedHubUrl(text: string): string | undefined {
+  if (!text.trimStart().startsWith("{")) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!jsonFeedHubsProjectionCheck.Check(parsed)) return undefined;
+    return parsed.hubs?.find((hub) => hub.type === "WebSub")?.url;
+  } catch {
+    return undefined;
+  }
+}
+
 // Resolves relative to the feed's own URL and rejects anything that isn't a
 // plain public http(s) URL -- both the hub URL and the topic URL are
 // attacker-influenced (they come from whatever the feed's own content or
@@ -74,7 +107,8 @@ export function discoverWebSub(
   const headerRels = parseLinkHeaderRels(headers.get("link") ?? "");
   const bodyRels = scanFeedBodyRels(bodyXml);
 
-  const hubUrl = headerRels.get("hub") ?? bodyRels.get("hub");
+  const hubUrl =
+    headerRels.get("hub") ?? bodyRels.get("hub") ?? jsonFeedHubUrl(bodyXml);
   if (!hubUrl) return undefined;
   const topicUrl = headerRels.get("self") ?? bodyRels.get("self") ?? feedUrl;
 

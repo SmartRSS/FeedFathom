@@ -83,6 +83,30 @@ describe("discoverWebSub", () => {
       discoverWebSub(new Headers(), body, "https://example.com/feed"),
     ).toBeUndefined();
   });
+
+  test("falls back to a JSON Feed's own hubs array", () => {
+    const body = JSON.stringify({
+      hubs: [{ type: "WebSub", url: "https://hub.example/" }],
+      items: [],
+      title: "Feed",
+    });
+    expect(
+      discoverWebSub(new Headers(), body, "https://example.com/feed.json"),
+    ).toEqual({
+      hubUrl: "https://hub.example/",
+      topicUrl: "https://example.com/feed.json",
+    });
+  });
+
+  test("ignores JSON Feed hubs of a different type", () => {
+    const body = JSON.stringify({
+      hubs: [{ type: "rssCloud", url: "https://hub.example/" }],
+      items: [],
+    });
+    expect(
+      discoverWebSub(new Headers(), body, "https://example.com/feed.json"),
+    ).toBeUndefined();
+  });
 });
 
 describe("verifyHubSignature", () => {

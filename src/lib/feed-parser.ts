@@ -10,6 +10,7 @@ import {
   HttpDeferredError,
   isHttpDeferredError,
 } from "./http-client.ts";
+import { isJsonFeedText, parseJsonFeed } from "./json-feed-parser.ts";
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 import { dateType, webUrlPolicy } from "./typebox-policy.ts";
@@ -530,7 +531,9 @@ export class FeedParser {
       response.data,
       response.headers.get("content-type"),
     );
-    const parsedFeed = parseFeed(text);
+    const parsedFeed = isJsonFeedText(text)
+      ? parseJsonFeed(text)
+      : parseFeed(text);
     validateParsedFeed(parsedFeed);
     return {
       cached: response.cached,
