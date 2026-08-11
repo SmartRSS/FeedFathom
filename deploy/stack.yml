@@ -132,6 +132,12 @@ services:
         limits:
           cpus: "${WORKER_CPU_LIMIT:-0.50}"
           memory: "${WORKER_MEM_LIMIT:-1500M}"
+        # start-first rolling updates need at least one extra reservation's
+        # worth of CPU free on the node beyond WORKER_REPLICAS *
+        # WORKER_CPU_RESERVATION, or the new task can't schedule until the
+        # old one stops -- and the old one won't stop until the new one is
+        # healthy, deadlocking the rollout. Keep real headroom when scaling
+        # WORKER_REPLICAS up on a capacity-constrained node.
         reservations:
           cpus: "${WORKER_CPU_RESERVATION:-0.25}"
           memory: "${WORKER_MEM_RESERVATION:-500M}"
