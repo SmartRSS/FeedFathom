@@ -105,6 +105,7 @@ services:
     environment:
       DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
       DEBUG: bull:*
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}

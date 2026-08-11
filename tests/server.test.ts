@@ -80,6 +80,7 @@ function createDependencies(): ServerDependencies {
       },
     },
     feedParser: {
+      async discoverAndSubscribeWebSub() {},
       async parseUrl() {
         return unexpected("feedParser.parseUrl");
       },
@@ -758,6 +759,51 @@ test("queues URL cache misses and email subscriptions", async () => {
   expect(enqueues).toEqual([
     [91, subscriptionSource.url],
     [92, "newsletter@example.com"],
+  ]);
+});
+
+test("triggers WebSub discovery immediately at subscribe time, but not for email targets", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.config.MAIL_ENABLED = true;
+  const discoveryCalls: [number, string, string | undefined][] = [];
+  dependencies.feedParser.discoverAndSubscribeWebSub = async (
+    sourceId,
+    url,
+    websubStatus,
+  ) => {
+    discoveryCalls.push([sourceId, url, websubStatus]);
+  };
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    payload,
+  ) => ({
+    source: {
+      ...subscriptionSource,
+      id: payload.url.includes("@") ? 94 : 93,
+      url: payload.url,
+    },
+    subscriptionCreatedAt: new Date(),
+    subscriptionId: payload.url.includes("@") ? 4 : 3,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.sourcesDataService.enqueueSource = async () => {};
+  const app = await appFor(dependencies);
+
+  await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+  await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "Newsletter",
+    sourceUrl: "newsletter@example.com",
+  });
+
+  expect(discoveryCalls).toEqual([
+    [93, subscriptionSource.url, subscriptionSource.websubStatus],
   ]);
 });
 

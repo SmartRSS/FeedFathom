@@ -98,6 +98,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       DEBUG: "bull:*"
+      # WebSub subscribe attempts happen from here (parseSource runs in the
+      # worker, not the server) -- without this the callback URL can't be
+      # built and every subscribe attempt silently no-ops.
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
       LOCK_DURATION: ${LOCK_DURATION:-60}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}

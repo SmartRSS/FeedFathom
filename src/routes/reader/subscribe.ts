@@ -4,6 +4,7 @@ import { subscribeRequest } from "../../contracts/requests.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
+import type { FeedParser } from "../../lib/feed-parser.ts";
 import {
   deserializeFeedPreview,
   type FeedPreviewCache,
@@ -17,6 +18,7 @@ import { type AuthedUser, json } from "../shared.ts";
 
 export type SubscribeRouteDependencies = {
   articlesDataService: Pick<ArticlesDataService, "batchUpsertArticles">;
+  feedParser: Pick<FeedParser, "discoverAndSubscribeWebSub">;
   feedPreviewCache: Pick<FeedPreviewCache, "get">;
   mailEnabled: boolean;
   sourcesDataService: Pick<
@@ -57,6 +59,7 @@ export async function postSubscribeHandler(
   },
   {
     articlesDataService,
+    feedParser,
     feedPreviewCache,
     mailEnabled,
     sourcesDataService,
@@ -98,8 +101,21 @@ export async function postSubscribeHandler(
     throw new Error("Stored subscription snapshot is invalid");
   }
 
-  const lease =
-    await userSourcesDataService.withSubscriptionInitializationLease(
+  // Runs alongside (not before) the article-fetch lease below rather than
+  // waiting on it -- both make their own network calls, so doing them
+  // concurrently keeps this from adding two round trips' worth of latency
+  // to what's otherwise a synchronous, user-facing subscribe request.
+  const websubDiscovery = isEmail
+    ? Promise.resolve()
+    : feedParser.discoverAndSubscribeWebSub(
+        subscription.source.id,
+        sourceUrl.value,
+        subscription.source.websubStatus,
+      );
+
+  const [, lease] = await Promise.all([
+    websubDiscovery,
+    userSourcesDataService.withSubscriptionInitializationLease(
       subscription.subscriptionId,
       async () => {
         if (preview) {
@@ -155,7 +171,8 @@ export async function postSubscribeHandler(
           await sourcesDataService.enqueueSource(subscription.source);
         }
       },
-    );
+    ),
+  ]);
   if (lease.outcome === "in-progress")
     return json({ error: "Subscription initialization in progress" }, 409);
 

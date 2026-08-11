@@ -186,6 +186,15 @@ export function isBetterFavicon(
   return candidateSize > bestSize;
 }
 
+// "pending" is retried (not just "none") since subscribing again is
+// idempotent from the hub's perspective -- self-heals a verification the
+// hub silently dropped, without needing a separate timeout/retry scheme.
+function shouldAttemptWebSubSubscribe(
+  status: "failed" | "none" | "pending" | "verified" | undefined,
+): boolean {
+  return status === undefined || status === "none" || status === "pending";
+}
+
 export class FeedParser {
   constructor(
     private readonly articlesDataService: ArticlesDataService,
@@ -220,12 +229,7 @@ export class FeedParser {
         websub,
       } = await this.parseUrl(source.url, "background");
 
-      if (
-        websub &&
-        (source.websubStatus === undefined ||
-          source.websubStatus === "none" ||
-          source.websubStatus === "pending")
-      ) {
+      if (websub && shouldAttemptWebSubSubscribe(source.websubStatus)) {
         await this.maybeSubscribeToWebSub(source.id, websub);
       }
 
@@ -293,6 +297,32 @@ export class FeedParser {
   ) {
     const resolvedUrl = await this.redirectMap.resolveUrl(url);
     return this.parseGenericFeed(resolvedUrl, url, priority);
+  }
+
+  // Called directly from the subscribe route so discovery happens as part
+  // of adding the source, not only whenever the next background poll (or
+  // the enqueued initial fetch) happens to run parseSource -- otherwise a
+  // WebSub-capable feed would sit on ordinary polling for however long
+  // that takes before its first real subscribe attempt.
+  public async discoverAndSubscribeWebSub(
+    sourceId: number,
+    url: string,
+    websubStatus?: "failed" | "none" | "pending" | "verified",
+  ): Promise<void> {
+    if (!shouldAttemptWebSubSubscribe(websubStatus)) return;
+    try {
+      const { websub } = await this.parseUrl(url, "interactive");
+      if (websub) await this.maybeSubscribeToWebSub(sourceId, websub);
+    } catch (error) {
+      // A feed that fails to fetch/parse here isn't this method's problem
+      // to surface -- the article-fetch path running alongside it (the
+      // cached-preview upsert, or the enqueued parseSource job) already
+      // owns reporting that failure through its own error handling.
+      console.error(
+        `WebSub discovery fetch failed for source ${sourceId}:`,
+        error,
+      );
+    }
   }
 
   // Errors here are deliberately never allowed to reach parseSource's own
