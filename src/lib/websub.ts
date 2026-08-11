@@ -152,6 +152,12 @@ export async function requestHubSubscription(params: {
     "hub.mode": params.mode,
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,
+    // Optional/deprecated since the 0.4 spec (verification is always async
+    // via a callback GET regardless), but some hubs -- WordPress.com's
+    // pushpress hub confirmed -- still require it explicitly and reject the
+    // request outright without it ("hub.verify is empty"). Harmless to send
+    // unconditionally since it just states what we already do.
+    "hub.verify": "async",
     ...(params.leaseSeconds
       ? { "hub.lease_seconds": String(params.leaseSeconds) }
       : {}),

@@ -188,6 +188,10 @@ describe("requestHubSubscription", () => {
     );
     expect(capturedBody?.get("hub.secret")).toBe("s3cr3t");
     expect(capturedBody?.get("hub.lease_seconds")).toBe("86400");
+    // Some hubs (WordPress.com's pushpress hub confirmed) reject a
+    // subscribe request outright without this, even though verification is
+    // always async regardless of what's sent here.
+    expect(capturedBody?.get("hub.verify")).toBe("async");
   });
 
   test("treats a non-2xx hub response as failure", async () => {
