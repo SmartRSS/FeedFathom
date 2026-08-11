@@ -92,6 +92,8 @@ export const articleResponse = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    // TEMPORARY: WebSub push verification, remove after confirming.
+    debugFetchTrigger: Type.Union([Type.String(), Type.Null()]),
     guid: Type.String(),
     id,
     lastSeenInFeedAt: jsonDate,
