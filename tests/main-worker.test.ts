@@ -16,6 +16,7 @@ const source = {
   id: 1,
   kind: "feed" as const,
   lastAttempt: null,
+  lastFetchTrigger: null,
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
@@ -136,7 +137,11 @@ test("captured processor parses the queued source", async () => {
     ...parseJob({ id: source.id, skipCache: true, url: source.url }),
   });
 
-  expect(parsedSource).toEqual({ ...source, skipCache: true });
+  expect(parsedSource).toEqual({
+    ...source,
+    skipCache: true,
+    trigger: "poll",
+  });
 });
 
 test("moves deferred validated jobs with their BullMQ token", async () => {

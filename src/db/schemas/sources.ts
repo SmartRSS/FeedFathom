@@ -29,6 +29,15 @@ export const sources = pgTable(
       .notNull()
       .default("feed"),
     lastAttempt: timestamp("last_attempt", { withTimezone: true }),
+    // How the last successful fetch actually reached us -- distinct from
+    // `kind`, which is the source's steady-state delivery mechanism.
+    // A "websub" source still shows "poll" here on its once-daily fallback
+    // fetches, and "websub-push" only on fetches actually triggered by a
+    // hub POST -- useful for confirming push delivery is really happening
+    // rather than the fallback poll quietly doing all the work.
+    lastFetchTrigger: varchar("last_fetch_trigger", {
+      enum: ["poll", "manual", "websub-push", "email"],
+    }),
     lastSuccess: timestamp("last_success", { withTimezone: true }),
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
     recentFailureDetails: varchar("recent_failure_details")

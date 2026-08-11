@@ -214,6 +214,7 @@ export class FeedParser {
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
+    trigger?: "manual" | "poll" | "websub-push";
     url: string;
     websubCallbackToken?: null | string;
     websubHubUrl?: null | string;
@@ -278,6 +279,7 @@ export class FeedParser {
         cached,
         new Date(freshUntil ?? Date.now() + 5 * 60_000),
         observedAt,
+        source.trigger ?? "poll",
       );
     } catch (error_: unknown) {
       if (isHttpDeferredError(error_)) {

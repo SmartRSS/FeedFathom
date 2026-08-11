@@ -11,7 +11,12 @@ import { type Source, sources } from "../schemas/sources.ts";
 type SourceQueue = {
   add(
     name: JobName,
-    data: { id: number; skipCache: boolean; url: string },
+    data: {
+      id: number;
+      skipCache: boolean;
+      trigger?: "manual" | "websub-push";
+      url: string;
+    },
     options: {
       jobId: string;
       lifo: boolean;
@@ -28,6 +33,7 @@ export interface SourceWithSubscriberCount {
   homeUrl: string;
   createdAt: Date;
   lastAttempt: Date | null;
+  lastFetchTrigger: "email" | "manual" | "poll" | "websub-push" | null;
   lastSuccess: Date | null;
   recentFailures: number;
   subscriberCount: number;
@@ -59,6 +65,13 @@ const sourceListRowsSchema = Type.Array(
       homeUrl: Type.String(),
       id: Type.Integer(),
       lastAttempt: Type.Union([dateType, Type.Null()]),
+      lastFetchTrigger: Type.Union([
+        Type.Literal("email"),
+        Type.Literal("manual"),
+        Type.Literal("poll"),
+        Type.Literal("websub-push"),
+        Type.Null(),
+      ]),
       lastSuccess: Type.Union([dateType, Type.Null()]),
       recentFailureDetails: Type.String(),
       recentFailures: Type.Integer(),
@@ -133,10 +146,13 @@ export class SourcesDataService {
     return existing;
   }
 
-  public async enqueueSource(source: { id: number; url: string }) {
+  public async enqueueSource(
+    source: { id: number; url: string },
+    trigger: "manual" | "websub-push" = "manual",
+  ) {
     await this.bullmqQueue.add(
       JobName.ParseSource,
-      { id: source.id, skipCache: true, url: source.url },
+      { id: source.id, skipCache: true, trigger, url: source.url },
       {
         jobId: `${JobName.ParseSource}-${source.id}`,
         lifo: true,
@@ -250,6 +266,7 @@ export class SourcesDataService {
             s.home_url as "homeUrl",
             s.created_at as "createdAt",
             s.last_attempt as "lastAttempt",
+            s.last_fetch_trigger as "lastFetchTrigger",
             s.last_success as "lastSuccess",
             COALESCE(s.recent_failures, 0) as "recentFailures",
             COALESCE(sc.count, 0) AS "subscriberCount",
@@ -301,11 +318,13 @@ export class SourcesDataService {
     // apart from "just fetched a moment ago" instead of the two always
     // differing by whatever this function's own call latency happens to be.
     observedAt = new Date(),
+    trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
   ) {
     await this.drizzleConnection
       .update(sources)
       .set({
         lastAttempt: observedAt,
+        lastFetchTrigger: trigger,
         lastSuccess: observedAt,
         nextCheckAt,
         recentFailureDetails: cached ? "cached" : "not cached",

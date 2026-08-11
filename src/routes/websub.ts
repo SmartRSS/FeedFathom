@@ -79,10 +79,10 @@ export function createWebSubRoutes({
         // through the normal pipeline reuses all the existing parsing,
         // caching, and dedup logic instead of a second "trust this POST body"
         // code path.
-        await sourcesDataService.enqueueSource({
-          id: source.id,
-          url: source.url,
-        });
+        await sourcesDataService.enqueueSource(
+          { id: source.id, url: source.url },
+          "websub-push",
+        );
         return json({ ok: true });
       },
     );

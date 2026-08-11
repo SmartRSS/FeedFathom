@@ -10,6 +10,7 @@ const source: Source = {
   id: 42,
   kind: "email",
   lastAttempt: null,
+  lastFetchTrigger: null,
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
@@ -33,6 +34,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
         lookups.push(address);
         return address === source.url ? source : undefined;
       },
+      async successSource() {},
     },
     {
       async batchUpsertArticles(articles) {

@@ -46,7 +46,7 @@ export class EmailHandler {
   constructor(
     private readonly sourcesDataService: Pick<
       SourcesDataService,
-      "findSourceByUrl"
+      "findSourceByUrl" | "successSource"
     >,
     private readonly articlesDataService: Pick<
       ArticlesDataService,
@@ -76,6 +76,13 @@ export class EmailHandler {
     );
     await this.articlesDataService.batchUpsertArticles([article]);
     await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+    await this.sourcesDataService.successSource(
+      source.id,
+      false,
+      undefined,
+      new Date(),
+      "email",
+    );
   }
 
   /**

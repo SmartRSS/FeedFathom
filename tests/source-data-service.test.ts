@@ -9,6 +9,7 @@ const sourceRow = {
   homeUrl: "https://example.com",
   id: 1,
   lastAttempt: new Date("2026-07-22T10:05:00.000Z"),
+  lastFetchTrigger: null,
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,

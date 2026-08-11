@@ -169,6 +169,13 @@
       "when": 1786449476032,
       "tag": "0024_clean_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786455816225,
+      "tag": "0025_conscious_pyro",
+      "breakpoints": true
     }
   ]
 }

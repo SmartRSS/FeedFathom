@@ -29,6 +29,9 @@ const mainWorkerJobData = Type.Union([
     data: Type.Object({
       id: Type.Integer({ minimum: 1 }),
       skipCache: Type.Optional(Type.Boolean()),
+      trigger: Type.Optional(
+        Type.Union([Type.Literal("manual"), Type.Literal("websub-push")]),
+      ),
       url: Type.Optional(sourceUrl),
     }),
     name: Type.Literal(JobName.ParseSource),
@@ -199,6 +202,7 @@ export class MainWorker {
             ...(input.data.skipCache === undefined
               ? {}
               : { skipCache: input.data.skipCache }),
+            trigger: input.data.trigger ?? "poll",
           });
           break;
         }

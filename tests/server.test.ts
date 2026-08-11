@@ -268,6 +268,7 @@ const subscriptionSource = {
   id: 91,
   kind: "feed" as const,
   lastAttempt: null,
+  lastFetchTrigger: null,
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
@@ -1748,12 +1749,14 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
 
 test("WebSub push requires a valid signature and then enqueues an immediate re-fetch", async () => {
   const dependencies = createDependencies();
-  const enqueued: { id: number; url: string }[] = [];
+  const enqueued: Parameters<
+    ServerDependencies["sourcesDataService"]["enqueueSource"]
+  >[] = [];
   dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.enqueueSource = async (source) => {
-    enqueued.push(source);
+  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+    enqueued.push(parameters);
   };
   const app = await appFor(dependencies);
   const body = "<rss>updated</rss>";
@@ -1776,5 +1779,7 @@ test("WebSub push requires a valid signature and then enqueues an immediate re-f
 
   expect(wrongSignature.status).toBe(403);
   expect(validPush.status).toBe(200);
-  expect(enqueued).toEqual([{ id: websubSource.id, url: websubSource.url }]);
+  expect(enqueued).toEqual([
+    [{ id: websubSource.id, url: websubSource.url }, "websub-push"],
+  ]);
 });

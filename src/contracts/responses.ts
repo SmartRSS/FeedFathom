@@ -154,6 +154,13 @@ export const adminSourcesResponse = Type.Array(
       homeUrl: Type.String(),
       id,
       lastAttempt: Type.Union([jsonDate, Type.Null()]),
+      lastFetchTrigger: Type.Union([
+        Type.Literal("email"),
+        Type.Literal("manual"),
+        Type.Literal("poll"),
+        Type.Literal("websub-push"),
+        Type.Null(),
+      ]),
       lastSuccess: Type.Union([jsonDate, Type.Null()]),
       recentFailureDetails: Type.String(),
       recentFailures: Type.Integer({ minimum: 0 }),

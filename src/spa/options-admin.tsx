@@ -315,6 +315,16 @@ const WEBSUB_STATUS_LABELS: Record<AdminSource["websubStatus"], string> = {
   verified: "Live",
 };
 
+const FETCH_TRIGGER_LABELS: Record<
+  NonNullable<AdminSource["lastFetchTrigger"]>,
+  string
+> = {
+  email: "Email",
+  manual: "Manual",
+  poll: "Poll",
+  "websub-push": "WebSub push",
+};
+
 export function Admin(props: {
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
@@ -429,6 +439,7 @@ export function Admin(props: {
                 )}
               </For>
               <th>WebSub</th>
+              <th>Last via</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -457,6 +468,11 @@ export function Admin(props: {
                     >
                       {WEBSUB_STATUS_LABELS[source.websubStatus]}
                     </span>
+                  </td>
+                  <td>
+                    {source.lastFetchTrigger
+                      ? FETCH_TRIGGER_LABELS[source.lastFetchTrigger]
+                      : "—"}
                   </td>
                   <td class="admin-table-actions">
                     <button
