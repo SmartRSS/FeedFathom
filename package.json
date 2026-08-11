@@ -31,6 +31,7 @@
     "generate-migrations": "drizzle-kit generate --config drizzle/config.json && bun run format:fix"
   },
   "dependencies": {
+    "@extractus/article-extractor": "^9.0.0",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.1.4",
     "@sinclair/typebox": "^0.34.52",
@@ -41,6 +42,7 @@
     "elysia": "next",
     "fast-xml-parser": "^5.10.1",
     "ioredis": "^5.11.1",
+    "linkedom": "file:./vendor/linkedom-shim",
     "mailparser": "^3.9.14",
     "sanitize-html": "^2.17.6",
     "solid-js": "^1.9.14",
@@ -83,7 +85,11 @@
     ],
     "ignoreUnresolved": [],
     "ignoreDependencies": [
-      "@sinclair/typebox"
+      "@sinclair/typebox",
+      "linkedom"
     ]
+  },
+  "patchedDependencies": {
+    "@extractus/article-extractor@9.0.0": "patches/@extractus%2Farticle-extractor@9.0.0.patch"
   }
 }

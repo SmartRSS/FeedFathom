@@ -667,7 +667,7 @@ export function Dashboard(props: {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
         const fetched = await readerBridge.fetch(opened.url);
         if (!isCurrent()) return;
-        const content = extractReaderContent(
+        const content = await extractReaderContent(
           fetched.html,
           fetched.finalUrl,
           mode,
@@ -1083,7 +1083,9 @@ export function Dashboard(props: {
                 onChange={(event) => {
                   const value = event.currentTarget.value;
                   const mode =
-                    value === "READABILITY" || value === "READABILITY_PLAIN"
+                    value === "READABILITY" ||
+                    value === "READABILITY_PLAIN" ||
+                    value === "ARTICLE_EXTRACTOR"
                       ? value
                       : "FEED";
                   setDisplayMode(mode);
@@ -1093,6 +1095,7 @@ export function Dashboard(props: {
                 <option value="FEED">Feed</option>
                 <option value="READABILITY">Reader</option>
                 <option value="READABILITY_PLAIN">Reader plain</option>
+                <option value="ARTICLE_EXTRACTOR">Reader (alt)</option>
               </select>
             </Show>
             <button

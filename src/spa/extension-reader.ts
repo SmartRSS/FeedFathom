@@ -1,3 +1,4 @@
+import { extractFromHtml } from "@extractus/article-extractor";
 import { Readability } from "@mozilla/readability";
 import domPurify from "dompurify";
 import {
@@ -51,7 +52,10 @@ type PendingRequest = {
 export type ReaderContent =
   | { content: string; kind: "html" }
   | { content: string; kind: "text" };
-export type ReaderMode = "READABILITY" | "READABILITY_PLAIN";
+export type ReaderMode =
+  | "ARTICLE_EXTRACTOR"
+  | "READABILITY"
+  | "READABILITY_PLAIN";
 
 /**
  * Reader flow: SPA window → content script → extension background → direct
@@ -180,12 +184,25 @@ const validatedBaseUrl = (value: string): URL => {
   return url;
 };
 
-const extractReaderDocument = (
+// Shared by every HTML-producing extractor: rewrites relative URLs against
+// the article's real address, then strips anything DOMPurify considers
+// unsafe -- extracted content is still attacker-controlled HTML from an
+// arbitrary site, extractor choice doesn't change that.
+const sanitizeExtractedHtml = (html: string, baseUrl: URL): string => {
+  const extracted = document.createElement("body");
+  extracted.innerHTML = html;
+  rewriteDocumentUrls(extracted, baseUrl);
+  return domPurify(window).sanitize(extracted.innerHTML, {
+    FORBID_ATTR: ["style"],
+    FORBID_TAGS: ["style"],
+  });
+};
+
+const extractWithReadability = (
   document_: Document,
-  finalUrl: string,
-  mode: ReaderMode,
+  baseUrl: URL,
+  mode: "READABILITY" | "READABILITY_PLAIN",
 ): ReaderContent => {
-  const baseUrl = validatedBaseUrl(finalUrl);
   for (const base of document_.querySelectorAll("base")) base.remove();
   const trustedBase = document_.createElement("base");
   trustedBase.href = baseUrl.href;
@@ -193,29 +210,45 @@ const extractReaderDocument = (
 
   const article = new Readability(document_).parse();
   if (!article) throw new Error("Reader could not extract this article.");
-  if (mode === "READABILITY_PLAIN")
-    return { content: article.textContent ?? "", kind: "text" };
+  return mode === "READABILITY_PLAIN"
+    ? { content: article.textContent ?? "", kind: "text" }
+    : {
+        content: sanitizeExtractedHtml(article.content ?? "", baseUrl),
+        kind: "html",
+      };
+};
 
-  const extracted = document_.createElement("body");
-  extracted.innerHTML = article.content ?? "";
-  rewriteDocumentUrls(extracted, baseUrl);
-  const purify = domPurify(document_.defaultView ?? window);
+// @extractus/article-extractor: a different heuristic set (falls back to
+// meta tags/OpenGraph data more readily than Readability), offered as a
+// manual alternative in the mode picker for articles Readability mangles.
+// Its own DOM calls are all standard APIs -- see vendor/linkedom-shim --
+// so this runs against the browser's native parser, not a second copy of
+// Readability's own dependency.
+const extractWithArticleExtractor = async (
+  html: string,
+  finalUrl: string,
+  baseUrl: URL,
+): Promise<ReaderContent> => {
+  const article = await extractFromHtml(html, finalUrl);
+  if (!article?.content)
+    throw new Error("Reader could not extract this article.");
   return {
-    content: purify.sanitize(extracted.innerHTML, {
-      FORBID_ATTR: ["style"],
-      FORBID_TAGS: ["style"],
-    }),
+    content: sanitizeExtractedHtml(article.content, baseUrl),
     kind: "html",
   };
 };
 
-export const extractReaderContent = (
+export const extractReaderContent = async (
   html: string,
   finalUrl: string,
   mode: ReaderMode,
-): ReaderContent =>
-  extractReaderDocument(
+): Promise<ReaderContent> => {
+  const baseUrl = validatedBaseUrl(finalUrl);
+  if (mode === "ARTICLE_EXTRACTOR")
+    return extractWithArticleExtractor(html, finalUrl, baseUrl);
+  return extractWithReadability(
     new DOMParser().parseFromString(html, "text/html"),
-    finalUrl,
+    baseUrl,
     mode,
   );
+};

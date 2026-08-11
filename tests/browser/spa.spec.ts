@@ -574,6 +574,21 @@ test("exposes Reader modes only when the bridge is available", async ({
   ).toBeVisible();
 });
 
+test("extracts article content with the alternate extractor", async ({
+  context,
+  page,
+}) => {
+  await installReaderResponder(context, true);
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await page.getByRole("combobox").selectOption("ARTICLE_EXTRACTOR");
+  await expect(
+    page.getByText("Reader bridge content.", { exact: false }),
+  ).toBeVisible();
+});
+
 test("keeps Feed mode when the Reader bridge is unavailable", async ({
   page,
 }) => {
