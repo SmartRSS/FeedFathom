@@ -25,8 +25,6 @@ export type ArticlePayload = {
   title: string;
   updatedAt: Date | null;
   url: string;
-  // TEMPORARY: WebSub push verification, remove after confirming.
-  debugFetchTrigger?: string | null;
 };
 
 type FeedPreviewArticle = {

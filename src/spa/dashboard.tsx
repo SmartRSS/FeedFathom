@@ -1048,12 +1048,6 @@ export function Dashboard(props: {
                       aria-selected={selectedIndexes().has(index())}
                     >
                       <span class="title">{article.title}</span>
-                      {/* TEMPORARY: WebSub push verification, remove after confirming. */}
-                      <Show when={article.debugFetchTrigger === "websub-push"}>
-                        <span title="Temporary WebSub verification badge">
-                          ⚡ WebSub
-                        </span>
-                      </Show>
                       <span class="details">
                         <span>{article.author}</span>
                         <time>

@@ -249,11 +249,7 @@ export class FeedParser {
             rewriteLinks,
             observedAt.getTime(),
           ),
-          {
-            lastSeenInFeedAt: observedAt,
-            // TEMPORARY: WebSub push verification, remove after confirming.
-            debugFetchTrigger: source.trigger ?? null,
-          },
+          { lastSeenInFeedAt: observedAt },
         ),
       );
       // batchUpsertArticles processes batches sequentially and a later

@@ -29,11 +29,6 @@ export const articles = pgTable(
     lastSeenInFeedAt: timestamp("last_seen_in_feed_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
-    // TEMPORARY: WebSub push verification, remove after confirming. Tracks
-    // whatever trigger most recently brought this article in ("poll",
-    // "manual", "websub-push", "email"), so the SPA can badge articles that
-    // arrived via an actual hub push.
-    debugFetchTrigger: varchar("debug_fetch_trigger"),
   },
   (table) => [
     check(

@@ -141,13 +141,6 @@ function createDependencies(): ServerDependencies {
       },
       async removeRedirect() {},
     },
-    // TEMPORARY: WebSub push verification, remove after confirming.
-    redis: {
-      async get() {
-        return null;
-      },
-      async set() {},
-    },
     sourcesDataService: {
       async deleteSource() {},
       async enqueueSource() {},
@@ -874,7 +867,6 @@ test("scopes article detail to the subscriber and always returns Feed content", 
   const article = {
     author: "Author",
     content: "<p>Visible</p>",
-    debugFetchTrigger: null,
     guid: "visible-guid",
     id: 7,
     lastSeenInFeedAt: new Date(),
