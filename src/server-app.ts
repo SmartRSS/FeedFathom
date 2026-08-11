@@ -4,6 +4,8 @@ import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
 } from "./routes/admin-options.ts";
+// TEMPORARY: WebSub push verification, remove after confirming.
+import { createDebugWebSubFeedRoutes } from "./routes/debug-websub-feed.ts";
 import { createInternalRoutes } from "./routes/internal.ts";
 import {
   createPublicAuthRoutes,
@@ -24,7 +26,10 @@ export type ServerDependencies = Omit<
 > &
   ReaderRouteDependencies &
   AdminOptionsRouteDependencies &
-  WebSubRouteDependencies;
+  WebSubRouteDependencies & {
+    // TEMPORARY: WebSub push verification, remove after confirming.
+    redis: Parameters<typeof createDebugWebSubFeedRoutes>[0]["redis"];
+  };
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -64,45 +69,55 @@ export async function createServerApp(
       })
     : new Elysia();
 
-  return new Elysia()
-    .use(createInternalRoutes())
-    .use(
-      createPublicAuthRoutes({
-        ...dependencies,
-        secureCookies: production,
-      }),
-    )
-    .use(createReaderRoutes(dependencies))
-    .use(createAdminOptionsRoutes(dependencies))
-    .use(createWebSubRoutes(dependencies))
-    .use(spaRoutes)
-    .error(({ error, request }) => {
-      const path = new URL(request.url).pathname;
-      if (
-        error instanceof NotFound &&
-        production &&
-        wantsSpaShellFallback(request, path)
-      ) {
-        return new Response(Bun.file(`${spaDirectory}/index.html`));
-      }
-      if (error instanceof NotFound) {
-        return undefined;
-      }
-      if (error instanceof ValidationError) {
-        // Elysia's own default body (a raw {type, detail, ...} dump of
-        // internal validation state) doesn't match anything the client's
-        // api() helper knows how to read, so every validation failure --
-        // not just one endpoint's -- surfaced as "malformed error payload".
+  return (
+    new Elysia()
+      .use(createInternalRoutes())
+      .use(
+        createPublicAuthRoutes({
+          ...dependencies,
+          secureCookies: production,
+        }),
+      )
+      .use(createReaderRoutes(dependencies))
+      .use(createAdminOptionsRoutes(dependencies))
+      .use(createWebSubRoutes(dependencies))
+      // TEMPORARY: WebSub push verification, remove after confirming.
+      .use(createDebugWebSubFeedRoutes(dependencies))
+      .use(spaRoutes)
+      .error(({ error, request }) => {
+        const path = new URL(request.url).pathname;
+        if (
+          error instanceof NotFound &&
+          production &&
+          wantsSpaShellFallback(request, path)
+        ) {
+          return new Response(Bun.file(`${spaDirectory}/index.html`));
+        }
+        if (error instanceof NotFound) {
+          return undefined;
+        }
+        if (error instanceof ValidationError) {
+          // Elysia's own default body (a raw {type, detail, ...} dump of
+          // internal validation state) doesn't match anything the client's
+          // api() helper knows how to read, so every validation failure --
+          // not just one endpoint's -- surfaced as "malformed error payload".
+          return Response.json(
+            { error: error.message || "Invalid request." },
+            { status: 422 },
+          );
+        }
+        if (error instanceof DecodeError) {
+          console.error(
+            `Decode error on ${path}:`,
+            JSON.stringify(error.cause),
+          );
+          return Response.json({ error: "Invalid request." }, { status: 400 });
+        }
+        console.error(`Unhandled error on ${path}:`, error);
         return Response.json(
-          { error: error.message || "Invalid request." },
-          { status: 422 },
+          { error: "Internal Server Error" },
+          { status: 500 },
         );
-      }
-      if (error instanceof DecodeError) {
-        console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
-        return Response.json({ error: "Invalid request." }, { status: 400 });
-      }
-      console.error(`Unhandled error on ${path}:`, error);
-      return Response.json({ error: "Internal Server Error" }, { status: 500 });
-    });
+      })
+  );
 }

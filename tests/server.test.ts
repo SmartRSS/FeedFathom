@@ -141,6 +141,13 @@ function createDependencies(): ServerDependencies {
       },
       async removeRedirect() {},
     },
+    // TEMPORARY: WebSub push verification, remove after confirming.
+    redis: {
+      async get() {
+        return null;
+      },
+      async set() {},
+    },
     sourcesDataService: {
       async deleteSource() {},
       async enqueueSource() {},
