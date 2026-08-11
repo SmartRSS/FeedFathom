@@ -14,6 +14,7 @@ const source = {
   favicon: null,
   homeUrl: "https://example.com",
   id: 1,
+  kind: "feed" as const,
   lastAttempt: null,
   lastSuccess: null,
   recentFailureDetails: "",

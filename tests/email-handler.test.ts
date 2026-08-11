@@ -8,6 +8,7 @@ const source: Source = {
   favicon: null,
   homeUrl: "https://reader.example/",
   id: 42,
+  kind: "email",
   lastAttempt: null,
   lastSuccess: null,
   recentFailureDetails: "",

@@ -266,6 +266,7 @@ const subscriptionSource = {
   favicon: null,
   homeUrl: "https://site.example/",
   id: 91,
+  kind: "feed" as const,
   lastAttempt: null,
   lastSuccess: null,
   recentFailureDetails: "",
@@ -643,6 +644,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
       {
         homeUrl: subscriptionSource.homeUrl,
         initializationSnapshot: serializeFeedPreview(cachedPreview),
+        kind: "feed",
         name: "URL feed",
         parentId: null,
         url: subscriptionSource.url,

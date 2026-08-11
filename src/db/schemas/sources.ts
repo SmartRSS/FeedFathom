@@ -17,6 +17,17 @@ export const sources = pgTable(
     favicon: varchar("favicon"),
     homeUrl: varchar("home_url").notNull(),
     id: serial("id").primaryKey(),
+    // Explicit delivery mechanism, not inferred from the URL's shape at
+    // query time: "email" sources never get an HTTP poll at all (there's
+    // no endpoint to fetch), "websub" polls on a flat once-daily fallback
+    // cadence regardless of recentFailures (see getSourcesToProcess) since
+    // a hub push is the primary update path, and "feed" is the default
+    // ordinary polling behavior. Sources move feed -> websub on
+    // markWebSubVerified and back on markWebSubFailed; "email" is set once
+    // at creation and never changes.
+    kind: varchar("kind", { enum: ["feed", "email", "websub"] })
+      .notNull()
+      .default("feed"),
     lastAttempt: timestamp("last_attempt", { withTimezone: true }),
     lastSuccess: timestamp("last_success", { withTimezone: true }),
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
@@ -50,6 +61,7 @@ export const sources = pgTable(
     websubTopicUrl: varchar("websub_topic_url"),
   },
   (table) => [
+    index("kind_idx").on(table.kind),
     index("last_attempt_idx").on(table.lastAttempt),
     index("next_check_at_idx").on(table.nextCheckAt),
     index("recent_failures_idx").on(table.recentFailures),

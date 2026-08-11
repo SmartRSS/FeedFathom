@@ -162,6 +162,13 @@
       "when": 1786444677240,
       "tag": "0023_aspiring_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786449476032,
+      "tag": "0024_clean_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

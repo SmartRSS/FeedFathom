@@ -116,6 +116,7 @@ export class SourcesDataService {
 
   public async addSource(payload: {
     homeUrl: string;
+    kind?: "email" | "feed" | undefined;
     url: string;
   }): Promise<Source> {
     const inserted = (
@@ -174,24 +175,46 @@ export class SourcesDataService {
       .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
   }
 
+  // "email" sources are excluded outright -- there's no HTTP endpoint to
+  // poll at all, unlike the old `url LIKE 'http%'` heuristic this replaced,
+  // which inferred the same fact from the URL's shape instead of an
+  // explicit column. "websub" sources use a flat once-daily last_attempt
+  // check regardless of recentFailures -- a hub push is the primary update
+  // path, so this is purely a fallback safety net for a dropped push, not
+  // the same kind of retry/backoff schedule "feed" sources need. Both
+  // branches ignore nextCheckAt for "websub" specifically: an HTTP
+  // Cache-Control-driven nextCheckAt from a normal fetch could otherwise
+  // schedule a websub source's *next* check sooner than a day out,
+  // undermining the point of the reduced cadence.
   public async getSourcesToProcess() {
     const result: unknown = await this.drizzleConnection.execute(sql`
       WITH "due_sources" AS (
         SELECT ${sources.id} AS "id", ${sources.url} AS "url", ${sources.lastAttempt} AS "last_attempt"
         FROM ${sources}
-        WHERE (${sources.nextCheckAt} IS NULL OR ${sources.nextCheckAt} <= NOW())
-          AND (
-            ${sources.lastAttempt} IS NULL
-            OR (
-              ${sources.recentFailures} = 0
-              AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes'
-            )
-            OR (
-              ${sources.recentFailures} > 0
-              AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)
+        WHERE (
+          (
+            ${sources.kind} = 'feed'
+            AND (${sources.nextCheckAt} IS NULL OR ${sources.nextCheckAt} <= NOW())
+            AND (
+              ${sources.lastAttempt} IS NULL
+              OR (
+                ${sources.recentFailures} = 0
+                AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes'
+              )
+              OR (
+                ${sources.recentFailures} > 0
+                AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)
+              )
             )
           )
-          AND ${sources.url} LIKE 'http%'
+          OR (
+            ${sources.kind} = 'websub'
+            AND (
+              ${sources.lastAttempt} IS NULL
+              OR ${sources.lastAttempt} < NOW() - INTERVAL '1 day'
+            )
+          )
+        )
       )
       SELECT "id", "url"
       FROM "due_sources"
@@ -330,10 +353,11 @@ export class SourcesDataService {
 
   public async findOrCreateSourceByUrl(
     url: string,
-    payload: { homeUrl: string },
+    payload: { homeUrl: string; kind?: "email" | "feed" | undefined },
   ) {
     return await this.addSource({
       homeUrl: payload.homeUrl,
+      kind: payload.kind,
       url,
     });
   }
@@ -368,11 +392,11 @@ export class SourcesDataService {
     await this.drizzleConnection
       .update(sources)
       .set({
-        // WebSub delivery isn't guaranteed, so this isn't "stop polling
-        // entirely" -- just fall back to a much longer interval than the
-        // usual 5-minute floor, as a safety net for a hub that silently
-        // drops pushes.
-        nextCheckAt: sql`NOW() + INTERVAL '1 day'`,
+        // kind: "websub" is what actually drives the reduced polling
+        // cadence (see getSourcesToProcess) -- WebSub delivery isn't
+        // guaranteed, so this isn't "stop polling entirely," just a much
+        // longer fallback interval than "feed" kind gets.
+        kind: "websub",
         websubLeaseExpiresAt: leaseExpiresAt,
         websubStatus: "verified",
       })
@@ -382,7 +406,13 @@ export class SourcesDataService {
   public async markWebSubFailed(sourceId: number) {
     await this.drizzleConnection
       .update(sources)
-      .set({ websubStatus: "failed" })
+      .set({
+        // Revert to ordinary polling cadence -- staying "websub" kind
+        // with a dead subscription would leave this source checked only
+        // once a day with no push arriving to make up for it.
+        kind: "feed",
+        websubStatus: "failed",
+      })
       .where(eq(sources.id, sourceId));
   }
 

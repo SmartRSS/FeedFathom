@@ -27,6 +27,7 @@ export class UserSourcesDataService {
     sourcePayload: {
       homeUrl: string;
       initializationSnapshot?: null | string;
+      kind?: "email" | "feed" | undefined;
       name: string;
       parentId: null | number;
       url: string;
@@ -48,6 +49,7 @@ export class UserSourcesDataService {
       sourcePayload.url,
       {
         homeUrl: sourcePayload.homeUrl,
+        kind: sourcePayload.kind,
       },
     );
 

@@ -80,6 +80,7 @@ export async function postSubscribeHandler(
     initializationSnapshot: cachedPreview
       ? serializeFeedPreview(cachedPreview)
       : null,
+    kind: isEmail ? "email" : "feed",
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
