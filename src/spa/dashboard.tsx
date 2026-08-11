@@ -33,7 +33,6 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader";
-import { EditSourceDialog } from "./edit-source";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
 import { Icon } from "./icon";
 import { resolvedTheme } from "./preferences";
@@ -591,6 +590,8 @@ export function Dashboard(props: {
     if (!node) return;
     if (node.type === "source") {
       setEditingSource(node);
+      props.focusPane("sources");
+      setShowDiscovery(true);
       return;
     }
     alert(`Name: ${node.name}\nItems: ${node.children?.length ?? 0}`);
@@ -869,22 +870,6 @@ export function Dashboard(props: {
           <p class="dashboard-alert" role="alert">
             {message()}
           </p>
-        )}
-      </Show>
-      <Show when={editingSource()}>
-        {(node) => (
-          <EditSourceDialog
-            handleUnauthorized={props.handleUnauthorized}
-            node={node()}
-            parentUid={findParentFolderUid(tree(), node().uid)}
-            onClose={() => setEditingSource(undefined)}
-            onSaved={() => {
-              setEditingSource(undefined);
-              loadTree().catch((cause) =>
-                reportError(cause, "Could not refresh tree"),
-              );
-            }}
-          />
         )}
       </Show>
       <Show when={!showDiscovery() || !authenticated()}>
@@ -1166,22 +1151,39 @@ export function Dashboard(props: {
       <Show when={showDiscovery() && authenticated()}>
         <FeedDiscovery
           backPane={props.backPane}
+          editing={
+            editingSource() && {
+              homeUrl: editingSource()!.homeUrl,
+              name: editingSource()!.name,
+              parentUid: findParentFolderUid(tree(), editingSource()!.uid),
+              uid: editingSource()!.uid,
+              xmlUrl: editingSource()!.xmlUrl,
+            }
+          }
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
           initialFeedUrl={props.initialFeedUrl}
           pane={props.pane}
           close={() => {
+            const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             else
               queueMicrotask(() =>
                 document
-                  .querySelector<HTMLElement>('[aria-label="add source"]')
+                  .querySelector<HTMLElement>(
+                    wasEditing
+                      ? '[aria-label="source properties"]'
+                      : '[aria-label="add source"]',
+                  )
                   ?.focus(),
               );
           }}
           saved={async (sourceId) => {
+            const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             const nextTree = await loadTree();
             const nodes = [...nextTree];
@@ -1195,6 +1197,11 @@ export function Dashboard(props: {
             }
             if (!savedNode) return;
             await select(savedNode);
+            // Editing only renames/moves an already-subscribed feed --
+            // there's nothing new to fetch, so skip the poll-for-articles
+            // loop below, which exists only to wait out a fresh
+            // subscription's initial (worker-driven) feed fetch.
+            if (wasEditing) return;
             // Subscribing only queues the feed fetch (the worker does the
             // actual network request), so the article list can still be
             // empty right after subscribing. Poll briefly rather than

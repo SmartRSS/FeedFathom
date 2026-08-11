@@ -310,26 +310,30 @@ test("disables the delete-articles button until something is selected", async ({
   await expect(deleteButton).toBeEnabled();
 });
 
-test("source properties opens an edit dialog with the feed/home URL locked", async ({
+test("source properties reuses the discovery panel with feed/website locked", async ({
   page,
 }) => {
+  // Editing reuses the exact same left-pane form the "add source" flow
+  // uses (see feed-discovery.tsx), just with feed/home URL disabled and
+  // the website-search/preview steps hidden -- not a separate dialog.
   await installApiFixture(page);
   await page.goto("/");
   await selectSource(page);
 
   await page.getByRole("button", { name: "source properties" }).click();
 
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("Title")).toHaveValue("Tech News");
-  const feedUrl = dialog.getByLabel("Feed URL");
-  const homeUrl = dialog.getByLabel("Home URL");
+  await expect(page.getByRole("heading", { name: "Edit feed" })).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Tech News");
+  const website = page.getByLabel("Website");
+  const feedUrl = page.getByLabel("Feed URL");
+  await expect(website).toHaveValue("https://news.example/");
+  await expect(website).toBeDisabled();
   await expect(feedUrl).toHaveValue("https://news.example/feed.xml");
   await expect(feedUrl).toBeDisabled();
-  await expect(homeUrl).toHaveValue("https://news.example/");
-  await expect(homeUrl).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Find feeds" })).toHaveCount(0);
 });
 
-test("renaming a source through the edit dialog updates the tree", async ({
+test("renaming a source through the edit panel updates the tree", async ({
   page,
 }) => {
   const state = await installApiFixture(page);
@@ -337,28 +341,25 @@ test("renaming a source through the edit dialog updates the tree", async ({
   await selectSource(page);
   await page.getByRole("button", { name: "source properties" }).click();
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Title").fill("Renamed Feed");
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await page.getByLabel("Title").fill("Renamed Feed");
+  await page.getByRole("button", { name: "Save" }).click();
 
-  await expect(dialog).toBeHidden();
   await expect(
     page.locator("button.source").filter({ hasText: "Renamed Feed" }),
   ).toBeVisible();
   expect(state.updatedSource).toEqual({ name: "Renamed Feed", parentId: 7 });
 });
 
-test("cancelling the edit dialog discards changes", async ({ page }) => {
+test("cancelling the edit panel discards changes", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/");
   await selectSource(page);
   await page.getByRole("button", { name: "source properties" }).click();
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Title").fill("Should not save");
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Title").fill("Should not save");
+  await page.getByRole("button", { name: "Cancel" }).click();
 
-  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Edit feed" })).toHaveCount(0);
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();

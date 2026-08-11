@@ -6,6 +6,7 @@ import {
   foundFeedsResponse,
   previewResponse,
   subscriptionResponse,
+  updatedSourceResponse,
   type Folder,
   type FoundFeed,
   type PreviewArticle,
@@ -33,6 +34,19 @@ function withScheme(value: string): string {
 export function FeedDiscovery(props: {
   backPane(): void;
   close(): void;
+  // Present only when editing an existing subscription instead of adding a
+  // new one: reuses this same panel (title/folder are editable either way)
+  // but locks the feed/home URL fields and skips the website-search/preview
+  // steps entirely, since those don't apply to an already-subscribed feed.
+  editing?:
+    | {
+        homeUrl: string;
+        name: string;
+        parentUid: string | undefined;
+        uid: string;
+        xmlUrl: string;
+      }
+    | undefined;
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
@@ -68,19 +82,32 @@ export function FeedDiscovery(props: {
   });
 
   onMount(() => {
-    const initialFeedUrl = props.initialFeedUrl;
-    if (initialFeedUrl) {
-      setFeedUrl(initialFeedUrl);
-      try {
-        const url = new URL(initialFeedUrl);
-        if (url.protocol === "http:" || url.protocol === "https:")
-          void preview(initialFeedUrl);
-      } catch {}
+    if (props.editing) {
+      setFeedUrl(props.editing.xmlUrl);
+      setLink(props.editing.homeUrl);
+      setTitle(props.editing.name);
+    } else {
+      const initialFeedUrl = props.initialFeedUrl;
+      if (initialFeedUrl) {
+        setFeedUrl(initialFeedUrl);
+        try {
+          const url = new URL(initialFeedUrl);
+          if (url.protocol === "http:" || url.protocol === "https:")
+            void preview(initialFeedUrl);
+        } catch {}
+      }
     }
     void (async () => {
       try {
         const loadedFolders = await api("/folders", foldersResponse);
-        if (!disposed) setFolders(loadedFolders);
+        if (disposed) return;
+        setFolders(loadedFolders);
+        // Set together with (not before) the folders that just loaded --
+        // assigning the <select>'s value while its matching <option> doesn't
+        // exist yet has nothing to select against, and Solid doesn't
+        // re-apply that binding just because sibling <option>s appear later,
+        // so it would silently fall back to "No parent" instead.
+        if (props.editing) setFolderId(props.editing.parentUid ?? "");
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
         setStartupMessage(
@@ -180,21 +207,35 @@ export function FeedDiscovery(props: {
 
   async function submit(event: Event) {
     event.preventDefault();
+    const editing = props.editing;
     setLoading(true);
-    setProgress("Subscribing…");
+    setProgress(editing ? "Saving…" : "Subscribing…");
     try {
-      const result = await api("/subscribe", subscriptionResponse, {
-        body: JSON.stringify({
-          sourceFolder: folderId() ? Number(folderId()) : null,
-          sourceName: title(),
-          sourceUrl: withScheme(feedUrl()),
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+      const result = editing
+        ? await api("/source", updatedSourceResponse, {
+            body: JSON.stringify({
+              sourceFolder: folderId() ? Number(folderId()) : null,
+              sourceId: Number(editing.uid),
+              sourceName: title(),
+            }),
+            headers: { "Content-Type": "application/json" },
+            method: "PATCH",
+          })
+        : await api("/subscribe", subscriptionResponse, {
+            body: JSON.stringify({
+              sourceFolder: folderId() ? Number(folderId()) : null,
+              sourceName: title(),
+              sourceUrl: withScheme(feedUrl()),
+            }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          });
       await props.saved(result.sourceId);
     } catch (cause) {
-      reportError(cause, "Could not subscribe");
+      reportError(
+        cause,
+        editing ? "Could not save changes" : "Could not subscribe",
+      );
     } finally {
       setLoading(false);
       setProgress("");
@@ -215,11 +256,19 @@ export function FeedDiscovery(props: {
         classList={{ "focused-pane": props.pane() === "sources" }}
       >
         <form class="feed-discovery-form" onSubmit={submit}>
-          <h2>Discover feed</h2>
+          <h2>{props.editing ? "Edit feed" : "Discover feed"}</h2>
           <label>
             Website
+            {/* Same shared-row lock as Feed URL below when editing -- see
+                that field's comment. */}
             <input
               ref={websiteInput}
+              disabled={!!props.editing}
+              title={
+                props.editing
+                  ? "Shared with every subscriber to this feed"
+                  : undefined
+              }
               type="url"
               value={link()}
               onInput={(event) => {
@@ -228,45 +277,63 @@ export function FeedDiscovery(props: {
               }}
             />
           </label>
-          <button
-            type="button"
-            disabled={loading() || !link()}
-            onClick={() => void findFeeds()}
-          >
-            Find feeds
-          </button>
-          <Show when={feeds().length}>
-            <div class="found-feeds">
-              <For each={feeds()}>
-                {(item) => (
-                  <button type="button" onClick={() => void preview(item.url)}>
-                    <strong>{item.title}</strong>
-                    <span>{item.url}</span>
-                  </button>
-                )}
-              </For>
-            </div>
+          <Show when={!props.editing}>
+            <button
+              type="button"
+              disabled={loading() || !link()}
+              onClick={() => void findFeeds()}
+            >
+              Find feeds
+            </button>
+            <Show when={feeds().length}>
+              <div class="found-feeds">
+                <For each={feeds()}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      onClick={() => void preview(item.url)}
+                    >
+                      <strong>{item.title}</strong>
+                      <span>{item.url}</span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
           </Show>
           <label>
             Feed URL
+            {/* Shared/deduplicated across every subscriber to this feed
+                (see sources_url_unique) -- locked here so editing can't
+                silently repoint everyone else's subscription too.
+                Unsubscribing and subscribing to a different URL is the
+                supported way to point at a different feed. */}
             <input
+              disabled={!!props.editing}
+              title={
+                props.editing
+                  ? "Shared with every subscriber to this feed"
+                  : undefined
+              }
               value={feedUrl()}
               onInput={(event) => setFeedUrl(event.currentTarget.value)}
             />
           </label>
-          <Show when={feedUrl().includes("@")}>
-            <button type="button" onClick={() => void copyAddress()}>
-              Copy address
-            </button>
-          </Show>
-          <Show when={!feedUrl().includes("@")}>
-            <button
-              type="button"
-              disabled={loading() || !feedUrl()}
-              onClick={() => void preview()}
-            >
-              Load preview
-            </button>
+          <Show when={!props.editing}>
+            <Show when={feedUrl().includes("@")}>
+              <button type="button" onClick={() => void copyAddress()}>
+                Copy address
+              </button>
+            </Show>
+            <Show when={!feedUrl().includes("@")}>
+              <button
+                type="button"
+                disabled={loading() || !feedUrl()}
+                onClick={() => void preview()}
+              >
+                Load preview
+              </button>
+            </Show>
           </Show>
           <label>
             Title
@@ -300,7 +367,7 @@ export function FeedDiscovery(props: {
               Cancel
             </button>
             <button disabled={loading() || !feedUrl() || !title()}>
-              Subscribe
+              {props.editing ? "Save" : "Subscribe"}
             </button>
           </div>
         </form>
@@ -318,7 +385,11 @@ export function FeedDiscovery(props: {
           <Show
             when={articles().length}
             fallback={
-              <p class="empty-pane">Load a feed to preview its articles.</p>
+              <p class="empty-pane">
+                {props.editing
+                  ? "Editing an existing subscription."
+                  : "Load a feed to preview its articles."}
+              </p>
             }
           >
             <For each={articles()}>
