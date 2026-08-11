@@ -11,6 +11,10 @@ import {
   isHttpDeferredError,
 } from "./http-client.ts";
 import { isJsonFeedText, parseJsonFeed } from "./json-feed-parser.ts";
+import {
+  isMicroformatHtml,
+  parseMicroformatFeed,
+} from "./microformat-feed-parser.ts";
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 import { dateType, webUrlPolicy } from "./typebox-policy.ts";
@@ -538,13 +542,13 @@ export class FeedParser {
         await rememberRedirect(originalUrl, finalUrl);
       }
     }
-    const text = decodeFeedBody(
-      response.data,
-      response.headers.get("content-type"),
-    );
+    const contentType = response.headers.get("content-type");
+    const text = decodeFeedBody(response.data, contentType);
     const parsedFeed = isJsonFeedText(text)
       ? parseJsonFeed(text)
-      : parseFeed(text);
+      : isMicroformatHtml(text, contentType)
+        ? parseMicroformatFeed(text, finalUrl)
+        : parseFeed(text);
     validateParsedFeed(parsedFeed);
     return {
       cached: response.cached,
