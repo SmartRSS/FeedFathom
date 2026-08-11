@@ -34,21 +34,23 @@ import {
   type ReaderMode,
 } from "./extension-reader";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
+import { Icon } from "./icon";
 import { resolvedTheme } from "./preferences";
-import addFolder from "../lib/images/icons/Document/folder-add-fill.svg";
-import add from "../lib/images/icons/System/add-box-fill.svg";
-import settings from "../lib/images/icons/System/settings-5-fill.svg";
-import details from "../lib/images/icons/System/information-fill.svg";
-import remove from "../lib/images/icons/System/delete-bin-7-fill.svg";
-import selectAll from "../lib/images/icons/System/check-double-fill.svg";
-import feed from "../lib/images/icons/System/rss-fill.svg";
-// Inlined as raw markup (not <img src>) rather than the shared node-icon
-// image pattern: these are stroke/fill="currentColor" SVGs specifically
-// so a folder row's icon automatically matches its own text color (grey
-// by default, --selected-fg when selected) with no per-theme "is this
+// Inlined as raw markup (not <img src>) rather than a plain image import:
+// every icon in this set is fill/stroke="currentColor" by design, so a
+// row's icon automatically matches its own text color (grey by default,
+// --selected-fg when selected, whatever the OS resolves it to under the
+// auto theme's dark-mode-aware colors) with no per-case "is this
 // background light or dark" guessing -- currentColor only resolves that
 // way when the SVG is actually in the page's DOM, not loaded as an
 // external image resource.
+import addFolderRaw from "../lib/images/icons/Document/folder-add-fill.svg?raw";
+import addRaw from "../lib/images/icons/System/add-box-fill.svg?raw";
+import settingsRaw from "../lib/images/icons/System/settings-5-fill.svg?raw";
+import detailsRaw from "../lib/images/icons/System/information-fill.svg?raw";
+import removeRaw from "../lib/images/icons/System/delete-bin-7-fill.svg?raw";
+import selectAllRaw from "../lib/images/icons/System/check-double-fill.svg?raw";
+import feedRaw from "../lib/images/icons/System/rss-fill.svg?raw";
 import arrowDownRaw from "../lib/images/icons/Arrows/chevron-down-fill.svg?raw";
 import arrowRightRaw from "../lib/images/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "../lib/images/icons/Document/folder-fill.svg?raw";
@@ -200,6 +202,7 @@ function TreeItem(props: {
 }) {
   const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
   const [faviconLoaded, setFaviconLoaded] = createSignal(false);
+  const [faviconFailed, setFaviconFailed] = createSignal(false);
   const isFolder = () => props.node.type === "folder";
   const children = () =>
     props.node.type === "folder" ? props.node.children : [];
@@ -257,17 +260,22 @@ function TreeItem(props: {
         <Show
           when={isFolder()}
           fallback={
-            <img
-              alt=""
-              class="node-icon"
-              classList={{ "skeleton-row": !faviconLoaded() }}
-              src={favicon() ?? feed}
-              onLoad={() => setFaviconLoaded(true)}
-              onError={(event) => {
-                setFaviconLoaded(true);
-                event.currentTarget.src = feed;
-              }}
-            />
+            <Show
+              when={favicon() && !faviconFailed()}
+              fallback={<Icon class="node-icon" raw={feedRaw} />}
+            >
+              <img
+                alt=""
+                class="node-icon"
+                classList={{ "skeleton-row": !faviconLoaded() }}
+                src={favicon()!}
+                onLoad={() => setFaviconLoaded(true)}
+                onError={() => {
+                  setFaviconLoaded(true);
+                  setFaviconFailed(true);
+                }}
+              />
+            </Show>
           }
         >
           <span
@@ -855,24 +863,24 @@ export function Dashboard(props: {
                 setShowDiscovery(true);
               }}
             >
-              <img alt="" src={add} />
+              <Icon raw={addRaw} />
             </button>
             <button aria-label="add folder" onClick={() => void addNewFolder()}>
-              <img alt="" src={addFolder} />
+              <Icon raw={addFolderRaw} />
             </button>
             <button
               aria-label="source properties"
               disabled={!selectedNode()}
               onClick={showProperties}
             >
-              <img alt="" src={details} />
+              <Icon raw={detailsRaw} />
             </button>
             <button
               aria-label="delete source"
               disabled={!selectedNode()}
               onClick={() => void removeSelectedNode()}
             >
-              <img alt="" src={remove} />
+              <Icon raw={removeRaw} />
             </button>
             <span />
             <button
@@ -880,7 +888,7 @@ export function Dashboard(props: {
               class="only-mobile"
               onClick={() => props.navigate("/options")}
             >
-              <img alt="" src={settings} />
+              <Icon raw={settingsRaw} />
             </button>
           </div>
           <Show
@@ -936,14 +944,14 @@ export function Dashboard(props: {
                 )
               }
             >
-              <img alt="" src={selectAll} />
+              <Icon raw={selectAllRaw} />
             </button>
             <button
               aria-label="delete articles"
               disabled={selectedIndexes().size === 0}
               onClick={() => removeSelected()}
             >
-              <img alt="" src={remove} />
+              <Icon raw={removeRaw} />
             </button>
             <span />
             <button
@@ -951,7 +959,7 @@ export function Dashboard(props: {
               class="only-mobile"
               onClick={() => props.navigate("/options")}
             >
-              <img alt="" src={settings} />
+              <Icon raw={settingsRaw} />
             </button>
           </div>
           <div
@@ -1037,7 +1045,7 @@ export function Dashboard(props: {
               disabled={!selected()}
               onClick={() => removeSelected()}
             >
-              <img alt="" src={remove} />
+              <Icon raw={removeRaw} />
             </button>
             <span />
             <Show when={readerAvailable()}>
@@ -1062,7 +1070,7 @@ export function Dashboard(props: {
               aria-label="options"
               onClick={() => props.navigate("/options")}
             >
-              <img alt="" src={settings} />
+              <Icon raw={settingsRaw} />
             </button>
           </div>
           <div

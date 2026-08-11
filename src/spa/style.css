@@ -19,6 +19,7 @@
   --selected-border: transparent;
   --radius: 0.5rem;
   --font-family: sans-serif;
+  --error: #b00020;
   color: var(--grey-90);
   font-family: var(--font-family);
 }
@@ -32,17 +33,44 @@
    color") so they're declared second, overriding Highlight/HighlightText
    wherever a browser recognizes them -- an unrecognized keyword makes
    only that one declaration invalid, leaving the earlier one in effect,
-   so this degrades safely instead of breaking. Surfaces are left alone:
-   touching them risks a dark OS accent landing on this app's fixed dark
-   body text with no dark-mode support to match it. Folder icons don't
-   need a per-theme override here either -- they're inlined SVGs using
-   currentColor directly (see dashboard.tsx / .chevron svg, .node-icon
-   svg below) instead of guessing light/dark. */
+   so this degrades safely instead of breaking. Every icon in the app is
+   inlined SVG using currentColor directly (see dashboard.tsx / .chevron
+   svg, .node-icon svg, .icon svg below) rather than a baked-in fill, so
+   they need no separate override here -- they already track whatever
+   text color surrounds them, including the Field/CanvasText below. */
 :root[data-theme="auto"] {
+  /* Without this, System Color keywords (Highlight/AccentColor here, and
+     Canvas/CanvasText/etc. below) always resolve to their light-mode
+     values -- a page is assumed light-only until it declares it
+     supports both, so an OS/browser dark preference would otherwise be
+     ignored entirely by every System Color in this file. */
+  color-scheme: light dark;
   --selected-bg: Highlight;
   --selected-bg: AccentColor;
   --selected-fg: HighlightText;
   --selected-fg: AccentColorText;
+}
+/* Only under an OS/browser dark color scheme: surfaces and text follow
+   the same System Color keywords used above for selection, so a dark
+   OS theme actually turns this app dark instead of leaving every
+   untouched panel/border/text on its fixed light-mode value. Scoped to
+   prefers-color-scheme: dark rather than applied unconditionally --
+   System Colors already resolve correctly in light mode via the plain
+   :root values, and forcing Canvas/CanvasText there too would just
+   replace one set of correct light colors with another. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --grey-90: CanvasText;
+    --grey-10: Field;
+    --grey-20: Field;
+    --grey-30: GrayText;
+    --grey-30: ButtonBorder;
+    --grey-40: GrayText;
+    --grey-50: GrayText;
+    --white: Canvas;
+    --blue: LinkText;
+    --error: #ff6b6b;
+  }
 }
 
 /* Selectable themes (Options -> Appearance), one attribute drives all of
@@ -303,7 +331,7 @@ a {
   color: var(--blue);
 }
 [role="alert"] {
-  color: #b00020;
+  color: var(--error);
   margin: 0;
 }
 
@@ -324,7 +352,7 @@ a {
   left: 0.5rem;
   padding: 0.5rem;
   border: var(--border);
-  background: white;
+  background: var(--white);
 }
 
 .dashboard-pane {
@@ -367,7 +395,8 @@ a {
 .toolbar button.only-mobile {
   display: none;
 }
-.toolbar button img {
+.toolbar button img,
+.toolbar button .icon {
   width: 1.2rem;
   height: 1.2rem;
 }
@@ -505,7 +534,8 @@ a {
    advance. The inlined <svg> itself has no explicit width/height (only
    a viewBox), so it needs to be told to fill its wrapper. */
 .chevron svg,
-.node-icon svg {
+.node-icon svg,
+.icon svg {
   display: block;
   width: 100%;
   height: 100%;

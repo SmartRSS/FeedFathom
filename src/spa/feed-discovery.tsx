@@ -10,12 +10,13 @@ import {
   type FoundFeed,
   type PreviewArticle,
 } from "../contracts/responses";
-import back from "../lib/images/icons/Arrows/arrow-left-fill.svg";
+import { Icon } from "./icon";
+import backRaw from "../lib/images/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {
   return (
     <button aria-label="back" class="only-mobile" onClick={props.backPane}>
-      <img alt="" src={back} />
+      <Icon raw={backRaw} />
     </button>
   );
 }
