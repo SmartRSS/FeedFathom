@@ -229,7 +229,7 @@ export class FeedParser {
         feed: parsedFeed,
         freshUntil,
         websub,
-      } = await this.parseUrl(source.url, "background");
+      } = await this.parseUrl(source.url, "background", source.skipCache);
 
       if (websub && shouldAttemptWebSubSubscribe(source.websubStatus)) {
         await this.maybeSubscribeToWebSub(source.id, websub);
@@ -301,9 +301,10 @@ export class FeedParser {
   public async parseUrl(
     url: string,
     priority: "background" | "interactive" = "interactive",
+    skipCache = false,
   ) {
     const resolvedUrl = await this.redirectMap.resolveUrl(url);
-    return this.parseGenericFeed(resolvedUrl, url, priority);
+    return this.parseGenericFeed(resolvedUrl, url, priority, skipCache);
   }
 
   // Called directly from the subscribe route so discovery happens as part
@@ -503,10 +504,12 @@ export class FeedParser {
     fetchedUrl: string,
     originalUrl: string,
     priority: "background" | "interactive",
+    skipCache = false,
   ) {
     const response = await this.httpClient.get(fetchedUrl, {
       priority,
       responseType: "arrayBuffer",
+      skipCache,
     });
     this.validateFeedResponse(response, fetchedUrl);
     const finalUrl = response.url || fetchedUrl;

@@ -67,6 +67,14 @@ type HttpRedis = {
 type HttpRequestOptions = {
   priority?: "background" | "interactive";
   responseType?: "arrayBuffer";
+  // Skips the local TTL short-circuit (trusting our own copy is still
+  // fresh per the origin's own Cache-Control/Expires) without giving up
+  // conditional revalidation -- still sends If-None-Match/If-Modified-Since
+  // from the cached entry, so an origin that genuinely hasn't changed can
+  // still answer 304 cheaply. For callers (like a WebSub push) that already
+  // know something changed and need to actually ask the origin, not just
+  // trust a TTL that hasn't technically expired yet.
+  skipCache?: boolean;
 };
 
 type ArrayBufferRequestOptions = HttpRequestOptions & {
@@ -218,7 +226,7 @@ export class HttpClient {
   ): Promise<HttpResponse<ArrayBuffer | string>> {
     const parsedUrl = parseHttpUrl(url);
     const cached = await this.getCached(url, deadline);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > Date.now() && !options.skipCache) {
       const response = this.fromCached(cached, options);
       deadline.assertActive();
       return response;

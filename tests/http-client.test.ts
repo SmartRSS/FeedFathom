@@ -106,6 +106,39 @@ test("caches fresh responses, retries transient failures, and defers background 
   ).rejects.toBeInstanceOf(HttpDeferredError);
 });
 
+test("skipCache bypasses the local TTL short-circuit but still revalidates conditionally", async () => {
+  let requests = 0;
+  const store = redis();
+  const client = new HttpClient(store, {
+    transport: queuedTransport([nativeResponse("", { status: 304 })], () => {
+      requests++;
+    }),
+  });
+
+  // Seed a still-fresh cached entry directly, as if an earlier fetch had
+  // already populated it -- avoids this test's own network call tripping
+  // the per-hostname reservation interval before the skipCache request runs.
+  const url = "https://1.1.1.1/feed";
+  const cacheKey = `http-cache:${Buffer.from(url).toString("base64url")}`;
+  store.values.set(
+    cacheKey,
+    JSON.stringify({
+      body: Buffer.from("stale-cached-feed").toString("base64"),
+      expiresAt: Date.now() + 60_000,
+      headers: [["etag", '"v1"']],
+      status: 200,
+      url,
+    }),
+  );
+
+  // Still within the cached entry's TTL, so a plain get() would return it
+  // without any network request -- skipCache forces revalidation instead.
+  const revalidated = await client.get(url, { skipCache: true });
+  expect(revalidated.data).toBe("stale-cached-feed");
+  expect(revalidated.cached).toBe(true);
+  expect(requests).toBe(1);
+});
+
 test("deletes malformed cached response projections before use", async () => {
   const url = "https://1.1.1.1/feed";
   const key = `http-cache:${Buffer.from(url).toString("base64url")}`;
