@@ -33,4 +33,38 @@ describe("scanHtml", () => {
       url: "https://publisher.example/feed.xml",
     });
   });
+
+  test("discovers a JSON Feed advertised via link autodiscovery", () => {
+    expect(
+      scanHtml(
+        "https://publisher.example/",
+        '<html><head><link rel="alternate" type="application/feed+json" href="/feed.json" title="JSON feed"></head><body></body></html>',
+      ),
+    ).toContainEqual({
+      title: "JSON feed",
+      url: "https://publisher.example/feed.json",
+    });
+  });
+
+  test("offers the page itself when it has microformats h-entry markup", () => {
+    expect(
+      scanHtml(
+        "https://blog.example/",
+        '<html><body><article class="h-entry"><span class="p-name">Post</span></article></body></html>',
+      ),
+    ).toContainEqual({
+      title: "This page (h-entry)",
+      url: "https://blog.example/",
+    });
+  });
+
+  test("does not offer a microformats subscription for an ordinary page", () => {
+    const results = scanHtml(
+      "https://publisher.example/about",
+      "<html><body><p>Just a regular page.</p></body></html>",
+    );
+    expect(
+      results.some((result) => result.title === "This page (h-entry)"),
+    ).toBe(false);
+  });
 });

@@ -10,6 +10,7 @@ import { scanGithub } from "./scanners/github-scanner.ts";
 import { scanHead } from "./scanners/head-scanner.ts";
 import { scanHiveblog } from "./scanners/hiveblog-scanner.ts";
 import { scanLinkFeed } from "./scanners/link-feed-scanner.ts";
+import { scanMicroformats } from "./scanners/microformats-scanner.ts";
 import { scanOdsee } from "./scanners/odsee-scanner.ts";
 import { scanSteemit } from "./scanners/steemit-scanner.ts";
 import { scanVimeo } from "./scanners/vimeo-scanner.ts";
@@ -28,6 +29,7 @@ const scanners = [
   scanYoutube,
   scanGenerator,
   scanLinkFeed,
+  scanMicroformats,
 ];
 
 const scanPage = (address: string, page: ScannerPage) => {

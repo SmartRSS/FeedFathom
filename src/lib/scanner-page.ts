@@ -4,6 +4,9 @@ export type ScannerPage = {
   bitchuteChannelName?: string | undefined;
   feedLinks: { href: string; title?: string | undefined }[];
   generator?: string | undefined;
+  // Microformats2 (h-feed/h-entry) has no <link> autodiscovery -- the
+  // markup lives directly in the page, so the page itself is the feed.
+  hasMicroformatEntries: boolean;
   rootName: string;
   rootXmlns?: string | undefined;
   vimeoChannelHref?: string | undefined;
@@ -30,7 +33,7 @@ export const scannerPageFromDocument = (
       document_.querySelector(".owner>a")?.textContent ?? undefined,
     feedLinks: Array.from(
       document_.querySelectorAll(
-        'link[type="application/rss+xml"], link[type="application/atom+xml"]',
+        'link[type="application/rss+xml"], link[type="application/atom+xml"], link[type="application/feed+json"]',
       ),
       (link) => ({
         href: link.getAttribute("href") ?? "",
@@ -38,6 +41,8 @@ export const scannerPageFromDocument = (
       }),
     ),
     generator: value('meta[name="generator"]', "content"),
+    hasMicroformatEntries:
+      document_.querySelector(".h-feed, .h-entry") !== null,
     rootName: root?.nodeName.toLowerCase() ?? "",
     rootXmlns: root?.getAttribute("xmlns") ?? undefined,
     vimeoChannelHref: value("a.js-user-link", "href"),
@@ -55,6 +60,7 @@ export const scannerPageFromHtml = (
   let baseUrl = address;
   let bitchuteChannelName: string | undefined;
   let generator: string | undefined;
+  let hasMicroformatEntries = false;
   let rootName = "";
   let rootXmlns: string | undefined;
   let vimeoChannelHref: string | undefined;
@@ -75,14 +81,17 @@ export const scannerPageFromHtml = (
           baseUrl = new URL(href, address).href;
       },
     })
-    .on('link[type="application/rss+xml"], link[type="application/atom+xml"]', {
-      element(element) {
-        feedLinks.push({
-          href: element.getAttribute("href") ?? "",
-          title: element.getAttribute("title") ?? undefined,
-        });
+    .on(
+      'link[type="application/rss+xml"], link[type="application/atom+xml"], link[type="application/feed+json"]',
+      {
+        element(element) {
+          feedLinks.push({
+            href: element.getAttribute("href") ?? "",
+            title: element.getAttribute("title") ?? undefined,
+          });
+        },
       },
-    })
+    )
     .on("a", {
       element(element) {
         activeAnchor = {
@@ -108,6 +117,11 @@ export const scannerPageFromHtml = (
         generator = element.getAttribute("content") ?? undefined;
       },
     })
+    .on(".h-feed, .h-entry", {
+      element() {
+        hasMicroformatEntries = true;
+      },
+    })
     .on("a.js-user-link", {
       element(element) {
         vimeoChannelHref = element.getAttribute("href") ?? undefined;
@@ -126,6 +140,7 @@ export const scannerPageFromHtml = (
     bitchuteChannelName,
     feedLinks,
     generator,
+    hasMicroformatEntries,
     rootName,
     rootXmlns,
     vimeoChannelHref,
