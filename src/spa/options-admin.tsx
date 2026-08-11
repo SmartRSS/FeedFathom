@@ -336,6 +336,7 @@ export function Admin(props: {
 
   async function load() {
     try {
+      setMessage("");
       setSources(
         await api(
           `/admin?sortBy=${sortBy()}&order=${order()}`,
