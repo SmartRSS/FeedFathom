@@ -49,7 +49,7 @@ function renderFeed(items: { guid: string; pubDate: string; title: string }[]) {
   return `<?xml version="1.0"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <atom:link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+    <atom:link rel="hub" href="https://pubsubhubbub.superfeedr.com/"/>
     <atom:link rel="self" href="${feedUrl}"/>
     <title>FeedFathom WebSub debug feed</title>
     <link>${domain}</link>
