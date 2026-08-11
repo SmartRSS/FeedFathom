@@ -245,7 +245,11 @@ export class FeedParser {
             rewriteLinks,
             observedAt.getTime(),
           ),
-          { lastSeenInFeedAt: observedAt },
+          {
+            lastSeenInFeedAt: observedAt,
+            // TEMPORARY: WebSub push verification, remove after confirming.
+            debugFetchTrigger: source.trigger ?? null,
+          },
         ),
       );
       // batchUpsertArticles processes batches sequentially and a later

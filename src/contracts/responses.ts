@@ -75,6 +75,8 @@ export const treeResponse = Type.Object(
 const articleSummaryResponse = Type.Object(
   {
     author: Type.String(),
+    // TEMPORARY: WebSub push verification, remove after confirming.
+    debugFetchTrigger: Type.Union([Type.String(), Type.Null()]),
     group: Type.String(),
     id,
     publishedAt: jsonDate,

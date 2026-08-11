@@ -45,6 +45,8 @@ export class ArticlesDataService {
     const loadedArticles = await this.drizzleConnection
       .select({
         author: articles.author,
+        // TEMPORARY: WebSub push verification, remove after confirming.
+        debugFetchTrigger: articles.debugFetchTrigger,
         id: articles.id,
         publishedAt: articles.publishedAt,
         sourceId: articles.sourceId,
@@ -138,6 +140,8 @@ export class ArticlesDataService {
               author: sql`excluded.author`,
               content: sql`excluded.content`,
               lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
+              // TEMPORARY: WebSub push verification, remove after confirming.
+              debugFetchTrigger: sql`excluded.debug_fetch_trigger`,
               publishedAt: sql`
                 CASE
                   WHEN excluded.updated_at IS NOT NULL THEN excluded.published_at
