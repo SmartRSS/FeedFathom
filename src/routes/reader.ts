@@ -9,6 +9,7 @@ import {
   removeFolderRequest,
   removeSourceRequest,
   subscribeRequest,
+  updateSourceRequest,
 } from "../contracts/requests.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
@@ -30,7 +31,7 @@ import {
   postFoldersHandler,
 } from "./reader/folders.ts";
 import { getPreviewHandler } from "./reader/preview.ts";
-import { deleteSourceHandler } from "./reader/source.ts";
+import { deleteSourceHandler, patchSourceHandler } from "./reader/source.ts";
 import { postSubscribeHandler } from "./reader/subscribe.ts";
 import { getTreeHandler } from "./reader/tree.ts";
 import { createAuthPlugin } from "./shared.ts";
@@ -64,6 +65,7 @@ export type ReaderRouteDependencies = {
     | "recomputeUnreadCounts"
     | "getUserSources"
     | "removeSourceFromUser"
+    | "updateUserSource"
     | "withSubscriptionInitializationLease"
   >;
 };
@@ -88,6 +90,9 @@ export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
     )
     .delete("/api/source", { body: removeSourceRequest }, (ctx) =>
       deleteSourceHandler(ctx, deps),
+    )
+    .patch("/api/source", { body: updateSourceRequest }, (ctx) =>
+      patchSourceHandler(ctx, deps),
     )
     .get("/api/preview", { query: previewQuery }, (ctx) =>
       getPreviewHandler(ctx, deps),

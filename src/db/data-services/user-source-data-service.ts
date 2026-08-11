@@ -204,6 +204,38 @@ export class UserSourcesDataService {
       );
   }
 
+  /**
+   * Renames a subscription and/or moves it between folders -- both live on
+   * user_sources, one row per subscriber, so this never touches the shared
+   * `sources` row (url/homeUrl) other subscribers depend on. Returns
+   * undefined for an unowned folder (mirrors addSourceToUser) or a source
+   * the user isn't actually subscribed to.
+   */
+  public async updateUserSource(
+    userId: number,
+    sourceId: number,
+    changes: { name: string; parentId: null | number },
+  ) {
+    if (changes.parentId) {
+      const folders = await this.foldersDataService.getUserFolders(userId);
+      if (!folders.some((folder) => folder.id === changes.parentId)) {
+        return undefined;
+      }
+    }
+    return (
+      await this.drizzleConnection
+        .update(userSources)
+        .set({ name: changes.name, parentId: changes.parentId })
+        .where(
+          and(
+            eq(userSources.userId, userId),
+            eq(userSources.sourceId, sourceId),
+          ),
+        )
+        .returning({ id: userSources.sourceId })
+    ).at(0);
+  }
+
   public async removeSourceFromUser(userId: number, sourceId: number) {
     await this.drizzleConnection
       .delete(userSources)

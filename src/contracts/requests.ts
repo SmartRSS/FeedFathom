@@ -53,6 +53,17 @@ export const subscribeRequest = Type.Object({
   sourceName: normalizedNonblankString,
   sourceUrl: normalizedSubscriptionTarget,
 });
+// Deliberately excludes the feed/home URL: `sources` rows are shared and
+// deduplicated across every subscriber (see sources_url_unique), so letting
+// one user edit them would silently repoint everyone else's subscription.
+// Name and folder live on user_sources instead, one row per subscriber, so
+// those are safe to edit per-user -- changing where the feed itself points
+// means unsubscribing and subscribing to a different URL instead.
+export const updateSourceRequest = Type.Object({
+  sourceFolder: Type.Union([id, Type.Null()]),
+  sourceId: id,
+  sourceName: normalizedNonblankString,
+});
 
 export const loginRequest = Type.Object({
   email: normalizedEmailAddress,

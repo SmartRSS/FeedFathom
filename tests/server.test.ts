@@ -189,6 +189,9 @@ function createDependencies(): ServerDependencies {
       async removeSourceFromUser() {
         return unexpected("userSourcesDataService.removeSourceFromUser");
       },
+      async updateUserSource() {
+        return unexpected("userSourcesDataService.updateUserSource");
+      },
       async withSubscriptionInitializationLease() {
         return unexpected(
           "userSourcesDataService.withSubscriptionInitializationLease",

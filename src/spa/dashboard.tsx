@@ -33,6 +33,7 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader";
+import { EditSourceDialog } from "./edit-source";
 import { BackButton, FeedDiscovery } from "./feed-discovery";
 import { Icon } from "./icon";
 import { resolvedTheme } from "./preferences";
@@ -149,6 +150,24 @@ function findNode(
   for (const node of queue) {
     if (node.type === type && node.uid === uid) return node;
     if (node.type === "folder") queue.push(...node.children);
+  }
+  return undefined;
+}
+
+// Folders are flat (one level, no nesting), so a source's containing
+// folder is always a direct child lookup, never a deeper search.
+function findParentFolderUid(
+  nodes: TreeNode[],
+  sourceUid: string,
+): string | undefined {
+  for (const node of nodes) {
+    if (
+      node.type === "folder" &&
+      node.children.some(
+        (child) => child.type === "source" && child.uid === sourceUid,
+      )
+    )
+      return node.uid;
   }
   return undefined;
 }
@@ -340,6 +359,8 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  const [editingSource, setEditingSource] =
+    createSignal<Extract<TreeNode, { type: "source" }>>();
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
@@ -568,11 +589,11 @@ export function Dashboard(props: {
   function showProperties() {
     const node = selectedNode();
     if (!node) return;
-    alert(
-      node.type === "source"
-        ? `Name: ${node.name}\nFeed URL: ${node.xmlUrl ?? ""}\nHome URL: ${node.homeUrl ?? ""}`
-        : `Name: ${node.name}\nItems: ${node.children?.length ?? 0}`,
-    );
+    if (node.type === "source") {
+      setEditingSource(node);
+      return;
+    }
+    alert(`Name: ${node.name}\nItems: ${node.children?.length ?? 0}`);
   }
   async function removeSelectedNode() {
     const node = selectedNode();
@@ -848,6 +869,22 @@ export function Dashboard(props: {
           <p class="dashboard-alert" role="alert">
             {message()}
           </p>
+        )}
+      </Show>
+      <Show when={editingSource()}>
+        {(node) => (
+          <EditSourceDialog
+            handleUnauthorized={props.handleUnauthorized}
+            node={node()}
+            parentUid={findParentFolderUid(tree(), node().uid)}
+            onClose={() => setEditingSource(undefined)}
+            onSaved={() => {
+              setEditingSource(undefined);
+              loadTree().catch((cause) =>
+                reportError(cause, "Could not refresh tree"),
+              );
+            }}
+          />
         )}
       </Show>
       <Show when={!showDiscovery() || !authenticated()}>

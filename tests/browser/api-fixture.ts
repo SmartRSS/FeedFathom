@@ -92,6 +92,7 @@ type ApiFixtureState = {
   subscribed: boolean;
   subscriptionBodies: object[];
   treeRequests: number;
+  updatedSource: { name: string; parentId: null | number } | undefined;
 };
 
 export async function installApiFixture(
@@ -115,6 +116,7 @@ export async function installApiFixture(
     subscribed: false,
     subscriptionBodies: [],
     treeRequests: 0,
+    updatedSource: undefined,
   };
 
   await page.route("**/api/**", async (route) => {
@@ -150,13 +152,18 @@ export async function installApiFixture(
     if (method === "GET" && url.pathname === "/api/tree") {
       state.treeRequests++;
       if (options.treeFailure) return respond({ tree: "malformed" });
+      const currentSource = state.updatedSource
+        ? { ...source, name: state.updatedSource.name }
+        : source;
       return respond({
         tree: state.removedFolderIds.includes(7)
           ? []
           : [
               {
                 children: [
-                  ...(state.removedSourceIds.includes(3) ? [] : [source]),
+                  ...(state.removedSourceIds.includes(3)
+                    ? []
+                    : [currentSource]),
                   ...(state.subscribed && !state.removedSourceIds.includes(9)
                     ? [subscribedSource]
                     : []),
@@ -220,6 +227,13 @@ export async function installApiFixture(
       const { removeSourceId } = request.postDataJSON();
       state.removedSourceIds.push(removeSourceId);
       return respond(removeSourceId);
+    }
+
+    if (method === "PATCH" && url.pathname === "/api/source") {
+      const { sourceFolder, sourceId, sourceName } = request.postDataJSON();
+      expect(sourceId).toBe(3);
+      state.updatedSource = { name: sourceName, parentId: sourceFolder };
+      return respond({ sourceId });
     }
 
     if (method === "DELETE" && url.pathname === "/api/folders") {

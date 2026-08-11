@@ -310,20 +310,59 @@ test("disables the delete-articles button until something is selected", async ({
   await expect(deleteButton).toBeEnabled();
 });
 
-test("shows source properties in an alert", async ({ page }) => {
+test("source properties opens an edit dialog with the feed/home URL locked", async ({
+  page,
+}) => {
   await installApiFixture(page);
   await page.goto("/");
   await selectSource(page);
 
-  let alertText = "";
-  page.once("dialog", (dialog) => {
-    alertText = dialog.message();
-    void dialog.dismiss();
-  });
   await page.getByRole("button", { name: "source properties" }).click();
 
-  expect(alertText).toContain("Tech News");
-  expect(alertText).toContain("https://news.example/feed.xml");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Title")).toHaveValue("Tech News");
+  const feedUrl = dialog.getByLabel("Feed URL");
+  const homeUrl = dialog.getByLabel("Home URL");
+  await expect(feedUrl).toHaveValue("https://news.example/feed.xml");
+  await expect(feedUrl).toBeDisabled();
+  await expect(homeUrl).toHaveValue("https://news.example/");
+  await expect(homeUrl).toBeDisabled();
+});
+
+test("renaming a source through the edit dialog updates the tree", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("button", { name: "source properties" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Title").fill("Renamed Feed");
+  await dialog.getByRole("button", { name: "Save" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Renamed Feed" }),
+  ).toBeVisible();
+  expect(state.updatedSource).toEqual({ name: "Renamed Feed", parentId: 7 });
+});
+
+test("cancelling the edit dialog discards changes", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("button", { name: "source properties" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Title").fill("Should not save");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  expect(state.updatedSource).toBeUndefined();
 });
 
 test("deletes a source after confirmation and refreshes the tree", async ({

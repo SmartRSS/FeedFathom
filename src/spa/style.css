@@ -249,6 +249,25 @@ form,
   margin: 0;
 }
 
+.edit-source-dialog {
+  width: min(100%, 28rem);
+  padding: 0;
+  color: var(--grey-90);
+  background: var(--white);
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.edit-source-dialog::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+.edit-source-dialog form {
+  width: auto;
+  margin: 0;
+}
+.edit-source-dialog input:disabled {
+  color: var(--muted);
+}
+
 .options-page {
   display: grid;
   gap: 1.5rem;
