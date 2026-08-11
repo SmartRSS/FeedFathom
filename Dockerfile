@@ -2,6 +2,8 @@
 FROM dhi.io/bun:1.3.14-alpine3.22-dev AS dev
 WORKDIR /app
 COPY package.json bun.lock /app/
+COPY patches/ /app/patches/
+COPY vendor/ /app/vendor/
 RUN bun install --frozen-lockfile
 COPY tsconfig.json /app/
 USER 65532:65532
@@ -11,6 +13,8 @@ ENTRYPOINT ["/usr/local/bin/bun"]
 FROM --platform=$BUILDPLATFORM dhi.io/bun:1.3.14-alpine3.22-dev AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
+COPY patches/ /app/patches/
+COPY vendor/ /app/vendor/
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # --- Builder Base ---
