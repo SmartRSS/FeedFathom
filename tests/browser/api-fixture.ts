@@ -105,6 +105,7 @@ export async function installApiFixture(
     multipleArticles?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
+    websubFeed?: boolean;
   } = {},
 ): Promise<ApiFixtureState> {
   const state: ApiFixtureState = {
@@ -265,16 +266,19 @@ export async function installApiFixture(
               {
                 title: "Slow feed",
                 url: "https://preview.example/slow.xml",
+                websub: false,
               },
               {
                 title: "Fast feed",
                 url: "https://preview.example/fast.xml",
+                websub: false,
               },
             ]
           : [
               {
                 title: "Tech Preview",
                 url: "https://preview.example/feed.xml",
+                websub: Boolean(options.websubFeed),
               },
             ],
       );

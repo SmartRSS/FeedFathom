@@ -293,7 +293,17 @@ export function FeedDiscovery(props: {
                       type="button"
                       onClick={() => void preview(item.url)}
                     >
-                      <strong>{item.title}</strong>
+                      <strong>
+                        {item.title}
+                        <Show when={item.websub}>
+                          <span
+                            class="websub-badge"
+                            title="This feed pushes updates instantly via WebSub instead of waiting to be polled."
+                          >
+                            WebSub
+                          </span>
+                        </Show>
+                      </strong>
                       <span>{item.url}</span>
                     </button>
                   )}

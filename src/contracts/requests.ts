@@ -102,6 +102,14 @@ export const passwordRequest = withMatchingChangedPasswords(
     password2: Type.String({ minLength: 1 }),
   }),
 );
+// Dotted key names ("hub.mode") are the actual WebSub spec query params --
+// not something this app invented, so kept verbatim rather than remapped.
+export const websubVerificationQuery = Type.Object({
+  "hub.challenge": Type.String({ minLength: 1 }),
+  "hub.lease_seconds": Type.Optional(Type.String()),
+  "hub.mode": Type.String(),
+  "hub.topic": Type.String(),
+});
 export const sourceSortSchema = Type.Union([
   Type.Literal("createdAt"),
   Type.Literal("recentFailures"),

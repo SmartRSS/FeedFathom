@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
@@ -79,6 +80,9 @@ function createDependencies(): ServerDependencies {
       },
     },
     feedParser: {
+      async parseUrl() {
+        return unexpected("feedParser.parseUrl");
+      },
       async preview() {
         return undefined;
       },
@@ -139,12 +143,16 @@ function createDependencies(): ServerDependencies {
     sourcesDataService: {
       async deleteSource() {},
       async enqueueSource() {},
+      async findSourceByWebSubCallbackToken() {
+        return undefined;
+      },
       async getFavicon() {
         return null;
       },
       async listAllSources() {
         return [];
       },
+      async markWebSubVerified() {},
       async successSource() {},
       async updateSourceUrl() {},
     },
@@ -263,6 +271,12 @@ const subscriptionSource = {
   recentFailures: 0,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "https://feed.example/rss",
+  websubCallbackToken: null,
+  websubHubUrl: null,
+  websubLeaseExpiresAt: null,
+  websubSecret: null,
+  websubStatus: "none" as const,
+  websubTopicUrl: null,
 };
 
 const cachedPreview = {
@@ -1608,4 +1622,111 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
 
   expect(adminResponse.status).toBe(200);
   expect(readerResponse.status).toBe(403);
+});
+
+const websubSource = {
+  ...subscriptionSource,
+  websubCallbackToken: "callback-token",
+  websubHubUrl: "https://hub.example/",
+  websubSecret: "s3cr3t",
+  websubStatus: "pending" as const,
+  websubTopicUrl: "https://feed.example/rss",
+};
+
+test("WebSub callback verification requires no session and echoes the challenge", async () => {
+  const dependencies = createDependencies();
+  let verifiedId: number | undefined;
+  let verifiedLease: Date | undefined;
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.markWebSubVerified = async (id, lease) => {
+    verifiedId = id;
+    verifiedLease = lease;
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/websub/callback/callback-token?" +
+        new URLSearchParams({
+          "hub.challenge": "abc123",
+          "hub.lease_seconds": "600",
+          "hub.mode": "subscribe",
+          "hub.topic": websubSource.websubTopicUrl,
+        }),
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("abc123");
+  expect(verifiedId).toBe(websubSource.id);
+  expect(verifiedLease?.getTime()).toBeGreaterThan(Date.now());
+});
+
+test("WebSub callback verification 404s for an unknown token or mismatched topic", async () => {
+  const dependencies = createDependencies();
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.markWebSubVerified = async () =>
+    unexpected("sourcesDataService.markWebSubVerified");
+  const app = await appFor(dependencies);
+
+  const unknownToken = await app.handle(
+    new Request(
+      "http://localhost/api/websub/callback/nope?" +
+        new URLSearchParams({
+          "hub.challenge": "abc123",
+          "hub.mode": "subscribe",
+          "hub.topic": websubSource.websubTopicUrl,
+        }),
+    ),
+  );
+  const mismatchedTopic = await app.handle(
+    new Request(
+      "http://localhost/api/websub/callback/callback-token?" +
+        new URLSearchParams({
+          "hub.challenge": "abc123",
+          "hub.mode": "subscribe",
+          "hub.topic": "https://someone-else.example/feed",
+        }),
+    ),
+  );
+
+  expect(unknownToken.status).toBe(404);
+  expect(mismatchedTopic.status).toBe(404);
+});
+
+test("WebSub push requires a valid signature and then enqueues an immediate re-fetch", async () => {
+  const dependencies = createDependencies();
+  const enqueued: { id: number; url: string }[] = [];
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.enqueueSource = async (source) => {
+    enqueued.push(source);
+  };
+  const app = await appFor(dependencies);
+  const body = "<rss>updated</rss>";
+  const validSignature = `sha256=${createHmac("sha256", websubSource.websubSecret).update(body).digest("hex")}`;
+
+  const wrongSignature = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      body,
+      headers: { "x-hub-signature-256": "sha256=deadbeef" },
+      method: "POST",
+    }),
+  );
+  const validPush = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      body,
+      headers: { "x-hub-signature-256": validSignature },
+      method: "POST",
+    }),
+  );
+
+  expect(wrongSignature.status).toBe(403);
+  expect(validPush.status).toBe(200);
+  expect(enqueued).toEqual([{ id: websubSource.id, url: websubSource.url }]);
 });

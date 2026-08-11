@@ -503,6 +503,22 @@ test("validates Website URLs before discovery", async ({ page }) => {
   expect(state.findRequests).toBe(1);
 });
 
+test("marks a found feed that advertises WebSub, and only that one", async ({
+  page,
+}) => {
+  await installApiFixture(page, { websubFeed: true });
+  await page.goto("/preview");
+  await page.getByLabel("Website").fill("https://preview.example/");
+  await page.getByRole("button", { name: "Find feeds" }).click();
+
+  const result = page
+    .getByRole("button", { name: /Tech Preview/ })
+    .locator(".websub-badge");
+  await expect(result).toBeVisible();
+  await expect(result).toHaveText("WebSub");
+  await expect(page.locator(".websub-badge")).toHaveCount(1);
+});
+
 test("keeps the newest discovery preview response", async ({ page }) => {
   await installApiFixture(page, { discoveryRace: true });
   await page.goto("/preview");

@@ -115,7 +115,10 @@ export const folderResponse = Type.Object(
 export const foldersResponse = Type.Array(folderResponse);
 
 export const foundFeedsResponse = Type.Array(
-  Type.Object({ title: Type.String(), url: Type.String() }, exact),
+  Type.Object(
+    { title: Type.String(), url: Type.String(), websub: Type.Boolean() },
+    exact,
+  ),
 );
 
 const previewArticleResponse = Type.Object(
@@ -156,6 +159,12 @@ export const adminSourcesResponse = Type.Array(
       recentFailures: Type.Integer({ minimum: 0 }),
       subscriberCount: Type.Integer({ minimum: 0 }),
       url: Type.String(),
+      websubStatus: Type.Union([
+        Type.Literal("none"),
+        Type.Literal("pending"),
+        Type.Literal("verified"),
+        Type.Literal("failed"),
+      ]),
     },
     exact,
   ),

@@ -13,13 +13,18 @@ import {
   createReaderRoutes,
   type ReaderRouteDependencies,
 } from "./routes/reader.ts";
+import {
+  createWebSubRoutes,
+  type WebSubRouteDependencies,
+} from "./routes/websub.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,
   "secureCookies"
 > &
   ReaderRouteDependencies &
-  AdminOptionsRouteDependencies;
+  AdminOptionsRouteDependencies &
+  WebSubRouteDependencies;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -69,6 +74,7 @@ export async function createServerApp(
     )
     .use(createReaderRoutes(dependencies))
     .use(createAdminOptionsRoutes(dependencies))
+    .use(createWebSubRoutes(dependencies))
     .use(spaRoutes)
     .error(({ error, request }) => {
       const path = new URL(request.url).pathname;

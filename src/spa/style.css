@@ -313,6 +313,23 @@ form,
   padding: 0.2rem 0.5rem;
   font: inherit;
 }
+.websub-status {
+  padding: 0.1rem 0.4rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+}
+.websub-status-verified {
+  color: #0b6b2c;
+  background: #d8f3dc;
+}
+.websub-status-pending {
+  color: #7a5b00;
+  background: #fff3cd;
+}
+.websub-status-failed {
+  color: #8a1c1c;
+  background: #f8d7da;
+}
 
 label {
   display: grid;
@@ -713,6 +730,16 @@ a {
   font-size: 0.8rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.websub-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  color: #0b6b2c;
+  font-size: 0.7rem;
+  font-weight: 400;
+  background: #d8f3dc;
+  border-radius: 1rem;
 }
 .form-actions {
   display: flex;

@@ -305,6 +305,16 @@ const ADMIN_COLUMNS: { label: string; sort: SourceSort }[] = [
   { label: "Created", sort: "createdAt" },
 ];
 
+// "none" is the overwhelming common case (most feeds never advertise a
+// hub), so it renders as an em dash rather than a label competing for
+// attention with the sources that actually matter here.
+const WEBSUB_STATUS_LABELS: Record<AdminSource["websubStatus"], string> = {
+  failed: "Failed",
+  none: "—",
+  pending: "Pending",
+  verified: "Live",
+};
+
 export function Admin(props: {
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
@@ -418,6 +428,7 @@ export function Admin(props: {
                   </th>
                 )}
               </For>
+              <th>WebSub</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -437,6 +448,16 @@ export function Admin(props: {
                   <td>{source.lastAttempt ?? "—"}</td>
                   <td>{source.lastSuccess ?? "—"}</td>
                   <td>{source.createdAt}</td>
+                  <td>
+                    <span
+                      class="websub-status"
+                      classList={{
+                        [`websub-status-${source.websubStatus}`]: true,
+                      }}
+                    >
+                      {WEBSUB_STATUS_LABELS[source.websubStatus]}
+                    </span>
+                  </td>
                   <td class="admin-table-actions">
                     <button
                       type="button"

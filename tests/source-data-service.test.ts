@@ -14,6 +14,7 @@ const sourceRow = {
   recentFailures: 0,
   subscriberCount: 3,
   url: "https://example.com/feed.xml",
+  websubStatus: "none" as const,
 };
 
 describe("source raw projections", () => {

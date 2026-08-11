@@ -8,6 +8,7 @@ import { JobName } from "../../types/job-name-enum.ts";
 import type { FeedParser } from "../feed-parser.ts";
 import { isHttpDeferredError } from "../http-client.ts";
 import { webUrlPolicy } from "../typebox-policy.ts";
+import { requestHubSubscription } from "../websub.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
 const sourceUrl = Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]);
@@ -38,6 +39,10 @@ const mainWorkerJobData = Type.Union([
       id: Type.Integer({ minimum: 1 }),
     }),
     name: Type.Literal(JobName.RefreshFavicon),
+  }),
+  Type.Object({
+    data: emptyJobData,
+    name: Type.Literal(JobName.WebSubRenewal),
   }),
 ]);
 const mainWorkerJobCheck = Schema.Compile(mainWorkerJobData);
@@ -83,6 +88,7 @@ export type MainWorkerFactory = (
 type MainWorkerConfig = Pick<
   AppConfig,
   | "CLEANUP_INTERVAL"
+  | "FEED_FATHOM_DOMAIN"
   | "GATHER_JOBS_INTERVAL"
   | "LOCK_DURATION"
   | "WORKER_CONCURRENCY"
@@ -90,7 +96,11 @@ type MainWorkerConfig = Pick<
 
 type MainWorkerSources = Pick<
   SourcesDataService,
-  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
+  | "findSourceById"
+  | "getRecentlySuccessfulSources"
+  | "getSourcesToProcess"
+  | "getWebSubSubscriptionsNeedingRenewal"
+  | "markWebSubFailed"
 >;
 
 export class MainWorker {
@@ -197,6 +207,45 @@ export class MainWorker {
           await this.feedParser.refreshFavicon(input.data);
           break;
         }
+
+        case JobName.WebSubRenewal: {
+          const domain = this.appConfig.FEED_FATHOM_DOMAIN;
+          if (!domain) break;
+          const subscriptions =
+            await this.sourcesDataService.getWebSubSubscriptionsNeedingRenewal();
+          await Promise.all(
+            subscriptions.map(async (subscription) => {
+              // hubUrl/topicUrl/secret/callbackToken are nullable columns
+              // (most sources never subscribe at all), but every row this
+              // query returns is already websubStatus: "verified", which
+              // only happens after all four were written together in
+              // recordWebSubDiscovery -- still checked rather than
+              // asserted, since "the DB row matches the invariant" isn't
+              // something the type system can promise.
+              if (
+                !subscription.hubUrl ||
+                !subscription.topicUrl ||
+                !subscription.secret ||
+                !subscription.callbackToken
+              )
+                return;
+              const result = await requestHubSubscription({
+                callbackUrl: `https://${domain}/api/websub/callback/${subscription.callbackToken}`,
+                hubUrl: subscription.hubUrl,
+                mode: "subscribe",
+                secret: subscription.secret,
+                topicUrl: subscription.topicUrl,
+              });
+              if (!result.ok) {
+                console.error(
+                  `WebSub renewal failed for source ${subscription.id}: ${result.error}`,
+                );
+                await this.sourcesDataService.markWebSubFailed(subscription.id);
+              }
+            }),
+          );
+          break;
+        }
       }
     } catch (error: unknown) {
       if (isHttpDeferredError(error)) {
@@ -266,6 +315,15 @@ export class MainWorker {
       {},
       {
         jobId: JobName.GatherFaviconJobs,
+        repeat: { every: 86_400_000 },
+      },
+    );
+
+    await this.bullmqQueue.add(
+      JobName.WebSubRenewal,
+      {},
+      {
+        jobId: JobName.WebSubRenewal,
         repeat: { every: 86_400_000 },
       },
     );

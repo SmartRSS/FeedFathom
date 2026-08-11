@@ -1,6 +1,6 @@
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
-import { eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { sourceSortSchema } from "../../contracts/requests.ts";
 import { dateType } from "../../lib/typebox-policy.ts";
@@ -32,6 +32,7 @@ export interface SourceWithSubscriberCount {
   recentFailures: number;
   subscriberCount: number;
   recentFailureDetails: string;
+  websubStatus: "failed" | "none" | "pending" | "verified";
 }
 
 const exact = { additionalProperties: false } as const;
@@ -63,6 +64,12 @@ const sourceListRowsSchema = Type.Array(
       recentFailures: Type.Integer(),
       subscriberCount: Type.Integer({ minimum: 0 }),
       url: Type.String(),
+      websubStatus: Type.Union([
+        Type.Literal("none"),
+        Type.Literal("pending"),
+        Type.Literal("verified"),
+        Type.Literal("failed"),
+      ]),
     },
     exact,
   ),
@@ -223,7 +230,8 @@ export class SourcesDataService {
             s.last_success as "lastSuccess",
             COALESCE(s.recent_failures, 0) as "recentFailures",
             COALESCE(sc.count, 0) AS "subscriberCount",
-            s.recent_failure_details as "recentFailureDetails"
+            s.recent_failure_details as "recentFailureDetails",
+            s.websub_status as "websubStatus"
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
         ORDER BY ${resolved.sort} ${resolved.order}
@@ -328,5 +336,87 @@ export class SourcesDataService {
       homeUrl: payload.homeUrl,
       url,
     });
+  }
+
+  // Called after a poll discovers a hub advertisement and the source isn't
+  // already tracking that exact hub/topic pair. Generates a fresh per-
+  // subscription secret and callback token and moves straight to "pending"
+  // -- the actual hub POST happens in the caller right after this, using
+  // the returned values, so this and the subscribe attempt always agree on
+  // which secret/token are current.
+  public async recordWebSubDiscovery(
+    sourceId: number,
+    hubUrl: string,
+    topicUrl: string,
+  ): Promise<{ callbackToken: string; secret: string }> {
+    const callbackToken = crypto.randomUUID();
+    const secret = crypto.randomUUID();
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        websubCallbackToken: callbackToken,
+        websubHubUrl: hubUrl,
+        websubSecret: secret,
+        websubStatus: "pending",
+        websubTopicUrl: topicUrl,
+      })
+      .where(eq(sources.id, sourceId));
+    return { callbackToken, secret };
+  }
+
+  public async markWebSubVerified(sourceId: number, leaseExpiresAt: Date) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        // WebSub delivery isn't guaranteed, so this isn't "stop polling
+        // entirely" -- just fall back to a much longer interval than the
+        // usual 5-minute floor, as a safety net for a hub that silently
+        // drops pushes.
+        nextCheckAt: sql`NOW() + INTERVAL '1 day'`,
+        websubLeaseExpiresAt: leaseExpiresAt,
+        websubStatus: "verified",
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  public async markWebSubFailed(sourceId: number) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({ websubStatus: "failed" })
+      .where(eq(sources.id, sourceId));
+  }
+
+  public async findSourceByWebSubCallbackToken(
+    token: string,
+  ): Promise<Source | undefined> {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(sources)
+        .where(eq(sources.websubCallbackToken, token))
+        .limit(1)
+    ).at(0);
+  }
+
+  // Subscriptions within a day of expiring -- the renewal job runs daily
+  // (see MainWorker), so this window guarantees every verified subscription
+  // gets at least one renewal attempt before its lease actually lapses,
+  // even if a given day's job run is late or fails outright.
+  public async getWebSubSubscriptionsNeedingRenewal() {
+    return await this.drizzleConnection
+      .select({
+        callbackToken: sources.websubCallbackToken,
+        hubUrl: sources.websubHubUrl,
+        id: sources.id,
+        secret: sources.websubSecret,
+        topicUrl: sources.websubTopicUrl,
+      })
+      .from(sources)
+      .where(
+        and(
+          eq(sources.websubStatus, "verified"),
+          sql`${sources.websubLeaseExpiresAt} <= NOW() + INTERVAL '1 day'`,
+        ),
+      );
   }
 }

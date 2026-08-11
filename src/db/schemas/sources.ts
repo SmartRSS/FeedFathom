@@ -28,12 +28,35 @@ export const sources = pgTable(
       .notNull()
       .defaultNow(),
     url: varchar("url").notNull(),
+    // WebSub (formerly PubSubHubbub): a hub push-notifies our callback
+    // instead of us polling, once subscribed. All nullable/"none" by
+    // default -- most feeds don't advertise a hub at all, so this is
+    // opportunistic, not required. websubTopicUrl is the feed's own
+    // canonical/self URL from its hub advertisement, which can differ
+    // from `url` (redirects, feed aggregators, etc.) -- the hub requires
+    // the exact topic it was told about, not just any URL that resolves
+    // to the same feed.
+    websubCallbackToken: varchar("websub_callback_token"),
+    websubHubUrl: varchar("websub_hub_url"),
+    websubLeaseExpiresAt: timestamp("websub_lease_expires_at", {
+      withTimezone: true,
+    }),
+    websubSecret: varchar("websub_secret"),
+    websubStatus: varchar("websub_status", {
+      enum: ["none", "pending", "verified", "failed"],
+    })
+      .notNull()
+      .default("none"),
+    websubTopicUrl: varchar("websub_topic_url"),
   },
   (table) => [
     index("last_attempt_idx").on(table.lastAttempt),
     index("next_check_at_idx").on(table.nextCheckAt),
     index("recent_failures_idx").on(table.recentFailures),
     unique("sources_url_unique").on(table.url),
+    unique("sources_websub_callback_token_unique").on(
+      table.websubCallbackToken,
+    ),
   ],
 );
 

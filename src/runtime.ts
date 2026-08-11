@@ -62,6 +62,7 @@ export async function createFeedRuntime() {
     sourcesDataService,
     redirectMap,
     userSourcesDataService,
+    config.FEED_FATHOM_DOMAIN,
   );
   let closePromise: Promise<void> | undefined;
   const close = () =>

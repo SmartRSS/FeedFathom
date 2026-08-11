@@ -13,6 +13,7 @@ import {
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
 import { dateType, webUrlPolicy } from "./typebox-policy.ts";
+import { discoverWebSub, requestHubSubscription } from "./websub.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(
@@ -195,19 +196,38 @@ export class FeedParser {
       UserSourcesDataService,
       "recomputeUnreadCounts"
     >,
+    // Undefined skips WebSub entirely (see maybeSubscribeToWebSub) -- there's
+    // no way to build a callback URL a remote hub could reach without a
+    // configured public domain.
+    private readonly feedFathomDomain?: string,
   ) {}
 
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
     url: string;
+    websubCallbackToken?: null | string;
+    websubHubUrl?: null | string;
+    websubSecret?: null | string;
+    websubStatus?: "failed" | "none" | "pending" | "verified";
+    websubTopicUrl?: null | string;
   }) {
     try {
       const {
         cached,
         feed: parsedFeed,
         freshUntil,
+        websub,
       } = await this.parseUrl(source.url, "background");
+
+      if (
+        websub &&
+        (source.websubStatus === undefined ||
+          source.websubStatus === "none" ||
+          source.websubStatus === "pending")
+      ) {
+        await this.maybeSubscribeToWebSub(source.id, websub);
+      }
 
       const observedAt = new Date();
       const articlesToUpsert = parsedFeed.items.map((item) =>
@@ -273,6 +293,44 @@ export class FeedParser {
   ) {
     const resolvedUrl = await this.redirectMap.resolveUrl(url);
     return this.parseGenericFeed(resolvedUrl, url, priority);
+  }
+
+  // Errors here are deliberately never allowed to reach parseSource's own
+  // try/catch -- a broken or unreachable hub says nothing about whether the
+  // feed itself is healthy, so it must never mark the *source* as failed
+  // (that would stop polling the actual feed content over a subscribe
+  // attempt failing).
+  private async maybeSubscribeToWebSub(
+    sourceId: number,
+    websub: NonNullable<
+      Awaited<ReturnType<FeedParser["parseGenericFeed"]>>["websub"]
+    >,
+  ): Promise<void> {
+    if (!this.feedFathomDomain) return;
+    try {
+      const { callbackToken, secret } =
+        await this.sourcesDataService.recordWebSubDiscovery(
+          sourceId,
+          websub.hubUrl,
+          websub.topicUrl,
+        );
+      const result = await requestHubSubscription({
+        callbackUrl: `https://${this.feedFathomDomain}/api/websub/callback/${callbackToken}`,
+        hubUrl: websub.hubUrl,
+        mode: "subscribe",
+        secret,
+        topicUrl: websub.topicUrl,
+      });
+      if (!result.ok) {
+        console.error(
+          `WebSub subscribe failed for source ${sourceId}: ${result.error}`,
+        );
+        await this.sourcesDataService.markWebSubFailed(sourceId);
+      }
+    } catch (error) {
+      console.error(`WebSub subscribe threw for source ${sourceId}:`, error);
+      await this.sourcesDataService.markWebSubFailed(sourceId);
+    }
   }
 
   public async preview(
@@ -439,6 +497,7 @@ export class FeedParser {
       feed: parsedFeed,
       finalUrl,
       freshUntil: response.freshUntil,
+      websub: discoverWebSub(response.headers, text, finalUrl),
     };
   }
 

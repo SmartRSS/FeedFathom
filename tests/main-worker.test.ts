@@ -20,6 +20,12 @@ const source = {
   recentFailures: 0,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "https://example.com/feed",
+  websubCallbackToken: null,
+  websubHubUrl: null,
+  websubLeaseExpiresAt: null,
+  websubSecret: null,
+  websubStatus: "none" as const,
+  websubTopicUrl: null,
 };
 
 const config = {
@@ -39,6 +45,10 @@ const idleSources = {
   async getSourcesToProcess() {
     return [];
   },
+  async getWebSubSubscriptionsNeedingRenewal() {
+    return [];
+  },
+  async markWebSubFailed() {},
 };
 
 const idleParser = {
@@ -304,6 +314,13 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
       async getSourcesToProcess() {
         downstreamCalls.push("getSourcesToProcess");
         return [];
+      },
+      async getWebSubSubscriptionsNeedingRenewal() {
+        downstreamCalls.push("getWebSubSubscriptionsNeedingRenewal");
+        return [];
+      },
+      async markWebSubFailed() {
+        downstreamCalls.push("markWebSubFailed");
       },
     },
     async () => {

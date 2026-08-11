@@ -45,7 +45,7 @@ export type ReaderRouteDependencies = {
     | "removeUserArticles"
   >;
   usersDataService: Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
-  feedParser: Pick<FeedParser, "preview">;
+  feedParser: Pick<FeedParser, "parseUrl" | "preview">;
   feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
   foldersDataService: Pick<
     FoldersDataService,

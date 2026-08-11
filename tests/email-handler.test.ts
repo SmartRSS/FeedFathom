@@ -14,6 +14,12 @@ const source: Source = {
   recentFailures: 0,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "trusted-recipient@example.com",
+  websubCallbackToken: null,
+  websubHubUrl: null,
+  websubLeaseExpiresAt: null,
+  websubSecret: null,
+  websubStatus: "none",
+  websubTopicUrl: null,
 };
 
 test("routes by the trusted envelope and rejects unknown envelope recipients", async () => {
