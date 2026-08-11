@@ -1,6 +1,6 @@
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { sourceSortSchema } from "../../contracts/requests.ts";
 import { dateType } from "../../lib/typebox-policy.ts";
@@ -387,6 +387,31 @@ export class SourcesDataService {
   // -- the actual hub POST happens in the caller right after this, using
   // the returned values, so this and the subscribe attempt always agree on
   // which secret/token are current.
+  // Atomic claim guarding against concurrent subscribe attempts for the
+  // same source (see the schema comment on websubSubscribeAttemptedAt) --
+  // returns false if another attempt already claimed this source within
+  // the cooldown window, so the caller should skip subscribing rather than
+  // race a second request to the hub with a different callback token.
+  public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
+    const claimed = await this.drizzleConnection
+      .update(sources)
+      .set({ websubSubscribeAttemptedAt: sql`NOW()` })
+      .where(
+        and(
+          eq(sources.id, sourceId),
+          or(
+            isNull(sources.websubSubscribeAttemptedAt),
+            lt(
+              sources.websubSubscribeAttemptedAt,
+              sql`NOW() - INTERVAL '30 seconds'`,
+            ),
+          ),
+        ),
+      )
+      .returning({ id: sources.id });
+    return claimed.length > 0;
+  }
+
   public async recordWebSubDiscovery(
     sourceId: number,
     hubUrl: string,

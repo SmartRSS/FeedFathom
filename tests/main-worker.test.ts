@@ -27,6 +27,7 @@ const source = {
   websubLeaseExpiresAt: null,
   websubSecret: null,
   websubStatus: "none" as const,
+  websubSubscribeAttemptedAt: null,
   websubTopicUrl: null,
 };
 

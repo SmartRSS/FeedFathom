@@ -62,6 +62,16 @@ export const sources = pgTable(
       withTimezone: true,
     }),
     websubSecret: varchar("websub_secret"),
+    // Claim guard against concurrent subscribe attempts for the same source
+    // -- discovery fires both immediately at subscribe time and again from
+    // the enqueued initial-fetch job, and each attempt generates its own
+    // fresh callback token/secret with no coordination between them. A hub
+    // that tolerates a rapid duplicate subscribe won't show it, but a
+    // stricter one can reject the second request outright. See
+    // recordWebSubDiscovery's claim UPDATE.
+    websubSubscribeAttemptedAt: timestamp("websub_subscribe_attempted_at", {
+      withTimezone: true,
+    }),
     websubStatus: varchar("websub_status", {
       enum: ["none", "pending", "verified", "failed"],
     })

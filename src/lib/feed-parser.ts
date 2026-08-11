@@ -346,6 +346,10 @@ export class FeedParser {
   ): Promise<void> {
     if (!this.feedFathomDomain) return;
     try {
+      if (
+        !(await this.sourcesDataService.claimWebSubSubscribeAttempt(sourceId))
+      )
+        return;
       const { callbackToken, secret } =
         await this.sourcesDataService.recordWebSubDiscovery(
           sourceId,
