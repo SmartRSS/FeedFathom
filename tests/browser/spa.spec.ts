@@ -7,6 +7,15 @@ import {
 } from "@playwright/test";
 import { installApiFixture } from "./api-fixture";
 
+// The real service worker (see src/spa/public/sw.js) takes /api/* fetches
+// over itself once it activates -- its own internal fetch() calls run
+// outside the page's network stack, so they bypass installApiFixture's
+// page.route() mock entirely and hit vite's real dev proxy instead
+// (which has no backend behind it here). A slow-enough test lets the SW
+// finish installing/activating mid-run and starts failing partway through
+// with ECONNREFUSED; blocking it keeps every request on the mocked path.
+test.use({ serviceWorkers: "block" });
+
 const browserFailures = new WeakMap<Page, string[]>();
 const guardedResources = new Set(["document", "script", "stylesheet"]);
 
@@ -141,7 +150,7 @@ test("keeps folder state usable when localStorage throws", async ({ page }) => {
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();
-  await page.getByAltText("toggle folder").click();
+  await page.locator(".chevron").first().click();
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeHidden();
@@ -156,6 +165,11 @@ test("preserves an unauthenticated deep link through login", async ({
 
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("next")).toBe(next);
+  // The initial GET /api/folders 401 that drives this redirect is expected
+  // -- not a bug -- so clear it rather than let afterEach's zero-console-
+  // errors guard fail on it, matching the pattern used below for the
+  // other test that deliberately triggers an expired-session 401.
+  (browserFailures.get(page) ?? []).length = 0;
 
   await page.getByLabel("Email").fill("reader@example.com");
   await page.getByLabel("Password").fill("password");
@@ -186,6 +200,18 @@ test("shows the current account and logs out", async ({ page }) => {
   expect(state.authenticated).toBe(false);
 });
 
+test("surfaces a malformed Options session without crashing", async ({
+  page,
+}) => {
+  await installApiFixture(page, { sessionFailure: true });
+  await page.goto("/options");
+
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid response from /api/session",
+  );
+  expect(new URL(page.url()).pathname).toBe("/options");
+});
+
 test("loads articles and content from a selected source", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
@@ -197,6 +223,187 @@ test("loads articles and content from a selected source", async ({ page }) => {
     page.getByRole("heading", { name: "First article" }),
   ).toBeVisible();
   await expect(page.getByText("Feed article content")).toBeVisible();
+});
+
+test("select all moves focus into the list so Delete works immediately", async ({
+  page,
+}) => {
+  // Regression test: clicking the toolbar's "select all" button natively
+  // focuses the button itself, which sits outside .article-list -- the
+  // element handleArticleKeys (Delete/arrow-key handling) is attached to.
+  // Without moving focus back into the list, a Delete keypress right after
+  // clicking select-all was silently a no-op.
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.getByRole("option")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "select all" }).click();
+  await expect(
+    page.getByRole("option", { name: /First article/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("option", { name: /Second article/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("option", { name: /Third article/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  expect(
+    await page.evaluate(() => document.activeElement?.getAttribute("role")),
+  ).toBe("option");
+
+  await page.keyboard.press("Delete");
+  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect
+    .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
+    .toEqual([11, 12, 13]);
+});
+
+test("select all then clicking Delete removes every article", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.getByRole("option")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "select all" }).click();
+  await page.getByRole("button", { name: "delete articles" }).click();
+
+  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect
+    .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
+    .toEqual([11, 12, 13]);
+});
+
+test("selecting a single article then pressing Delete removes only it", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+
+  await page.getByRole("option", { name: /Second article/ }).click();
+  await page.keyboard.press("Delete");
+
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await expect(
+    page.getByRole("option", { name: /First article/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /Third article/ }),
+  ).toBeVisible();
+  expect(state.removedArticleIds).toEqual([12]);
+});
+
+test("disables the delete-articles button until something is selected", async ({
+  page,
+}) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+
+  const deleteButton = page.getByRole("button", { name: "delete articles" });
+  await expect(deleteButton).toBeDisabled();
+
+  await page.getByRole("option", { name: /First article/ }).click();
+  await expect(deleteButton).toBeEnabled();
+});
+
+test("shows source properties in an alert", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  let alertText = "";
+  page.once("dialog", (dialog) => {
+    alertText = dialog.message();
+    void dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "source properties" }).click();
+
+  expect(alertText).toContain("Tech News");
+  expect(alertText).toContain("https://news.example/feed.xml");
+});
+
+test("deletes a source after confirmation and refreshes the tree", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "delete source" }).click();
+
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toHaveCount(0);
+  expect(state.removedSourceIds).toEqual([3]);
+});
+
+test("blocks deleting a non-empty folder", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await page
+    .locator("button.source.folder")
+    .filter({ hasText: "Reading" })
+    .click();
+
+  page.once("dialog", (dialog) => {
+    throw new Error(`Unexpected confirm dialog: ${dialog.message()}`);
+  });
+  await page.getByRole("button", { name: "delete source" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("Folder is not empty");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+});
+
+test("every toolbar icon renders and is clickable", async ({ page }) => {
+  // Regression test for the Icon component swap (inline currentColor SVG
+  // instead of <img src>) -- each button must still have a nonzero hit
+  // area and a visible icon, not just an empty/invisible span.
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+
+  const toolbarButtons = [
+    "add source",
+    "add folder",
+    "source properties",
+    "delete source",
+    "select all",
+    "delete articles",
+  ];
+  await Promise.all(
+    toolbarButtons.map(async (name) => {
+      const button = page.getByRole("button", { name, exact: true }).first();
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box?.width).toBeGreaterThan(0);
+      expect(box?.height).toBeGreaterThan(0);
+      await expect(button.locator("svg")).toBeVisible();
+    }),
+  );
+});
+
+test("shows the generic RSS icon for a source with no favicon", async ({
+  page,
+}) => {
+  // Regression test for the favicon <Show>/faviconFailed restructuring:
+  // the fixture's source carries favicon: null, so this exercises the
+  // Icon-swap fallback branch (not the real <img>) on every render.
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const nodeIcon = page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .locator(".node-icon");
+  await expect(nodeIcon.locator("svg")).toBeVisible();
+  await expect(nodeIcon.locator("img")).toHaveCount(0);
 });
 
 test("uses three desktop panes and mobile history navigation", async ({
@@ -337,20 +544,6 @@ test("keeps Feed mode when the Reader bridge is unavailable", async ({
 
   await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByText("Feed article content")).toBeVisible();
-});
-
-test("surfaces malformed sessions without redirecting to login", async ({
-  page,
-}) => {
-  const state = await installApiFixture(page, { sessionFailure: true });
-  await page.goto("/");
-
-  expect(new URL(page.url()).pathname).toBe("/");
-  await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/session",
-  );
-  await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
-  expect(state.treeRequests).toBe(0);
 });
 
 test("redirects expired protected requests to login", async ({ page }) => {

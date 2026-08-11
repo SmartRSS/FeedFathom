@@ -41,6 +41,25 @@ const article = {
   url: "https://articles.example/first",
 };
 
+// Two more Tech News articles alongside `article`, only returned when
+// `multipleArticles` is on -- exercises select-all/multi-delete without
+// changing the article count every other existing test already asserts
+// against (several match on "First article" as if it may be the only row).
+const secondArticle = {
+  ...article,
+  guid: "article-12",
+  id: 12,
+  title: "Second article",
+  url: "https://articles.example/second",
+};
+const thirdArticle = {
+  ...article,
+  guid: "article-13",
+  id: 13,
+  title: "Third article",
+  url: "https://articles.example/third",
+};
+
 const subscribedArticle = {
   author: "Preview Author",
   content: "<p>Subscribed feed content</p>",
@@ -67,6 +86,9 @@ const summary = (item: typeof article) => ({
 type ApiFixtureState = {
   authenticated: boolean;
   findRequests: number;
+  removedArticleIds: number[];
+  removedFolderIds: number[];
+  removedSourceIds: number[];
   subscribed: boolean;
   subscriptionBodies: object[];
   treeRequests: number;
@@ -79,6 +101,7 @@ export async function installApiFixture(
     discoveryRace?: boolean;
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
+    multipleArticles?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
   } = {},
@@ -86,6 +109,9 @@ export async function installApiFixture(
   const state: ApiFixtureState = {
     authenticated: options.authenticated ?? true,
     findRequests: 0,
+    removedArticleIds: [],
+    removedFolderIds: [],
+    removedSourceIds: [],
     subscribed: false,
     subscriptionBodies: [],
     treeRequests: 0,
@@ -125,14 +151,21 @@ export async function installApiFixture(
       state.treeRequests++;
       if (options.treeFailure) return respond({ tree: "malformed" });
       return respond({
-        tree: [
-          {
-            children: [source, ...(state.subscribed ? [subscribedSource] : [])],
-            name: "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
+        tree: state.removedFolderIds.includes(7)
+          ? []
+          : [
+              {
+                children: [
+                  ...(state.removedSourceIds.includes(3) ? [] : [source]),
+                  ...(state.subscribed && !state.removedSourceIds.includes(9)
+                    ? [subscribedSource]
+                    : []),
+                ],
+                name: "Reading",
+                type: "folder",
+                uid: "7",
+              },
+            ],
       });
     }
 
@@ -142,19 +175,33 @@ export async function installApiFixture(
       expect(
         sources.every((sourceId: number) => [3, 9].includes(sourceId)),
       ).toBe(true);
-      return respond([
-        summary(
-          sources.length === 1 && sources[0] === 9
-            ? subscribedArticle
-            : article,
-        ),
-      ]);
+      if (sources.length === 1 && sources[0] === 9) {
+        return respond([summary(subscribedArticle)]);
+      }
+      const techNewsArticles = options.multipleArticles
+        ? [article, secondArticle, thirdArticle]
+        : [article];
+      return respond(
+        techNewsArticles
+          .filter((item) => !state.removedArticleIds.includes(item.id))
+          .map(summary),
+      );
+    }
+
+    if (method === "DELETE" && url.pathname === "/api/articles") {
+      const { removedArticleIdList } = request.postDataJSON();
+      expect(removedArticleIdList.length > 0).toBe(true);
+      state.removedArticleIds.push(...removedArticleIdList);
+      return respond(removedArticleIdList);
     }
 
     if (method === "GET" && url.pathname === "/api/article") {
       const id = url.searchParams.get("article");
-      expect(["11", "19"]).toContain(id);
-      return respond(id === "19" ? subscribedArticle : article);
+      expect(["11", "12", "13", "19"]).toContain(id);
+      if (id === "19") return respond(subscribedArticle);
+      if (id === "12") return respond(secondArticle);
+      if (id === "13") return respond(thirdArticle);
+      return respond(article);
     }
 
     if (method === "POST" && url.pathname === "/api/folders") {
@@ -169,7 +216,20 @@ export async function installApiFixture(
       });
     }
 
+    if (method === "DELETE" && url.pathname === "/api/source") {
+      const { removeSourceId } = request.postDataJSON();
+      state.removedSourceIds.push(removeSourceId);
+      return respond(removeSourceId);
+    }
+
+    if (method === "DELETE" && url.pathname === "/api/folders") {
+      const { removeFolderId } = request.postDataJSON();
+      state.removedFolderIds.push(removeFolderId);
+      return respond(removeFolderId);
+    }
+
     if (method === "GET" && url.pathname === "/api/folders") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       if (options.foldersFailure) return respond({ folders: "malformed" });
       return respond([
         {
