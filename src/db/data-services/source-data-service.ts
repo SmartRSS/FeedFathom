@@ -44,6 +44,17 @@ export interface SourceWithSubscriberCount {
 // Minimum spacing between successful "feed" polls, regardless of what the
 // origin's Cache-Control says -- see successSource's clamp.
 const pollFloorMs = 5 * 60_000;
+// Flat per-tick ceiling, replacing a "10% of whatever is due" throttle.
+// That percentage self-balanced into a permanent backlog: at equilibrium
+// each source waited ~3.3 extra minutes for a slot regardless of how many
+// sources existed, stretching an intended 5-minute cadence to ~8.3 (the
+// observed production median was 7.3). Draining what's due is well within
+// capacity -- WORKER_REPLICAS * WORKER_CONCURRENCY is three orders of
+// magnitude above a typical due count -- and notBefore already staggers
+// arrivals, which is the smoothing the percentage was standing in for.
+// The flat cap only bounds the pathological case (a long outage making
+// every source due at once) instead of taxing the steady state.
+const gatherBatchLimit = 500;
 const exact = { additionalProperties: false } as const;
 type SourceSort = Static<typeof sourceSortSchema>;
 const sourceOrderSchema = Type.Union([
@@ -230,10 +241,7 @@ export class SourcesDataService {
       SELECT "id", "url"
       FROM "due_sources"
       ORDER BY "last_attempt" ASC NULLS FIRST
-      LIMIT GREATEST(
-        1,
-        (SELECT CEIL(COUNT(*) * 0.1)::int FROM "due_sources")
-      )
+      LIMIT ${gatherBatchLimit}
     `);
     if (!sourcesToProcessRowsCheck.Check(result)) {
       throw new Error("Database returned invalid source processing rows");
