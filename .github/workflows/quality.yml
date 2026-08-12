@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -44,6 +46,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/bun.lock') }}
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -51,7 +59,24 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       - name: Run quality checks
-        run: bun run quality
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
+            # Unit tests statically import what they test, so bun's --changed
+            # (which walks that import graph) is safe here. The browser
+            # suite loads app code at runtime over HTTP with no static
+            # import edge to it, so --only-changed can't see those changes
+            # -- it stays a full run every time.
+            git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
+            bun test --changed="origin/${{ github.event.pull_request.base.ref }}" \
+              --path-ignore-patterns='tests/browser/**' \
+              --path-ignore-patterns='tests/migration-integration.test.ts'
+            bun run test:browser
+            bun run lint
+            bun run build-project
+          else
+            bun run quality
+          fi
 
       - name: Test database migrations
         run: bun run test:migrations
