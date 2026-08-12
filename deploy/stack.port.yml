@@ -1,0 +1,6 @@
+services:
+  server:
+    ports:
+      - target: 3000
+        published: ${SERVER_HOST_PORT:-3458}
+        protocol: tcp
