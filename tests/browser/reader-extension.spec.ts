@@ -236,6 +236,12 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
 test("uses the real extension bridge only on its configured origin", async ({
   baseURL,
 }) => {
+  // Loads a real persistent context with a real extension, waits for its
+  // real service worker, and does two full page reloads with a
+  // postMessage round trip each -- routinely tighter than the default 30s
+  // under CI's slower/shared runners even though it's comfortably fast
+  // locally.
+  test.slow();
   if (!baseURL) throw new Error("Playwright baseURL is required");
   const profile = await mkdtemp(`${tmpdir()}/feedfathom-extension-`);
   const context = await chromium.launchPersistentContext(profile, {
