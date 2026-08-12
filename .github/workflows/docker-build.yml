@@ -181,9 +181,22 @@ jobs:
       - name: Set extension release metadata
         id: metadata
         run: |
+          # WebExtension manifest versions forbid a leading zero on any
+          # dot-segment (each must be "0" or start 1-9) and cap each segment
+          # at 65535, so raw zero-padding and raw seconds-since-midnight are
+          # both out. Instead, offset month/day/hour/second by +10 so every
+          # value is always 2 digits with no leading zero, then pack
+          # month/day into one fixed-width segment (always 4 digits,
+          # 1111-2241) -- the whole version stays fixed-width per segment,
+          # so it sorts correctly both numerically (AMO's own comparator)
+          # and as a plain string (git tag / release list).
           YEAR=$(date -u +%Y)
-          MONTH_DAY=$(date -u +%-m%-d)
-          EXTENSION_VERSION="$YEAR.$MONTH_DAY.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          MONTH=$(( 10#$(date -u +%m) + 10 ))
+          DAY=$(( 10#$(date -u +%d) + 10 ))
+          HOUR=$(( 10#$(date -u +%H) + 10 ))
+          SECOND=$(( 10#$(date -u +%S) + 10 ))
+          MONTH_DAY=$(( MONTH * 100 + DAY ))
+          EXTENSION_VERSION="$YEAR.$MONTH_DAY.$HOUR.$SECOND"
           BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
           {
             echo "extension_version=$EXTENSION_VERSION"
@@ -604,7 +617,14 @@ jobs:
 
           remove_migration() {
             if [[ "$MIGRATION_CREATED" == true ]]; then
-              docker service rm "$MIGRATION_SERVICE"
+              # The completed job service can already be gone by the time we
+              # get here (observed in production: gone before this cleanup
+              # ran, despite wait_for_migration already having confirmed it
+              # reached "complete" -- harmless, since its one task had
+              # already finished). Removal is just tidiness at this point,
+              # not something worth failing an otherwise-successful deploy
+              # over.
+              docker service rm "$MIGRATION_SERVICE" || true
               MIGRATION_CREATED=false
             fi
           }
