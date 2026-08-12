@@ -254,6 +254,24 @@ test("uses the real extension bridge only on its configured origin", async ({
   });
 
   try {
+    // The app's own service worker (unrelated to the extension's) can
+    // register and end up controlling appPage, intercepting same-origin
+    // fetches (including /api/tree) from *inside* the worker's own
+    // execution context -- outside what page.route() covers, since that
+    // only intercepts requests the page itself initiates. Stubbing out
+    // navigator.serviceWorker.register keeps the app's own worker from
+    // ever installing at all, without touching the extension's real
+    // service worker (registered by the browser's own extension-loading
+    // mechanism, not via this page-level API) -- context-wide
+    // serviceWorkers: "block" isn't an option here since this test needs
+    // that one.
+    await context.addInitScript(() => {
+      if (!("serviceWorker" in navigator)) return;
+      Object.defineProperty(navigator.serviceWorker, "register", {
+        value: async () => undefined,
+      });
+    });
+
     const serviceWorker =
       context.serviceWorkers()[0] ??
       (await context.waitForEvent("serviceworker"));
@@ -266,19 +284,6 @@ test("uses the real extension bridge only on its configured origin", async ({
       if (message.type() === "error") browserFailures.push(message.text());
     });
     await installApiFixture(appPage);
-    // The app's own service worker registers and can end up controlling
-    // appPage, intercepting same-origin fetches (including /api/tree) from
-    // *inside* the worker's own execution context -- outside what
-    // page.route() covers, since that only intercepts requests the page
-    // itself initiates. context.route() also covers service-worker-
-    // originated requests, so this catches whatever the page-level mock in
-    // installApiFixture doesn't, without needing to block or fake out
-    // service worker registration itself (this test needs the extension's
-    // own real service worker, so context-wide serviceWorkers: "block"
-    // isn't an option here).
-    await context.route("**/api/**", (route) =>
-      route.fulfill({ body: "[]", contentType: "application/json" }),
-    );
 
     const origin = new URL(baseURL).origin;
     await setInstance(optionsPage, extensionId, origin);
