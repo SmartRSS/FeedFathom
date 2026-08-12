@@ -301,12 +301,17 @@ test("disables the delete-articles button until something is selected", async ({
 }) => {
   await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
-  await selectSource(page);
 
   const deleteButton = page.getByRole("button", { name: "delete articles" });
   await expect(deleteButton).toBeDisabled();
 
-  await page.getByRole("option", { name: /First article/ }).click();
+  // Selecting a source auto-selects its first article for immediate
+  // reading (see "loads articles and content from a selected source"), so
+  // the button already reflects a selection right after this.
+  await selectSource(page);
+  await expect(
+    page.getByRole("option", { name: /First article/ }),
+  ).toHaveAttribute("aria-selected", "true");
   await expect(deleteButton).toBeEnabled();
 });
 

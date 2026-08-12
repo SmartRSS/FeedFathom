@@ -260,6 +260,19 @@ test("uses the real extension bridge only on its configured origin", async ({
       if (message.type() === "error") browserFailures.push(message.text());
     });
     await installApiFixture(appPage);
+    // The app's own service worker registers and can end up controlling
+    // appPage, intercepting same-origin fetches (including /api/tree) from
+    // *inside* the worker's own execution context -- outside what
+    // page.route() covers, since that only intercepts requests the page
+    // itself initiates. context.route() also covers service-worker-
+    // originated requests, so this catches whatever the page-level mock in
+    // installApiFixture doesn't, without needing to block or fake out
+    // service worker registration itself (this test needs the extension's
+    // own real service worker, so context-wide serviceWorkers: "block"
+    // isn't an option here).
+    await context.route("**/api/**", (route) =>
+      route.fulfill({ body: "[]", contentType: "application/json" }),
+    );
 
     const origin = new URL(baseURL).origin;
     await setInstance(optionsPage, extensionId, origin);
