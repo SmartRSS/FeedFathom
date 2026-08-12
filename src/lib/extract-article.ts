@@ -1,50 +1,38 @@
-import domPurify from "dompurify";
-import { JSDOM } from "jsdom";
-import container from "../container.ts";
-import { Extractus } from "./extractors/extractus.ts";
-import { MozillaReadability } from "./extractors/mozilla-readability.ts";
-import { MozillaReadabilityPlain } from "./extractors/mozilla-readability-plain.ts";
-import { Original } from "./extractors/original.ts";
-import { DisplayMode } from "./settings.ts";
+import sanitizeHtml from "sanitize-html";
 
-const displayModeToExtractor = {
-  [DisplayMode.Extractus]: Extractus,
-  [DisplayMode.Feed]: Original,
-  [DisplayMode.Readability]: MozillaReadability,
-  [DisplayMode.ReadabilityPlain]: MozillaReadabilityPlain,
-} as const;
+const allowedTags = [
+  ...sanitizeHtml.defaults.allowedTags,
+  "audio",
+  "figcaption",
+  "figure",
+  "img",
+  "picture",
+  "source",
+  "video",
+];
 
-const window = new JSDOM("").window;
-const purify = domPurify(window);
-
-const getContent = async (
-  content: null | string | undefined,
-  articleUrl: string,
-  displayMode: DisplayMode,
-) => {
-  if (displayMode === DisplayMode.Feed) {
-    return purify.sanitize(content ?? "");
-  }
-
-  const response = await container.cradle.axiosInstance.get(articleUrl);
-  if (response.status !== 200) {
-    return "";
-  }
-
-  if (typeof response.data !== "string") {
-    return "";
-  }
-
-  const originalContent = response.data;
-  return purify.sanitize(originalContent);
-};
-
-export const extractArticle = async (
-  content: null | string | undefined,
-  articleUrl: string,
-  displayMode: DisplayMode,
-) => {
-  const cleanContent = await getContent(content, articleUrl, displayMode);
-  const extractor = new displayModeToExtractor[displayMode]();
-  return await extractor.extract(cleanContent, articleUrl);
-};
+export const extractArticle = (content: null | string | undefined) =>
+  sanitizeHtml(content ?? "", {
+    allowedAttributes: {
+      a: ["href", "name", "target", "rel"],
+      audio: ["controls", "src"],
+      img: ["alt", "height", "loading", "src", "srcset", "title", "width"],
+      source: ["src", "srcset", "type"],
+      video: ["controls", "height", "poster", "src", "width"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedTags,
+    // allowedAttributes only lets the "rel" attribute *name* through, not its
+    // value: content that never passes through rewrite-links.ts (email
+    // articles bypass it entirely) could otherwise carry an attacker-chosen
+    // rel="opener" that actively re-enables window.opener access. Force the
+    // safe value on every link unconditionally (harmless on links that don't
+    // open a new tab) rather than trying to detect target="_blank" first --
+    // that match previously missed case variants like target="_BLANK".
+    transformTags: {
+      a: (tagName, attribs) => ({
+        attribs: { ...attribs, rel: "noopener noreferrer" },
+        tagName,
+      }),
+    },
+  });

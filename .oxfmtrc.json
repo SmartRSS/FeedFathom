@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/build/**",
+    "**/node_modules/**",
+    "**/*.lock",
+    "**/*.js",
+    "**/*.config.js",
+    "**/*.config.ts",
+    "**/ext/**",
+    "**/drizzle/**",
+    "**/*.md",
+    "**/LICENSE",
+    "**/.claude/worktrees/**",
+    "**/.git/**",
+    "**/.github/**",
+    "**/.idea/**",
+    "**/.DS_Store"
+  ]
+}

@@ -1,53 +1,44 @@
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getBoundaryDates, getDateGroup } from "../../util/get-date-group";
-import { logError } from "../../util/log";
+import { generateBoundaryDates, getDateGroup } from "../../util/get-date-group";
 import { userSources } from "../schema";
+import type * as schema from "../schema.ts";
 import {
   type Article,
   type ArticleInsert,
   articles,
 } from "../schemas/articles";
 import { userArticles } from "../schemas/userArticles";
-import { users } from "../schemas/users";
+
+function userArticleAccessJoin(userId: number) {
+  return and(
+    eq(userSources.userId, userId),
+    eq(userSources.sourceId, articles.sourceId),
+    gte(articles.lastSeenInFeedAt, userSources.createdAt),
+  );
+}
 
 export class ArticlesDataService {
-  constructor(private readonly drizzleConnection: BunSQLDatabase) {}
+  constructor(
+    private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
+  ) {}
 
-  public async getArticleByGuid(guid: string): Promise<Article | undefined> {
+  public async getUserArticle(
+    articleId: number,
+    userId: number,
+  ): Promise<Article | undefined> {
     return (
       await this.drizzleConnection
-        .select()
+        .select({ article: articles })
         .from(articles)
-        .where(eq(articles.guid, guid))
-        .limit(1)
-    ).at(0);
-  }
-
-  public async getArticle(articleId: number): Promise<Article | undefined> {
-    return (
-      await this.drizzleConnection
-        .select()
-        .from(articles)
+        .innerJoin(userSources, userArticleAccessJoin(userId))
         .where(eq(articles.id, articleId))
         .limit(1)
-    ).at(0);
+    ).at(0)?.article;
   }
 
   public async getUserArticlesForSources(sourceIds: number[], userId: number) {
     if (sourceIds.length === 0) {
-      return [];
-    }
-
-    const user = (
-      await this.drizzleConnection
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1)
-    ).at(0);
-
-    if (!user) {
       return [];
     }
 
@@ -68,14 +59,7 @@ export class ArticlesDataService {
           eq(userArticles.userId, userId),
         ),
       )
-      .leftJoin(
-        userSources,
-        and(
-          eq(userSources.userId, userId),
-          eq(userSources.sourceId, articles.sourceId),
-          gt(articles.lastSeenInFeedAt, userSources.createdAt),
-        ),
-      )
+      .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
@@ -90,13 +74,13 @@ export class ArticlesDataService {
       )
       .orderBy(desc(articles.publishedAt));
 
-    const boundaryDates = getBoundaryDates();
-    return loadedArticles.map((item) => {
-      return {
-        group: getDateGroup(boundaryDates, item.publishedAt),
-        ...item,
-      };
-    });
+    const boundaryDates = generateBoundaryDates();
+    return loadedArticles.map((item) =>
+      Object.assign(
+        { group: getDateGroup(boundaryDates, item.publishedAt) },
+        item,
+      ),
+    );
   }
 
   public async batchUpsertArticles(articlePayloads: ArticleInsert[]) {
@@ -104,34 +88,92 @@ export class ArticlesDataService {
       return;
     }
 
+    // A feed can list the same (sourceId, guid) twice in one fetch (republishing,
+    // pagination overlap, feed-generator bugs). Postgres rejects an ON CONFLICT
+    // DO UPDATE batch that targets the same row twice, so dedupe first, keeping
+    // the last occurrence as the freshest data.
+    const deduped = [
+      ...new Map(
+        articlePayloads.map((payload) => [
+          `${payload.sourceId} ${payload.guid}`,
+          payload,
+        ]),
+      ).values(),
+    ];
+
     // Process articles in batches to avoid hitting database parameter limits
+    const fieldChange = sql`
+      excluded.author IS DISTINCT FROM ${articles.author}
+      OR excluded.content IS DISTINCT FROM ${articles.content}
+      OR excluded.title IS DISTINCT FROM ${articles.title}
+      OR excluded.url IS DISTINCT FROM ${articles.url}
+      OR (
+        excluded.updated_at IS NOT NULL
+        AND excluded.published_at IS DISTINCT FROM ${articles.publishedAt}
+      )
+    `;
+    const timestampAdvance = sql`
+      excluded.updated_at IS NOT NULL
+      AND (
+        ${articles.updatedAt} IS NULL
+        OR excluded.updated_at > ${articles.updatedAt}
+      )
+    `;
     const BATCH_SIZE = 10;
     const batches = [];
 
-    for (let i = 0; i < articlePayloads.length; i += BATCH_SIZE) {
-      batches.push(articlePayloads.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+      batches.push(deduped.slice(i, i + BATCH_SIZE));
     }
 
     for (const [batchIndex, batch] of batches.entries()) {
       try {
+        // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
         await this.drizzleConnection
           .insert(articles)
           .values(batch)
           .onConflictDoUpdate({
-            target: articles.guid,
+            target: [articles.sourceId, articles.guid],
             set: {
-              title: sql`excluded.title`,
+              author: sql`excluded.author`,
               content: sql`excluded.content`,
-              updatedAt: sql`excluded.updated_at`,
               lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
+              publishedAt: sql`
+                CASE
+                  WHEN excluded.updated_at IS NOT NULL THEN excluded.published_at
+                  ELSE ${articles.publishedAt}
+                END
+              `,
+              title: sql`excluded.title`,
+              updatedAt: sql`
+                CASE
+                  WHEN ${fieldChange} THEN
+                    CASE
+                      WHEN ${timestampAdvance} THEN excluded.updated_at
+                      ELSE GREATEST(
+                        excluded.last_seen_in_feed_at,
+                        COALESCE(
+                          ${articles.updatedAt} + INTERVAL '1 microsecond',
+                          '-infinity'::timestamp
+                        )
+                      )
+                    END
+                  WHEN ${timestampAdvance} THEN excluded.updated_at
+                  ELSE ${articles.updatedAt}
+                END
+              `,
+              url: sql`excluded.url`,
             },
+            setWhere: sql`
+              excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
+            `,
           });
       } catch (error) {
-        logError(
+        console.error(
           `Error upserting articles batch ${batchIndex + 1}/${batches.length}:`,
           error,
         );
-        logError(
+        console.error(
           `Batch size: ${batch.length}, Total articles: ${articlePayloads.length}`,
         );
         throw error;
@@ -139,17 +181,42 @@ export class ArticlesDataService {
     }
   }
 
-  public async removeUserArticles(articleIdList: number[], userId: number) {
-    const now = new Date();
-    const values = articleIdList.map((articleId) => {
-      return {
-        articleId,
-        deletedAt: now,
-        userId,
-      };
-    });
+  public async removeUserArticles(
+    articleIdList: number[],
+    userId: number,
+  ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
+    if (articleIdList.length === 0) {
+      return { articleIds: [], sourceIds: [] };
+    }
 
-    await this.drizzleConnection.transaction(async (trx) => {
+    const now = new Date();
+
+    return await this.drizzleConnection.transaction(async (trx) => {
+      // Only allow soft-deleting articles whose source the user is actually
+      // subscribed to; article IDs are a guessable serial PK so we can't
+      // trust the caller-supplied list as-is.
+      const authorizedArticles = await trx
+        .selectDistinct({
+          id: articles.id,
+          sourceId: articles.sourceId,
+        })
+        .from(articles)
+        .innerJoin(userSources, userArticleAccessJoin(userId))
+        .where(inArray(articles.id, articleIdList));
+
+      if (authorizedArticles.length === 0) {
+        return { articleIds: [], sourceIds: [] };
+      }
+
+      const articleIds = authorizedArticles.map((row) => row.id);
+      const values = articleIds.map((articleId) => {
+        return {
+          articleId,
+          deletedAt: now,
+          userId,
+        };
+      });
+
       await trx
         .insert(userArticles)
         .values(values)
@@ -157,6 +224,11 @@ export class ArticlesDataService {
           set: { deletedAt: now },
           target: [userArticles.userId, userArticles.articleId],
         });
+
+      const sourceIds = [
+        ...new Set(authorizedArticles.map((row) => row.sourceId)),
+      ];
+      return { articleIds, sourceIds };
     });
   }
 }

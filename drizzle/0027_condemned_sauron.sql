@@ -1,0 +1,1 @@
+ALTER TABLE "sources" ADD COLUMN "websub_subscribe_attempted_at" timestamp with time zone;

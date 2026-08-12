@@ -1,58 +1,63 @@
 # dev image is used for development purposes
-FROM oven/bun:1.2.22-alpine AS dev
+FROM dhi.io/bun:1.3.14-alpine3.22-dev AS dev
 WORKDIR /app
+COPY package.json bun.lock /app/
+COPY patches/ /app/patches/
+COPY vendor/ /app/vendor/
+RUN bun install --frozen-lockfile
+COPY tsconfig.json /app/
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Installer (shared dependencies) ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.22-alpine AS installer
+FROM --platform=$BUILDPLATFORM dhi.io/bun:1.3.14-alpine3.22-dev AS installer
 WORKDIR /app
-COPY package.json bun.lock svelte.config.js vite.config.ts tsconfig.json /app/
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --omit=peer --frozen-lockfile
+COPY package.json bun.lock /app/
+COPY patches/ /app/patches/
+COPY vendor/ /app/vendor/
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
+
+# --- Builder Base ---
+FROM --platform=$BUILDPLATFORM dhi.io/bun:1.3.14-alpine3.22-dev AS builder-base
+WORKDIR /app
+COPY tsconfig.json package.json /app/
+COPY src/ /app/src/
+COPY bin/ /app/bin/
+COPY --from=installer /app/node_modules /app/node_modules
 
 # --- Server Builder ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.22-alpine AS builder-server
-WORKDIR /app
-COPY svelte.config.js vite.config.ts tsconfig.json package.json /app/
-COPY static /app/static
-COPY src/ /app/src/
-COPY --from=installer /app/node_modules /app/node_modules
-RUN mkdir -p /app/build && \
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
-    bun run build-server && \
-    echo "Build timestamp: $timestamp" && \
-    echo "$timestamp" > /app/build/BUILD_TIME
+FROM builder-base AS builder-server
+RUN bun run build-server
 
 # --- Worker Builder ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.22-alpine AS builder-worker
-WORKDIR /app
-COPY svelte.config.js vite.config.ts tsconfig.json package.json /app/
+FROM builder-base AS builder-worker
+RUN bun run build-worker
+
+# --- Migrator Builder ---
+FROM builder-base AS builder-migrator
 COPY drizzle /app/drizzle/
-COPY static /app/static
-COPY src/ /app/src/
-COPY --from=installer /app/node_modules /app/node_modules
-RUN mkdir -p /app/build && \
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
-    bun svelte-kit sync && \
-    bun run build-worker && \
-    echo "Build timestamp: $timestamp" && \
-    echo "$timestamp" > /app/build/BUILD_TIME
+RUN bun run build-migrator
+
+# --- Release Base ---
+FROM dhi.io/bun:1.3.14-alpine3.22 AS release
+WORKDIR /app
+ENV NODE_ENV=production
+USER 65532:65532
+COPY --chown=65532:65532 package.json /app/
+ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Server Release ---
-FROM oven/bun:1.2.22-alpine AS feedfathom-server
-WORKDIR /app
-RUN apk add --no-cache curl
-USER 1000:1000
-COPY package.json /app/
-COPY --from=builder-server /app/build/ /app/
-ENTRYPOINT ["/usr/local/bin/bun"]
+FROM release AS feedfathom-server
+COPY --chown=65532:65532 --from=builder-server /app/build/ /app/
 CMD ["index.js"]
+
 # --- Worker Release ---
-FROM oven/bun:1.2.22-alpine AS feedfathom-worker
-WORKDIR /app
-RUN apk add --no-cache curl
-USER 1000:1000
-COPY package.json /app/
-COPY --from=builder-worker /app/build/ /app/
-COPY --from=builder-worker /app/drizzle/ /app/drizzle/
-ENTRYPOINT ["/usr/local/bin/bun"]
-CMD ["worker-entrypoint.js"]
+FROM release AS feedfathom-worker
+COPY --chown=65532:65532 --from=builder-worker /app/build/ /app/
+CMD ["worker.js"]
+
+# --- Migrator Release ---
+FROM release AS feedfathom-migrator
+COPY --chown=65532:65532 --from=builder-migrator /app/build/ /app/
+COPY --chown=65532:65532 --from=builder-migrator /app/drizzle/ /app/drizzle/
+CMD ["migrator.js"]

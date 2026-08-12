@@ -99,6 +99,104 @@
       "when": 1751368238239,
       "tag": "0014_stale_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1757673513000,
+      "tag": "0015_conscious_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785238777933,
+      "tag": "0016_smart_blackheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785498799957,
+      "tag": "0017_soft_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785765117033,
+      "tag": "0018_reflective_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785869000000,
+      "tag": "0019_curly_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786004903011,
+      "tag": "0020_panoramic_rawhide_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786019269655,
+      "tag": "0021_sudden_mattie_franklin",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786038929417,
+      "tag": "0022_sad_marvel_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786444677240,
+      "tag": "0023_aspiring_starjammers",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786449476032,
+      "tag": "0024_clean_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786455816225,
+      "tag": "0025_conscious_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786456875778,
+      "tag": "0026_flat_masked_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786467837920,
+      "tag": "0027_condemned_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786480303705,
+      "tag": "0028_goofy_pepper_potts",
+      "breakpoints": true
     }
   ]
 }

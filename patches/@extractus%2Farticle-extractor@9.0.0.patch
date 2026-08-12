@@ -1,0 +1,14 @@
+diff --git a/package.json b/package.json
+index 615ebb5d29a17a54d65d540d9f7d7ec0e8be010d..30d1e8baea233c44bb0764a48c66741499cbbb0c 100644
+--- a/package.json
++++ b/package.json
+@@ -21,8 +21,7 @@
+   },
+   "scripts": {},
+   "dependencies": {
+-    "@mozilla/readability": "^0.6.0",
+-    "linkedom": "^0.18.13"
++    "@mozilla/readability": "^0.6.0"
+   },
+   "devDependencies": {
+     "@types/node": "^20.9.0"

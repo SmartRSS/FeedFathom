@@ -1,5 +1,5 @@
 {
   "description": "current directory relative path",
   "content": "<a href=\"./nested/path\">Link</a>",
-  "expected": "<a href=\"https://example.com/nested/path\" target=\"_blank\">Link</a>"
+  "expected": "<a href=\"https://example.com/nested/path\" target=\"_blank\" rel=\"noopener noreferrer\">Link</a>"
 }

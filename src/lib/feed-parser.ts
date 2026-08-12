@@ -1,411 +1,574 @@
-import { lookup } from "node:dns/promises";
 import { parseFeed } from "@rowanmanning/feed-parser";
-import { AxiosError } from "axios";
-import type { AxiosCacheInstance } from "axios-cache-interceptor";
-import type { RedisClient } from "bun";
-import container from "../container.ts";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
-import { logError as error } from "../util/log.ts";
+import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
 import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
+import {
+  type HttpClient,
+  HttpDeferredError,
+  isHttpDeferredError,
+} from "./http-client.ts";
+import { isJsonFeedText, parseJsonFeed } from "./json-feed-parser.ts";
+import {
+  isMicroformatHtml,
+  parseMicroformatFeed,
+} from "./microformat-feed-parser.ts";
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
+import { dateType, webUrlPolicy } from "./typebox-policy.ts";
+import { discoverWebSub, requestHubSubscription } from "./websub.ts";
 
-// const parserStrategies: Record<string, (url: string) => Promise<Feed | void>> =
-//   {};
+const nullableString = Type.Union([Type.String(), Type.Null()]);
+const feedAuthorProjection = Type.Object(
+  { name: nullableString },
+  { additionalProperties: true },
+);
+const feedItemProjection = Type.Object(
+  {
+    authors: Type.Array(feedAuthorProjection),
+    content: nullableString,
+    description: nullableString,
+    id: nullableString,
+    published: Type.Union([dateType, Type.Null()]),
+    title: nullableString,
+    updated: Type.Union([dateType, Type.Null()]),
+    url: nullableString,
+  },
+  { additionalProperties: true },
+);
+const feedProjection = Type.Object(
+  {
+    description: nullableString,
+    items: Type.Array(feedItemProjection),
+    title: nullableString,
+    url: nullableString,
+  },
+  { additionalProperties: true },
+);
+const feedProjectionCheck = Schema.Compile(feedProjection);
+const successfulStatusCheck = Schema.Compile(Type.Literal(200));
+const feedResponseStatusProjection = Type.Object(
+  { status: Type.Number() },
+  { additionalProperties: true },
+);
+const feedResponseStatusProjectionCheck = Schema.Compile(
+  feedResponseStatusProjection,
+);
+const successfulFeedResponse = Type.Object(
+  {
+    cached: Type.Boolean(),
+    status: Type.Literal(200),
+    url: Type.Intersect([Type.String(), webUrlPolicy]),
+  },
+  { additionalProperties: true },
+);
+const successfulFeedResponseCheck = Schema.Compile(successfulFeedResponse);
+
+const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
+
+// The <?xml ...?> prolog is guaranteed ASCII-compatible up to the encoding
+// declaration itself, so it's always safe to decode as windows-1252 (a
+// superset of ASCII with no invalid byte sequences) just to go looking for it.
+export function detectFeedEncoding(
+  buffer: ArrayBuffer,
+  contentType: string | null,
+): string {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return "utf-8";
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+
+  const charset = /charset=([^;]+)/i.exec(contentType ?? "")?.[1]?.trim();
+  if (charset) return charset;
+
+  const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
+  return xmlEncodingPattern.exec(prolog)?.[1] ?? "utf-8";
+}
+
+export function decodeFeedBody(
+  buffer: ArrayBuffer,
+  contentType: string | null,
+): string {
+  try {
+    return new TextDecoder(detectFeedEncoding(buffer, contentType)).decode(
+      buffer,
+    );
+  } catch {
+    // Unrecognized/unsupported encoding label — UTF-8 is the right default
+    // for the overwhelming majority of feeds anyway.
+    return new TextDecoder("utf-8").decode(buffer);
+  }
+}
+
+export function validateParsedFeed(value: unknown): void {
+  if (!feedProjectionCheck.Check(value)) {
+    throw new Error("Feed parser returned an invalid feed projection");
+  }
+}
+
+// Some favicon providers return an error placeholder (e.g. an HTML 404 page,
+// or HTML-entity-escaped SVG markup) with a 200 status and a plausible
+// content-type. Parse actual magic bytes / markup to size the result and
+// reject anything that isn't really an image.
+function imageDimensions(
+  buffer: Buffer,
+): { width: number; height: number } | undefined {
+  if (
+    buffer.length >= 24 &&
+    buffer.subarray(1, 4).toString("latin1") === "PNG"
+  ) {
+    return { height: buffer.readUInt32BE(20), width: buffer.readUInt32BE(16) };
+  }
+  if (
+    buffer.length >= 10 &&
+    buffer.subarray(0, 3).toString("latin1") === "GIF"
+  ) {
+    return { height: buffer.readUInt16LE(8), width: buffer.readUInt16LE(6) };
+  }
+  if (
+    buffer.length >= 22 &&
+    buffer.readUInt16LE(0) === 0 &&
+    buffer.readUInt16LE(2) === 1
+  ) {
+    return {
+      height: buffer[7] === 0 ? 256 : buffer[7]!,
+      width: buffer[6] === 0 ? 256 : buffer[6]!,
+    };
+  }
+  if (
+    buffer.length >= 26 &&
+    buffer.subarray(0, 2).toString("latin1") === "BM"
+  ) {
+    return {
+      height: Math.abs(buffer.readInt32LE(22)),
+      width: buffer.readInt32LE(18),
+    };
+  }
+  if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset < buffer.length - 8) {
+      if (buffer[offset] !== 0xff) break;
+      const marker = buffer[offset + 1]!;
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc
+      ) {
+        return {
+          height: buffer.readUInt16BE(offset + 5),
+          width: buffer.readUInt16BE(offset + 7),
+        };
+      }
+      offset += 2 + buffer.readUInt16BE(offset + 2);
+    }
+    return undefined;
+  }
+  if (/^\s*<svg[\s>]/i.test(buffer.toString("utf8", 0, 500))) {
+    return { height: Infinity, width: Infinity };
+  }
+  return undefined;
+}
+
+// Prefers the smallest candidate that still meets `target`, over always
+// grabbing the biggest available -- falls back to the biggest undersized
+// candidate only when nothing meets the target at all.
+export function isBetterFavicon(
+  candidateSize: number,
+  bestSize: number,
+  target: number,
+): boolean {
+  const candidateMeetsTarget = candidateSize >= target;
+  const bestMeetsTarget = bestSize >= target;
+  if (candidateMeetsTarget && bestMeetsTarget) return candidateSize < bestSize;
+  if (candidateMeetsTarget) return true;
+  if (bestMeetsTarget) return false;
+  return candidateSize > bestSize;
+}
+
+// "pending" is retried (not just "none") since subscribing again is
+// idempotent from the hub's perspective -- self-heals a verification the
+// hub silently dropped, without needing a separate timeout/retry scheme.
+function shouldAttemptWebSubSubscribe(
+  status: "failed" | "none" | "pending" | "verified" | undefined,
+): boolean {
+  return status === undefined || status === "none" || status === "pending";
+}
 
 export class FeedParser {
-  private readonly defaultDelay = 10_000;
-
-  private domainDelaySettings: Record<string, number> = {
-    "feeds.feedburner.com": 5_000,
-    "openrss.org": 2_500,
-    "youtube.com": 2_500,
-  };
-
   constructor(
     private readonly articlesDataService: ArticlesDataService,
-    private readonly axiosInstance: AxiosCacheInstance,
-    private readonly redis: RedisClient,
+    private readonly httpClient: HttpClient,
     private readonly sourcesDataService: SourcesDataService,
     private readonly redirectMap: RedirectMap,
+    private readonly userSourcesDataService: Pick<
+      UserSourcesDataService,
+      "recomputeUnreadCounts"
+    >,
+    // Undefined skips WebSub entirely (see maybeSubscribeToWebSub) -- there's
+    // no way to build a callback URL a remote hub could reach without a
+    // configured public domain.
+    private readonly feedFathomDomain?: string,
   ) {}
-
-  private formatErrorMessage(error_: unknown): string {
-    if (error_ instanceof AxiosError) {
-      return [
-        error_.cause instanceof Object
-          ? JSON.stringify(error_.cause)
-          : "unknown cause",
-        error_.code ?? "no code",
-        error_.message,
-        String(error_.response?.status ?? "no status"),
-        typeof error_.response?.data === "string"
-          ? error_.response.data
-          : JSON.stringify(error_.response?.data ?? "no data"),
-      ].join("\n");
-    }
-    return error_ instanceof Error ? error_.message : String(error_);
-  }
 
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
+    trigger?: "manual" | "poll" | "websub-push";
     url: string;
+    websubCallbackToken?: null | string;
+    websubHubUrl?: null | string;
+    websubSecret?: null | string;
+    websubStatus?: "failed" | "none" | "pending" | "verified";
+    websubTopicUrl?: null | string;
   }) {
     try {
-      if (
-        !(await this.canDomainBeProcessedAlready(new URL(source.url).hostname))
-      ) {
-        return;
-      }
-
       const {
         cached,
         feed: parsedFeed,
-        finalUrl,
-        permanentRedirect,
-      } = await this.parseUrl(source.url);
+        freshUntil,
+        websub,
+      } = await this.parseUrl(source.url, "background", source.skipCache);
 
-      if (cached && !source.skipCache) {
-        // Mark this source as successfully processed using cached data
-        await this.sourcesDataService.successSource(source.id, true);
-        return;
+      if (websub && shouldAttemptWebSubSubscribe(source.websubStatus)) {
+        await this.maybeSubscribeToWebSub(source.id, websub);
       }
 
-      const articlePayloads = parsedFeed.items.map((item) => {
-        return mapFeedItemToArticle(
-          item,
-          parsedFeed,
-          { id: source.id, url: source.url },
-          rewriteLinks,
+      const observedAt = new Date();
+      const articlesToUpsert = parsedFeed.items.map((item) =>
+        Object.assign(
+          mapFeedItemToArticle(
+            item,
+            parsedFeed,
+            { id: source.id, url: source.url },
+            rewriteLinks,
+            observedAt.getTime(),
+          ),
+          { lastSeenInFeedAt: observedAt },
+        ),
+      );
+      // batchUpsertArticles processes batches sequentially and a later
+      // batch can fail after earlier ones already committed -- recompute
+      // regardless of that outcome so committed articles aren't left
+      // counted as unread-stale, then re-raise the original failure.
+      let upsertError: unknown;
+      try {
+        await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
+      } catch (error) {
+        upsertError = error;
+      }
+      try {
+        await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+      } catch (recomputeError) {
+        // The upsert failure is the more actionable root cause -- don't
+        // let a recompute failure silently replace it.
+        if (upsertError === undefined) {
+          throw recomputeError;
+        }
+        console.error(
+          "recomputeUnreadCounts failed after batchUpsertArticles error:",
+          recomputeError,
         );
+      }
+      if (upsertError !== undefined) {
+        throw upsertError;
+      }
+
+      await this.sourcesDataService.successSource(
+        source.id,
+        cached,
+        new Date(freshUntil ?? Date.now() + 5 * 60_000),
+        observedAt,
+        source.trigger ?? "poll",
+      );
+    } catch (error_: unknown) {
+      if (isHttpDeferredError(error_)) {
+        throw error_;
+      }
+      console.error("parseSource", error_);
+
+      const message = error_ instanceof Error ? error_.message : String(error_);
+      await this.sourcesDataService.failSource(source.id, message);
+      console.error(`${source.url} failed`);
+    }
+  }
+
+  public async parseUrl(
+    url: string,
+    priority: "background" | "interactive" = "interactive",
+    skipCache = false,
+  ) {
+    const resolvedUrl = await this.redirectMap.resolveUrl(url);
+    return this.parseGenericFeed(resolvedUrl, url, priority, skipCache);
+  }
+
+  // Called directly from the subscribe route so discovery happens as part
+  // of adding the source, not only whenever the next background poll (or
+  // the enqueued initial fetch) happens to run parseSource -- otherwise a
+  // WebSub-capable feed would sit on ordinary polling for however long
+  // that takes before its first real subscribe attempt.
+  public async discoverAndSubscribeWebSub(
+    sourceId: number,
+    url: string,
+    websubStatus?: "failed" | "none" | "pending" | "verified",
+  ): Promise<void> {
+    if (!shouldAttemptWebSubSubscribe(websubStatus)) return;
+    try {
+      const { websub } = await this.parseUrl(url, "interactive");
+      if (websub) await this.maybeSubscribeToWebSub(sourceId, websub);
+    } catch (error) {
+      // A feed that fails to fetch/parse here isn't this method's problem
+      // to surface -- the article-fetch path running alongside it (the
+      // cached-preview upsert, or the enqueued parseSource job) already
+      // owns reporting that failure through its own error handling.
+      console.error(
+        `WebSub discovery fetch failed for source ${sourceId}:`,
+        error,
+      );
+    }
+  }
+
+  // Errors here are deliberately never allowed to reach parseSource's own
+  // try/catch -- a broken or unreachable hub says nothing about whether the
+  // feed itself is healthy, so it must never mark the *source* as failed
+  // (that would stop polling the actual feed content over a subscribe
+  // attempt failing).
+  private async maybeSubscribeToWebSub(
+    sourceId: number,
+    websub: NonNullable<
+      Awaited<ReturnType<FeedParser["parseGenericFeed"]>>["websub"]
+    >,
+  ): Promise<void> {
+    if (!this.feedFathomDomain) return;
+    try {
+      if (
+        !(await this.sourcesDataService.claimWebSubSubscribeAttempt(sourceId))
+      )
+        return;
+      const { callbackToken, secret } =
+        await this.sourcesDataService.recordWebSubDiscovery(
+          sourceId,
+          websub.hubUrl,
+          websub.topicUrl,
+        );
+      const result = await requestHubSubscription({
+        callbackUrl: `https://${this.feedFathomDomain}/api/websub/callback/${callbackToken}`,
+        hubUrl: websub.hubUrl,
+        mode: "subscribe",
+        secret,
+        topicUrl: websub.topicUrl,
       });
-      const date = new Date();
+      if (!result.ok) {
+        console.error(
+          `WebSub subscribe failed for source ${sourceId}: ${result.error}`,
+        );
+        await this.sourcesDataService.markWebSubFailed(sourceId);
+      }
+    } catch (error) {
+      console.error(`WebSub subscribe threw for source ${sourceId}:`, error);
+      await this.sourcesDataService.markWebSubFailed(sourceId);
+    }
+  }
 
-      const articlesToUpsert = articlePayloads.map((payload) => ({
-        guid: payload.guid,
-        sourceId: payload.sourceId,
-        title: payload.title,
-        url: payload.url,
-        author: payload.author,
-        publishedAt: payload.publishedAt ?? date,
-        content: payload.content ?? "",
-        updatedAt: date,
-        lastSeenInFeedAt: date,
-      }));
-      await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
-      articlePayloads.length = 0;
+  public async preview(
+    sourceUrl: string,
+  ): Promise<ReturnType<typeof mapFeedToPreview> | undefined> {
+    try {
+      const { feed: parsedFeed, freshUntil } = await this.parseUrl(sourceUrl);
+      return Object.assign(
+        mapFeedToPreview(parsedFeed, sourceUrl, rewriteLinks),
+        { freshUntil },
+      );
+    } catch (error_: unknown) {
+      if (isHttpDeferredError(error_)) {
+        throw error_;
+      }
+      return undefined;
+    }
+  }
 
-      await this.sourcesDataService.successSource(source.id);
+  // The tree shows favicons at 1.5cap -- a few dozen CSS px even at a 2x
+  // pixel density -- and since a warm favicon now gets embedded as base64
+  // directly in the /api/tree response (see sw.js), every extra byte here
+  // is paid on every tree load, not just once. 64px covers that display
+  // size with headroom; prefer the smallest candidate that clears it over
+  // always grabbing the biggest available, falling back to the biggest
+  // undersized one when nothing meets the target at all.
+  private static readonly TARGET_FAVICON_SIZE = 64;
 
-      // If we encountered a permanent redirect (301/308) – rewrite the source
-      // URL so future fetches go directly to the canonical location.
-      if (permanentRedirect && finalUrl && finalUrl !== source.url) {
-        try {
-          await this.sourcesDataService.updateSourceUrl(source.url, finalUrl);
-          // Keep the in-memory object in sync to avoid duplicate work later in
-          // this method – especially important for the successSource call.
-          source.url = finalUrl;
-        } catch (updateError) {
-          // Non-critical – log and continue so feed parsing still succeeds.
-          error(
-            `Failed to update source URL from ${source.url} to ${finalUrl}:`,
-            updateError,
+  private async bestFavicon(urls: string[]) {
+    const results = await Promise.allSettled(
+      urls.map((url) =>
+        this.httpClient.get(url, {
+          priority: "background",
+          responseType: "arrayBuffer",
+        }),
+      ),
+    );
+
+    let best: { buffer: Buffer; contentType: string; size: number } | undefined;
+    let earliestRetryAt: number | undefined;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        if (isHttpDeferredError(result.reason)) {
+          earliestRetryAt = Math.min(
+            earliestRetryAt ?? Infinity,
+            result.reason.retryAt,
           );
         }
-      }
-    } catch (error_: unknown) {
-      if (error_ instanceof Error) {
-        error("parseSource", error_.message);
-      } else {
-        error("parseSource", error_);
+        continue;
       }
 
-      const message = this.formatErrorMessage(error_);
-      await this.sourcesDataService.failSource(source.id, message);
-      error(`${source.url} failed`);
+      const response = result.value;
+      if (!successfulStatusCheck.Check(response.status)) continue;
+
+      const buffer = Buffer.from(response.data);
+      if (buffer.length < 20) continue;
+
+      const dimensions = imageDimensions(buffer);
+      if (!dimensions) continue;
+
+      const size = Math.max(dimensions.width, dimensions.height);
+      if (
+        !best ||
+        isBetterFavicon(size, best.size, FeedParser.TARGET_FAVICON_SIZE)
+      ) {
+        best = {
+          buffer,
+          contentType: response.headers.get("content-type") ?? "image/png",
+          size,
+        };
+      }
     }
-  }
 
-  public async parseUrl(url: string) {
-    // Remember the originally supplied URL so that we can create a direct mapping
-    // from it to the final resolved URL (to avoid redirect chains).
-
-    // Check for redirect mapping first – if we already know that `url` redirects
-    // somewhere else, we will fetch that destination instead.
-    const resolvedUrl = await this.redirectMap.resolveUrl(url);
-
-    const urlObject = new URL(resolvedUrl);
-    const lookupResult = await lookup(urlObject.hostname);
-    if (!lookupResult.address) {
-      throw new Error(`Failed to resolve ${urlObject.hostname}`);
-    }
-
-    // const chosenParser =
-    //   parserStrategies[urlObject.origin] ?? this.parseGenericFeed;
-    // return await chosenParser.bind(this)(resolvedUrl);
-
-    // Pass along both the URL we are actually fetching (resolvedUrl) and the
-    // originally provided URL so that the parser can store proper redirect
-    // mappings without creating inefficient chains (A -> C instead of A -> B -> C).
-    return await this.parseGenericFeed(resolvedUrl, url);
-  }
-
-  public async preview(sourceUrl: string) {
-    try {
-      const { feed: parsedFeed } = await this.parseUrl(sourceUrl);
-      return mapFeedToPreview(parsedFeed, sourceUrl);
-    } catch {
-      return {};
-    }
+    return { best, earliestRetryAt };
   }
 
   public async refreshFavicon(source: { homeUrl: string; id: number }) {
-    const urls = [
-      `https://icons.duckduckgo.com/ip3/${source.homeUrl}.ico`,
-      `https://unavatar.io/${source.homeUrl}`,
+    // Query the free providers concurrently and keep the smallest valid
+    // image that still meets TARGET_FAVICON_SIZE (falling back to the
+    // biggest available if none do) -- an earlier one can succeed with a
+    // smaller icon while a later one has a bigger one. unavatar.io is
+    // capped at 25 requests/day on the free tier, so it's only used as a
+    // last resort when nothing else has an icon.
+    let hostname: string;
+    try {
+      hostname = new URL(source.homeUrl).hostname;
+    } catch {
+      return;
+    }
+    const primaryUrls = [
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=${FeedParser.TARGET_FAVICON_SIZE}`,
       `https://favicon.im/${source.homeUrl}`,
-      `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=64`,
+      `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
     ];
 
-    for (const url of urls) {
-      try {
-        const response = await container.cradle.axiosInstance.get(url, {
-          responseType: "arraybuffer",
-        });
-
-        if (response.status !== 200 || !response.data) {
-          continue;
-        }
-
-        let faviconPayload: string;
-
-        if (response.data instanceof ArrayBuffer) {
-          const buffer = Buffer.from(response.data);
-          // Ignore small responses, likely errors or blank images
-          if (buffer.length < 20) {
-            continue;
-          }
-          const contentType = response.headers["content-type"] ?? "image/png";
-          faviconPayload = `data:${contentType};base64,${buffer.toString(
-            "base64",
-          )}`;
-        } else if (typeof response.data === "string") {
-          // If it's a string, it must be a data URI, otherwise we don't know how to handle it.
-          if (response.data.startsWith("data:image")) {
-            faviconPayload = response.data;
-          } else {
-            continue;
-          }
-        } else {
-          // Unsupported type
-          continue;
-        }
-
-        await this.sourcesDataService.updateFavicon(source.id, faviconPayload);
-        // Exit loop after successful update
-        break;
-      } catch {
-        // nop
-      }
-    }
-  }
-
-  private async canDomainBeProcessedAlready(domain: string): Promise<boolean> {
-    const now = Date.now();
-    const lastFetchKey = `lastFetchTimestamp:${domain}`;
-    const rateLimitKey = `rateLimitUntil:${domain}`;
-
-    // Check for dynamic rate limit (set by Retry-After or similar)
-    const rateLimitUntil = Number.parseInt(
-      (await this.redis.get(rateLimitKey)) ?? "0",
-      10,
-    );
-    if (now < rateLimitUntil) {
-      error(
-        `Domain ${domain} is rate limited until ${new Date(rateLimitUntil).toISOString()}`,
-      );
-      return false;
-    }
-
-    const lastFetchTimestamp = Number.parseInt(
-      (await this.redis.get(lastFetchKey)) ?? "0",
-      10,
-    );
-
-    const delaySetting = this.domainDelaySettings[domain] ?? this.defaultDelay;
-    if (now < lastFetchTimestamp + delaySetting) {
-      return false;
-    }
-
-    await this.redis.set(lastFetchKey, now.toString());
-    return true;
-  }
-
-  /**
-   * Generic feed parsing logic.
-   *
-   * @param fetchedUrl   The URL we are going to request (possibly already resolved by a previous redirect mapping).
-   * @param originalUrl  The URL originally supplied to `parseUrl`. This can be different from `fetchedUrl` when a redirect
-   *                     mapping already exists. Providing it allows us to store a direct mapping from the original URL to
-   *                     the final one and avoid redirect chains.
-   */
-  private async parseGenericFeed(fetchedUrl: string, originalUrl?: string) {
-    let response: Awaited<ReturnType<AxiosCacheInstance["get"]>> & {
-      status: number;
-      data: unknown;
-      headers: Record<string, string>;
-      request?: { res?: { responseUrl?: string } };
-      config: { url?: string };
-      cached?: boolean;
-    };
-    try {
-      response = await this.axiosInstance.get(fetchedUrl);
-      const domain = new URL(fetchedUrl).hostname;
-      await this.handleUpcomingRateLimitHeaders(response, domain);
-      this.validateFeedResponse(response, fetchedUrl);
-      const finalUrl = this.getFinalUrl(response, fetchedUrl);
-      const permanentRedirect = await this.handleRedirects(
-        fetchedUrl,
-        finalUrl,
-      );
-      if (finalUrl !== fetchedUrl) {
-        await this.redirectMap.setRedirect(fetchedUrl, finalUrl);
-      }
-      if (originalUrl && originalUrl !== finalUrl) {
-        await this.redirectMap.setRedirect(originalUrl, finalUrl);
-      }
-      return {
-        cached: response.cached ?? false,
-        feed: parseFeed(response.data as string),
-        finalUrl,
-        permanentRedirect,
+    const primary = await this.bestFavicon(primaryUrls);
+    let result = primary;
+    if (!primary.best) {
+      const fallback = await this.bestFavicon([
+        `https://unavatar.io/domain/${hostname}?size=${FeedParser.TARGET_FAVICON_SIZE}`,
+      ]);
+      result = {
+        best: fallback.best,
+        earliestRetryAt:
+          primary.earliestRetryAt !== undefined ||
+          fallback.earliestRetryAt !== undefined
+            ? Math.min(
+                primary.earliestRetryAt ?? Infinity,
+                fallback.earliestRetryAt ?? Infinity,
+              )
+            : undefined,
       };
-    } catch (err) {
-      await this.handleRateLimitError(err, fetchedUrl);
-      throw err;
+    }
+
+    if (result.best) {
+      await this.sourcesDataService.updateFavicon(
+        source.id,
+        result.best.buffer,
+        result.best.contentType,
+      );
+      return;
+    }
+
+    // Nothing usable came back, but a rate-limited provider might have
+    // something once it's no longer throttled — retry later instead of
+    // treating this as a dead end.
+    if (result.earliestRetryAt !== undefined) {
+      throw new HttpDeferredError(result.earliestRetryAt);
     }
   }
 
-  // --- Helper methods ---
-
-  private async handleUpcomingRateLimitHeaders(
-    response: { headers: Record<string, string> },
-    domain: string,
-  ): Promise<void> {
-    const rateLimitReset = response.headers["x-ratelimit-reset"];
-    const rateLimitRemaining = response.headers["x-ratelimit-remaining"];
-    if (rateLimitRemaining !== undefined && rateLimitReset !== undefined) {
-      const remaining = Number(rateLimitRemaining);
-      const reset = Number(rateLimitReset);
-      if (!Number.isNaN(remaining) && remaining <= 1 && !Number.isNaN(reset)) {
-        const waitUntil = reset * 1000;
-        if (waitUntil > Date.now()) {
-          await this.redis.set(
-            `rateLimitUntil:${domain}`,
-            waitUntil.toString(),
-          );
-          error(
-            `Upcoming rate limit for ${domain}, pausing requests until ${new Date(waitUntil).toISOString()}`,
-          );
-        }
+  private async parseGenericFeed(
+    fetchedUrl: string,
+    originalUrl: string,
+    priority: "background" | "interactive",
+    skipCache = false,
+  ) {
+    const response = await this.httpClient.get(fetchedUrl, {
+      priority,
+      responseType: "arrayBuffer",
+      skipCache,
+    });
+    this.validateFeedResponse(response, fetchedUrl);
+    const finalUrl = response.url || fetchedUrl;
+    // A 301/308 redirect is the origin telling us the move is permanent, so
+    // persist it straight onto any subscribed source's URL; 302/303/307 are
+    // temporary and only belong in the short-lived Redis redirect cache.
+    const rememberRedirect = response.redirectedPermanently
+      ? (from: string, to: string) =>
+          this.sourcesDataService.updateSourceUrl(from, to)
+      : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
+    // Only remember original -> final when *this* fetch actually redirected
+    // (finalUrl !== fetchedUrl). Otherwise, once a cached redirect target
+    // stops redirecting further -- e.g. the origin's redirect was a
+    // transient glitch and has since reverted -- this would keep
+    // rewriting the same stale mapping back into the cache forever, since
+    // fetchedUrl was already pre-substituted from that same cache entry.
+    // Leaving it unrefreshed lets it expire on its own TTL and fall back to
+    // the real original URL.
+    if (finalUrl !== fetchedUrl) {
+      await rememberRedirect(fetchedUrl, finalUrl);
+      if (originalUrl !== fetchedUrl) {
+        await rememberRedirect(originalUrl, finalUrl);
       }
     }
+    const contentType = response.headers.get("content-type");
+    const text = decodeFeedBody(response.data, contentType);
+    const parsedFeed = isJsonFeedText(text)
+      ? parseJsonFeed(text)
+      : isMicroformatHtml(text, contentType)
+        ? parseMicroformatFeed(text, finalUrl)
+        : parseFeed(text);
+    validateParsedFeed(parsedFeed);
+    return {
+      cached: response.cached,
+      feed: parsedFeed,
+      finalUrl,
+      freshUntil: response.freshUntil,
+      websub: discoverWebSub(response.headers, text, finalUrl),
+    };
   }
 
-  private validateFeedResponse(
-    response: { status: number; data: unknown },
-    fetchedUrl: string,
-  ): void {
-    if (response.status !== 200) {
-      error(`failed to load data for ${fetchedUrl}`);
+  private validateFeedResponse(response: unknown, fetchedUrl: string): void {
+    if (successfulFeedResponseCheck.Check(response)) return;
+
+    console.error(`failed to load data for ${fetchedUrl}`);
+    if (
+      feedResponseStatusProjectionCheck.Check(response) &&
+      !successfulStatusCheck.Check(response.status)
+    ) {
       throw new Error(
         `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
       );
     }
-    if (typeof response.data !== "string") {
-      error(`failed to load data for ${fetchedUrl}`);
-      throw new Error(
-        `Failed to load data for ${fetchedUrl}, unexpected payload type`,
-      );
-    }
-  }
-
-  private getFinalUrl(
-    response: {
-      request?: { res?: { responseUrl?: string } };
-      config: { url?: string };
-    },
-    fetchedUrl: string,
-  ): string {
-    return (
-      (response.request &&
-      typeof response.request === "object" &&
-      "res" in response.request &&
-      response.request.res &&
-      typeof response.request.res === "object" &&
-      "responseUrl" in response.request.res
-        ? (response.request.res.responseUrl as string | undefined)
-        : undefined) ??
-      response.config.url ??
-      fetchedUrl
+    throw new Error(
+      `Failed to load data for ${fetchedUrl}, unexpected payload type`,
     );
-  }
-
-  private async handleRedirects(
-    fetchedUrl: string,
-    finalUrl: string,
-  ): Promise<boolean> {
-    let permanentRedirect = false;
-    if (finalUrl !== fetchedUrl) {
-      try {
-        const redirectCheck = await this.axiosInstance.get(fetchedUrl, {
-          maxRedirects: 0,
-          validateStatus: (status) => status >= 300 && status < 400,
-        });
-        permanentRedirect =
-          redirectCheck.status === 301 || redirectCheck.status === 308;
-      } catch {
-        permanentRedirect = false;
-      }
-    }
-    return permanentRedirect;
-  }
-
-  private async handleRateLimitError(
-    err: unknown,
-    fetchedUrl: string,
-  ): Promise<void> {
-    if (err instanceof AxiosError && err.response?.status === 429) {
-      const domain = new URL(fetchedUrl).hostname;
-      const retryAfter = err.response.headers["retry-after"];
-      let waitUntil = Date.now();
-      let parsed = false;
-      if (retryAfter) {
-        const retryAfterSeconds = Number(retryAfter);
-        if (!Number.isNaN(retryAfterSeconds)) {
-          waitUntil += retryAfterSeconds * 1000;
-          parsed = true;
-        } else {
-          const date = Date.parse(retryAfter);
-          if (!Number.isNaN(date)) {
-            waitUntil = date;
-            parsed = true;
-          }
-        }
-      }
-      // Fallback: if Retry-After is missing or unparseable, use 5 minutes
-      if (!parsed) {
-        waitUntil += 5 * 60 * 1000;
-      }
-      await this.redis.set(`rateLimitUntil:${domain}`, waitUntil.toString());
-      error(
-        `Received 429 for ${fetchedUrl}, rate limiting domain ${domain} until ${new Date(waitUntil).toISOString()}`,
-      );
-      throw new Error(
-        `Rate limited by ${domain}, retry after ${new Date(waitUntil).toISOString()}`,
-      );
-    }
   }
 }

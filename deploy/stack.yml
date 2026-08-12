@@ -1,0 +1,171 @@
+services:
+  redis:
+    image: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_storage:/data
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 30s
+
+  postgres:
+    image: pgautoupgrade/pgautoupgrade:17-bookworm
+    command: ["-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-1000}"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER}"]
+      interval: 1s
+      timeout: 1s
+      retries: 25
+      start_period: 1s
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 30s
+
+  server:
+    image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to the immutable image tag}
+    environment:
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
+      MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:?Set MAIL_RELAY_SECRET to the Cloudflare relay secret}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/bun",
+          "-e",
+          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 2
+      start_period: 5s
+    stop_grace_period: 20s
+    tmpfs:
+      - /tmp
+    networks:
+      backend: {}
+    deploy:
+      replicas: ${APP_REPLICAS:-1}
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 30s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        monitor: 30s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        monitor: 30s
+        failure_action: pause
+
+  worker:
+    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to the immutable image tag}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DEBUG: "bull:*"
+      # WebSub subscribe attempts happen from here (parseSource runs in the
+      # worker, not the server) -- without this the callback URL can't be
+      # built and every subscribe attempt silently no-ops.
+      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
+      LOCK_DURATION: ${LOCK_DURATION:-60}
+      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
+      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
+      USER_DORMANT_AFTER_DAYS: ${USER_DORMANT_AFTER_DAYS:-365}
+      ARTICLE_STALE_AFTER_DAYS: ${ARTICLE_STALE_AFTER_DAYS:-365}
+      USER_EXPIRY_DAYS: ${USER_EXPIRY_DAYS:-730}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/bun",
+          "-e",
+          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 2
+      start_period: 5s
+    stop_grace_period: 5m
+    tmpfs:
+      - /tmp
+    networks:
+      - backend
+    deploy:
+      replicas: ${WORKER_REPLICAS:-10}
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-0.50}"
+          memory: "${WORKER_MEM_LIMIT:-1500M}"
+        # start-first rolling updates need at least one extra reservation's
+        # worth of CPU free on the node beyond WORKER_REPLICAS *
+        # WORKER_CPU_RESERVATION, or the new task can't schedule until the
+        # old one stops -- and the old one won't stop until the new one is
+        # healthy, deadlocking the rollout. Keep real headroom when scaling
+        # WORKER_REPLICAS up on a capacity-constrained node.
+        reservations:
+          cpus: "${WORKER_CPU_RESERVATION:-0.25}"
+          memory: "${WORKER_MEM_RESERVATION:-500M}"
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 30s
+      update_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        monitor: 30s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        monitor: 30s
+        failure_action: pause
+
+volumes:
+  postgres_storage:
+    external: true
+    name: ${POSTGRES_VOLUME_NAME:?Set POSTGRES_VOLUME_NAME to the existing PostgreSQL volume}
+  redis_storage:
+    external: true
+    name: ${REDIS_VOLUME_NAME:?Set REDIS_VOLUME_NAME to the existing Redis volume}
+
+networks:
+  backend:
+    driver: overlay

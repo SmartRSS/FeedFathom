@@ -1,0 +1,794 @@
+:root {
+  --blue-40: #45a1ff;
+  --blue-50: #0a84ff;
+  --blue-60: #0060df;
+  --grey-10: #f9f9fa;
+  --grey-20: #ededf0;
+  --grey-30: #d7d7db;
+  --grey-40: #b1b1b3;
+  --grey-50: #737373;
+  --grey-90: #0c0c0d;
+  --white: #fff;
+  --border: 1px solid var(--grey-30);
+  --blue: var(--blue-60);
+  --muted: var(--grey-50);
+  /* Kept as their own tokens rather than reusing --blue-60 so selection
+     doesn't also recolor links; overridden per [data-theme] below. */
+  --selected-bg: var(--blue-60);
+  --selected-fg: var(--grey-10);
+  --selected-border: transparent;
+  --radius: 0.5rem;
+  --font-family: sans-serif;
+  --error: #b00020;
+  color: var(--grey-90);
+  font-family: var(--font-family);
+}
+
+/* "auto" (the default): CSS system-color keywords, resolved live by the
+   browser to the OS's actual current accent/selection color -- not a
+   value this app picks, whatever the user's real OS theme says right
+   now. Highlight/HighlightText have been supported since CSS2; the
+   newer AccentColor/AccentColorText are more semantically exact (the
+   OS's chosen accent color specifically, not just "the selection
+   color") so they're declared second, overriding Highlight/HighlightText
+   wherever a browser recognizes them -- an unrecognized keyword makes
+   only that one declaration invalid, leaving the earlier one in effect,
+   so this degrades safely instead of breaking. Every icon in the app is
+   inlined SVG using currentColor directly (see dashboard.tsx / .chevron
+   svg, .node-icon svg, .icon svg below) rather than a baked-in fill, so
+   they need no separate override here -- they already track whatever
+   text color surrounds them, including the Field/CanvasText below. */
+:root[data-theme="auto"] {
+  /* Without this, System Color keywords (Highlight/AccentColor here, and
+     Canvas/CanvasText/etc. below) always resolve to their light-mode
+     values -- a page is assumed light-only until it declares it
+     supports both, so an OS/browser dark preference would otherwise be
+     ignored entirely by every System Color in this file. */
+  color-scheme: light dark;
+  --selected-bg: Highlight;
+  --selected-bg: AccentColor;
+  --selected-fg: HighlightText;
+  --selected-fg: AccentColorText;
+}
+/* Only under an OS/browser dark color scheme: surfaces and text follow
+   the same System Color keywords used above for selection, so a dark
+   OS theme actually turns this app dark instead of leaving every
+   untouched panel/border/text on its fixed light-mode value. Scoped to
+   prefers-color-scheme: dark rather than applied unconditionally --
+   System Colors already resolve correctly in light mode via the plain
+   :root values, and forcing Canvas/CanvasText there too would just
+   replace one set of correct light colors with another. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --grey-90: CanvasText;
+    --grey-10: Field;
+    --grey-20: Field;
+    --grey-30: GrayText;
+    --grey-30: ButtonBorder;
+    --grey-40: GrayText;
+    --grey-50: GrayText;
+    --white: Canvas;
+    --blue: LinkText;
+    --error: #ff6b6b;
+  }
+}
+
+/* Selectable themes (Options -> Appearance), one attribute drives all of
+   them: each is a distinct selection color/contrast era from desktop
+   OS history, picked apart wherever the default listbox highlight
+   actually changed. High contrast is its own theme rather than a
+   separate toggle, since it's just another point in the same "which
+   selection/border colors are active" space.
+
+   Beyond the selection color, each also carries its era's characteristic
+   surface color (--grey-10/--grey-20, used for toolbars/cards/panels),
+   border color (--grey-30), corner radius, and system font -- a period-
+   correct selection color alone still read as "off" sitting inside this
+   app's otherwise-unchanged flat modern chrome, so those needed to move
+   too. --grey-90 (body text) is left alone in all of them: every surface
+   color below is light enough that the existing dark text stays legible
+   without a second per-theme contrast pass. Real 3D bevel button edges
+   are the one thing deliberately skipped -- CSS can't cheaply fake those
+   without restructuring every button into per-side border colors, and a
+   flat approximation of the surface/border/font/radius already carries
+   most of the period feel. */
+:root[data-theme="classic"] {
+  --selected-bg: #000080;
+  --selected-fg: #fff;
+  --grey-10: #c0c0c0;
+  --grey-20: #c0c0c0;
+  --grey-30: #808080;
+  --radius: 0;
+  --font-family: "MS Sans Serif", Tahoma, sans-serif;
+}
+:root[data-theme="millennial"] {
+  --selected-bg: #316ac5;
+  --selected-fg: #fff;
+  --grey-10: #ece9d8;
+  --grey-20: #ece9d8;
+  --grey-30: #aca899;
+  --radius: 0.35rem;
+  --font-family: Tahoma, Verdana, sans-serif;
+}
+/* Sampled directly from a real Windows 7 screenshot (Start Menu search
+   result selection, a keyboard-focused item rather than a hover/unfocused
+   one -- Windows used a notably more saturated fill for that state than
+   the pale Explorer-listview tone an earlier pass used here): solid fill
+   #309AFE, black text (measured 7.18:1 -- a lighter fill needed the
+   inverse and would have failed at 2.93:1), with a subtle 1px border
+   sampled from the fill/background edge transition. */
+:root[data-theme="aero"] {
+  --selected-bg: #309afe;
+  --selected-fg: #000;
+  --selected-border: #4598e6;
+  --grey-10: #eaf3fc;
+  --grey-20: #eaf3fc;
+  --grey-30: #a9c4e0;
+  --radius: 0.4rem;
+  --font-family: "Segoe UI", Tahoma, sans-serif;
+}
+:root[data-theme="modern"] {
+  --selected-bg: #0067b8;
+  --selected-fg: #fff;
+  --grey-10: #f2f2f2;
+  --grey-20: #f2f2f2;
+  --grey-30: #c8c8c8;
+  --radius: 0;
+  --font-family: "Segoe UI", Tahoma, sans-serif;
+}
+/* Overrides the same custom properties everything else already reads --
+   selected rows, borders, focus indicators, and links all follow along
+   automatically instead of needing their own high-contrast variants. */
+:root[data-theme="high-contrast"] {
+  --blue-40: #001a4d;
+  --blue-50: #001333;
+  --blue-60: #000d24;
+  --grey-10: #fff;
+  --grey-20: #d0d0d0;
+  --grey-30: #4d4d4d;
+  --grey-40: #1a1a1a;
+  --grey-50: #000;
+  --grey-90: #000;
+  --border: 2px solid #000;
+  --selected-bg: #000d24;
+  --selected-fg: #fff;
+}
+/* A dotted outline drawn just inside the item's edge, not a glow/shadow.
+   White dots on selected (navy/dark) rows so the rect stays visible
+   there too -- black dots read as invisible on a dark background. */
+:root[data-theme="high-contrast"] .source:focus,
+:root[data-theme="high-contrast"] .article.active {
+  outline: 2px dotted var(--grey-90);
+  outline-offset: -2px;
+}
+:root[data-theme="high-contrast"] .source.selected:focus,
+:root[data-theme="high-contrast"] .article.selected.active {
+  outline: 2px dotted var(--selected-fg);
+  outline-offset: -2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -3rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: var(--white);
+  border: var(--border);
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.update-banner {
+  position: fixed;
+  z-index: 200;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--grey-90);
+  color: var(--white);
+  border-radius: var(--radius);
+}
+.update-banner button {
+  padding: 0.3rem 0.6rem;
+  color: inherit;
+  background: var(--blue-60);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--white);
+}
+
+main {
+  padding: 1rem;
+}
+
+form,
+.account-result {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 32rem);
+  margin: 8vh auto;
+  padding: 2rem;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.account-result {
+  text-align: center;
+}
+.account-result > * {
+  margin: 0;
+}
+
+.options-page {
+  display: grid;
+  gap: 1.5rem;
+  width: min(100%, 32rem);
+  margin: 2rem auto;
+}
+.options-page h1 {
+  margin: 0;
+}
+.options-card {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 1.5rem;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.options-card h2 {
+  margin: 0;
+}
+
+.admin-page {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+}
+.admin-table-scroll {
+  overflow: auto;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.admin-table th,
+.admin-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: var(--border);
+}
+.admin-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--grey-10);
+}
+.admin-table th button {
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+}
+.admin-table-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.admin-table-actions button {
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+}
+.websub-status {
+  padding: 0.1rem 0.4rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+}
+.websub-status-verified {
+  color: #0b6b2c;
+  background: #d8f3dc;
+}
+.websub-status-pending {
+  color: #7a5b00;
+  background: #fff3cd;
+}
+.websub-status-failed {
+  color: #8a1c1c;
+  background: #f8d7da;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+}
+input,
+button {
+  padding: 0.6rem;
+  font: inherit;
+}
+button {
+  border: 0;
+  cursor: pointer;
+}
+a {
+  color: var(--blue);
+}
+[role="alert"] {
+  color: var(--error);
+  margin: 0;
+}
+
+.dashboard {
+  position: relative;
+  display: grid;
+  grid-template-columns: 25% 25% 50%;
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dashboard-alert {
+  position: absolute;
+  z-index: 10;
+  top: 0.5rem;
+  right: 0.5rem;
+  left: 0.5rem;
+  padding: 0.5rem;
+  border: var(--border);
+  background: var(--white);
+}
+
+.dashboard-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-right: var(--border);
+}
+
+.reader-pane {
+  border-right: 0;
+}
+
+.toolbar {
+  height: 2rem;
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  border-bottom: var(--border);
+  background: var(--grey-10);
+}
+.toolbar > span {
+  flex: 1;
+}
+.toolbar button,
+.toolbar select {
+  padding: 0;
+}
+.toolbar button {
+  display: flex;
+  width: 1.8rem;
+  height: 1.8rem;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+.toolbar button.only-mobile {
+  display: none;
+}
+.toolbar button img,
+.toolbar button .icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.toolbar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.source,
+.article {
+  width: 100%;
+  display: block;
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border-bottom: var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree {
+  margin: 0;
+  flex: 1;
+  overflow: auto;
+  /* Without this, an overlay-style scrollbar (macOS, or Windows/Linux in
+     overlay mode) doesn't reserve layout space -- it renders on top of
+     the last few pixels of content instead, which is what made the
+     selection/focus rect look like it ran under (and slightly past) the
+     scrollbar. Reserving space makes rows stop short of it instead.
+     Chromium/Firefox only as of writing; Safari ignores the property and
+     is back to the old (overlay, no reserved gutter) behavior there. */
+  scrollbar-gutter: stable;
+  /* scrollbar-gutter alone only fixes browsers that support it; styling
+     the scrollbar itself directly removes the OS/browser variability
+     that scrollbar-gutter can't reach (Safari, or an OS scrollbar
+     that's simply wider than the reserved gutter expects). */
+  scrollbar-width: thin;
+  padding: 0.5rem 0;
+  list-style: none;
+}
+.tree::-webkit-scrollbar {
+  width: 10px;
+}
+.tree::-webkit-scrollbar-thumb {
+  background: var(--grey-40);
+  border-radius: 0.25rem;
+}
+.tree::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tree.nested {
+  padding: 0;
+}
+.tree.skeleton {
+  overflow: hidden;
+}
+.skeleton-row,
+.skeleton-text {
+  border-radius: 0.2rem;
+  background-image: linear-gradient(
+    90deg,
+    var(--grey-20) 25%,
+    var(--grey-10) 37%,
+    var(--grey-20) 63%
+  );
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skeleton-row {
+  display: block;
+  height: 0.7rem;
+  background-size: 400% 100%;
+}
+/* Applied to the real text-bearing element itself (not a stand-in bar):
+   the text stays, invisible, so the box keeps its exact real line-height,
+   font metrics, and truncation behavior -- the shimmer background shows
+   through in its place instead of approximating those dimensions by hand.
+   The gradient is drawn shorter than the line box and centered on it, so
+   it spans roughly ascender-top to baseline instead of the full
+   ascender-to-descender line height. */
+.skeleton-text {
+  color: transparent;
+  background-size: 400% 0.75em;
+  user-select: none;
+}
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+.source {
+  display: flex;
+  align-items: center;
+  min-height: 1.2rem;
+  padding: 0 0.5rem 0 1.4rem;
+  border-bottom: 0;
+  gap: 5px;
+  font-size: 0.85rem;
+  line-height: 1.2rem;
+}
+.source:focus {
+  outline: 1px dotted var(--grey-90);
+  outline-offset: -1px;
+}
+.source.folder {
+  padding-left: 0.1rem;
+}
+.tree.nested .source {
+  padding-left: 2rem;
+}
+.chevron {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  cursor: pointer;
+}
+.node-icon {
+  width: 1.5cap;
+  height: 1.5cap;
+  flex: 0 0 auto;
+}
+/* The folder chevron/node-icon (never a source row's real favicon --
+   that stays a plain <img>) are inlined as raw SVG markup (see
+   dashboard.tsx) rather than loaded as an external <img src>
+   specifically so their fill/stroke="currentColor" resolves against
+   this page's own text color -- automatically matching the row's text
+   (grey by default, var(--selected-fg) when selected) with no
+   per-theme "is this background light or dark" guess needed, exact
+   even for auto where the resolved system color isn't known in
+   advance. The inlined <svg> itself has no explicit width/height (only
+   a viewBox), so it needs to be told to fill its wrapper. */
+.chevron svg,
+.node-icon svg,
+.icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.article-list.skeleton {
+  overflow: hidden;
+}
+.source em {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.source.unread {
+  font-weight: 700;
+}
+.source.selected,
+.article.selected {
+  color: var(--selected-fg);
+  background: var(--selected-bg);
+  /* inset, not a real border, so it can't shift row height/layout --
+     transparent (the default) is invisible, only Aero sets one. */
+  box-shadow: inset 0 0 0 1px var(--selected-border);
+}
+.article.selected .details {
+  color: inherit;
+}
+/* Classic desktop list/tree controls render a selected item's text in
+   a single highlight-text color -- there's no separate "muted"
+   sub-color for secondary text within a selected row. --muted
+   (grey-50/near-black in most of these themes) measured well under
+   1.5:1 against every theme's selected background, e.g. smart 1.18:1,
+   classic 3.38:1, millennial 1.11:1, high-contrast 1.08:1 -- all fail. */
+.source.selected em {
+  color: inherit;
+}
+.article:focus {
+  outline: 0;
+}
+.article.active {
+  outline: 1px dotted var(--grey-90);
+  outline-offset: -1px;
+}
+/* The classic focus rect on a selected item used white dots (an
+   XOR-drawn pattern CSS can't replicate, but this gets the same
+   result): black dots disappear against the navy selected background,
+   so the rect needs to switch to the selected-row's own light text
+   color there. */
+.source.selected:focus,
+.article.selected.active {
+  outline-color: var(--selected-fg);
+}
+
+.article {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  line-height: 1rem;
+  text-decoration: none;
+  white-space: normal;
+}
+.article-list {
+  flex: 1;
+  overflow: auto;
+}
+.title,
+.details > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title {
+  font-size: 0.8rem;
+}
+.details {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--grey-50);
+  font-size: 0.75rem;
+}
+.details > span {
+  flex: 1;
+}
+.date-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 1.5rem;
+  border-bottom: var(--border);
+  background: linear-gradient(to bottom, var(--white) 3px, var(--grey-20));
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+.dashboard article {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.reader {
+  overflow: auto;
+  padding: 20px 30px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.reader h1 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+.reader img,
+.reader video {
+  max-width: 100%;
+  height: auto;
+}
+.reader pre {
+  overflow: auto;
+}
+.reader-plain {
+  white-space: pre-wrap;
+}
+
+.feed-discovery-form {
+  width: 100%;
+  height: 100%;
+  align-content: start;
+  margin: 0;
+  overflow: auto;
+  padding: 1rem;
+  border: 0;
+  border-radius: 0;
+}
+.feed-discovery-form h2 {
+  margin: 0;
+}
+.feed-discovery-form select {
+  padding: 0.6rem;
+  font: inherit;
+}
+.feed-discovery-form input:disabled {
+  color: var(--muted);
+}
+.empty-pane {
+  margin: 0;
+  padding: 1rem;
+  color: var(--muted);
+}
+.toolbar strong {
+  overflow: hidden;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.found-feeds {
+  display: grid;
+  max-height: 12rem;
+  overflow: auto;
+  border: var(--border);
+}
+.found-feeds button {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  overflow: hidden;
+  text-align: left;
+  background: var(--grey-10);
+  border-bottom: var(--border);
+}
+.found-feeds span {
+  overflow: hidden;
+  color: var(--grey-50);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.websub-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  color: #0b6b2c;
+  font-size: 0.7rem;
+  font-weight: 400;
+  background: #d8f3dc;
+  border-radius: 1rem;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--grey-50);
+}
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--grey-30);
+  border-top-color: var(--blue-50);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 150%;
+  }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-pane {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    flex-flow: column-reverse;
+    border-right: 0;
+    border-bottom: var(--border);
+  }
+  .dashboard .reader-pane {
+    display: flex;
+  }
+  .dashboard-pane:not(.focused-pane) {
+    display: none;
+  }
+  .toolbar button.only-mobile {
+    display: flex;
+  }
+}

@@ -1,5 +1,5 @@
+import type { ScannerPage } from "../scanner-page.ts";
 import type { FeedData } from "./feed-data-type.ts";
-import type { Scanner } from "./scanner-interface.ts";
 
 const feedUrlPatterns = [
   /\/(rss|feed|atom|feeds)\/?$/iu,
@@ -7,43 +7,28 @@ const feedUrlPatterns = [
   /feeds?\/(rss|atom)/iu,
   /\/syndication\/?$/iu,
 ] as const;
-export class LinkFeedScanner implements Scanner {
-  scan(currentUrl: URL, document: Document): FeedData[] {
-    const feeds: FeedData[] = [];
+const isFeedUrl = (pathname: string) =>
+  feedUrlPatterns.some((pattern) => pattern.test(pathname));
 
-    // Search for anchor elements
-    const anchorElements = document.querySelectorAll("a");
+export const scanLinkFeed = (
+  currentUrl: URL,
+  page: ScannerPage,
+): FeedData[] => {
+  const feeds: FeedData[] = [];
 
-    for (const anchor of anchorElements) {
-      const href = anchor.getAttribute("href");
-      if (!href) {
-        continue;
-      }
+  for (const anchor of page.anchors) {
+    if (!anchor.href) continue;
 
-      try {
-        const feedUrl = new URL(href, currentUrl.href);
-
-        // Skip if it's not the same domain
-        if (feedUrl.hostname !== currentUrl.hostname) {
-          continue;
-        }
-
-        // Check if URL matches common feed patterns
-        if (this.isFeedUrl(feedUrl.pathname)) {
-          feeds.push({
-            title: anchor.textContent?.trim() ?? "Untitled Feed",
-            url: feedUrl.href,
-          });
-        }
-      } catch {}
-    }
-
-    return feeds;
+    try {
+      const feedUrl = new URL(anchor.href, currentUrl.href);
+      if (feedUrl.hostname !== currentUrl.hostname) continue;
+      if (isFeedUrl(feedUrl.pathname))
+        feeds.push({
+          title: anchor.text.trim() || "Untitled Feed",
+          url: feedUrl.href,
+        });
+    } catch {}
   }
 
-  private isFeedUrl(pathname: string): boolean {
-    return feedUrlPatterns.some((pattern) => {
-      return pattern.test(pathname);
-    });
-  }
-}
+  return feeds;
+};

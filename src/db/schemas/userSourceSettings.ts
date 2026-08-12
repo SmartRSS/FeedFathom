@@ -8,6 +8,3 @@ export const userSourceSettings = pgTable("user_source_settings", {
     .references(() => userSources.id, { onDelete: "cascade" })
     .notNull(),
 });
-
-export type UserSourceSetting = typeof userSourceSettings.$inferSelect;
-export type UserSourceSettingInsert = typeof userSourceSettings.$inferInsert;

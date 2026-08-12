@@ -1,5 +1,5 @@
 {
   "description": "multiple absolute URLs",
   "content": "<a href=\"https://absolute1.com\">Link1</a><a href=\"https://absolute2.com\">Link2</a>",
-  "expected": "<a href=\"https://absolute1.com\" target=\"_blank\">Link1</a><a href=\"https://absolute2.com\" target=\"_blank\">Link2</a>"
+  "expected": "<a href=\"https://absolute1.com\" target=\"_blank\" rel=\"noopener noreferrer\">Link1</a><a href=\"https://absolute2.com\" target=\"_blank\" rel=\"noopener noreferrer\">Link2</a>"
 }
