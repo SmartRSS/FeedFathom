@@ -1,7 +1,16 @@
-# Version control
+# Version control and repository tooling
 .git
 .gitignore
 .gitattributes
+.claude
+.cursor
+.github
+
+# Non-image source and generated artifacts
+deploy
+ext
+tests
+test-results
 
 # Dependencies
 node_modules
@@ -41,7 +50,6 @@ LICENSE
 # Docker files
 Dockerfile
 .dockerignore
-docker-compose*.yml
 
 # Temporary files
 *.tmp

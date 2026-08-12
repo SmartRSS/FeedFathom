@@ -4,4 +4,5 @@ export enum JobName {
   GatherJobs = "gatherJobs",
   ParseSource = "parseSource",
   RefreshFavicon = "REFRESH_FAVICON",
+  WebSubRenewal = "WEBSUB_RENEWAL",
 }

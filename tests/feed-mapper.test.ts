@@ -3,28 +3,36 @@ import {
   mapFeedToPreview,
   type Source,
 } from "../src/lib/feed-mapper";
-import { type Feed } from "@rowanmanning/feed-parser/lib/feed/base";
-import { type FeedItem } from "@rowanmanning/feed-parser/lib/feed/item/base";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+
+type FeedInput = Parameters<typeof mapFeedItemToArticle>[1];
+type FeedItemInput = Parameters<typeof mapFeedItemToArticle>[0];
 
 const mockRewriteLinks = (content: string): string => {
   return content;
 };
 
-const createMockFeedItem = (override: Partial<FeedItem> = {}): FeedItem => {
-  const base: Partial<FeedItem> = {
-    authors: [],
-    content: null,
-    description: null,
-    id: null,
-    published: null,
-    title: null,
-    updated: null,
-    url: null,
-  };
+const createMockFeed = (override: Partial<FeedInput> = {}): FeedInput => ({
+  description: null,
+  items: [],
+  title: null,
+  url: null,
+  ...override,
+});
 
-  return { ...base, ...override } as FeedItem;
-};
+const createMockFeedItem = (
+  override: Partial<FeedItemInput> = {},
+): FeedItemInput => ({
+  authors: [],
+  content: null,
+  description: null,
+  id: null,
+  published: null,
+  title: null,
+  updated: null,
+  url: null,
+  ...override,
+});
 
 describe("mapFeedItemToArticle", () => {
   const mockSource: Source = {
@@ -32,30 +40,17 @@ describe("mapFeedItemToArticle", () => {
     url: "https://example.com/feed.xml",
   };
 
-  const mockFeed = {
+  const mockFeed = createMockFeed({
     description: "Feed description",
     title: "Feed Title",
     url: "https://example.com",
-  } as Feed;
+  });
 
   const fixedDate = new Date("2024-03-06T12:00:00Z");
-  const originalDateNow = Date.now;
-
-  beforeEach(() => {
-    // Mock Date.now() to return a fixed timestamp
-    Date.now = () => {
-      return fixedDate.getTime();
-    };
-  });
-
-  afterEach(() => {
-    // Restore the original Date.now
-    Date.now = originalDateNow;
-  });
 
   test("should map feed item with all fields present", () => {
     const mockItem = createMockFeedItem({
-      authors: [{ email: null, name: "John Doe", url: null }],
+      authors: [{ name: "John Doe" }],
       content: "Test content",
       description: "Test description",
       id: "123",
@@ -91,6 +86,7 @@ describe("mapFeedItemToArticle", () => {
       mockFeed,
       mockSource,
       mockRewriteLinks,
+      fixedDate.getTime(),
     );
 
     expect(result).toEqual({
@@ -100,24 +96,21 @@ describe("mapFeedItemToArticle", () => {
       publishedAt: fixedDate,
       sourceId: 1,
       title: "Feed Title",
-      updatedAt: fixedDate,
+      updatedAt: null,
       url: "",
     });
   });
 
   test("should fallback to source URL when no other identifiers available", () => {
     const mockItem = createMockFeedItem();
-    const emptyFeed = {
-      description: null,
-      title: null,
-      url: null,
-    } as Feed;
+    const emptyFeed = createMockFeed();
 
     const result = mapFeedItemToArticle(
       mockItem,
       emptyFeed,
       mockSource,
       mockRewriteLinks,
+      fixedDate.getTime(),
     );
 
     expect(result).toEqual({
@@ -127,7 +120,7 @@ describe("mapFeedItemToArticle", () => {
       publishedAt: fixedDate,
       sourceId: 1,
       title: "https://example.com/feed.xml",
-      updatedAt: fixedDate,
+      updatedAt: null,
       url: "",
     });
   });
@@ -135,10 +128,7 @@ describe("mapFeedItemToArticle", () => {
   test("should handle author fallback chain", () => {
     // When first author has no name, it should fall back to feed title
     const mockItem = createMockFeedItem({
-      authors: [
-        { email: "test@example.com", name: null, url: null },
-        { email: null, name: "Second Author", url: null },
-      ],
+      authors: [{ name: null }, { name: "Second Author" }],
     });
 
     const result = mapFeedItemToArticle(
@@ -215,53 +205,104 @@ describe("mapFeedItemToArticle", () => {
 
 describe("mapFeedToPreview", () => {
   test("should map feed with all fields present", () => {
-    const mockFeed = {
+    const mockFeed = createMockFeed({
       description: "Feed description",
       title: "Feed Title",
       url: "https://example.com",
-    } as Feed;
+    });
 
-    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml");
+    const result = mapFeedToPreview(
+      mockFeed,
+      "https://example.com/feed.xml",
+      mockRewriteLinks,
+    );
 
     expect(result).toEqual({
+      articles: [],
       description: "Feed description",
       feedUrl: "https://example.com/feed.xml",
-      link: "https://example.com",
+      link: "https://example.com/",
       title: "Feed Title",
     });
   });
 
   test("should handle null fields", () => {
-    const mockFeed = {
+    const mockFeed = createMockFeed({
       description: null,
       title: null,
       url: null,
-    } as Feed;
+    });
 
-    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml");
+    const result = mapFeedToPreview(
+      mockFeed,
+      "https://example.com/feed.xml",
+      mockRewriteLinks,
+    );
 
     expect(result).toEqual({
+      articles: [],
       description: undefined,
       feedUrl: "https://example.com/feed.xml",
       link: undefined,
-      title: undefined,
+      title: "https://example.com/feed.xml",
     });
   });
 
   test("should handle partially undefined feed data", () => {
-    const mockFeed = {
+    const mockFeed = createMockFeed({
       description: "description",
       title: null,
-      url: undefined,
-    } as unknown as Feed;
+    });
 
-    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml");
+    const result = mapFeedToPreview(
+      mockFeed,
+      "https://example.com/feed.xml",
+      mockRewriteLinks,
+    );
 
     expect(result).toEqual({
+      articles: [],
       description: "description",
       feedUrl: "https://example.com/feed.xml",
       link: undefined,
-      title: undefined,
+      title: "https://example.com/feed.xml",
     });
+  });
+
+  test("preserves preview article persistence fields", () => {
+    const publishedAt = new Date("2024-03-06T12:00:00Z");
+    const mockFeed = createMockFeed({
+      description: null,
+      items: [
+        createMockFeedItem({
+          authors: [{ name: "Author" }],
+          content: "Article content",
+          published: publishedAt,
+          title: "Article title",
+          url: "javascript:alert(1)",
+        }),
+      ],
+      title: "Feed Title",
+      url: "https://example.com",
+    });
+
+    const result = mapFeedToPreview(
+      mockFeed,
+      "https://example.com/feed.xml",
+      (content, baseUrl) => `${content} from ${baseUrl}`,
+      publishedAt.getTime(),
+    );
+
+    expect(result.articles).toEqual([
+      {
+        author: "Author",
+        content: "Article content from javascript:alert(1)",
+        guid: expect.any(String),
+        publishedAt,
+        title: "Article title",
+        updatedAt: publishedAt,
+        url: "",
+      },
+    ]);
   });
 });

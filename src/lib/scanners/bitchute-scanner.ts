@@ -1,23 +1,20 @@
+import type { ScannerPage } from "../scanner-page.ts";
 import type { FeedData } from "./feed-data-type.ts";
-import type { Scanner } from "./scanner-interface.ts";
 
-export class BitchuteScanner implements Scanner {
-  private readonly feedBase: string =
-    "https://www.bitchute.com/feeds/rss/channel/";
+const feedBase = "https://www.bitchute.com/feeds/rss/channel/";
 
-  scan(currentPage: URL, document: Document): FeedData[] {
-    const hostname = currentPage.hostname.toLowerCase();
-    if (hostname !== "www.bitchute.com" && hostname !== "bitchute.com") {
-      return [];
-    }
+export const scanBitchute = (
+  currentPage: URL,
+  page: ScannerPage,
+): FeedData[] => {
+  const hostname = currentPage.hostname.toLowerCase();
+  if (hostname !== "www.bitchute.com" && hostname !== "bitchute.com") return [];
+  if (page.bitchuteChannelName === undefined) return [];
 
-    const channelLinkElement = document.querySelector(".owner>a");
-    if (!channelLinkElement) {
-      return [];
-    }
-
-    const channelName = channelLinkElement.textContent;
-    const feedLink = `${this.feedBase}${channelName}`;
-    return [{ title: `Channel feed for ${channelName}`, url: feedLink }];
-  }
-}
+  return [
+    {
+      title: `Channel feed for ${page.bitchuteChannelName}`,
+      url: `${feedBase}${page.bitchuteChannelName}`,
+    },
+  ];
+};

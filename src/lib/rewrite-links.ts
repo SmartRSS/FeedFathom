@@ -67,6 +67,7 @@ const handleElement = (
   if (isAbsoluteUrl(attributeValue)) {
     if (tagName === "a") {
       element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
     }
 
     // no need to change anything
@@ -78,6 +79,7 @@ const handleElement = (
     element.setAttribute(attributeName, absoluteUrl);
     if (tagName === "a") {
       element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
     }
   }
 };

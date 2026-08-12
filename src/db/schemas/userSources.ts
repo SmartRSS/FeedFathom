@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
+  index,
   integer,
   pgTable,
   serial,
+  text,
   timestamp,
   unique,
   varchar,
@@ -15,6 +17,10 @@ export const userSources = pgTable(
   "user_sources",
   {
     id: serial("id").primaryKey(),
+    initializedAt: timestamp("initialized_at", { withTimezone: true }),
+    initializationOwner: varchar("initialization_owner"),
+    initializationSnapshot: text("initialization_snapshot"),
+    initializingAt: timestamp("initializing_at", { withTimezone: true }),
     name: varchar("name").notNull(),
     parentId: integer("parent_id").references(() => userFolders.id, {
       onDelete: "cascade",
@@ -25,12 +31,15 @@ export const userSources = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at")
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
-      .default(sql`'1970-01-01 00:00:00'::timestamp`),
+      .default(sql`'1970-01-01 00:00:00+00'::timestamptz`),
+    unreadCount: integer("unread_count").notNull().default(0),
   },
-  (table) => [unique().on(table.userId, table.sourceId)],
+  (table) => [
+    unique().on(table.userId, table.sourceId),
+    index("user_sources_user_id_idx").on(table.userId),
+    index("user_sources_source_id_idx").on(table.sourceId),
+    index("user_sources_user_source_idx").on(table.userId, table.sourceId),
+  ],
 );
-
-export type UserSource = typeof userSources.$inferSelect;
-export type UserSourceInsert = typeof userSources.$inferInsert;

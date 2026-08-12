@@ -15,10 +15,10 @@ alwaysApply: true
 
 ## Code Formatting Rules
 - Indentation: 2 spaces
-- String quotes: Double quotes for strings, single quotes for JSX/Svelte attributes
+- String quotes: Double quotes
 - Always include semicolons and trailing commas
 - Use `??` operator for nullish coalescing instead of `||`
-- Follow ESLint and Prettier configurations without exceptions
+- Follow Oxfmt and Oxlint configurations without exceptions
 
 ## Code Organization
 - Keep files focused and single-responsibility
@@ -26,12 +26,13 @@ alwaysApply: true
 - Follow the established project structure:
   ```
   src/
-    ├── lib/           # Shared utilities
-    ├── components/    # Reusable components
-    ├── routes/        # SvelteKit routes
-    ├── types/        # TypeScript types
-    └── util/         # Small utility functions
-  tests/              # Test files
+    ├── db/        # Database schema and data services
+    ├── lib/       # Shared application logic
+    ├── routes/    # Elysia route modules
+    ├── spa/       # Solid SPA
+    ├── types/     # TypeScript types
+    └── util/      # Small utility functions
+  tests/           # Test files
   ```
 
 ## Quality Standards

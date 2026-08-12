@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Contributing
-nav_order: 5
+nav_order: 4
 ---
 
 # Contributing to FeedFathom
@@ -33,6 +33,13 @@ git push origin feature-branch-name
 - Add tests for new features
 - Update documentation as needed
 - Keep commits focused and meaningful
+- Run the complete gate before opening a pull request:
+
+```bash
+bun run quality
+```
+
+Use `bun run test:unit`, `bun run test:browser`, or `bun run lint` while iterating. Browser tests require the Chromium binary installed by `bunx playwright install chromium`.
 
 ## License
 
@@ -42,4 +49,4 @@ This project is licensed under the MIT License.
 
 - [Remix Icon](https://remixicon.com/) - Apache License 2.0
 - [Bun](https://bun.sh) - JavaScript runtime
-- [SvelteKit](https://kit.svelte.dev/) - Web framework 
+- [Solid](https://www.solidjs.com/) and [Elysia](https://elysiajs.com/) - Web UI and API framework

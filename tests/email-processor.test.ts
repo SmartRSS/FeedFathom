@@ -1,18 +1,6 @@
-import { EmailProcessor } from "../src/lib/email-processor";
+import { getEmailContent } from "../src/lib/email-processor";
 import { describe, expect, test } from "bun:test";
-import { type AddressObject, type EmailAddress, type ParsedMail } from "mailparser";
-
-const createAddressObject = (value: EmailAddress[] = []): AddressObject => {
-  return {
-    html: "",
-    text: "",
-    value,
-  };
-};
-
-const createEmailAddress = (address: string, name = ""): EmailAddress => {
-  return { address, name };
-};
+import type { ParsedMail } from "mailparser";
 
 const createMockEmail = (overrides: Partial<ParsedMail> = {}): ParsedMail => {
   return {
@@ -26,73 +14,7 @@ const createMockEmail = (overrides: Partial<ParsedMail> = {}): ParsedMail => {
   };
 };
 
-describe("EmailProcessor", () => {
-  const processor = new EmailProcessor();
-
-  describe("extractRecipientAddresses", () => {
-    test("should extract single recipient address", () => {
-      const email = createMockEmail({
-        to: createAddressObject([createEmailAddress("test@example.com")]),
-      });
-
-      const result = processor.extractRecipientAddresses(email);
-      expect(result).toEqual(["test@example.com"]);
-    });
-
-    test("should extract multiple recipient addresses", () => {
-      const email = createMockEmail({
-        to: createAddressObject([
-          createEmailAddress("test1@example.com"),
-          createEmailAddress("test2@example.com"),
-        ]),
-      });
-
-      const result = processor.extractRecipientAddresses(email);
-      expect(result).toEqual(["test1@example.com", "test2@example.com"]);
-    });
-
-    test("should handle array of recipient objects", () => {
-      const email = createMockEmail({
-        to: [
-          createAddressObject([createEmailAddress("test1@example.com")]),
-          createAddressObject([createEmailAddress("test2@example.com")]),
-        ],
-      });
-
-      const result = processor.extractRecipientAddresses(email);
-      expect(result).toEqual(["test1@example.com", "test2@example.com"]);
-    });
-
-    test("should handle missing or invalid addresses", () => {
-      const email = createMockEmail({
-        to: createAddressObject([
-          createEmailAddress("invalid1@example.com"),
-          createEmailAddress("invalid2@example.com"),
-          createEmailAddress("valid@example.com"),
-        ]),
-      });
-
-      // Mock the address property to be undefined at runtime
-      const to = email.to as AddressObject;
-      const invalidAddress1 = to.value[0] as Partial<EmailAddress>;
-      const invalidAddress2 = to.value[1] as Partial<EmailAddress>;
-      invalidAddress1.address = undefined;
-      invalidAddress2.address = undefined;
-
-      const result = processor.extractRecipientAddresses(email);
-      expect(result).toEqual(["valid@example.com"]);
-    });
-
-    test("should handle empty recipient list", () => {
-      const email = createMockEmail({
-        to: createAddressObject(),
-      });
-
-      const result = processor.extractRecipientAddresses(email);
-      expect(result).toEqual([]);
-    });
-  });
-
+describe("email processor", () => {
   describe("getEmailContent", () => {
     test("should prefer HTML content when available", () => {
       const email = createMockEmail({
@@ -100,7 +22,7 @@ describe("EmailProcessor", () => {
         textAsHtml: "<p>Text content</p>",
       });
 
-      const result = processor.getEmailContent(email);
+      const result = getEmailContent(email);
       expect(result).toBe("<p>HTML content</p>");
     });
 
@@ -110,18 +32,16 @@ describe("EmailProcessor", () => {
         textAsHtml: "<p>Text content</p>",
       });
 
-      const result = processor.getEmailContent(email);
+      const result = getEmailContent(email);
       expect(result).toBe("<p>Text content</p>");
     });
 
-    test("should handle non-string HTML content", () => {
-      const email = createMockEmail({
-        html: true as unknown as string,
-        textAsHtml: "<p>Text content</p>",
-      });
+    test("should reject malformed content projections", () => {
+      const email = { ...createMockEmail(), html: true };
 
-      const result = processor.getEmailContent(email);
-      expect(result).toBe("<p>Text content</p>");
+      expect(() => getEmailContent(email)).toThrow(
+        "Mail parser returned an invalid message projection",
+      );
     });
 
     test("should return default message when no content is available", () => {
@@ -130,7 +50,7 @@ describe("EmailProcessor", () => {
         textAsHtml: undefined,
       });
 
-      const result = processor.getEmailContent(email);
+      const result = getEmailContent(email);
       expect(result).toBe("No content.");
     });
   });

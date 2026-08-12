@@ -1,59 +1,40 @@
-import { generateBoundaryDates } from "../src/util/get-date-group";
 import { describe, expect, test } from "bun:test";
+import { generateBoundaryDates } from "../src/util/get-date-group";
 
 describe("generateBoundaryDates", () => {
-  const testCases = [
+  const cases = [
     {
       expected: {
-        lastYear: new Date("2019-02-29T00:00:00Z"),
-        oneMonthAgo: new Date("2020-01-29T00:00:00Z"),
-        oneWeekAgo: new Date("2020-02-22T00:00:00Z"),
-        today: new Date("2020-02-29T00:00:00Z"),
-        twoMonthsAgo: new Date("2019-12-29T00:00:00Z"),
+        lastYear: new Date(2023, 2, 1),
+        oneMonthAgo: new Date(2024, 0, 29),
+        oneWeekAgo: new Date(2024, 1, 22),
+        today: new Date(2024, 1, 29),
       },
-      fixedDate: new Date("2020-02-29T00:00:00Z"),
+      now: new Date(2024, 1, 29, 12, 30),
     },
     {
       expected: {
-        lastYear: new Date("2022-01-01T00:00:00Z"),
-        oneMonthAgo: new Date("2022-12-01T00:00:00Z"),
-        oneWeekAgo: new Date("2022-12-25T00:00:00Z"),
-        today: new Date("2023-01-01T00:00:00Z"),
-        twoMonthsAgo: new Date("2022-11-01T00:00:00Z"),
+        lastYear: new Date(2022, 0, 1),
+        oneMonthAgo: new Date(2022, 11, 1),
+        oneWeekAgo: new Date(2022, 11, 25),
+        today: new Date(2023, 0, 1),
       },
-      fixedDate: new Date("2023-01-01T00:00:00Z"),
+      now: new Date(2023, 0, 1, 23, 59),
     },
     {
       expected: {
-        lastYear: new Date("1999-01-01T00:00:00Z"),
-        oneMonthAgo: new Date("1999-12-01T00:00:00Z"),
-        oneWeekAgo: new Date("1999-12-25T00:00:00Z"),
-        today: new Date("2000-01-01T00:00:00Z"),
-        twoMonthsAgo: new Date("1999-11-01T00:00:00Z"),
+        lastYear: new Date(2023, 2, 31),
+        oneMonthAgo: new Date(2024, 2, 2),
+        oneWeekAgo: new Date(2024, 2, 24),
+        today: new Date(2024, 2, 31),
       },
-      fixedDate: new Date("2000-01-01T00:00:00Z"),
+      now: new Date(2024, 2, 31, 8),
     },
   ];
 
-  for (const { expected, fixedDate } of testCases) {
-    test(`should generate correct boundary dates for ${fixedDate.toISOString()}`, () => {
-      // Mock the Date object to return the fixed date
-      const originalDate = Date;
-      global.Date = class extends originalDate {
-        constructor(dateString?: string) {
-          if (dateString) {
-            super();
-            return new originalDate(dateString);
-          }
-
-          return new originalDate(fixedDate);
-        }
-      } as typeof Date;
-
-      const boundaryDates = generateBoundaryDates();
-      global.Date = originalDate;
-
-      expect(boundaryDates).toEqual(expected);
+  for (const { expected, now } of cases) {
+    test(`generates local boundaries for ${now.toString()}`, () => {
+      expect(generateBoundaryDates(now)).toEqual(expected);
     });
   }
 });

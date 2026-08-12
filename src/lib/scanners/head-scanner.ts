@@ -1,34 +1,19 @@
-import { logError as error } from "../../util/log.ts";
+import type { ScannerPage } from "../scanner-page.ts";
 import type { FeedData } from "./feed-data-type.ts";
-import type { Scanner } from "./scanner-interface.ts";
 
-const selector = [
-  'link[type="application/rss+xml"]',
-  'link[type="application/atom+xml"]',
-].join(", ");
-const getFeeds = function* (document: Document): Generator<FeedData> {
-  const baseUrl = document.baseURI || "";
-
-  for (const feed of document.querySelectorAll(selector)) {
-    const url = feed.getAttribute("href");
-    if (!url) {
-      continue;
-    }
-
-    const resolvedUrl = new URL(url, baseUrl).toString();
-    const title = feed.getAttribute("title") ?? resolvedUrl;
-
-    yield { title, url: resolvedUrl };
+const getFeeds = function* (page: ScannerPage): Generator<FeedData> {
+  for (const feed of page.feedLinks) {
+    if (!feed.href) continue;
+    const resolvedUrl = new URL(feed.href, page.baseUrl).toString();
+    yield { title: feed.title ?? resolvedUrl, url: resolvedUrl };
   }
 };
 
-export class HeadScanner implements Scanner {
-  scan(_currentUrl: URL, document: Document): FeedData[] {
-    if (!document.baseURI) {
-      error("Document does not have a valid baseURI.");
-      return [];
-    }
-
-    return Array.from(getFeeds(document));
+export const scanHead = (_currentUrl: URL, page: ScannerPage): FeedData[] => {
+  if (!page.baseUrl) {
+    console.error("Document does not have a valid baseURI.");
+    return [];
   }
-}
+
+  return Array.from(getFeeds(page));
+};

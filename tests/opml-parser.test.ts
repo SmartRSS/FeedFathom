@@ -35,17 +35,128 @@ describe("OpmlParser", () => {
         const { input } = await import(
           path.join(process.cwd(), inputDirectory, `${testFile}.ts`)
         );
+        if (testFile.includes("invalid")) {
+          // A malformed outline is skipped rather than aborting the whole
+          // import (see opml-parser.ts) -- processOutline's single-node
+          // wrapper then has nothing to return, so it falls back to its
+          // own "no result" error instead of a feed-URL-specific one.
+          expect(() => parser.processOutline(input)).toThrow(
+            "Invalid OPML outline",
+          );
+          return;
+        }
+
         const { expected } = await import(
           path.join(process.cwd(), expectedDirectory, `${testFile}.ts`)
         );
-
-        const result = parser.processOutline(input);
-        expect(result).toEqual(expected);
+        expect(parser.processOutline(input)).toEqual(expected);
       });
     }
   });
 
   describe("parseOpml", () => {
+    test("parses recursively nested outlines with arbitrary XML data", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline text="Root" custom="kept">
+              <description>Folder metadata</description>
+              <outline text="Nested">
+                <outline text="Feed" xmlUrl="https://example.com/feed.xml" customFeed="kept" />
+              </outline>
+            </outline>
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          children: [
+            {
+              children: [
+                {
+                  homeUrl: "https://example.com",
+                  name: "Feed",
+                  type: "source",
+                  xmlUrl: "https://example.com/feed.xml",
+                },
+              ],
+              name: "Nested",
+              type: "folder",
+            },
+          ],
+          name: "Root",
+          type: "folder",
+        },
+      ]);
+    });
+
+    test("returns an empty list without outlines", () => {
+      expect(
+        parser.parseOpml("<opml><body><not-outline /></body></opml>"),
+      ).toEqual([]);
+    });
+
+    test("rejects a non-OPML root", () => {
+      expect(() => parser.parseOpml("<different-root />")).toThrow(
+        "Invalid OPML document",
+      );
+    });
+
+    test("skips a malformed outline instead of aborting the whole import", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline text="Good feed" type="rss" xmlUrl="https://example.com/feed.xml" />
+            <outline text="Bad feed" type="rss" xmlUrl="not-a-valid-url" />
+            <outline text="Another good feed" type="rss" xmlUrl="https://example.org/feed.xml" />
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          homeUrl: "https://example.com",
+          name: "Good feed",
+          type: "source",
+          xmlUrl: "https://example.com/feed.xml",
+        },
+        {
+          homeUrl: "https://example.org",
+          name: "Another good feed",
+          type: "source",
+          xmlUrl: "https://example.org/feed.xml",
+        },
+      ]);
+    });
+
+    test("keeps valid children nested under an attribute-less outline wrapper", () => {
+      const result = parser.parseOpml(`
+        <opml version="2.0">
+          <body>
+            <outline>
+              <outline text="Nested feed" type="rss" xmlUrl="https://example.com/feed.xml" />
+            </outline>
+          </body>
+        </opml>
+      `);
+
+      expect(result).toEqual([
+        {
+          children: [
+            {
+              homeUrl: "https://example.com",
+              name: "Nested feed",
+              type: "source",
+              xmlUrl: "https://example.com/feed.xml",
+            },
+          ],
+          name: "Unknown",
+          type: "folder",
+        },
+      ]);
+    });
+
     const inputDirectory = path.join(TEST_CASES_DIR, "inputs", "parse-opml");
     const expectedDirectory = path.join(
       TEST_CASES_DIR,
