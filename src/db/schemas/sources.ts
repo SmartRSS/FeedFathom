@@ -39,7 +39,16 @@ export const sources = pgTable(
       enum: ["poll", "manual", "websub-push", "email"],
     }),
     lastSuccess: timestamp("last_success", { withTimezone: true }),
-    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    // Earliest time this source is eligible for another poll -- set on
+    // every successSource (from the response's Cache-Control) and every
+    // failSource (from the backoff formula), so getSourcesToProcess's
+    // "feed" branch just checks notBefore <= NOW() instead of separately
+    // recomputing a backoff interval from recentFailures at read time.
+    // Defaults to the Unix epoch (always due) rather than NULL, so it
+    // never needs an `IS NULL OR` check anywhere it's queried.
+    notBefore: timestamp("not_before", { withTimezone: true })
+      .notNull()
+      .default(new Date(0)),
     recentFailureDetails: varchar("recent_failure_details")
       .notNull()
       .default(""),
@@ -82,7 +91,7 @@ export const sources = pgTable(
   (table) => [
     index("kind_idx").on(table.kind),
     index("last_attempt_idx").on(table.lastAttempt),
-    index("next_check_at_idx").on(table.nextCheckAt),
+    index("sources_not_before_idx").on(table.notBefore),
     index("recent_failures_idx").on(table.recentFailures),
     unique("sources_url_unique").on(table.url),
     unique("sources_websub_callback_token_unique").on(
@@ -92,6 +101,6 @@ export const sources = pgTable(
 );
 
 type SourceRow = typeof sources.$inferSelect;
-export type Source = Omit<SourceRow, "nextCheckAt"> & {
-  nextCheckAt?: Date | null;
+export type Source = Omit<SourceRow, "notBefore"> & {
+  notBefore?: Date;
 };

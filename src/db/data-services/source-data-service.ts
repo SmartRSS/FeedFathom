@@ -41,6 +41,9 @@ export interface SourceWithSubscriberCount {
   websubStatus: "failed" | "none" | "pending" | "verified";
 }
 
+// Minimum spacing between successful "feed" polls, regardless of what the
+// origin's Cache-Control says -- see successSource's clamp.
+const pollFloorMs = 5 * 60_000;
 const exact = { additionalProperties: false } as const;
 type SourceSort = Static<typeof sourceSortSchema>;
 const sourceOrderSchema = Type.Union([
@@ -194,14 +197,17 @@ export class SourcesDataService {
   // "email" sources are excluded outright -- there's no HTTP endpoint to
   // poll at all, unlike the old `url LIKE 'http%'` heuristic this replaced,
   // which inferred the same fact from the URL's shape instead of an
-  // explicit column. "websub" sources use a flat once-daily last_attempt
-  // check regardless of recentFailures -- a hub push is the primary update
-  // path, so this is purely a fallback safety net for a dropped push, not
-  // the same kind of retry/backoff schedule "feed" sources need. Both
-  // branches ignore nextCheckAt for "websub" specifically: an HTTP
-  // Cache-Control-driven nextCheckAt from a normal fetch could otherwise
-  // schedule a websub source's *next* check sooner than a day out,
-  // undermining the point of the reduced cadence.
+  // explicit column. "feed" sources are gated purely by notBefore now --
+  // successSource/failSource write it directly (from Cache-Control, or the
+  // backoff formula on failure) instead of this query recomputing a backoff
+  // interval from recentFailures at read time. "websub" sources use a flat
+  // once-daily last_attempt check regardless of recentFailures -- a hub
+  // push is the primary update path, so this is purely a fallback safety
+  // net for a dropped push, not the same kind of retry/backoff schedule
+  // "feed" sources need, and deliberately ignores notBefore: a
+  // Cache-Control-driven value from a normal fetch could otherwise schedule
+  // a websub source's *next* check sooner than a day out, undermining the
+  // point of the reduced cadence.
   public async getSourcesToProcess() {
     const result: unknown = await this.drizzleConnection.execute(sql`
       WITH "due_sources" AS (
@@ -210,18 +216,7 @@ export class SourcesDataService {
         WHERE (
           (
             ${sources.kind} = 'feed'
-            AND (${sources.nextCheckAt} IS NULL OR ${sources.nextCheckAt} <= NOW())
-            AND (
-              ${sources.lastAttempt} IS NULL
-              OR (
-                ${sources.recentFailures} = 0
-                AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes'
-              )
-              OR (
-                ${sources.recentFailures} > 0
-                AND ${sources.lastAttempt} < NOW() - INTERVAL '5 minutes' * LEAST(${sources.recentFailures}, 15)
-              )
-            )
+            AND ${sources.notBefore} <= NOW()
           )
           OR (
             ${sources.kind} = 'websub'
@@ -310,7 +305,7 @@ export class SourcesDataService {
   public async successSource(
     sourceId: number,
     cached = false,
-    nextCheckAt = new Date(Date.now() + 5 * 60_000),
+    notBefore = new Date(Date.now() + pollFloorMs),
     // Defaults to a fresh timestamp for callers that don't care, but
     // parseSource passes its own observedAt here so this stamp exactly
     // matches the last_seen_in_feed_at it just wrote for this fetch's
@@ -320,13 +315,22 @@ export class SourcesDataService {
     observedAt = new Date(),
     trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
   ) {
+    // A floor regardless of what the caller (or the origin's own
+    // Cache-Control) asks for -- an origin sending no-cache/max-age=0
+    // shouldn't be able to make a periodic poller hammer it every gather
+    // cycle. Only matters for "feed" kind in practice (getSourcesToProcess
+    // ignores notBefore for "websub"/"email"), but harmless to apply
+    // unconditionally here since successSource doesn't know the kind.
+    const clampedNotBefore = new Date(
+      Math.max(notBefore.getTime(), Date.now() + pollFloorMs),
+    );
     await this.drizzleConnection
       .update(sources)
       .set({
         lastAttempt: observedAt,
         lastFetchTrigger: trigger,
         lastSuccess: observedAt,
-        nextCheckAt,
+        notBefore: clampedNotBefore,
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,
       })
@@ -335,10 +339,16 @@ export class SourcesDataService {
 
   public async failSource(sourceId: number, reason = "") {
     try {
+      // Same backoff formula getSourcesToProcess used to recompute at read
+      // time from recentFailures -- now stored directly on failure instead,
+      // so the read side is just "notBefore <= NOW()". recentFailures is
+      // incremented in the same expression this reads, so +1 accounts for
+      // the failure being recorded right now.
       await this.drizzleConnection
         .update(sources)
         .set({
           lastAttempt: new Date(),
+          notBefore: sql`NOW() + INTERVAL '5 minutes' * LEAST(${sources.recentFailures} + 1, 15)`,
           recentFailureDetails: reason,
           recentFailures: sql`${sources.recentFailures} + 1`,
         })
