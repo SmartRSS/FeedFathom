@@ -272,9 +272,12 @@ test("uses the real extension bridge only on its configured origin", async ({
       });
     });
 
-    const serviceWorker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
+    // TEMPORARY diagnostic: test.step() boundaries show up in the list
+    // reporter as they start, even if the test times out before finishing
+    // -- pins down exactly which phase is stuck in CI, where this hangs at
+    // the 90s timeout despite passing locally every time.
+    const serviceWorker = await test.step("wait for extension service worker", () =>
+      context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker"));
     const extensionId = new URL(serviceWorker.url()).hostname;
     const optionsPage = await context.newPage();
     const appPage = await context.newPage();
@@ -286,10 +289,14 @@ test("uses the real extension bridge only on its configured origin", async ({
     await installApiFixture(appPage);
 
     const origin = new URL(baseURL).origin;
-    await setInstance(optionsPage, extensionId, origin);
-    await appPage.goto(origin);
-    await expect(appPage.getByRole("combobox")).toContainText("Reader plain");
-    const allowed = await probeCapabilities(appPage);
+    await test.step("set instance to the configured origin", () =>
+      setInstance(optionsPage, extensionId, origin));
+    await test.step("load the app on the configured origin", () =>
+      appPage.goto(origin));
+    await test.step("wait for the reader mode combobox", () =>
+      expect(appPage.getByRole("combobox")).toContainText("Reader plain"));
+    const allowed = await test.step("probe capabilities (allowed)", () =>
+      probeCapabilities(appPage));
     expect(allowed).toEqual({
       action: "capabilities",
       available: true,
@@ -303,9 +310,11 @@ test("uses the real extension bridge only on its configured origin", async ({
     const refusedOrigin = new URL(origin);
     refusedOrigin.hostname =
       refusedOrigin.hostname === "localhost" ? "127.0.0.1" : "localhost";
-    await setInstance(optionsPage, extensionId, refusedOrigin.origin);
-    await appPage.reload();
-    const refused = await probeCapabilities(appPage);
+    await test.step("set instance to the refused origin", () =>
+      setInstance(optionsPage, extensionId, refusedOrigin.origin));
+    await test.step("reload the app", () => appPage.reload());
+    const refused = await test.step("probe capabilities (refused)", () =>
+      probeCapabilities(appPage));
     expect(refused).toEqual({
       action: "capabilities",
       channel: "feedfathom-reader",
