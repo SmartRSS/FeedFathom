@@ -392,6 +392,7 @@ jobs:
     name: Create GitHub release
     needs: [build, build_extension, release_smoke, promote]
     if: >-
+      always() &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') &&
       needs.build.result == 'success' &&
