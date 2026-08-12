@@ -96,7 +96,21 @@ async function seedLegacyData(client: SQL) {
   >`INSERT INTO "sources" ("url", "home_url")
     VALUES ('https://two.example.test/feed', 'https://two.example.test')
     RETURNING "id"`;
-  if (!legacyUser || !tokenUser || !firstSource || !secondSource) {
+  // Predates the `kind` column, and its url is a delivery address rather
+  // than an endpoint -- migration 0031 has to classify it as "email", or it
+  // gets polled as an HTTP feed and fails forever (see that migration).
+  const [emailSource] = await client<
+    { id: number }[]
+  >`INSERT INTO "sources" ("url", "home_url")
+    VALUES ('inbox@example.test', 'https://example.test')
+    RETURNING "id"`;
+  if (
+    !legacyUser ||
+    !tokenUser ||
+    !firstSource ||
+    !secondSource ||
+    !emailSource
+  ) {
     throw new Error("Legacy seed inserts did not return their identifiers");
   }
 
@@ -123,6 +137,7 @@ async function seedLegacyData(client: SQL) {
 
   return {
     articleId: article.id,
+    emailSourceId: emailSource.id,
     firstSourceId: firstSource.id,
     legacyUserId: legacyUser.id,
     secondSourceId: secondSource.id,
@@ -210,6 +225,24 @@ test("migrates legacy and fresh databases without deleting unmanaged queue data"
       sourceId: seeded.firstSourceId,
       userId: seeded.legacyUserId,
     });
+
+    // Migration 0024 defaulted every pre-existing row to 'feed', including
+    // email sources, which then failed every poll. 0031 restores the
+    // classification the `url LIKE 'http%'` heuristic used to provide.
+    const sourceKinds = await client<
+      { id: number; kind: string }[]
+    >`SELECT id, kind FROM "sources"
+      WHERE id = ANY(${client.array(
+        [seeded.emailSourceId, seeded.firstSourceId],
+        "INT4",
+      )})
+      ORDER BY id`;
+    expect(
+      sourceKinds.find((row) => row.id === seeded.emailSourceId)?.kind,
+    ).toBe("email");
+    expect(
+      sourceKinds.find((row) => row.id === seeded.firstSourceId)?.kind,
+    ).toBe("feed");
 
     const foreignKeys = await client<
       { name: string; valid: boolean }[]
