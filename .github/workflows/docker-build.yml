@@ -712,7 +712,12 @@ jobs:
 
           docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker"
           docker stack services "$STACK_NAME"
-          SPA_HTML=$(curl --fail-with-body --location --retry 10 --retry-delay 3 --retry-all-errors --connect-timeout 5 --max-time 10 --show-error "http://${FEED_FATHOM_DOMAIN}/")
+          # wantsSpaShellFallback (server-app.ts) only serves the SPA shell
+          # for requests whose Accept header contains text/html -- curl's
+          # default Accept: */* doesn't match that, and gets a real 404
+          # instead of the app, even though production is genuinely healthy
+          # for real browsers. Send the header real navigations send.
+          SPA_HTML=$(curl --fail-with-body --location --header 'Accept: text/html' --retry 10 --retry-delay 3 --retry-all-errors --connect-timeout 5 --max-time 10 --show-error "http://${FEED_FATHOM_DOMAIN}/")
           if ! grep -Fq 'id="app"' <<< "$SPA_HTML"; then
             printf '%s\n' 'Public root did not contain the expected SPA app marker' >&2
             false

@@ -132,12 +132,13 @@ services:
         limits:
           cpus: "${WORKER_CPU_LIMIT:-0.50}"
           memory: "${WORKER_MEM_LIMIT:-1500M}"
-        # start-first rolling updates need at least one extra reservation's
-        # worth of CPU free on the node beyond WORKER_REPLICAS *
-        # WORKER_CPU_RESERVATION, or the new task can't schedule until the
-        # old one stops -- and the old one won't stop until the new one is
-        # healthy, deadlocking the rollout. Keep real headroom when scaling
-        # WORKER_REPLICAS up on a capacity-constrained node.
+        # start-first rolling updates need update_config.parallelism extra
+        # reservations' worth of CPU free on the node beyond WORKER_REPLICAS
+        # * WORKER_CPU_RESERVATION (currently 4, matching parallelism: 4
+        # below), or new tasks can't schedule until old ones stop -- and old
+        # ones won't stop until the new ones are healthy, deadlocking the
+        # rollout. Keep real headroom when scaling WORKER_REPLICAS or
+        # parallelism up on a capacity-constrained node.
         reservations:
           cpus: "${WORKER_CPU_RESERVATION:-0.25}"
           memory: "${WORKER_MEM_RESERVATION:-500M}"
@@ -146,16 +147,16 @@ services:
         delay: 5s
         window: 30s
       update_config:
-        parallelism: 1
-        delay: 15s
+        parallelism: 4
+        delay: 5s
         order: start-first
-        monitor: 30s
+        monitor: 15s
         failure_action: rollback
       rollback_config:
-        parallelism: 1
-        delay: 15s
+        parallelism: 4
+        delay: 5s
         order: start-first
-        monitor: 30s
+        monitor: 15s
         failure_action: pause
 
 volumes:
