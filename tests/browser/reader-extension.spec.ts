@@ -282,7 +282,15 @@ test("uses the real extension bridge only on its configured origin", async ({
     console.log("[diag] setInstance (allowed origin)");
     await setInstance(optionsPage, extensionId, origin);
     console.log("[diag] appPage.goto (allowed origin)");
-    await appPage.goto(origin);
+    // Default goto() waits for the "load" event (every resource, including
+    // Vite's dev-mode HMR websocket) -- domcontentloaded is enough for an
+    // SPA and avoids a live connection preventing "load" from ever firing.
+    // Explicit short timeout so a genuine hang here throws a specific,
+    // diagnosable error instead of running out the whole test budget.
+    await appPage.goto(origin, {
+      timeout: 15_000,
+      waitUntil: "domcontentloaded",
+    });
     console.log("[diag] waiting for reader mode combobox");
     await expect(appPage.getByRole("combobox")).toContainText("Reader plain");
     console.log("[diag] probeCapabilities (allowed)");
