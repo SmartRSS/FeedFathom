@@ -23,7 +23,7 @@ import { users } from "./schemas/users";
 // are actually missing. This buffer must be far larger than any real gap
 // between a fetch's upsert and its own success stamp (milliseconds) so the
 // comparison only fires once an article has survived many real fetch
-// cycles without appearing (sources.nextCheckAt defaults to +5 minutes).
+// cycles without appearing (successSource's poll floor is 5 minutes).
 const confirmedGoneFromFeedBuffer = sql`INTERVAL '1 day'`;
 
 const daysInterval = (days: number) => sql`(${days} * INTERVAL '1 day')`;
