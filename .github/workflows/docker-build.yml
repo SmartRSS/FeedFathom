@@ -604,7 +604,14 @@ jobs:
 
           remove_migration() {
             if [[ "$MIGRATION_CREATED" == true ]]; then
-              docker service rm "$MIGRATION_SERVICE"
+              # The completed job service can already be gone by the time we
+              # get here (observed in production: gone before this cleanup
+              # ran, despite wait_for_migration already having confirmed it
+              # reached "complete" -- harmless, since its one task had
+              # already finished). Removal is just tidiness at this point,
+              # not something worth failing an otherwise-successful deploy
+              # over.
+              docker service rm "$MIGRATION_SERVICE" || true
               MIGRATION_CREATED=false
             fi
           }
