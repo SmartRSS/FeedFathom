@@ -272,12 +272,15 @@ test("uses the real extension bridge only on its configured origin", async ({
       });
     });
 
-    // TEMPORARY diagnostic: test.step() boundaries show up in the list
-    // reporter as they start, even if the test times out before finishing
-    // -- pins down exactly which phase is stuck in CI, where this hangs at
-    // the 90s timeout despite passing locally every time.
-    const serviceWorker = await test.step("wait for extension service worker", () =>
-      context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker"));
+    // TEMPORARY diagnostic: plain console.log always reaches stdout
+    // regardless of reporter, unlike test.step() which didn't surface
+    // anything in the "list" reporter's captured output -- pins down
+    // exactly which phase is stuck in CI, where this hangs at the 90s
+    // timeout despite passing locally every time.
+    console.log("[diag] waiting for extension service worker");
+    const serviceWorker =
+      context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+    console.log("[diag] got extension service worker");
     const extensionId = new URL(serviceWorker.url()).hostname;
     const optionsPage = await context.newPage();
     const appPage = await context.newPage();
@@ -289,14 +292,15 @@ test("uses the real extension bridge only on its configured origin", async ({
     await installApiFixture(appPage);
 
     const origin = new URL(baseURL).origin;
-    await test.step("set instance to the configured origin", () =>
-      setInstance(optionsPage, extensionId, origin));
-    await test.step("load the app on the configured origin", () =>
-      appPage.goto(origin));
-    await test.step("wait for the reader mode combobox", () =>
-      expect(appPage.getByRole("combobox")).toContainText("Reader plain"));
-    const allowed = await test.step("probe capabilities (allowed)", () =>
-      probeCapabilities(appPage));
+    console.log("[diag] setInstance (allowed origin)");
+    await setInstance(optionsPage, extensionId, origin);
+    console.log("[diag] appPage.goto (allowed origin)");
+    await appPage.goto(origin);
+    console.log("[diag] waiting for reader mode combobox");
+    await expect(appPage.getByRole("combobox")).toContainText("Reader plain");
+    console.log("[diag] probeCapabilities (allowed)");
+    const allowed = await probeCapabilities(appPage);
+    console.log("[diag] probeCapabilities (allowed) resolved");
     expect(allowed).toEqual({
       action: "capabilities",
       available: true,
@@ -310,11 +314,13 @@ test("uses the real extension bridge only on its configured origin", async ({
     const refusedOrigin = new URL(origin);
     refusedOrigin.hostname =
       refusedOrigin.hostname === "localhost" ? "127.0.0.1" : "localhost";
-    await test.step("set instance to the refused origin", () =>
-      setInstance(optionsPage, extensionId, refusedOrigin.origin));
-    await test.step("reload the app", () => appPage.reload());
-    const refused = await test.step("probe capabilities (refused)", () =>
-      probeCapabilities(appPage));
+    console.log("[diag] setInstance (refused origin)");
+    await setInstance(optionsPage, extensionId, refusedOrigin.origin);
+    console.log("[diag] appPage.reload");
+    await appPage.reload();
+    console.log("[diag] probeCapabilities (refused)");
+    const refused = await probeCapabilities(appPage);
+    console.log("[diag] probeCapabilities (refused) resolved");
     expect(refused).toEqual({
       action: "capabilities",
       channel: "feedfathom-reader",
