@@ -30,7 +30,7 @@ jobs:
       needs.quality.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
     env:
       DOCKER_DEFAULT_PLATFORM: linux/amd64
@@ -53,8 +53,8 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to Docker Hardened Images registry
         uses: docker/login-action@v4
@@ -103,7 +103,7 @@ jobs:
           - feedfathom-server
           - feedfathom-worker
           - feedfathom-migrator
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
@@ -114,8 +114,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to Docker Hardened Images registry
         uses: docker/login-action@v4
@@ -135,15 +135,13 @@ jobs:
         run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Build and publish immutable ${{ matrix.target }} image
-        uses: docker/build-push-action@v7
+        uses: useblacksmith/build-push-action@v2
         timeout-minutes: 30
         with:
           context: .
           target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
           tags: ghcr.io/${{ env.REPO_NAME }}/${{ matrix.target }}:${{ github.sha }}
           provenance: false
 
@@ -154,7 +152,7 @@ jobs:
       needs.quality.result == 'success' &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       build_date: ${{ steps.metadata.outputs.build_date }}
       extension_version: ${{ steps.metadata.outputs.extension_version }}
@@ -247,7 +245,7 @@ jobs:
     if: >-
       needs.quality.result == 'success' &&
       github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: read
@@ -262,8 +260,8 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -334,7 +332,7 @@ jobs:
           - feedfathom-server
           - feedfathom-worker
           - feedfathom-migrator
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
@@ -342,8 +340,8 @@ jobs:
       CHANNEL_TAG: ${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
 
     steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -372,7 +370,7 @@ jobs:
       needs.build_extension.result == 'success' &&
       needs.release_smoke_push.result == 'success' &&
       needs.promote.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write
     env:
@@ -451,7 +449,7 @@ jobs:
           gh release edit "$TAG" --notes "${EXISTING_BODY}${IMAGE_NOTES}"
 
   deploy:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs:
       [
         quality,
@@ -704,7 +702,7 @@ jobs:
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       needs.build_extension.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       pages: write
@@ -797,7 +795,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       pages: write
       id-token: write
