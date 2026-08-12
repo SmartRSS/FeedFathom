@@ -189,6 +189,7 @@ jobs:
       - name: Build extension variants
         env:
           FIREFOX_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.json
+          EXTENSION_VERSION: ${{ steps.metadata.outputs.extension_version }}
         run: bun run build-extension
 
       - name: Sign Firefox extension
