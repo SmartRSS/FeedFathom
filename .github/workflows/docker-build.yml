@@ -162,7 +162,9 @@ jobs:
     outputs:
       build_date: ${{ steps.metadata.outputs.build_date }}
       extension_version: ${{ steps.metadata.outputs.extension_version }}
+      changed: ${{ steps.content.outputs.changed }}
     env:
+      GH_TOKEN: ${{ github.token }}
       PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
     steps:
       - name: Checkout repository
@@ -209,7 +211,62 @@ jobs:
           EXTENSION_VERSION: ${{ steps.metadata.outputs.extension_version }}
         run: bun run build-extension
 
+      - name: Detect whether the extension actually changed
+        id: content
+        run: |
+          set -euo pipefail
+          # Hash what actually ships, not the paths that feed it: the bundle
+          # pulls in src/lib/** (scanner, feed-data-type) as well as
+          # src/extension/**, so a `paths:` filter would miss real changes
+          # arriving through shared code. The version field is stamped fresh
+          # every run, so it is excluded -- otherwise nothing would ever
+          # compare equal. Tree-shaken code correctly does not count as a
+          # change: if it never reaches the bundle, nothing ships differently.
+          CONTENT_HASH=$(bun -e '
+            import { createHash } from "node:crypto";
+            import { readdirSync, statSync, readFileSync } from "node:fs";
+            const root = "ext/build-ff";
+            const walk = (dir) => readdirSync(dir).flatMap((entry) => {
+              const full = `${dir}/${entry}`;
+              return statSync(full).isDirectory() ? walk(full) : [full];
+            });
+            const hash = createHash("sha256");
+            for (const file of walk(root).sort()) {
+              hash.update(file.slice(root.length));
+              if (file.endsWith("/manifest.json")) {
+                const { version, ...rest } = JSON.parse(readFileSync(file, "utf8"));
+                hash.update(JSON.stringify(rest));
+              } else {
+                hash.update(readFileSync(file));
+              }
+            }
+            process.stdout.write(hash.digest("hex"));
+          ')
+          printf 'Built extension content hash: %s\n' "$CONTENT_HASH"
+
+          # The last published hash travels with the release that published
+          # it, so this is branch-independent -- an Actions cache would not
+          # be, since caches do not cross sibling branches and staging/main
+          # would each sign the same content separately.
+          PREVIOUS_HASH=""
+          for tag in $(gh release list --limit 30 --json tagName -q '.[].tagName'); do
+            if gh release download "$tag" --pattern extension-content-hash.txt --output - > /tmp/previous-hash 2>/dev/null; then
+              PREVIOUS_HASH=$(tr -d '[:space:]' < /tmp/previous-hash)
+              printf 'Comparing against %s\n' "$tag"
+              break
+            fi
+          done
+
+          if [ -n "$PREVIOUS_HASH" ] && [ "$PREVIOUS_HASH" = "$CONTENT_HASH" ]; then
+            printf '%s\n' 'Extension content is unchanged -- skipping signing, release assets, and the docs/update-manifest refresh.'
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          printf '%s' "$CONTENT_HASH" > /tmp/extension-content-hash.txt
+
       - name: Sign Firefox extension
+        if: steps.content.outputs.changed == 'true'
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
@@ -236,7 +293,9 @@ jobs:
           cp ext/build-ff/manifest.json dist-extension/manifest.json
 
       - name: Verify signed Firefox release
+        if: steps.content.outputs.changed == 'true'
         run: |
+          cp /tmp/extension-content-hash.txt dist-extension/extension-content-hash.txt
           unzip -Z1 dist-extension/feedfathom_ff.xpi | grep -q '^META-INF/'
           unzip -p dist-extension/feedfathom_ff.xpi manifest.json > /tmp/signed-manifest.json
           bun -e '
@@ -252,6 +311,7 @@ jobs:
           '
 
       - name: Upload signed extension artifact
+        if: steps.content.outputs.changed == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: extension-build
@@ -404,6 +464,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download signed extension artifact
+        if: needs.build_extension.outputs.changed == 'true'
         uses: actions/download-artifact@v8
         with:
           name: extension-build
@@ -426,8 +487,10 @@ jobs:
               echo "PRERELEASE=true"
             } >> "$GITHUB_ENV"
           fi
-          mv dist-extension/feedfathom_ff.xpi "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
-          mv dist-extension/feedfathom_ch.zip "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+          if [[ "${{ needs.build_extension.outputs.changed }}" == 'true' ]]; then
+            mv dist-extension/feedfathom_ff.xpi "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
+            mv dist-extension/feedfathom_ch.zip "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+          fi
 
       - name: Create release
         run: |
@@ -446,14 +509,26 @@ jobs:
           if [[ -n "$LAST_STABLE_TAG" ]]; then
             notes_start_tag=(--notes-start-tag "$LAST_STABLE_TAG")
           fi
+          # No assets when the extension is unchanged: the previous release
+          # already carries that exact build, and Pages still serves it via
+          # the update manifest published back then.
+          extension_assets=()
+          EXTENSION_NOTE='- extension: unchanged since the previous release'
+          if [[ "${{ needs.build_extension.outputs.changed }}" == 'true' ]]; then
+            extension_assets=(
+              "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
+              "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+              "dist-extension/extension-content-hash.txt"
+            )
+            EXTENSION_NOTE="- extension: \`${EXTENSION_VERSION}\` (attached)"
+          fi
           gh release create "$TAG" \
             --title "$TITLE" \
             --target "${{ github.sha }}" \
             --generate-notes \
             "${notes_start_tag[@]}" \
             "${prerelease_flag[@]}" \
-            "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi" \
-            "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+            "${extension_assets[@]}"
 
           IMAGE_NOTES=$(cat <<EOF
 
@@ -462,6 +537,9 @@ jobs:
           - \`ghcr.io/${REPO_NAME}/feedfathom-server:${GITHUB_SHA}\`
           - \`ghcr.io/${REPO_NAME}/feedfathom-worker:${GITHUB_SHA}\`
           - \`ghcr.io/${REPO_NAME}/feedfathom-migrator:${GITHUB_SHA}\`
+
+          ## Extension
+          ${EXTENSION_NOTE}
           EOF
           )
           EXISTING_BODY=$(gh release view "$TAG" --json body -q .body)
@@ -732,7 +810,8 @@ jobs:
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      needs.build_extension.result == 'success'
+      needs.build_extension.result == 'success' &&
+      needs.build_extension.outputs.changed == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
