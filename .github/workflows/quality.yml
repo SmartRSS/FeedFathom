@@ -7,9 +7,13 @@ on:
 permissions:
   contents: read
 
+# Job ids are load-bearing: the main branch ruleset pins its four required
+# status checks by context name ("quality / lint" and friends), which is
+# "<caller job> / <this job's name, or its id when unnamed>". Renaming a job
+# here, or giving it a `name:`, silently blocks every PR into main until the
+# ruleset is updated to match.
 jobs:
   lint:
-    name: Lint
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
@@ -21,8 +25,7 @@ jobs:
       - name: Run lint
         run: bun run lint
 
-  compile:
-    name: Compile every deployable target
+  build:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
@@ -35,7 +38,6 @@ jobs:
         run: bun run build-project
 
   unit:
-    name: Unit and migration tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test
@@ -81,7 +83,6 @@ jobs:
         run: bun run test:migrations
 
   browser:
-    name: Browser tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
