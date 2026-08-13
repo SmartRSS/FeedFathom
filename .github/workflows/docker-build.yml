@@ -774,7 +774,15 @@ jobs:
           MIGRATION_CREATED=true
           wait_for_migration
 
-          timeout -k 15s 600s docker stack deploy --detach=false --with-registry-auth --prune -c stack.yml -c stack.port.yml "$STACK_NAME"
+          # --quiet suppresses the per-task progress rendering, which is
+          # meant to redraw one line in place and instead emits a fresh line
+          # many times a second under CI's non-TTY stdout ("overall
+          # progress: N out of M tasks", "verify: Waiting 30 seconds..."),
+          # burying everything else in the log. It does not change the
+          # waiting behaviour -- that is --detach=false -- and failures
+          # still report fully via the ERR trap's diagnose() dump plus the
+          # image-convergence and public-root checks below.
+          timeout -k 15s 600s docker stack deploy --quiet --detach=false --with-registry-auth --prune -c stack.yml -c stack.port.yml "$STACK_NAME"
 
           for specification in \
             "${STACK_NAME}_server|$SERVER_IMAGE" \
