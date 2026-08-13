@@ -1,4 +1,6 @@
-name: Build, Verify, and Deploy Docker Images
+# Publishes three container images, the browser extension, the GitHub release,
+# the docs site, and the production Swarm deploy -- all keyed to one commit SHA.
+name: Release Pipeline
 
 on:
   push:
@@ -19,6 +21,11 @@ on:
 permissions:
   contents: read
 
+# deploy/stack.yml and deploy/compose.smoke.yml already hardcode this prefix,
+# so computing it per job from ${GITHUB_REPOSITORY,,} bought no portability.
+env:
+  IMAGE_PREFIX: ghcr.io/smartrss/feedfathom
+
 jobs:
   quality:
     uses: ./.github/workflows/quality.yml
@@ -27,7 +34,6 @@ jobs:
     name: Build and smoke internal PR images
     needs: quality
     if: >-
-      needs.quality.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -42,22 +48,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Set up Bun project
+        uses: ./.github/actions/bun-project
         with:
-          bun-version: 1.3.14
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/bun.lock') }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+          playwright: "true"
 
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
@@ -95,11 +89,10 @@ jobs:
         if: always()
         run: docker compose -f deploy/compose.smoke.yml down
 
-  build:
+  publish_images:
     name: Publish ${{ matrix.target }} immutable image
     needs: quality
     if: >-
-      needs.quality.result == 'success' &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     strategy:
@@ -137,9 +130,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase repository name
-        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-
       - name: Build and publish immutable ${{ matrix.target }} image
         uses: useblacksmith/build-push-action@v2
         timeout-minutes: 30
@@ -148,14 +138,13 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ env.REPO_NAME }}/${{ matrix.target }}:${{ github.sha }}
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.target }}:${{ github.sha }}
           provenance: false
 
   build_extension:
     name: Build and sign browser extension
     needs: quality
     if: >-
-      needs.quality.result == 'success' &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -172,13 +161,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Set up Bun project
+        uses: ./.github/actions/bun-project
 
       - name: Set extension release metadata
         id: metadata
@@ -331,9 +315,7 @@ jobs:
   validate_deploy_tag:
     name: Validate existing deployment manifests
     needs: quality
-    if: >-
-      needs.quality.result == 'success' &&
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -359,29 +341,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase repository name
-        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-
       - name: Verify all exact-tag manifests exist
         run: |
           set -euo pipefail
           for target in feedfathom-server feedfathom-worker feedfathom-migrator; do
-            docker buildx imagetools inspect "ghcr.io/${REPO_NAME}/${target}:${DEPLOY_TAG}" >/dev/null
+            docker buildx imagetools inspect "${IMAGE_PREFIX}/${target}:${DEPLOY_TAG}" >/dev/null
           done
 
   # Split into a push-path and a dispatch-path caller (instead of one shared
   # job juggling both) so a normal push run's dependency chain never has a
   # naturally-skipped job in it -- validate_deploy_tag (workflow_dispatch
-  # only) would otherwise sit between build and release_smoke and force
-  # every downstream job (promote, create_release) to add always() just to
-  # survive that skip.
+  # only) would otherwise sit between publish_images and release_smoke and
+  # force every downstream job (promote, create_release) to add always() just
+  # to survive that skip. Each caller needs no `if:` of its own: its sole
+  # dependency already runs on exactly one event, and a skipped or failed
+  # need skips the caller.
   release_smoke_push:
     name: Smoke exact published images (push)
-    needs: [quality, build]
-    if: >-
-      needs.quality.result == 'success' &&
-      github.event_name == 'push' &&
-      needs.build.result == 'success'
+    needs: publish_images
     uses: ./.github/workflows/release-smoke.yml
     permissions:
       contents: read
@@ -392,11 +369,7 @@ jobs:
 
   release_smoke_dispatch:
     name: Smoke exact published images (dispatch)
-    needs: [quality, validate_deploy_tag]
-    if: >-
-      needs.quality.result == 'success' &&
-      github.event_name == 'workflow_dispatch' &&
-      needs.validate_deploy_tag.result == 'success'
+    needs: validate_deploy_tag
     uses: ./.github/workflows/release-smoke.yml
     permissions:
       contents: read
@@ -407,13 +380,7 @@ jobs:
 
   promote:
     name: Promote verified ${{ matrix.target }} manifest to a channel tag
-    needs: [quality, build, release_smoke_push]
-    if: >-
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') &&
-      needs.quality.result == 'success' &&
-      needs.build.result == 'success' &&
-      needs.release_smoke_push.result == 'success'
+    needs: release_smoke_push
     strategy:
       fail-fast: false
       matrix:
@@ -439,26 +406,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase repository name
-        run: printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-
       - name: Promote exact verified manifest
         run: |
           docker buildx imagetools create \
-            --tag "ghcr.io/${REPO_NAME}/${{ matrix.target }}:${CHANNEL_TAG}" \
-            "ghcr.io/${REPO_NAME}/${{ matrix.target }}:${GITHUB_SHA}"
+            --tag "${IMAGE_PREFIX}/${{ matrix.target }}:${CHANNEL_TAG}" \
+            "${IMAGE_PREFIX}/${{ matrix.target }}:${GITHUB_SHA}"
 
   create_release:
     name: Create GitHub release
-    needs: [build, build_extension, release_smoke_push, promote]
-    if: >-
-      always() &&
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') &&
-      needs.build.result == 'success' &&
-      needs.build_extension.result == 'success' &&
-      needs.release_smoke_push.result == 'success' &&
-      needs.promote.result == 'success'
+    needs: [build_extension, promote]
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write
@@ -483,7 +439,6 @@ jobs:
       - name: Set release metadata
         run: |
           set -euo pipefail
-          printf 'REPO_NAME=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
           if [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
             {
               echo "TAG=v${EXTENSION_VERSION}"
@@ -544,9 +499,9 @@ jobs:
 
           ## Images
           Published to GHCR at this commit (\`${GITHUB_SHA}\`):
-          - \`ghcr.io/${REPO_NAME}/feedfathom-server:${GITHUB_SHA}\`
-          - \`ghcr.io/${REPO_NAME}/feedfathom-worker:${GITHUB_SHA}\`
-          - \`ghcr.io/${REPO_NAME}/feedfathom-migrator:${GITHUB_SHA}\`
+          - \`${IMAGE_PREFIX}/feedfathom-server:${GITHUB_SHA}\`
+          - \`${IMAGE_PREFIX}/feedfathom-worker:${GITHUB_SHA}\`
+          - \`${IMAGE_PREFIX}/feedfathom-migrator:${GITHUB_SHA}\`
 
           ## Extension
           ${EXTENSION_NOTE}
@@ -556,33 +511,20 @@ jobs:
           gh release edit "$TAG" --notes "${EXISTING_BODY}${IMAGE_NOTES}"
 
   deploy:
+    name: Deploy to production Swarm
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs:
-      [
-        quality,
-        build,
-        validate_deploy_tag,
-        release_smoke_push,
-        release_smoke_dispatch,
-        promote,
-      ]
+    # Each path funnels through exactly one terminal job, and the two are
+    # mutually exclusive by event, so this needs no per-event breakdown: the
+    # transitive needs already require quality, the image publish/validation,
+    # and the smoke test to have succeeded. !cancelled() (not always()) is
+    # required only because the other path's job is legitimately skipped.
+    needs: [promote, release_smoke_dispatch]
     if: >-
-      always() &&
+      !cancelled() &&
       vars.ENABLE_SWARM_DEPLOYMENT == 'true' &&
       github.ref == 'refs/heads/main' &&
-      needs.quality.result == 'success' &&
-      ((github.event_name == 'push' &&
-        needs.build.result == 'success' &&
-        needs.validate_deploy_tag.result == 'skipped' &&
-        needs.release_smoke_push.result == 'success' &&
-        needs.release_smoke_dispatch.result == 'skipped' &&
-        needs.promote.result == 'success') ||
-       (github.event_name == 'workflow_dispatch' &&
-        needs.build.result == 'skipped' &&
-        needs.validate_deploy_tag.result == 'success' &&
-        needs.release_smoke_push.result == 'skipped' &&
-        needs.release_smoke_dispatch.result == 'success' &&
-        needs.promote.result == 'skipped'))
+      (needs.promote.result == 'success' ||
+       needs.release_smoke_dispatch.result == 'success')
     timeout-minutes: 30
     permissions:
       contents: read
@@ -822,19 +764,23 @@ jobs:
           trap - ERR
           REMOTE
 
-  pages_build:
-    name: Build docs site with signed extension
+  pages:
+    name: Publish docs site with signed extension
     needs: build_extension
     if: >-
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      needs.build_extension.result == 'success' &&
       needs.build_extension.outputs.changed == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       pages: write
       id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     env:
       PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
       EXTENSION_VERSION: ${{ needs.build_extension.outputs.extension_version }}
@@ -845,10 +791,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # Only needs the bun binary for the manifest scripts below -- no
+      # dependencies, so this skips the shared bun-project action.
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version-file: package.json
 
       - name: Download signed extension artifact
         uses: actions/download-artifact@v8
@@ -913,24 +861,6 @@ jobs:
         with:
           path: ./_site
 
-  pages_deploy:
-    name: Deploy docs site
-    needs: pages_build
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      needs.pages_build.result == 'success'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
