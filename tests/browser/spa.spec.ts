@@ -120,6 +120,29 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
+// A nested list also matches .tree, so it easily picks that rule's
+// scroll-container treatment back up and reserves a scrollbar gutter of its
+// own, indenting every source row's right edge by the gutter width while the
+// folder rows around it stay put. The visible symptom is the unread counts
+// failing to line up, so assert on those directly.
+test("right-aligns folder and source unread counts to the same edge", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const folderCount = page.locator(".source.folder em").first();
+  const sourceCount = page.locator(".tree.nested .source em").first();
+  await expect(folderCount).toBeVisible();
+  await expect(sourceCount).toBeVisible();
+
+  const folderBox = (await folderCount.boundingBox())!;
+  const sourceBox = (await sourceCount.boundingBox())!;
+  expect(
+    Math.abs(folderBox.x + folderBox.width - (sourceBox.x + sourceBox.width)),
+  ).toBeLessThan(1);
+});
+
 test("surfaces folder creation failures without refreshing the tree", async ({
   page,
 }) => {
