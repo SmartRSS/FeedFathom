@@ -36,58 +36,16 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 45
-    env:
-      DOCKER_DEFAULT_PLATFORM: linux/amd64
-      FEEDFATHOM_TAG: ${{ github.sha }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Set up Bun project
-        uses: ./.github/actions/bun-project
-        with:
-          playwright: "true"
-
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
-
-      - name: Log in to Docker Hardened Images registry
-        uses: docker/login-action@v4
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DHI_USERNAME }}
-          password: ${{ secrets.DHI_TOKEN }}
-
-      - name: Build and load exact PR images
-        run: docker compose -f deploy/compose.smoke.yml build migrator server worker
-
-      - name: Pull smoke infrastructure images
-        run: docker compose -f deploy/compose.smoke.yml pull redis postgres
-
-      - name: Start exact local images without pulling
-        run: docker compose -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never
-
-      - name: Run production browser smoke test
-        env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3456
-        run: bun run test:smoke
-
-      - name: Print logs on failure
-        if: failure()
-        run: |
-          printf '%s\n' 'Verification failed. Printing logs for all services:'
-          docker compose -f deploy/compose.smoke.yml logs migrator worker server
-          printf '%s\n' 'Current container status:'
-          docker compose -f deploy/compose.smoke.yml ps
-
-      - name: Cleanup
-        if: always()
-        run: docker compose -f deploy/compose.smoke.yml down
+    uses: ./.github/workflows/release-smoke.yml
+    # build_locally needs the dhi.io credentials the pull path does not.
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: read
+    with:
+      checkout_ref: ${{ github.sha }}
+      feedfathom_tag: ${{ github.sha }}
+      build_locally: true
 
   publish_images:
     name: Publish ${{ matrix.target }} immutable image
@@ -595,6 +553,7 @@ jobs:
           set -euo pipefail
           umask 077
           variables=(
+            IMAGE_PREFIX
             FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME SERVER_HOST_PORT
             DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FEED_FATHOM_DOMAIN FEED_FATHOM_ALT_DOMAIN
             ALLOWED_EMAILS ENABLE_REGISTRATION APP_REPLICAS WORKER_REPLICAS WORKER_CONCURRENCY
@@ -639,9 +598,9 @@ jobs:
             exit 1
           fi
 
-          SERVER_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG}"
-          WORKER_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG}"
-          MIGRATOR_IMAGE="ghcr.io/smartrss/feedfathom/feedfathom-migrator:${FEEDFATHOM_TAG}"
+          SERVER_IMAGE="${IMAGE_PREFIX}/feedfathom-server:${FEEDFATHOM_TAG}"
+          WORKER_IMAGE="${IMAGE_PREFIX}/feedfathom-worker:${FEEDFATHOM_TAG}"
+          MIGRATOR_IMAGE="${IMAGE_PREFIX}/feedfathom-migrator:${FEEDFATHOM_TAG}"
           MIGRATION_SERVICE="${STACK_NAME}_migration"
           MIGRATION_CREATED=false
 

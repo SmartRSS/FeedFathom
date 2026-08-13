@@ -1,4 +1,4 @@
-name: Smoke exact published images
+name: Smoke published or freshly built images
 
 on:
   workflow_call:
@@ -9,6 +9,15 @@ on:
       feedfathom_tag:
         required: true
         type: string
+      # PRs have nothing in GHCR to pull -- images are only published from
+      # pushes to main and staging -- so they build the three app services
+      # from the checkout instead. Everything after that (start, smoke, dump
+      # logs, tear down) is identical either way, which is the whole reason
+      # this is one workflow.
+      build_locally:
+        description: Build the app images from this checkout instead of pulling them from GHCR.
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -18,7 +27,7 @@ jobs:
   smoke:
     name: Smoke test
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.build_locally && 45 || 15 }}
     env:
       FEEDFATHOM_TAG: ${{ inputs.feedfathom_tag }}
 
@@ -33,17 +42,43 @@ jobs:
         with:
           playwright: "true"
 
+      - name: Setup Blacksmith Builder
+        if: inputs.build_locally
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Log in to Docker Hardened Images registry
+        if: inputs.build_locally
+        uses: docker/login-action@v4
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
+      # Only the pull path touches GHCR; a local build reads its bases from
+      # dhi.io and tags the result under the same name compose expects.
       - name: Log in to GitHub Container Registry
+        if: ${{ !inputs.build_locally }}
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build the exact app images under test
+        if: inputs.build_locally
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/amd64
+        run: docker compose -f deploy/compose.smoke.yml build migrator server worker
+
+      - name: Pull smoke infrastructure images
+        if: inputs.build_locally
+        run: docker compose -f deploy/compose.smoke.yml pull redis postgres
+
       - name: Pull exact release images
+        if: ${{ !inputs.build_locally }}
         run: docker compose -f deploy/compose.smoke.yml pull migrator server worker redis postgres
 
-      - name: Start exact release images without rebuilding or pulling
+      - name: Start the images under test without rebuilding or pulling
         run: docker compose -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never
 
       - name: Run production browser smoke test
