@@ -196,9 +196,19 @@ jobs:
           MONTH=$(( 10#$(date -u +%m) + 10 ))
           DAY=$(( 10#$(date -u +%d) + 10 ))
           HOUR=$(( 10#$(date -u +%H) + 10 ))
+          MINUTE=$(( 10#$(date -u +%M) + 10 ))
           SECOND=$(( 10#$(date -u +%S) + 10 ))
           MONTH_DAY=$(( MONTH * 100 + DAY ))
-          EXTENSION_VERSION="$YEAR.$MONTH_DAY.$HOUR.$SECOND"
+          # Minute and second share the last segment. Leaving the minute out
+          # made two runs in the same hour collide whenever they hit the same
+          # second-of-minute -- a coin flip at ~10 runs an hour, and it did
+          # collide: the release create failed with HTTP 422 because the tag
+          # already existed. Packed range is 1010-6969, so it stays 4 digits,
+          # never leads with a zero, and stays under the 65535 per-segment
+          # cap; left-to-right numeric comparison is now monotonic to the
+          # second.
+          MINUTE_SECOND=$(( MINUTE * 100 + SECOND ))
+          EXTENSION_VERSION="$YEAR.$MONTH_DAY.$HOUR.$MINUTE_SECOND"
           BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
           {
             echo "extension_version=$EXTENSION_VERSION"
