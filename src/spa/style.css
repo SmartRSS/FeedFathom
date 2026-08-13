@@ -465,8 +465,15 @@ a {
 .tree::-webkit-scrollbar-track {
   background: transparent;
 }
+/* A nested list matches .tree too, so it would otherwise inherit that
+   rule's scroll-container treatment and reserve a scrollbar gutter of its
+   own -- shrinking its content box by the gutter width and pulling every
+   source row (and so its right-aligned unread count) that far left of the
+   folder rows around it. Only the outer tree scrolls; nested lists just
+   flow, and scrollbar-gutter has no effect once overflow is visible. */
 .tree.nested {
   padding: 0;
+  overflow: visible;
 }
 .tree.skeleton {
   overflow: hidden;
