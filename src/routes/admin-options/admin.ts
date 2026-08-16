@@ -1,10 +1,10 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
-import {
+import type {
   adminQuery,
   removeSourceRequest,
-  sourceUrlReplacementRequest,
 } from "../../contracts/requests.ts";
+import { sourceUrlReplacementRequest } from "../../contracts/requests.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,

@@ -1,6 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "../schema.ts";
-import { jobFailures } from "../schemas/jobFailures";
+import { jobFailures } from "../schemas/job-failures.ts";
 
 export class JobFailuresDataService {
   constructor(
@@ -9,8 +9,8 @@ export class JobFailuresDataService {
 
   public async record(jobType: string, errorMessage: string) {
     await this.drizzleConnection.insert(jobFailures).values({
-      jobType,
       errorMessage,
+      jobType,
     });
   }
 }

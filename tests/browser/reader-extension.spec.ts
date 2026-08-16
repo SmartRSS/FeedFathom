@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { chromium, expect, test, type Page } from "@playwright/test";
-import type { ReaderResponse } from "../../src/extension/extension-types";
-import { installApiFixture } from "./api-fixture";
+import type { ReaderResponse } from "../../src/extension/extension-types.ts";
+import { installApiFixture } from "./api-fixture.ts";
 
 const extensionPath = fileURLToPath(
   new URL("../../ext/build-ch", import.meta.url),

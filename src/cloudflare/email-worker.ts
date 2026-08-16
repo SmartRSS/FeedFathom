@@ -29,8 +29,8 @@ const incomingMessageProjection = Type.Object(
 const outgoingMailPayload = Type.Object(
   {
     from: Type.String({ minLength: 1, pattern: "\\S" }),
-    to: Type.String({ minLength: 1, pattern: "\\S" }),
     raw: Type.String({ maxLength: maxRawEmailBytes, minLength: 1 }),
+    to: Type.String({ minLength: 1, pattern: "\\S" }),
   },
   { additionalProperties: false },
 );

@@ -71,13 +71,13 @@ export const loginRequest = Type.Object({
 });
 export const registerRequest = withMatchingPasswords(
   Type.Object({
-    username: normalizedNonblankString,
-    email: normalizedEmailAddress,
-    password: Type.String({ minLength: 1 }),
-    passwordConfirm: Type.String({ minLength: 1 }),
     "cf-turnstile-response": Type.Optional(
       Type.String({ minLength: 1, pattern: "\\S" }),
     ),
+    email: normalizedEmailAddress,
+    password: Type.String({ minLength: 1 }),
+    passwordConfirm: Type.String({ minLength: 1 }),
+    username: normalizedNonblankString,
   }),
 );
 export const activationParams = Type.Object({

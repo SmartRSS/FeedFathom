@@ -9,7 +9,7 @@ import {
   soleSelectedIndex,
   transitionArticleSelection,
   withDashboardPane,
-} from "../src/spa/behavior";
+} from "../src/spa/behavior.ts";
 
 describe("dashboard pane history state", () => {
   test("parses valid pane markers", () => {

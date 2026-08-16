@@ -129,8 +129,8 @@ describe("loadConfig", () => {
   test.each([
     { TURNSTILE_SITE_KEY: "site" },
     { TURNSTILE_SECRET_KEY: "secret" },
-    { TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET_KEY: "secret" },
-    { TURNSTILE_SITE_KEY: "site", TURNSTILE_SECRET_KEY: "   " },
+    { TURNSTILE_SECRET_KEY: "secret", TURNSTILE_SITE_KEY: "" },
+    { TURNSTILE_SECRET_KEY: "   ", TURNSTILE_SITE_KEY: "site" },
   ])("rejects incomplete Turnstile configuration %#", (environment) => {
     expect(() =>
       loadConfig({ DATABASE_URL: databaseUrl, ...environment }),

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import {
   generateBoundaryDates,
   getDateGroup,
-} from "../src/util/get-date-group";
+} from "../src/util/get-date-group.ts";
 
 const cases: [Date, Date, string][] = [
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 15), "Today"],

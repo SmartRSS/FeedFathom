@@ -1,9 +1,9 @@
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { rewriteLinks } from "../src/lib/rewrite-links";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { rewriteLinks } from "../src/lib/rewrite-links.ts";
 
 const testCaseSchema = Type.Object(
   {

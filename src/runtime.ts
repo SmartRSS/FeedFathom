@@ -94,7 +94,7 @@ export async function createFeedRuntime() {
     redirectMap,
     redis,
     sourcesDataService,
-    usersDataService,
     userSourcesDataService,
+    usersDataService,
   };
 }

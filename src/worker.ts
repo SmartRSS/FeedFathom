@@ -59,7 +59,6 @@ async function runWorker() {
   }
 
   Bun.serve({
-    port: 3000,
     async fetch(request, server) {
       const url = new URL(request.url);
       const ip = server.requestIP(request)?.address ?? "";
@@ -74,6 +73,7 @@ async function runWorker() {
 
       return new Response("Not Found", { status: 404 });
     },
+    port: 3000,
   });
 }
 

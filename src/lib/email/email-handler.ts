@@ -100,12 +100,12 @@ export class EmailHandler {
       author: senderAddress,
       content: getEmailContent(email),
       guid,
+      lastSeenInFeedAt: new Date(),
       publishedAt: date,
       sourceId,
       title: email.subject ?? "Untitled",
       updatedAt: date,
       url: `/article/${guid}`,
-      lastSeenInFeedAt: new Date(),
     };
   }
 }

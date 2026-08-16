@@ -1,7 +1,7 @@
-import { OpmlParser } from "../src/lib/opml-parser.ts";
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { OpmlParser } from "../src/lib/opml-parser.ts";
 
 const TEST_CASES_DIR = "tests/opml-parser";
 

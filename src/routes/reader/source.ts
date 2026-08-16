@@ -1,5 +1,5 @@
 import type { Static } from "typebox";
-import {
+import type {
   removeSourceRequest,
   updateSourceRequest,
 } from "../../contracts/requests.ts";

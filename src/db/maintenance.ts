@@ -10,11 +10,11 @@ import {
 } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "./schema.ts";
-import { articles } from "./schemas/articles";
-import { sources } from "./schemas/sources";
-import { userArticles } from "./schemas/userArticles";
-import { userSources } from "./schemas/userSources";
-import { users } from "./schemas/users";
+import { articles } from "./schemas/articles.ts";
+import { sources } from "./schemas/sources.ts";
+import { userArticles } from "./schemas/user-articles.ts";
+import { userSources } from "./schemas/user-sources.ts";
+import { users } from "./schemas/users.ts";
 
 // A source's last_success is stamped strictly after its articles' upsert
 // (see FeedParser.parseSource), so last_seen_in_feed_at < last_success is
@@ -77,10 +77,10 @@ export async function cleanupOrphanedData(
     .leftJoin(
       drizzleConnection
         .select({
-          sourceId: userSources.sourceId,
           earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
             "earliest_subscription",
           ),
+          sourceId: userSources.sourceId,
         })
         .from(userSources)
         .groupBy(userSources.sourceId)

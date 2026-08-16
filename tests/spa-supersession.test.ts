@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createSupersessionGuard } from "../src/spa/supersession";
+import { createSupersessionGuard } from "../src/spa/supersession.ts";
 
 describe("supersession guard", () => {
   test("a fresh token is current until a newer one starts", () => {
