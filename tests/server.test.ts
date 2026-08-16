@@ -157,34 +157,6 @@ function createDependencies(): ServerDependencies {
       async successSource() {},
       async updateSourceUrl() {},
     },
-    usersDataService: {
-      async activateUser() {
-        return unexpected("usersDataService.activateUser");
-      },
-      async createSession() {
-        return "test-session";
-      },
-      async deleteSession() {},
-      async createUser() {
-        return undefined;
-      },
-      async findUser() {
-        return undefined;
-      },
-      async findUserByActivationToken() {
-        return undefined;
-      },
-      async getUserBySid() {
-        return undefined;
-      },
-      async getUserCount() {
-        return 0;
-      },
-      async touchLastSeen() {},
-      async updatePassword() {
-        return unexpected("usersDataService.updatePassword");
-      },
-    },
     userSourcesDataService: {
       async addSourceToUser() {
         return unexpected("userSourcesDataService.addSourceToUser");
@@ -205,6 +177,34 @@ function createDependencies(): ServerDependencies {
         return unexpected(
           "userSourcesDataService.withSubscriptionInitializationLease",
         );
+      },
+    },
+    usersDataService: {
+      async activateUser() {
+        return unexpected("usersDataService.activateUser");
+      },
+      async createSession() {
+        return "test-session";
+      },
+      async createUser() {
+        return undefined;
+      },
+      async deleteSession() {},
+      async findUser() {
+        return undefined;
+      },
+      async findUserByActivationToken() {
+        return undefined;
+      },
+      async getUserBySid() {
+        return undefined;
+      },
+      async getUserCount() {
+        return 0;
+      },
+      async touchLastSeen() {},
+      async updatePassword() {
+        return unexpected("usersDataService.updatePassword");
       },
     },
   };
@@ -1140,7 +1140,7 @@ test("validates admin sort and URL policies before service calls", async () => {
   );
   const invalidUpdate = await app.handle(
     new Request("http://localhost/api/admin", {
-      body: JSON.stringify({ oldUrl: "not a url", newUrl: "javascript:x" }),
+      body: JSON.stringify({ newUrl: "javascript:x", oldUrl: "not a url" }),
       headers: { ...cookie, "content-type": "application/json" },
       method: "POST",
     }),

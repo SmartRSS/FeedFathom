@@ -9,9 +9,9 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
-import { sources } from "./sources";
-import { userFolders } from "./userFolders";
-import { users } from "./users";
+import { sources } from "./sources.ts";
+import { userFolders } from "./user-folders.ts";
+import { users } from "./users.ts";
 
 export const userSources = pgTable(
   "user_sources",

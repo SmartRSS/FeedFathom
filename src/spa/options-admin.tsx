@@ -1,14 +1,14 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import type { Static } from "typebox";
-import { api } from "./api";
+import { api } from "./api.ts";
 import {
   adminSourcesResponse,
   removedIdResponse,
   sessionResponse,
   successResponse,
-} from "../contracts/responses";
-import { loginPath } from "./behavior";
-import { isTheme, setTheme, theme } from "./preferences";
+} from "../contracts/responses.ts";
+import { loginPath } from "./behavior.ts";
+import { isTheme, setTheme, theme } from "./preferences.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 

@@ -11,9 +11,9 @@ import {
   soleSelectedIndex,
   transitionArticleSelection,
   type DashboardPane,
-} from "./behavior";
-import { createSupersessionGuard } from "./supersession";
-import { api } from "./api";
+} from "./behavior.ts";
+import { createSupersessionGuard } from "./supersession.ts";
+import { api } from "./api.ts";
 import {
   articleResponse,
   articlesResponse,
@@ -24,18 +24,18 @@ import {
   type Article,
   type ArticleSummary,
   type TreeNode,
-} from "../contracts/responses";
-import { safeArticleUrl } from "../lib/feed-mapper";
+} from "../contracts/responses.ts";
+import { safeArticleUrl } from "../lib/feed-mapper.ts";
 import {
   createExtensionReaderBridge,
   extractReaderContent,
   ReaderExtensionError,
   type ReaderContent,
   type ReaderMode,
-} from "./extension-reader";
-import { BackButton, FeedDiscovery } from "./feed-discovery";
-import { Icon } from "./icon";
-import { resolvedTheme } from "./preferences";
+} from "./extension-reader.ts";
+import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
+import { Icon } from "./icon.tsx";
+import { resolvedTheme } from "./preferences.ts";
 // Inlined as raw markup (not <img src>) rather than a plain image import:
 // every icon in this set is fill/stroke="currentColor" by design, so a
 // row's icon automatically matches its own text color (grey by default,

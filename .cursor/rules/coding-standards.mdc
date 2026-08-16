@@ -20,6 +20,28 @@ alwaysApply: true
 - Use `??` operator for nullish coalescing instead of `||`
 - Follow Oxfmt and Oxlint configurations without exceptions
 
+## Conventions oxlint cannot check
+These are enforced by review, not tooling. Everything else in this file that
+*can* be a lint rule already is one in `.oxlintrc.json` -- prefer adding a
+rule over adding a bullet here.
+
+- **Import grouping**: package imports first, then relative imports. Currently
+  holds in every file in `src/`. Oxlint has no `import/order` rule.
+- **File naming**: kebab-case (enforced), and relative imports always carry
+  their `.ts`/`.tsx` extension (enforced).
+- **Route modules** (`src/routes/**`): each file exports handlers named
+  `<verb><Noun>Handler` and a `<Name>RouteDependencies` type. Dependencies are
+  narrowed with `Pick<XDataService, "methodName">` rather than taking the whole
+  service, so a handler's test double only has to implement what it uses.
+- **Responses**: build them with the `json()` helper from `src/routes/shared.ts`
+  instead of `Response.json` directly.
+- **Data services**: one `*DataService` class per file under
+  `src/db/data-services/`, instantiated only in `src/runtime.ts`.
+- **Environment access**: read config through `src/config.ts`; do not reach for
+  `process.env` / `Bun.env` elsewhere.
+- **No barrel files** (enforced by `oxc/no-barrel-file`): import from the
+  defining module.
+
 ## Code Organization
 - Keep files focused and single-responsibility
 - Group related functionality in appropriate directories

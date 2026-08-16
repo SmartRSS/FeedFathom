@@ -5,8 +5,8 @@ import {
   primaryKey,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { articles } from "./articles";
-import { users } from "./users";
+import { articles } from "./articles.ts";
+import { users } from "./users.ts";
 
 export const userArticles = pgTable(
   "user_articles",

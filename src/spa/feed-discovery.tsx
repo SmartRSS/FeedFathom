@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import type { DashboardPane } from "./behavior";
-import { api } from "./api";
+import type { DashboardPane } from "./behavior.ts";
+import { api } from "./api.ts";
 import {
   foldersResponse,
   foundFeedsResponse,
@@ -10,8 +10,8 @@ import {
   type Folder,
   type FoundFeed,
   type PreviewArticle,
-} from "../contracts/responses";
-import { Icon } from "./icon";
+} from "../contracts/responses.ts";
+import { Icon } from "./icon.tsx";
 import backRaw from "../lib/images/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {

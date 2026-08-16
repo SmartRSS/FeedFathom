@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractArticle } from "../src/lib/extract-article";
+import { extractArticle } from "../src/lib/extract-article.ts";
 
 describe("extractArticle", () => {
   test("forces rel=noopener noreferrer on links, overriding an attacker-supplied value", () => {

@@ -1,9 +1,9 @@
+import { describe, expect, test } from "bun:test";
 import {
   mapFeedItemToArticle,
   mapFeedToPreview,
   type Source,
-} from "../src/lib/feed-mapper";
-import { describe, expect, test } from "bun:test";
+} from "../src/lib/feed-mapper.ts";
 
 type FeedInput = Parameters<typeof mapFeedItemToArticle>[1];
 type FeedItemInput = Parameters<typeof mapFeedItemToArticle>[0];

@@ -1,6 +1,6 @@
-import { getEmailContent } from "../src/lib/email-processor";
 import { describe, expect, test } from "bun:test";
 import type { ParsedMail } from "mailparser";
+import { getEmailContent } from "../src/lib/email-processor.ts";
 
 const createMockEmail = (overrides: Partial<ParsedMail> = {}): ParsedMail => {
   return {

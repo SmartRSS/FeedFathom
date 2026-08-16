@@ -15,12 +15,12 @@ import {
   withDashboardPane,
   type DashboardPane,
   type Route,
-} from "./behavior";
-import { Activate, Login, Register } from "./account-flows";
-import { Dashboard } from "./dashboard";
-import { Admin, Options } from "./options-admin";
-import { isUnauthorizedError } from "./api";
-import { resolvedTheme } from "./preferences";
+} from "./behavior.ts";
+import { Activate, Login, Register } from "./account-flows.tsx";
+import { Dashboard } from "./dashboard.tsx";
+import { Admin, Options } from "./options-admin.tsx";
+import { isUnauthorizedError } from "./api.ts";
+import { resolvedTheme } from "./preferences.ts";
 import "./style.css";
 
 const currentPath = () => location.pathname + location.search;

@@ -14,7 +14,6 @@ const redis = () => {
   const values = new Map<string, string>();
   const deleted: string[] = [];
   return {
-    deleted,
     async decr(key: string) {
       const value = String(Number(values.get(key) ?? "0") - 1);
       values.set(key, value);
@@ -25,6 +24,7 @@ const redis = () => {
       values.delete(key);
       return 1;
     },
+    deleted,
     async expire() {
       return 1;
     },
@@ -221,9 +221,9 @@ test("uses the fallback delay when Retry-After is absent or empty", async () => 
       const client = new HttpClient(redis(), {
         transport: queuedTransport([
           nativeResponse("rate limited", {
-            status: 429,
             headers:
               retryAfter === undefined ? {} : { "retry-after": retryAfter },
+            status: 429,
           }),
         ]),
       });
@@ -273,10 +273,6 @@ test("rejects unsafe URL forms before transport", async () => {
 test("pins a validated DNS address while preserving Host and HTTPS SNI", async () => {
   let lookupHostname = "";
   const transport = createNativeHttpTransport({
-    async lookup(hostname) {
-      lookupHostname = hostname;
-      return [{ address: "93.184.216.34", family: 4 }];
-    },
     async dispatch(request) {
       expect(request.address).toBe("93.184.216.34");
       expect(request.family).toBe(4);
@@ -284,6 +280,10 @@ test("pins a validated DNS address while preserving Host and HTTPS SNI", async (
       expect(request.port).toBe(8443);
       expect(request.servername).toBe("feeds.example.com");
       return nativeResponse("feed", { url: request.url });
+    },
+    async lookup(hostname) {
+      lookupHostname = hostname;
+      return [{ address: "93.184.216.34", family: 4 }];
     },
   });
   const client = new HttpClient(redis(), { transport });
@@ -307,13 +307,13 @@ test("rejects empty, malformed, or mixed public/private DNS without retrying", a
     let lookups = 0;
     let dispatches = 0;
     const transport = createNativeHttpTransport({
-      async lookup() {
-        lookups++;
-        return answers;
-      },
       async dispatch() {
         dispatches++;
         return nativeResponse("unexpected");
+      },
+      async lookup() {
+        lookups++;
+        return answers;
       },
     });
 
@@ -331,10 +331,6 @@ test("validates and pins every redirect target", async () => {
   const dispatched: string[] = [];
   let destroyed = 0;
   const transport = createNativeHttpTransport({
-    async lookup(hostname) {
-      lookedUp.push(hostname);
-      return [{ address: "93.184.216.34", family: 4 }];
-    },
     async dispatch(request) {
       dispatched.push(`${request.address}${request.path}`);
       return request.path === "/start"
@@ -345,6 +341,10 @@ test("validates and pins every redirect target", async () => {
             url: request.url,
           })
         : nativeResponse("feed", { url: request.url });
+    },
+    async lookup(hostname) {
+      lookedUp.push(hostname);
+      return [{ address: "93.184.216.34", family: 4 }];
     },
   });
 
@@ -363,9 +363,6 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
   for (const location of [undefined, "http://[", "http://127.0.0.1/feed"]) {
     let destroyed = 0;
     const transport = createNativeHttpTransport({
-      async lookup() {
-        return [{ address: "93.184.216.34", family: 4 }];
-      },
       async dispatch(request) {
         return nativeResponse("redirect", {
           headers: location === undefined ? {} : { location },
@@ -373,6 +370,9 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
           status: 302,
           url: request.url,
         });
+      },
+      async lookup() {
+        return [{ address: "93.184.216.34", family: 4 }];
       },
     });
 
