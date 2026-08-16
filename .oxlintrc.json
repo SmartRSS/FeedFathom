@@ -22,8 +22,8 @@
   ],
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
   // Custom rules for conventions with no built-in equivalent. See
-  // tools/oxlint-plugin.ts. JS plugins are alpha and not semver-stable.
-  "jsPlugins": ["./tools/oxlint-plugin.ts"],
+  // tools/oxlint-plugin.js. JS plugins are alpha and not semver-stable.
+  "jsPlugins": ["./tools/oxlint-plugin.js"],
   // Every rule below is at zero violations against the tree as of the commit
   // that added it -- they lock in conventions the codebase already follows
   // rather than scheduling a refactor. Adding a rule here means: measure
@@ -164,12 +164,6 @@
       // runtimes that require a default export.
       "files": ["**/*.config.ts", "src/cloudflare/email-worker.ts"],
       "rules": { "import/no-default-export": "off" }
-    },
-    {
-      // oxlint loads a plugin from its default export, and rule objects have a
-      // conventional `meta`-then-`createOnce` shape that alphabetising ruins.
-      "files": ["tools/oxlint-plugin.ts"],
-      "rules": { "import/no-default-export": "off", "sort-keys": "off" }
     },
     {
       // The rule guards against recompiling a validator on a hot path. A

@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 // directory instead. That also exercises plugin loading end to end, and keeps
 // the deliberately-broken fixtures out of the repo's own lint run.
 
-const pluginPath = resolve(import.meta.dir, "../tools/oxlint-plugin.ts");
+const pluginPath = resolve(import.meta.dir, "../tools/oxlint-plugin.js");
 // Resolved absolutely rather than via `bunx`: these run with `cwd` set to a
 // temp directory, where `bunx` cannot see the project's node_modules and would
 // try to fetch its own copy of oxlint instead.

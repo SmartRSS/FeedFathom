@@ -13,6 +13,13 @@ import { definePlugin, defineRule } from "@oxlint/plugins";
 //
 // Node type names are ESTree-standard (`MemberExpression`, not
 // `StaticMemberExpression`); verified against oxlint 1.78.
+//
+// This file is JavaScript, not TypeScript, on purpose. oxlint loads plugins
+// with whatever runtime invokes it: `bun run oxlint` uses Bun, but the bin's
+// shebang is `#!/usr/bin/env node`, and the VS Code Oxc extension uses its own
+// Node. Node only strips TypeScript types from 22.18/20.19 onward, so a .ts
+// plugin fails with an opaque "Failed to parse oxlint configuration file" on
+// older Node. Plain JS with JSDoc types loads everywhere.
 
 /**
  * `Schema.Compile()` builds a validator. Calling it inside a function body
@@ -147,8 +154,12 @@ const importGrouping = defineRule({
   },
 });
 
-/** Narrow the rule's untyped options into the allow list, without asserting. */
-function readAllowList(options: unknown): string[] {
+/**
+ * Narrow the rule's untyped options into the allow list, without asserting.
+ * @param {unknown} options
+ * @returns {string[]}
+ */
+function readAllowList(options) {
   if (typeof options !== "object" || options === null) return [];
   if (!("allow" in options)) return [];
   const { allow } = options;
@@ -188,7 +199,8 @@ const noBarrelFile = defineRule({
     type: "suggestion",
   },
   createOnce(context) {
-    let importedNames = new Set<string>();
+    /** @type {Set<string>} */
+    let importedNames = new Set();
     let reexported = 0;
     let ownExports = 0;
     let exempt = false;
