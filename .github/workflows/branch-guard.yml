@@ -21,15 +21,23 @@ jobs:
     name: Merges into main come from staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - name: Verify the head branch is staging
+      - name: Verify the head is this repository's staging branch
         # Passed through the environment rather than interpolated into the
-        # script, so a branch name cannot inject shell.
+        # script, so a branch name cannot inject shell. The repository is
+        # checked as well as the branch name: a fork may also have a branch
+        # called "staging", and that is not the same branch.
         env:
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [[ "$HEAD_REPO" != "$THIS_REPO" ]]; then
+            echo "::error::PRs into main must come from this repository's staging branch, but this one comes from the fork '$HEAD_REPO'. Open it against staging instead."
+            exit 1
+          fi
           if [[ "$HEAD_REF" != "staging" ]]; then
             echo "::error::PRs into main must come from staging, but this one comes from '$HEAD_REF'. Merge into staging first, then promote staging to main."
             exit 1
           fi
-          echo "Head branch is staging."
+          echo "Head is $THIS_REPO staging."

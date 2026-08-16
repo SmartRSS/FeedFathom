@@ -47,6 +47,55 @@ jobs:
       feedfathom_tag: ${{ github.sha }}
       build_locally: true
 
+  # The branch rulesets pin this as a required status check instead of
+  # pr_smoke. pr_smoke builds internal images and so needs registry
+  # credentials, which a pull_request from a fork never receives -- and because
+  # it is a reusable workflow, skipping it means its nested job never
+  # materialises, so a check pinned to it stays pending forever and blocks
+  # every fork PR. This job always reports, and decides the verdict itself.
+  #
+  # Its name is load-bearing: the rulesets pin it by context name, so renaming
+  # it retires the check and silently blocks every PR.
+  pr_gate:
+    name: PR gate
+    needs:
+      - quality
+      - pr_smoke
+    if: always() && github.event_name == 'pull_request'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Require the quality checks to have passed
+        env:
+          QUALITY: ${{ needs.quality.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$QUALITY" != "success" ]]; then
+            echo "::error::quality did not pass (result: $QUALITY)."
+            exit 1
+          fi
+
+      - name: Require the image smoke to have passed, unless it could not run
+        env:
+          # A fork PR gets no secrets, so pr_smoke cannot build the internal
+          # images. Same-repo PRs have no such excuse and must smoke clean.
+          IS_FORK: >-
+            ${{ github.event.pull_request.head.repo.full_name
+                != github.repository }}
+          SMOKE: ${{ needs.pr_smoke.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SMOKE" == "success" ]]; then
+            echo "Image smoke passed."
+            exit 0
+          fi
+          if [[ "$SMOKE" == "skipped" && "$IS_FORK" == "true" ]]; then
+            echo "Fork PR: internal image smoke cannot run without registry" \
+              "credentials. Quality checks still gate this merge."
+            exit 0
+          fi
+          echo "::error::Image smoke did not pass (result: $SMOKE)."
+          exit 1
+
   publish_images:
     name: Publish ${{ matrix.target }} immutable image
     needs: quality
