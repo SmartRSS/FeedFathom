@@ -1,0 +1,35 @@
+name: Branch guard
+
+# main is promoted from staging only. GitHub rulesets can require checks and a
+# pull request, but have no rule constraining which branch a PR comes *from*,
+# so the constraint is expressed as a status check the main ruleset requires.
+#
+# This job's name is load-bearing: the main branch ruleset pins it as a
+# required status check by context name. Renaming it retires the check it is
+# pinned to and silently blocks every PR into main. Change the two together.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  source_branch:
+    name: Merges into main come from staging
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Verify the head branch is staging
+        # Passed through the environment rather than interpolated into the
+        # script, so a branch name cannot inject shell.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$HEAD_REF" != "staging" ]]; then
+            echo "::error::PRs into main must come from staging, but this one comes from '$HEAD_REF'. Merge into staging first, then promote staging to main."
+            exit 1
+          fi
+          echo "Head branch is staging."
