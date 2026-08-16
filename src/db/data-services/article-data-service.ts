@@ -1,14 +1,17 @@
 import { and, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { generateBoundaryDates, getDateGroup } from "../../util/get-date-group";
-import { userSources } from "../schema";
+import {
+  generateBoundaryDates,
+  getDateGroup,
+} from "../../util/get-date-group.ts";
+import { userSources } from "../schema.ts";
 import type * as schema from "../schema.ts";
 import {
   type Article,
   type ArticleInsert,
   articles,
-} from "../schemas/articles";
-import { userArticles } from "../schemas/userArticles";
+} from "../schemas/articles.ts";
+import { userArticles } from "../schemas/user-articles.ts";
 
 function userArticleAccessJoin(userId: number) {
   return and(
@@ -133,7 +136,6 @@ export class ArticlesDataService {
           .insert(articles)
           .values(batch)
           .onConflictDoUpdate({
-            target: [articles.sourceId, articles.guid],
             set: {
               author: sql`excluded.author`,
               content: sql`excluded.content`,
@@ -167,6 +169,7 @@ export class ArticlesDataService {
             setWhere: sql`
               excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
             `,
+            target: [articles.sourceId, articles.guid],
           });
       } catch (error) {
         console.error(

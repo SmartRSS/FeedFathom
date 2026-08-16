@@ -23,7 +23,6 @@
     "noUncheckedSideEffectImports": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "paths": { "$lib/*": ["./src/lib/*"] },
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "sourceMap": true,

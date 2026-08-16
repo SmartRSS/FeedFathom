@@ -20,14 +20,163 @@
     "**/ext/**",
     "**/build/**"
   ],
+  "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
+  // Custom rules for conventions with no built-in equivalent. See
+  // tools/oxlint-plugin.ts. JS plugins are alpha and not semver-stable.
+  "jsPlugins": ["./tools/oxlint-plugin.ts"],
+  // Every rule below is at zero violations against the tree as of the commit
+  // that added it -- they lock in conventions the codebase already follows
+  // rather than scheduling a refactor. Adding a rule here means: measure
+  // first, and only enable what is already true.
   "rules": {
+    "array-callback-return": "error",
+    "default-case-last": "error",
+    "guard-for-in": "error",
+    "import/extensions": [
+      "error",
+      "always",
+      { "checkTypeImports": true, "ignorePackages": true }
+    ],
+    "import/first": "error",
+    "import/newline-after-import": "error",
+    "import/no-anonymous-default-export": "error",
+    "import/no-commonjs": "error",
+    "import/no-cycle": "error",
+    "import/no-default-export": "error",
+    "import/no-duplicates": "error",
+    "import/no-dynamic-require": "error",
+    "import/no-mutable-exports": "error",
+    "import/no-named-default": "error",
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+    "logical-assignment-operators": "error",
+    "max-depth": ["error", 5],
+    "max-nested-callbacks": ["error", 4],
+    "no-constructor-return": "error",
     "no-control-regex": "off",
+    "no-else-return": "error",
+    "no-lonely-if": "error",
+    "no-loop-func": "error",
+    "no-multi-assign": "error",
+    "no-object-constructor": "error",
+    "no-param-reassign": "error",
+    "no-return-assign": "error",
+    "no-self-compare": "error",
+    "no-sequences": "error",
+    "no-template-curly-in-string": "error",
+    "no-throw-literal": "error",
     "no-underscore-dangle": ["warn", { "allow": ["__treePreload"] }],
     "no-unassigned-vars": "off",
     "no-unused-expressions": "off",
+    "no-useless-computed-key": "error",
+    "no-useless-return": "error",
+    "no-var": "error",
+    "object-shorthand": "error",
+    "operator-assignment": "error",
+    "feedfathom/import-grouping": "error",
+    // src/db/schema.ts is drizzle-kit's schema entry point
+    // (drizzle/config.json). It is a barrel by necessity, not convenience:
+    // drizzle-kit discovers tables through it, and with it gone `generate`
+    // sees 0 tables and emits DROP TABLE for every one of them.
+    "feedfathom/no-barrel-file": ["error", { "allow": ["src/db/schema.ts"] }],
+    "feedfathom/route-deps-narrowed": "error",
+    "feedfathom/schema-compile-module-scope": "error",
+    // oxc/no-barrel-file only counts `export * from` (default threshold 100),
+    // of which this repo has none, so it can never fire. feedfathom/no-barrel-file
+    // supersedes it and catches the named-re-export form too.
+    "oxc/no-const-enum": "error",
+    "prefer-arrow-callback": "error",
+    "prefer-const": "error",
+    "prefer-object-has-own": "error",
+    "prefer-regex-literals": "error",
+    "prefer-rest-params": "error",
+    "prefer-spread": "error",
+    // Fires on side-effect-only `.then()` (settling a deferred, awaiting a
+    // decode) where there is nothing to return. The value it protects is
+    // covered by no-floating-promises.
+    "promise/always-return": "off",
+    "promise/no-multiple-resolved": "error",
+    "promise/no-new-statics": "error",
+    "promise/no-return-in-finally": "error",
+    "promise/no-return-wrap": "error",
+    "promise/valid-params": "error",
+    "sort-keys": "error",
+    "symbol-description": "error",
     "typescript/await-thenable": "off",
+    "typescript/ban-ts-comment": "error",
+    "typescript/consistent-type-assertions": "error",
+    "typescript/consistent-type-exports": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": ["error", { "ignoreVoid": true }],
+    "typescript/no-inferrable-types": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/non-nullable-type-assertion-style": "error",
+    "typescript/prefer-find": "error",
+    "typescript/prefer-for-of": "error",
+    "typescript/prefer-function-type": "error",
+    "typescript/prefer-includes": "error",
+    "typescript/prefer-nullish-coalescing": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/prefer-string-starts-ends-with": "error",
+    "typescript/prefer-ts-expect-error": "error",
     "typescript/restrict-template-expressions": "off",
-    "typescript/unbound-method": "off"
-  }
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/unbound-method": "off",
+    "typescript/unified-signatures": "error",
+    "unicorn/consistent-date-clone": "error",
+    "unicorn/consistent-existence-index-check": "error",
+    "unicorn/error-message": "error",
+    "unicorn/explicit-timer-delay": "error",
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    "unicorn/no-abusive-eslint-disable": "error",
+    "unicorn/no-immediate-mutation": "error",
+    "unicorn/no-instanceof-array": "error",
+    "unicorn/no-static-only-class": "error",
+    "unicorn/no-typeof-undefined": "error",
+    "unicorn/no-unreadable-array-destructuring": "error",
+    "unicorn/no-useless-promise-resolve-reject": "error",
+    "unicorn/prefer-array-some": "error",
+    "unicorn/prefer-date-now": "error",
+    "unicorn/prefer-event-target": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error",
+    "unicorn/prefer-optional-catch-binding": "error",
+    "unicorn/prefer-regexp-test": "error",
+    "unicorn/prefer-string-slice": "error",
+    "unicorn/prefer-structured-clone": "error",
+    "unicorn/require-array-join-separator": "error",
+    "unicorn/throw-new-error": "error"
+  },
+  "overrides": [
+    {
+      // Drizzle table definitions read column-order-first (id, then the
+      // columns as they appear in the migration); config.ts groups env vars
+      // by the comments that explain how they interact. Alphabetising either
+      // scatters the grouping that carries the meaning.
+      "files": ["src/db/schemas/**", "src/db/schema.ts", "src/config.ts"],
+      "rules": { "sort-keys": "off" }
+    },
+    {
+      // Tool configs and the Cloudflare worker entry are consumed by
+      // runtimes that require a default export.
+      "files": ["**/*.config.ts", "src/cloudflare/email-worker.ts"],
+      "rules": { "import/no-default-export": "off" }
+    },
+    {
+      // oxlint loads a plugin from its default export, and rule objects have a
+      // conventional `meta`-then-`createOnce` shape that alphabetising ruins.
+      "files": ["tools/oxlint-plugin.ts"],
+      "rules": { "import/no-default-export": "off", "sort-keys": "off" }
+    },
+    {
+      // The rule guards against recompiling a validator on a hot path. A
+      // compile inside a test body runs once per test run, so the cost it
+      // exists to prevent cannot occur there.
+      "files": ["tests/**"],
+      "rules": { "feedfathom/schema-compile-module-scope": "off" }
+    }
+  ]
 }

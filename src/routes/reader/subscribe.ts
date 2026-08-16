@@ -1,6 +1,6 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
-import { subscribeRequest } from "../../contracts/requests.ts";
+import type { subscribeRequest } from "../../contracts/requests.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";

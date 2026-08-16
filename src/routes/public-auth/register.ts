@@ -42,9 +42,9 @@ async function validateCaptcha(
     const response = await fetcher(
       "https://challenges.cloudflare.com/turnstile/v0/siteverify",
       {
-        method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({ response: token, secret }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
       },
     );
     const result: unknown = await response.json();
@@ -121,12 +121,12 @@ export function createRegisterRoute({
         );
         await mailSender.sendActivationEmail(request.email, activationToken);
         await usersDataService.createUser({
+          activationToken,
+          activationTokenExpiresAt,
           email: request.email,
           name: request.username,
           passwordHash,
           status: "inactive",
-          activationToken,
-          activationTokenExpiresAt,
         });
       } else {
         await usersDataService.createUser({

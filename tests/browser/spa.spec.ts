@@ -5,7 +5,7 @@ import {
   type Page,
   type Request,
 } from "@playwright/test";
-import { installApiFixture } from "./api-fixture";
+import { installApiFixture } from "./api-fixture.ts";
 
 // The real service worker (see src/spa/public/sw.js) takes /api/* fetches
 // over itself once it activates -- its own internal fetch() calls run
@@ -147,7 +147,7 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   page,
 }) => {
   const state = await installApiFixture(page, { folderCreateFailure: true });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
   page.once("dialog", (dialog) => dialog.accept("Saved"));
   await page.getByRole("button", { name: "add folder" }).click();
@@ -447,7 +447,7 @@ test("every toolbar icon renders and is clickable", async ({ page }) => {
   ];
   await Promise.all(
     toolbarButtons.map(async (name) => {
-      const button = page.getByRole("button", { name, exact: true }).first();
+      const button = page.getByRole("button", { exact: true, name }).first();
       await expect(button).toBeVisible();
       const box = await button.boundingBox();
       expect(box?.width).toBeGreaterThan(0);
@@ -484,7 +484,7 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".articles-pane")).toBeVisible();
   await expect(page.locator(".reader-pane")).toBeVisible();
 
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await expect(page.locator(".sources-pane")).toBeVisible();
   await expect(page.locator(".articles-pane")).toBeHidden();
   await expect(page.locator(".reader-pane")).toBeHidden();
@@ -566,7 +566,7 @@ test("keeps the newest discovery preview response", async ({ page }) => {
 
 test("keeps preview usable when folder startup fails", async ({ page }) => {
   await installApiFixture(page, { foldersFailure: true });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");

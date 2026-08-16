@@ -9,16 +9,16 @@ const localPort = process.env["PLAYWRIGHT_PORT"] ?? "3456";
 const localBaseUrl = `http://127.0.0.1:${localPort}`;
 
 export default defineConfig({
-  testDir: path.join(root, "tests/browser"),
-  outputDir: path.join(root, "test-results"),
   fullyParallel: false,
+  outputDir: path.join(root, "test-results"),
+  projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
   reporter: "list",
+  testDir: path.join(root, "tests/browser"),
   use: {
     baseURL: externalBaseUrl ?? localBaseUrl,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
   ...(externalBaseUrl
     ? {}
     : {

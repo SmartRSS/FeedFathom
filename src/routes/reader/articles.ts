@@ -1,5 +1,5 @@
 import type { Static } from "typebox";
-import {
+import type {
   articlesRequest,
   removeArticlesRequest,
 } from "../../contracts/requests.ts";

@@ -1,5 +1,5 @@
 import type { Static } from "typebox";
-import { passwordRequest } from "../../contracts/requests.ts";
+import type { passwordRequest } from "../../contracts/requests.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
 import { type AuthedUser, json } from "../shared.ts";
 

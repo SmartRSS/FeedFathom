@@ -7,14 +7,14 @@ import {
   Switch,
 } from "solid-js";
 import type { Turnstile } from "../types/turnstile.d.ts";
-import { api } from "./api";
-import { loginPath, registerPath } from "./behavior";
+import { api } from "./api.ts";
+import { loginPath, registerPath } from "./behavior.ts";
 import {
   loginResponse,
   registrationResponse,
   successResponse,
   type Registration,
-} from "../contracts/responses";
+} from "../contracts/responses.ts";
 
 export function Login(props: { navigate(to: string): void; next: string }) {
   const [email, setEmail] = createSignal("");
@@ -92,13 +92,13 @@ export function Register(props: { navigate(to: string): void; next: string }) {
     const turnstile: Turnstile | undefined = window.turnstile;
     if (disposed || turnstileRendered || !turnstile) return;
     turnstile.render(turnstileContainer, {
-      sitekey,
       callback: setTurnstileToken,
       "error-callback": () => {
         setTurnstileToken("");
         setMessage("CAPTCHA verification failed. Please try again.");
       },
       "expired-callback": () => setTurnstileToken(""),
+      sitekey,
     });
     turnstileRendered = true;
   }

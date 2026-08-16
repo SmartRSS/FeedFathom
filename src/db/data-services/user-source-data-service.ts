@@ -1,10 +1,10 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "../schema.ts";
-import { type Source, sources } from "../schemas/sources";
-import { userSources } from "../schemas/userSources";
-import type { FoldersDataService } from "./folder-data-service";
-import type { SourcesDataService } from "./source-data-service";
+import { type Source, sources } from "../schemas/sources.ts";
+import { userSources } from "../schemas/user-sources.ts";
+import type { FoldersDataService } from "./folder-data-service.ts";
+import type { SourcesDataService } from "./source-data-service.ts";
 
 type SubscriptionResult = {
   created?: boolean;
@@ -61,13 +61,13 @@ export class UserSourcesDataService {
       await this.drizzleConnection
         .insert(userSources)
         .values({
-          initializedAt: null,
+          createdAt: new Date(),
           initializationSnapshot: sourcePayload.initializationSnapshot ?? null,
+          initializedAt: null,
           name: sourcePayload.name,
           parentId: sourcePayload.parentId,
           sourceId: source.id,
           userId,
-          createdAt: new Date(),
         })
         .onConflictDoNothing({
           target: [userSources.sourceId, userSources.userId],
@@ -96,8 +96,8 @@ export class UserSourcesDataService {
     const initialized = userSource.initializedAt !== null;
     return {
       created,
-      initialized,
       initializationSnapshot: userSource.initializationSnapshot,
+      initialized,
       source,
       subscriptionCreatedAt: userSource.createdAt,
       subscriptionId: userSource.id,
@@ -174,9 +174,9 @@ export class UserSourcesDataService {
     const completed = await this.drizzleConnection
       .update(userSources)
       .set({
-        initializedAt: sql`NOW()`,
         initializationOwner: null,
         initializationSnapshot: null,
+        initializedAt: sql`NOW()`,
         initializingAt: null,
       })
       .where(

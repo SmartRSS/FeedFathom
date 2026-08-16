@@ -55,12 +55,12 @@ describe("MailSender", () => {
             Email: "welcome@localhost:3456",
             Name: "FeedFathom",
           },
-          To: [{ Email: "reader@example.com" }],
+          HTMLPart:
+            '<p>Please activate your account by clicking this link: <a href="http://localhost:3456/activate/activation-token">http://localhost:3456/activate/activation-token</a></p>',
           Subject: "Activate your FeedFathom account",
           TextPart:
             "Please activate your account by clicking this link: http://localhost:3456/activate/activation-token",
-          HTMLPart:
-            '<p>Please activate your account by clicking this link: <a href="http://localhost:3456/activate/activation-token">http://localhost:3456/activate/activation-token</a></p>',
+          To: [{ Email: "reader@example.com" }],
         },
       ],
     });

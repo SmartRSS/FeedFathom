@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "../schema.ts";
-import { sessions } from "../schemas/sessions";
-import { users } from "../schemas/users";
+import { sessions } from "../schemas/sessions.ts";
+import { users } from "../schemas/users.ts";
 
 export class UsersDataService {
   constructor(
@@ -33,13 +33,13 @@ export class UsersDataService {
     activationTokenExpiresAt?: Date;
   }) {
     const values = (isAdmin: boolean) => ({
+      activationToken: payload.activationToken,
+      activationTokenExpiresAt: payload.activationTokenExpiresAt,
       email: payload.email,
+      isAdmin,
       name: payload.name,
       password: payload.passwordHash,
       status: payload.status,
-      activationToken: payload.activationToken,
-      activationTokenExpiresAt: payload.activationTokenExpiresAt,
-      isAdmin,
     });
 
     // The table-lock below only exists to resolve the "first user becomes
@@ -100,9 +100,9 @@ export class UsersDataService {
     return await this.drizzleConnection
       .update(users)
       .set({
-        status: "active",
         activationToken: null,
         activationTokenExpiresAt: null,
+        status: "active",
       })
       .where(eq(users.id, userId))
       .execute();
@@ -112,11 +112,11 @@ export class UsersDataService {
     return (
       await this.drizzleConnection
         .select({
-          id: users.id,
           email: users.email,
+          id: users.id,
+          isAdmin: users.isAdmin,
           name: users.name,
           status: users.status,
-          isAdmin: users.isAdmin,
         })
         .from(users)
         .where(eq(sessions.sid, sid))
