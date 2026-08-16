@@ -9,6 +9,10 @@ import { join, resolve } from "node:path";
 // the deliberately-broken fixtures out of the repo's own lint run.
 
 const pluginPath = resolve(import.meta.dir, "../tools/oxlint-plugin.ts");
+// Resolved absolutely rather than via `bunx`: these run with `cwd` set to a
+// temp directory, where `bunx` cannot see the project's node_modules and would
+// try to fetch its own copy of oxlint instead.
+const oxlintBin = resolve(import.meta.dir, "../node_modules/.bin/oxlint");
 let directory = "";
 
 const config = {
@@ -22,8 +26,17 @@ const config = {
 } as const;
 
 /** Pull the diagnostic codes out of oxlint's JSON report without asserting. */
-function diagnosticCodes(stdout: string): string[] {
-  const parsed: unknown = JSON.parse(stdout);
+function diagnosticCodes(stdout: string, stderr: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    // oxlint failing to start prints a plain-text reason. Surface that rather
+    // than a bare "Unexpected identifier" from the JSON parser.
+    throw new Error(
+      `oxlint did not emit JSON.\nstdout: ${stdout}\nstderr: ${stderr}`,
+    );
+  }
   if (typeof parsed !== "object" || parsed === null) return [];
   if (!("diagnostics" in parsed)) return [];
   const { diagnostics } = parsed;
@@ -39,8 +52,7 @@ function diagnosticCodes(stdout: string): string[] {
 function lintFile(relativePath: string): string[] {
   const result = Bun.spawnSync({
     cmd: [
-      "bunx",
-      "oxlint",
+      oxlintBin,
       "-c",
       join(directory, ".oxlintrc.json"),
       "--format",
@@ -51,9 +63,10 @@ function lintFile(relativePath: string): string[] {
     stderr: "pipe",
     stdout: "pipe",
   });
-  return diagnosticCodes(result.stdout.toString()).filter((name) =>
-    name.includes("feedfathom"),
-  );
+  return diagnosticCodes(
+    result.stdout.toString(),
+    result.stderr.toString(),
+  ).filter((name) => name.includes("feedfathom"));
 }
 
 /** Lint one source string and return the rule names that fired. */
