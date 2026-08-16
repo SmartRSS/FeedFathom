@@ -751,10 +751,14 @@ export function Dashboard(props: {
       const sourceUid = items[index]!.sourceId.toString();
       deltas.set(sourceUid, (deltas.get(sourceUid) ?? 0) + 1);
     }
-    setTree((current) => withDecrementedUnread(current, deltas));
+    // Reuse the computed tree instead of re-reading tree() after the set:
+    // Solid 2.0 defers setter visibility to the microtask flush, so a
+    // synchronous read here would see the pre-decrement tree.
+    const nextTree = withDecrementedUnread(tree(), deltas);
+    setTree(nextTree);
     const current = selectedNode();
     if (current) {
-      setSelectedNode(findNode(tree(), current.type, current.uid));
+      setSelectedNode(findNode(nextTree, current.type, current.uid));
     }
     // The removed rows' DOM nodes are gone, which drops focus to
     // document.body; restore it to the list so keyboard nav keeps working.
