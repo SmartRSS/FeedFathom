@@ -1,28 +1,24 @@
 # Upcoming major upgrades: Bun 1.4, Elysia 2.0, Solid 2.0
 
-Researched 2026-08-16. Registry state at that date:
+Researched 2026-08-16, Bun section updated 2026-08-20 when 1.4.0 shipped.
 
-| Package             | We use          | `latest` | `next` / prerelease |
-| ------------------- | --------------- | -------- | ------------------- |
-| bun                 | 1.3.14 (pinned) | 1.3.14   | 1.4.0-canary        |
-| elysia              | 2.0.0-beta.4    | 1.4.29   | 2.0.0-beta.4        |
-| solid-js            | 1.9.14          | 1.9.14   | 2.0.0-rc.0          |
-| vite-plugin-solid   | 2.11.14         | 2.11.14  | 3.0.0-next.27       |
-| typebox             | 1.3.9           | 1.3.14   | —                   |
+| Package           | We use       | `latest` | `next` / prerelease |
+| ----------------- | ------------ | -------- | ------------------- |
+| bun               | 1.4.0        | 1.4.0    | —                   |
+| elysia            | 2.0.0-beta.4 | 1.4.29   | 2.0.0-beta.4        |
+| solid-js          | 1.9.14       | 1.9.14   | 2.0.0-rc.0          |
+| vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
+| typebox           | 1.3.9        | 1.3.14   | —                   |
 
 ## Bun 1.4
 
-Not released yet (blog stops at 1.3.14; `bun --version` locally is a
-`1.4.0-canary`). Billed as the biggest Node-compat jump since 1.0 — compat
-work, not API breakage. Nothing to redesign.
+Released, and we're on it. The version is pinned in three places, all bumped
+to `1.4.0`: `packageManager` (CI reads this via `oven-sh/setup-bun`'s
+`bun-version-file`), `devDependencies["bun-types"]`, and 4 `dhi.io/bun:` tags
+in the `Dockerfile`.
 
-Three places pin the version. Bump all three together or CI and the image
-drift apart:
-
-- `package.json` → `packageManager: "bun@1.3.14"` (CI reads this via
-  `oven-sh/setup-bun`'s `bun-version-file: package.json`)
-- `package.json` → `devDependencies["bun-types"]`
-- `Dockerfile` → `dhi.io/bun:1.3.14-alpine3.22{,-dev}`, 4 occurrences
+The headline for us is `Bun.XML` — a native SIMD XML parser and serializer
+that replaces `fast-xml-parser`. See "XML parsing" below.
 
 ## Elysia 2.0
 
@@ -129,6 +125,32 @@ against a moving prerelease compiler buys nothing.
 5. Re-run the read-after-set audit — the scan is a `createSignal` regex plus a
    7-line lookahead for a matching read; it caught the one real case here.
 
+## XML parsing
+
+`src/lib/xml.ts` is a thin shim over `Bun.XML`, and `OpmlParser` is the only
+thing that uses it -- OPML import was our sole direct XML parse. Feed XML is
+*not* ours to move: it goes through `@rowanmanning/feed-parser`, which depends
+on `fast-xml-parser` itself, so that package stays in the tree as a transitive
+dependency.
+
+`Bun.XML.parse` differs from our old `fast-xml-parser` configuration in four
+ways, which is what the shim exists to absorb:
+
+| | fast-xml-parser (as configured) | `Bun.XML` |
+| --- | --- | --- |
+| Attributes | grouped under `@_`, unprefixed | inline on the element, `@`-prefixed |
+| Repeated elements | forced to arrays via `isArray` | array only when >1; a lone child is an object |
+| Empty element | `{}` | `""` |
+| Malformed input | silent; needed a separate `XMLValidator` pass | `parse` throws |
+
+That last one let us drop `XMLValidator` and the separate validation pass
+entirely. Options passed as a second argument to `parse` appear to be ignored
+(unknown keys are accepted silently and change nothing), so the output shape
+is fixed -- treat it as non-configurable.
+
+Verified on Bun 1.4.0: all 20 OPML parser tests pass, including the 7
+raw-XML `parse-opml` fixtures which were not modified.
+
 ## Done on this branch
 
 - Removed `@sinclair/typebox` 0.34 — a dead dependency since the Elysia 2 move
@@ -136,3 +158,4 @@ against a moving prerelease compiler buys nothing.
   which is now gone too).
 - Pinned `elysia` to `2.0.0-beta.4` instead of the floating `next` tag.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
+- Moved to Bun 1.4.0 and replaced `fast-xml-parser` with a `Bun.XML` shim.
