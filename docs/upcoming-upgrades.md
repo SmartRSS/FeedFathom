@@ -125,58 +125,54 @@ against a moving prerelease compiler buys nothing.
 5. Re-run the read-after-set audit — the scan is a `createSignal` regex plus a
    7-line lookahead for a matching read; it caught the one real case here.
 
-## XML parsing: why we did NOT adopt `Bun.XML`
+## XML parsing: on `Bun.XML`
 
-Bun 1.4 ships `Bun.XML`, a native SIMD XML parser billed as replacing
-`fast-xml-parser` and `xml2js`. We tried it, on the OPML parser first and then
-as a drop-in shim for the `fast-xml-parser` package itself. Both were reverted.
-Keep this section before anyone tries again.
+Both XML paths run on Bun 1.4's native parser. `fast-xml-parser` and its 6
+transitive dependencies are gone.
 
-`Bun.XML` has the API surface to do it. `parse(xml, { compact: false })`
-returns an ordered `{ name, attributes, children }` tree, which is enough to
-reconstruct `fast-xml-parser`'s `preserveOrder` format -- the format
-`@rowanmanning/feed-parser` is built around. Reimplementing `XMLParser` and
-`XMLBuilder` on top of it is maybe 80 lines.
+- **OPML** — `src/lib/xml.ts` wraps `Bun.XML`'s compact shape; `OpmlParser`
+  uses it. `Bun.XML` throws on malformed input, so the separate `XMLValidator`
+  pass is no longer needed.
+- **Feeds** — `vendor/fast-xml-parser-shim` stands in for the package itself,
+  reimplementing the only two things `@rowanmanning/feed-parser` uses
+  (`XMLParser` in `preserveOrder` mode, `XMLBuilder` for `innerHtml`) on
+  `Bun.XML`'s ordered tree shape. Same arrangement as `vendor/linkedom-shim`.
 
-**The problem is leniency, not shape.** `Bun.XML` is a *conforming*
-XML processor: well-formed or `SyntaxError`, no recovery. `fast-xml-parser` is
-deliberately tolerant. Feeds and OPML exports in the wild are frequently not
-well-formed XML, and the tolerant behaviour is load-bearing.
+**The `overrides` entry is load-bearing.** `feed-parser` depends on
+`fast-xml-parser@^5.10.1`, which a `file:` spec does not satisfy, so the
+dependency alone leaves bun installing the real package nested under
+`feed-parser` and the shim silently bypassed. Check
+`node_modules/@rowanmanning/feed-parser/node_modules` is empty after any
+dependency change.
 
-Measured on ten patterns that occur routinely in real feeds --
-`fast-xml-parser` parsed 10/10, `Bun.XML` parsed 2/10:
+### What it was measured against
 
-| Input | fast-xml-parser | `Bun.XML` |
-| --- | --- | --- |
-| `&nbsp;` / `&mdash;` (undeclared HTML entity) | passes through as text | throws |
-| bare `&` (`Q&A`, `AT&T`) | tolerated | throws |
-| unclosed tag | recovers | throws |
-| mismatched tag case | recovers | throws |
-| stray `<` in text | tolerated | throws |
-| duplicate attribute | last wins | throws |
-| invalid control character | tolerated | throws |
-| content before the XML declaration | tolerated | throws |
-| undeclared namespace prefix | parses | parses |
-| numeric character reference `&#8212;` | left **encoded** | **decoded** to `—` |
+The 229 sources in production (208 fetched): **204 parse, 0 regressions.** The
+2 failures are HTML redirect pages rather than feeds, and `fast-xml-parser`
+rejected them too. `feed-parser`'s own integration suite passes 1029/1029 on
+the real package, and every shim failure traces to those same feeds.
 
-Two things make this fatal rather than merely stricter:
+13 feeds produce different output, 12 of them fixes. `fast-xml-parser` leaves
+numeric character references encoded and `html-entities` does not catch them
+downstream, so `palant.info` lost **every publication date** to a `&#43;` in
+its timezone offset, and several feeds carried `&#038;` in image URLs. The
+13th is a trailing newline, because `feed-parser` trims raw text before
+decoding entities, so an encoded `&#xA;` used to survive the trim.
 
-1. A single stray `&` anywhere in a feed or OPML file fails the *entire*
-   document. That contradicts how this code is written -- `OpmlParser` goes out
-   of its way to skip one malformed outline and keep the rest of the import.
-2. That last row is a silent behaviour change even when both parsers succeed.
-   `feed-parser` leaves entities encoded on purpose and decodes them later with
-   `html-entities`. A parser that pre-decodes gives different text.
+### The cost, and what to watch
 
-**There is also no dependency win available.** `fast-xml-parser` is a
-dependency of `@rowanmanning/feed-parser`, so it stays in the tree (with its 6
-transitive deps) unless the *feed* path moves too -- and the feed path is
-exactly the one that most needs tolerant parsing. Moving only OPML off it costs
-leniency and saves nothing.
+`Bun.XML` is a conforming processor: well-formed or `SyntaxError`, no
+recovery. `fast-xml-parser` was deliberately tolerant.
 
-`Bun.XML` is a good fit for XML we control or that must be well-formed
-(config files, API payloads with a schema). It is the wrong tool for
-syndication feeds.
+That did not cost anything on the feed corpus, but it is a real change for
+OPML: an export containing an undeclared HTML entity (`&nbsp;`) or a bare `&`
+in a title now fails the **whole import**, where before those outlines
+imported fine. This has not been measured against real OPML uploads — the
+`opml_imports` table in production is the place to check if imports start
+failing.
+
+`Bun.XML.parse` takes one option, `compact`. Other keys are accepted silently
+and ignored, so treat the output shape as fixed.
 
 ## Done on this branch
 
@@ -186,3 +182,4 @@ syndication feeds.
 - Pinned `elysia` to `2.0.0-beta.4` instead of the floating `next` tag.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Moved to Bun 1.4.0 (`packageManager`, `bun-types`, and the `Dockerfile` tags).
+- Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.
