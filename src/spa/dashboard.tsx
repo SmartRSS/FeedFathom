@@ -784,13 +784,13 @@ export function Dashboard(props: {
   // JSX below), so the browser announces the newly focused row on its own
   // -- no aria-activedescendant plumbing, no dependency on a screen
   // reader's support for it.
-  function focusArticleAt(index: number) {
+  function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
     const element = document.querySelector<HTMLElement>(
       `[data-index="${index}"]`,
     );
     element?.focus({ preventScroll: true });
-    element?.scrollIntoView({ block: "nearest" });
+    if (options?.scroll ?? true) element?.scrollIntoView({ block: "nearest" });
   }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
@@ -970,7 +970,7 @@ export function Dashboard(props: {
                 void setArticleSelection(
                   new Set(articles().map((_, index) => index)),
                 );
-                if (articles().length) focusArticleAt(0);
+                if (articles().length) focusArticleAt(0, { scroll: false });
               }}
             >
               <Icon raw={selectAllRaw} />
