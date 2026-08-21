@@ -65,9 +65,15 @@ services:
           "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
         ]
       interval: 5s
-      timeout: 1s
-      retries: 2
-      start_period: 5s
+      timeout: 2s
+      # start-first rolling updates run this alongside the old task it's
+      # replacing, doubling the server's resource pressure right when it
+      # needs to boot -- the old 5s start_period/2 retries budget (15s
+      # worst case) was tight enough to occasionally get killed as
+      # unhealthy under that contention and trigger a rollback. 25s worst
+      # case leaves headroom and still fits inside update_config.monitor.
+      retries: 3
+      start_period: 10s
     stop_grace_period: 20s
     tmpfs:
       - /tmp
@@ -118,9 +124,9 @@ services:
           "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
         ]
       interval: 5s
-      timeout: 1s
-      retries: 2
-      start_period: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
     stop_grace_period: 5m
     tmpfs:
       - /tmp
@@ -150,13 +156,17 @@ services:
         parallelism: 4
         delay: 5s
         order: start-first
-        monitor: 15s
+        # Must stay >= the healthcheck's worst-case time-to-unhealthy
+        # (start_period + retries * interval = 25s below), or a rollout can
+        # be reported successful before a slow-to-start task is actually
+        # confirmed healthy.
+        monitor: 30s
         failure_action: rollback
       rollback_config:
         parallelism: 4
         delay: 5s
         order: start-first
-        monitor: 15s
+        monitor: 30s
         failure_action: pause
 
 volumes:
