@@ -282,6 +282,27 @@ test("select all moves focus into the list so Delete works immediately", async (
     .toEqual([11, 12, 13]);
 });
 
+test("select all does not scroll the article list", async ({ page }) => {
+  // Regression test: focusArticleAt(0) used to always scrollIntoView the
+  // first row, which yanked the list back to the top even when the user
+  // had scrolled down before clicking select-all.
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
+  await selectSource(page);
+  await expect(page.getByRole("option")).toHaveCount(3);
+
+  const list = page.locator(".article-list");
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const scrolledTop = await list.evaluate((element) => element.scrollTop);
+  expect(scrolledTop).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "select all" }).click();
+  await expect(list).toHaveJSProperty("scrollTop", scrolledTop);
+});
+
 test("select all then clicking Delete removes every article", async ({
   page,
 }) => {
