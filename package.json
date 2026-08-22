@@ -34,13 +34,12 @@
     "@extractus/article-extractor": "^9.0.0",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.1.4",
-    "@sinclair/typebox": "^0.34.52",
     "bullmq": "^5.80.12",
     "disposable-email-domains-js": "^1.25.0",
     "dompurify": "^3.4.12",
     "drizzle-orm": "^0.45.2",
-    "elysia": "next",
-    "fast-xml-parser": "^5.10.1",
+    "elysia": "2.0.0-beta.4",
+    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
     "ioredis": "^5.11.1",
     "linkedom": "file:./vendor/linkedom-shim",
     "mailparser": "^3.9.14",
@@ -68,6 +67,9 @@
     "web-ext": "10.5.0"
   },
   "peerDependencies": {},
+  "overrides": {
+    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim"
+  },
   "packageManager": "bun@1.4.0",
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
@@ -87,7 +89,6 @@
     ],
     "ignoreUnresolved": [],
     "ignoreDependencies": [
-      "@sinclair/typebox",
       "linkedom"
     ]
   },
