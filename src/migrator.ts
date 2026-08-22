@@ -164,6 +164,65 @@ async function reserveWhenReady(
   }
 }
 
+// One-time shim for the migration squash. A database that ran the 31 original
+// migrations already has exactly the schema the baseline builds -- compared
+// column, type, default, index and constraint before the squash landed -- it
+// just does not know the baseline's name for it. Replaying the baseline would
+// fail on CREATE TABLE, so record it as applied instead.
+//
+// Deliberately narrow. It fires only for a database that reached the final
+// pre-squash migration, so a partially migrated one still fails loudly rather
+// than being told it has a schema it does not have. It is one statement, so a
+// concurrent migrator cannot interleave with it, and it is a no-op everywhere
+// else: fresh databases have no journal table, and post-squash ones already
+// carry the row.
+//
+// ponytail: delete once no database predating the squash remains.
+const preSquashFinalMigration = 1_786_570_692_742;
+
+async function adoptSquashedBaseline(
+  client: ReservedSQL,
+  migrationsFolder: string,
+) {
+  const [journalTable] = await client<
+    { migrationJournalExists: boolean }[]
+  >`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL
+      AS "migrationJournalExists"`;
+  if (!journalTable?.migrationJournalExists) return;
+
+  const journal = Value.Decode(
+    migrationJournal,
+    await Bun.file(`${migrationsFolder}/meta/_journal.json`).json(),
+  );
+  const baseline = journal.entries.at(0);
+  if (!baseline || baseline.when <= preSquashFinalMigration) return;
+
+  // Drizzle keys a migration by the SHA-256 of the file's contents, so the
+  // hash is computed rather than pinned and cannot drift from the file.
+  const hash = new Bun.CryptoHasher("sha256")
+    .update(await Bun.file(`${migrationsFolder}/${baseline.tag}.sql`).text())
+    .digest("hex");
+
+  const adopted = await client<{ createdAt: string }[]>`
+    INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
+    SELECT ${hash}, ${baseline.when}
+    WHERE EXISTS (
+        SELECT 1 FROM "drizzle"."__drizzle_migrations"
+        WHERE "created_at" = ${preSquashFinalMigration}
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "drizzle"."__drizzle_migrations"
+        WHERE "created_at" = ${baseline.when}
+      )
+    RETURNING "created_at"::text AS "createdAt"`;
+
+  if (adopted.length > 0) {
+    console.log(
+      `Adopted migration baseline ${baseline.tag} for a database that predates the squash`,
+    );
+  }
+}
+
 export async function migrateDatabase(
   databaseUrl: AppConfig["DATABASE_URL"],
   migrationsFolder = "./drizzle",
@@ -175,6 +234,7 @@ export async function migrateDatabase(
     try {
       await reserved`SELECT pg_advisory_lock(hashtextextended('feedfathom:migrations', 0))`;
       locked = true;
+      await adoptSquashedBaseline(reserved, migrationsFolder);
       await prebuildIndexesConcurrently(
         reserved,
         await pendingConcurrentIndexes(reserved, migrationsFolder),

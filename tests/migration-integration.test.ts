@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import journal from "../drizzle/meta/_journal.json";
@@ -147,6 +147,82 @@ test("gates startup on this build's newest migration, tolerating a newer databas
     await expect(
       waitForMigration(client, undefined, 10),
     ).resolves.toBeUndefined();
+  } finally {
+    await client.close();
+  }
+});
+
+// The squash shim. Reproducing it without the deleted migration files means
+// building the schema from the baseline and then rewriting the journal to
+// look like a database that predates the squash.
+const preSquashFinalMigration = 1_786_570_692_742;
+
+async function forgeJournal(client: SQL, appliedAt: number) {
+  await client`DELETE FROM "drizzle"."__drizzle_migrations"`;
+  await client`INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
+    VALUES ('pre-squash', ${appliedAt})`;
+}
+
+test("adopts the baseline for a database that reached the final pre-squash migration", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    await forgeJournal(client, preSquashFinalMigration);
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+
+    const [adopted] = await client<
+      { count: number }[]
+    >`SELECT count(*)::integer AS "count"
+      FROM "drizzle"."__drizzle_migrations"
+      WHERE "created_at" = ${journal.entries[0]?.when}`;
+    expect(adopted?.count).toBe(1);
+    await expectIndexesValid(client);
+  } finally {
+    await client.close();
+  }
+});
+
+// The dangerous case: a database stopped somewhere in the middle of the old
+// history has neither the baseline's schema nor a claim to it, so it has to
+// fail rather than be marked as migrated.
+test("refuses to adopt the baseline for a partially migrated database", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    await forgeJournal(client, preSquashFinalMigration - 1);
+
+    await expect(
+      migrateDatabase(databaseUrl, currentMigrationsFolder),
+    ).rejects.toThrow();
+
+    const rows = await client<
+      { createdAt: string }[]
+    >`SELECT "created_at"::text AS "createdAt" FROM "drizzle"."__drizzle_migrations"`;
+    expect(rows.map((row) => Number(row.createdAt))).toEqual([
+      preSquashFinalMigration - 1,
+    ]);
+  } finally {
+    await client.close();
+  }
+});
+
+// These tests forge the journal to reproduce pre-squash databases, so the
+// last word has to be a real migration. CI points DATABASE_URL and
+// MIGRATION_TEST_DATABASE_URL at the same ephemeral database, and leaving a
+// forged journal behind breaks whatever runs next against it.
+afterAll(async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
   } finally {
     await client.close();
   }
