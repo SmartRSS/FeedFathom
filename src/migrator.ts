@@ -245,14 +245,21 @@ export async function migrateDatabase(
       console.log("Migrations complete");
     } finally {
       try {
+        // Best effort. A migration that fails mid-transaction can leave the
+        // session unable to answer, and the unlock throwing on the way out
+        // would replace the error that actually explains the failure. The
+        // lock is session-scoped, so closing the client below releases it
+        // either way.
         if (locked)
-          await reserved`SELECT pg_advisory_unlock(hashtextextended('feedfathom:migrations', 0))`;
+          await reserved`SELECT pg_advisory_unlock(hashtextextended('feedfathom:migrations', 0))`.catch(
+            () => undefined,
+          );
       } finally {
         reserved.release();
       }
     }
   } finally {
-    await database.$client.close();
+    await database.$client.close().catch(() => undefined);
   }
 }
 
