@@ -1,17 +1,29 @@
 # FeedFathom
 
-FeedFathom is a self-hosted RSS and newsletter reader with companion extensions for Firefox and Chromium-based browsers.
+FeedFathom is a self-hosted RSS and newsletter reader. It runs as a set of
+containers on a single host and is reached through a browser. Companion
+extensions for Firefox and Chromium add feed discovery and reader views.
+
+The database schema is created and upgraded automatically on every start.
+There is no manual database step, on a first install or on an upgrade.
 
 ## Components
 
-- A Solid browser interface and Bun-native Elysia API
-- A background worker for scheduled feed updates
-- Firefox and Chromium extensions for feed discovery, subscription, and Reader modes
-- A Cloudflare Email Routing Worker for inbound newsletters
+| Component | Function |
+| --- | --- |
+| Server | Serves the web interface and the API. |
+| Worker | Fetches and parses feeds on a schedule. |
+| Migrator | Brings the database schema up to date, then exits. Runs on every start. |
+| PostgreSQL | Stores accounts, subscriptions, and articles. |
+| Redis | Holds the job queue and the HTTP cache. |
+| Browser extension | Discovers feeds on visited pages and renders reader views. Optional. |
+| Cloudflare Email Worker | Relays inbound newsletters to the API. Optional. |
 
-## Self-Hosting
+## Self-hosting
 
-Docker with Compose v2.24 or newer is all you need. The images are published, so there is nothing to build.
+Docker with Compose v2.24 or newer is the only requirement. The images are
+published, so there is nothing to build and no registry to authenticate
+against.
 
 ```bash
 git clone https://github.com/SmartRSS/FeedFathom.git
@@ -19,11 +31,61 @@ cd FeedFathom
 docker compose up -d
 ```
 
-Open `http://127.0.0.1:3456` and create the first account. Put any configuration in a `.env` file beside `compose.yml`; every variable has a working default. See [running and deployment](docs/running.md) for the full list.
+Open `http://127.0.0.1:3456` and create the first account. The first account
+can always be created; afterwards registration stays closed unless
+`ENABLE_REGISTRATION` is `true`.
+
+Configure the deployment by putting variables in a `.env` file next to
+`compose.yml`. Copy `.env.example` to start from the documented defaults.
+[Running and deployment](docs/running.md) lists every variable.
+
+### Serving over the network
+
+WARNING: Serve the instance over HTTPS. The session cookie carries the
+`Secure` attribute, which browsers refuse to store on an insecure origin, so
+plain HTTP on a non-local address produces a login that appears to succeed
+and then fails silently on the next request. Browsers exempt `localhost`
+from this rule; bare IP addresses are not exempt.
+
+Restrict the published port to loopback and terminate TLS in front of it. Set
+`FEEDFATHOM_PORT=127.0.0.1:3456` in `.env`, then point a reverse proxy at it.
+A complete Caddyfile, which obtains and renews a certificate on its own:
+
+```caddy
+feeds.example.com {
+	reverse_proxy 127.0.0.1:3456
+}
+```
+
+Any reverse proxy works. The requirements are TLS termination, forwarding to
+the published port, and passing the original `Host` header through. No path
+rewriting or WebSocket handling is needed.
+
+### Upgrading
+
+CAUTION: Migrations are forward-only. A newer image will not downgrade a
+database it has already migrated. Back up before upgrading, and pin
+`FEEDFATHOM_TAG` to a commit SHA to control when the upgrade happens.
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Backup
+
+Everything irreplaceable is in PostgreSQL. Redis holds queue state and cached
+responses.
+
+```bash
+docker compose exec -T postgres pg_dump -U postgres postgres > feedfathom-backup.sql
+```
 
 ## Development
 
-Development also needs [Bun](https://bun.sh) and access to the Docker Hardened Images registry, because the development image builds from `dhi.io` bases.
+Development additionally requires [Bun](https://bun.sh), Git, and access to
+the Docker Hardened Images registry, because the development image builds
+from `dhi.io` bases.
 
 ```bash
 bun install --frozen-lockfile
@@ -31,23 +93,42 @@ docker login dhi.io
 bun run dev
 ```
 
-This starts `compose.yml` with the `deploy/compose.dev.yml` overlay and runs Vite on the host. Open `http://127.0.0.1:3456`.
+This starts `compose.yml` with the `deploy/compose.dev.yml` overlay and runs
+Vite on the host. Open `http://127.0.0.1:3456`.
 
-## Quality
-
-Run the complete test, lint, type-check, and build gate:
+Run the complete gate before opening a pull request. It covers unit tests,
+real Chromium tests, formatting, linting, type checking, and every build
+target.
 
 ```bash
 bun run quality
 ```
 
-## Browser Extension Builds
+## Browser extension
+
+The extension adds feed discovery on visited pages and reader views. Reader
+views work only through the extension; the server does not proxy article
+pages.
 
 ```bash
 bun run build-extension
 ```
 
-This creates the unpacked extensions in `ext/build-ch` and `ext/build-ff`, plus the lowercase archives `ext/feedfathom_ch.zip` and `ext/feedfathom_ff.zip`. See the extension documentation for local installation and Firefox signing details.
+This creates the unpacked extensions in `ext/build-ch` and `ext/build-ff`,
+plus the archives `ext/feedfathom_ch.zip` and `ext/feedfathom_ff.zip`. See
+the [extension documentation](docs/extension.md) for local installation and
+Firefox signing details.
+
+## Newsletters
+
+Newsletter ingestion uses Cloudflare Email Routing and the bundled Worker,
+which relays messages to `/api/mail`. The stack runs no SMTP server and does
+not expose port 25.
+
+Set `MAIL_ENABLED=true` and set `MAIL_RELAY_SECRET` to the same value
+configured on the Cloudflare Worker. Outbound activation email for public
+registration is separate and needs `MAILJET_API_KEY` and
+`MAILJET_API_SECRET`.
 
 ## Documentation
 

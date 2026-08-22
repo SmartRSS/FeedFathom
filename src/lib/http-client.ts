@@ -21,6 +21,72 @@ const requestDeadlineMs = 30_000;
 const maximumBodyBytes = 5 * 1024 * 1024;
 const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
 const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
+const userAgentProduct = "SmartRSS/FeedFathom";
+const userAgentUrl = "+https://github.com/SmartRSS/FeedFathom";
+const shortShaLength = 7;
+
+// Both fields land in an outgoing header, so anything outside this set is
+// dropped rather than escaped: it covers hostnames (with an optional
+// :port) and every tag shape we produce -- a commit SHA, a channel name
+// like "staging", a semver -- and excludes the ";" / ")" / CR / LF that
+// would let a mis-set env var break the header or the convention's own
+// grammar. A field that survives as empty is treated as absent.
+function sanitizeIdentity(value: string | undefined): string | undefined {
+  const cleaned = value?.trim().replaceAll(/[^\w.:-]/gu, "");
+  if (cleaned === undefined || cleaned === "") return undefined;
+  return cleaned;
+}
+
+// A full commit SHA is the usual FEEDFATHOM_TAG, and 40 hex characters in
+// a User-Agent is noise -- the first 7 identify the build just as well.
+// Anything else (a channel tag, a semver) is already short, so pass it
+// through untouched.
+function normalizeVersion(value: string | undefined): string | undefined {
+  const tag = sanitizeIdentity(value);
+  if (tag === undefined) return undefined;
+  return /^[0-9a-f]{40}$/u.test(tag) ? tag.slice(0, shortShaLength) : tag;
+}
+
+// Feed readers conventionally report how many of their own users subscribe
+// to a feed in the User-Agent -- for most publishers it is the only
+// feedback RSS gives them about their audience. Google's Feedfetcher
+// established the shape ("...; 4 subscribers; feed-id=...") and Feedly,
+// Feedbin and Inoreader all copied it, so publishers scrape it with
+// regexes over the literal word "subscribers".
+//
+// The build tag and instance host ride along so a publisher (and our own
+// support) can tell two FeedFathom instances apart, which a bare product
+// token made impossible. The project URL stays in the "+" slot rather than
+// the instance host: it is the stable page explaining what this fetcher
+// is, and a self-hosted domain explains nothing to the publisher reading
+// it. "localhost" stands in when FEED_FATHOM_DOMAIN is unset, which is
+// honest for a dev or LAN-only instance.
+function buildUserAgentPrefix(identity: HttpClientIdentity): string {
+  const version = normalizeVersion(identity.version);
+  const product = version ? `${userAgentProduct}/${version}` : userAgentProduct;
+  const instance = sanitizeIdentity(identity.instance) ?? "localhost";
+  return `${product} (${userAgentUrl}; instance=${instance}`;
+}
+
+// Only appended when a real count is known: discovery and preview fetches
+// have no subscribers yet, and claiming otherwise would poison the very
+// numbers this exists to report. Plural even at one, because the regexes
+// reading it match the literal word. Non-integer and negative counts are
+// dropped rather than interpolated.
+function buildUserAgent(
+  prefix: string,
+  subscribers: number | undefined,
+): string {
+  if (
+    subscribers === undefined ||
+    !Number.isInteger(subscribers) ||
+    subscribers < 0
+  ) {
+    return `${prefix})`;
+  }
+  return `${prefix}; ${subscribers} subscribers)`;
+}
+
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
@@ -75,13 +141,26 @@ type HttpRequestOptions = {
   // know something changed and need to actually ask the origin, not just
   // trust a TTL that hasn't technically expired yet.
   skipCache?: boolean;
+  // Number of our users subscribed to the feed being fetched, reported to
+  // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
+  // that aren't on behalf of subscribers: discovery, preview, favicons.
+  subscribers?: number;
 };
 
 type ArrayBufferRequestOptions = HttpRequestOptions & {
   responseType: "arrayBuffer";
 };
 
-type HttpClientInternals = {
+type HttpClientIdentity = {
+  // FEED_FATHOM_DOMAIN. Falls back to "localhost" when unset.
+  instance?: string | undefined;
+  // FEEDFATHOM_BUILD -- the commit baked into the image at build time.
+  // Omitted from the User-Agent entirely when unset, rather than guessed
+  // at from whatever tag happened to be pulled.
+  version?: string | undefined;
+};
+
+type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
   transport?: NativeHttpTransport;
 };
@@ -177,13 +256,18 @@ class RequestDeadline {
 export class HttpClient {
   private readonly deadlineMs: number;
   private readonly transport: NativeHttpTransport;
+  // Identity is fixed for the process, so the constant part of every
+  // User-Agent is built once here and only the subscriber clause varies
+  // per request.
+  private readonly userAgentPrefix: string;
 
   constructor(
     private readonly redis: HttpRedis,
-    internals: HttpClientInternals = {},
+    options: HttpClientOptions = {},
   ) {
-    this.deadlineMs = internals.deadlineMs ?? requestDeadlineMs;
-    this.transport = internals.transport ?? nativeHttpTransport;
+    this.deadlineMs = options.deadlineMs ?? requestDeadlineMs;
+    this.transport = options.transport ?? nativeHttpTransport;
+    this.userAgentPrefix = buildUserAgentPrefix(options);
   }
 
   async get(
@@ -236,6 +320,14 @@ export class HttpClient {
     await this.reserve(hostname, options.priority ?? "interactive", deadline);
 
     const headers = new Headers();
+    headers.set(
+      "accept",
+      "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
+    );
+    headers.set(
+      "user-agent",
+      buildUserAgent(this.userAgentPrefix, options.subscribers),
+    );
     if (cached) {
       const cachedHeaders = new Headers(cached.headers);
       const etag = cachedHeaders.get("etag");
@@ -296,11 +388,6 @@ export class HttpClient {
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
-    headers.set(
-      "accept",
-      "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
-    );
-    headers.set("user-agent", "SmartRSS/FeedFathom");
     /* eslint-disable no-await-in-loop -- Each retry depends on its response, rate-limit state, and backoff. */
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;
