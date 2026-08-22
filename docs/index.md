@@ -22,7 +22,7 @@ FeedFathom leverages modern technologies for optimal performance:
 
 - **Solid + Elysia**: For browser interfaces and server-side APIs
 - **Bun**: Fast JavaScript runtime for server operations
-- **Docker**: Containerized backend services for development and standalone deployment stacks
+- **Docker**: Self-hosted with a single Compose file; overlays cover development and release verification
 - **Background Workers**: For scheduled RSS feed updates
 - **Cloudflare Email Routing**: For inbound newsletter delivery to `/api/mail` when `MAIL_ENABLED` is enabled
 

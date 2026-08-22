@@ -24,7 +24,11 @@ function requireDisposableDatabaseUrl() {
 }
 
 const databaseUrl = requireDisposableDatabaseUrl();
-await migrateDatabase(databaseUrl);
+// A short connect deadline, because the production default is two minutes
+// of retrying -- right for a container racing PostgreSQL's first boot, and
+// two minutes of nothing for a developer who simply has no PostgreSQL
+// running.
+await migrateDatabase(databaseUrl, "./drizzle", 5_000);
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const noopQueue = { async add() {} };
 const sourcesDataService = new SourcesDataService(drizzleConnection, noopQueue);
