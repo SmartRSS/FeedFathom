@@ -188,10 +188,15 @@ test("adopts the baseline for a database that reached the final pre-squash migra
 
 // The dangerous case: a database stopped somewhere in the middle of the old
 // history has neither the baseline's schema nor a claim to it, so it must not
-// be recorded as migrated. Asserted against the decision itself rather than by
-// running a migration that fails -- drizzle's transaction teardown floats an
-// unhandled rejection on that path, and the branch here is what is actually
-// in question.
+// be recorded as migrated.
+//
+// Asserted against the decision itself rather than by running a migration that
+// fails. Drizzle's transaction teardown floats an unhandled rejection on that
+// path, which neither .rejects.toThrow() nor an explicit try/catch can catch
+// because it never reaches the awaited promise, and whether a Bun release
+// fails the test on it has already changed once. That a partial database is
+// rejected by CREATE TABLE is PostgreSQL's behaviour; the branch below is
+// ours, and is what is actually in question.
 test("refuses to adopt the baseline for a partially migrated database", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
