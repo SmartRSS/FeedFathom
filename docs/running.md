@@ -187,25 +187,27 @@ The Swarm defaults are deliberately generous, sized for a host with room to spar
 - `DB_POOL_MAX` — PostgreSQL connections opened per server and worker replica (default `10`, matching Bun's SQL client default).
 - `POSTGRES_MAX_CONNECTIONS` — PostgreSQL's own connection ceiling (`deploy/stack.yml` default `1000`, far more than a small deployment needs). Size it against the other two: roughly `1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX`, which leaves room for connection churn during a rolling update without reserving memory for thousands of unused slots. One server and one worker replica at the `DB_POOL_MAX` default of `10` needs `1.5 * 2 * 10 = 30`.
 
-### One-time: adopting the squashed migration baseline
+### The squashed migration baseline
 
-The 31 historical migrations were replaced by a single baseline, `drizzle/0000_silky_multiple_man.sql`. It builds the same schema those 31 produced — verified by applying both to empty databases and diffing every column, type, default, index and constraint — so an existing database needs no schema change at all. It only needs to be told the baseline is already applied.
+The 31 historical migrations were replaced by a single baseline, `drizzle/0000_silky_multiple_man.sql`. It builds the same schema those 31 produced — verified by applying both to empty databases and comparing every column, type, default, nullability, index and constraint — so an existing database needs no schema change. It only needs to know the baseline's name for the schema it already has.
 
-Run this against production **before** deploying the first image that contains the squashed history. It is idempotent, and it adds a row rather than replacing the existing 31, so rolling back to an older image still finds the journal it expects:
+The migrator does that itself, so nothing manual is required. On a database whose journal records the final pre-squash migration, it inserts the baseline's row and skips it rather than replaying it:
 
-```sql
-INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
-SELECT '829ad6549b291149905be05311412c98209f54b613103fbb734c77b51b728cf6', 1787402128382
-WHERE NOT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE created_at = 1787402128382);
+```
+Adopted migration baseline 0000_silky_multiple_man for a database that predates the squash
 ```
 
-Deploying without it fails safely rather than destructively: the migrator tries `CREATE TABLE "articles"`, PostgreSQL rejects it as already existing, the transaction rolls back and the migrator exits non-zero. The deployment workflow treats that as a failed migration and leaves the running services untouched, so the only cost is a blocked deploy.
+The rule is deliberately narrow. It fires only when the final pre-squash migration is journaled, which is what proves the database carries the complete old schema. A database stopped partway through the old history is left to fail on `CREATE TABLE` instead, because marking it migrated would claim a schema it does not have. That failure is safe: the transaction rolls back, the journal is untouched, and the deployment workflow leaves the running services alone.
+
+It is also a no-op everywhere else. Fresh databases have no journal table, and databases that have already adopted the baseline carry its row.
 
 Two consequences are permanent and worth recording.
 
 The legacy `job_queue` table, created by the old migrations 0008 to 0010 and unused since the move to BullMQ, survives on any database that predates the squash and is absent from every fresh install. No migration or schema file mentions it any more.
 
-Databases that had not reached the final pre-squash migration cannot take this upgrade. The baseline is all-or-nothing: it either runs in full against an empty database or is stamped on a complete one. There is no partial path.
+Databases that never reached the final pre-squash migration cannot take this upgrade at all. They have to reach it under a pre-squash image first.
+
+Once no database predating the squash remains, `adoptSquashedBaseline` in `src/migrator.ts` can be deleted.
 
 ### First cutover
 
