@@ -54,7 +54,10 @@ export async function createFeedRuntime() {
     drizzleConnection,
     sourcesDataService,
   );
-  const httpClient = new HttpClient(redis);
+  const httpClient = new HttpClient(redis, {
+    instance: config.FEED_FATHOM_DOMAIN,
+    version: config.FEEDFATHOM_BUILD,
+  });
   const redirectMap = new RedirectMap(redis);
   const feedParser = new FeedParser(
     articlesDataService,
