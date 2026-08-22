@@ -3,6 +3,7 @@ import { EmailHandler } from "./lib/email/email-handler.ts";
 import { MailSender } from "./lib/email/mail-sender.ts";
 import { FeedPreviewCache } from "./lib/feed-preview-cache.ts";
 import { OpmlParser } from "./lib/opml-parser.ts";
+import { waitForMigration } from "./db/connection.ts";
 import { createFeedRuntime } from "./runtime.ts";
 import { createServerApp } from "./server-app.ts";
 
@@ -27,6 +28,15 @@ export const app = await createServerApp(
   },
   { production },
 );
+
+// Unlike the worker, which reports healthy while it waits because nothing
+// routes to it, the server must not accept traffic against a schema it was
+// not built for -- that would answer requests with errors instead of making
+// the orchestrator wait. So it does not listen at all until its migration is
+// applied, and the healthcheck's start_period is what covers that gap. A
+// migration slower than that budget leaves the server restarting until it
+// finishes, which is noisy but self-correcting.
+await waitForMigration(runtime.drizzleConnection.$client);
 
 app.listen(config.PORT ?? 3000);
 

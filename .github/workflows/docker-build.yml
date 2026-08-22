@@ -21,8 +21,9 @@ on:
 permissions:
   contents: read
 
-# deploy/stack.yml and deploy/compose.smoke.yml already hardcode this prefix,
-# so computing it per job from ${GITHUB_REPOSITORY,,} bought no portability.
+# compose.yml, deploy/compose.smoke.yml, and deploy/stack.yml already hardcode
+# this prefix, so computing it per job from ${GITHUB_REPOSITORY,,} bought no
+# portability.
 env:
   IMAGE_PREFIX: ghcr.io/smartrss/feedfathom
 
@@ -580,8 +581,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_tag || github.sha }}
           sparse-checkout: |
+            compose.yml
             deploy/stack.yml
-            deploy/stack.port.yml
           sparse-checkout-cone-mode: false
 
       - name: Add SSH key
@@ -623,7 +624,7 @@ jobs:
           SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
           printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
           ssh "${SSH_OPTS[@]}" "$SSH_DEST" "install -d -m 700 -- $DEPLOY_PATH_Q"
-          scp "${SSH_OPTS[@]}" deploy/stack.yml deploy/stack.port.yml deployment.env "$SSH_DEST:$DEPLOY_PATH/"
+          scp "${SSH_OPTS[@]}" compose.yml deploy/stack.yml deployment.env "$SSH_DEST:$DEPLOY_PATH/"
           ssh "${SSH_OPTS[@]}" "$SSH_DEST" "chmod 600 -- $DEPLOY_PATH_Q/deployment.env"
 
       - name: Deploy Swarm stack
@@ -711,7 +712,12 @@ jobs:
             return 1
           }
 
-          docker stack config -c stack.yml -c stack.port.yml >/dev/null
+          # compose.yml owns the port; the protected environment still names
+          # the variable SERVER_HOST_PORT, so map it across rather than
+          # asking every deployment to be reconfigured.
+          export FEEDFATHOM_PORT="${SERVER_HOST_PORT:-3458}"
+
+          docker stack config -c compose.yml -c stack.yml >/dev/null
           docker pull "$SERVER_IMAGE"
           docker pull "$WORKER_IMAGE"
           docker pull "$MIGRATOR_IMAGE"
@@ -742,7 +748,7 @@ jobs:
           # waiting behaviour -- that is --detach=false -- and failures
           # still report fully via the ERR trap's diagnose() dump plus the
           # image-convergence and public-root checks below.
-          timeout -k 15s 600s docker stack deploy --quiet --detach=false --with-registry-auth --prune -c stack.yml -c stack.port.yml "$STACK_NAME"
+          timeout -k 15s 600s docker stack deploy --quiet --detach=false --with-registry-auth --prune -c compose.yml -c stack.yml "$STACK_NAME"
 
           for specification in \
             "${STACK_NAME}_server|$SERVER_IMAGE" \

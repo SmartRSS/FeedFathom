@@ -3,7 +3,15 @@ import path from "node:path";
 const root = path.resolve(import.meta.dir, "..");
 const compose = async (...arguments_: string[]): Promise<number> =>
   await Bun.spawn(
-    ["docker", "compose", "-f", "deploy/compose.dev.yml", ...arguments_],
+    [
+      "docker",
+      "compose",
+      "-f",
+      "compose.yml",
+      "-f",
+      "deploy/compose.dev.yml",
+      ...arguments_,
+    ],
     {
       cwd: root,
       stdin: "inherit",
@@ -21,14 +29,23 @@ if (process.argv.length > 2) {
   throw new Error(`Unknown development option: ${process.argv[2]}`);
 }
 
-const startup = await compose(
-  "up",
-  "-d",
-  "--build",
-  "--wait",
-  "--wait-timeout",
-  "300",
-);
+// Starting and waiting are two calls because `up --wait` reports the
+// migrator's clean exit(0) as a failure, and naming services does not help
+// -- a named service's dependencies are waited on too. So: start everything,
+// then wait only on the two that stay up. Nothing is lost, because the
+// worker blocks until the schema exists, which means waiting for the worker
+// to report healthy already waits for migrations to have succeeded.
+const startup =
+  (await compose("up", "-d", "--build")) ||
+  (await compose(
+    "up",
+    "-d",
+    "--wait",
+    "--wait-timeout",
+    "300",
+    "server",
+    "worker",
+  ));
 if (startup !== 0) process.exit(startup);
 
 const vite = Bun.spawn([process.execPath, "run", "watch-spa"], {
