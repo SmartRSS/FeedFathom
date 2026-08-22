@@ -68,18 +68,25 @@ jobs:
         if: inputs.build_locally
         env:
           DOCKER_DEFAULT_PLATFORM: linux/amd64
-        run: docker compose -f deploy/compose.smoke.yml build migrator server worker
+        run: docker compose -f compose.yml -f deploy/compose.smoke.yml build migrator server worker
 
       - name: Pull smoke infrastructure images
         if: inputs.build_locally
-        run: docker compose -f deploy/compose.smoke.yml pull redis postgres
+        run: docker compose -f compose.yml -f deploy/compose.smoke.yml pull redis postgres
 
       - name: Pull exact release images
         if: ${{ !inputs.build_locally }}
-        run: docker compose -f deploy/compose.smoke.yml pull migrator server worker redis postgres
+        run: docker compose -f compose.yml -f deploy/compose.smoke.yml pull migrator server worker redis postgres
 
+      # Starting and waiting are two steps because `up --wait` reports the
+      # migrator's clean exit(0) as a failure, and naming services does not
+      # help -- their dependencies are waited on too. The worker blocks
+      # until the schema exists, so waiting on it still waits for migrations
+      # to have succeeded.
       - name: Start the images under test without rebuilding or pulling
-        run: docker compose -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never
+        run: |
+          docker compose -f compose.yml -f deploy/compose.smoke.yml up -d --no-build --pull never
+          docker compose -f compose.yml -f deploy/compose.smoke.yml up -d --wait --wait-timeout 300 --no-build --pull never server worker
 
       - name: Run production browser smoke test
         env:
@@ -90,10 +97,10 @@ jobs:
         if: failure()
         run: |
           printf '%s\n' 'Verification failed. Printing logs for all services:'
-          docker compose -f deploy/compose.smoke.yml logs migrator worker server
+          docker compose -f compose.yml -f deploy/compose.smoke.yml logs migrator worker server
           printf '%s\n' 'Current container status:'
-          docker compose -f deploy/compose.smoke.yml ps
+          docker compose -f compose.yml -f deploy/compose.smoke.yml ps
 
       - name: Cleanup
         if: always()
-        run: docker compose -f deploy/compose.smoke.yml down
+        run: docker compose -f compose.yml -f deploy/compose.smoke.yml down
