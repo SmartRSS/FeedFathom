@@ -19,6 +19,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: feedfathom-migrator
+      args:
+        FEEDFATHOM_BUILD: ${FEEDFATHOM_TAG}
 
   server:
     image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to a full immutable commit SHA}
@@ -26,6 +28,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: feedfathom-server
+      args:
+        FEEDFATHOM_BUILD: ${FEEDFATHOM_TAG}
 
   worker:
     image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to a full immutable commit SHA}
@@ -33,3 +37,5 @@ services:
       context: .
       dockerfile: Dockerfile
       target: feedfathom-worker
+      args:
+        FEEDFATHOM_BUILD: ${FEEDFATHOM_TAG}
