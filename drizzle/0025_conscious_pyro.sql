@@ -1,1 +1,0 @@
-ALTER TABLE "sources" ADD COLUMN "last_fetch_trigger" varchar;

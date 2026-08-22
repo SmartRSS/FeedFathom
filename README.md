@@ -9,17 +9,29 @@ FeedFathom is a self-hosted RSS and newsletter reader with companion extensions 
 - Firefox and Chromium extensions for feed discovery, subscription, and Reader modes
 - A Cloudflare Email Routing Worker for inbound newsletters
 
-## Quick Start
+## Self-Hosting
 
-Prerequisites are [Bun](https://bun.sh), Docker with Docker Compose, and access to the Docker Hardened Images registry.
+Docker with Compose v2.24 or newer is all you need. The images are published, so there is nothing to build.
 
 ```bash
-docker login dhi.io
+git clone https://github.com/SmartRSS/FeedFathom.git
+cd FeedFathom
+docker compose up -d
+```
+
+Open `http://127.0.0.1:3456` and create the first account. Put any configuration in a `.env` file beside `compose.yml`; every variable has a working default. See [running and deployment](docs/running.md) for the full list.
+
+## Development
+
+Development also needs [Bun](https://bun.sh) and access to the Docker Hardened Images registry, because the development image builds from `dhi.io` bases.
+
+```bash
 bun install --frozen-lockfile
+docker login dhi.io
 bun run dev
 ```
 
-Open `http://127.0.0.1:3456`.
+This starts `compose.yml` with the `deploy/compose.dev.yml` overlay and runs Vite on the host. Open `http://127.0.0.1:3456`.
 
 ## Quality
 

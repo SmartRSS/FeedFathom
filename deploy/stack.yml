@@ -1,176 +1,91 @@
+# Production on Docker Swarm, as an overlay on the root compose.yml:
+#
+#   docker stack deploy -c compose.yml -c deploy/stack.yml "$STACK_NAME"
+#
+# Everything the application needs -- images, environment, health probes --
+# comes from compose.yml, so there is exactly one place to change a variable.
+# This file adds only what Swarm needs and Compose has no concept of:
+# replica counts, rolling updates, resource reservations, and the fact that
+# the data volumes already exist on the host.
+#
+# `docker stack deploy` prints "Ignoring unsupported options: restart" for
+# compose.yml's `restart: always`. That is expected; deploy.restart_policy
+# below is what governs restarts here.
+#
+# The migrator runs at zero replicas because Swarm ignores depends_on and
+# would otherwise restart a completed migration forever. The workflow runs
+# migrations as a separate replicated-job service that doubles as a
+# deployment lock, before updating the application services.
+
 services:
+  migrator:
+    deploy:
+      replicas: 0
+
   redis:
-    image: redis
-    command: ["redis-server", "--appendonly", "yes"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    volumes:
-      - redis_storage:/data
-    networks:
-      - backend
     deploy:
       replicas: 1
-      restart_policy:
+      restart_policy: &restart-policy
         condition: any
         delay: 5s
         window: 30s
 
   postgres:
-    image: pgautoupgrade/pgautoupgrade:17-bookworm
     command: ["-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-1000}"]
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER}"]
-      interval: 1s
-      timeout: 1s
-      retries: 25
-      start_period: 1s
-    volumes:
-      - postgres_storage:/var/lib/postgresql/data
-    networks:
-      - backend
     deploy:
       replicas: 1
-      restart_policy:
-        condition: any
-        delay: 5s
-        window: 30s
+      restart_policy: *restart-policy
 
   server:
-    image: ghcr.io/smartrss/feedfathom/feedfathom-server:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to the immutable image tag}
-    environment:
-      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
-      DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
-      MAIL_ENABLED: ${MAIL_ENABLED:-false}
-      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
-      MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:?Set MAIL_RELAY_SECRET to the Cloudflare relay secret}
-      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
-      MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
-      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
-      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "/usr/local/bin/bun",
-          "-e",
-          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
-        ]
-      interval: 5s
-      timeout: 2s
-      # start-first rolling updates run this alongside the old task it's
-      # replacing, doubling the server's resource pressure right when it
-      # needs to boot -- the old 5s start_period/2 retries budget (15s
-      # worst case) was tight enough to occasionally get killed as
-      # unhealthy under that contention and trigger a rollback. 25s worst
-      # case leaves headroom and still fits inside update_config.monitor.
-      retries: 3
-      start_period: 10s
     stop_grace_period: 20s
-    tmpfs:
-      - /tmp
-    networks:
-      backend: {}
     deploy:
       replicas: ${APP_REPLICAS:-1}
-      restart_policy:
-        condition: any
-        delay: 5s
-        window: 30s
-      update_config:
+      restart_policy: *restart-policy
+      update_config: &server-rollout
         parallelism: 1
         delay: 10s
         order: start-first
-        monitor: 30s
+        # Must stay >= the server healthcheck's worst-case time-to-unhealthy
+        # (start_period 30s + retries 3 * interval 5s = 45s in compose.yml),
+        # or a rollout can be reported successful before a slow-to-start task is
+        # actually confirmed healthy. start-first also runs the new task
+        # alongside the one it replaces, doubling resource pressure exactly
+        # when it needs to boot, so the budget needs real headroom.
+        monitor: 60s
         failure_action: rollback
       rollback_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
-        monitor: 30s
+        <<: *server-rollout
         failure_action: pause
 
   worker:
-    image: ghcr.io/smartrss/feedfathom/feedfathom-worker:${FEEDFATHOM_TAG:?Set FEEDFATHOM_TAG to the immutable image tag}
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the protected PostgreSQL connection URL}
-      DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      DEBUG: "bull:*"
-      # WebSub subscribe attempts happen from here (parseSource runs in the
-      # worker, not the server) -- without this the callback URL can't be
-      # built and every subscribe attempt silently no-ops.
-      FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:?Set FEED_FATHOM_DOMAIN to the public host}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
-      LOCK_DURATION: ${LOCK_DURATION:-60}
-      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
-      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-      USER_DORMANT_AFTER_DAYS: ${USER_DORMANT_AFTER_DAYS:-365}
-      ARTICLE_STALE_AFTER_DAYS: ${ARTICLE_STALE_AFTER_DAYS:-365}
-      USER_EXPIRY_DAYS: ${USER_EXPIRY_DAYS:-730}
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "/usr/local/bin/bun",
-          "-e",
-          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
-        ]
-      interval: 5s
-      timeout: 2s
-      retries: 3
-      start_period: 10s
-    stop_grace_period: 5m
-    tmpfs:
-      - /tmp
-    networks:
-      - backend
     deploy:
       replicas: ${WORKER_REPLICAS:-10}
+      restart_policy: *restart-policy
       resources:
         limits:
           cpus: "${WORKER_CPU_LIMIT:-0.50}"
           memory: "${WORKER_MEM_LIMIT:-1500M}"
         # start-first rolling updates need update_config.parallelism extra
         # reservations' worth of CPU free on the node beyond WORKER_REPLICAS
-        # * WORKER_CPU_RESERVATION (currently 4, matching parallelism: 4
-        # below), or new tasks can't schedule until old ones stop -- and old
-        # ones won't stop until the new ones are healthy, deadlocking the
-        # rollout. Keep real headroom when scaling WORKER_REPLICAS or
-        # parallelism up on a capacity-constrained node.
+        # * WORKER_CPU_RESERVATION, or new tasks cannot schedule until old
+        # ones stop -- and old ones will not stop until the new ones are
+        # healthy, deadlocking the rollout. Keep real headroom when scaling
+        # WORKER_REPLICAS or parallelism up on a capacity-constrained node.
         reservations:
           cpus: "${WORKER_CPU_RESERVATION:-0.25}"
           memory: "${WORKER_MEM_RESERVATION:-500M}"
-      restart_policy:
-        condition: any
-        delay: 5s
-        window: 30s
-      update_config:
+      update_config: &worker-rollout
         parallelism: 4
         delay: 5s
         order: start-first
-        # Must stay >= the healthcheck's worst-case time-to-unhealthy
-        # (start_period + retries * interval = 25s below), or a rollout can
-        # be reported successful before a slow-to-start task is actually
-        # confirmed healthy.
         monitor: 30s
         failure_action: rollback
       rollback_config:
-        parallelism: 4
-        delay: 5s
-        order: start-first
-        monitor: 30s
+        <<: *worker-rollout
         failure_action: pause
 
 volumes:
-  postgres_storage:
+  postgres_storage_17:
     external: true
     name: ${POSTGRES_VOLUME_NAME:?Set POSTGRES_VOLUME_NAME to the existing PostgreSQL volume}
   redis_storage:

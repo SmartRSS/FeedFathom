@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import { config } from "./config.ts";
 import { internalAddressPolicy } from "./lib/typebox-policy.ts";
 import { MainWorker, type MainWorkerFactory } from "./lib/workers/main.ts";
+import { waitForMigration } from "./db/connection.ts";
 import { createFeedRuntime } from "./runtime.ts";
 
 async function runWorker() {
@@ -51,13 +52,9 @@ async function runWorker() {
     void shutdown();
   });
 
-  try {
-    await mainWorker.initialize();
-  } catch (error) {
-    console.error("Failed to initialize worker:", error);
-    throw new Error("Worker initialization failed", { cause: error });
-  }
-
+  // Served before the worker starts consuming, so a worker still waiting on
+  // the migrator reports what it is -- alive and idle -- instead of looking
+  // like a crash loop to Compose's --wait and to Swarm's rollout monitor.
   Bun.serve({
     async fetch(request, server) {
       const url = new URL(request.url);
@@ -75,6 +72,15 @@ async function runWorker() {
     },
     port: 3000,
   });
+
+  await waitForMigration(runtime.drizzleConnection.$client);
+
+  try {
+    await mainWorker.initialize();
+  } catch (error) {
+    console.error("Failed to initialize worker:", error);
+    throw new Error("Worker initialization failed", { cause: error });
+  }
 }
 
 await runWorker();

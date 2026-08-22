@@ -1,153 +1,62 @@
+# Development overlay. Never used alone:
+#
+#   docker compose -f compose.yml -f deploy/compose.dev.yml up -d --build --wait
+#
+# `bun run dev` runs exactly that, then starts Vite on the host.
+#
+# It replaces the three published images with one image built from this
+# checkout, mounts the backend source read-only so `bun --watch` reloads on
+# save, and moves the published port to 3001 so Vite can own 3456 and proxy
+# /api to the container. Everything else -- Redis, PostgreSQL, health
+# probes, startup order -- is inherited unchanged from compose.yml.
+#
+# Building requires a Docker Hardened Images login: `docker login dhi.io`.
+#
+# It also carries the project name. compose.yml cannot declare a top-level
+# `name`, because the legacy Swarm loader rejects it, so each Compose
+# overlay names the project it belongs to.
 name: feedfathom
 
+x-dev-image: &dev-image
+  image: feedfathom-dev:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: dev
+
 services:
-  redis:
-    image: redis
-    restart: always
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: "redis-cli ping | grep PONG || exit 1"
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    volumes:
-      - redis_storage:/data
-    networks:
-      - feedfathom
-
-  postgres:
-    image: pgautoupgrade/pgautoupgrade:17-bookworm
-    restart: always
-    command: ["-c", "max_connections=1000"]
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-    healthcheck:
-      test: 'pg_isready --username=${POSTGRES_USER:-postgres} && psql --username=${POSTGRES_USER:-postgres} -c "SELECT * FROM postgres.pg_catalog.pg_database;"'
-      interval: 1s
-      timeout: 1s
-      retries: 25
-      start_period: 1s
-    volumes:
-      - postgres_storage_17:/var/lib/postgresql/data
-    networks:
-      - feedfathom
-
   migrator:
-    init: true
-    image: feedfathom-dev:local
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: dev
+    <<: *dev-image
     command: ["src/migrator.ts"]
-    environment:
-      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
     volumes:
-      - ../src:/app/src:ro
-      - ../drizzle:/app/drizzle:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - feedfathom
+      - ./src:/app/src:ro
+      # Every service resolves the journal import from disk here, rather
+      # than from a bundle as the release images do; the migrator also reads
+      # the migration files themselves at runtime.
+      - ./drizzle:/app/drizzle:ro
 
   server:
-    init: true
-    image: feedfathom-dev:local
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: dev
-    restart: always
-    command: ["run", "watch-spa-api"]
+    <<: *dev-image
+    command: ["--watch", "src/server.ts"]
+    # !override replaces the inherited mapping instead of adding to it;
+    # without it Compose would keep the base's 3456 binding and collide
+    # with Vite.
+    ports: !override
+      - "127.0.0.1:3001:3000"
     environment:
-      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
       ENABLE_REGISTRATION: "true"
-      FEED_FATHOM_DOMAIN: localhost:3456
       MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-local-development-relay-secret}
-      MAILJET_API_KEY: ""
-      MAILJET_API_SECRET: ""
-      TURNSTILE_SITE_KEY: ""
-      TURNSTILE_SECRET_KEY: ""
-    ports:
-      - "127.0.0.1:3001:3001"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "/usr/local/bin/bun",
-          "-e",
-          "process.exit((await fetch('http://127.0.0.1:3001/healthcheck')).ok ? 0 : 1)",
-        ]
-      interval: 5s
-      timeout: 1s
-      retries: 2
-      start_period: 5s
     volumes:
-      - ../src:/app/src:ro
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      migrator:
-        condition: service_completed_successfully
-    tmpfs:
-      - /tmp
-    networks:
-      - feedfathom
+      - ./src:/app/src:ro
+      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # rather than from a bundle as the release images do.
+      - ./drizzle:/app/drizzle:ro
 
   worker:
-    init: true
-    image: feedfathom-dev:local
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: dev
-    restart: always
-    command: ["run", "watch-worker"]
-    environment:
-      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}}"
-      DEBUG: bull:*
-      FEED_FATHOM_DOMAIN: localhost:3456
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
-      LOCK_DURATION: ${LOCK_DURATION:-60}
-      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
-      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "/usr/local/bin/bun",
-          "-e",
-          "process.exit((await fetch('http://127.0.0.1:3000/healthcheck')).ok ? 0 : 1)",
-        ]
-      interval: 5s
-      timeout: 1s
-      retries: 2
-      start_period: 5s
+    <<: *dev-image
+    command: ["--watch", "src/worker.ts"]
     volumes:
-      - ../src:/app/src:ro
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      migrator:
-        condition: service_completed_successfully
-    tmpfs:
-      - /tmp
-    networks:
-      - feedfathom
-
-volumes:
-  redis_storage:
-    driver: local
-  postgres_storage_17:
-    driver: local
-
-networks:
-  feedfathom:
-    driver: bridge
+      - ./src:/app/src:ro
+      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # rather than from a bundle as the release images do.
+      - ./drizzle:/app/drizzle:ro

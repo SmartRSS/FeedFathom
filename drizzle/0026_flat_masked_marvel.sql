@@ -1,1 +1,0 @@
-ALTER TABLE "articles" ADD COLUMN "debug_fetch_trigger" varchar;
