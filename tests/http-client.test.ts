@@ -483,3 +483,42 @@ test("deletes oversized Redis wire and base64 cache entries before decoding", as
   }
   /* eslint-enable no-await-in-loop */
 });
+
+test("reports the subscriber count in the User-Agent, and only when known", async () => {
+  const sent: string[] = [];
+  const transport: NativeHttpTransport = async (_url, headers) => {
+    sent.push(headers.get("user-agent") ?? "");
+    return nativeResponse("feed");
+  };
+
+  // The count publishers actually scrape, in the shape Feedfetcher
+  // established. Plural at one subscriber is deliberate -- their regexes
+  // match the literal word.
+  await new HttpClient(redis(), { transport }).get("https://a.example/feed", {
+    subscribers: 4,
+  });
+  await new HttpClient(redis(), { transport }).get("https://b.example/feed", {
+    subscribers: 1,
+  });
+  await new HttpClient(redis(), { transport }).get("https://c.example/feed", {
+    subscribers: 0,
+  });
+
+  // Discovery and preview fetches have no subscribers, so they must not
+  // claim a number -- reporting a phantom "1 subscribers" for every preview
+  // would inflate the counts this feature exists to make truthful.
+  await new HttpClient(redis(), { transport }).get("https://d.example/feed");
+  // A non-integer can't be interpolated into a header safely; fall back
+  // rather than emit a malformed one.
+  await new HttpClient(redis(), { transport }).get("https://e.example/feed", {
+    subscribers: Number.NaN,
+  });
+
+  expect(sent).toEqual([
+    "SmartRSS/FeedFathom (+https://github.com/SmartRSS/FeedFathom; 4 subscribers)",
+    "SmartRSS/FeedFathom (+https://github.com/SmartRSS/FeedFathom; 1 subscribers)",
+    "SmartRSS/FeedFathom (+https://github.com/SmartRSS/FeedFathom; 0 subscribers)",
+    "SmartRSS/FeedFathom",
+    "SmartRSS/FeedFathom",
+  ]);
+});

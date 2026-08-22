@@ -21,6 +21,29 @@ const requestDeadlineMs = 30_000;
 const maximumBodyBytes = 5 * 1024 * 1024;
 const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
 const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
+const userAgentProduct = "SmartRSS/FeedFathom";
+const userAgentUrl = "+https://github.com/SmartRSS/FeedFathom";
+
+// Feed readers conventionally report how many of their own users subscribe
+// to a feed in the User-Agent -- for most publishers it is the only
+// feedback RSS gives them about their audience. Google's Feedfetcher
+// established the shape ("...; 4 subscribers; feed-id=...") and Feedly,
+// Feedbin and Inoreader all copied it, so publishers scrape it with
+// regexes over the literal word "subscribers". Keep it plural even at one
+// subscriber for that reason, and only append the clause when a real count
+// is known: discovery and preview fetches have no subscribers yet, and
+// claiming otherwise would poison the very numbers this exists to report.
+function buildUserAgent(subscribers: number | undefined): string {
+  if (
+    subscribers === undefined ||
+    !Number.isInteger(subscribers) ||
+    subscribers < 0
+  ) {
+    return userAgentProduct;
+  }
+  return `${userAgentProduct} (${userAgentUrl}; ${subscribers} subscribers)`;
+}
+
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
@@ -75,6 +98,10 @@ type HttpRequestOptions = {
   // know something changed and need to actually ask the origin, not just
   // trust a TTL that hasn't technically expired yet.
   skipCache?: boolean;
+  // Number of our users subscribed to the feed being fetched, reported to
+  // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
+  // that aren't on behalf of subscribers: discovery, preview, favicons.
+  subscribers?: number;
 };
 
 type ArrayBufferRequestOptions = HttpRequestOptions & {
@@ -236,6 +263,11 @@ export class HttpClient {
     await this.reserve(hostname, options.priority ?? "interactive", deadline);
 
     const headers = new Headers();
+    headers.set(
+      "accept",
+      "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
+    );
+    headers.set("user-agent", buildUserAgent(options.subscribers));
     if (cached) {
       const cachedHeaders = new Headers(cached.headers);
       const etag = cachedHeaders.get("etag");
@@ -296,11 +328,6 @@ export class HttpClient {
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
-    headers.set(
-      "accept",
-      "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/plain, */*",
-    );
-    headers.set("user-agent", "SmartRSS/FeedFathom");
     /* eslint-disable no-await-in-loop -- Each retry depends on its response, rate-limit state, and backoff. */
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;

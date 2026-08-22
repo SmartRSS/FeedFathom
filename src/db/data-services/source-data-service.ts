@@ -1,12 +1,13 @@
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
-import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { sourceSortSchema } from "../../contracts/requests.ts";
 import { dateType } from "../../lib/typebox-policy.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import type * as schema from "../schema.ts";
 import { type Source, sources } from "../schemas/sources.ts";
+import { userSources } from "../schemas/user-sources.ts";
 
 type SourceQueue = {
   add(
@@ -176,10 +177,24 @@ export class SourcesDataService {
     );
   }
 
-  public async findSourceById(sourceId: number): Promise<Source | undefined> {
+  // subscriberCount rides along because the only caller is the ParseSource
+  // job, which reports it to the origin in the User-Agent (see
+  // buildUserAgent in http-client). A correlated subquery keeps this a
+  // single round trip on the hot polling path rather than a second query
+  // per fetch.
+  public async findSourceById(
+    sourceId: number,
+  ): Promise<(Source & { subscriberCount: number }) | undefined> {
     return (
       await this.drizzleConnection
-        .select()
+        .select({
+          ...getTableColumns(sources),
+          subscriberCount: sql<number>`(
+            SELECT COUNT(*)::int
+            FROM ${userSources}
+            WHERE ${userSources.sourceId} = ${sources.id}
+          )`,
+        })
         .from(sources)
         .where(eq(sources.id, sourceId))
         .limit(1)

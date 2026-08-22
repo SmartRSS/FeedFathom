@@ -219,6 +219,7 @@ export class FeedParser {
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
+    subscriberCount?: number;
     trigger?: "manual" | "poll" | "websub-push";
     url: string;
     websubCallbackToken?: null | string;
@@ -233,7 +234,12 @@ export class FeedParser {
         feed: parsedFeed,
         freshUntil,
         websub,
-      } = await this.parseUrl(source.url, "background", source.skipCache);
+      } = await this.parseUrl(
+        source.url,
+        "background",
+        source.skipCache,
+        source.subscriberCount,
+      );
 
       if (websub && shouldAttemptWebSubSubscribe(source.websubStatus)) {
         await this.maybeSubscribeToWebSub(source.id, websub);
@@ -302,9 +308,17 @@ export class FeedParser {
     url: string,
     priority: "background" | "interactive" = "interactive",
     skipCache = false,
+    // Left undefined by discovery and preview callers -- see buildUserAgent.
+    subscribers?: number,
   ) {
     const resolvedUrl = await this.redirectMap.resolveUrl(url);
-    return this.parseGenericFeed(resolvedUrl, url, priority, skipCache);
+    return this.parseGenericFeed(
+      resolvedUrl,
+      url,
+      priority,
+      skipCache,
+      subscribers,
+    );
   }
 
   // Called directly from the subscribe route so discovery happens as part
@@ -509,11 +523,13 @@ export class FeedParser {
     originalUrl: string,
     priority: "background" | "interactive",
     skipCache = false,
+    subscribers?: number,
   ) {
     const response = await this.httpClient.get(fetchedUrl, {
       priority,
       responseType: "arrayBuffer",
       skipCache,
+      ...(subscribers === undefined ? {} : { subscribers }),
     });
     this.validateFeedResponse(response, fetchedUrl);
     const finalUrl = response.url || fetchedUrl;
