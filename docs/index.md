@@ -6,25 +6,43 @@ nav_order: 1
 
 # FeedFathom
 
-FeedFathom is an efficient RSS feed reader paired with an extension intended for use with both Firefox and Chromium-based browsers.
+FeedFathom is a self-hosted RSS and newsletter reader. It runs as a set of
+containers on a single host and is reached through a browser. Companion
+extensions for Firefox and Chromium add feed discovery and reader views.
 
-## Key Features
+## Quick start
 
-- **RSS Feed Management**: Efficiently manage and organize your RSS feeds
-- **Browser Extensions**: Support for both Firefox and Chromium-based browsers
-- **Newsletter Integration**: Unique newsletter addresses with inbound MIME delivery through Cloudflare Email Routing and the bundled Worker to `/api/mail`
-- **Background Updates**: Automated feed updates via background workers
-- **Activation Email**: Optional outbound Mailjet delivery for public-registration activation
+Docker with Compose v2.24 or newer is the only requirement. The images are
+published, so there is nothing to build and no registry to authenticate
+against.
 
-## Technology Stack
+```bash
+git clone https://github.com/SmartRSS/FeedFathom.git
+cd FeedFathom
+docker compose up -d
+```
 
-FeedFathom leverages modern technologies for optimal performance:
+Open `http://127.0.0.1:3456` and create the first account. The database
+schema is created and upgraded automatically on every start.
 
-- **Solid + Elysia**: For browser interfaces and server-side APIs
-- **Bun**: Fast JavaScript runtime for server operations
-- **Docker**: Self-hosted with a single Compose file; overlays cover development and release verification
-- **Background Workers**: For scheduled RSS feed updates
-- **Cloudflare Email Routing**: For inbound newsletter delivery to `/api/mail` when `MAIL_ENABLED` is enabled
+WARNING: Serve the instance over HTTPS. The session cookie carries the
+`Secure` attribute, so plain HTTP on a non-local address produces a login
+that appears to succeed and then fails silently.
 
-[Get Started](./running.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
+## What it does
+
+- **Feed management** — subscriptions organised into folders, updated by a
+  dedicated background worker.
+- **Browser extensions** — feed discovery on visited pages, plus Reader and
+  Reader plain modes, for Firefox and Chromium-based browsers.
+- **Newsletters** — per-user newsletter addresses, delivered through
+  Cloudflare Email Routing and the bundled Worker to `/api/mail`. Optional.
+- **Registration control** — closed by default, with optional Turnstile
+  protection and Mailjet activation email.
+
+## Built with
+
+Bun, Elysia, Solid, PostgreSQL, and Redis, packaged as Docker images.
+
+[Get started](./running.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
 [View on GitHub](https://github.com/SmartRSS/FeedFathom){: .btn .fs-5 .mb-4 .mb-md-0 }

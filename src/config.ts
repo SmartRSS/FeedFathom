@@ -99,6 +99,11 @@ const configSchema = Type.Object(
     MAILJET_API_KEY: Type.Optional(Type.String()),
     MAILJET_API_SECRET: Type.Optional(Type.String()),
     FEED_FATHOM_DOMAIN: Type.Optional(Type.String()),
+    // Commit this image was built from, baked in by the Dockerfile (see
+    // FEEDFATHOM_BUILD there) rather than supplied by the deployment, so
+    // it stays accurate even when the image was pulled through a moving
+    // tag. Optional: a local build has no commit to claim.
+    FEEDFATHOM_BUILD: Type.Optional(Type.String()),
     TURNSTILE_SITE_KEY: Type.Optional(Type.String()),
     TURNSTILE_SECRET_KEY: Type.Optional(Type.String()),
   },
