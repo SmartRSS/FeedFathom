@@ -48,6 +48,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 USER 65532:65532
 COPY --chown=65532:65532 package.json /app/
+# Baked in rather than passed at run time so the process can always name
+# the commit it was built from, even when it was pulled through a moving
+# tag: ":latest" tells you which channel you followed, never which build
+# you actually got. Empty for a local build, which has no commit to claim.
+ARG FEEDFATHOM_BUILD=""
+ENV FEEDFATHOM_BUILD=$FEEDFATHOM_BUILD
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Server Release ---
