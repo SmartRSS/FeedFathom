@@ -64,7 +64,7 @@ docker compose up -d
 
 Open `http://127.0.0.1:3456`. Create the first account immediately: the first account can always be created regardless of the registration setting, and once it exists, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
 
-Configure the deployment by putting variables in a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change.
+Configure the deployment by putting variables in a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change; `.env.example` carries the whole list, commented out.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -76,6 +76,30 @@ Configure the deployment by putting variables in a `.env` file next to `compose.
 | `ENABLE_REGISTRATION` | `false` | Whether accounts beyond the first may be created. |
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
+
+### Behind a reverse proxy
+
+WARNING: Serve the instance over HTTPS. The session cookie carries the `Secure` attribute, which browsers refuse to store on an insecure origin, so plain HTTP on a non-local address produces a login that appears to succeed and then fails silently on the next request. Browsers exempt `localhost` from this rule; bare IP addresses are not exempt.
+
+`FEEDFATHOM_PORT` accepts a full binding, so restrict the published port to loopback and terminate TLS in front of it:
+
+```bash
+FEEDFATHOM_PORT=127.0.0.1:3456
+```
+
+A complete Caddyfile, which obtains and renews a certificate on its own:
+
+```caddy
+feeds.example.com {
+	reverse_proxy 127.0.0.1:3456
+}
+```
+
+Any reverse proxy works. The requirements are TLS termination, forwarding to the published port, and passing the original `Host` header through. No path rewriting or WebSocket handling is needed.
+
+NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. That does not break the application, but a subscription's stored home link falls back to the upstream address instead of the public host name.
+
+`/healthcheck` answers the container health probes and returns 403 to outside callers, so it is not usable as a proxy health probe.
 
 The stack runs no SMTP server and does not expose port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`; `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
 
@@ -189,7 +213,7 @@ Keep `ENABLE_SWARM_DEPLOYMENT` disabled and complete these operator-owned steps 
 
 1. Back up PostgreSQL and Redis, then record the actual existing volume names from `docker volume ls`. Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to those exact names; do not infer them from the Compose keys and do not delete or recreate the volumes.
 2. Initialize this host as the single-node Swarm manager with `docker swarm init` if it is not already a manager.
-3. Configure the protected environment with `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `SERVER_HOST_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel. Add `DATABASE_URL` as a protected secret; its PostgreSQL role, password, host, and database must match the initialized volume. The stack initializes new volumes with `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, defaulting all three to `postgres`; for a nondefault installation, set the protected `POSTGRES_DB` variable and the `POSTGRES_USER` and `POSTGRES_PASSWORD` secrets to the same database and credentials embedded in `DATABASE_URL`. Changing these initialization values does not change a database or credentials in an existing volume. Add `MAIL_RELAY_SECRET` as a protected secret with exactly the same value as the Cloudflare Email Worker secret. `FEED_FATHOM_DOMAIN` is required application configuration for email identity and links regardless of how ingress is arranged. The deployment user must already be allowed to run Docker and pull the private GHCR images, and the host must provide a coreutils-compatible `timeout` with `-k` support.
+3. Configure the protected environment with `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `SERVER_HOST_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel. Add `DATABASE_URL` as a protected secret; its PostgreSQL role, password, host, and database must match the initialized volume. The stack initializes new volumes with `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, defaulting all three to `postgres`; for a nondefault installation, set the protected `POSTGRES_DB` variable and the `POSTGRES_USER` and `POSTGRES_PASSWORD` secrets to the same database and credentials embedded in `DATABASE_URL`. Changing these initialization values does not change a database or credentials in an existing volume. Add `MAIL_RELAY_SECRET` as a protected secret with exactly the same value as the Cloudflare Email Worker secret. `FEED_FATHOM_DOMAIN` is required application configuration for email identity and links regardless of how ingress is arranged. The deployment user must already be allowed to run Docker, and the host must provide a coreutils-compatible `timeout` with `-k` support.
 4. Stop the old Compose project without removing volumes. Bootstrap the stack with application and worker replicas set to zero, so Swarm creates the `${STACK_NAME}_backend` network and starts the existing PostgreSQL and Redis data:
 
    ```bash
