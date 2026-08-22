@@ -180,7 +180,7 @@ async function reserveWhenReady(
 // ponytail: delete once no database predating the squash remains.
 const preSquashFinalMigration = 1_786_570_692_742;
 
-async function adoptSquashedBaseline(
+export async function adoptSquashedBaseline(
   client: ReservedSQL,
   migrationsFolder: string,
 ) {

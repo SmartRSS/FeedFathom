@@ -3,7 +3,7 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import journal from "../drizzle/meta/_journal.json";
 import { waitForMigration } from "../src/db/connection.ts";
-import { migrateDatabase } from "../src/migrator.ts";
+import { adoptSquashedBaseline, migrateDatabase } from "../src/migrator.ts";
 
 const currentMigrationsFolder = fileURLToPath(
   new URL("../drizzle", import.meta.url),
@@ -187,8 +187,11 @@ test("adopts the baseline for a database that reached the final pre-squash migra
 });
 
 // The dangerous case: a database stopped somewhere in the middle of the old
-// history has neither the baseline's schema nor a claim to it, so it has to
-// fail rather than be marked as migrated.
+// history has neither the baseline's schema nor a claim to it, so it must not
+// be recorded as migrated. Asserted against the decision itself rather than by
+// running a migration that fails -- drizzle's transaction teardown floats an
+// unhandled rejection on that path, and the branch here is what is actually
+// in question.
 test("refuses to adopt the baseline for a partially migrated database", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -198,9 +201,12 @@ test("refuses to adopt the baseline for a partially migrated database", async ()
     await migrateDatabase(databaseUrl, currentMigrationsFolder);
     await forgeJournal(client, preSquashFinalMigration - 1);
 
-    await expect(
-      migrateDatabase(databaseUrl, currentMigrationsFolder),
-    ).rejects.toThrow();
+    const reserved = await client.reserve();
+    try {
+      await adoptSquashedBaseline(reserved, currentMigrationsFolder);
+    } finally {
+      reserved.release();
+    }
 
     const rows = await client<
       { createdAt: string }[]
