@@ -23,6 +23,10 @@ WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
 COPY bin/ /app/bin/
+# The server and worker gate startup on the newest migration this build was
+# compiled against, so the journal is bundled into every target, not just the
+# migrator's. It is inlined by `bun build`, so nothing reads it at runtime.
+COPY drizzle/meta/_journal.json /app/drizzle/meta/_journal.json
 COPY --from=installer /app/node_modules /app/node_modules
 
 # --- Server Builder ---

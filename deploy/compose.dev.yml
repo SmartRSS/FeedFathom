@@ -30,6 +30,9 @@ services:
     command: ["src/migrator.ts"]
     volumes:
       - ./src:/app/src:ro
+      # Every service resolves the journal import from disk here, rather
+      # than from a bundle as the release images do; the migrator also reads
+      # the migration files themselves at runtime.
       - ./drizzle:/app/drizzle:ro
 
   server:
@@ -45,9 +48,15 @@ services:
       MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-local-development-relay-secret}
     volumes:
       - ./src:/app/src:ro
+      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # rather than from a bundle as the release images do.
+      - ./drizzle:/app/drizzle:ro
 
   worker:
     <<: *dev-image
     command: ["--watch", "src/worker.ts"]
     volumes:
       - ./src:/app/src:ro
+      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # rather than from a bundle as the release images do.
+      - ./drizzle:/app/drizzle:ro
