@@ -8,7 +8,7 @@ import { isHttpDeferredError } from "#platform/http/http-client.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { requestHubSubscription } from "#features/feeds/websub.ts";
-import type { JobFailuresDataService } from "../../db/data-services/job-failure-data-service.ts";
+import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
 const sourceUrl = Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]);

@@ -15,7 +15,7 @@ import {
 import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
-} from "./routes/admin-options.ts";
+} from "#features/admin/routes.ts";
 import { createInternalRoutes } from "./routes/internal.ts";
 
 export type ServerDependencies = Omit<

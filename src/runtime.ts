@@ -13,7 +13,7 @@ import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { ArticlesDataService } from "#features/reader/article-data-service.ts";
 import { FoldersDataService } from "#features/reader/folder-data-service.ts";
 import { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
-import { JobFailuresDataService } from "./db/data-services/job-failure-data-service.ts";
+import { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 
 export async function createFeedRuntime() {
   const redis = new RedisClient("redis://redis:6379", {

@@ -18,18 +18,18 @@ import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,
-} from "./admin-options/admin-redirects.ts";
+} from "#features/admin/routes/admin-redirects.ts";
 import {
   deleteAdminHandler,
   getAdminHandler,
   postAdminHandler,
-} from "./admin-options/admin.ts";
+} from "#features/admin/routes/admin.ts";
 import {
   opmlRequest,
   postOptionsOpmlHandler,
-} from "./admin-options/options-opml.ts";
-import { postOptionsPasswordHandler } from "./admin-options/options-password.ts";
-import { getOptionsHandler } from "./admin-options/options.ts";
+} from "#features/admin/routes/options-opml.ts";
+import { postOptionsPasswordHandler } from "#features/admin/routes/options-password.ts";
+import { getOptionsHandler } from "#features/admin/routes/options.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
