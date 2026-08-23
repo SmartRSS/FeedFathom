@@ -85,6 +85,25 @@ imports are fine.
 `import/extensions: ["error", "always"]` applies to subpath imports too:
 specifiers keep their `.ts` suffix.
 
+## Extracting logic
+
+Decision logic lives in a dependency-free module beside whatever uses it, with
+a co-located test. Classes and components keep I/O, storage and rendering. A
+verdict, an interval, a transition or a selection is a candidate as soon as
+answering it requires a database, a Redis, a browser or a network — that
+requirement is the bug, not the size of the file holding it.
+
+The criterion is testability, not line count. A long file whose decisions are
+all extracted is finished; splitting it further buys a smaller file and nothing
+else. Two clusters were deliberately left in place on exactly that basis: the
+WebSub lifecycle methods on the sources data service, and the cache read/write
+half of the HTTP client. Both are pure I/O with the decisions already lifted
+out, so moving them would cost a rewiring across their callers and gain no test.
+
+Extracted SPA logic goes in one behaviour module per view — `behavior.ts` keeps
+only genuinely cross-view concerns. A single shared module would become the new
+large file and would change for several unrelated reasons.
+
 ## Tests
 
 Unit tests are co-located: `foo.test.ts` sits next to `foo.ts`.
@@ -97,6 +116,12 @@ fast-xml-parser shim, `bin/generate-packages.ts` and `tools/oxlint-plugin.js`.
 A test that asserts on a module's file path, its directory, or which file an
 export comes from is testing structure rather than behaviour. Delete the
 assertion.
+
+There is no component test harness. No test imports a `.tsx`: `bun test`
+resolves `.tsx` against React's JSX runtime rather than the configured
+`solid-js` one, and the SPA's `.svg?raw` imports are a Vite feature the test
+runner cannot resolve. Component behaviour is covered by the Playwright specs;
+anything that needs a unit test has to come out of the component first.
 
 ## Glossary
 
