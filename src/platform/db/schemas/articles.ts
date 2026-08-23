@@ -10,7 +10,7 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
-import { sources } from "./sources.ts";
+import { sources } from "#platform/db/schemas/sources.ts";
 
 export const articles = pgTable(
   "articles",

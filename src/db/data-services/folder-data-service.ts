@@ -1,8 +1,8 @@
 import { and, eq, notExists } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type * as schema from "../schema.ts";
-import { userFolders } from "../schemas/user-folders.ts";
-import { userSources } from "../schemas/user-sources.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { userFolders } from "#platform/db/schemas/user-folders.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
 
 export class FoldersDataService {
   constructor(

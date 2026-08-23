@@ -1,5 +1,5 @@
 {
-  "schema": "./src/db/schema.ts",
+  "schema": "./src/platform/db/schema.ts",
   "out": "./drizzle",
   "dialect": "postgresql",
   "dbCredentials": {

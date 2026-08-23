@@ -1,8 +1,8 @@
 import { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import type { AppConfig } from "#platform/config.ts";
-import journal from "../../drizzle/meta/_journal.json";
-import * as schema from "./schema.ts";
+import * as schema from "#platform/db/schema.ts";
+import journal from "../../../drizzle/meta/_journal.json";
 
 export function createDrizzleConnection(
   databaseUrl: AppConfig["DATABASE_URL"],

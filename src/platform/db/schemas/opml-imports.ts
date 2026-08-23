@@ -5,7 +5,7 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
-import { users } from "./users.ts";
+import { users } from "#platform/db/schemas/users.ts";
 
 export const opmlImports = pgTable(
   "opml_imports",

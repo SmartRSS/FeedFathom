@@ -1,6 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type * as schema from "../schema.ts";
-import { jobFailures } from "../schemas/job-failures.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { jobFailures } from "#platform/db/schemas/job-failures.ts";
 
 export class JobFailuresDataService {
   constructor(

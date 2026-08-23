@@ -1,9 +1,9 @@
 import { config } from "#platform/config.ts";
+import { waitForMigration } from "#platform/db/connection.ts";
 import { EmailHandler } from "./lib/email/email-handler.ts";
 import { MailSender } from "./lib/email/mail-sender.ts";
 import { FeedPreviewCache } from "./lib/feed-preview-cache.ts";
 import { OpmlParser } from "./lib/opml-parser.ts";
-import { waitForMigration } from "./db/connection.ts";
 import { createFeedRuntime } from "./runtime.ts";
 import { createServerApp } from "./server-app.ts";
 

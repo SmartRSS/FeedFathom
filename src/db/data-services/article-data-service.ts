@@ -4,14 +4,14 @@ import {
   generateBoundaryDates,
   getDateGroup,
 } from "#shared/util/get-date-group.ts";
-import { userSources } from "../schema.ts";
-import type * as schema from "../schema.ts";
+import { userSources } from "#platform/db/schema.ts";
+import type * as schema from "#platform/db/schema.ts";
 import {
   type Article,
   type ArticleInsert,
   articles,
-} from "../schemas/articles.ts";
-import { userArticles } from "../schemas/user-articles.ts";
+} from "#platform/db/schemas/articles.ts";
+import { userArticles } from "#platform/db/schemas/user-articles.ts";
 
 function userArticleAccessJoin(userId: number) {
   return and(

@@ -9,12 +9,12 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type * as schema from "./schema.ts";
-import { articles } from "./schemas/articles.ts";
-import { sources } from "./schemas/sources.ts";
-import { userArticles } from "./schemas/user-articles.ts";
-import { userSources } from "./schemas/user-sources.ts";
-import { users } from "./schemas/users.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { articles } from "#platform/db/schemas/articles.ts";
+import { sources } from "#platform/db/schemas/sources.ts";
+import { userArticles } from "#platform/db/schemas/user-articles.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
+import { users } from "#platform/db/schemas/users.ts";
 
 // A source's last_success is stamped strictly after its articles' upsert
 // (see FeedParser.parseSource), so last_seen_in_feed_at < last_success is

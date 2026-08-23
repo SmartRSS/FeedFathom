@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type * as schema from "../schema.ts";
-import { sessions } from "../schemas/sessions.ts";
-import { users } from "../schemas/users.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { sessions } from "#platform/db/schemas/sessions.ts";
+import { users } from "#platform/db/schemas/users.ts";
 
 export class UsersDataService {
   constructor(

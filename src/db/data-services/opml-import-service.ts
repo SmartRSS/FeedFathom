@@ -1,11 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "#shared/types/opml-types.ts";
-import type * as schema from "../schema.ts";
-import { opmlImports } from "../schemas/opml-imports.ts";
-import { type Source, sources } from "../schemas/sources.ts";
-import { userFolders } from "../schemas/user-folders.ts";
-import { userSources } from "../schemas/user-sources.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
+import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import { userFolders } from "#platform/db/schemas/user-folders.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { SourcesDataService } from "./source-data-service.ts";
 
 type PendingImportNode = {

@@ -3,7 +3,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "#platform/config.ts";
-import { createDrizzleConnection } from "./db/connection.ts";
+import { createDrizzleConnection } from "#platform/db/connection.ts";
 
 type PendingIndex = { create: string; name: string; table: string };
 

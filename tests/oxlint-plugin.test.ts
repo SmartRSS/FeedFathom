@@ -19,7 +19,10 @@ const config = {
   jsPlugins: [pluginPath],
   rules: {
     "feedfathom/import-grouping": "error",
-    "feedfathom/no-barrel-file": ["error", { allow: ["src/db/schema.ts"] }],
+    "feedfathom/no-barrel-file": [
+      "error",
+      { allow: ["src/platform/db/schema.ts"] },
+    ],
     "feedfathom/route-deps-narrowed": "error",
     "feedfathom/schema-compile-module-scope": "error",
   },
@@ -181,10 +184,10 @@ test("no-barrel-file honours the allow list", async () => {
     await lint("schema.ts", 'import { a } from "./a.ts";\nexport { a };'),
   ).toHaveLength(1);
   // Identical shape at the exempted path is allowed.
-  const file = join("src", "db", "schema.ts");
+  const file = join("src", "platform", "db", "schema.ts");
   await Bun.write(
     join(directory, file),
-    'import { a } from "../../a.ts";\nexport { a };',
+    'import { a } from "../../../a.ts";\nexport { a };',
   );
   expect(lintFile(file)).toEqual([]);
 });

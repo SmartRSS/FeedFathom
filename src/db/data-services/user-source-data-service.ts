@@ -1,8 +1,8 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type * as schema from "../schema.ts";
-import { type Source, sources } from "../schemas/sources.ts";
-import { userSources } from "../schemas/user-sources.ts";
+import type * as schema from "#platform/db/schema.ts";
+import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { FoldersDataService } from "./folder-data-service.ts";
 import type { SourcesDataService } from "./source-data-service.ts";
 

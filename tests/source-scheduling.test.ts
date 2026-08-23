@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createDrizzleConnection } from "../src/db/connection.ts";
+import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { SourcesDataService } from "../src/db/data-services/source-data-service.ts";
 import { migrateDatabase } from "../src/migrator.ts";
 

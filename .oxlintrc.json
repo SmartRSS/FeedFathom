@@ -73,11 +73,14 @@
     "object-shorthand": "error",
     "operator-assignment": "error",
     "feedfathom/import-grouping": "error",
-    // src/db/schema.ts is drizzle-kit's schema entry point
+    // src/platform/db/schema.ts is drizzle-kit's schema entry point
     // (drizzle/config.json). It is a barrel by necessity, not convenience:
     // drizzle-kit discovers tables through it, and with it gone `generate`
     // sees 0 tables and emits DROP TABLE for every one of them.
-    "feedfathom/no-barrel-file": ["error", { "allow": ["src/db/schema.ts"] }],
+    "feedfathom/no-barrel-file": [
+      "error",
+      { "allow": ["src/platform/db/schema.ts"] }
+    ],
     "feedfathom/route-deps-narrowed": "error",
     "feedfathom/schema-compile-module-scope": "error",
     // oxc/no-barrel-file only counts `export * from` (default threshold 100),
@@ -157,8 +160,8 @@
       // by the comments that explain how they interact. Alphabetising either
       // scatters the grouping that carries the meaning.
       "files": [
-        "src/db/schemas/**",
-        "src/db/schema.ts",
+        "src/platform/db/schemas/**",
+        "src/platform/db/schema.ts",
         "src/platform/config.ts"
       ],
       "rules": { "sort-keys": "off" }

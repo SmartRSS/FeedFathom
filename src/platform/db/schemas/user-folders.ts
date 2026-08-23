@@ -5,7 +5,7 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
-import { users } from "./users.ts";
+import { users } from "#platform/db/schemas/users.ts";
 
 export const userFolders = pgTable("user_folders", {
   createdAt: timestamp("created_at", { withTimezone: true })
