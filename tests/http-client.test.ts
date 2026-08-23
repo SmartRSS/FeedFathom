@@ -8,7 +8,7 @@ import {
   type NativeHttpTransport,
 } from "../src/lib/http-native-transport.ts";
 
-const maximumBodyBytes = 5 * 1024 * 1024;
+const maximumBodyBytes = 24 * 1024 * 1024;
 
 const redis = () => {
   const values = new Map<string, string>();
@@ -423,7 +423,7 @@ test("enforces one deadline through the streamed body and cancels it", async () 
   expect(destroyed).toBe(1);
 });
 
-test("accepts exactly 5 MiB and rejects one decoded byte over", async () => {
+test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
   const exact = Buffer.alloc(maximumBodyBytes, 65);
   const exactClient = new HttpClient(redis(), {
     transport: queuedTransport([
@@ -451,7 +451,7 @@ test("accepts exactly 5 MiB and rejects one decoded byte over", async () => {
     ]),
   });
   await expect(overClient.get("https://1.1.1.1/over")).rejects.toThrow(
-    "exceeds 5 MiB",
+    "exceeds 24 MiB",
   );
   expect(destroyed).toBe(1);
 });
