@@ -576,6 +576,118 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   expect(findRetryAfter).toBeLessThanOrEqual(300);
 });
 
+// The discovery fan-out reads only `websub` off a parse, but the real
+// parseUrl signature returns the whole parsed feed, so a double has to supply
+// it. That asymmetry is the case for giving discovery its own dependency.
+type ParsedFeed = Awaited<
+  ReturnType<ServerDependencies["feedParser"]["parseUrl"]>
+>;
+
+function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
+  return {
+    cached: false,
+    feed: { description: null, items: [], title: null, url },
+    finalUrl: url,
+    freshUntil: null,
+    websub: hubUrl === undefined ? undefined : { hubUrl, topicUrl: url },
+  };
+}
+
+// The fan-out below is about to move out of the route into a named service.
+// Its contract has never been asserted, only its auth and its failure modes.
+test("find marks each candidate with whether it advertises a WebSub hub", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => ({
+    data: `<html><head>
+      <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
+      <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
+    </head></html>`,
+  });
+  dependencies.feedParser.parseUrl = async (url: string) =>
+    parsedFeed(url, url.includes("push") ? "https://hub.example/" : undefined);
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      {
+        headers: { cookie: "sid=test" },
+      },
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual([
+    { title: "Push", url: "https://site.example/push.xml", websub: true },
+    { title: "Plain", url: "https://site.example/plain.xml", websub: false },
+  ]);
+});
+
+// A dead candidate is worth showing: the user finds out when they preview it,
+// and dropping it silently would make the page look like the feed never
+// existed.
+test("find keeps a candidate whose parse throws, merely unmarked", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => ({
+    data: `<html><head>
+      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
+      <link rel="alternate" type="application/rss+xml" title="Live" href="https://site.example/live.xml">
+    </head></html>`,
+  });
+  dependencies.feedParser.parseUrl = async (url: string) => {
+    if (url.includes("dead")) throw new Error("404");
+    return parsedFeed(url, "https://hub.example/");
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      {
+        headers: { cookie: "sid=test" },
+      },
+    ),
+  );
+
+  expect(await response.json()).toEqual([
+    { title: "Dead", url: "https://site.example/dead.xml", websub: false },
+    { title: "Live", url: "https://site.example/live.xml", websub: true },
+  ]);
+});
+
+// scanHtml never returns an empty list -- it appends an OpenRSS suggestion
+// when a page advertises nothing -- so a page with no feeds still produces one
+// candidate, and find's own `if (!feeds.length)` 400 is unreachable today.
+test("find falls back to an OpenRSS suggestion for a page with no feeds", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => ({
+    data: "<html><head></head><body>nothing here</body></html>",
+  });
+  dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      {
+        headers: { cookie: "sid=test" },
+      },
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual([
+    {
+      title: "Attempt to use OpenRSS",
+      url: "https://openrss.org/site.example/",
+      websub: false,
+    },
+  ]);
+});
+
 // The deferred mapping is about to move from these handlers into the central
 // error hook in server-app.ts. What must not move with it is find's fallback:
 // it turns any other failure to fetch a user-supplied URL into a 400, and
