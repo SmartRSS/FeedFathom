@@ -1,6 +1,4 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import type { DashboardPane } from "./behavior.ts";
-import { api } from "./api.ts";
 import {
   foldersResponse,
   foundFeedsResponse,
@@ -10,9 +8,18 @@ import {
   type Folder,
   type FoundFeed,
   type PreviewArticle,
-} from "../contracts/responses.ts";
+} from "#shared/contracts/responses.ts";
+import type { DashboardPane } from "./behavior.ts";
+import { api } from "./api.ts";
+import { createSupersessionGuard } from "./supersession.ts";
+import {
+  clickSelectsArticle,
+  initialPreviewSelection,
+  websiteValidationMessage,
+  withScheme,
+} from "./discovery-behavior.ts";
 import { Icon } from "./icon.tsx";
-import backRaw from "../lib/images/icons/Arrows/arrow-left-fill.svg?raw";
+import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {
   return (
@@ -20,15 +27,6 @@ export function BackButton(props: { backPane(): void }) {
       <Icon raw={backRaw} />
     </button>
   );
-}
-
-const schemePattern = /^[a-z][a-z0-9+.-]*:\/\//iu;
-
-function withScheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || schemePattern.test(trimmed) || trimmed.includes("@"))
-    return trimmed;
-  return `https://${trimmed}`;
 }
 
 export function FeedDiscovery(props: {
@@ -73,12 +71,12 @@ export function FeedDiscovery(props: {
     const index = selectedIndex();
     return index === undefined ? undefined : articles()[index];
   };
-  let latestRequest = 0;
+  const requests = createSupersessionGuard();
   let disposed = false;
   let websiteInput!: HTMLInputElement;
   onCleanup(() => {
     disposed = true;
-    latestRequest++;
+    requests.start();
   });
 
   onMount(() => {
@@ -119,16 +117,7 @@ export function FeedDiscovery(props: {
 
   function websiteIsValid() {
     if (!websiteInput) return false;
-    try {
-      const protocol = new URL(withScheme(link())).protocol;
-      websiteInput.setCustomValidity(
-        protocol === "http:" || protocol === "https:"
-          ? ""
-          : "Enter an HTTP or HTTPS URL.",
-      );
-    } catch {
-      websiteInput.setCustomValidity("Enter an HTTP or HTTPS URL.");
-    }
+    websiteInput.setCustomValidity(websiteValidationMessage(link()));
     return websiteInput.reportValidity();
   }
 
@@ -136,7 +125,7 @@ export function FeedDiscovery(props: {
     const normalizedLink = withScheme(link());
     if (normalizedLink !== link()) setLink(normalizedLink);
     if (!websiteIsValid()) return;
-    const request = ++latestRequest;
+    const request = requests.start();
     setLoading(true);
     setProgress("Finding feeds…");
     try {
@@ -144,13 +133,13 @@ export function FeedDiscovery(props: {
         `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
       );
-      if (request !== latestRequest) return;
+      if (!requests.isCurrent(request)) return;
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (request === latestRequest) reportError(cause, "No feeds found");
+      if (requests.isCurrent(request)) reportError(cause, "No feeds found");
     } finally {
-      if (request === latestRequest) {
+      if (requests.isCurrent(request)) {
         setLoading(false);
         setProgress("");
       }
@@ -158,7 +147,7 @@ export function FeedDiscovery(props: {
   }
 
   async function preview(url = feedUrl()) {
-    const request = ++latestRequest;
+    const request = requests.start();
     setLoading(true);
     setProgress("Loading preview…");
     setArticles([]);
@@ -169,19 +158,19 @@ export function FeedDiscovery(props: {
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
       );
-      if (request !== latestRequest) return;
+      if (!requests.isCurrent(request)) return;
       setFeedUrl(result.feedUrl);
       setLink(result.link ?? "");
       setTitle(result.title);
       setArticles(result.articles);
-      setSelectedIndex(result.articles.length ? 0 : undefined);
+      setSelectedIndex(initialPreviewSelection(result.articles.length));
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (request === latestRequest) reportError(cause, "Preview failed");
+      if (requests.isCurrent(request)) reportError(cause, "Preview failed");
     } finally {
-      if (request === latestRequest) {
+      if (requests.isCurrent(request)) {
         setLoading(false);
         setProgress("");
       }
@@ -189,8 +178,7 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-      return;
+    if (!clickSelectsArticle(event)) return;
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");

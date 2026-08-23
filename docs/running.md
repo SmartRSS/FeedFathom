@@ -35,7 +35,7 @@ The three overlays are alternatives and are never combined with one another.
 
 That last constraint is the interesting one, because startup ordering had been carrying real weight. It is now handled in the application instead, which is a better place for it: correctness no longer depends on which orchestrator is running the containers.
 
-Every build bundles `drizzle/meta/_journal.json`, so each binary knows the timestamp of the newest migration it was compiled against. The migrator records that same timestamp in `drizzle.__drizzle_migrations` when it applies the migration, in the same transaction — so `waitForMigration` in `src/db/connection.ts` can ask an exact question at startup: *is the schema at the version I was built for?* It stays false midway through an upgrade, which probing for a table's existence would not, and it stays true against a database carrying migrations this build has never heard of, which is what running an older image looks like.
+Every build bundles `drizzle/meta/_journal.json`, so each binary knows the timestamp of the newest migration it was compiled against. The migrator records that same timestamp in `drizzle.__drizzle_migrations` when it applies the migration, in the same transaction — so `waitForMigration` in `src/platform/db/connection.ts` can ask an exact question at startup: *is the schema at the version I was built for?* It stays false midway through an upgrade, which probing for a table's existence would not, and it stays true against a database carrying migrations this build has never heard of, which is what running an older image looks like.
 
 Three pieces use it:
 

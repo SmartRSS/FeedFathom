@@ -14,7 +14,7 @@
 // rather than silently behave differently.
 //
 // Our own code does not go through this shim; it calls Bun.XML via
-// src/lib/xml.ts, which uses the simpler compact shape.
+// src/platform/xml.ts, which uses the simpler compact shape.
 
 const TEXT = "#text";
 const ATTRS = ":@";

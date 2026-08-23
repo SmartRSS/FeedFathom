@@ -1,22 +1,28 @@
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
 import {
-  type AdminOptionsRouteDependencies,
-  createAdminOptionsRoutes,
-} from "./routes/admin-options.ts";
-import { createInternalRoutes } from "./routes/internal.ts";
-import {
   createPublicAuthRoutes,
   type PublicAuthRouteDependencies,
-} from "./routes/public-auth.ts";
-import {
-  createReaderRoutes,
-  type ReaderRouteDependencies,
-} from "./routes/reader.ts";
+} from "#features/auth/routes.ts";
 import {
   createWebSubRoutes,
   type WebSubRouteDependencies,
-} from "./routes/websub.ts";
+} from "#features/feeds/routes/websub.ts";
+import {
+  createReaderRoutes,
+  type ReaderRouteDependencies,
+} from "#features/reader/routes.ts";
+import {
+  type AdminOptionsRouteDependencies,
+  createAdminOptionsRoutes,
+} from "#features/admin/routes.ts";
+import {
+  createMailRoute,
+  type MailRouteDependencies,
+} from "#features/mail-ingest/routes/mail.ts";
+import { createInternalRoutes } from "#platform/http/internal-routes.ts";
+import { deferredResponse } from "#platform/http/deferred-response.ts";
+import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,
@@ -24,7 +30,8 @@ export type ServerDependencies = Omit<
 > &
   ReaderRouteDependencies &
   AdminOptionsRouteDependencies &
-  WebSubRouteDependencies;
+  WebSubRouteDependencies &
+  MailRouteDependencies;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -75,6 +82,7 @@ export async function createServerApp(
     .use(createReaderRoutes(dependencies))
     .use(createAdminOptionsRoutes(dependencies))
     .use(createWebSubRoutes(dependencies))
+    .use(createMailRoute(dependencies))
     .use(spaRoutes)
     .error(({ error, request }) => {
       const path = new URL(request.url).pathname;
@@ -97,6 +105,12 @@ export async function createServerApp(
           { error: error.message || "Invalid request." },
           { status: 422 },
         );
+      }
+      // Deferral is not a failure: the origin is rate limited, or this
+      // instance's own politeness interval for the host has not elapsed. The
+      // client is meant to come back, and deferredResponse says when.
+      if (isHttpDeferredError(error)) {
+        return deferredResponse(error);
       }
       if (error instanceof DecodeError) {
         console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));

@@ -145,7 +145,7 @@
       "id": "CE-11",
       "title": "Turnstile keys can be configured independently",
       "status": "verified",
-      "scope": ["src/config.ts"],
+      "scope": ["src/platform/config.ts"],
       "acceptanceCriteria": [
         "Configuration accepts both Turnstile keys or neither and rejects blank or one-sided values"
       ],
@@ -169,7 +169,10 @@
       "id": "CE-13",
       "title": "Response contracts accept arbitrary date strings",
       "status": "verified",
-      "scope": ["src/lib/typebox-policy.ts", "src/contracts/responses.ts"],
+      "scope": [
+        "src/shared/validation/typebox-policy.ts",
+        "src/shared/contracts/responses.ts"
+      ],
       "acceptanceCriteria": [
         "Response contracts reject invalid and noncanonical JSON date strings"
       ],
@@ -182,8 +185,8 @@
       "title": "Large folders create oversized article query URLs",
       "status": "verified",
       "scope": [
-        "src/contracts/requests.ts",
-        "src/routes/reader.ts",
+        "src/shared/contracts/requests.ts",
+        "src/features/reader/routes.ts",
         "src/spa/dashboard.tsx"
       ],
       "acceptanceCriteria": [
@@ -199,8 +202,8 @@
       "title": "Session lifecycle lacks logout and account UI",
       "status": "verified",
       "scope": [
-        "src/db/data-services/user-data-service.ts",
-        "src/routes/public-auth.ts",
+        "src/features/auth/user-data-service.ts",
+        "src/features/auth/routes.ts",
         "src/spa/options-admin.tsx"
       ],
       "acceptanceCriteria": [

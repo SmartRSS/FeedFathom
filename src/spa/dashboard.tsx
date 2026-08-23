@@ -7,14 +7,6 @@ import {
   Show,
 } from "solid-js";
 import {
-  removalOutcome,
-  soleSelectedIndex,
-  transitionArticleSelection,
-  type DashboardPane,
-} from "./behavior.ts";
-import { createSupersessionGuard } from "./supersession.ts";
-import { api } from "./api.ts";
-import {
   articleResponse,
   articlesResponse,
   folderResponse,
@@ -24,8 +16,24 @@ import {
   type Article,
   type ArticleSummary,
   type TreeNode,
-} from "../contracts/responses.ts";
-import { safeArticleUrl } from "../lib/feed-mapper.ts";
+} from "#shared/contracts/responses.ts";
+import { safeArticleUrl } from "#shared/util/safe-url.ts";
+import {
+  faviconUrls,
+  findNode,
+  findParentFolderUid,
+  sourceIds,
+  treeNodeKey,
+  withDecrementedUnread,
+} from "./dashboard-behavior.ts";
+import {
+  removalOutcome,
+  soleSelectedIndex,
+  transitionArticleSelection,
+  type DashboardPane,
+} from "./behavior.ts";
+import { createSupersessionGuard } from "./supersession.ts";
+import { api } from "./api.ts";
 import {
   createExtensionReaderBridge,
   extractReaderContent,
@@ -35,6 +43,7 @@ import {
 } from "./extension-reader.ts";
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
+import { TreeItem } from "./tree-item.tsx";
 import { resolvedTheme } from "./preferences.ts";
 // Inlined as raw markup (not <img src>) rather than a plain image import:
 // every icon in this set is fill/stroke="currentColor" by design, so a
@@ -44,17 +53,12 @@ import { resolvedTheme } from "./preferences.ts";
 // background light or dark" guessing -- currentColor only resolves that
 // way when the SVG is actually in the page's DOM, not loaded as an
 // external image resource.
-import addFolderRaw from "../lib/images/icons/Document/folder-add-fill.svg?raw";
-import addRaw from "../lib/images/icons/System/add-box-fill.svg?raw";
-import settingsRaw from "../lib/images/icons/System/settings-5-fill.svg?raw";
-import detailsRaw from "../lib/images/icons/System/information-fill.svg?raw";
-import removeRaw from "../lib/images/icons/System/delete-bin-7-fill.svg?raw";
-import selectAllRaw from "../lib/images/icons/System/check-double-fill.svg?raw";
-import feedRaw from "../lib/images/icons/System/rss-fill.svg?raw";
-import arrowDownRaw from "../lib/images/icons/Arrows/chevron-down-fill.svg?raw";
-import arrowRightRaw from "../lib/images/icons/Arrows/chevron-right-fill.svg?raw";
-import folderRaw from "../lib/images/icons/Document/folder-fill.svg?raw";
-import folderOpenedRaw from "../lib/images/icons/Document/folder-open-fill.svg?raw";
+import addFolderRaw from "./assets/icons/Document/folder-add-fill.svg?raw";
+import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
+import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
+import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
+import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
+import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
@@ -62,24 +66,6 @@ function ReaderBody(props: { content: ReaderContent }) {
   ) : (
     <div class="reader-plain">{props.content.content}</div>
   );
-}
-
-function treeNodeKey(node: TreeNode): string {
-  return `${node.type}:${node.uid}`;
-}
-
-function sourceIds(node: TreeNode): number[] {
-  return node.type === "source"
-    ? [Number(node.uid)]
-    : (node.children ?? []).flatMap(sourceIds);
-}
-
-function faviconUrls(node: TreeNode): string[] {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(faviconUrls);
 }
 
 // Only used for the very first tree render (see onMount): keeps the tree
@@ -119,220 +105,6 @@ const ARTICLE_SKELETON_TITLES = [
   "A Somewhat Longer Article Title About Something",
   "Another Example Headline",
 ];
-
-function withDecrementedUnread(
-  nodes: TreeNode[],
-  deltas: Map<string, number>,
-): TreeNode[] {
-  let changed = false;
-  const next = nodes.map((node) => {
-    if (node.type === "folder") {
-      const children = withDecrementedUnread(node.children, deltas);
-      if (children === node.children) return node;
-      changed = true;
-      return { ...node, children };
-    }
-    const delta = deltas.get(node.uid);
-    if (!delta) return node;
-    changed = true;
-    return { ...node, unreadCount: Math.max(0, node.unreadCount - delta) };
-  });
-  return changed ? next : nodes;
-}
-
-function findNode(
-  nodes: TreeNode[],
-  type: TreeNode["type"],
-  uid: string,
-): TreeNode | undefined {
-  const queue = [...nodes];
-  for (const node of queue) {
-    if (node.type === type && node.uid === uid) return node;
-    if (node.type === "folder") queue.push(...node.children);
-  }
-  return undefined;
-}
-
-// Folders are flat (one level, no nesting), so a source's containing
-// folder is always a direct child lookup, never a deeper search.
-function findParentFolderUid(
-  nodes: TreeNode[],
-  sourceUid: string,
-): string | undefined {
-  for (const node of nodes) {
-    if (
-      node.type === "folder" &&
-      node.children.some(
-        (child) => child.type === "source" && child.uid === sourceUid,
-      )
-    )
-      return node.uid;
-  }
-  return undefined;
-}
-
-function unreadCount(node: TreeNode): number {
-  return node.type === "source"
-    ? (node.unreadCount ?? 0)
-    : (node.children ?? []).reduce(
-        (count, child) => count + unreadCount(child),
-        0,
-      );
-}
-
-function storedFolderOpen(uid: string) {
-  try {
-    return localStorage.getItem(`folder:${uid}`) !== "closed";
-  } catch {
-    return true;
-  }
-}
-
-function storeFolderOpen(uid: string, open: boolean) {
-  try {
-    localStorage.setItem(`folder:${uid}`, open ? "open" : "closed");
-  } catch {}
-}
-
-// Reads visible row order straight from the DOM instead of tracking it in
-// state -- closed folders' children simply aren't rendered, so a plain
-// query already reflects exactly what's visible, with no separate
-// flattened-tree bookkeeping to keep in sync with each TreeItem's own
-// open/closed signal.
-function moveTreeFocus(current: HTMLElement, offset: number) {
-  const items = [
-    ...document.querySelectorAll<HTMLElement>(".sources-pane .source"),
-  ];
-  const index = items.indexOf(current);
-  if (index === -1) return;
-  const next = items[(index + offset + items.length) % items.length];
-  next?.focus();
-  next?.scrollIntoView({ block: "nearest" });
-}
-
-function TreeItem(props: {
-  focused: boolean;
-  focusedKey: string | undefined;
-  node: TreeNode;
-  onFocus(node: TreeNode): void;
-  select(node: TreeNode): void;
-  selected: TreeNode | undefined;
-}) {
-  const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
-  const [faviconLoaded, setFaviconLoaded] = createSignal(false);
-  const [faviconFailed, setFaviconFailed] = createSignal(false);
-  const isFolder = () => props.node.type === "folder";
-  const children = () =>
-    props.node.type === "folder" ? props.node.children : [];
-  const unread = () => unreadCount(props.node);
-  const favicon = () =>
-    props.node.type === "source" ? props.node.favicon : null;
-  function toggle() {
-    const next = !open();
-    setOpen(next);
-    storeFolderOpen(props.node.uid, next);
-  }
-  function openFolder() {
-    if (!open()) toggle();
-  }
-  function closeFolder() {
-    if (open()) toggle();
-  }
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      if (event.currentTarget instanceof HTMLElement)
-        moveTreeFocus(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
-    } else if (event.key === " " && isFolder()) {
-      event.preventDefault();
-      toggle();
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      // Can't open further (it's a source, or an already-open folder) ->
-      // fall back to the same action Enter takes: load its articles.
-      if (isFolder() && !open()) openFolder();
-      else props.select(props.node);
-    } else if (event.key === "ArrowLeft" && isFolder()) {
-      event.preventDefault();
-      closeFolder();
-    }
-  }
-  return (
-    <li role="none">
-      <button
-        aria-expanded={isFolder() ? open() : undefined}
-        aria-selected={props.selected === props.node}
-        class="source"
-        classList={{
-          folder: isFolder(),
-          selected: props.selected === props.node,
-          unread: unread() > 0,
-        }}
-        data-tree-key={treeNodeKey(props.node)}
-        onClick={() => props.select(props.node)}
-        onKeyDown={handleKeyDown}
-        role="treeitem"
-        tabIndex={props.focused ? 0 : -1}
-        onFocus={() => props.onFocus(props.node)}
-      >
-        <Show
-          when={isFolder()}
-          fallback={
-            <Show
-              when={favicon() && !faviconFailed()}
-              fallback={<Icon class="node-icon" raw={feedRaw} />}
-            >
-              <img
-                alt=""
-                class="node-icon"
-                classList={{ "skeleton-row": !faviconLoaded() }}
-                src={favicon()!}
-                onLoad={() => setFaviconLoaded(true)}
-                onError={() => {
-                  setFaviconLoaded(true);
-                  setFaviconFailed(true);
-                }}
-              />
-            </Show>
-          }
-        >
-          <span
-            aria-hidden="true"
-            class="chevron"
-            innerHTML={open() ? arrowDownRaw : arrowRightRaw}
-            onClick={(event) => {
-              event.stopPropagation();
-              toggle();
-            }}
-          />
-          <span
-            aria-hidden="true"
-            class="node-icon"
-            innerHTML={open() ? folderOpenedRaw : folderRaw}
-          />
-        </Show>
-        <span>{props.node.name}</span>
-        <Show when={unread()}>{(count) => <em>{count()}</em>}</Show>
-      </button>
-      <Show when={isFolder() && open()}>
-        <ul class="tree nested" role="group">
-          <For each={children()}>
-            {(child) => (
-              <TreeItem
-                focused={props.focusedKey === treeNodeKey(child)}
-                focusedKey={props.focusedKey}
-                node={child}
-                onFocus={props.onFocus}
-                select={props.select}
-                selected={props.selected}
-              />
-            )}
-          </For>
-        </ul>
-      </Show>
-    </li>
-  );
-}
 
 export function Dashboard(props: {
   backPane(): void;

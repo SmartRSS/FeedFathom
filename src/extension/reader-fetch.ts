@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { isBlockedHostname } from "../lib/private-network-guard.ts";
+import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 import {
   readerBridgeChannel,
   readerBridgeVersion,
@@ -8,7 +8,7 @@ import {
   type ReaderErrorCode,
   type ReaderRequest,
   type ReaderResponse,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
 const maximumBytes = 5 * 1024 * 1024;

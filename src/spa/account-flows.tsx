@@ -6,15 +6,15 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import type { Turnstile } from "../types/turnstile.d.ts";
-import { api } from "./api.ts";
-import { loginPath, registerPath } from "./behavior.ts";
 import {
   loginResponse,
   registrationResponse,
   successResponse,
   type Registration,
-} from "../contracts/responses.ts";
+} from "#shared/contracts/responses.ts";
+import type { Turnstile } from "./turnstile.d.ts";
+import { api } from "./api.ts";
+import { loginPath, registerPath } from "./behavior.ts";
 
 export function Login(props: { navigate(to: string): void; next: string }) {
   const [email, setEmail] = createSignal("");
