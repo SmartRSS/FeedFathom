@@ -576,6 +576,53 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   expect(findRetryAfter).toBeLessThanOrEqual(300);
 });
 
+// The deferred mapping is about to move from these handlers into the central
+// error hook in server-app.ts. What must not move with it is find's fallback:
+// it turns any other failure to fetch a user-supplied URL into a 400, and
+// deleting that along with the deferred branch would quietly promote a class
+// of client errors to 500s.
+test("find still answers 400 when fetching a user-supplied url simply fails", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => {
+    throw new Error("getaddrinfo ENOTFOUND site.example");
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      {
+        headers: { cookie: "sid=test" },
+      },
+    ),
+  );
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "Invalid feed url" });
+});
+
+// preview, unlike find, re-raises anything that is not deferred rather than
+// classifying it. That reaches the central handler and is a 500 today; moving
+// the deferred branch out must not change it.
+test("preview surfaces a non-deferred parser failure as a 500", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedParser.preview = async () => {
+    throw new Error("parser exploded");
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+
+  expect(response.status).toBe(500);
+});
+
 test("persists a cached preview inline and recomputes unread counts, without reparsing or trusting browser articles", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
