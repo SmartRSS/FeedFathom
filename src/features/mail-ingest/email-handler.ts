@@ -4,8 +4,8 @@ import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
+import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import {
   getEmailContent,
   validateParsedMail,

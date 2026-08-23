@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Source } from "#platform/db/schemas/sources.ts";
-import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
+import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 const source: Source = {

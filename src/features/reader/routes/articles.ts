@@ -6,8 +6,8 @@ import type {
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { safeArticleUrl } from "#features/feeds/feed-mapper.ts";
-import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
+import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 
 export type ArticlesRouteDependencies = {
   articlesDataService: Pick<

@@ -7,7 +7,7 @@ import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { deferredResponse } from "#platform/http/deferred-response.ts";
-import { extractArticle } from "#features/reader/extract-article.ts";
+import { extractArticle } from "#features/feeds/extract-article.ts";
 
 export type PreviewRouteDependencies = {
   feedParser: Pick<FeedParser, "preview">;

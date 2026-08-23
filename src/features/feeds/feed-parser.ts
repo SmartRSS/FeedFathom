@@ -25,9 +25,9 @@ import {
   discoverWebSub,
   requestHubSubscription,
 } from "#features/feeds/websub.ts";
-import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
-import { rewriteLinks } from "#features/reader/rewrite-links.ts";
+import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(
