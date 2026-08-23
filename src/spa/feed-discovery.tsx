@@ -3,6 +3,7 @@ import {
   foldersResponse,
   foundFeedsResponse,
   previewResponse,
+  sessionResponse,
   subscriptionResponse,
   updatedSourceResponse,
   type Folder,
@@ -15,6 +16,7 @@ import { createSupersessionGuard } from "./supersession.ts";
 import {
   clickSelectsArticle,
   initialPreviewSelection,
+  newsletterAddress,
   websiteValidationMessage,
   withScheme,
 } from "./discovery-behavior.ts";
@@ -63,6 +65,9 @@ export function FeedDiscovery(props: {
   const [progress, setProgress] = createSignal("");
   const [message, setMessage] = createSignal("");
   const [startupMessage, setStartupMessage] = createSignal("");
+  // Only set where the server ingests mail, which is what gates the
+  // newsletter button below -- a minted address is useless otherwise.
+  const [mailDomain, setMailDomain] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
     setMessage(cause instanceof Error ? cause.message : fallback);
@@ -113,6 +118,16 @@ export function FeedDiscovery(props: {
         );
       }
     })();
+    // Separate from the folders load: mail being unavailable only costs the
+    // newsletter button, so a failure here must not take the panel's own
+    // startup message with it.
+    if (!props.editing)
+      void (async () => {
+        try {
+          const session = await api("/session", sessionResponse);
+          if (!disposed) setMailDomain(session.mailDomain ?? "");
+        } catch {}
+      })();
   });
 
   function websiteIsValid() {
@@ -182,6 +197,13 @@ export function FeedDiscovery(props: {
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");
+  }
+
+  async function useNewsletterAddress() {
+    setFeedUrl(newsletterAddress(mailDomain()));
+    setArticles([]);
+    setSelectedIndex(undefined);
+    await copyAddress();
   }
 
   async function copyAddress() {
@@ -321,6 +343,16 @@ export function FeedDiscovery(props: {
             <Show when={feedUrl().includes("@")}>
               <button type="button" onClick={() => void copyAddress()}>
                 Copy address
+              </button>
+            </Show>
+            <Show when={mailDomain()}>
+              <button
+                type="button"
+                disabled={loading()}
+                title="Subscribe by email: mail sent to this address becomes articles in this feed."
+                onClick={() => void useNewsletterAddress()}
+              >
+                Generate email address
               </button>
             </Show>
             <Show when={!feedUrl().includes("@")}>

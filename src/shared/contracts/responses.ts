@@ -23,7 +23,13 @@ const sessionUser = Type.Object(
   exact,
 );
 export const sessionResponse = Type.Object(
-  { user: Type.Union([sessionUser, Type.Null()]) },
+  {
+    // Present only where mail ingest is configured: the host newsletter
+    // addresses are minted at, and the SPA's only signal that email
+    // subscriptions are accepted at all.
+    mailDomain: Type.Optional(Type.String()),
+    user: Type.Union([sessionUser, Type.Null()]),
+  },
   exact,
 );
 
