@@ -95,6 +95,11 @@ const configSchema = Type.Object(
     ),
     PORT: Type.Optional(integerString("PORT", undefined, 1, 65_535)),
     MAIL_ENABLED: booleanString(),
+    // The host newsletter addresses are minted at. Distinct from
+    // FEED_FATHOM_DOMAIN: mail routing lives wherever Cloudflare Email
+    // Routing is configured, which is rarely the host the app is served
+    // from. Falls back to FEED_FATHOM_DOMAIN when the two do coincide.
+    MAIL_DOMAIN: Type.Optional(Type.String()),
     MAIL_RELAY_SECRET: Type.Optional(Type.String()),
     MAILJET_API_KEY: Type.Optional(Type.String()),
     MAILJET_API_SECRET: Type.Optional(Type.String()),

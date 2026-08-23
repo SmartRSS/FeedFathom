@@ -30,6 +30,28 @@ const getInstanceUrl = async (): Promise<null | string> => {
   }
 };
 
+/**
+ * Asks the instance where its newsletter mail is routed. Undefined whenever
+ * the instance is old, unreachable, or ingests no mail at all -- the address
+ * then falls back to the instance hostname.
+ */
+const getMailDomain = async (instance: string): Promise<string | undefined> => {
+  try {
+    const response = await fetch(new URL("/api/session", instance).href, {
+      credentials: "include",
+    });
+    if (!response.ok) return undefined;
+    const body: unknown = await response.json();
+    const domain =
+      typeof body === "object" && body !== null && "mailDomain" in body
+        ? body.mailDomain
+        : undefined;
+    return typeof domain === "string" ? domain : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 // ===== Menu Management =====
 
 // Menu state variables
@@ -157,6 +179,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
       const address = buildNewsletterAddress(
         instance,
         globalThis.crypto.randomUUID(),
+        await getMailDomain(instance),
       );
       if (address) previewSource(instance, address);
       return;
