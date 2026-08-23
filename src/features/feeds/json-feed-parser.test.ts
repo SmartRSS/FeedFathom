@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { validateParsedFeed } from "../src/lib/feed-parser.ts";
-import { isJsonFeedText, parseJsonFeed } from "../src/lib/json-feed-parser.ts";
+import { validateParsedFeed } from "#features/feeds/feed-parser.ts";
+import {
+  isJsonFeedText,
+  parseJsonFeed,
+} from "#features/feeds/json-feed-parser.ts";
 
 const feedText = JSON.stringify({
   description: "About the feed",

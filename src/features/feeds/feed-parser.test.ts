@@ -4,7 +4,7 @@ import {
   detectFeedEncoding,
   isBetterFavicon,
   validateParsedFeed,
-} from "../src/lib/feed-parser.ts";
+} from "#features/feeds/feed-parser.ts";
 
 const item = {
   authors: [{ name: "Author" }],

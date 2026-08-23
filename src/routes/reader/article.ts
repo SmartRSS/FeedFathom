@@ -3,9 +3,9 @@ import { Value } from "typebox/value";
 import { articleQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import { safeArticleUrl } from "#features/feeds/feed-mapper.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
-import { safeArticleUrl } from "../../lib/feed-mapper.ts";
 
 export type ArticleRouteDependencies = {
   articlesDataService: Pick<ArticlesDataService, "getUserArticle">;

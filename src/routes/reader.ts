@@ -13,11 +13,11 @@ import {
 } from "#shared/contracts/requests.ts";
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
-import type { FeedParser } from "../lib/feed-parser.ts";
 import type { FeedPreviewCache } from "../lib/feed-preview-cache.ts";
 import { getArticleHandler } from "./reader/article.ts";
 import {

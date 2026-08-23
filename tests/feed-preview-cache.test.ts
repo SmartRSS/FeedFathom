@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { FeedPreview } from "../src/lib/feed-mapper.ts";
+import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
 import { FeedPreviewCache } from "../src/lib/feed-preview-cache.ts";
 
 class FakeRedis {

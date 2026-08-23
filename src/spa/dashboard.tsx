@@ -17,6 +17,7 @@ import {
   type ArticleSummary,
   type TreeNode,
 } from "#shared/contracts/responses.ts";
+import { safeArticleUrl } from "#features/feeds/feed-mapper.ts";
 import {
   removalOutcome,
   soleSelectedIndex,
@@ -25,7 +26,6 @@ import {
 } from "./behavior.ts";
 import { createSupersessionGuard } from "./supersession.ts";
 import { api } from "./api.ts";
-import { safeArticleUrl } from "../lib/feed-mapper.ts";
 import {
   createExtensionReaderBridge,
   extractReaderContent,

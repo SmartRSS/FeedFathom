@@ -7,10 +7,10 @@ import {
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
-import type { FeedParser } from "../../lib/feed-parser.ts";
 import {
   deserializeFeedPreview,
   type FeedPreviewCache,

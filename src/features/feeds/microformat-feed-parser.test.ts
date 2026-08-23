@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { validateParsedFeed } from "../src/lib/feed-parser.ts";
+import { validateParsedFeed } from "#features/feeds/feed-parser.ts";
 import {
   isMicroformatHtml,
   parseMicroformatFeed,
-} from "../src/lib/microformat-feed-parser.ts";
+} from "#features/feeds/microformat-feed-parser.ts";
 
 const withFeedWrapper = `<!doctype html>
 <html>

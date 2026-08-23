@@ -9,12 +9,12 @@ import {
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import type { OpmlParser } from "#features/feeds/opml-parser.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
 } from "../db/data-services/source-data-service.ts";
 import type { OpmlImportService } from "../db/data-services/opml-import-service.ts";
-import type { OpmlParser } from "../lib/opml-parser.ts";
 import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { Value } from "typebox/value";
-import type { FeedPreview } from "./feed-mapper.ts";
+import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
 
 type PreviewCacheRedis = {
   del(key: string): Promise<number>;

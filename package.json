@@ -86,7 +86,8 @@
       "src/extension/{background-event,content-script,options}.ts",
       "tests/**/*.ts",
       "bin/**/*.ts",
-      "src/**/*.test.ts"
+      "src/**/*.test.ts",
+      "src/features/feeds/opml-parser-cases/**/*.ts"
     ],
     "project": [
       "src/**/*.{ts,tsx}",

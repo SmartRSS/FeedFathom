@@ -8,17 +8,23 @@ import {
   isHttpDeferredError,
 } from "#platform/http/http-client.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
-import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
-import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
-import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
-import { mapFeedItemToArticle, mapFeedToPreview } from "./feed-mapper.ts";
-import { isJsonFeedText, parseJsonFeed } from "./json-feed-parser.ts";
+import {
+  mapFeedItemToArticle,
+  mapFeedToPreview,
+} from "#features/feeds/feed-mapper.ts";
+import {
+  isJsonFeedText,
+  parseJsonFeed,
+} from "#features/feeds/json-feed-parser.ts";
 import {
   isMicroformatHtml,
   parseMicroformatFeed,
-} from "./microformat-feed-parser.ts";
-import { rewriteLinks } from "./rewrite-links.ts";
-import { discoverWebSub, requestHubSubscription } from "./websub.ts";
+} from "#features/feeds/microformat-feed-parser.ts";
+import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
+import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
+import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
+import { rewriteLinks } from "../../lib/rewrite-links.ts";
+import { discoverWebSub, requestHubSubscription } from "../../lib/websub.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(

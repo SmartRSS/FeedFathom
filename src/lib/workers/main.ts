@@ -5,9 +5,9 @@ import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { isHttpDeferredError } from "#platform/http/http-client.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { JobFailuresDataService } from "../../db/data-services/job-failure-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
-import type { FeedParser } from "../feed-parser.ts";
 import { requestHubSubscription } from "../websub.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
