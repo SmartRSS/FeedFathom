@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { scanHtml } from "../src/lib/scanner.ts";
+import { scanHtml } from "#shared/scanners/scanner.ts";
 
 describe("scanHtml", () => {
   test("discovers and resolves feeds from raw HTML", () => {

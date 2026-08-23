@@ -1,5 +1,5 @@
-import type { ScannerPage } from "../scanner-page.ts";
-import type { FeedData } from "./feed-data-type.ts";
+import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 
 const channelNameFromUrlExpression = /vimeo\.com\/(.+)/u;
 const channelNameTestExpression = /^[A-Za-z]+$/u;

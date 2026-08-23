@@ -1,5 +1,5 @@
-import type { ScannerPage } from "../scanner-page.ts";
-import type { FeedData } from "./feed-data-type.ts";
+import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 
 // Unlike RSS/Atom/JSON Feed, microformats2 (h-feed/h-entry) has no separate
 // feed file to link to -- the markup lives directly in the page, so the

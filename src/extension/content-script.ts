@@ -1,5 +1,5 @@
-import { scan } from "../lib/scanner.ts";
-import type { FeedData } from "../lib/scanners/feed-data-type.ts";
+import { scan } from "#shared/scanners/scanner.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 import {
   isReaderRequest,
   isReaderResponseForRequest,
