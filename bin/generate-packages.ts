@@ -104,7 +104,7 @@ async function buildSharedExtension(): Promise<void> {
     "128-inverted-round.png",
   ]) {
     await copyFile(
-      path.join(root, "src/lib/images", name),
+      path.join(root, "src/spa/assets", name),
       path.join(commonDirectory, name),
     );
   }

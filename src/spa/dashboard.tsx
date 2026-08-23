@@ -44,17 +44,17 @@ import { resolvedTheme } from "./preferences.ts";
 // background light or dark" guessing -- currentColor only resolves that
 // way when the SVG is actually in the page's DOM, not loaded as an
 // external image resource.
-import addFolderRaw from "../lib/images/icons/Document/folder-add-fill.svg?raw";
-import addRaw from "../lib/images/icons/System/add-box-fill.svg?raw";
-import settingsRaw from "../lib/images/icons/System/settings-5-fill.svg?raw";
-import detailsRaw from "../lib/images/icons/System/information-fill.svg?raw";
-import removeRaw from "../lib/images/icons/System/delete-bin-7-fill.svg?raw";
-import selectAllRaw from "../lib/images/icons/System/check-double-fill.svg?raw";
-import feedRaw from "../lib/images/icons/System/rss-fill.svg?raw";
-import arrowDownRaw from "../lib/images/icons/Arrows/chevron-down-fill.svg?raw";
-import arrowRightRaw from "../lib/images/icons/Arrows/chevron-right-fill.svg?raw";
-import folderRaw from "../lib/images/icons/Document/folder-fill.svg?raw";
-import folderOpenedRaw from "../lib/images/icons/Document/folder-open-fill.svg?raw";
+import addFolderRaw from "./assets/icons/Document/folder-add-fill.svg?raw";
+import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
+import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
+import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
+import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
+import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
+import feedRaw from "./assets/icons/System/rss-fill.svg?raw";
+import arrowDownRaw from "./assets/icons/Arrows/chevron-down-fill.svg?raw";
+import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
+import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
+import folderOpenedRaw from "./assets/icons/Document/folder-open-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (

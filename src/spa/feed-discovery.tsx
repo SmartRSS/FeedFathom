@@ -12,7 +12,7 @@ import {
 import type { DashboardPane } from "./behavior.ts";
 import { api } from "./api.ts";
 import { Icon } from "./icon.tsx";
-import backRaw from "../lib/images/icons/Arrows/arrow-left-fill.svg?raw";
+import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {
   return (
