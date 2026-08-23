@@ -16,7 +16,7 @@ import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
 } from "#features/admin/routes.ts";
-import { createInternalRoutes } from "./routes/internal.ts";
+import { createInternalRoutes } from "#platform/http/internal-routes.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,

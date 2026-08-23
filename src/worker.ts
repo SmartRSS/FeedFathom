@@ -3,7 +3,7 @@ import { Worker } from "bullmq";
 import { internalAddressPolicy } from "#shared/validation/typebox-policy.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
-import { MainWorker, type MainWorkerFactory } from "./lib/workers/main.ts";
+import { MainWorker, type MainWorkerFactory } from "#features/jobs/main.ts";
 import { createFeedRuntime } from "./runtime.ts";
 
 async function runWorker() {
