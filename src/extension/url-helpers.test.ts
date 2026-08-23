@@ -4,7 +4,7 @@ import {
   buildPreviewUrl,
   canonicalizeInstance,
   normalizeFeedAddress,
-} from "../src/extension/url-helpers.ts";
+} from "./url-helpers.ts";
 
 describe("canonicalizeInstance", () => {
   test.each([

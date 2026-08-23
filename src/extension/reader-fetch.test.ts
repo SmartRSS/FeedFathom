@@ -10,11 +10,8 @@ import {
   storedInstance,
   type ReaderErrorCode,
   type ReaderRequest,
-} from "../src/extension/extension-types.ts";
-import {
-  handleReaderRequest,
-  type ReaderFetch,
-} from "../src/extension/reader-fetch.ts";
+} from "./extension-types.ts";
+import { handleReaderRequest, type ReaderFetch } from "./reader-fetch.ts";
 
 const instance = "https://reader.example";
 const sender = { frameId: 0, url: `${instance}/` };

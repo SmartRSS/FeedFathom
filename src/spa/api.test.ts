@@ -4,7 +4,7 @@ import {
   folderResponse,
   sessionResponse,
 } from "#shared/contracts/responses.ts";
-import { api, ApiError, isUnauthorizedError } from "../src/spa/api.ts";
+import { api, ApiError, isUnauthorizedError } from "./api.ts";
 
 const exactMessage = Type.Object(
   { message: Type.String() },
