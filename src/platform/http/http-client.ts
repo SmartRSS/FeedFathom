@@ -1,6 +1,12 @@
-import { type Static, Type } from "typebox";
+import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
+import {
+  cacheable,
+  type CachedResponse,
+  cachedResponseCheck,
+  refresh,
+  sharedCacheAllowed,
+} from "#platform/http/http-cache-policy.ts";
 import {
   HttpDeadlineError,
   RequestDeadline,
@@ -105,18 +111,6 @@ function buildUserAgent(
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
-const exact = { additionalProperties: false } as const;
-const cachedResponseSchema = Type.Object(
-  {
-    body: Type.String(),
-    expiresAt: Type.Number(),
-    headers: Type.Array(Type.Tuple([Type.String(), Type.String()])),
-    status: Type.Number(),
-    url: Type.Intersect([Type.String(), webUrlPolicy]),
-  },
-  exact,
-);
-const cachedResponseCheck = Schema.Compile(cachedResponseSchema);
 const finiteNumberCheck = Schema.Compile(Type.Number());
 const redirectStatusCheck = Schema.Compile(
   Type.Union([301, 302, 303, 307, 308].map((status) => Type.Literal(status))),
@@ -128,8 +122,6 @@ const retryableStatusCheck = Schema.Compile(
 );
 const rateLimitedStatusCheck = Schema.Compile(Type.Literal(429));
 const notModifiedStatusCheck = Schema.Compile(Type.Literal(304));
-
-type CachedResponse = Static<typeof cachedResponseSchema>;
 
 type HttpRedis = {
   decr(key: string): Promise<number>;
@@ -306,9 +298,9 @@ export class HttpClient {
     );
     if (notModifiedStatusCheck.Check(response.status) && cached) {
       response.destroy();
-      const refreshed = this.refresh(cached, response.headers);
+      const refreshed = refresh(cached, response.headers);
       const refreshedHeaders = new Headers(refreshed.headers);
-      const retain = this.sharedCacheAllowed(refreshedHeaders);
+      const retain = sharedCacheAllowed(refreshedHeaders);
       if (retain) await this.saveCached(url, refreshed, deadline);
       else
         await deadline.run(
@@ -323,7 +315,7 @@ export class HttpClient {
     }
 
     const body = await this.readBody(response, deadline);
-    const next = this.cacheable(response, body, url);
+    const next = cacheable(response, body, url);
     if (next) await this.saveCached(url, next, deadline);
     else {
       await deadline.run(this.redis.del(`${cachePrefix}${this.cacheKey(url)}`));
@@ -594,108 +586,6 @@ export class HttpClient {
     if (finiteNumberCheck.Check(seconds)) return Date.now() + seconds * 1_000;
     const date = Date.parse(retryAfter);
     return finiteNumberCheck.Check(date) ? date : Date.now() + 5 * 60_000;
-  }
-
-  private cacheable(
-    response: NativeHttpResponse,
-    body: Buffer,
-    requestedUrl: string,
-  ): CachedResponse | undefined {
-    if (!this.sharedCacheAllowed(response.headers)) return undefined;
-    const receivedAt = Date.now();
-    const expiresAt = this.expiresAt(response.headers, receivedAt);
-    const hasValidator =
-      response.headers.has("etag") || response.headers.has("last-modified");
-    if ((expiresAt === undefined || expiresAt <= receivedAt) && !hasValidator)
-      return undefined;
-    return {
-      body: body.toString("base64"),
-      expiresAt: expiresAt ?? receivedAt,
-      headers: [...response.headers],
-      status: response.status,
-      url: response.url || requestedUrl,
-    };
-  }
-
-  private refresh(cached: CachedResponse, headers: Headers): CachedResponse {
-    const merged = new Headers(cached.headers);
-    for (const [name, value] of headers) merged.set(name, value);
-    if (!headers.has("age")) merged.delete("age");
-    if (!headers.has("date")) merged.set("date", new Date().toUTCString());
-    return {
-      ...cached,
-      expiresAt: this.expiresAt(merged) ?? Date.now(),
-      headers: [...merged],
-    };
-  }
-
-  private sharedCacheAllowed(headers: Headers): boolean {
-    const directives = new Set(
-      (headers.get("cache-control") ?? "")
-        .toLowerCase()
-        .split(",")
-        .map((directive) => directive.trim().split("=", 1)[0]),
-    );
-    return !(
-      directives.has("no-store") ||
-      directives.has("private") ||
-      headers.get("vary")?.trim() === "*" ||
-      headers.has("set-cookie")
-    );
-  }
-
-  private expiresAt(
-    headers: Headers,
-    receivedAt = Date.now(),
-  ): number | undefined {
-    const directives = (headers.get("cache-control") ?? "")
-      .split(",")
-      .map((directive) => {
-        const [name = "", value = ""] = directive.trim().split("=", 2);
-        return [name.toLowerCase(), value.trim()] as const;
-      })
-      .filter(([name]) => name);
-    if (directives.some(([name]) => name === "no-cache")) return receivedAt;
-
-    const sharedMaxAge = directives.filter(([name]) => name === "s-maxage");
-    const maxAgeDirectives = sharedMaxAge.length
-      ? sharedMaxAge
-      : directives.filter(([name]) => name === "max-age");
-    if (maxAgeDirectives.length > 1) return receivedAt;
-
-    const currentAge = this.currentAge(headers, receivedAt);
-    const maxAgeValue = maxAgeDirectives[0]?.[1];
-    if (maxAgeValue !== undefined) {
-      const maxAge = this.deltaSeconds(maxAgeValue);
-      if (maxAge === undefined) return receivedAt;
-      return receivedAt + Math.max(0, maxAge * 1_000 - currentAge);
-    }
-
-    const expires = Date.parse(headers.get("expires") ?? "");
-    if (!finiteNumberCheck.Check(expires)) return undefined;
-    const responseDate = Date.parse(headers.get("date") ?? "");
-    const freshnessLifetime = Math.max(
-      0,
-      expires -
-        (finiteNumberCheck.Check(responseDate) ? responseDate : receivedAt),
-    );
-    return receivedAt + Math.max(0, freshnessLifetime - currentAge);
-  }
-
-  private currentAge(headers: Headers, receivedAt: number): number {
-    const responseDate = Date.parse(headers.get("date") ?? "");
-    const apparentAge = finiteNumberCheck.Check(responseDate)
-      ? Math.max(0, receivedAt - responseDate)
-      : 0;
-    const age = this.deltaSeconds(headers.get("age") ?? "") ?? 0;
-    return Math.max(apparentAge, age * 1_000);
-  }
-
-  private deltaSeconds(value: string): number | undefined {
-    const match = /^(?:"(\d+)"|(\d+))$/.exec(value.trim());
-    if (!match) return undefined;
-    const parsed = Number(match[1] ?? match[2]);
-    return Number.isSafeInteger(parsed) ? parsed : undefined;
   }
 
   private async getCached(
