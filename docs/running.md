@@ -75,6 +75,7 @@ Configure the deployment by putting variables in a `.env` file next to `compose.
 | `DATABASE_URL` | built from the defaults above | Connection URL the application uses. Only needed if you change any `POSTGRES_*` value or point at an external database. |
 | `ENABLE_REGISTRATION` | `false` | Whether accounts beyond the first may be created. |
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
+| `MAIL_DOMAIN` | `FEED_FATHOM_DOMAIN` | Domain inbound newsletter mail is routed to. Generated addresses are minted at this host, so set it whenever mail lands on a different domain than the app is served from. |
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
 
 ### Behind a reverse proxy

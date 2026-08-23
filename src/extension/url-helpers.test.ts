@@ -88,6 +88,18 @@ describe("buildNewsletterAddress", () => {
     );
   });
 
+  test("prefers the instance's configured mail domain", () => {
+    expect(
+      buildNewsletterAddress("https://app.example.com", "01ABC", "mail.test"),
+    ).toBe("01ABC@mail.test");
+  });
+
+  test("falls back to the hostname for a blank mail domain", () => {
+    expect(buildNewsletterAddress("https://example.com", "01ABC", " ")).toBe(
+      "01ABC@example.com",
+    );
+  });
+
   test("returns undefined for an invalid instance", () => {
     expect(buildNewsletterAddress("file:///tmp/feed", "01ABC")).toBeUndefined();
   });
