@@ -95,3 +95,40 @@ Same reasoning: `src/extension/reader-fetch.ts` imports `isBlockedHostname`,
 and the module depends on nothing. The alternative — letting clients import
 `platform` — would also let the extension import the database connection, which
 is exactly what the client rule exists to prevent.
+
+## Amendment, recorded on landing
+
+The DAG sketched when this decision was written did not survive contact with
+the code. Measuring the actual cross-feature imports after the moves gave a
+different graph, with a cycle in it.
+
+**`feeds ↔ reader` was cyclic.** `feed-parser.ts` and `subscribe.ts` write
+through the articles and user-sources data services and `preview.ts` extracts
+article content — all assigned to `reader` in the sketch — while `reader` reads
+all of them back. The cycle is inherent to where the writes happen, not to a
+bad file placement, so it was broken along the write direction: the articles,
+user-sources and folders data services, `extract-article` and `rewrite-links`
+belong to the feature that writes them. `features/feeds` owns the subscription
+and content store; `features/reader` is the reading surface over it.
+
+**`auth → mail-ingest` closed a second cycle**, via
+`mail-ingest → feeds → auth`. `/api/mail` was in the public-auth route group
+because it is unauthenticated, not because it is auth. It moved to
+`mail-ingest` and is now mounted directly by `server-app.ts`.
+
+**`feeds → auth` and `jobs → admin` are real edges** the sketch omitted: the
+feed routes take an `AuthedUser`, and the worker records job failures through
+the admin feature's data service.
+
+The landed DAG is in `CONTEXT.md` and in the rule's options. It is acyclic.
+
+Two further modules turned out to be shared between both clients rather than
+owned by either: the reader-bridge protocol (`extension-types.ts`, spoken by
+the SPA and the extension) and `safeArticleUrl` / `safeHttpUrl`, which the SPA
+called out of the feed mapper. Both moved to `shared`.
+
+Deliberately left alone, as follow-ups rather than smuggled into a move-only
+refactor: folding the `HttpDeferredError` mapping into the central
+`server-app.ts` error handler, extracting the fan-out in `find.ts` into a named
+discovery service, and splitting the migration engine out of `src/migrator.ts`
+so a co-located test does not have to import an entrypoint.

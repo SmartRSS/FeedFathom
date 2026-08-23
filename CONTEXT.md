@@ -28,7 +28,15 @@ Entrypoints — `src/server.ts`, `src/worker.ts`, `src/migrator.ts`, plus
 import anything. They are the composition roots.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
-rule. Prose alone did not hold; the lint rule is the load-bearing half.
+rule, which carries the DAG in its `.oxlintrc.json` options. Prose alone did
+not hold; the lint rule is the load-bearing half. Relative specifiers are
+resolved and judged by the same rule, so `../../` is not an escape hatch.
+Co-located `*.test.ts` files are exempt — a test arranges state rather than
+wiring the product, and ships in no bundle.
+
+Anything two clients both need is `shared` by that definition, which is where
+the scanner tree, the reader-bridge protocol in `extension-types.ts` and the
+URL-safety helpers in `util/safe-url.ts` live.
 
 ## Features
 
@@ -38,12 +46,12 @@ Cross-feature dependencies are real and are written down rather than wished
 away. The declared DAG:
 
 ```
+auth        → (none)
+feeds       → auth
 reader      → feeds, auth
 admin       → feeds, auth
 mail-ingest → feeds
-jobs        → feeds, mail-ingest
-auth        → (none)
-feeds       → (none)
+jobs        → feeds, admin
 ```
 
 Any edge not on that list is a lint error, and the list must stay acyclic.
@@ -54,15 +62,15 @@ not as a quiet new import.
   service, and the mail sender that carries activation mail. The session plugin
   lives here rather than in `platform`: session verification is domain logic
   about users, not infrastructure.
-- **`feeds`** — feed parsing (RSS/Atom, JSON Feed, microformats), OPML import,
-  feed discovery and preview, subscription, WebSub, favicons, and the sources
-  data service.
-- **`reader`** — reading: articles, folders, the source tree, article
-  extraction and link rewriting, and the articles / folders / user-sources data
-  services.
+- **`feeds`** — acquiring content and the store it lands in: feed parsing
+  (RSS/Atom, JSON Feed, microformats), OPML import, discovery and preview,
+  subscription, WebSub, favicons, article extraction and link rewriting, and
+  the sources, articles, user-sources and folders data services.
+- **`reader`** — the reading surface over that store: the articles, article,
+  folders, tree and source routes.
 - **`admin`** — the admin and options routes and the job-failures data service.
-- **`mail-ingest`** — inbound newsletter mail: the email handler, the email
-  processor, and the Cloudflare email worker.
+- **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
+  email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.
 
 ## Imports
