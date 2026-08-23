@@ -21,6 +21,8 @@ import {
   type MailRouteDependencies,
 } from "#features/mail-ingest/routes/mail.ts";
 import { createInternalRoutes } from "#platform/http/internal-routes.ts";
+import { deferredResponse } from "#platform/http/deferred-response.ts";
+import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,
@@ -103,6 +105,12 @@ export async function createServerApp(
           { error: error.message || "Invalid request." },
           { status: 422 },
         );
+      }
+      // Deferral is not a failure: the origin is rate limited, or this
+      // instance's own politeness interval for the host has not elapsed. The
+      // client is meant to come back, and deferredResponse says when.
+      if (isHttpDeferredError(error)) {
+        return deferredResponse(error);
       }
       if (error instanceof DecodeError) {
         console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
