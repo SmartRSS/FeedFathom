@@ -54,9 +54,10 @@ mail-ingest → feeds
 jobs        → feeds, admin
 ```
 
-Any edge not on that list is a lint error, and the list must stay acyclic.
-Adding an edge is a deliberate act that shows up in review as a config change,
-not as a quiet new import.
+Any edge not on that list is a lint error. The list must also stay acyclic;
+that part is checked in review rather than by the rule, which is the point of
+keeping the edges in a config file — adding one is a deliberate act that shows
+up in the diff instead of arriving as a quiet new import.
 
 - **`auth`** — sessions, registration, activation, password, the users data
   service, and the mail sender that carries activation mail. The session plugin
@@ -86,9 +87,12 @@ specifiers keep their `.ts` suffix.
 
 ## Tests
 
-Unit tests are co-located: `foo.test.ts` sits next to `foo.ts`. Playwright
-specs stay in `tests/browser/` — they test the running application, not a
-module, and Playwright's config points at that directory.
+Unit tests are co-located: `foo.test.ts` sits next to `foo.ts`.
+
+`tests/` holds only what tests something other than a `src/` module: the
+Playwright specs under `tests/browser/`, the migration integration test (which
+needs a disposable database and has its own script), the vendored
+fast-xml-parser shim, `bin/generate-packages.ts` and `tools/oxlint-plugin.js`.
 
 A test that asserts on a module's file path, its directory, or which file an
 export comes from is testing structure rather than behaviour. Delete the

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
-import { migrateDatabase, parseConcurrentIndexes } from "../src/migrator.ts";
+import { migrateDatabase, parseConcurrentIndexes } from "./migrator.ts";
 import journal from "../drizzle/meta/_journal.json";
 
 test("lists every SQL migration in the Drizzle journal", async () => {
