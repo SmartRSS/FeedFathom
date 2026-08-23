@@ -1,3 +1,5 @@
+import { safeHttpUrl } from "#shared/util/safe-url.ts";
+
 type FeedMapperItem = {
   authors: readonly { name: string | null }[];
   content: string | null;
@@ -76,24 +78,6 @@ const generateArticleGuid = (
     .join("_");
   return Bun.hash(hashInput).toString(36);
 };
-
-const safeHttpUrl = (value: string, baseUrl: string): string => {
-  if (!value) return "";
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    try {
-      url = new URL(value, baseUrl);
-    } catch {
-      return "";
-    }
-  }
-  return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
-};
-
-export const safeArticleUrl = (value: string, baseUrl: string): string =>
-  value.startsWith("/article/") ? value : safeHttpUrl(value, baseUrl);
 
 export const mapFeedItemToArticle = (
   item: FeedMapperItem,

@@ -8,7 +8,7 @@ import {
   type ReaderErrorCode,
   type ReaderRequest,
   type ReaderResponse,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
 const maximumBytes = 5 * 1024 * 1024;

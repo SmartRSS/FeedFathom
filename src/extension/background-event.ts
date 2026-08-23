@@ -5,7 +5,7 @@ import {
   isVisibilityLostMessage,
   storedInstance,
   type ReaderResponse,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
 import {

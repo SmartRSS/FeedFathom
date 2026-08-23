@@ -3,7 +3,7 @@ import { Value } from "typebox/value";
 import { articleQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
-import { safeArticleUrl } from "#features/feeds/feed-mapper.ts";
+import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 

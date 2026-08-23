@@ -1,4 +1,4 @@
-import { storedInstance } from "./extension-types.ts";
+import { storedInstance } from "#shared/extension-types.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
 void (async () => {

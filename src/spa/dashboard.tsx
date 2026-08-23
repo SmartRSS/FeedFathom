@@ -17,7 +17,7 @@ import {
   type ArticleSummary,
   type TreeNode,
 } from "#shared/contracts/responses.ts";
-import { safeArticleUrl } from "#features/feeds/feed-mapper.ts";
+import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
   removalOutcome,
   soleSelectedIndex,

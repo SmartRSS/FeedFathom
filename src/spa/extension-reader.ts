@@ -8,7 +8,7 @@ import {
   type ReaderErrorCode,
   type ReaderRequest,
   type ReaderResponse,
-} from "../extension/extension-types.ts";
+} from "#shared/extension-types.ts";
 
 const responseTimeoutMs = 20_000;
 

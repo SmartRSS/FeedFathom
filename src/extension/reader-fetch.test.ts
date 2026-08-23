@@ -10,7 +10,7 @@ import {
   storedInstance,
   type ReaderErrorCode,
   type ReaderRequest,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 import { handleReaderRequest, type ReaderFetch } from "./reader-fetch.ts";
 
 const instance = "https://reader.example";

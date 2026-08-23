@@ -4,7 +4,7 @@ import {
   isReaderRequest,
   isReaderResponseForRequest,
   readerErrorResponse,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 
 const readerMessage = (event: MessageEvent<unknown>) => {
   if (
