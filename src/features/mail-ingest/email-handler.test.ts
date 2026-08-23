@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { Source } from "#platform/db/schemas/sources.ts";
 import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
-import { EmailHandler } from "../src/lib/email/email-handler.ts";
+import { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 const source: Source = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),

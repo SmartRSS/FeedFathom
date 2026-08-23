@@ -8,7 +8,7 @@ import { createLogoutRoute } from "#features/auth/routes/logout.ts";
 import { createMailRoute } from "#features/auth/routes/mail.ts";
 import { createRegisterRoute } from "#features/auth/routes/register.ts";
 import { createSessionRoute } from "#features/auth/routes/session.ts";
-import type { EmailHandler } from "../../lib/email/email-handler.ts";
+import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 type Password = {
   hash(password: string): Promise<string>;

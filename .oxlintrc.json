@@ -169,7 +169,7 @@
     {
       // Tool configs and the Cloudflare worker entry are consumed by
       // runtimes that require a default export.
-      "files": ["**/*.config.ts", "src/cloudflare/email-worker.ts"],
+      "files": ["**/*.config.ts", "src/features/mail-ingest/email-worker.ts"],
       "rules": { "import/no-default-export": "off" }
     },
     {

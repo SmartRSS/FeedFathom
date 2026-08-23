@@ -6,7 +6,10 @@ import { simpleParser } from "mailparser";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
-import { getEmailContent, validateParsedMail } from "../email-processor.ts";
+import {
+  getEmailContent,
+  validateParsedMail,
+} from "#features/mail-ingest/email-processor.ts";
 
 export type TrustedMailEnvelope = {
   from: string;

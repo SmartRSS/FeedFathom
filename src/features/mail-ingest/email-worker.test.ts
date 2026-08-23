@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createEmailWorker,
   type IncomingEmailMessage,
-} from "../src/cloudflare/email-worker.ts";
+} from "#features/mail-ingest/email-worker.ts";
 
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const maxRawEmailBytes = 5 * 1_024 * 1_024;
