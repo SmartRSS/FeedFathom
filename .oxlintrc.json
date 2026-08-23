@@ -73,6 +73,23 @@
     "object-shorthand": "error",
     "operator-assignment": "error",
     "feedfathom/import-grouping": "error",
+    // The layer direction from CONTEXT.md, enforced. Cross-feature edges are
+    // declared here rather than inferred, so adding one is a config change
+    // that shows up in review instead of a quiet new import. The list must
+    // stay acyclic -- see docs/adr/0001-feature-first-layering.md.
+    "feedfathom/layer-boundaries": [
+      "error",
+      {
+        "features": {
+          "admin": ["auth", "feeds"],
+          "auth": [],
+          "feeds": ["auth"],
+          "jobs": ["admin", "feeds"],
+          "mail-ingest": ["feeds"],
+          "reader": ["auth", "feeds"]
+        }
+      }
+    ],
     // src/platform/db/schema.ts is drizzle-kit's schema entry point
     // (drizzle/config.json). It is a barrel by necessity, not convenience:
     // drizzle-kit discovers tables through it, and with it gone `generate`

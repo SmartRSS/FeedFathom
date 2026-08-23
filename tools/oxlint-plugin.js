@@ -5,7 +5,7 @@ import { definePlugin, defineRule } from "@oxlint/plugins";
 // violations -- they lock in what the codebase already does rather than
 // scheduling a refactor.
 //
-// All four use the `createOnce` API rather than the ESLint-compatible
+// All five use the `createOnce` API rather than the ESLint-compatible
 // `create`. `createOnce` runs once per lint run instead of once per file,
 // which lets oxlint statically analyse which node types a rule wants and skip
 // traversal when they are absent. Per-file state must therefore be reset in
@@ -252,10 +252,225 @@ const noBarrelFile = defineRule({
   },
 });
 
+/**
+ * Narrow the rule's untyped options into the feature DAG, without asserting.
+ * @param {unknown} options
+ * @returns {Record<string, string[]>}
+ */
+function readFeatureDag(options) {
+  if (typeof options !== "object" || options === null) return {};
+  if (!("features" in options)) return {};
+  const { features } = options;
+  if (typeof features !== "object" || features === null) return {};
+  /** @type {Record<string, string[]>} */
+  const dag = {};
+  for (const [name, edges] of Object.entries(features)) {
+    dag[name] = Array.isArray(edges)
+      ? edges.filter((edge) => typeof edge === "string")
+      : [];
+  }
+  return dag;
+}
+
+/**
+ * Strip everything before the source root so a rule decision never depends on
+ * where the repository is checked out.
+ * @param {string} filename
+ * @returns {string}
+ */
+function repoRelative(filename) {
+  const path = filename.replaceAll("\\", "/");
+  if (path.startsWith("src/")) return path;
+  const index = path.lastIndexOf("/src/");
+  return index === -1 ? "" : path.slice(index + 1);
+}
+
+/**
+ * Which layer a repo-relative path sits in. `null` means ungoverned -- tests,
+ * tooling, anything outside src/.
+ * @param {string} path
+ * @returns {{ kind: string, name: string } | null}
+ */
+function layerOf(path) {
+  if (!path.startsWith("src/")) return null;
+  const segments = path.split("/");
+  // src/server.ts and friends are the composition roots.
+  if (segments.length === 2) return { kind: "root", name: "" };
+  const group = segments[1] ?? "";
+  if (group === "shared" || group === "platform") {
+    return { kind: group, name: "" };
+  }
+  if (group === "features") return { kind: "feature", name: segments[2] ?? "" };
+  if (group === "spa" || group === "extension") {
+    return { kind: "client", name: group };
+  }
+  return null;
+}
+
+/**
+ * Resolve a relative specifier against the importing file, so a `../../`
+ * escape hatch is judged by the same rule as a `#`-prefixed one.
+ * @param {string} from
+ * @param {string} specifier
+ * @returns {string}
+ */
+function resolveRelative(from, specifier) {
+  const segments = from.split("/").slice(0, -1);
+  for (const part of specifier.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") segments.pop();
+    else segments.push(part);
+  }
+  return segments.join("/");
+}
+
+/** @type {Record<string, string>} */
+const SUBPATH_PREFIXES = {
+  "#features/": "src/features/",
+  "#platform/": "src/platform/",
+  "#shared/": "src/shared/",
+};
+
+/**
+ * @param {string} from
+ * @param {string} specifier
+ * @returns {string | null}
+ */
+function targetOf(from, specifier) {
+  for (const [prefix, root] of Object.entries(SUBPATH_PREFIXES)) {
+    if (specifier.startsWith(prefix)) {
+      return root + specifier.slice(prefix.length);
+    }
+  }
+  return specifier.startsWith(".") ? resolveRelative(from, specifier) : null;
+}
+
+/**
+ * @param {{ kind: string, name: string }} from
+ * @param {{ kind: string, name: string }} to
+ * @param {Record<string, string[]>} dag
+ * @returns {boolean}
+ */
+function allows(from, to, dag) {
+  switch (from.kind) {
+    case "root": {
+      return true;
+    }
+    case "shared": {
+      return to.kind === "shared";
+    }
+    case "platform": {
+      return to.kind === "shared" || to.kind === "platform";
+    }
+    case "feature": {
+      if (to.kind === "shared" || to.kind === "platform") return true;
+      if (to.kind !== "feature") return false;
+      if (to.name === from.name) return true;
+      return (dag[from.name] ?? []).includes(to.name);
+    }
+    case "client": {
+      return to.kind === "shared" || (to.kind === "client" && to.name === from.name);
+    }
+    default: {
+      return false;
+    }
+  }
+}
+
+/**
+ * @param {{ kind: string, name: string }} layer
+ * @returns {string}
+ */
+function describe(layer) {
+  if (layer.kind === "feature") return `feature '${layer.name}'`;
+  if (layer.kind === "client") return `client '${layer.name}'`;
+  if (layer.kind === "root") return "the composition root";
+  return `the ${layer.kind} layer`;
+}
+
+/**
+ * The layers may depend only downward -- shared, then platform, then features,
+ * with spa and extension able to see shared alone. Cross-feature edges are
+ * real in this codebase and are declared in this rule's options rather than
+ * wished away, which makes adding one a config change visible in review
+ * instead of a quiet new import. CONTEXT.md and docs/adr/0001 explain why.
+ *
+ * Relative specifiers are resolved and judged by the same rule, so `../../`
+ * is not an escape hatch from the boundary that `#platform/` would enforce.
+ *
+ * Co-located `*.test.ts` files are exempt. A test arranges state rather than
+ * wiring the product, and it is not in any shipped bundle, so a test reaching
+ * across a boundary says nothing about the product's dependency direction.
+ */
+const layerBoundaries = defineRule({
+  meta: {
+    docs: {
+      description:
+        "Require imports to follow the declared layer direction and feature DAG.",
+    },
+    messages: {
+      forbidden:
+        "{{from}} may not import {{to}}. See CONTEXT.md for the layer direction; if this edge is legitimate, declare it in the feedfathom/layer-boundaries options.",
+    },
+    schema: [
+      {
+        additionalProperties: false,
+        properties: {
+          features: {
+            additionalProperties: { items: { type: "string" }, type: "array" },
+            description:
+              "The declared feature-to-feature edges, as feature name -> features it may import. Must stay acyclic.",
+            type: "object",
+          },
+        },
+        type: "object",
+      },
+    ],
+    type: "problem",
+  },
+  createOnce(context) {
+    /** @type {Record<string, string[]>} */
+    let dag = {};
+    let path = "";
+    /** @type {{ kind: string, name: string } | null} */
+    let from = null;
+
+    /**
+     * @param {{ source: { value: unknown } | null }} node
+     */
+    const check = (node) => {
+      if (!from) return;
+      const specifier = node.source?.value;
+      if (typeof specifier !== "string") return;
+      const target = targetOf(path, specifier);
+      if (target === null) return;
+      const to = layerOf(target);
+      if (!to || allows(from, to, dag)) return;
+      context.report({
+        data: { from: describe(from), to: describe(to) },
+        messageId: "forbidden",
+        node,
+      });
+    };
+
+    return {
+      before() {
+        dag = readFeatureDag(context.options[0]);
+        path = repoRelative(context.filename);
+        from = path.endsWith(".test.ts") ? null : layerOf(path);
+      },
+      ExportAllDeclaration: check,
+      ExportNamedDeclaration: check,
+      ImportDeclaration: check,
+    };
+  },
+});
+
 export default definePlugin({
   meta: { name: "feedfathom" },
   rules: {
     "import-grouping": importGrouping,
+    "layer-boundaries": layerBoundaries,
     "no-barrel-file": noBarrelFile,
     "route-deps-narrowed": routeDepsNarrowed,
     "schema-compile-module-scope": schemaCompileModuleScope,

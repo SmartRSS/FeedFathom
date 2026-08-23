@@ -19,6 +19,10 @@ const config = {
   jsPlugins: [pluginPath],
   rules: {
     "feedfathom/import-grouping": "error",
+    "feedfathom/layer-boundaries": [
+      "error",
+      { features: { auth: [], feeds: ["auth"], reader: ["auth", "feeds"] } },
+    ],
     "feedfathom/no-barrel-file": [
       "error",
       { allow: ["src/platform/db/schema.ts"] },
@@ -190,4 +194,102 @@ test("no-barrel-file honours the allow list", async () => {
     'import { a } from "../../../a.ts";\nexport { a };',
   );
   expect(lintFile(file)).toEqual([]);
+});
+
+/** Write a fixture at a path the layer rule reads, and lint it there. */
+async function lintAt(path: string, code: string): Promise<string[]> {
+  await Bun.write(join(directory, path), code);
+  return lintFile(path);
+}
+
+test("layer-boundaries allows downward and declared imports", async () => {
+  // Feature -> platform and feature -> shared are downward.
+  expect(
+    await lintAt(
+      join("src", "features", "reader", "down.ts"),
+      'import { a } from "#platform/db/connection.ts";\nimport { b } from "#shared/util/safe-url.ts";\nexport const c = a + b;',
+    ),
+  ).toEqual([]);
+  // reader -> feeds is on the declared list, and a feature may always import
+  // itself.
+  expect(
+    await lintAt(
+      join("src", "features", "reader", "declared.ts"),
+      'import { a } from "#features/feeds/feed-parser.ts";\nimport { b } from "#features/reader/own.ts";\nexport const c = a + b;',
+    ),
+  ).toEqual([]);
+  // The composition root may import anything.
+  expect(
+    await lintAt(
+      join("src", "root.ts"),
+      'import { a } from "#features/reader/routes.ts";\nexport const b = a;',
+    ),
+  ).toEqual([]);
+});
+
+test("layer-boundaries rejects upward imports", async () => {
+  expect(
+    await lintAt(
+      join("src", "shared", "up.ts"),
+      'import { a } from "#platform/config.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+  expect(
+    await lintAt(
+      join("src", "platform", "up.ts"),
+      'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+});
+
+test("layer-boundaries rejects an undeclared feature edge", async () => {
+  // feeds -> auth is declared; auth -> feeds is not.
+  expect(
+    await lintAt(
+      join("src", "features", "auth", "sideways.ts"),
+      'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+});
+
+test("layer-boundaries rejects a client importing a feature", async () => {
+  expect(
+    await lintAt(
+      join("src", "spa", "reach.ts"),
+      'import { a } from "#features/feeds/feed-mapper.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+  // ... and one client reaching into the other.
+  expect(
+    await lintAt(
+      join("src", "spa", "cross.ts"),
+      'import { a } from "../extension/extension-types.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+});
+
+test("layer-boundaries judges relative specifiers by the same rule", async () => {
+  // `../../` must not be an escape hatch from what `#platform/` enforces.
+  expect(
+    await lintAt(
+      join("src", "shared", "util", "sneak.ts"),
+      'import { a } from "../../platform/config.ts";\nexport const b = a;',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+  // A relative import that stays inside the layer is fine.
+  expect(
+    await lintAt(
+      join("src", "shared", "util", "sibling.ts"),
+      'import { a } from "./safe-url.ts";\nexport const b = a;',
+    ),
+  ).toEqual([]);
+});
+
+test("layer-boundaries exempts co-located tests", async () => {
+  expect(
+    await lintAt(
+      join("src", "shared", "util", "arrange.test.ts"),
+      'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
+    ),
+  ).toEqual([]);
 });
