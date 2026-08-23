@@ -11,6 +11,12 @@ import {
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
 import { api } from "./api.ts";
+import {
+  clickSelectsArticle,
+  initialPreviewSelection,
+  websiteValidationMessage,
+  withScheme,
+} from "./discovery-behavior.ts";
 import { Icon } from "./icon.tsx";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
@@ -20,15 +26,6 @@ export function BackButton(props: { backPane(): void }) {
       <Icon raw={backRaw} />
     </button>
   );
-}
-
-const schemePattern = /^[a-z][a-z0-9+.-]*:\/\//iu;
-
-function withScheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || schemePattern.test(trimmed) || trimmed.includes("@"))
-    return trimmed;
-  return `https://${trimmed}`;
 }
 
 export function FeedDiscovery(props: {
@@ -119,16 +116,7 @@ export function FeedDiscovery(props: {
 
   function websiteIsValid() {
     if (!websiteInput) return false;
-    try {
-      const protocol = new URL(withScheme(link())).protocol;
-      websiteInput.setCustomValidity(
-        protocol === "http:" || protocol === "https:"
-          ? ""
-          : "Enter an HTTP or HTTPS URL.",
-      );
-    } catch {
-      websiteInput.setCustomValidity("Enter an HTTP or HTTPS URL.");
-    }
+    websiteInput.setCustomValidity(websiteValidationMessage(link()));
     return websiteInput.reportValidity();
   }
 
@@ -174,7 +162,7 @@ export function FeedDiscovery(props: {
       setLink(result.link ?? "");
       setTitle(result.title);
       setArticles(result.articles);
-      setSelectedIndex(result.articles.length ? 0 : undefined);
+      setSelectedIndex(initialPreviewSelection(result.articles.length));
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
@@ -189,8 +177,7 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-      return;
+    if (!clickSelectsArticle(event)) return;
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");
