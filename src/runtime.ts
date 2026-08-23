@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import { RedisClient } from "bun";
 import Redis from "ioredis";
-import { config } from "./config.ts";
+import { config } from "#platform/config.ts";
 import { createPooledDrizzleConnection } from "./db/connection.ts";
 import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
 import { FoldersDataService } from "./db/data-services/folder-data-service.ts";

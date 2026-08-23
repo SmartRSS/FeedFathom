@@ -1,4 +1,4 @@
-import { config } from "./config.ts";
+import { config } from "#platform/config.ts";
 import { EmailHandler } from "./lib/email/email-handler.ts";
 import { MailSender } from "./lib/email/mail-sender.ts";
 import { FeedPreviewCache } from "./lib/feed-preview-cache.ts";

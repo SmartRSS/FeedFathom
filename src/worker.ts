@@ -1,7 +1,7 @@
 import { Value } from "typebox/value";
 import { Worker } from "bullmq";
 import { internalAddressPolicy } from "#shared/validation/typebox-policy.ts";
-import { config } from "./config.ts";
+import { config } from "#platform/config.ts";
 import { MainWorker, type MainWorkerFactory } from "./lib/workers/main.ts";
 import { waitForMigration } from "./db/connection.ts";
 import { createFeedRuntime } from "./runtime.ts";

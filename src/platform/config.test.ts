@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadConfig } from "../src/config.ts";
+import { loadConfig } from "#platform/config.ts";
 
 const databaseUrl =
   "postgresql://feedfathom:secret@db.example.com:5432/feedfathom";

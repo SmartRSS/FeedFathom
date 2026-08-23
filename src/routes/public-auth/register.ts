@@ -5,7 +5,7 @@ import Schema from "typebox/schema";
 import { Value } from "typebox/value";
 import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
 import { registerRequest } from "#shared/contracts/requests.ts";
-import type { AppConfig } from "../../config.ts";
+import type { AppConfig } from "#platform/config.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
 import type { MailSender } from "../../lib/email/mail-sender.ts";
 import { json } from "../shared.ts";

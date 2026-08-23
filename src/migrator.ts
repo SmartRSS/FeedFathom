@@ -2,7 +2,7 @@ import type { ReservedSQL } from "bun";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
-import type { AppConfig } from "./config.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { createDrizzleConnection } from "./db/connection.ts";
 
 type PendingIndex = { create: string; name: string; table: string };
@@ -264,6 +264,6 @@ export async function migrateDatabase(
 }
 
 if (import.meta.main) {
-  const { config } = await import("./config.ts");
+  const { config } = await import("#platform/config.ts");
   await migrateDatabase(config.DATABASE_URL);
 }

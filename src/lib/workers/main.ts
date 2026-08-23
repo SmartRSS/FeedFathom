@@ -3,7 +3,7 @@ import Schema from "typebox/schema";
 import { DelayedError } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
-import type { AppConfig } from "../../config.ts";
+import type { AppConfig } from "#platform/config.ts";
 import type { JobFailuresDataService } from "../../db/data-services/job-failure-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { FeedParser } from "../feed-parser.ts";

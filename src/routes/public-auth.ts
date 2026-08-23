@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import type { AppConfig } from "../config.ts";
+import type { AppConfig } from "#platform/config.ts";
 import type { UsersDataService } from "../db/data-services/user-data-service.ts";
 import type { EmailHandler } from "../lib/email/email-handler.ts";
 import type { MailSender } from "../lib/email/mail-sender.ts";

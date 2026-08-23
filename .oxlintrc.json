@@ -156,7 +156,11 @@
       // columns as they appear in the migration); config.ts groups env vars
       // by the comments that explain how they interact. Alphabetising either
       // scatters the grouping that carries the meaning.
-      "files": ["src/db/schemas/**", "src/db/schema.ts", "src/config.ts"],
+      "files": [
+        "src/db/schemas/**",
+        "src/db/schema.ts",
+        "src/platform/config.ts"
+      ],
       "rules": { "sort-keys": "off" }
     },
     {
