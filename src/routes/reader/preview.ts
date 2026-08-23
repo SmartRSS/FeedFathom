@@ -5,8 +5,8 @@ import { HttpDeferredError } from "#platform/http/http-client.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
-import type { FeedPreviewCache } from "../../lib/feed-preview-cache.ts";
 import { deferredResponse } from "./deferred-response.ts";
 
 export type PreviewRouteDependencies = {

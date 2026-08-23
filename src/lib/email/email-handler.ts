@@ -3,8 +3,8 @@ import { Buffer } from "node:buffer";
 import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
-import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { getEmailContent, validateParsedMail } from "../email-processor.ts";
 

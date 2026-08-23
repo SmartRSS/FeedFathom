@@ -20,11 +20,14 @@ import {
   isMicroformatHtml,
   parseMicroformatFeed,
 } from "#features/feeds/microformat-feed-parser.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import {
+  discoverWebSub,
+  requestHubSubscription,
+} from "#features/feeds/websub.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
-import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { rewriteLinks } from "../../lib/rewrite-links.ts";
-import { discoverWebSub, requestHubSubscription } from "../../lib/websub.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(

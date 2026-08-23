@@ -13,8 +13,8 @@ import type { OpmlParser } from "#features/feeds/opml-parser.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
-} from "../db/data-services/source-data-service.ts";
-import type { OpmlImportService } from "../db/data-services/opml-import-service.ts";
+} from "#features/feeds/source-data-service.ts";
+import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,

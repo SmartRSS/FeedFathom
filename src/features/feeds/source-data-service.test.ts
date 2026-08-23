@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   parseSourceListRows,
   resolveSourceListOrder,
-} from "../src/db/data-services/source-data-service.ts";
+} from "#features/feeds/source-data-service.ts";
 
 const sourceRow = {
   createdAt: new Date("2026-07-22T10:00:00.000Z"),

@@ -2,8 +2,8 @@ import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
 import { MailSender } from "#features/auth/mail-sender.ts";
 import { OpmlParser } from "#features/feeds/opml-parser.ts";
+import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { EmailHandler } from "./lib/email/email-handler.ts";
-import { FeedPreviewCache } from "./lib/feed-preview-cache.ts";
 import { createFeedRuntime } from "./runtime.ts";
 import { createServerApp } from "./server-app.ts";
 

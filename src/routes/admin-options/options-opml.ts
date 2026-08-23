@@ -6,7 +6,7 @@ import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { OpmlParser } from "#features/feeds/opml-parser.ts";
-import type { OpmlImportService } from "../../db/data-services/opml-import-service.ts";
+import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });

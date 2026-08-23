@@ -1,4 +1,4 @@
-import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 
 export type FaviconRouteDependencies = {
   sourcesDataService: Pick<SourcesDataService, "getFavicon">;

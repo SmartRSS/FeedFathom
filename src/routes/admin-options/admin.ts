@@ -10,7 +10,7 @@ import { json } from "#platform/http/json.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
-} from "../../db/data-services/source-data-service.ts";
+} from "#features/feeds/source-data-service.ts";
 
 export type AdminRouteDependencies = {
   sourcesDataService: Pick<

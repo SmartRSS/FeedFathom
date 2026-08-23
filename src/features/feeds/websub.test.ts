@@ -4,7 +4,7 @@ import {
   discoverWebSub,
   requestHubSubscription,
   verifyHubSignature,
-} from "../src/lib/websub.ts";
+} from "#features/feeds/websub.ts";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
-import { FeedPreviewCache } from "../src/lib/feed-preview-cache.ts";
+import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 
 class FakeRedis {
   readonly deleted: string[] = [];
