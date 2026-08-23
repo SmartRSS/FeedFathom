@@ -4,6 +4,10 @@ import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
+import {
+  leaseExpiresAt,
+  resolveLeaseSeconds,
+} from "#features/feeds/websub-lease-policy.ts";
 
 export type WebSubRouteDependencies = {
   sourcesDataService: Pick<
@@ -16,7 +20,6 @@ export type WebSubRouteDependencies = {
 // "should" isn't "must" -- if it's missing, assume a short lease instead of
 // an indefinite one, so a source without a real lease gets caught by the
 // next day's renewal sweep instead of silently never renewing.
-const defaultLeaseSeconds = 24 * 60 * 60;
 
 export function createWebSubRoutes({
   sourcesDataService,
@@ -41,14 +44,10 @@ export function createWebSubRoutes({
         // callback token.
         if (decoded["hub.topic"] !== source.websubTopicUrl) return status(404);
 
-        const requestedLease = Number(decoded["hub.lease_seconds"]);
-        const leaseSeconds =
-          Number.isFinite(requestedLease) && requestedLease > 0
-            ? requestedLease
-            : defaultLeaseSeconds;
+        const leaseSeconds = resolveLeaseSeconds(decoded["hub.lease_seconds"]);
         await sourcesDataService.markWebSubVerified(
           source.id,
-          new Date(Date.now() + leaseSeconds * 1_000),
+          leaseExpiresAt(leaseSeconds, Date.now()),
         );
 
         // Per spec: 2xx with the challenge echoed back verbatim as the
