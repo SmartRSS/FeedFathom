@@ -12,7 +12,7 @@ import {
   successResponse,
   type Registration,
 } from "#shared/contracts/responses.ts";
-import type { Turnstile } from "../types/turnstile.d.ts";
+import type { Turnstile } from "./turnstile.d.ts";
 import { api } from "./api.ts";
 import { loginPath, registerPath } from "./behavior.ts";
 
