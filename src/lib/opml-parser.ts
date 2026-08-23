@@ -3,7 +3,12 @@ import type {
   OpmlNode,
   OpmlSource,
 } from "#shared/types/opml-types.ts";
-import { attribute, childElements, isXmlElement, parseXml } from "./xml.ts";
+import {
+  attribute,
+  childElements,
+  isXmlElement,
+  parseXml,
+} from "#platform/xml.ts";
 
 const maximumDepth = 32;
 const maximumNodes = 10_000;
