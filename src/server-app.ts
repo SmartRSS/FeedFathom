@@ -1,14 +1,14 @@
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
 import {
+  createPublicAuthRoutes,
+  type PublicAuthRouteDependencies,
+} from "#features/auth/routes.ts";
+import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
 } from "./routes/admin-options.ts";
 import { createInternalRoutes } from "./routes/internal.ts";
-import {
-  createPublicAuthRoutes,
-  type PublicAuthRouteDependencies,
-} from "./routes/public-auth.ts";
 import {
   createReaderRoutes,
   type ReaderRouteDependencies,

@@ -7,8 +7,8 @@ import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
 import { registerRequest } from "#shared/contracts/requests.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import type { MailSender } from "../../lib/email/mail-sender.ts";
+import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import type { MailSender } from "#features/auth/mail-sender.ts";
 
 const turnstileResponse = Type.Object(
   { success: Type.Boolean() },

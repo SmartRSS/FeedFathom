@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
+import type { UsersDataService } from "#features/auth/user-data-service.ts";
 
 export async function userFor(
   sid: unknown,

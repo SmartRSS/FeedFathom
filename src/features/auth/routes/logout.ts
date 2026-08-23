@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import { sessionHeader } from "./session-header.ts";
+import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
 export type LogoutRouteDependencies = {
   secureCookies: boolean;

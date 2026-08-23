@@ -4,7 +4,7 @@ import { Value } from "typebox/value";
 import { incomingMailRequest } from "#shared/contracts/requests.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { EmailHandler } from "../../lib/email/email-handler.ts";
+import type { EmailHandler } from "../../../lib/email/email-handler.ts";
 
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const maxRawEmailBytes = 5 * 1_024 * 1_024;

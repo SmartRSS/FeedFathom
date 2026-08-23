@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AppConfig } from "#platform/config.ts";
-import { MailSender } from "../src/lib/email/mail-sender.ts";
+import { MailSender } from "#features/auth/mail-sender.ts";
 
 const config = (overrides: Partial<AppConfig> = {}): AppConfig => ({
   ALLOWED_EMAILS: [],
