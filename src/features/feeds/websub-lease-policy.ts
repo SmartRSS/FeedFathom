@@ -19,3 +19,19 @@ export function resolveLeaseSeconds(requested: string | undefined): number {
 export function leaseExpiresAt(leaseSeconds: number, now: number): Date {
   return new Date(now + leaseSeconds * 1_000);
 }
+
+export type WebSubStatus = "failed" | "none" | "pending" | "verified";
+
+/**
+ * Whether a source with this WebSub status is worth a subscribe attempt.
+ *
+ * "pending" is retried, not just "none": subscribing again is idempotent from
+ * the hub's perspective, so retrying self-heals a verification the hub
+ * silently dropped without needing a separate timeout and retry scheme.
+ * "verified" is live and "failed" was refused, so neither is retried here.
+ */
+export function shouldAttemptWebSubSubscribe(
+  status: undefined | WebSubStatus,
+): boolean {
+  return status === undefined || status === "none" || status === "pending";
+}

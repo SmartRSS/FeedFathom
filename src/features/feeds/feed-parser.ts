@@ -27,6 +27,7 @@ import {
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
+import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(
@@ -116,15 +117,6 @@ export function validateParsedFeed(value: unknown): void {
   if (!feedProjectionCheck.Check(value)) {
     throw new Error("Feed parser returned an invalid feed projection");
   }
-}
-
-// "pending" is retried (not just "none") since subscribing again is
-// idempotent from the hub's perspective -- self-heals a verification the
-// hub silently dropped, without needing a separate timeout/retry scheme.
-function shouldAttemptWebSubSubscribe(
-  status: "failed" | "none" | "pending" | "verified" | undefined,
-): boolean {
-  return status === undefined || status === "none" || status === "pending";
 }
 
 export class FeedParser {

@@ -3,6 +3,7 @@ import {
   defaultLeaseSeconds,
   leaseExpiresAt,
   resolveLeaseSeconds,
+  shouldAttemptWebSubSubscribe,
 } from "./websub-lease-policy.ts";
 
 describe("resolveLeaseSeconds", () => {
@@ -39,5 +40,26 @@ describe("leaseExpiresAt", () => {
   test("converts seconds to an absolute instant", () => {
     const now = Date.UTC(2026, 0, 1);
     expect(leaseExpiresAt(3600, now).getTime()).toBe(now + 3_600_000);
+  });
+});
+
+describe("shouldAttemptWebSubSubscribe", () => {
+  test("subscribes when nothing has been tried", () => {
+    expect(shouldAttemptWebSubSubscribe(undefined)).toBe(true);
+    expect(shouldAttemptWebSubSubscribe("none")).toBe(true);
+  });
+
+  // Subscribing again is idempotent from the hub's perspective, so retrying a
+  // pending subscription self-heals a verification the hub silently dropped.
+  test("retries a subscription still awaiting verification", () => {
+    expect(shouldAttemptWebSubSubscribe("pending")).toBe(true);
+  });
+
+  test("leaves a live subscription alone", () => {
+    expect(shouldAttemptWebSubSubscribe("verified")).toBe(false);
+  });
+
+  test("does not retry one the hub refused", () => {
+    expect(shouldAttemptWebSubSubscribe("failed")).toBe(false);
   });
 });
