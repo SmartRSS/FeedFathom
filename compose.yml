@@ -108,6 +108,9 @@ services:
       # is needed even when nothing sits in front of the published port.
       FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-localhost:3456}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      # Where inbound newsletter mail is routed, which is not necessarily
+      # the host the app is served from. Defaults to FEED_FATHOM_DOMAIN.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-}
       MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-}
       MAILJET_API_KEY: ${MAILJET_API_KEY:-}
       MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}

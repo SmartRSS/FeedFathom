@@ -234,17 +234,23 @@ test("returns a session matching the browser contract", async () => {
   expect(body).toEqual({ user: sessionUser });
 });
 
+// MAIL_DOMAIN is where inbound mail is routed and FEED_FATHOM_DOMAIN is
+// where the app is served; they coincide only in single-domain setups, so
+// the app host is a fallback and never an override.
 test.each([
-  [false, "feeds.example.com", undefined],
-  [true, "", undefined],
-  [true, "feeds.example.com:8443", "feeds.example.com"],
+  [false, "feeds.example.com", undefined, undefined],
+  [true, "", undefined, undefined],
+  [true, "feeds.example.com:8443", undefined, "feeds.example.com"],
+  [true, "app.example.com", "mail.example.com", "mail.example.com"],
+  [true, "app.example.com", "", undefined],
 ])(
-  "advertises the newsletter domain only with mail enabled (%p, %p)",
-  async (mailEnabled, domain, expected) => {
+  "advertises the newsletter domain only with mail enabled (%p, %p, %p)",
+  async (mailEnabled, domain, mailDomain, expected) => {
     const dependencies = createDependencies();
     authenticated(dependencies);
     dependencies.config.MAIL_ENABLED = mailEnabled;
     dependencies.config.FEED_FATHOM_DOMAIN = domain;
+    if (mailDomain !== undefined) dependencies.config.MAIL_DOMAIN = mailDomain;
     const app = await appFor(dependencies);
 
     const response = await app.handle(
