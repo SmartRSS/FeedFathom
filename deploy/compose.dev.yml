@@ -48,7 +48,7 @@ services:
       MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-local-development-relay-secret}
     volumes:
       - ./src:/app/src:ro
-      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # Bun resolves src/platform/db/connection.ts's journal import from disk here,
       # rather than from a bundle as the release images do.
       - ./drizzle:/app/drizzle:ro
 
@@ -57,6 +57,6 @@ services:
     command: ["--watch", "src/worker.ts"]
     volumes:
       - ./src:/app/src:ro
-      # Bun resolves src/db/connection.ts's journal import from disk here,
+      # Bun resolves src/platform/db/connection.ts's journal import from disk here,
       # rather than from a bundle as the release images do.
       - ./drizzle:/app/drizzle:ro

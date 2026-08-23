@@ -125,7 +125,7 @@ services:
     # order its start anyway, never its completion, and listing it would make
     # `up --wait` report its clean exit(0) as a failure. Correctness comes
     # from the worker waiting on the Drizzle migrations journal instead
-    # (waitForMigration in src/db/connection.ts).
+    # (waitForMigration in src/platform/db/connection.ts).
     depends_on:
       - redis
       - postgres
