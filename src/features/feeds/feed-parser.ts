@@ -2,10 +2,8 @@ import { parseFeed } from "@rowanmanning/feed-parser";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
-import {
-  type HttpClient,
-  isHttpDeferredError,
-} from "#platform/http/http-client.ts";
+import { type HttpClient } from "#platform/http/http-client.ts";
+import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import {
   mapFeedItemToArticle,

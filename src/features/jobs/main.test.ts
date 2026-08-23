@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { DelayedError } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
-import { HttpDeferredError } from "#platform/http/http-client.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   MainWorker,
   type MainWorkerFactory,

@@ -11,6 +11,8 @@ import {
   HttpDeadlineError,
   RequestDeadline,
 } from "#platform/http/request-deadline.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
   type NativeHttpResponse,
@@ -21,11 +23,6 @@ import {
 
 const cachePrefix = "http-cache:";
 const cacheLockPrefix = "http-cache-lock:";
-const blockedPrefix = "http-blocked:";
-const intervalPrefix = "http-interval:";
-const interactivePrefix = "http-interactive:";
-const feedDelayMs = 10_000;
-const interactiveWaitMs = 2_500;
 const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 const requestDeadlineMs = 30_000;
 // Sized off the largest feed we actually poll rather than a round number:
@@ -111,7 +108,6 @@ function buildUserAgent(
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
-const finiteNumberCheck = Schema.Compile(Type.Number());
 const redirectStatusCheck = Schema.Compile(
   Type.Union([301, 302, 303, 307, 308].map((status) => Type.Literal(status))),
 );
@@ -187,25 +183,6 @@ export type HttpResponse<T> = {
   url: string;
 };
 
-export class HttpDeferredError extends Error {
-  constructor(readonly retryAt: number) {
-    super(`Request deferred until ${new Date(retryAt).toISOString()}`);
-  }
-}
-
-// `instanceof` can itself throw (e.g. a Proxy with a poisoned
-// getPrototypeOf trap), so callers that can't trust their caught value
-// should go through this guard instead of a bare `instanceof` check.
-export function isHttpDeferredError(
-  error: unknown,
-): error is HttpDeferredError {
-  try {
-    return error instanceof HttpDeferredError;
-  } catch {
-    return false;
-  }
-}
-
 export class HttpClient {
   private readonly deadlineMs: number;
   private readonly transport: NativeHttpTransport;
@@ -213,11 +190,13 @@ export class HttpClient {
   // User-Agent is built once here and only the subscriber clause varies
   // per request.
   private readonly userAgentPrefix: string;
+  private readonly rateLimiter: HttpRateLimiter;
 
   constructor(
     private readonly redis: HttpRedis,
     options: HttpClientOptions = {},
   ) {
+    this.rateLimiter = new HttpRateLimiter(redis);
     this.deadlineMs = options.deadlineMs ?? requestDeadlineMs;
     this.transport = options.transport ?? nativeHttpTransport;
     this.userAgentPrefix = buildUserAgentPrefix(options);
@@ -270,7 +249,11 @@ export class HttpClient {
     }
 
     const hostname = parsedUrl.hostname;
-    await this.reserve(hostname, options.priority ?? "interactive", deadline);
+    await this.rateLimiter.reserve(
+      hostname,
+      options.priority ?? "interactive",
+      deadline,
+    );
 
     const headers = new Headers();
     headers.set(
@@ -346,7 +329,7 @@ export class HttpClient {
       let result: FetchResult | undefined;
       try {
         result = await this.fetchFollowingRedirects(url, headers, deadline);
-        await this.applyRateLimitHeaders(
+        await this.rateLimiter.applyRateLimitHeaders(
           hostname,
           result.response.headers,
           deadline,
@@ -356,7 +339,7 @@ export class HttpClient {
           result.response.destroy();
           result = undefined;
           throw new HttpDeferredError(
-            await this.block(hostname, retryAfter, deadline),
+            await this.rateLimiter.block(hostname, retryAfter, deadline),
           );
         }
         if (
@@ -463,129 +446,6 @@ export class HttpClient {
     } catch {
       // The lock expires shortly after the request deadline.
     }
-  }
-
-  private async reserve(
-    hostname: string,
-    priority: "background" | "interactive",
-    deadline: RequestDeadline,
-  ): Promise<void> {
-    const delay = feedDelayMs;
-    const until = await this.blockedUntil(hostname, deadline);
-    if (until > Date.now()) throw new HttpDeferredError(until);
-
-    if (priority === "background") {
-      const waiters = Number(
-        (await deadline.run(
-          this.redis.get(`${interactivePrefix}${hostname}`),
-        )) ?? "0",
-      );
-      if (waiters > 0 || !(await this.reserveSlot(hostname, delay, deadline))) {
-        throw new HttpDeferredError(Date.now() + delay);
-      }
-      return;
-    }
-
-    const reservationDeadline = Date.now() + interactiveWaitMs;
-    let waiting = false;
-    try {
-      /* eslint-disable no-await-in-loop -- Reservation and waiter state are updated between polls. */
-      while (Date.now() < reservationDeadline) {
-        if (await this.reserveSlot(hostname, delay, deadline)) return;
-        if (!waiting) {
-          waiting = true;
-          await deadline.run(
-            this.redis.incr(`${interactivePrefix}${hostname}`),
-          );
-          await deadline.run(
-            this.redis.expire(`${interactivePrefix}${hostname}`, 6),
-          );
-        }
-        await deadline.sleep(50);
-      }
-      /* eslint-enable no-await-in-loop */
-      throw new HttpDeferredError(Date.now() + delay);
-    } finally {
-      if (waiting) {
-        await deadline.run(this.redis.decr(`${interactivePrefix}${hostname}`));
-      }
-    }
-  }
-
-  private async reserveSlot(
-    hostname: string,
-    delay: number,
-    deadline: RequestDeadline,
-  ): Promise<boolean> {
-    return (
-      (await deadline.run(
-        this.redis.set(
-          `${intervalPrefix}${hostname}`,
-          "1",
-          "PX",
-          delay.toString(),
-          "NX",
-        ),
-      )) === "OK"
-    );
-  }
-
-  private async blockedUntil(
-    hostname: string,
-    deadline: RequestDeadline,
-  ): Promise<number> {
-    return Number.parseInt(
-      (await deadline.run(this.redis.get(`${blockedPrefix}${hostname}`))) ??
-        "0",
-      10,
-    );
-  }
-
-  private async applyRateLimitHeaders(
-    hostname: string,
-    headers: Headers,
-    deadline: RequestDeadline,
-  ): Promise<void> {
-    const remainingHeader = headers.get("x-ratelimit-remaining");
-    const resetHeader = headers.get("x-ratelimit-reset");
-    if (!remainingHeader?.trim() || !resetHeader?.trim()) return;
-
-    const remaining = Number(remainingHeader);
-    const reset = Number(resetHeader);
-    if (
-      remaining <= 1 &&
-      finiteNumberCheck.Check(reset) &&
-      reset * 1_000 > Date.now()
-    ) {
-      await this.block(hostname, reset * 1_000, deadline);
-    }
-  }
-
-  private async block(
-    hostname: string,
-    retryAfter: string | number | null,
-    deadline: RequestDeadline,
-  ): Promise<number> {
-    const retryAt = this.retryAt(retryAfter);
-    await deadline.run(
-      this.redis.set(
-        `${blockedPrefix}${hostname}`,
-        retryAt.toString(),
-        "PX",
-        Math.max(1, retryAt - Date.now()),
-      ),
-    );
-    return retryAt;
-  }
-
-  private retryAt(retryAfter: string | number | null): number {
-    if (typeof retryAfter === "number") return retryAfter;
-    if (!retryAfter?.trim()) return Date.now() + 5 * 60_000;
-
-    const seconds = Number(retryAfter);
-    if (finiteNumberCheck.Check(seconds)) return Date.now() + seconds * 1_000;
-    const date = Date.parse(retryAfter);
-    return finiteNumberCheck.Check(date) ? date : Date.now() + 5 * 60_000;
   }
 
   private async getCached(

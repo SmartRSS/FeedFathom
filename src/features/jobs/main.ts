@@ -4,7 +4,7 @@ import { DelayedError } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import type { AppConfig } from "#platform/config.ts";
-import { isHttpDeferredError } from "#platform/http/http-client.ts";
+import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";

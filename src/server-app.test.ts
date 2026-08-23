@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
-import { HttpDeferredError } from "#platform/http/http-client.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
 import { createServerApp, type ServerDependencies } from "./server-app.ts";
 

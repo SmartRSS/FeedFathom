@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
-import { HttpClient, HttpDeferredError } from "#platform/http/http-client.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   createNativeHttpTransport,
   HttpPolicyError,
