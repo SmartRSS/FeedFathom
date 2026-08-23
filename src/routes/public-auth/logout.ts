@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
+import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import { json } from "../shared.ts";
 import { sessionHeader } from "./session-header.ts";
 
 export type LogoutRouteDependencies = {

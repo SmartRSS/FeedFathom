@@ -6,11 +6,11 @@ import type {
 } from "#shared/contracts/requests.ts";
 import { sourceUrlReplacementRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { json } from "#platform/http/json.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
 } from "../../db/data-services/source-data-service.ts";
-import { json } from "../shared.ts";
 
 export type AdminRouteDependencies = {
   sourcesDataService: Pick<

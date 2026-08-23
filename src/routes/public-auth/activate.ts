@@ -1,8 +1,8 @@
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import { activationParams } from "#shared/contracts/requests.ts";
+import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import { json } from "../shared.ts";
 
 export type ActivateRouteDependencies = {
   usersDataService: {

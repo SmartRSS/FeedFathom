@@ -1,5 +1,5 @@
 import type { HttpDeferredError } from "#platform/http/http-client.ts";
-import { json } from "../shared.ts";
+import { json } from "#platform/http/json.ts";
 
 export function deferredResponse(error: HttpDeferredError) {
   // Clamped to an hour: retryAt can come from an upstream Retry-After

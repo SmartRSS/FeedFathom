@@ -3,8 +3,8 @@ import { Value } from "typebox/value";
 import type { removeFolderRequest } from "#shared/contracts/requests.ts";
 import { createFolderRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { json } from "#platform/http/json.ts";
 import type { FoldersDataService } from "../../db/data-services/folder-data-service.ts";
-import { json } from "../shared.ts";
 
 export type FoldersRouteDependencies = {
   foldersDataService: Pick<

@@ -1,7 +1,7 @@
 import { Value } from "typebox/value";
 import { Elysia } from "elysia";
 import { internalAddressPolicy } from "#shared/validation/typebox-policy.ts";
-import { json } from "./shared.ts";
+import { json } from "#platform/http/json.ts";
 
 export const createInternalRoutes = () =>
   new Elysia().get("/healthcheck", ({ request, server }) => {

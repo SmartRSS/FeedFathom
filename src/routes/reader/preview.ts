@@ -3,10 +3,10 @@ import { Value } from "typebox/value";
 import { previewQuery } from "#shared/contracts/requests.ts";
 import { HttpDeferredError } from "#platform/http/http-client.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "../../lib/feed-parser.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
 import type { FeedPreviewCache } from "../../lib/feed-preview-cache.ts";
-import { json } from "../shared.ts";
 import { deferredResponse } from "./deferred-response.ts";
 
 export type PreviewRouteDependencies = {
