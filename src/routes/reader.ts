@@ -11,6 +11,7 @@ import {
   subscribeRequest,
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
+import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
@@ -34,7 +35,6 @@ import { getPreviewHandler } from "./reader/preview.ts";
 import { deleteSourceHandler, patchSourceHandler } from "./reader/source.ts";
 import { postSubscribeHandler } from "./reader/subscribe.ts";
 import { getTreeHandler } from "./reader/tree.ts";
-import { createAuthPlugin } from "./shared.ts";
 
 export type ReaderRouteDependencies = {
   articlesDataService: Pick<

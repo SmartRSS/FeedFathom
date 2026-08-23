@@ -5,11 +5,12 @@ import type {
   removeSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { sourceUrlReplacementRequest } from "#shared/contracts/requests.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
 } from "../../db/data-services/source-data-service.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { json } from "../shared.ts";
 
 export type AdminRouteDependencies = {
   sourcesDataService: Pick<

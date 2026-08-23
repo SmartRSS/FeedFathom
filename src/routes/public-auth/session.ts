@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
+import { userFor } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import { json, userFor } from "../shared.ts";
+import { json } from "../shared.ts";
 
 export type SessionRouteDependencies = {
   usersDataService: Pick<UsersDataService, "getUserBySid">;

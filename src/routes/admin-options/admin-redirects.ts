@@ -1,7 +1,8 @@
 import { Value } from "typebox/value";
 import { redirectDeletionRequest } from "#shared/contracts/requests.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { json } from "../shared.ts";
 
 export type AdminRedirectsRouteDependencies = {
   redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;

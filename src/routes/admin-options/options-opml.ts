@@ -3,9 +3,10 @@ import { t } from "elysia";
 import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { OpmlImportService } from "../../db/data-services/opml-import-service.ts";
 import type { OpmlParser } from "../../lib/opml-parser.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { json } from "../shared.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });

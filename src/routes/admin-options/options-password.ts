@@ -1,7 +1,8 @@
 import type { Static } from "typebox";
 import type { passwordRequest } from "#shared/contracts/requests.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { json } from "../shared.ts";
 
 type Password = {
   hash(password: string): Promise<string>;

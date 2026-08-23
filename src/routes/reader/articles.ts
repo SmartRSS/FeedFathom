@@ -3,10 +3,11 @@ import type {
   articlesRequest,
   removeArticlesRequest,
 } from "#shared/contracts/requests.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { safeArticleUrl } from "../../lib/feed-mapper.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { json } from "../shared.ts";
 
 export type ArticlesRouteDependencies = {
   articlesDataService: Pick<

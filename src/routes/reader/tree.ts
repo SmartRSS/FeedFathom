@@ -1,6 +1,7 @@
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { FoldersDataService } from "../../db/data-services/folder-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
-import { type AuthedUser, json } from "../shared.ts";
+import { json } from "../shared.ts";
 
 export type TreeRouteDependencies = {
   foldersDataService: Pick<FoldersDataService, "getUserFolders">;

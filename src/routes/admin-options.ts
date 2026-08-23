@@ -7,6 +7,7 @@ import {
   sourceUrlReplacementRequest,
 } from "#shared/contracts/requests.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
@@ -29,7 +30,6 @@ import {
 } from "./admin-options/options-opml.ts";
 import { postOptionsPasswordHandler } from "./admin-options/options-password.ts";
 import { getOptionsHandler } from "./admin-options/options.ts";
-import { createAuthPlugin } from "./shared.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
