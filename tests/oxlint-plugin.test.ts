@@ -285,6 +285,22 @@ test("layer-boundaries judges relative specifiers by the same rule", async () =>
   ).toEqual([]);
 });
 
+test("layer-boundaries checks dynamic imports too", async () => {
+  // One `await import()` would otherwise be enough to walk around the rule.
+  expect(
+    await lintAt(
+      join("src", "features", "auth", "lazy.ts"),
+      'export const a = async () => import("#features/feeds/feed-parser.ts");',
+    ),
+  ).toEqual(["feedfathom(layer-boundaries)"]);
+  expect(
+    await lintAt(
+      join("src", "features", "auth", "lazy-ok.ts"),
+      'export const a = async () => import("#shared/util/safe-url.ts");',
+    ),
+  ).toEqual([]);
+});
+
 test("layer-boundaries exempts co-located tests", async () => {
   expect(
     await lintAt(

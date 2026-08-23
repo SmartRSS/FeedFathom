@@ -381,7 +381,7 @@ function allows(from, to, dag) {
  * @param {{ kind: string, name: string }} layer
  * @returns {string}
  */
-function describe(layer) {
+function describeLayer(layer) {
   if (layer.kind === "feature") return `feature '${layer.name}'`;
   if (layer.kind === "client") return `client '${layer.name}'`;
   if (layer.kind === "root") return "the composition root";
@@ -397,6 +397,9 @@ function describe(layer) {
  *
  * Relative specifiers are resolved and judged by the same rule, so `../../`
  * is not an escape hatch from the boundary that `#platform/` would enforce.
+ *
+ * `await import("#features/...")` is checked alongside the static forms --
+ * otherwise one dynamic import is all it takes to walk around the rule.
  *
  * Co-located `*.test.ts` files are exempt. A test arranges state rather than
  * wiring the product, and it is not in any shipped bundle, so a test reaching
@@ -447,7 +450,7 @@ const layerBoundaries = defineRule({
       const to = layerOf(target);
       if (!to || allows(from, to, dag)) return;
       context.report({
-        data: { from: describe(from), to: describe(to) },
+        data: { from: describeLayer(from), to: describeLayer(to) },
         messageId: "forbidden",
         node,
       });
@@ -462,6 +465,7 @@ const layerBoundaries = defineRule({
       ExportAllDeclaration: check,
       ExportNamedDeclaration: check,
       ImportDeclaration: check,
+      ImportExpression: check,
     };
   },
 });
