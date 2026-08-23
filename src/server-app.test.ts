@@ -234,6 +234,34 @@ test("returns a session matching the browser contract", async () => {
   expect(body).toEqual({ user: sessionUser });
 });
 
+test.each([
+  [false, "feeds.example.com", undefined],
+  [true, "", undefined],
+  [true, "feeds.example.com:8443", "feeds.example.com"],
+])(
+  "advertises the newsletter domain only with mail enabled (%p, %p)",
+  async (mailEnabled, domain, expected) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    dependencies.config.MAIL_ENABLED = mailEnabled;
+    dependencies.config.FEED_FATHOM_DOMAIN = domain;
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/session", {
+        headers: { cookie: "sid=test" },
+      }),
+    );
+    const body: unknown = await response.json();
+
+    expect(Value.Check(sessionResponse, body)).toBe(true);
+    expect(body).toEqual({
+      ...(expected === undefined ? {} : { mailDomain: expected }),
+      user: sessionUser,
+    });
+  },
+);
+
 test("ends only the current session and clears its cookie", async () => {
   const dependencies = createDependencies();
   const deleted: string[] = [];
@@ -870,7 +898,7 @@ test("falls back to queueing when inline persistence fails", async () => {
   expect(enqueues).toEqual([subscriptionSource]);
 });
 
-test("queues URL cache misses and email subscriptions", async () => {
+test("queues URL cache misses but never email subscriptions", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.MAIL_ENABLED = true;
@@ -919,10 +947,7 @@ test("queues URL cache misses and email subscriptions", async () => {
   expect(await web.json()).toEqual({ sourceId: 91 });
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
-  expect(enqueues).toEqual([
-    [91, subscriptionSource.url],
-    [92, "newsletter@example.com"],
-  ]);
+  expect(enqueues).toEqual([[91, subscriptionSource.url]]);
 });
 
 test("triggers WebSub discovery immediately at subscribe time, but not for email targets", async () => {

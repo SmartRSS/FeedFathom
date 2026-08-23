@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { Value } from "typebox/value";
+import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
 import {
   clickSelectsArticle,
   initialPreviewSelection,
+  newsletterAddress,
   websiteValidationMessage,
   withScheme,
 } from "./discovery-behavior.ts";
@@ -84,5 +87,21 @@ describe("clickSelectsArticle", () => {
   // false leading modifier short-circuited and hid a pressed later one.
   test("a pressed modifier still counts behind an explicitly false one", () => {
     expect(clickSelectsArticle({ ctrlKey: false, metaKey: true })).toBe(false);
+  });
+});
+
+describe("newsletterAddress", () => {
+  // The address goes straight into /subscribe, which rejects anything the
+  // shared email policy does not accept.
+  test("mints an address the subscribe contract accepts", () => {
+    const address = newsletterAddress("example.com");
+    expect(Value.Check(emailAddressPolicy, address)).toBe(true);
+    expect(address.endsWith("@example.com")).toBe(true);
+  });
+
+  test("does not repeat itself", () => {
+    expect(newsletterAddress("example.com")).not.toBe(
+      newsletterAddress("example.com"),
+    );
   });
 });
