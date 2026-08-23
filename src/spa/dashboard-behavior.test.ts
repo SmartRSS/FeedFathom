@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
   faviconUrls,
+  folderOpenFromStored,
+  folderOpenStorageKey,
+  folderOpenToStored,
   findNode,
   findParentFolderUid,
   sourceIds,
@@ -143,5 +146,32 @@ describe("findParentFolderUid", () => {
 
   test("a source at the root has no parent folder", () => {
     expect(findParentFolderUid([source("1")], "1")).toBeUndefined();
+  });
+});
+
+describe("folder open persistence", () => {
+  test('only the literal "closed" collapses a folder', () => {
+    expect(folderOpenFromStored("closed")).toBe(false);
+    expect(folderOpenFromStored("open")).toBe(true);
+  });
+
+  // A folder that has never been toggled has no stored entry at all.
+  test("an absent entry reads as open", () => {
+    expect(folderOpenFromStored(null)).toBe(true);
+  });
+
+  // A value from an older build or a corrupted one must not hide feeds.
+  test("an unrecognised value reads as open", () => {
+    expect(folderOpenFromStored("")).toBe(true);
+    expect(folderOpenFromStored("CLOSED")).toBe(true);
+  });
+
+  test("round-trips both states", () => {
+    expect(folderOpenFromStored(folderOpenToStored(true))).toBe(true);
+    expect(folderOpenFromStored(folderOpenToStored(false))).toBe(false);
+  });
+
+  test("namespaces the key by uid", () => {
+    expect(folderOpenStorageKey("inbox")).toBe("folder:inbox");
   });
 });

@@ -20,6 +20,9 @@ import {
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
   faviconUrls,
+  folderOpenFromStored,
+  folderOpenStorageKey,
+  folderOpenToStored,
   findNode,
   findParentFolderUid,
   sourceIds,
@@ -111,9 +114,13 @@ const ARTICLE_SKELETON_TITLES = [
   "Another Example Headline",
 ];
 
+// localStorage throws in a private-browsing context and when the origin has
+// no storage access; a folder falling back to open is the safe outcome.
 function storedFolderOpen(uid: string) {
   try {
-    return localStorage.getItem(`folder:${uid}`) !== "closed";
+    return folderOpenFromStored(
+      localStorage.getItem(folderOpenStorageKey(uid)),
+    );
   } catch {
     return true;
   }
@@ -121,7 +128,7 @@ function storedFolderOpen(uid: string) {
 
 function storeFolderOpen(uid: string, open: boolean) {
   try {
-    localStorage.setItem(`folder:${uid}`, open ? "open" : "closed");
+    localStorage.setItem(folderOpenStorageKey(uid), folderOpenToStored(open));
   } catch {}
 }
 
