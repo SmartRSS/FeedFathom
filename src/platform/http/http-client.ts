@@ -7,7 +7,7 @@ import {
   type NativeHttpTransport,
   nativeHttpTransport,
   parseHttpUrl,
-} from "./http-native-transport.ts";
+} from "#platform/http/http-native-transport.ts";
 
 const cachePrefix = "http-cache:";
 const cacheLockPrefix = "http-cache-lock:";

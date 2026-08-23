@@ -1,4 +1,4 @@
-import type { HttpDeferredError } from "../../lib/http-client.ts";
+import type { HttpDeferredError } from "#platform/http/http-client.ts";
 import { json } from "../shared.ts";
 
 export function deferredResponse(error: HttpDeferredError) {

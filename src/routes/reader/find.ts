@@ -1,8 +1,8 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { findQuery } from "#shared/contracts/requests.ts";
+import { HttpDeferredError } from "#platform/http/http-client.ts";
 import type { FeedParser } from "../../lib/feed-parser.ts";
-import { HttpDeferredError } from "../../lib/http-client.ts";
 import { scanHtml } from "../../lib/scanner.ts";
 import { json } from "../shared.ts";
 import { deferredResponse } from "./deferred-response.ts";

@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
-import { HttpClient, HttpDeferredError } from "../src/lib/http-client.ts";
+import { HttpClient, HttpDeferredError } from "#platform/http/http-client.ts";
 import {
   createNativeHttpTransport,
   HttpPolicyError,
   type NativeHttpResponse,
   type NativeHttpTransport,
-} from "../src/lib/http-native-transport.ts";
+} from "#platform/http/http-native-transport.ts";
 
 const maximumBodyBytes = 24 * 1024 * 1024;
 

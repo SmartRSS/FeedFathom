@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { isBlockedHostname } from "./private-network-guard.ts";
+import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 
 const subscribeTimeoutMs = 15_000;
 const supportedSignatureAlgorithms = new Set([

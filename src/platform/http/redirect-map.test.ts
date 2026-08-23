@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RedirectMap } from "../src/lib/redirect-map.ts";
+import { RedirectMap } from "#platform/http/redirect-map.ts";
 
 test("reads redirect values concurrently and awaits every result", async () => {
   const keys = [

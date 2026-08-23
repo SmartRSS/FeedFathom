@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { isBlockedHostname } from "../lib/private-network-guard.ts";
+import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 import {
   readerBridgeChannel,
   readerBridgeVersion,

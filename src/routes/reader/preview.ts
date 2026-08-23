@@ -1,9 +1,9 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { previewQuery } from "#shared/contracts/requests.ts";
+import { HttpDeferredError } from "#platform/http/http-client.ts";
 import type { FeedParser } from "../../lib/feed-parser.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
-import { HttpDeferredError } from "../../lib/http-client.ts";
 import type { FeedPreviewCache } from "../../lib/feed-preview-cache.ts";
 import { type AuthedUser, json } from "../shared.ts";
 import { deferredResponse } from "./deferred-response.ts";

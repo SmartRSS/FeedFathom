@@ -1,5 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
-import { readResponseDiagnostic } from "../read-response-diagnostic.ts";
+import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
 const mailjetEndpoint = "https://api.mailjet.com/v3.1/send";
 

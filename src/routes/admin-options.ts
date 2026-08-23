@@ -6,6 +6,7 @@ import {
   removeSourceRequest,
   sourceUrlReplacementRequest,
 } from "#shared/contracts/requests.ts";
+import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
@@ -13,7 +14,6 @@ import type {
 import type { OpmlImportService } from "../db/data-services/opml-import-service.ts";
 import type { UsersDataService } from "../db/data-services/user-data-service.ts";
 import type { OpmlParser } from "../lib/opml-parser.ts";
-import type { RedirectMap } from "../lib/redirect-map.ts";
 import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,

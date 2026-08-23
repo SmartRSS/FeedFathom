@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
+import { HttpDeferredError } from "#platform/http/http-client.ts";
 import { createServerApp, type ServerDependencies } from "../src/server-app.ts";
 import { serializeFeedPreview } from "../src/lib/feed-preview-cache.ts";
-import { HttpDeferredError } from "../src/lib/http-client.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../src/spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";

@@ -4,6 +4,8 @@ import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
 import { cleanupOrphanedData } from "#platform/db/maintenance.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { RedirectMap } from "#platform/http/redirect-map.ts";
 import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
 import { FoldersDataService } from "./db/data-services/folder-data-service.ts";
 import { JobFailuresDataService } from "./db/data-services/job-failure-data-service.ts";
@@ -12,8 +14,6 @@ import { SourcesDataService } from "./db/data-services/source-data-service.ts";
 import { UsersDataService } from "./db/data-services/user-data-service.ts";
 import { UserSourcesDataService } from "./db/data-services/user-source-data-service.ts";
 import { FeedParser } from "./lib/feed-parser.ts";
-import { HttpClient } from "./lib/http-client.ts";
-import { RedirectMap } from "./lib/redirect-map.ts";
 
 export async function createFeedRuntime() {
   const redis = new RedisClient("redis://redis:6379", {

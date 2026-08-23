@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { readResponseDiagnostic } from "../lib/read-response-diagnostic.ts";
+import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
 const endpointDomain = Type.Union([
   Type.String({ pattern: "^https://" }),

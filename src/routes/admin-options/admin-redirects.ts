@@ -1,6 +1,6 @@
 import { Value } from "typebox/value";
 import { redirectDeletionRequest } from "#shared/contracts/requests.ts";
-import type { RedirectMap } from "../../lib/redirect-map.ts";
+import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import { type AuthedUser, json } from "../shared.ts";
 
 export type AdminRedirectsRouteDependencies = {
