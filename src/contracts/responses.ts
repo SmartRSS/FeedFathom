@@ -1,5 +1,5 @@
 import { Type, type Static } from "typebox";
-import { jsonDatePolicy } from "../lib/typebox-policy.ts";
+import { jsonDatePolicy } from "#shared/validation/typebox-policy.ts";
 
 const exact = { additionalProperties: false } as const;
 const id = Type.Integer({ minimum: 1 });

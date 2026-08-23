@@ -1,5 +1,6 @@
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
+import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import {
   HttpPolicyError,
   type NativeHttpResponse,
@@ -7,7 +8,6 @@ import {
   nativeHttpTransport,
   parseHttpUrl,
 } from "./http-native-transport.ts";
-import { webUrlPolicy } from "./typebox-policy.ts";
 
 const cachePrefix = "http-cache:";
 const cacheLockPrefix = "http-cache-lock:";

@@ -3,6 +3,11 @@
   "version": "0.0.1",
   "private": false,
   "type": "module",
+  "imports": {
+    "#shared/*": "./src/shared/*",
+    "#platform/*": "./src/platform/*",
+    "#features/*": "./src/features/*"
+  },
   "scripts": {
     "dev": "bun ./bin/dev.ts",
     "dev:down": "bun ./bin/dev.ts --down",
@@ -80,7 +85,8 @@
       "src/cloudflare/email-worker.ts",
       "src/extension/{background-event,content-script,options}.ts",
       "tests/**/*.ts",
-      "bin/**/*.ts"
+      "bin/**/*.ts",
+      "src/**/*.test.ts"
     ],
     "project": [
       "src/**/*.{ts,tsx}",

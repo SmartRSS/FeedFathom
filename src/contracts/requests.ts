@@ -6,7 +6,7 @@ import {
   normalizedWebUrl,
   withMatchingChangedPasswords,
   withMatchingPasswords,
-} from "../lib/typebox-policy.ts";
+} from "#shared/validation/typebox-policy.ts";
 
 const id = Type.Integer({ minimum: 1 });
 const maximumRequestIds = 500;

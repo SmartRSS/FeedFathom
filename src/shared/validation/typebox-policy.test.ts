@@ -12,7 +12,7 @@ import {
   webUrlPolicy,
   withMatchingChangedPasswords,
   withMatchingPasswords,
-} from "../src/lib/typebox-policy.ts";
+} from "#shared/validation/typebox-policy.ts";
 
 const registration = withMatchingPasswords(
   Type.Object({

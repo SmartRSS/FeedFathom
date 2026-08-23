@@ -1,7 +1,7 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { isDisposableEmail } from "disposable-email-domains-js";
-import { isPlainText } from "../util/is-plain-text.ts";
+import { isPlainText } from "../../util/is-plain-text.ts";
 
 type PasswordPair = {
   password: string;

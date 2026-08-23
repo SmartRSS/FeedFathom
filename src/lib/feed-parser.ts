@@ -1,6 +1,7 @@
 import { parseFeed } from "@rowanmanning/feed-parser";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
+import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
@@ -17,7 +18,6 @@ import {
 } from "./microformat-feed-parser.ts";
 import type { RedirectMap } from "./redirect-map.ts";
 import { rewriteLinks } from "./rewrite-links.ts";
-import { dateType, webUrlPolicy } from "./typebox-policy.ts";
 import { discoverWebSub, requestHubSubscription } from "./websub.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);

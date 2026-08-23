@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { dateType } from "./typebox-policy.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
 
 const externalProjection = { additionalProperties: true } as const;
 const parsedMailProjection = Type.Object(

@@ -1,5 +1,9 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
+import {
+  normalizedSubscriptionTarget,
+  type SubscriptionTarget,
+} from "#shared/validation/typebox-policy.ts";
 import type { subscribeRequest } from "../../contracts/requests.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { SourcesDataService } from "../../db/data-services/source-data-service.ts";
@@ -10,10 +14,6 @@ import {
   type FeedPreviewCache,
   serializeFeedPreview,
 } from "../../lib/feed-preview-cache.ts";
-import {
-  normalizedSubscriptionTarget,
-  type SubscriptionTarget,
-} from "../../lib/typebox-policy.ts";
 import { type AuthedUser, json } from "../shared.ts";
 
 export type SubscribeRouteDependencies = {

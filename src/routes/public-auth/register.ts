@@ -3,11 +3,11 @@ import { Elysia } from "elysia";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { Value } from "typebox/value";
+import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
 import type { AppConfig } from "../../config.ts";
 import { registerRequest } from "../../contracts/requests.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
 import type { MailSender } from "../../lib/email/mail-sender.ts";
-import { disposableEmailPolicy } from "../../lib/typebox-policy.ts";
 import { json } from "../shared.ts";
 
 const turnstileResponse = Type.Object(
