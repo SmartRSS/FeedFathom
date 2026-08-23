@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isPlainText } from "../src/util/is-plain-text.ts";
+import { isPlainText } from "#shared/util/is-plain-text.ts";
 
 describe("isPlainText", () => {
   test("should return true for empty string", () => {

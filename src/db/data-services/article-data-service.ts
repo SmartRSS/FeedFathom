@@ -3,7 +3,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
   generateBoundaryDates,
   getDateGroup,
-} from "../../util/get-date-group.ts";
+} from "#shared/util/get-date-group.ts";
 import { userSources } from "../schema.ts";
 import type * as schema from "../schema.ts";
 import {

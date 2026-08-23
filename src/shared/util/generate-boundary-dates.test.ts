@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateBoundaryDates } from "../src/util/get-date-group.ts";
+import { generateBoundaryDates } from "#shared/util/get-date-group.ts";
 
 describe("generateBoundaryDates", () => {
   const cases = [
