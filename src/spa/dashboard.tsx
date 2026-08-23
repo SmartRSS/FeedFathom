@@ -19,6 +19,15 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
+  faviconUrls,
+  findNode,
+  findParentFolderUid,
+  sourceIds,
+  treeNodeKey,
+  unreadCount,
+  withDecrementedUnread,
+} from "./dashboard-behavior.ts";
+import {
   removalOutcome,
   soleSelectedIndex,
   transitionArticleSelection,
@@ -64,24 +73,6 @@ function ReaderBody(props: { content: ReaderContent }) {
   );
 }
 
-function treeNodeKey(node: TreeNode): string {
-  return `${node.type}:${node.uid}`;
-}
-
-function sourceIds(node: TreeNode): number[] {
-  return node.type === "source"
-    ? [Number(node.uid)]
-    : (node.children ?? []).flatMap(sourceIds);
-}
-
-function faviconUrls(node: TreeNode): string[] {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(faviconUrls);
-}
-
 // Only used for the very first tree render (see onMount): keeps the tree
 // skeleton up until every favicon has settled (loaded or failed). A failed
 // image still resolves via the .catch() below, so this can't hang on a
@@ -119,66 +110,6 @@ const ARTICLE_SKELETON_TITLES = [
   "A Somewhat Longer Article Title About Something",
   "Another Example Headline",
 ];
-
-function withDecrementedUnread(
-  nodes: TreeNode[],
-  deltas: Map<string, number>,
-): TreeNode[] {
-  let changed = false;
-  const next = nodes.map((node) => {
-    if (node.type === "folder") {
-      const children = withDecrementedUnread(node.children, deltas);
-      if (children === node.children) return node;
-      changed = true;
-      return { ...node, children };
-    }
-    const delta = deltas.get(node.uid);
-    if (!delta) return node;
-    changed = true;
-    return { ...node, unreadCount: Math.max(0, node.unreadCount - delta) };
-  });
-  return changed ? next : nodes;
-}
-
-function findNode(
-  nodes: TreeNode[],
-  type: TreeNode["type"],
-  uid: string,
-): TreeNode | undefined {
-  const queue = [...nodes];
-  for (const node of queue) {
-    if (node.type === type && node.uid === uid) return node;
-    if (node.type === "folder") queue.push(...node.children);
-  }
-  return undefined;
-}
-
-// Folders are flat (one level, no nesting), so a source's containing
-// folder is always a direct child lookup, never a deeper search.
-function findParentFolderUid(
-  nodes: TreeNode[],
-  sourceUid: string,
-): string | undefined {
-  for (const node of nodes) {
-    if (
-      node.type === "folder" &&
-      node.children.some(
-        (child) => child.type === "source" && child.uid === sourceUid,
-      )
-    )
-      return node.uid;
-  }
-  return undefined;
-}
-
-function unreadCount(node: TreeNode): number {
-  return node.type === "source"
-    ? (node.unreadCount ?? 0)
-    : (node.children ?? []).reduce(
-        (count, child) => count + unreadCount(child),
-        0,
-      );
-}
 
 function storedFolderOpen(uid: string) {
   try {
