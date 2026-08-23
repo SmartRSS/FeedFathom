@@ -50,3 +50,10 @@ export function clickSelectsArticle(modifiers: ClickModifiers): boolean {
     modifiers.altKey === true
   );
 }
+
+// A newsletter subscription is just a source whose URL is an address the mail
+// ingest routes back here, so the address only has to be unguessable and
+// unique -- no server round trip needed to mint one.
+export function newsletterAddress(domain: string): string {
+  return `${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}@${domain}`;
+}

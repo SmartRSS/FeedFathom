@@ -120,6 +120,12 @@ export async function postSubscribeHandler(
     userSourcesDataService.withSubscriptionInitializationLease(
       subscription.subscriptionId,
       async () => {
+        // An email source has nothing to fetch -- its articles arrive by
+        // mail -- so enqueueing it would only have the worker try to parse
+        // the address as a feed URL and fail the brand-new source. The
+        // lease itself still runs, so the subscription counts as
+        // initialized.
+        if (isEmail) return;
         if (preview) {
           // A cached preview means the feed was already fetched and
           // parsed moments ago (e.g. during "load preview" in feed
