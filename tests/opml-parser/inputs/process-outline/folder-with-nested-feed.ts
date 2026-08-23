@@ -1,4 +1,4 @@
-import type { Outline } from "../../../../src/types/opml-types.ts";
+import type { Outline } from "#shared/types/opml-types.ts";
 
 export const input: Outline = {
   "@text": "Tech Blogs",

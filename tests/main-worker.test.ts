@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { DelayedError } from "bullmq";
+import { JobName } from "#shared/types/job-name-enum.ts";
 import {
   MainWorker,
   type MainWorkerFactory,
@@ -7,7 +8,6 @@ import {
   type MainWorkerQueue,
 } from "../src/lib/workers/main.ts";
 import { HttpDeferredError } from "../src/lib/http-client.ts";
-import { JobName } from "../src/types/job-name-enum.ts";
 
 const source = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),

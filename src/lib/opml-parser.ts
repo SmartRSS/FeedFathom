@@ -1,4 +1,8 @@
-import type { OpmlFolder, OpmlNode, OpmlSource } from "../types/opml-types.ts";
+import type {
+  OpmlFolder,
+  OpmlNode,
+  OpmlSource,
+} from "#shared/types/opml-types.ts";
 import { attribute, childElements, isXmlElement, parseXml } from "./xml.ts";
 
 const maximumDepth = 32;
