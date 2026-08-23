@@ -18,7 +18,18 @@ const feedDelayMs = 10_000;
 const interactiveWaitMs = 2_500;
 const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 const requestDeadlineMs = 30_000;
-const maximumBodyBytes = 5 * 1024 * 1024;
+// Sized off the largest feed we actually poll rather than a round number:
+// Project Zero's feed carries ten full exploit writeups with the complete
+// HTML inlined, which is 12.6 MiB today and grows by roughly 1.3 MiB per
+// post. Everything else in a 227-source corpus fits in well under 1 MiB.
+//
+// ponytail: one global ceiling, not a per-source budget. The worst case is
+// WORKER_CONCURRENCY simultaneous downloads all sitting at the cap against
+// the worker's memory limit (production: 50 and 750 MiB, so this cap is
+// only safe because a single source exceeds even 5 MiB). Give feeds their
+// own per-source budget if a second heavyweight ever shows up.
+const maximumBodyBytes = 24 * 1024 * 1024;
+const maximumBodyMebibytes = maximumBodyBytes / (1024 * 1024);
 const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
 const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
 const userAgentProduct = "SmartRSS/FeedFathom";
@@ -824,7 +835,9 @@ export class HttpClient {
             const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
             length += chunk.byteLength;
             if (length > maximumBodyBytes) {
-              throw new HttpPolicyError("Decoded response body exceeds 5 MiB");
+              throw new HttpPolicyError(
+                `Decoded response body exceeds ${maximumBodyMebibytes.toString()} MiB`,
+              );
             }
             chunks.push(chunk);
           }
