@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   decodeFeedBody,
   detectFeedEncoding,
-  isBetterFavicon,
   validateParsedFeed,
 } from "#features/feeds/feed-parser.ts";
 
@@ -41,23 +40,6 @@ describe("external feed parser projection", () => {
     expect(() => validateParsedFeed({ ...feed, items: [{}] })).toThrow(
       "Feed parser returned an invalid feed projection",
     );
-  });
-});
-
-describe("favicon size preference", () => {
-  test("prefers the smaller of two candidates that both clear the target", () => {
-    expect(isBetterFavicon(64, 128, 64)).toBe(true);
-    expect(isBetterFavicon(128, 64, 64)).toBe(false);
-  });
-
-  test("prefers any candidate that clears the target over one that doesn't", () => {
-    expect(isBetterFavicon(64, 32, 64)).toBe(true);
-    expect(isBetterFavicon(32, 64, 64)).toBe(false);
-  });
-
-  test("prefers the bigger of two candidates when neither clears the target", () => {
-    expect(isBetterFavicon(32, 16, 64)).toBe(true);
-    expect(isBetterFavicon(16, 32, 64)).toBe(false);
   });
 });
 

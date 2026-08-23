@@ -28,6 +28,11 @@ import {
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
+import {
+  imageDimensions,
+  isBetterFavicon,
+  targetFaviconSize,
+} from "#features/feeds/favicon-selection.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(
@@ -117,87 +122,6 @@ export function validateParsedFeed(value: unknown): void {
   if (!feedProjectionCheck.Check(value)) {
     throw new Error("Feed parser returned an invalid feed projection");
   }
-}
-
-// Some favicon providers return an error placeholder (e.g. an HTML 404 page,
-// or HTML-entity-escaped SVG markup) with a 200 status and a plausible
-// content-type. Parse actual magic bytes / markup to size the result and
-// reject anything that isn't really an image.
-function imageDimensions(
-  buffer: Buffer,
-): { width: number; height: number } | undefined {
-  if (
-    buffer.length >= 24 &&
-    buffer.subarray(1, 4).toString("latin1") === "PNG"
-  ) {
-    return { height: buffer.readUInt32BE(20), width: buffer.readUInt32BE(16) };
-  }
-  if (
-    buffer.length >= 10 &&
-    buffer.subarray(0, 3).toString("latin1") === "GIF"
-  ) {
-    return { height: buffer.readUInt16LE(8), width: buffer.readUInt16LE(6) };
-  }
-  if (
-    buffer.length >= 22 &&
-    buffer.readUInt16LE(0) === 0 &&
-    buffer.readUInt16LE(2) === 1
-  ) {
-    return {
-      height: buffer[7] === 0 ? 256 : buffer[7]!,
-      width: buffer[6] === 0 ? 256 : buffer[6]!,
-    };
-  }
-  if (
-    buffer.length >= 26 &&
-    buffer.subarray(0, 2).toString("latin1") === "BM"
-  ) {
-    return {
-      height: Math.abs(buffer.readInt32LE(22)),
-      width: buffer.readInt32LE(18),
-    };
-  }
-  if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-    let offset = 2;
-    while (offset < buffer.length - 8) {
-      if (buffer[offset] !== 0xff) break;
-      const marker = buffer[offset + 1]!;
-      if (
-        marker >= 0xc0 &&
-        marker <= 0xcf &&
-        marker !== 0xc4 &&
-        marker !== 0xc8 &&
-        marker !== 0xcc
-      ) {
-        return {
-          height: buffer.readUInt16BE(offset + 5),
-          width: buffer.readUInt16BE(offset + 7),
-        };
-      }
-      offset += 2 + buffer.readUInt16BE(offset + 2);
-    }
-    return undefined;
-  }
-  if (/^\s*<svg[\s>]/i.test(buffer.toString("utf8", 0, 500))) {
-    return { height: Infinity, width: Infinity };
-  }
-  return undefined;
-}
-
-// Prefers the smallest candidate that still meets `target`, over always
-// grabbing the biggest available -- falls back to the biggest undersized
-// candidate only when nothing meets the target at all.
-export function isBetterFavicon(
-  candidateSize: number,
-  bestSize: number,
-  target: number,
-): boolean {
-  const candidateMeetsTarget = candidateSize >= target;
-  const bestMeetsTarget = bestSize >= target;
-  if (candidateMeetsTarget && bestMeetsTarget) return candidateSize < bestSize;
-  if (candidateMeetsTarget) return true;
-  if (bestMeetsTarget) return false;
-  return candidateSize > bestSize;
 }
 
 // "pending" is retried (not just "none") since subscribing again is
@@ -422,8 +346,6 @@ export class FeedParser {
   // size with headroom; prefer the smallest candidate that clears it over
   // always grabbing the biggest available, falling back to the biggest
   // undersized one when nothing meets the target at all.
-  private static readonly TARGET_FAVICON_SIZE = 64;
-
   private async bestFavicon(urls: string[]) {
     const results = await Promise.allSettled(
       urls.map((url) =>
@@ -457,10 +379,7 @@ export class FeedParser {
       if (!dimensions) continue;
 
       const size = Math.max(dimensions.width, dimensions.height);
-      if (
-        !best ||
-        isBetterFavicon(size, best.size, FeedParser.TARGET_FAVICON_SIZE)
-      ) {
+      if (!best || isBetterFavicon(size, best.size, targetFaviconSize)) {
         best = {
           buffer,
           contentType: response.headers.get("content-type") ?? "image/png",
@@ -486,7 +405,7 @@ export class FeedParser {
       return;
     }
     const primaryUrls = [
-      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=${FeedParser.TARGET_FAVICON_SIZE}`,
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=${targetFaviconSize}`,
       `https://favicon.im/${source.homeUrl}`,
       `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
     ];
@@ -495,7 +414,7 @@ export class FeedParser {
     let result = primary;
     if (!primary.best) {
       const fallback = await this.bestFavicon([
-        `https://unavatar.io/domain/${hostname}?size=${FeedParser.TARGET_FAVICON_SIZE}`,
+        `https://unavatar.io/domain/${hostname}?size=${targetFaviconSize}`,
       ]);
       result = {
         best: fallback.best,
