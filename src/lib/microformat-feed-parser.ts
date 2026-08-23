@@ -13,10 +13,21 @@ type MicroformatProperty = NonNullable<
 
 const htmlDoctypePattern = /^\s*(?:<!doctype html|<html[\s>])/i;
 
+// Origins that serve a perfectly good RSS/Atom document as `text/html` are
+// common enough to matter (WordPress behind a proxy that rewrites the header,
+// static hosts that guess a type from the extension). Believing the header
+// there hands XML to the microformats parser, which finds no h-entry items
+// and fails the whole source. The document's own root element is the more
+// reliable witness, so it wins. An XML declaration alone would not be: XHTML
+// pages carrying microformats open with one too, which is why this looks past
+// it for the root element rather than stopping at `<?xml`.
+const feedRootPattern = /^\s*(?:<\?xml[^>]*\?>\s*)?<(?:rss|feed|rdf:RDF)[\s>]/i;
+
 export function isMicroformatHtml(
   text: string,
   contentType: string | null,
 ): boolean {
+  if (feedRootPattern.test(text)) return false;
   return (
     (contentType?.toLowerCase().includes("html") ?? false) ||
     htmlDoctypePattern.test(text)
