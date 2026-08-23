@@ -1,12 +1,10 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { previewQuery } from "#shared/contracts/requests.ts";
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
-import { deferredResponse } from "#platform/http/deferred-response.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 
 export type PreviewRouteDependencies = {
@@ -19,13 +17,7 @@ export async function getPreviewHandler(
   { feedParser, feedPreviewCache }: PreviewRouteDependencies,
 ) {
   const decoded = Value.Decode(previewQuery, query);
-  let source;
-  try {
-    source = await feedParser.preview(decoded.feedUrl);
-  } catch (error_: unknown) {
-    if (error_ instanceof HttpDeferredError) return deferredResponse(error_);
-    throw error_;
-  }
+  const source = await feedParser.preview(decoded.feedUrl);
   if (!source) return json({ error: "Invalid feed url" }, 400);
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
   return json({
