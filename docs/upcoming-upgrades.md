@@ -130,7 +130,7 @@ against a moving prerelease compiler buys nothing.
 Both XML paths run on Bun 1.4's native parser. `fast-xml-parser` and its 6
 transitive dependencies are gone.
 
-- **OPML** — `src/lib/xml.ts` wraps `Bun.XML`'s compact shape; `OpmlParser`
+- **OPML** — `src/platform/xml.ts` wraps `Bun.XML`'s compact shape; `OpmlParser`
   uses it. `Bun.XML` throws on malformed input, so the separate `XMLValidator`
   pass is no longer needed.
 - **Feeds** — `vendor/fast-xml-parser-shim` stands in for the package itself,

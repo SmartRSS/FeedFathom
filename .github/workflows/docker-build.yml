@@ -220,7 +220,7 @@ jobs:
         run: |
           set -euo pipefail
           # Hash what actually ships, not the paths that feed it: the bundle
-          # pulls in src/lib/** (scanner, feed-data-type) as well as
+          # pulls in src/shared/scanners/** (scanner, feed-data-type) as well as
           # src/extension/**, so a `paths:` filter would miss real changes
           # arriving through shared code. The version field is stamped fresh
           # every run, so it is excluded -- otherwise nothing would ever

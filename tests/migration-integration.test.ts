@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
+import { waitForMigration } from "#platform/db/connection.ts";
 import journal from "../drizzle/meta/_journal.json";
-import { waitForMigration } from "../src/db/connection.ts";
 import { adoptSquashedBaseline, migrateDatabase } from "../src/migrator.ts";
 
 const currentMigrationsFolder = fileURLToPath(

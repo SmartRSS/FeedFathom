@@ -73,11 +73,31 @@
     "object-shorthand": "error",
     "operator-assignment": "error",
     "feedfathom/import-grouping": "error",
-    // src/db/schema.ts is drizzle-kit's schema entry point
+    // The layer direction from CONTEXT.md, enforced. Cross-feature edges are
+    // declared here rather than inferred, so adding one is a config change
+    // that shows up in review instead of a quiet new import. The list must
+    // stay acyclic -- see docs/adr/0001-feature-first-layering.md.
+    "feedfathom/layer-boundaries": [
+      "error",
+      {
+        "features": {
+          "admin": ["auth", "feeds"],
+          "auth": [],
+          "feeds": ["auth"],
+          "jobs": ["admin", "feeds"],
+          "mail-ingest": ["feeds"],
+          "reader": ["auth", "feeds"]
+        }
+      }
+    ],
+    // src/platform/db/schema.ts is drizzle-kit's schema entry point
     // (drizzle/config.json). It is a barrel by necessity, not convenience:
     // drizzle-kit discovers tables through it, and with it gone `generate`
     // sees 0 tables and emits DROP TABLE for every one of them.
-    "feedfathom/no-barrel-file": ["error", { "allow": ["src/db/schema.ts"] }],
+    "feedfathom/no-barrel-file": [
+      "error",
+      { "allow": ["src/platform/db/schema.ts"] }
+    ],
     "feedfathom/route-deps-narrowed": "error",
     "feedfathom/schema-compile-module-scope": "error",
     // oxc/no-barrel-file only counts `export * from` (default threshold 100),
@@ -156,20 +176,24 @@
       // columns as they appear in the migration); config.ts groups env vars
       // by the comments that explain how they interact. Alphabetising either
       // scatters the grouping that carries the meaning.
-      "files": ["src/db/schemas/**", "src/db/schema.ts", "src/config.ts"],
+      "files": [
+        "src/platform/db/schemas/**",
+        "src/platform/db/schema.ts",
+        "src/platform/config.ts"
+      ],
       "rules": { "sort-keys": "off" }
     },
     {
       // Tool configs and the Cloudflare worker entry are consumed by
       // runtimes that require a default export.
-      "files": ["**/*.config.ts", "src/cloudflare/email-worker.ts"],
+      "files": ["**/*.config.ts", "src/features/mail-ingest/email-worker.ts"],
       "rules": { "import/no-default-export": "off" }
     },
     {
       // The rule guards against recompiling a validator on a hot path. A
       // compile inside a test body runs once per test run, so the cost it
       // exists to prevent cannot occur there.
-      "files": ["tests/**"],
+      "files": ["tests/**", "src/**/*.test.ts"],
       "rules": { "feedfathom/schema-compile-module-scope": "off" }
     }
   ]

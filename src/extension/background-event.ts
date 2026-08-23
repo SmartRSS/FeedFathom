@@ -1,11 +1,11 @@
-import type { FeedData } from "../lib/scanners/feed-data-type.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 import {
   isListFeedsMessage,
   isReaderRequest,
   isVisibilityLostMessage,
   storedInstance,
   type ReaderResponse,
-} from "./extension-types.ts";
+} from "#shared/extension-types.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
 import {

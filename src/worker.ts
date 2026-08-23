@@ -1,9 +1,9 @@
 import { Value } from "typebox/value";
 import { Worker } from "bullmq";
-import { config } from "./config.ts";
-import { internalAddressPolicy } from "./lib/typebox-policy.ts";
-import { MainWorker, type MainWorkerFactory } from "./lib/workers/main.ts";
-import { waitForMigration } from "./db/connection.ts";
+import { internalAddressPolicy } from "#shared/validation/typebox-policy.ts";
+import { config } from "#platform/config.ts";
+import { waitForMigration } from "#platform/db/connection.ts";
+import { MainWorker, type MainWorkerFactory } from "#features/jobs/main.ts";
 import { createFeedRuntime } from "./runtime.ts";
 
 async function runWorker() {
@@ -24,6 +24,7 @@ async function runWorker() {
     config,
     runtime.bullmqQueue,
     runtime.feedParser,
+    runtime.faviconRefresher,
     runtime.sourcesDataService,
     runtime.cleanupOrphanedData,
     runtime.jobFailuresDataService,
