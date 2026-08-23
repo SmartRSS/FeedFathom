@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
-import { loginRequest } from "../../contracts/requests.ts";
+import { loginRequest } from "#shared/contracts/requests.ts";
 import type { UsersDataService } from "../../db/data-services/user-data-service.ts";
 import { json } from "../shared.ts";
 import { sessionHeader } from "./session-header.ts";

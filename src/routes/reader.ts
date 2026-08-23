@@ -10,7 +10,7 @@ import {
   removeSourceRequest,
   subscribeRequest,
   updateSourceRequest,
-} from "../contracts/requests.ts";
+} from "#shared/contracts/requests.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";

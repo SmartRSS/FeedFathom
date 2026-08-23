@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Type } from "typebox";
+import {
+  folderResponse,
+  sessionResponse,
+} from "#shared/contracts/responses.ts";
 import { api, ApiError, isUnauthorizedError } from "../src/spa/api.ts";
-import { folderResponse, sessionResponse } from "../src/contracts/responses.ts";
 
 const exactMessage = Type.Object(
   { message: Type.String() },

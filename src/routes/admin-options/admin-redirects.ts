@@ -1,5 +1,5 @@
 import { Value } from "typebox/value";
-import { redirectDeletionRequest } from "../../contracts/requests.ts";
+import { redirectDeletionRequest } from "#shared/contracts/requests.ts";
 import type { RedirectMap } from "../../lib/redirect-map.ts";
 import { type AuthedUser, json } from "../shared.ts";
 

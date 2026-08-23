@@ -2,7 +2,7 @@ import type { Static } from "typebox";
 import type {
   removeSourceRequest,
   updateSourceRequest,
-} from "../../contracts/requests.ts";
+} from "#shared/contracts/requests.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { type AuthedUser, json } from "../shared.ts";
 

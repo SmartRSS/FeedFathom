@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
-import { websubVerificationQuery } from "../contracts/requests.ts";
+import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import type { SourcesDataService } from "../db/data-services/source-data-service.ts";
 import { verifyHubSignature } from "../lib/websub.ts";
 import { json } from "./shared.ts";

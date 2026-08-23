@@ -7,14 +7,6 @@ import {
   Show,
 } from "solid-js";
 import {
-  removalOutcome,
-  soleSelectedIndex,
-  transitionArticleSelection,
-  type DashboardPane,
-} from "./behavior.ts";
-import { createSupersessionGuard } from "./supersession.ts";
-import { api } from "./api.ts";
-import {
   articleResponse,
   articlesResponse,
   folderResponse,
@@ -24,7 +16,15 @@ import {
   type Article,
   type ArticleSummary,
   type TreeNode,
-} from "../contracts/responses.ts";
+} from "#shared/contracts/responses.ts";
+import {
+  removalOutcome,
+  soleSelectedIndex,
+  transitionArticleSelection,
+  type DashboardPane,
+} from "./behavior.ts";
+import { createSupersessionGuard } from "./supersession.ts";
+import { api } from "./api.ts";
 import { safeArticleUrl } from "../lib/feed-mapper.ts";
 import {
   createExtensionReaderBridge,

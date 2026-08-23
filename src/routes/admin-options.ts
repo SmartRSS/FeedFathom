@@ -5,7 +5,7 @@ import {
   redirectDeletionRequest,
   removeSourceRequest,
   sourceUrlReplacementRequest,
-} from "../contracts/requests.ts";
+} from "#shared/contracts/requests.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,

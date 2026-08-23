@@ -1,12 +1,12 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import type { Static } from "typebox";
-import { api } from "./api.ts";
 import {
   adminSourcesResponse,
   removedIdResponse,
   sessionResponse,
   successResponse,
-} from "../contracts/responses.ts";
+} from "#shared/contracts/responses.ts";
+import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import { isTheme, setTheme, theme } from "./preferences.ts";
 

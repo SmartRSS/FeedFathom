@@ -1,6 +1,6 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
-import { articleQuery } from "../../contracts/requests.ts";
+import { articleQuery } from "#shared/contracts/requests.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
 import { safeArticleUrl } from "../../lib/feed-mapper.ts";

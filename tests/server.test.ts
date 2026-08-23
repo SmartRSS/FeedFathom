@@ -2,8 +2,8 @@ import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
+import { sessionResponse } from "#shared/contracts/responses.ts";
 import { createServerApp, type ServerDependencies } from "../src/server-app.ts";
-import { sessionResponse } from "../src/contracts/responses.ts";
 import { serializeFeedPreview } from "../src/lib/feed-preview-cache.ts";
 import { HttpDeferredError } from "../src/lib/http-client.ts";
 

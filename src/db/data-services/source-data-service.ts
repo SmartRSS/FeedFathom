@@ -3,7 +3,7 @@ import Schema from "typebox/schema";
 import { and, eq, getTableColumns, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { dateType } from "#shared/validation/typebox-policy.ts";
-import { sourceSortSchema } from "../../contracts/requests.ts";
+import { sourceSortSchema } from "#shared/contracts/requests.ts";
 import { JobName } from "../../types/job-name-enum.ts";
 import type * as schema from "../schema.ts";
 import { type Source, sources } from "../schemas/sources.ts";

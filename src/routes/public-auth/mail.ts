@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
+import { incomingMailRequest } from "#shared/contracts/requests.ts";
 import type { AppConfig } from "../../config.ts";
-import { incomingMailRequest } from "../../contracts/requests.ts";
 import type { EmailHandler } from "../../lib/email/email-handler.ts";
 import { json } from "../shared.ts";
 

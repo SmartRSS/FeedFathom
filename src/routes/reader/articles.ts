@@ -2,7 +2,7 @@ import type { Static } from "typebox";
 import type {
   articlesRequest,
   removeArticlesRequest,
-} from "../../contracts/requests.ts";
+} from "#shared/contracts/requests.ts";
 import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
 import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
 import { safeArticleUrl } from "../../lib/feed-mapper.ts";

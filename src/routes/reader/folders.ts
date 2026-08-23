@@ -1,7 +1,7 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
-import type { removeFolderRequest } from "../../contracts/requests.ts";
-import { createFolderRequest } from "../../contracts/requests.ts";
+import type { removeFolderRequest } from "#shared/contracts/requests.ts";
+import { createFolderRequest } from "#shared/contracts/requests.ts";
 import type { FoldersDataService } from "../../db/data-services/folder-data-service.ts";
 import { type AuthedUser, json } from "../shared.ts";
 

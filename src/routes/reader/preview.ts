@@ -1,6 +1,6 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
-import { previewQuery } from "../../contracts/requests.ts";
+import { previewQuery } from "#shared/contracts/requests.ts";
 import type { FeedParser } from "../../lib/feed-parser.ts";
 import { extractArticle } from "../../lib/extract-article.ts";
 import { HttpDeferredError } from "../../lib/http-client.ts";

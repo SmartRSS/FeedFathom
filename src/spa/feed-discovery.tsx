@@ -1,6 +1,4 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import type { DashboardPane } from "./behavior.ts";
-import { api } from "./api.ts";
 import {
   foldersResponse,
   foundFeedsResponse,
@@ -10,7 +8,9 @@ import {
   type Folder,
   type FoundFeed,
   type PreviewArticle,
-} from "../contracts/responses.ts";
+} from "#shared/contracts/responses.ts";
+import type { DashboardPane } from "./behavior.ts";
+import { api } from "./api.ts";
 import { Icon } from "./icon.tsx";
 import backRaw from "../lib/images/icons/Arrows/arrow-left-fill.svg?raw";
 

@@ -3,8 +3,8 @@ import { Value } from "typebox/value";
 import type {
   adminQuery,
   removeSourceRequest,
-} from "../../contracts/requests.ts";
-import { sourceUrlReplacementRequest } from "../../contracts/requests.ts";
+} from "#shared/contracts/requests.ts";
+import { sourceUrlReplacementRequest } from "#shared/contracts/requests.ts";
 import type {
   SourcesDataService,
   SourceUrlUpdateResult,
