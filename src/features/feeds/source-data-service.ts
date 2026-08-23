@@ -8,6 +8,10 @@ import { JobName } from "#shared/types/job-name-enum.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
+import {
+  clampToPollFloor,
+  pollFloorMs,
+} from "#features/feeds/source-schedule-policy.ts";
 
 type SourceQueue = {
   add(
@@ -44,7 +48,6 @@ export interface SourceWithSubscriberCount {
 
 // Minimum spacing between successful "feed" polls, regardless of what the
 // origin's Cache-Control says -- see successSource's clamp.
-const pollFloorMs = 5 * 60_000;
 // Flat per-tick ceiling, replacing a "10% of whatever is due" throttle.
 // That percentage self-balanced into a permanent backlog: at equilibrium
 // each source waited ~3.3 extra minutes for a slot regardless of how many
@@ -338,15 +341,7 @@ export class SourcesDataService {
     observedAt = new Date(),
     trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
   ) {
-    // A floor regardless of what the caller (or the origin's own
-    // Cache-Control) asks for -- an origin sending no-cache/max-age=0
-    // shouldn't be able to make a periodic poller hammer it every gather
-    // cycle. Only matters for "feed" kind in practice (getSourcesToProcess
-    // ignores notBefore for "websub"/"email"), but harmless to apply
-    // unconditionally here since successSource doesn't know the kind.
-    const clampedNotBefore = new Date(
-      Math.max(notBefore.getTime(), Date.now() + pollFloorMs),
-    );
+    const clampedNotBefore = clampToPollFloor(notBefore, Date.now());
     await this.drizzleConnection
       .update(sources)
       .set({
