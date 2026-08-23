@@ -5,10 +5,8 @@ import type { MailSender } from "#features/auth/mail-sender.ts";
 import { createActivateRoute } from "#features/auth/routes/activate.ts";
 import { createLoginRoute } from "#features/auth/routes/login.ts";
 import { createLogoutRoute } from "#features/auth/routes/logout.ts";
-import { createMailRoute } from "#features/auth/routes/mail.ts";
 import { createRegisterRoute } from "#features/auth/routes/register.ts";
 import { createSessionRoute } from "#features/auth/routes/session.ts";
-import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
@@ -17,7 +15,6 @@ type Password = {
 
 export type PublicAuthRouteDependencies = {
   config: AppConfig;
-  emailHandler: Pick<EmailHandler, "processEmail">;
   fetcher: (
     ...args: Parameters<typeof globalThis.fetch>
   ) => ReturnType<typeof globalThis.fetch>;
@@ -46,5 +43,4 @@ export const createPublicAuthRoutes = (deps: PublicAuthRouteDependencies) =>
     .use(createSessionRoute(deps))
     .use(createLogoutRoute(deps))
     .use(createRegisterRoute(deps))
-    .use(createActivateRoute(deps))
-    .use(createMailRoute(deps));
+    .use(createActivateRoute(deps));

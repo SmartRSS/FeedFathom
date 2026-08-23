@@ -16,6 +16,10 @@ import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
 } from "#features/admin/routes.ts";
+import {
+  createMailRoute,
+  type MailRouteDependencies,
+} from "#features/mail-ingest/routes/mail.ts";
 import { createInternalRoutes } from "#platform/http/internal-routes.ts";
 
 export type ServerDependencies = Omit<
@@ -24,7 +28,8 @@ export type ServerDependencies = Omit<
 > &
   ReaderRouteDependencies &
   AdminOptionsRouteDependencies &
-  WebSubRouteDependencies;
+  WebSubRouteDependencies &
+  MailRouteDependencies;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -75,6 +80,7 @@ export async function createServerApp(
     .use(createReaderRoutes(dependencies))
     .use(createAdminOptionsRoutes(dependencies))
     .use(createWebSubRoutes(dependencies))
+    .use(createMailRoute(dependencies))
     .use(spaRoutes)
     .error(({ error, request }) => {
       const path = new URL(request.url).pathname;
