@@ -85,6 +85,21 @@ imports are fine.
 `import/extensions: ["error", "always"]` applies to subpath imports too:
 specifiers keep their `.ts` suffix.
 
+## Errors
+
+An error type with a canonical HTTP representation is mapped once, in the
+composition root's error hook, next to the types already mapped there —
+`NotFound`, `ValidationError`, `DecodeError` and `HttpDeferredError`.
+
+A route handler catches an error only when it can do something a central
+mapping could not. `find` is the example: it knows the URL it just failed to
+fetch came from the user, so that failure is a client error rather than a
+server one. It re-raises anything else.
+
+Guard a caught value with a helper such as `isHttpDeferredError` rather than a
+bare `instanceof` — what reaches an error hook is whatever was thrown, and
+`instanceof` can itself throw on a proxy with a poisoned `getPrototypeOf` trap.
+
 ## Extracting logic
 
 Decision logic lives in a dependency-free module beside whatever uses it, with
