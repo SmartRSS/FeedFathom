@@ -10,10 +10,10 @@ import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { ArticlesDataService } from "./db/data-services/article-data-service.ts";
-import { FoldersDataService } from "./db/data-services/folder-data-service.ts";
+import { ArticlesDataService } from "#features/reader/article-data-service.ts";
+import { FoldersDataService } from "#features/reader/folder-data-service.ts";
+import { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
 import { JobFailuresDataService } from "./db/data-services/job-failure-data-service.ts";
-import { UserSourcesDataService } from "./db/data-services/user-source-data-service.ts";
 
 export async function createFeedRuntime() {
   const redis = new RedisClient("redis://redis:6379", {

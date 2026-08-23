@@ -4,7 +4,7 @@ import type { removeFolderRequest } from "#shared/contracts/requests.ts";
 import { createFolderRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
-import type { FoldersDataService } from "../../db/data-services/folder-data-service.ts";
+import type { FoldersDataService } from "#features/reader/folder-data-service.ts";
 
 export type FoldersRouteDependencies = {
   foldersDataService: Pick<

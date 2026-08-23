@@ -5,7 +5,7 @@ import type {
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
-import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
+import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
 
 export type SourceRouteDependencies = {
   userSourcesDataService: Pick<

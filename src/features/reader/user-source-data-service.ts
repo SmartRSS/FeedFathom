@@ -4,7 +4,7 @@ import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { FoldersDataService } from "./folder-data-service.ts";
+import type { FoldersDataService } from "#features/reader/folder-data-service.ts";
 
 type SubscriptionResult = {
   created?: boolean;

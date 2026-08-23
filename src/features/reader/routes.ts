@@ -20,21 +20,24 @@ import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
 import { getFindHandler } from "#features/feeds/routes/find.ts";
 import { getPreviewHandler } from "#features/feeds/routes/preview.ts";
 import { postSubscribeHandler } from "#features/feeds/routes/subscribe.ts";
-import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
-import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
-import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
-import { getArticleHandler } from "./reader/article.ts";
+import type { ArticlesDataService } from "#features/reader/article-data-service.ts";
+import type { FoldersDataService } from "#features/reader/folder-data-service.ts";
+import type { UserSourcesDataService } from "#features/reader/user-source-data-service.ts";
+import { getArticleHandler } from "#features/reader/routes/article.ts";
 import {
   deleteArticlesHandler,
   postArticlesHandler,
-} from "./reader/articles.ts";
+} from "#features/reader/routes/articles.ts";
 import {
   deleteFoldersHandler,
   getFoldersHandler,
   postFoldersHandler,
-} from "./reader/folders.ts";
-import { deleteSourceHandler, patchSourceHandler } from "./reader/source.ts";
-import { getTreeHandler } from "./reader/tree.ts";
+} from "#features/reader/routes/folders.ts";
+import {
+  deleteSourceHandler,
+  patchSourceHandler,
+} from "#features/reader/routes/source.ts";
+import { getTreeHandler } from "#features/reader/routes/tree.ts";
 
 export type ReaderRouteDependencies = {
   articlesDataService: Pick<

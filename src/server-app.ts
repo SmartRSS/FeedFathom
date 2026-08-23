@@ -9,14 +9,14 @@ import {
   type WebSubRouteDependencies,
 } from "#features/feeds/routes/websub.ts";
 import {
+  createReaderRoutes,
+  type ReaderRouteDependencies,
+} from "#features/reader/routes.ts";
+import {
   type AdminOptionsRouteDependencies,
   createAdminOptionsRoutes,
 } from "./routes/admin-options.ts";
 import { createInternalRoutes } from "./routes/internal.ts";
-import {
-  createReaderRoutes,
-  type ReaderRouteDependencies,
-} from "./routes/reader.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,
