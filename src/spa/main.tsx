@@ -18,7 +18,8 @@ import {
 } from "./behavior.ts";
 import { Activate, Login, Register } from "./account-flows.tsx";
 import { Dashboard } from "./dashboard.tsx";
-import { Admin, Options } from "./options-admin.tsx";
+import { Admin } from "./admin.tsx";
+import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
 import { resolvedTheme } from "./preferences.ts";
 import "./style.css";
