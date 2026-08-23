@@ -6,8 +6,8 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
-import { extractArticle } from "../../lib/extract-article.ts";
-import { deferredResponse } from "./deferred-response.ts";
+import { deferredResponse } from "#platform/http/deferred-response.ts";
+import { extractArticle } from "../../../lib/extract-article.ts";
 
 export type PreviewRouteDependencies = {
   feedParser: Pick<FeedParser, "preview">;

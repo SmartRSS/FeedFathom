@@ -5,7 +5,7 @@ import { HttpDeferredError } from "#platform/http/http-client.ts";
 import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import { scanHtml } from "#shared/scanners/scanner.ts";
-import { deferredResponse } from "./deferred-response.ts";
+import { deferredResponse } from "#platform/http/deferred-response.ts";
 
 export type FindRouteDependencies = {
   feedParser: Pick<FeedParser, "parseUrl">;

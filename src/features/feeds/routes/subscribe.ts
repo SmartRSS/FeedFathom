@@ -14,8 +14,8 @@ import {
   type FeedPreviewCache,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
-import type { ArticlesDataService } from "../../db/data-services/article-data-service.ts";
-import type { UserSourcesDataService } from "../../db/data-services/user-source-data-service.ts";
+import type { ArticlesDataService } from "../../../db/data-services/article-data-service.ts";
+import type { UserSourcesDataService } from "../../../db/data-services/user-source-data-service.ts";
 
 export type SubscribeRouteDependencies = {
   articlesDataService: Pick<ArticlesDataService, "batchUpsertArticles">;

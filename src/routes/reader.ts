@@ -16,6 +16,10 @@ import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
+import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
+import { getFindHandler } from "#features/feeds/routes/find.ts";
+import { getPreviewHandler } from "#features/feeds/routes/preview.ts";
+import { postSubscribeHandler } from "#features/feeds/routes/subscribe.ts";
 import type { ArticlesDataService } from "../db/data-services/article-data-service.ts";
 import type { FoldersDataService } from "../db/data-services/folder-data-service.ts";
 import type { UserSourcesDataService } from "../db/data-services/user-source-data-service.ts";
@@ -24,16 +28,12 @@ import {
   deleteArticlesHandler,
   postArticlesHandler,
 } from "./reader/articles.ts";
-import { getFaviconHandler } from "./reader/favicon.ts";
-import { getFindHandler } from "./reader/find.ts";
 import {
   deleteFoldersHandler,
   getFoldersHandler,
   postFoldersHandler,
 } from "./reader/folders.ts";
-import { getPreviewHandler } from "./reader/preview.ts";
 import { deleteSourceHandler, patchSourceHandler } from "./reader/source.ts";
-import { postSubscribeHandler } from "./reader/subscribe.ts";
 import { getTreeHandler } from "./reader/tree.ts";
 
 export type ReaderRouteDependencies = {
