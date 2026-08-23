@@ -57,6 +57,9 @@ const idleSources = {
 
 const idleParser = {
   async parseSource() {},
+};
+
+const idleFaviconRefresher = {
   async refreshFavicon() {},
 };
 
@@ -94,6 +97,7 @@ test("initialize schedules configured intervals and starts the worker", async ()
     config,
     queue,
     idleParser,
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     idleJobFailures,
@@ -125,8 +129,8 @@ test("captured processor parses the queued source", async () => {
       async parseSource(value) {
         parsedSource = value;
       },
-      async refreshFavicon() {},
     },
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     idleJobFailures,
@@ -161,8 +165,8 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
       async parseSource() {
         throw new HttpDeferredError(retryAt);
       },
-      async refreshFavicon() {},
     },
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     idleJobFailures,
@@ -194,9 +198,9 @@ test("refreshes favicons only for validated job data", async () => {
   const worker = new MainWorker(
     config,
     { async add() {}, async addBulk() {} },
+    idleParser,
     {
-      async parseSource() {},
-      async refreshFavicon(value) {
+      async refreshFavicon(value: { homeUrl: string; id: number }) {
         refreshed.push(value);
       },
     },
@@ -242,6 +246,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
     config,
     queue,
     idleParser,
+    idleFaviconRefresher,
     {
       ...idleSources,
       async getRecentlySuccessfulSources() {
@@ -306,6 +311,8 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
       async parseSource() {
         downstreamCalls.push("parseSource");
       },
+    },
+    {
       async refreshFavicon() {
         downstreamCalls.push("refreshFavicon");
       },
@@ -384,6 +391,7 @@ test("cleanup delegates to the worker", async () => {
     config,
     queue,
     idleParser,
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     idleJobFailures,
@@ -407,6 +415,7 @@ test("records a durable failure for non-ParseSource job errors", async () => {
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
+    idleFaviconRefresher,
     idleSources,
     async () => {
       throw new Error("cleanup exploded");
@@ -440,6 +449,7 @@ test("a failure while recording a job failure doesn't itself fail the job", asyn
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
+    idleFaviconRefresher,
     idleSources,
     async () => {
       throw new Error("cleanup exploded");
@@ -476,6 +486,7 @@ test("a poisoned error whose message getter throws doesn't fail the job either",
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
+    idleFaviconRefresher,
     idleSources,
     async () => {
       throw new PoisonedError();
@@ -516,8 +527,8 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
       async parseSource() {
         throw evilDeferredError;
       },
-      async refreshFavicon() {},
     },
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     {
@@ -558,8 +569,8 @@ test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail 
       async parseSource() {
         throw new HttpDeferredError(retryAt);
       },
-      async refreshFavicon() {},
     },
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     {
@@ -601,8 +612,8 @@ test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job",
       async parseSource() {
         throw new HttpDeferredError(retryAt);
       },
-      async refreshFavicon() {},
     },
+    idleFaviconRefresher,
     idleSources,
     idleCleanupOrphanedData,
     {

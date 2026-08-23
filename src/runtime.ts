@@ -8,6 +8,7 @@ import { HttpClient } from "#platform/http/http-client.ts";
 import { RedirectMap } from "#platform/http/redirect-map.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
+import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
@@ -67,6 +68,7 @@ export async function createFeedRuntime() {
     userSourcesDataService,
     config.FEED_FATHOM_DOMAIN,
   );
+  const faviconRefresher = new FaviconRefresher(httpClient, sourcesDataService);
   let closePromise: Promise<void> | undefined;
   const close = () =>
     (closePromise ??= Promise.allSettled([
@@ -89,6 +91,7 @@ export async function createFeedRuntime() {
       ),
     close,
     drizzleConnection,
+    faviconRefresher,
     feedParser,
     foldersDataService,
     httpClient,

@@ -6,6 +6,7 @@ import { JobName } from "#shared/types/job-name-enum.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { isHttpDeferredError } from "#platform/http/http-client.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { requestHubSubscription } from "#features/feeds/websub.ts";
 import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
@@ -112,10 +113,8 @@ export class MainWorker {
   constructor(
     private readonly appConfig: MainWorkerConfig,
     private readonly bullmqQueue: MainWorkerQueue,
-    private readonly feedParser: Pick<
-      FeedParser,
-      "parseSource" | "refreshFavicon"
-    >,
+    private readonly feedParser: Pick<FeedParser, "parseSource">,
+    private readonly faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
     private readonly sourcesDataService: MainWorkerSources,
     private readonly cleanupOrphanedData: () => Promise<void>,
     private readonly jobFailuresDataService: Pick<
@@ -208,7 +207,7 @@ export class MainWorker {
         }
 
         case JobName.RefreshFavicon: {
-          await this.feedParser.refreshFavicon(input.data);
+          await this.faviconRefresher.refreshFavicon(input.data);
           break;
         }
 
