@@ -78,7 +78,7 @@ jobs:
             git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
             bun test --changed="origin/${{ github.event.pull_request.base.ref }}" \
               --path-ignore-patterns='tests/browser/**' \
-              --path-ignore-patterns='tests/migration-integration.test.ts'
+              --path-ignore-patterns='tests/*-integration.test.ts'
           else
             bun run test:unit
           fi
