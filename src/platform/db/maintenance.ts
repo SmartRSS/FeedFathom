@@ -5,6 +5,7 @@ import {
   inArray,
   isNotNull,
   lte,
+  ne,
   notExists,
   sql,
 } from "drizzle-orm";
@@ -16,15 +17,33 @@ import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { users } from "#platform/db/schemas/users.ts";
 
-// A source's last_success is stamped strictly after its articles' upsert
-// (see FeedParser.parseSource), so last_seen_in_feed_at < last_success is
-// true for EVERY article on EVERY successful fetch -- including ones that
-// were just confirmed present -- by construction, not just for ones that
-// are actually missing. This buffer must be far larger than any real gap
-// between a fetch's upsert and its own success stamp (milliseconds) so the
-// comparison only fires once an article has survived many real fetch
-// cycles without appearing (successSource's poll floor is 5 minutes).
-const confirmedGoneFromFeedBuffer = sql`INTERVAL '1 day'`;
+// How long an article must go unseen before the feed is believed to have
+// dropped it for good. A single fetch omitting an item does NOT mean it is
+// gone -- pagination boundaries, ordering changes and transient truncation
+// all do that routinely -- so this has to span MANY of the source's own
+// fetch cycles, which is what a flat interval fails to do: at the 5-minute
+// poll floor one day is ~288 cycles, but a feed advertising a long
+// max-age parks itself days out (successSource clamps the floor, never the
+// ceiling), and a websub source only falls back to polling once a day. For
+// those, a flat day is less than a single cycle -- no grace at all, which
+// is exactly the false positive that made this rule destroy 89k articles'
+// deletion records once already.
+//
+// So scale it by the source's own cadence. not_before and last_success are
+// written by the same successSource UPDATE, so their difference is the
+// refresh interval the origin itself asked for; websub polls on a flat
+// daily fallback that ignores that column entirely. Every degenerate case
+// (never-set not_before, a long failure backoff) lands on a LARGER buffer,
+// which errs towards keeping an article rather than deleting one.
+const confirmedGoneFromFeedBuffer = sql`
+  GREATEST(
+    INTERVAL '1 day',
+    10 * CASE ${sources.kind}
+      WHEN 'websub' THEN INTERVAL '1 day'
+      ELSE ${sources.notBefore} - ${sources.lastSuccess}
+    END
+  )
+`;
 
 const daysInterval = (days: number) => sql`(${days} * INTERVAL '1 day')`;
 
@@ -107,6 +126,18 @@ export async function cleanupOrphanedData(
   // subscribers who joined before it disappeared -- someone who
   // subscribed later never had the chance to see or delete it, so their
   // absence of a deletion row doesn't block the prune.
+  //
+  // The deletion is only as safe as that "gone for good" signal: removals
+  // live in user_articles keyed on articles.id and cascade away with the
+  // row, so a false positive doesn't just delete an article, it forgets
+  // that anyone ever removed it -- and the next fetch listing the item
+  // again re-inserts it under a fresh serial id, unread. Hence the
+  // cadence-scaled buffer above, and hence email sources being excluded
+  // outright: they have no feed to be absent from. Each delivery upserts
+  // one article and stamps last_success (for the admin's "last via"
+  // column), which under a plain last_seen < last_success comparison
+  // makes every earlier newsletter look dropped from a feed that does
+  // not exist.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -114,6 +145,7 @@ export async function cleanupOrphanedData(
     .where(
       and(
         isNotNull(sources.lastSuccess),
+        ne(sources.kind, "email"),
         sql`${articles.lastSeenInFeedAt} < ${sources.lastSuccess} - ${confirmedGoneFromFeedBuffer}`,
         notExists(
           drizzleConnection
