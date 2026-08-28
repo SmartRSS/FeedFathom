@@ -9,7 +9,7 @@ import {
   soleSelectedIndex,
   transitionArticleSelection,
   withDashboardPane,
-} from "./behavior.ts";
+} from "../behavior.ts";
 
 describe("dashboard pane history state", () => {
   test("parses valid pane markers", () => {

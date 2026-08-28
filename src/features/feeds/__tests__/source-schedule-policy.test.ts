@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clampToPollFloor, pollFloorMs } from "./source-schedule-policy.ts";
+import { clampToPollFloor, pollFloorMs } from "../source-schedule-policy.ts";
 
 describe("clampToPollFloor", () => {
   const now = Date.UTC(2026, 0, 1);

@@ -7,7 +7,7 @@ import {
   newsletterAddress,
   websiteValidationMessage,
   withScheme,
-} from "./discovery-behavior.ts";
+} from "../discovery-behavior.ts";
 
 describe("withScheme", () => {
   test("prefixes a bare host", () => {
