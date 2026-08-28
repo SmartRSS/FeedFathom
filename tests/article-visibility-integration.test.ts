@@ -22,24 +22,29 @@ function requireDisposableDatabaseUrl() {
 }
 
 // Removing an article is the only user-level state this app writes, and it
-// has to stay removed: the feed re-listing the item (or the publisher
-// touching it, which bumps articles.updated_at) must not put it back in
-// the list. user_articles.read_at is legacy -- nothing writes it any more,
-// but rows predating that still carry it, and the list query used to hide
-// removals only as a side effect of comparing against it.
-test("a removed article stays out of the list and the unread count", async () => {
+// has to stay removed -- through the article row being pruned and the feed
+// listing that guid again, which is what used to bring removals back unread
+// under a fresh id, and through the publisher editing the item, which bumps
+// articles.updated_at.
+test("a removal survives its article row being pruned and re-listed", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const drizzleConnection = createDrizzleConnection(databaseUrl);
   const articlesDataService = new ArticlesDataService(drizzleConnection);
 
+  // articles.id is bigint, which this driver hands back as a string --
+  // unlike the drizzle mapping the service under test goes through.
   const addArticle = async (sourceId: number, guid: string) => {
-    const [article] = await client<{ id: number }[]>`
+    const [article] = await client<{ id: string }[]>`
       INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
       VALUES (${sourceId}, ${guid}, 'a', 't', '', 'body', NOW(), NOW(), NOW())
       RETURNING id`;
-    return article!.id;
+    return Number(article!.id);
   };
+  const listedIds = async (sourceId: number, userId: number) =>
+    (await articlesDataService.getUserArticlesForSources([sourceId], userId))
+      .map((article) => article.id)
+      .toSorted((left, right) => left - right);
 
   try {
     await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
@@ -60,23 +65,29 @@ test("a removed article stays out of the list and the unread count", async () =>
 
     const kept = await addArticle(source!.id, "kept");
     const removed = await addArticle(source!.id, "removed");
-    // Same removal, on a row that also carries a legacy read_at older than
-    // the article's own updated_at -- the publisher edited it after the
-    // read stamp, which is what used to resurface it.
-    const removedThenEdited = await addArticle(source!.id, "removed-edited");
+    // Removed on a row that also carries a legacy read_at older than the
+    // article's updated_at -- the publisher edited it after that stamp.
+    // Nothing writes read_at any more, but rows predating that still have
+    // one, and hiding a removal used to depend on it being NULL.
+    await addArticle(source!.id, "removed-edited");
 
     await client`
-      INSERT INTO user_articles (user_id, article_id, deleted_at)
-      VALUES (${user!.id}, ${removed}, NOW())`;
+      INSERT INTO user_articles (user_id, source_id, guid, deleted_at)
+      VALUES (${user!.id}, ${source!.id}, 'removed', NOW())`;
     await client`
-      INSERT INTO user_articles (user_id, article_id, deleted_at, read_at)
-      VALUES (${user!.id}, ${removedThenEdited}, NOW(), NOW() - INTERVAL '1 day')`;
+      INSERT INTO user_articles (user_id, source_id, guid, deleted_at, read_at)
+      VALUES (${user!.id}, ${source!.id}, 'removed-edited', NOW(), NOW() - INTERVAL '1 day')`;
 
-    const listed = await articlesDataService.getUserArticlesForSources(
-      [source!.id],
-      user!.id,
-    );
-    expect(listed.map((article) => article.id)).toEqual([kept]);
+    expect(await listedIds(source!.id, user!.id)).toEqual([kept]);
+
+    // What cleanupOrphanedData does to an article every subscriber has
+    // removed and the feed appears to have dropped, followed by the feed
+    // listing that same guid again.
+    await client`DELETE FROM articles WHERE id = ${removed}`;
+    const relisted = await addArticle(source!.id, "removed");
+    expect(relisted).not.toBe(removed);
+
+    expect(await listedIds(source!.id, user!.id)).toEqual([kept]);
   } finally {
     await drizzleConnection.$client.close();
     await client.close();
