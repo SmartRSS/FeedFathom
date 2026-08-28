@@ -17,7 +17,9 @@ const testCaseCheck = Schema.Compile(testCaseSchema);
 
 describe("rewriteLinks", () => {
   const articleUrl = "https://example.com/article";
-  const files = readdirSync("./src/features/feeds/rewrite-links-cases")
+  const files = readdirSync(
+    "./src/features/feeds/__tests__/rewrite-links-cases",
+  )
     .filter((file) => {
       return file.endsWith(".json");
     })
@@ -27,7 +29,7 @@ describe("rewriteLinks", () => {
 
   for (const file of files) {
     const content = readFileSync(
-      join("src/features/feeds/rewrite-links-cases", file),
+      join("src/features/feeds/__tests__/rewrite-links-cases", file),
       "utf8",
     );
     const testCase: unknown = JSON.parse(content);
