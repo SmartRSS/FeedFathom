@@ -67,9 +67,19 @@ export class ArticlesDataService {
         and(
           inArray(articles.sourceId, sourceIds),
           // Remove user.createdAt filter since userSources.createdAt is more restrictive
+          // A removal is terminal -- deleted_at alone hides the article,
+          // exactly as recomputeUnreadCounts scores it. It used to be
+          // hidden only as a side effect of updated_at > read_at being
+          // NULL for rows nothing writes read_at into any more; a row
+          // still carrying a legacy read_at older than the article's
+          // updated_at (the publisher edited it after that stamp) came
+          // back into the list while the unread count still said zero.
           or(
             isNull(userArticles.articleId),
-            gt(articles.updatedAt, userArticles.readAt),
+            and(
+              isNull(userArticles.deletedAt),
+              gt(articles.updatedAt, userArticles.readAt),
+            ),
           ),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
