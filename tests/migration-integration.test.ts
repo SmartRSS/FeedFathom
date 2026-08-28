@@ -1,5 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
+import { copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitForMigration } from "#platform/db/connection.ts";
 import journal from "../drizzle/meta/_journal.json";
@@ -12,9 +15,6 @@ const expectedIndexNames = [
   "articles_source_published_idx",
   "articles_updated_at_idx",
   "articles_source_last_seen_idx",
-  "user_articles_user_id_idx",
-  "user_articles_article_user_idx",
-  "user_articles_user_read_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
   "user_sources_user_source_idx",
@@ -153,9 +153,27 @@ test("gates startup on this build's newest migration, tolerating a newer databas
 });
 
 // The squash shim. Reproducing it without the deleted migration files means
-// building the schema from the baseline and then rewriting the journal to
-// look like a database that predates the squash.
+// building the schema from the baseline -- and only the baseline, since a
+// database that predates the squash has not run anything after it either --
+// then rewriting the journal to look like a database that got there the old
+// way.
 const preSquashFinalMigration = 1_786_570_692_742;
+
+async function baselineOnlyMigrationsFolder() {
+  const baseline = journal.entries.at(0);
+  if (!baseline) throw new Error("The migration journal has no baseline");
+  const folder = await mkdtemp(join(tmpdir(), "feedfathom-baseline-"));
+  await mkdir(join(folder, "meta"), { recursive: true });
+  await copyFile(
+    join(currentMigrationsFolder, `${baseline.tag}.sql`),
+    join(folder, `${baseline.tag}.sql`),
+  );
+  await writeFile(
+    join(folder, "meta", "_journal.json"),
+    JSON.stringify({ ...journal, entries: [baseline] }),
+  );
+  return folder;
+}
 
 async function forgeJournal(client: SQL, appliedAt: number) {
   await client`DELETE FROM "drizzle"."__drizzle_migrations"`;
@@ -169,9 +187,12 @@ test("adopts the baseline for a database that reached the final pre-squash migra
 
   try {
     await resetDatabase(client);
-    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    await migrateDatabase(databaseUrl, await baselineOnlyMigrationsFolder());
     await forgeJournal(client, preSquashFinalMigration);
 
+    // Adopts the baseline, then applies everything written since it -- which
+    // is the whole point of adopting rather than replaying: production is a
+    // pre-squash database and still has to receive later migrations.
     await migrateDatabase(databaseUrl, currentMigrationsFolder);
 
     const [adopted] = await client<
@@ -203,7 +224,7 @@ test("refuses to adopt the baseline for a partially migrated database", async ()
 
   try {
     await resetDatabase(client);
-    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    await migrateDatabase(databaseUrl, await baselineOnlyMigrationsFolder());
     await forgeJournal(client, preSquashFinalMigration - 1);
 
     const reserved = await client.reserve();
