@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
-import { migrateDatabase, parseConcurrentIndexes } from "./migrator.ts";
-import journal from "../drizzle/meta/_journal.json";
+import { migrateDatabase, parseConcurrentIndexes } from "../migrator.ts";
+import journal from "../../drizzle/meta/_journal.json";
 
 test("lists every SQL migration in the Drizzle journal", async () => {
-  const files = await readdir(new URL("../drizzle", import.meta.url));
+  const files = await readdir(new URL("../../drizzle", import.meta.url));
   const migrations = files
     .filter((file) => /^\d{4}_.+\.sql$/.test(file))
     .map((file) => file.replace(/\.sql$/, ""))
@@ -69,7 +69,7 @@ test("finds nothing to pre-build in the squashed baseline", async () => {
       journal.entries.map(async (entry) =>
         parseConcurrentIndexes(
           await Bun.file(
-            new URL(`../drizzle/${entry.tag}.sql`, import.meta.url).pathname,
+            new URL(`../../drizzle/${entry.tag}.sql`, import.meta.url).pathname,
           ).text(),
         ),
       ),

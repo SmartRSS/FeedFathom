@@ -4,7 +4,7 @@ import {
   type ContextMenuOperations,
   removeAllContextMenus,
   type RuntimeErrors,
-} from "./context-menu.ts";
+} from "../context-menu.ts";
 
 class ContextMenusFake implements ContextMenuOperations {
   readonly calls: string[] = [];

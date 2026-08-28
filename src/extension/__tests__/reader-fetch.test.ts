@@ -11,7 +11,7 @@ import {
   type ReaderErrorCode,
   type ReaderRequest,
 } from "#shared/extension-types.ts";
-import { handleReaderRequest, type ReaderFetch } from "./reader-fetch.ts";
+import { handleReaderRequest, type ReaderFetch } from "../reader-fetch.ts";
 
 const instance = "https://reader.example";
 const sender = { frameId: 0, url: `${instance}/` };

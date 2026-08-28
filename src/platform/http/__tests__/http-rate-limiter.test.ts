@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rateLimitBlockUntil, retryAtFrom } from "./http-rate-limiter.ts";
+import { rateLimitBlockUntil, retryAtFrom } from "../http-rate-limiter.ts";
 
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;

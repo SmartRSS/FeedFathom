@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { markWebSubAvailability, type WebSubProbe } from "./feed-discovery.ts";
+import { markWebSubAvailability, type WebSubProbe } from "../feed-discovery.ts";
 
 const feed = (title: string, url: string) => ({ title, url });
 
