@@ -13,6 +13,16 @@ import {
 } from "#platform/db/schemas/articles.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
 
+// user_articles is keyed on the article's (source, guid) rather than its id,
+// so a removal survives the article row being pruned -- see the schema.
+function userArticleStateJoin(userId: number) {
+  return and(
+    eq(userArticles.userId, userId),
+    eq(userArticles.sourceId, articles.sourceId),
+    eq(userArticles.guid, articles.guid),
+  );
+}
+
 function userArticleAccessJoin(userId: number) {
   return and(
     eq(userSources.userId, userId),
@@ -55,13 +65,7 @@ export class ArticlesDataService {
         url: articles.url,
       })
       .from(articles)
-      .leftJoin(
-        userArticles,
-        and(
-          eq(articles.id, userArticles.articleId),
-          eq(userArticles.userId, userId),
-        ),
-      )
+      .leftJoin(userArticles, userArticleStateJoin(userId))
       .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
@@ -75,7 +79,7 @@ export class ArticlesDataService {
           // updated_at (the publisher edited it after that stamp) came
           // back into the list while the unread count still said zero.
           or(
-            isNull(userArticles.articleId),
+            isNull(userArticles.userId),
             and(
               isNull(userArticles.deletedAt),
               gt(articles.updatedAt, userArticles.readAt),
@@ -210,6 +214,7 @@ export class ArticlesDataService {
       // trust the caller-supplied list as-is.
       const authorizedArticles = await trx
         .selectDistinct({
+          guid: articles.guid,
           id: articles.id,
           sourceId: articles.sourceId,
         })
@@ -222,10 +227,11 @@ export class ArticlesDataService {
       }
 
       const articleIds = authorizedArticles.map((row) => row.id);
-      const values = articleIds.map((articleId) => {
+      const values = authorizedArticles.map((row) => {
         return {
-          articleId,
           deletedAt: now,
+          guid: row.guid,
+          sourceId: row.sourceId,
           userId,
         };
       });
@@ -235,7 +241,11 @@ export class ArticlesDataService {
         .values(values)
         .onConflictDoUpdate({
           set: { deletedAt: now },
-          target: [userArticles.userId, userArticles.articleId],
+          target: [
+            userArticles.userId,
+            userArticles.sourceId,
+            userArticles.guid,
+          ],
         });
 
       const sourceIds = [

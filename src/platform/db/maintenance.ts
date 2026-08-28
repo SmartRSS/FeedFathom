@@ -127,17 +127,21 @@ export async function cleanupOrphanedData(
   // subscribed later never had the chance to see or delete it, so their
   // absence of a deletion row doesn't block the prune.
   //
-  // The deletion is only as safe as that "gone for good" signal: removals
-  // live in user_articles keyed on articles.id and cascade away with the
-  // row, so a false positive doesn't just delete an article, it forgets
-  // that anyone ever removed it -- and the next fetch listing the item
-  // again re-inserts it under a fresh serial id, unread. Hence the
-  // cadence-scaled buffer above, and hence email sources being excluded
-  // outright: they have no feed to be absent from. Each delivery upserts
-  // one article and stamps last_success (for the admin's "last via"
-  // column), which under a plain last_seen < last_success comparison
-  // makes every earlier newsletter look dropped from a feed that does
-  // not exist.
+  // A false positive here used to be unrecoverable: removals lived in
+  // user_articles keyed on articles.id and cascaded away with the row, so
+  // deleting an article also forgot that anyone had removed it, and the
+  // next fetch listing the item again brought it back unread under a fresh
+  // id. user_articles is now keyed on (source, guid) with no foreign key
+  // to articles, so the removal outlives the prune and the re-inserted
+  // article is still removed. The buffer above is no longer load-bearing
+  // for that -- it stays because re-fetching an article's content is still
+  // waste, not because being wrong is still destructive.
+  //
+  // Email sources stay excluded outright: they have no feed to be absent
+  // from. Each delivery upserts one article and stamps last_success (for
+  // the admin's "last via" column), which under a plain last_seen <
+  // last_success comparison makes every earlier newsletter look dropped
+  // from a feed that does not exist.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -162,7 +166,8 @@ export async function cleanupOrphanedData(
                     .where(
                       and(
                         eq(userArticles.userId, userSources.userId),
-                        eq(userArticles.articleId, articles.id),
+                        eq(userArticles.sourceId, articles.sourceId),
+                        eq(userArticles.guid, articles.guid),
                         isNotNull(userArticles.deletedAt),
                       ),
                     ),

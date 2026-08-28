@@ -90,11 +90,12 @@ test("only prunes articles the feed has really stopped listing", async () => {
     const missedOneFetch = await addArticle(slowFeed, "flaky", "3 days");
     const oldNewsletter = await addArticle(mailbox, "letter", "30 days");
 
-    for (const articleId of [goneForGood, missedOneFetch, oldNewsletter]) {
+    for (const guid of ["gone", "flaky", "letter"]) {
       // eslint-disable-next-line no-await-in-loop -- three fixture rows.
       await client`
-        INSERT INTO user_articles (user_id, article_id, deleted_at)
-        VALUES (${user!.id}, ${articleId}, NOW())`;
+        INSERT INTO user_articles (user_id, source_id, guid, deleted_at)
+        SELECT ${user!.id}, source_id, guid, NOW()
+        FROM articles WHERE guid = ${guid}`;
     }
 
     await cleanupOrphanedData(drizzleConnection, 365, 365, 730);

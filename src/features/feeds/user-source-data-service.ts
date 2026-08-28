@@ -292,7 +292,8 @@ export class UserSourcesDataService {
         LEFT JOIN articles a
           ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
         LEFT JOIN user_articles ua
-          ON ua.user_id = us2.user_id AND ua.article_id = a.id
+          ON ua.user_id = us2.user_id
+          AND ua.source_id = a.source_id AND ua.guid = a.guid
         WHERE us2.source_id IN ${sourceIds} ${userFilter}
         GROUP BY us2.id
       ) counts

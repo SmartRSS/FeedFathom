@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   check,
   index,
   integer,
   pgTable,
-  serial,
   text,
   timestamp,
   unique,
@@ -18,7 +18,10 @@ export const articles = pgTable(
     author: varchar("author").notNull(),
     content: text("content").notNull(),
     guid: varchar("guid").notNull(),
-    id: serial("id").primaryKey(),
+    // Every upsert attempt burns a sequence value whether it inserts or
+    // conflicts, so this counter climbs by millions a day for a table of
+    // thousands of rows -- a 32-bit serial had a dated end.
+    id: bigserial("id", { mode: "number" }).primaryKey(),
     publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
     sourceId: integer("source_id")
       .notNull()
