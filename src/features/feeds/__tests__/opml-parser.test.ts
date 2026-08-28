@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { OpmlParser } from "#features/feeds/opml-parser.ts";
 
-const TEST_CASES_DIR = "src/features/feeds/opml-parser-cases";
+const TEST_CASES_DIR = "src/features/feeds/__tests__/opml-parser-cases";
 
 describe("OpmlParser", () => {
   const parser = new OpmlParser();

@@ -87,7 +87,7 @@
       "tests/**/*.ts",
       "bin/**/*.ts",
       "src/**/*.test.ts",
-      "src/features/feeds/opml-parser-cases/**/*.ts"
+      "src/features/feeds/__tests__/opml-parser-cases/**/*.ts"
     ],
     "project": [
       "src/**/*.{ts,tsx}",
