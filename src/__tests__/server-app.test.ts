@@ -5,9 +5,9 @@ import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
-import { createServerApp, type ServerDependencies } from "./server-app.ts";
+import { createServerApp, type ServerDependencies } from "../server-app.ts";
 
-const spaDirectory = resolve(import.meta.dir, "../src/spa");
+const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const maxRawEmailBytes = 5 * 1_024 * 1_024;
 const unexpected = (name: string): never => {

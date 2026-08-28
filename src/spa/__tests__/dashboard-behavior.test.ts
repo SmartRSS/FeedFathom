@@ -11,7 +11,7 @@ import {
   treeNodeKey,
   unreadCount,
   withDecrementedUnread,
-} from "./dashboard-behavior.ts";
+} from "../dashboard-behavior.ts";
 
 function source(
   uid: string,

@@ -3,7 +3,7 @@ import {
   imageDimensions,
   isBetterFavicon,
   targetFaviconSize,
-} from "./favicon-selection.ts";
+} from "../favicon-selection.ts";
 
 function png(width: number, height: number): Buffer {
   const buffer = Buffer.alloc(24);

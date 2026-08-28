@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { migrateDatabase } from "../../migrator.ts";
+import { migrateDatabase } from "../../../migrator.ts";
 
 function requireDisposableDatabaseUrl() {
   const databaseUrl = process.env["DATABASE_URL"];

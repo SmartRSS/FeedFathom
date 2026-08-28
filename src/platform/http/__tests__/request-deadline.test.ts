@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HttpDeadlineError, RequestDeadline } from "./request-deadline.ts";
+import { HttpDeadlineError, RequestDeadline } from "../request-deadline.ts";
 
 const never = new Promise<never>(() => {});
 

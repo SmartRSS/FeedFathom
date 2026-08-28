@@ -121,7 +121,8 @@ large file and would change for several unrelated reasons.
 
 ## Tests
 
-Unit tests are co-located: `foo.test.ts` sits next to `foo.ts`.
+Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
+next to `foo.ts` (i.e. `__tests__/foo.test.ts`).
 
 `tests/` holds only what tests something other than a `src/` module: the
 Playwright specs under `tests/browser/`, the migration integration test (which

@@ -6,7 +6,7 @@ import {
   expiresAt,
   refresh,
   sharedCacheAllowed,
-} from "./http-cache-policy.ts";
+} from "../http-cache-policy.ts";
 
 const second = 1_000;
 const at = Date.UTC(2026, 0, 1, 12, 0, 0);

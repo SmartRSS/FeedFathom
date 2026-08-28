@@ -4,7 +4,7 @@ import {
   leaseExpiresAt,
   resolveLeaseSeconds,
   shouldAttemptWebSubSubscribe,
-} from "./websub-lease-policy.ts";
+} from "../websub-lease-policy.ts";
 
 describe("resolveLeaseSeconds", () => {
   test("honours a finite positive lease from the hub", () => {
