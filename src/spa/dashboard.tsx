@@ -638,6 +638,7 @@ export function Dashboard(props: {
   }
   return (
     <main class="dashboard">
+      <h1 class="sr-only">FeedFathom</h1>
       <div aria-live="polite" class="sr-only" role="status">
         {accessibilityAnnouncement()}
       </div>
@@ -650,6 +651,7 @@ export function Dashboard(props: {
       </Show>
       <Show when={!showDiscovery() || !authenticated()}>
         <aside
+          aria-label="Feeds"
           class="dashboard-pane sources-pane"
           classList={{ "focused-pane": props.pane() === "sources" }}
         >
@@ -712,7 +714,12 @@ export function Dashboard(props: {
               </ul>
             }
           >
-            <ul class="tree" role="tree">
+            <ul
+              aria-busy={treeLoading()}
+              aria-label="Feeds"
+              class="tree"
+              role="tree"
+            >
               <For each={tree()}>
                 {(node) => (
                   <TreeItem
@@ -729,6 +736,7 @@ export function Dashboard(props: {
           </Show>
         </aside>
         <section
+          aria-label="Articles"
           class="dashboard-pane articles-pane"
           classList={{ "focused-pane": props.pane() === "articles" }}
         >
@@ -768,6 +776,8 @@ export function Dashboard(props: {
             </button>
           </div>
           <div
+            aria-busy={articlesLoading()}
+            aria-label="Articles"
             aria-multiselectable="true"
             class="article-list"
             role="listbox"
@@ -804,7 +814,9 @@ export function Dashboard(props: {
                     <Show
                       when={article.group !== articles()[index() - 1]?.group}
                     >
-                      <div class="date-group">{article.group}</div>
+                      <div aria-hidden="true" class="date-group">
+                        {article.group}
+                      </div>
                     </Show>
                     <a
                       class="article"
@@ -826,7 +838,7 @@ export function Dashboard(props: {
                       <span class="title">{article.title}</span>
                       <span class="details">
                         <span>{article.author}</span>
-                        <time>
+                        <time datetime={article.publishedAt || undefined}>
                           {article.publishedAt
                             ? new Date(article.publishedAt).toLocaleString()
                             : ""}
@@ -840,6 +852,7 @@ export function Dashboard(props: {
           </div>
         </section>
         <article
+          aria-label="Reader"
           class="dashboard-pane reader-pane"
           classList={{ "focused-pane": props.pane() === "reader" }}
         >
@@ -855,6 +868,7 @@ export function Dashboard(props: {
             <span />
             <Show when={readerAvailable()}>
               <select
+                aria-label="Article display mode"
                 value={displayMode()}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
