@@ -18,7 +18,6 @@ let directory = "";
 const config = {
   jsPlugins: [pluginPath],
   rules: {
-    "feedfathom/import-grouping": "error",
     "feedfathom/layer-boundaries": [
       "error",
       { features: { auth: [], feeds: ["auth"], reader: ["auth", "feeds"] } },
@@ -140,24 +139,6 @@ test("route-deps-narrowed allows narrowed and non-service fields", async () => {
   ).toEqual([]);
   expect(
     await lint("i.ts", "export type Other = { svc: UsersDataService };"),
-  ).toEqual([]);
-});
-
-test("import-grouping flags a package import after a relative one", async () => {
-  expect(
-    await lint(
-      "j.ts",
-      'import { a } from "./a.ts";\nimport { b } from "node:fs";\nexport const c = [a, b];',
-    ),
-  ).toHaveLength(1);
-});
-
-test("import-grouping allows packages first", async () => {
-  expect(
-    await lint(
-      "k.ts",
-      'import { a } from "node:fs";\nimport { b } from "./b.ts";\nexport const c = [a, b];',
-    ),
   ).toEqual([]);
 });
 

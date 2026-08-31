@@ -45,13 +45,11 @@ export class UserSourcesDataService {
       }
     }
 
-    const source = await this.sourcesDataService.findOrCreateSourceByUrl(
-      sourcePayload.url,
-      {
-        homeUrl: sourcePayload.homeUrl,
-        kind: sourcePayload.kind,
-      },
-    );
+    const source = await this.sourcesDataService.addSource({
+      homeUrl: sourcePayload.homeUrl,
+      kind: sourcePayload.kind,
+      url: sourcePayload.url,
+    });
 
     if (!source) {
       throw new Error("Source not found or created");

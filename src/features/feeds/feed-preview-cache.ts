@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { Value } from "typebox/value";
 import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
 
 type PreviewCacheRedis = {
@@ -48,11 +47,9 @@ const decodePreview = (
   expectedUrl: string,
 ): FeedPreview | undefined => {
   if (!previewWireCheck.Check(value)) return undefined;
-
-  const expectedFeedPolicy = Type.Object({
-    feedUrl: Type.Literal(expectedUrl),
-  });
-  if (!Value.Check(expectedFeedPolicy, value)) return undefined;
+  // A cache key collision (or a hand-edited Redis entry) must not hand back
+  // another feed's preview under this URL.
+  if (value.feedUrl !== expectedUrl) return undefined;
 
   return Object.assign(
     {

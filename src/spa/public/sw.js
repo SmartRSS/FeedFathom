@@ -285,28 +285,17 @@ async function responseToDataUrl(response) {
   return `data:${contentType};base64,${btoa(binary)}`;
 }
 
-async function warmFavicon(cache, path) {
-  if (await cache.match(path)) return;
+// Runs for every favicon in the tree, hit or miss. A miss needs fetching so
+// the next load can inline it; a hit needs it too, because a source's favicon
+// can change in place (RefreshFavicon) without its URL changing, and an
+// inlined <img src> never fires its own request -- so nothing else would ever
+// ask the network for it again.
+async function refreshFavicon(cache, path) {
   try {
     const response = await fetch(path);
     if (response.ok) await cache.put(path, response);
   } catch {
     // best-effort; the page's own <img> will just fetch it normally
-  }
-}
-
-// A source's favicon can change in place (RefreshFavicon) without its URL
-// changing, so a cache hit still needs occasional revalidation -- otherwise
-// once a favicon is first inlined below, nothing would ever ask the network
-// for it again (an inlined <img src> never fires its own request, which is
-// what staleWhileRevalidate normally relies on to trigger a refresh). This
-// mirrors that same refresh, just triggered from here instead.
-async function revalidateFavicon(cache, path) {
-  try {
-    const response = await fetch(path);
-    if (response.ok) await cache.put(path, response);
-  } catch {
-    // best-effort; still serving the cached copy this time
   }
 }
 
@@ -327,25 +316,15 @@ async function inlineTreeFavicons(event, response, cache) {
   }
   const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
   const dataUrlByPath = new Map();
-  const hits = [];
-  const misses = [];
   await Promise.allSettled(
     urls.map(async (path) => {
       const cached = await cache.match(path);
-      if (cached) {
-        hits.push(path);
-        dataUrlByPath.set(path, await responseToDataUrl(cached));
-      } else {
-        misses.push(path);
-      }
+      if (cached) dataUrlByPath.set(path, await responseToDataUrl(cached));
     }),
   );
-  if (hits.length || misses.length)
+  if (urls.length)
     event.waitUntil(
-      Promise.allSettled([
-        ...misses.map((path) => warmFavicon(cache, path)),
-        ...hits.map((path) => revalidateFavicon(cache, path)),
-      ]),
+      Promise.allSettled(urls.map((path) => refreshFavicon(cache, path))),
     );
   if (dataUrlByPath.size === 0) return null;
   const patched = {

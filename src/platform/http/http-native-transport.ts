@@ -299,20 +299,12 @@ function toNativeResponse(
 
 function raceAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(abortReason(signal));
-  return new Promise((resolve, reject) => {
-    const aborted = () => reject(abortReason(signal));
-    signal.addEventListener("abort", aborted, { once: true });
-    operation.then(
-      (value) => {
-        signal.removeEventListener("abort", aborted);
-        resolve(value);
-      },
-      (error: Error) => {
-        signal.removeEventListener("abort", aborted);
-        reject(error);
-      },
-    );
+  const aborted = new Promise<never>((_, reject) => {
+    signal.addEventListener("abort", () => reject(abortReason(signal)), {
+      once: true,
+    });
   });
+  return Promise.race([operation, aborted]);
 }
 
 function abortReason(signal: AbortSignal): Error {

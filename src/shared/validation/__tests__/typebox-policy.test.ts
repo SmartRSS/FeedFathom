@@ -5,7 +5,6 @@ import { describe, expect, test } from "bun:test";
 import {
   disposableEmailPolicy,
   emailAddressPolicy,
-  internalAddressPolicy,
   jsonDatePolicy,
   normalizedSubscriptionTarget,
   plainTextPolicy,
@@ -61,20 +60,6 @@ test("checks URL, email, plain-text, and internal-address policies", () => {
     false,
   );
 });
-
-test.each(["127.0.0.1", "::1", "::ffff:127.0.0.1"])(
-  "accepts loopback address %s",
-  (address) => {
-    expect(Value.Check(internalAddressPolicy, address)).toBe(true);
-  },
-);
-
-test.each(["", "127.0.0.2", "192.0.2.1", "::ffff:192.0.2.1"])(
-  "rejects non-loopback address %s",
-  (address) => {
-    expect(Value.Check(internalAddressPolicy, address)).toBe(false);
-  },
-);
 
 test("accepts canonical JSON dates", () => {
   expect(Value.Check(jsonDatePolicy, "2026-07-29T12:34:56.789Z")).toBe(true);

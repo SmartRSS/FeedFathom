@@ -71,3 +71,12 @@ export const isBlockedHostname = (hostname: string): boolean => {
     (first & 0xff00) === 0xff00
   );
 };
+
+// The inverse question, for the internal healthcheck endpoints: an address is
+// allowed there only when the request came from this machine. Exact literals
+// rather than a range check -- the peer address is one of these three or the
+// request is not local.
+const loopbackAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+export const isLoopbackAddress = (address: string): boolean =>
+  loopbackAddresses.has(address);
