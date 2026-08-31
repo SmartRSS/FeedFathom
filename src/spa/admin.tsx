@@ -130,13 +130,19 @@ export function Admin(props: {
         Home
       </a>
       <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-      <div class="admin-table-scroll">
-        <table class="admin-table">
+      <div
+        aria-label="Feed sources"
+        class="admin-table-scroll"
+        role="region"
+        tabindex="0"
+      >
+        <table aria-label="Feed sources" class="admin-table">
           <thead>
             <tr>
               <For each={ADMIN_COLUMNS}>
                 {(column) => (
                   <th
+                    scope="col"
                     aria-sort={
                       sortBy() === column.sort
                         ? order() === "asc"
@@ -159,9 +165,9 @@ export function Admin(props: {
                   </th>
                 )}
               </For>
-              <th>WebSub</th>
-              <th>Last via</th>
-              <th>Actions</th>
+              <th scope="col">WebSub</th>
+              <th scope="col">Last via</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>

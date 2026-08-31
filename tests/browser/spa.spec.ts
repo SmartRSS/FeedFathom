@@ -131,8 +131,10 @@ test("right-aligns folder and source unread counts to the same edge", async ({
   await installApiFixture(page);
   await page.goto("/");
 
-  const folderCount = page.locator(".source.folder em").first();
-  const sourceCount = page.locator(".tree.nested .source em").first();
+  const folderCount = page.locator(".source.folder .unread-count").first();
+  const sourceCount = page
+    .locator(".tree.nested .source .unread-count")
+    .first();
   await expect(folderCount).toBeVisible();
   await expect(sourceCount).toBeVisible();
 
@@ -208,6 +210,29 @@ test("preserves an unauthenticated deep link through login", async ({
   await expect(
     page.getByRole("heading", { name: "Preview article" }),
   ).toBeVisible();
+});
+
+// A folder's <ul role="group"> is a DOM sibling of its treeitem, so nothing
+// but this aria-owns keeps the two connected -- lose it and the nesting
+// silently flattens in the accessibility tree while looking identical.
+test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const folder = page.locator(".source.folder").first();
+  await expect(folder).toHaveAttribute("aria-expanded", "true");
+  const owns = await folder.getAttribute("aria-owns");
+  expect(owns).toBeTruthy();
+  await expect(page.locator(`#${owns}`)).toHaveAttribute("role", "group");
+});
+
+test("retitles the document on route changes", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await expect(page).toHaveTitle("FeedFathom");
+  await page.getByRole("button", { name: "options" }).first().click();
+  await expect(page).toHaveTitle("Options · FeedFathom");
 });
 
 test("shows the current account and logs out", async ({ page }) => {
