@@ -21,7 +21,6 @@ const cachedResponseSchema = Type.Object(
   exact,
 );
 export const cachedResponseCheck = Schema.Compile(cachedResponseSchema);
-const finiteNumberCheck = Schema.Compile(Type.Number());
 
 export type CachedResponse = Static<typeof cachedResponseSchema>;
 
@@ -45,7 +44,7 @@ export function deltaSeconds(value: string): number | undefined {
  */
 export function currentAge(headers: Headers, receivedAt: number): number {
   const responseDate = Date.parse(headers.get("date") ?? "");
-  const apparentAge = finiteNumberCheck.Check(responseDate)
+  const apparentAge = Number.isFinite(responseDate)
     ? Math.max(0, receivedAt - responseDate)
     : 0;
   const age = deltaSeconds(headers.get("age") ?? "") ?? 0;
@@ -108,12 +107,11 @@ export function expiresAt(
   }
 
   const expires = Date.parse(headers.get("expires") ?? "");
-  if (!finiteNumberCheck.Check(expires)) return undefined;
+  if (!Number.isFinite(expires)) return undefined;
   const responseDate = Date.parse(headers.get("date") ?? "");
   const freshnessLifetime = Math.max(
     0,
-    expires -
-      (finiteNumberCheck.Check(responseDate) ? responseDate : receivedAt),
+    expires - (Number.isFinite(responseDate) ? responseDate : receivedAt),
   );
   return receivedAt + Math.max(0, freshnessLifetime - age);
 }
