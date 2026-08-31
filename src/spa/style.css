@@ -167,6 +167,10 @@
   outline-offset: -2px;
 }
 
+main:focus {
+  outline: none;
+}
+
 .skip-link {
   position: absolute;
   top: -3rem;
@@ -281,6 +285,10 @@ form,
   overflow: auto;
   border: var(--border);
   border-radius: var(--radius);
+}
+.admin-table-scroll:focus-visible {
+  outline: 2px solid var(--blue-60);
+  outline-offset: 2px;
 }
 .admin-table {
   width: 100%;
@@ -567,7 +575,7 @@ a {
 .article-list.skeleton {
   overflow: hidden;
 }
-.source em {
+.source .unread-count {
   margin-left: auto;
   color: var(--muted);
   font-size: 0.8rem;
@@ -593,7 +601,7 @@ a {
    (grey-50/near-black in most of these themes) measured well under
    1.5:1 against every theme's selected background, e.g. smart 1.18:1,
    classic 3.38:1, millennial 1.11:1, high-contrast 1.08:1 -- all fail. */
-.source.selected em {
+.source.selected .unread-count {
   color: inherit;
 }
 .article:focus {

@@ -57,6 +57,14 @@ export function TreeItem(props: {
   selected: TreeNode | undefined;
 }) {
   const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
+  // The nested <ul role="group"> below is a DOM *sibling* of this row's
+  // treeitem (a button can't contain a list), and the presentational <li>
+  // around them both re-parents it onto the tree root -- leaving the group
+  // beside the folder rather than under it, with aria-expanded pointing at
+  // nothing. aria-owns puts it back where it belongs without restructuring
+  // the row into a non-button element, which would cost the button's native
+  // Enter/Space activation that handleKeyDown deliberately doesn't handle.
+  const groupId = () => `tree-group-${props.node.uid}`;
   const [faviconLoaded, setFaviconLoaded] = createSignal(false);
   const [faviconFailed, setFaviconFailed] = createSignal(false);
   const isFolder = () => props.node.type === "folder";
@@ -99,6 +107,7 @@ export function TreeItem(props: {
     <li role="none">
       <button
         aria-expanded={isFolder() ? open() : undefined}
+        aria-owns={isFolder() && open() ? groupId() : undefined}
         aria-selected={props.selected === props.node}
         class="source"
         classList={{
@@ -150,10 +159,16 @@ export function TreeItem(props: {
           />
         </Show>
         <span>{props.node.name}</span>
-        <Show when={unread()}>{(count) => <em>{count()}</em>}</Show>
+        <Show when={unread()}>
+          {(count) => (
+            <span aria-label={`${count()} unread`} class="unread-count">
+              {count()}
+            </span>
+          )}
+        </Show>
       </button>
       <Show when={isFolder() && open()}>
-        <ul class="tree nested" role="group">
+        <ul class="tree nested" id={groupId()} role="group">
           <For each={children()}>
             {(child) => (
               <TreeItem

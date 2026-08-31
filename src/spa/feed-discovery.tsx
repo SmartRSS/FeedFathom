@@ -262,6 +262,7 @@ export function FeedDiscovery(props: {
         )}
       </Show>
       <aside
+        aria-label={props.editing ? "Edit feed" : "Discover feed"}
         class="dashboard-pane sources-pane"
         classList={{ "focused-pane": props.pane() === "sources" }}
       >
@@ -403,6 +404,7 @@ export function FeedDiscovery(props: {
         </form>
       </aside>
       <section
+        aria-label="Preview articles"
         class="dashboard-pane articles-pane"
         classList={{ "focused-pane": props.pane() === "articles" }}
       >
@@ -425,6 +427,9 @@ export function FeedDiscovery(props: {
             <For each={articles()}>
               {(article, index) => (
                 <a
+                  aria-current={
+                    selectedIndex() === index() ? "true" : undefined
+                  }
                   class="article"
                   classList={{ selected: selectedIndex() === index() }}
                   href={article.url || undefined}
@@ -433,7 +438,7 @@ export function FeedDiscovery(props: {
                   <span class="title">{article.title}</span>
                   <span class="details">
                     <span>{article.author}</span>
-                    <time>
+                    <time datetime={article.publishedAt}>
                       {new Date(article.publishedAt).toLocaleString()}
                     </time>
                   </span>
@@ -444,6 +449,7 @@ export function FeedDiscovery(props: {
         </div>
       </section>
       <article
+        aria-label="Preview reader"
         class="dashboard-pane reader-pane"
         classList={{ "focused-pane": props.pane() === "reader" }}
       >

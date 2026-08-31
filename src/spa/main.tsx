@@ -24,6 +24,19 @@ import { isUnauthorizedError } from "./api.ts";
 import { resolvedTheme } from "./preferences.ts";
 import "./style.css";
 
+// A route swap replaces the whole page without the title change and focus
+// reset a real navigation would give you: the tab keeps reading "FeedFathom"
+// and Tab resumes from wherever the old page's link was.
+const ROUTE_TITLES: Record<Route["name"], string> = {
+  activate: "Account activation",
+  admin: "Admin",
+  dashboard: "FeedFathom",
+  login: "Login",
+  options: "Options",
+  preview: "Discover feed",
+  register: "Register",
+};
+
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
 const [updateAvailable, setUpdateAvailable] = createSignal(false);
@@ -70,6 +83,32 @@ function App() {
     const current = route();
     return current.name === "login" ? current : undefined;
   };
+
+  createEffect(() => {
+    const title = ROUTE_TITLES[route().name];
+    document.title = title === "FeedFathom" ? title : `${title} · FeedFathom`;
+  });
+
+  // Skips the first render (nothing was replaced yet). Pane changes keep the
+  // same path, and setPath's === check means the signal doesn't fire for
+  // them, so moving between panes never steals focus. Landing on <main>
+  // rather than a heading works for every route without each page needing
+  // its own focus target; the dashboard's own tree focus (see its onMount)
+  // runs later and wins where it applies.
+  let firstRoute = true;
+  createEffect(() => {
+    path();
+    if (firstRoute) {
+      firstRoute = false;
+      return;
+    }
+    queueMicrotask(() => {
+      const main = document.querySelector("main");
+      if (!main) return;
+      main.tabIndex = -1;
+      main.focus();
+    });
+  });
   onMount(() => addEventListener("popstate", popstate));
   onCleanup(() => removeEventListener("popstate", popstate));
 
