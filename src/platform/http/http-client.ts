@@ -1,5 +1,3 @@
-import { Type } from "typebox";
-import Schema from "typebox/schema";
 import {
   cacheable,
   type CachedResponse,
@@ -108,16 +106,10 @@ function buildUserAgent(
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
-const redirectStatusCheck = Schema.Compile(
-  Type.Union([301, 302, 303, 307, 308].map((status) => Type.Literal(status))),
-);
-const retryableStatusCheck = Schema.Compile(
-  Type.Union(
-    [408, 425, 500, 502, 503, 504].map((status) => Type.Literal(status)),
-  ),
-);
-const rateLimitedStatusCheck = Schema.Compile(Type.Literal(429));
-const notModifiedStatusCheck = Schema.Compile(Type.Literal(304));
+const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
+const rateLimitedStatus = 429;
+const notModifiedStatus = 304;
 
 type HttpRedis = {
   decr(key: string): Promise<number>;
@@ -279,7 +271,7 @@ export class HttpClient {
       options.priority ?? "interactive",
       deadline,
     );
-    if (notModifiedStatusCheck.Check(response.status) && cached) {
+    if (response.status === notModifiedStatus && cached) {
       response.destroy();
       const refreshed = refresh(cached, response.headers);
       const refreshedHeaders = new Headers(refreshed.headers);
@@ -334,7 +326,7 @@ export class HttpClient {
           result.response.headers,
           deadline,
         );
-        if (rateLimitedStatusCheck.Check(result.response.status)) {
+        if (result.response.status === rateLimitedStatus) {
           const retryAfter = result.response.headers.get("retry-after");
           result.response.destroy();
           result = undefined;
@@ -383,7 +375,7 @@ export class HttpClient {
       const response = await deadline.run(
         this.transport(next, headers, deadline.controller.signal),
       );
-      if (!redirectStatusCheck.Check(response.status)) {
+      if (!redirectStatuses.has(response.status)) {
         return { permanent: redirects > 0 && permanent, response };
       }
 
@@ -562,7 +554,7 @@ export class HttpClient {
   }
 
   private isRetryable(status: number): boolean {
-    return retryableStatusCheck.Check(status);
+    return retryableStatuses.has(status);
   }
 }
 
