@@ -3,7 +3,7 @@ import Schema from "typebox/schema";
 import { and, eq, getTableColumns, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { dateType } from "#shared/validation/typebox-policy.ts";
-import { sourceSortSchema } from "#shared/contracts/requests.ts";
+import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
@@ -61,21 +61,21 @@ export interface SourceWithSubscriberCount {
 const gatherBatchLimit = 500;
 const exact = { additionalProperties: false } as const;
 type SourceSort = Static<typeof sourceSortSchema>;
-const sourceOrderSchema = Type.Union([
-  Type.Literal("asc"),
-  Type.Literal("desc"),
+// These two maps are the whole defence for the interpolation in
+// listAllSources: an unrecognised key can only ever fall back to a literal
+// spelled out here, so nothing caller-supplied reaches the SQL text.
+const sourceSortSql = new Map([
+  ["createdAt", "s.created_at"],
+  ["lastAttempt", "s.last_attempt"],
+  ["lastSuccess", "s.last_success"],
+  ["recentFailures", "s.recent_failures"],
+  ["subscriberCount", '"subscriberCount"'],
+  ["url", "s.url"],
 ]);
-const sourceSortCheck = Schema.Compile(sourceSortSchema);
-const sourceOrderCheck = Schema.Compile(sourceOrderSchema);
-const sourceSortSql = {
-  createdAt: "s.created_at",
-  lastAttempt: "s.last_attempt",
-  lastSuccess: "s.last_success",
-  recentFailures: "s.recent_failures",
-  subscriberCount: '"subscriberCount"',
-  url: "s.url",
-} as const;
-const sourceOrderSql = { asc: "ASC", desc: "DESC" } as const;
+const sourceOrderSql = new Map([
+  ["asc", "ASC"],
+  ["desc", "DESC"],
+]);
 const sourceListRowsSchema = Type.Array(
   Type.Object(
     {
@@ -121,11 +121,9 @@ export function parseSourceListRows(
 }
 
 export function resolveSourceListOrder(sortBy: string, order: string) {
-  const validSortBy = sourceSortCheck.Check(sortBy) ? sortBy : "createdAt";
-  const validOrder = sourceOrderCheck.Check(order) ? order : "asc";
   return {
-    order: sourceOrderSql[validOrder],
-    sort: sourceSortSql[validSortBy],
+    order: sourceOrderSql.get(order) ?? "ASC",
+    sort: sourceSortSql.get(sortBy) ?? "s.created_at",
   };
 }
 
@@ -396,17 +394,6 @@ export class SourcesDataService {
       .where(eq(sources.id, sourceId))
       .limit(1);
     return row?.favicon ?? null;
-  }
-
-  public async findOrCreateSourceByUrl(
-    url: string,
-    payload: { homeUrl: string; kind?: "email" | "feed" | undefined },
-  ) {
-    return await this.addSource({
-      homeUrl: payload.homeUrl,
-      kind: payload.kind,
-      url,
-    });
   }
 
   // Called after a poll discovers a hub advertisement and the source isn't

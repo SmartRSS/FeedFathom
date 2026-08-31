@@ -3,30 +3,12 @@ import { Value } from "typebox/value";
 import { isDisposableEmail } from "disposable-email-domains-js";
 import { isPlainText } from "#shared/util/is-plain-text.ts";
 
-type PasswordPair = {
-  password: string;
-  passwordConfirm: string;
-};
-
-type PasswordChange = {
-  password1: string;
-  password2: string;
-};
-
 type SubscriptionTarget =
   | { kind: "email"; value: string }
   | { kind: "feed"; value: string };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const nonblankString = Type.String({ minLength: 1, pattern: "\\S" });
-const passwordPairProjection = Type.Object(
-  { password: Type.String(), passwordConfirm: Type.String() },
-  { additionalProperties: true },
-);
-const passwordChangeProjection = Type.Object(
-  { password1: Type.String(), password2: Type.String() },
-  { additionalProperties: true },
-);
 
 function isWebUrl(value: string) {
   try {
@@ -49,24 +31,29 @@ export const dateType = Type.Refine(
   (value) => value instanceof Date,
 );
 
-export function withMatchingPasswords<T extends TSchema>(schema: T) {
+// Both password forms carry the same rule under different field names, so
+// the pair to compare is a parameter rather than a second copy of the check.
+function withEqualStrings<T extends TSchema>(
+  schema: T,
+  first: string,
+  second: string,
+) {
+  const projection = Type.Object(
+    { [first]: Type.String(), [second]: Type.String() },
+    { additionalProperties: true },
+  );
   return Type.Refine(schema, (value) => {
-    if (!Value.Check(passwordPairProjection, value)) return false;
-    return (
-      (value as PasswordPair).password ===
-      (value as PasswordPair).passwordConfirm
-    );
+    if (!Value.Check(projection, value)) return false;
+    return value[first] === value[second];
   });
 }
 
+export function withMatchingPasswords<T extends TSchema>(schema: T) {
+  return withEqualStrings(schema, "password", "passwordConfirm");
+}
+
 export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
-  return Type.Refine(schema, (value) => {
-    if (!Value.Check(passwordChangeProjection, value)) return false;
-    return (
-      (value as PasswordChange).password1 ===
-      (value as PasswordChange).password2
-    );
-  });
+  return withEqualStrings(schema, "password1", "password2");
 }
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
@@ -75,11 +62,6 @@ export const disposableEmailPolicy = Type.Refine(Type.String(), (value) =>
   isDisposableEmail(value.trim()),
 );
 export const plainTextPolicy = Type.Refine(Type.String(), isPlainText);
-export const internalAddressPolicy = Type.Refine(
-  Type.String(),
-  (value) =>
-    value === "127.0.0.1" || value === "::1" || value === "::ffff:127.0.0.1",
-);
 export const jsonDatePolicy = Type.Refine(
   Type.String(),
   (value) =>

@@ -5,7 +5,7 @@ import { definePlugin, defineRule } from "@oxlint/plugins";
 // violations -- they lock in what the codebase already does rather than
 // scheduling a refactor.
 //
-// All five use the `createOnce` API rather than the ESLint-compatible
+// All four use the `createOnce` API rather than the ESLint-compatible
 // `create`. `createOnce` runs once per lint run instead of once per file,
 // which lets oxlint statically analyse which node types a rule wants and skip
 // traversal when they are absent. Per-file state must therefore be reset in
@@ -106,47 +106,6 @@ const routeDepsNarrowed = defineRule({
             data: { field, service },
             messageId: "bare",
             node: member,
-          });
-        }
-      },
-    };
-  },
-});
-
-/**
- * Package imports before relative imports. oxlint has no `import/order` rule,
- * and this holds in every file under `src/`.
- */
-const importGrouping = defineRule({
-  meta: {
-    docs: {
-      description: "Require package imports to come before relative imports.",
-    },
-    messages: {
-      outOfOrder:
-        'Package import "{{source}}" must come before relative imports.',
-    },
-    type: "layout",
-  },
-  createOnce(context) {
-    let seenRelative = false;
-
-    return {
-      before() {
-        seenRelative = false;
-      },
-      ImportDeclaration(node) {
-        const source = node.source.value;
-        if (typeof source !== "string") return;
-        if (source.startsWith(".")) {
-          seenRelative = true;
-          return;
-        }
-        if (seenRelative) {
-          context.report({
-            data: { source },
-            messageId: "outOfOrder",
-            node,
           });
         }
       },
@@ -473,7 +432,6 @@ const layerBoundaries = defineRule({
 export default definePlugin({
   meta: { name: "feedfathom" },
   rules: {
-    "import-grouping": importGrouping,
     "layer-boundaries": layerBoundaries,
     "no-barrel-file": noBarrelFile,
     "route-deps-narrowed": routeDepsNarrowed,

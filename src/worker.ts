@@ -1,6 +1,5 @@
-import { Value } from "typebox/value";
 import { Worker } from "bullmq";
-import { internalAddressPolicy } from "#shared/validation/typebox-policy.ts";
+import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
 import { MainWorker, type MainWorkerFactory } from "#features/jobs/main.ts";
@@ -61,7 +60,7 @@ async function runWorker() {
       const url = new URL(request.url);
       const ip = server.requestIP(request)?.address ?? "";
 
-      if (!Value.Check(internalAddressPolicy, ip)) {
+      if (!isLoopbackAddress(ip)) {
         return Response.json({ error: "Unauthorized" }, { status: 403 });
       }
 

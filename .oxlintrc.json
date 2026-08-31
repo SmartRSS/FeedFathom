@@ -72,7 +72,6 @@
     "no-var": "error",
     "object-shorthand": "error",
     "operator-assignment": "error",
-    "feedfathom/import-grouping": "error",
     // The layer direction from CONTEXT.md, enforced. Cross-feature edges are
     // declared here rather than inferred, so adding one is a config change
     // that shows up in review instead of a quiet new import. The list must

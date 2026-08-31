@@ -1,4 +1,5 @@
 import { Type } from "typebox";
+import { maxRawEmailBytes } from "#shared/contracts/mail-relay.ts";
 import {
   normalizedEmailAddress,
   normalizedNonblankString,
@@ -10,7 +11,6 @@ import {
 
 const id = Type.Integer({ minimum: 1 });
 const maximumRequestIds = 500;
-const maxRawEmailCharacters = 5 * 1_024 * 1_024;
 const normalizedMailEnvelopeValue = Type.Codec(
   Type.String({ maxLength: 320, minLength: 1, pattern: "\\S" }),
 )
@@ -87,7 +87,9 @@ export const incomingMailRequest = Type.Object(
   {
     from: normalizedMailEnvelopeValue,
     raw: Type.String({
-      maxLength: maxRawEmailCharacters,
+      // maxLength counts characters, so this is the looser of the two
+      // ceilings; the route checks the real byte length as well.
+      maxLength: maxRawEmailBytes,
       minLength: 1,
     }),
     to: normalizedMailEnvelopeValue,

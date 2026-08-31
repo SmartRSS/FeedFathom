@@ -1,5 +1,9 @@
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import {
+  mailRelaySecretHeader,
+  maxRawEmailBytes,
+} from "#shared/contracts/mail-relay.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
 const endpointDomain = Type.Union([
@@ -9,8 +13,6 @@ const endpointDomain = Type.Union([
       "^http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\])(?::[1-9]\\d{0,4})?/?$",
   }),
 ]);
-const maxRawEmailBytes = 5 * 1_024 * 1_024;
-const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const workerEnvironment = Type.Object(
   {
     MAIL_ENDPOINT_DOMAIN: endpointDomain,

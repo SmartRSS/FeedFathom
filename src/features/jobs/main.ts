@@ -256,6 +256,8 @@ export class MainWorker {
           await job.moveToDelayed(error.retryAt, job.token);
           throw new DelayedError();
         } catch (moveError) {
+          // `instanceof` reads the value's prototype, which a thrown Proxy can
+          // poison into throwing -- see the poisoned-trap case in main.test.ts.
           const isDelayed = (() => {
             try {
               return moveError instanceof DelayedError;
@@ -295,41 +297,17 @@ export class MainWorker {
   };
 
   private async setupScheduledTasks() {
-    await this.bullmqQueue.add(
-      JobName.Cleanup,
-      {},
-      {
-        jobId: JobName.Cleanup,
-        repeat: { every: this.appConfig.CLEANUP_INTERVAL * 1_000 },
-      },
-    );
-
-    await this.bullmqQueue.add(
-      JobName.GatherJobs,
-      {},
-      {
-        jobId: JobName.GatherJobs,
-        repeat: { every: this.appConfig.GATHER_JOBS_INTERVAL * 1_000 },
-      },
-    );
-
-    await this.bullmqQueue.add(
-      JobName.GatherFaviconJobs,
-      {},
-      {
-        jobId: JobName.GatherFaviconJobs,
-        repeat: { every: 86_400_000 },
-      },
-    );
-
-    await this.bullmqQueue.add(
-      JobName.WebSubRenewal,
-      {},
-      {
-        jobId: JobName.WebSubRenewal,
-        repeat: { every: 86_400_000 },
-      },
-    );
+    const daily = 86_400_000;
+    const schedule: Array<[JobName, number]> = [
+      [JobName.Cleanup, this.appConfig.CLEANUP_INTERVAL * 1_000],
+      [JobName.GatherJobs, this.appConfig.GATHER_JOBS_INTERVAL * 1_000],
+      [JobName.GatherFaviconJobs, daily],
+      [JobName.WebSubRenewal, daily],
+    ];
+    for (const [name, every] of schedule) {
+      // eslint-disable-next-line no-await-in-loop -- BullMQ repeat registration is ordered.
+      await this.bullmqQueue.add(name, {}, { jobId: name, repeat: { every } });
+    }
   }
 
   private startWorker() {

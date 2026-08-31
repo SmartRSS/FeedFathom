@@ -1,26 +1,5 @@
 const defaultLimit = 1_024;
 
-async function readChunks(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  decoder: TextDecoder,
-  remaining: number,
-): Promise<string> {
-  if (remaining === 0) return decoder.decode();
-
-  const { done, value } = await reader.read();
-  if (done) return decoder.decode();
-
-  const chunk = value.subarray(0, remaining);
-  const text = decoder.decode(chunk, { stream: true });
-  if (chunk.byteLength < value.byteLength || chunk.byteLength === remaining) {
-    return text + decoder.decode();
-  }
-
-  return (
-    text + (await readChunks(reader, decoder, remaining - chunk.byteLength))
-  );
-}
-
 export async function readResponseDiagnostic(
   response: Response,
   limit = defaultLimit,
@@ -28,8 +7,21 @@ export async function readResponseDiagnostic(
   const reader = response.body?.getReader();
   if (!reader) return "";
 
+  const decoder = new TextDecoder();
+  let remaining = limit;
+  let text = "";
   try {
-    return (await readChunks(reader, new TextDecoder(), limit)).trim();
+    /* eslint-disable no-await-in-loop -- Each chunk depends on the previous read. */
+    while (remaining > 0) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value.subarray(0, remaining);
+      remaining -= chunk.byteLength;
+      text += decoder.decode(chunk, { stream: true });
+      if (chunk.byteLength < value.byteLength) break;
+    }
+    /* eslint-enable no-await-in-loop */
+    return (text + decoder.decode()).trim();
   } finally {
     await reader.cancel().catch(() => undefined);
   }
