@@ -17,6 +17,8 @@ rule's options in `.oxlintrc.json`.
 Unit tests are co-located next to the module they cover. `tests/` holds only
 what tests something other than a `src/` module: the Playwright specs, the
 drizzle migration tests, the vendored shim, and the `bin/` and `tools/` tests.
+A co-located test that needs a real PostgreSQL takes the
+`*-integration.test.ts` suffix, which keeps it out of `test:unit`.
 
 Decisions live in `docs/adr/`.
 
