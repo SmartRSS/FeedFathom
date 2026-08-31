@@ -10,7 +10,6 @@ const dashboardHistoryStateSchema = Type.Object(
   { feedFathomPane: dashboardPaneSchema },
   { additionalProperties: true },
 );
-const historyStateSchema = Type.Object({}, { additionalProperties: true });
 
 const normalizedNextPath = (value: string): string | undefined => {
   if (!value.startsWith("/") || value.startsWith("//")) return undefined;
@@ -26,15 +25,6 @@ const normalizedNextPath = (value: string): string | undefined => {
     return undefined;
   }
 };
-
-const safeNextPathSchema = Type.Codec(
-  Type.Refine(
-    Type.String(),
-    (value) => normalizedNextPath(value) !== undefined,
-  ),
-)
-  .Decode((value) => normalizedNextPath(value) ?? "/")
-  .Encode((value) => value);
 
 export type SelectionModifiers = {
   ctrlKey?: boolean;
@@ -100,15 +90,15 @@ export function withDashboardPane(
   feedFathomPane: DashboardPane,
 ): Record<string, unknown> {
   return {
-    ...(Value.Check(historyStateSchema, state) ? state : {}),
-    feedFathomPane: Value.Decode(dashboardPaneSchema, feedFathomPane),
+    ...(typeof state === "object" && state !== null ? state : {}),
+    feedFathomPane,
   };
 }
 
 export function safeNextPath(value: string | null | undefined): string {
-  return Value.Check(safeNextPathSchema, value)
-    ? Value.Decode(safeNextPathSchema, value)
-    : "/";
+  return (
+    (typeof value === "string" ? normalizedNextPath(value) : undefined) ?? "/"
+  );
 }
 
 export function loginPath(next: string): string {

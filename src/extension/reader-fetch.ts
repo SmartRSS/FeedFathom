@@ -1,5 +1,3 @@
-import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 import {
   readerBridgeChannel,
@@ -36,38 +34,26 @@ const articleTargetUrl = (value: string, baseUrl?: string): URL | undefined => {
   }
 };
 
-const articleTargetSchema = (base?: URL) =>
-  Type.Refine(
-    Type.String(),
-    (value) => articleTargetUrl(value, base?.href) !== undefined,
-  );
-const publicHostnameSchema = Type.Refine(
-  Type.String(),
-  (value) => !isBlockedHostname(value),
-);
-const readerSenderSchema = (origin: string) =>
-  Type.Object(
-    {
-      frameId: Type.Literal(0),
-      url: Type.Refine(Type.String(), (value) => {
-        try {
-          return new URL(value).origin === origin;
-        } catch {
-          return false;
-        }
-      }),
-    },
-    { additionalProperties: false },
-  );
+// The sender must be the top frame of the configured instance and carry
+// nothing else: an extra key means this isn't the shape we vouched for.
+const isReaderSender = (sender: unknown, origin: string): boolean => {
+  if (typeof sender !== "object" || sender === null) return false;
+  const keys = Object.keys(sender);
+  if (keys.length !== 2 || !("frameId" in sender) || !("url" in sender))
+    return false;
+  const { frameId, url } = sender;
+  if (frameId !== 0 || typeof url !== "string") return false;
+  try {
+    return new URL(url).origin === origin;
+  } catch {
+    return false;
+  }
+};
 
 const validateArticleUrl = (value: string, base?: URL): ValidatedUrl => {
-  if (!Value.Check(articleTargetSchema(base), value))
-    return { error: "INVALID_URL" };
-
-  const url = base ? new URL(value, base) : new URL(value);
-  return Value.Check(publicHostnameSchema, url.hostname)
-    ? { url }
-    : { error: "PRIVATE_URL" };
+  const url = articleTargetUrl(value, base?.href);
+  if (!url) return { error: "INVALID_URL" };
+  return isBlockedHostname(url.hostname) ? { error: "PRIVATE_URL" } : { url };
 };
 
 const authorizeSender = (
@@ -78,9 +64,7 @@ const authorizeSender = (
   const instance = canonicalizeInstance(configuredInstance);
   if (!instance) return "UNAVAILABLE";
 
-  return Value.Check(readerSenderSchema(instance), sender)
-    ? undefined
-    : "UNAUTHORIZED";
+  return isReaderSender(sender, instance) ? undefined : "UNAUTHORIZED";
 };
 
 const readBoundedHtml = async (
@@ -118,8 +102,7 @@ const fetchArticle = async (
   if ("error" in validated)
     return readerErrorResponse(request, validated.error);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = AbortSignal.timeout(timeoutMs);
   /* eslint-disable no-await-in-loop -- Each fetch follows the previously validated redirect. */
   try {
     for (let redirects = 0; ; redirects++) {
@@ -127,7 +110,7 @@ const fetchArticle = async (
         credentials: "omit",
         redirect: "manual",
         referrer: "",
-        signal: controller.signal,
+        signal,
       });
 
       if (response.type === "opaqueredirect")
@@ -173,10 +156,8 @@ const fetchArticle = async (
   } catch {
     return readerErrorResponse(
       request,
-      controller.signal.aborted ? "TIMEOUT" : "FETCH_FAILED",
+      signal.aborted ? "TIMEOUT" : "FETCH_FAILED",
     );
-  } finally {
-    clearTimeout(timer);
   }
   /* eslint-enable no-await-in-loop */
 };

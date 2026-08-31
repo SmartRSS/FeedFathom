@@ -1,6 +1,3 @@
-import { Type } from "typebox";
-import { Value } from "typebox/value";
-
 const isLoopbackHostname = (hostname: string) => {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
@@ -16,7 +13,7 @@ const isLoopbackHostname = (hostname: string) => {
     Number(parts[0]) === 127
   );
 };
-const instanceOrigin = (value: string): string | undefined => {
+export const canonicalizeInstance = (value: string): string | undefined => {
   try {
     const url = new URL(value);
     return (url.protocol === "https:" ||
@@ -31,17 +28,6 @@ const instanceOrigin = (value: string): string | undefined => {
     return undefined;
   }
 };
-
-const instanceUrlSchema = Type.Codec(
-  Type.Refine(Type.String(), (value) => instanceOrigin(value) !== undefined),
-)
-  .Decode((value) => new URL(value).origin)
-  .Encode((value) => value);
-
-export const canonicalizeInstance = (value: string): string | undefined =>
-  Value.Check(instanceUrlSchema, value)
-    ? Value.Decode(instanceUrlSchema, value)
-    : undefined;
 
 export const normalizeFeedAddress = (address: string): string => {
   const lowerAddress = address.toLowerCase();

@@ -6,6 +6,7 @@ import {
   removeSourceRequest,
   sourceUrlReplacementRequest,
 } from "#shared/contracts/requests.ts";
+import { json } from "#platform/http/json.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
@@ -29,7 +30,6 @@ import {
   postOptionsOpmlHandler,
 } from "#features/admin/routes/options-opml.ts";
 import { postOptionsPasswordHandler } from "#features/admin/routes/options-password.ts";
-import { getOptionsHandler } from "#features/admin/routes/options.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
@@ -63,7 +63,7 @@ export type AdminOptionsRouteDependencies = {
 export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
   new Elysia()
     .use(createAuthPlugin(deps.usersDataService))
-    .get("/api/options", (ctx) => getOptionsHandler(ctx))
+    .get("/api/options", ({ user }) => json({ user }))
     .post("/api/options/password", { body: passwordRequest }, (ctx) =>
       postOptionsPasswordHandler(ctx, deps),
     )
