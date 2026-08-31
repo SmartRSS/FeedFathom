@@ -124,6 +124,13 @@ large file and would change for several unrelated reasons.
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).
 
+A co-located test that needs a real PostgreSQL is named
+`foo-integration.test.ts`. `test:unit` skips every `*-integration.test.ts`
+wherever it lives and `test:migrations` names them explicitly, so `bun run
+test:unit` stays runnable with nothing but the repo checked out. Co-location
+still applies -- needing a database is not a reason to move a `src/` module's
+test into `tests/`.
+
 `tests/` holds only what tests something other than a `src/` module: the
 Playwright specs under `tests/browser/`, the migration integration test (which
 needs a disposable database and has its own script), the vendored

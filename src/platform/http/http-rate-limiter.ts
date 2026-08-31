@@ -1,5 +1,3 @@
-import { Type } from "typebox";
-import Schema from "typebox/schema";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { RequestDeadline } from "#platform/http/request-deadline.ts";
 
@@ -13,7 +11,6 @@ const interactivePrefix = "http-interactive:";
 const feedDelayMs = 10_000;
 const interactiveWaitMs = 2_500;
 const fallbackBlockMs = 5 * 60_000;
-const finiteNumberCheck = Schema.Compile(Type.Number());
 
 type RateLimitRedis = {
   decr(key: string): Promise<number>;
@@ -43,9 +40,9 @@ export function retryAtFrom(
   if (!retryAfter?.trim()) return now + fallbackBlockMs;
 
   const seconds = Number(retryAfter);
-  if (finiteNumberCheck.Check(seconds)) return now + seconds * 1_000;
+  if (Number.isFinite(seconds)) return now + seconds * 1_000;
   const date = Date.parse(retryAfter);
-  return finiteNumberCheck.Check(date) ? date : now + fallbackBlockMs;
+  return Number.isFinite(date) ? date : now + fallbackBlockMs;
 }
 
 /**
@@ -63,7 +60,7 @@ export function rateLimitBlockUntil(
 
   const remaining = Number(remainingHeader);
   const reset = Number(resetHeader);
-  if (remaining <= 1 && finiteNumberCheck.Check(reset) && reset * 1_000 > now) {
+  if (remaining <= 1 && Number.isFinite(reset) && reset * 1_000 > now) {
     return reset * 1_000;
   }
   return undefined;

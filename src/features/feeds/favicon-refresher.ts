@@ -1,5 +1,3 @@
-import { Type } from "typebox";
-import Schema from "typebox/schema";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import {
   HttpDeferredError,
@@ -11,8 +9,6 @@ import {
   isBetterFavicon,
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
-
-const successfulStatusCheck = Schema.Compile(Type.Literal(200));
 
 /**
  * Fetches a site's favicon from the free providers and stores the best result.
@@ -54,7 +50,7 @@ export class FaviconRefresher {
       }
 
       const response = result.value;
-      if (!successfulStatusCheck.Check(response.status)) continue;
+      if (response.status !== 200) continue;
 
       const buffer = Buffer.from(response.data);
       if (buffer.length < 20) continue;

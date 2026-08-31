@@ -55,7 +55,6 @@ const feedProjection = Type.Object(
   { additionalProperties: true },
 );
 const feedProjectionCheck = Schema.Compile(feedProjection);
-const successfulStatusCheck = Schema.Compile(Type.Literal(200));
 const feedResponseStatusProjection = Type.Object(
   { status: Type.Number() },
   { additionalProperties: true },
@@ -389,7 +388,7 @@ export class FeedParser {
     console.error(`failed to load data for ${fetchedUrl}`);
     if (
       feedResponseStatusProjectionCheck.Check(response) &&
-      !successfulStatusCheck.Check(response.status)
+      response.status !== 200
     ) {
       throw new Error(
         `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
