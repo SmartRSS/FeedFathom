@@ -909,9 +909,10 @@ jobs:
   pages:
     name: Publish docs site with signed extension
     needs: build_extension
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      needs.build_extension.outputs.changed == 'true'
+    # Every push to main republishes, not just the ones that rebuild the
+    # extension: the site is rendered from scratch each run, so gating this on
+    # the extension meant a docs-only commit never reached the published site.
+    if: github.ref == 'refs/heads/main'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -925,8 +926,6 @@ jobs:
       cancel-in-progress: false
     env:
       PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-      EXTENSION_VERSION: ${{ needs.build_extension.outputs.extension_version }}
-      BUILD_DATE: ${{ needs.build_extension.outputs.build_date }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -941,16 +940,53 @@ jobs:
           bun-version-file: package.json
 
       - name: Download signed extension artifact
+        if: needs.build_extension.outputs.changed == 'true'
         uses: actions/download-artifact@v8
         with:
           name: extension-build
           path: dist-extension
 
       - name: Publish extension files to docs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_DATE: ${{ needs.build_extension.outputs.build_date }}
         run: |
+          set -euo pipefail
+          # A docs-only run signs nothing, so there is no artifact -- but the
+          # site still has to carry the extension it carried before, or the
+          # deploy would drop the XPI and break every install link and update
+          # check. Take it back off the release that published it. The signed
+          # XPI already contains the manifest the update file is built from,
+          # so the release needs no separate copy of it.
+          if [ ! -f dist-extension/feedfathom_ff.xpi ]; then
+            TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '[.[]
+                     | select((.draft or .prerelease) | not)
+                     | select([.assets[].name] | map(endswith(".xpi")) | any)]
+                    | first | .tag_name // empty')
+            if [ -z "$TAG" ]; then
+              printf '%s\n' 'No stable release carries a signed extension to republish' >&2
+              exit 1
+            fi
+            printf 'Republishing the extension from %s\n' "$TAG"
+            mkdir -p dist-extension
+            gh release download "$TAG" --pattern '*.xpi' --output dist-extension/feedfathom_ff.xpi
+            gh release download "$TAG" --pattern '*.zip' --output dist-extension/feedfathom_ch.zip
+            unzip -p dist-extension/feedfathom_ff.xpi manifest.json > dist-extension/manifest.json
+            BUILD_DATE=$(date -u -d "$(gh release view "$TAG" --json publishedAt -q .publishedAt)" '+%Y-%m-%d %H:%M UTC')
+          fi
+
           mkdir -p docs/assets/extension
           cp dist-extension/feedfathom_ff.xpi docs/assets/extension/feedfathom_ff.xpi
           cp dist-extension/feedfathom_ch.zip docs/assets/extension/feedfathom_ch.zip
+
+          # The manifest is the only source that agrees with the bytes just
+          # copied; the job's own build metadata describes this run, which on a
+          # docs-only push built no extension at all.
+          {
+            echo "EXTENSION_VERSION=$(jq -r .version dist-extension/manifest.json)"
+            echo "BUILD_DATE=$BUILD_DATE"
+          } >> "$GITHUB_ENV"
 
       - name: Create Firefox update manifest
         run: |
