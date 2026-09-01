@@ -29,6 +29,23 @@ x-database-env: &database-env
   DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/postgres}
   DB_POOL_MAX: ${DB_POOL_MAX:-10}
 
+# Neither application service reports healthy until the schema this build was
+# compiled against is applied: the server does not listen at all until then
+# (src/server.ts) and the worker answers 503 (src/worker.ts). So start_period
+# is not a boot budget, it is a migration budget -- 120s covers a cold start
+# plus an ordinary migration.
+#
+# A migration that cannot finish inside it is a manual rollout: run the
+# migrator to completion first, then start or update the application
+# services, which then find the schema already there and come up in seconds.
+# That is what the Swarm deployment workflow already does (it runs the
+# migrator as a separate replicated job and waits for it before
+# `docker stack deploy`), so this budget only really binds a plain
+# `docker compose up -d`, where the migrator and the application start
+# together.
+#
+# Raising it means raising deploy/stack.yml's rollout monitors to match; the
+# invariant is written down there.
 x-app-healthcheck: &app-healthcheck
   test:
     [
@@ -40,7 +57,7 @@ x-app-healthcheck: &app-healthcheck
   interval: 5s
   timeout: 2s
   retries: 3
-  start_period: 10s
+  start_period: 120s
 
 services:
   redis:
@@ -102,6 +119,7 @@ services:
       - "${FEEDFATHOM_PORT:-3456}:3000"
     environment:
       <<: *database-env
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       # Used for newsletter addresses and for links in outbound email, so it
@@ -116,19 +134,13 @@ services:
       MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
-    # A longer start_period than the shared default, because the server
-    # refuses to listen until its migration is applied (see src/server.ts)
-    # and the probe cannot connect until then. 30s covers a cold start and a
-    # small upgrade; a slower migration leaves the server restarting until it
-    # finishes, which is noisy but self-correcting.
-    healthcheck:
-      <<: *app-healthcheck
-      start_period: 30s
+    healthcheck: *app-healthcheck
     # The migrator is deliberately absent. Short-form depends_on could only
     # order its start anyway, never its completion, and listing it would make
     # `up --wait` report its clean exit(0) as a failure. Correctness comes
-    # from the worker waiting on the Drizzle migrations journal instead
-    # (waitForMigration in src/platform/db/connection.ts).
+    # from both application services waiting on the Drizzle migrations
+    # journal instead (waitForMigration in src/platform/db/connection.ts) and
+    # staying unhealthy until it clears.
     depends_on:
       - redis
       - postgres
@@ -143,6 +155,7 @@ services:
     restart: always
     environment:
       <<: *database-env
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DEBUG: "bull:*"
       # WebSub subscribe attempts happen here, not in the server, and the
       # callback URL cannot be built without this.

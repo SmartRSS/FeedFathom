@@ -73,6 +73,7 @@ Configure the deployment by putting variables in a `.env` file next to `compose.
 | `FEED_FATHOM_DOMAIN` | `localhost:3456` | Public host. Newsletter addresses and email links are built from it. |
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password. PostgreSQL is never published outside the Compose network, but change it if that reassurance is not enough. Set `DATABASE_URL` to match — the default does not follow it. |
 | `DATABASE_URL` | built from the defaults above | Connection URL the application uses. Only needed if you change any `POSTGRES_*` value or point at an external database. |
+| `REDIS_URL` | `redis://redis:6379` | Redis the job queue and the HTTP cache live in. Only needed to point at a Redis you already run; `rediss://` is accepted for TLS. |
 | `ENABLE_REGISTRATION` | `false` | Whether accounts beyond the first may be created. |
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
 | `MAIL_DOMAIN` | `FEED_FATHOM_DOMAIN` | Domain inbound newsletter mail is routed to. Generated addresses are minted at this host, so set it whenever mail lands on a different domain than the app is served from. |
@@ -190,25 +191,21 @@ The Swarm defaults are deliberately generous, sized for a host with room to spar
 
 ### The squashed migration baseline
 
-The 31 historical migrations were replaced by a single baseline, `drizzle/0000_silky_multiple_man.sql`. It builds the same schema those 31 produced — verified by applying both to empty databases and comparing every column, type, default, nullability, index and constraint — so an existing database needs no schema change. It only needs to know the baseline's name for the schema it already has.
+The 31 historical migrations were replaced by a single baseline,
+`drizzle/0000_silky_multiple_man.sql`. It builds the same schema those 31
+produced, so a database that ran them needs no schema change.
 
-The migrator does that itself, so nothing manual is required. On a database whose journal records the final pre-squash migration, it inserts the baseline's row and skips it rather than replaying it:
+The one-time shim that stamped such a database as having applied the baseline
+has been removed, so a database that never took the squash upgrade can no
+longer take it at all: the baseline would be replayed and fail on
+`CREATE TABLE`. That failure is safe -- the transaction rolls back and the
+journal is untouched -- but the only way forward is to reach the squash under
+an image that still carried the shim.
 
-```
-Adopted migration baseline 0000_silky_multiple_man for a database that predates the squash
-```
-
-The rule is deliberately narrow. It fires only when the final pre-squash migration is journaled, which is what proves the database carries the complete old schema. A database stopped partway through the old history is left to fail on `CREATE TABLE` instead, because marking it migrated would claim a schema it does not have. That failure is safe: the transaction rolls back, the journal is untouched, and the deployment workflow leaves the running services alone.
-
-It is also a no-op everywhere else. Fresh databases have no journal table, and databases that have already adopted the baseline carry its row.
-
-Two consequences are permanent and worth recording.
-
-The legacy `job_queue` table, created by the old migrations 0008 to 0010 and unused since the move to BullMQ, survives on any database that predates the squash and is absent from every fresh install. No migration or schema file mentions it any more.
-
-Databases that never reached the final pre-squash migration cannot take this upgrade at all. They have to reach it under a pre-squash image first.
-
-Once no database predating the squash remains, `adoptSquashedBaseline` in `src/migrator.ts` can be deleted.
+One consequence is permanent. The legacy `job_queue` table, created by the old
+migrations 0008 to 0010 and unused since the move to BullMQ, survives on any
+database that predates the squash and is absent from every fresh install. No
+migration or schema file mentions it any more.
 
 ### First cutover
 

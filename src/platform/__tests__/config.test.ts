@@ -22,6 +22,7 @@ describe("loadConfig", () => {
       GATHER_JOBS_INTERVAL: 1000,
       LOCK_DURATION: 1000,
       MAIL_ENABLED: false,
+      REDIS_URL: "redis://redis:6379",
       USER_DORMANT_AFTER_DAYS: 365,
       USER_EXPIRY_DAYS: 730,
       WORKER_CONCURRENCY: 1,
@@ -74,6 +75,25 @@ describe("loadConfig", () => {
     (protocol) => {
       const value = `${protocol}//db.example.com/feedfathom`;
       expect(loadConfig({ DATABASE_URL: value }).DATABASE_URL).toBe(value);
+    },
+  );
+
+  test.each(["http://cache.example.com", "redis://", "not a URL"])(
+    "rejects invalid Redis URL %s",
+    (value) => {
+      expect(() =>
+        loadConfig({ DATABASE_URL: databaseUrl, REDIS_URL: value }),
+      ).toThrow("Invalid config");
+    },
+  );
+
+  test.each(["redis:", "rediss:"])(
+    "accepts the %s protocol for Redis",
+    (protocol) => {
+      const value = `${protocol}//cache.example.com:6379`;
+      expect(
+        loadConfig({ DATABASE_URL: databaseUrl, REDIS_URL: value }).REDIS_URL,
+      ).toBe(value);
     },
   );
 

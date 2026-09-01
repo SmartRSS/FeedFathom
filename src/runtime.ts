@@ -17,7 +17,7 @@ import { UserSourcesDataService } from "#features/feeds/user-source-data-service
 import { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 
 export async function createFeedRuntime() {
-  const redis = new RedisClient("redis://redis:6379", {
+  const redis = new RedisClient(config.REDIS_URL, {
     autoReconnect: true,
     connectionTimeout: 60 * 60 * 1_000,
     enableAutoPipelining: false,
@@ -28,10 +28,10 @@ export async function createFeedRuntime() {
   });
   await redis.connect();
 
-  const bullmqRedis = new Redis({
-    host: "redis",
+  // BullMQ requires maxRetriesPerRequest: null, so this connection is
+  // configured rather than handed the URL alone.
+  const bullmqRedis = new Redis(config.REDIS_URL, {
     maxRetriesPerRequest: null,
-    port: 6379,
   });
   const bullmqQueue = new Queue("tasks", { connection: bullmqRedis });
   const drizzleConnection = createPooledDrizzleConnection(
