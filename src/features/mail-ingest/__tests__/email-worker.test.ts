@@ -66,9 +66,31 @@ describe("Cloudflare email worker", () => {
     const payload: unknown = JSON.parse(captured.init.body);
     expect(payload).toEqual({
       from: "sender@example.com",
-      raw,
+      raw: Buffer.from(raw).toString("base64"),
       to: "newsletter@example.com",
     });
+  });
+
+  // Base64 rather than text is the whole point: an 8-bit body in a legacy
+  // charset used to come back as U+FFFD once it round-tripped through UTF-8.
+  test("relays raw MIME bytes that are not valid UTF-8", async () => {
+    const bytes = Uint8Array.from([0x53, 0x3a, 0x20, 0xe9, 0x0d, 0x0a, 0xff]);
+    let body: string | undefined;
+    const worker = createEmailWorker(async (_input, init) => {
+      body = typeof init?.body === "string" ? init.body : undefined;
+      return new Response(null, { status: 204 });
+    });
+
+    await worker.email(
+      message({ raw: bytes, rawSize: bytes.byteLength }),
+      environment(),
+    );
+
+    if (body === undefined) throw new Error("Relay request body was not JSON");
+    const payload: unknown = JSON.parse(body);
+    if (typeof payload !== "object" || payload === null || !("raw" in payload))
+      throw new Error("Relay payload had no raw field");
+    expect(Buffer.from(String(payload.raw), "base64").equals(bytes)).toBe(true);
   });
 
   test("allows HTTP only for loopback endpoint origins", async () => {

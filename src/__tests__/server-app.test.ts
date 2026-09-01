@@ -10,6 +10,7 @@ import { createServerApp, type ServerDependencies } from "../server-app.ts";
 const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const maxRawEmailBytes = 5 * 1_024 * 1_024;
+const relayed = (raw: string) => Buffer.from(raw).toString("base64");
 const unexpected = (name: string): never => {
   throw new Error(`Unexpected dependency call: ${name}`);
 };
@@ -1383,7 +1384,7 @@ test("fails closed when mail ingestion or relay authentication is unavailable", 
         new Request("http://localhost/api/mail", {
           body: JSON.stringify({
             from: "sender@example.com",
-            raw: "Subject: Test\r\n\r\nBody",
+            raw: relayed("Subject: Test\r\n\r\nBody"),
             to: "reader@example.com",
           }),
           headers,
@@ -1415,8 +1416,8 @@ test("authenticates incoming mail and passes the normalized trusted envelope", a
     new Request("http://localhost/api/mail", {
       body: JSON.stringify({
         from: "  sender@example.com  ",
-        raw: "Subject: Test\r\n\r\nBody",
-        to: " reader@example.com ",
+        raw: relayed("Subject: Test\r\n\r\nBody"),
+        to: " Reader@Example.com ",
       }),
       headers: {
         "content-type": "application/json",
@@ -1464,14 +1465,52 @@ test("enforces the raw MIME byte limit before EmailHandler", async () => {
       }),
     );
 
-  const exact = await mail("a".repeat(maxRawEmailBytes));
-  const over = await mail("a".repeat(maxRawEmailBytes + 1));
-  const encodedOver = await mail("é".repeat(maxRawEmailBytes / 2 + 1));
+  const exact = await mail(relayed("a".repeat(maxRawEmailBytes)));
+  const over = await mail(relayed("a".repeat(maxRawEmailBytes + 1)));
+  const notBase64 = await mail("Subject: Test\r\n\r\nBody");
 
   expect(exact.status).toBe(200);
   expect(over.status).not.toBe(200);
-  expect(encodedOver.status).not.toBe(200);
+  expect(notBase64.status).toBe(422);
   expect(sizes).toEqual([maxRawEmailBytes]);
+});
+
+// The relay carries base64 precisely so that an 8-bit body in a legacy
+// charset arrives byte for byte; routing it as UTF-8 text replaced every
+// such byte with U+FFFD.
+test("delivers raw MIME bytes that are not valid UTF-8", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAIL_ENABLED = true;
+  dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
+  const latin1 = Buffer.from(
+    "Subject: caf\u00e9\r\n\r\nR\u00e9sum\u00e9",
+    "latin1",
+  );
+  const received: Buffer[] = [];
+  dependencies.emailHandler.processEmail = async (raw) => {
+    if (!Buffer.isBuffer(raw)) throw new Error("Expected buffered mail input");
+    received.push(raw);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/mail", {
+      body: JSON.stringify({
+        from: "sender@example.com",
+        raw: latin1.toString("base64"),
+        to: "reader@example.com",
+      }),
+      headers: {
+        "content-type": "application/json",
+        [mailRelaySecretHeader]: "relay-secret",
+      },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(received).toHaveLength(1);
+  expect(received[0]?.equals(latin1)).toBe(true);
 });
 
 test("rejects malformed mail envelopes before EmailHandler", async () => {

@@ -50,7 +50,9 @@ export function createMailRoute({
       }
 
       const decoded = Value.Decode(incomingMailRequest, body);
-      const raw = Buffer.from(decoded.raw, "utf8");
+      // Base64, not UTF-8 text: a MIME message is bytes, and an 8-bit body in
+      // a legacy charset does not survive a round trip through UTF-8.
+      const raw = Buffer.from(decoded.raw, "base64");
       if (raw.byteLength > maxRawEmailBytes) {
         return json({ error: "Raw email exceeds 5 MiB" }, 413);
       }

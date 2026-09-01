@@ -1,5 +1,8 @@
 import { Type } from "typebox";
-import { maxRawEmailBytes } from "#shared/contracts/mail-relay.ts";
+import {
+  base64Pattern,
+  maxRelayPayloadChars,
+} from "#shared/contracts/mail-relay.ts";
 import {
   normalizedEmailAddress,
   normalizedNonblankString,
@@ -11,10 +14,19 @@ import {
 
 const id = Type.Integer({ minimum: 1 });
 const maximumRequestIds = 500;
-const normalizedMailEnvelopeValue = Type.Codec(
-  Type.String({ maxLength: 320, minLength: 1, pattern: "\\S" }),
-)
+const mailEnvelopeValue = Type.String({
+  maxLength: 320,
+  minLength: 1,
+  pattern: "\\S",
+});
+const normalizedMailEnvelopeValue = Type.Codec(mailEnvelopeValue)
   .Decode((value) => value.trim())
+  .Encode((value) => value);
+// The recipient is looked up against sources.url with an exact match, and the
+// addresses minted for newsletters are lowercase, so a sender that echoes the
+// address back capitalised would otherwise be reported as unknown.
+const normalizedMailRecipient = Type.Codec(mailEnvelopeValue)
+  .Decode((value) => value.trim().toLowerCase())
   .Encode((value) => value);
 const idQueryTransform = Type.Codec(
   Type.Union([id, Type.String({ pattern: "^[1-9]\\d*$" })]),
@@ -87,12 +99,13 @@ export const incomingMailRequest = Type.Object(
   {
     from: normalizedMailEnvelopeValue,
     raw: Type.String({
-      // maxLength counts characters, so this is the looser of the two
-      // ceilings; the route checks the real byte length as well.
-      maxLength: maxRawEmailBytes,
+      // Base64 of the MIME bytes, so this ceiling is the inflated one; the
+      // route checks the decoded byte length as well.
+      maxLength: maxRelayPayloadChars,
       minLength: 1,
+      pattern: base64Pattern,
     }),
-    to: normalizedMailEnvelopeValue,
+    to: normalizedMailRecipient,
   },
   { additionalProperties: false },
 );

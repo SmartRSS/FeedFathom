@@ -93,8 +93,11 @@ export const normalizedSubscriptionTarget = Type.Codec(
 )
   .Decode((value): SubscriptionTarget => {
     const normalized = value.trim();
+    // Newsletter addresses are matched against the envelope recipient of
+    // inbound mail with an exact comparison, so both sides canonicalise to
+    // lowercase. A feed URL keeps its case: its path is case-sensitive.
     return isEmailAddress(normalized)
-      ? { kind: "email", value: normalized }
+      ? { kind: "email", value: normalized.toLowerCase() }
       : { kind: "feed", value: normalized };
   })
   .Encode((value) => value.value);
