@@ -110,7 +110,15 @@ describe("Cloudflare email worker", () => {
         message(),
         environment({ MAIL_ENDPOINT_DOMAIN: "http://reader.example" }),
       ),
-    ).rejects.toThrow("Invalid Cloudflare email worker environment");
+    ).rejects.toThrow(
+      "MAIL_ENDPOINT_DOMAIN must be https, or http on loopback",
+    );
+    await expect(
+      worker.email(
+        message(),
+        environment({ MAIL_ENDPOINT_DOMAIN: "http://[::1]:3456" }),
+      ),
+    ).resolves.toBeUndefined();
     await expect(
       worker.email(
         message(),
@@ -118,7 +126,10 @@ describe("Cloudflare email worker", () => {
       ),
     ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must contain only a URL origin");
 
-    expect(endpoints).toEqual(["http://localhost:3456/api/mail"]);
+    expect(endpoints).toEqual([
+      "http://localhost:3456/api/mail",
+      "http://[::1]:3456/api/mail",
+    ]);
     expect(errors).toHaveLength(2);
   });
 

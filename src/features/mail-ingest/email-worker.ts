@@ -1,42 +1,68 @@
-import { Type } from "typebox";
-import { Value } from "typebox/value";
 import {
   mailRelaySecretHeader,
   maxRawEmailBytes,
-  maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
-const endpointDomain = Type.Union([
-  Type.String({ pattern: "^https://" }),
-  Type.String({
-    pattern:
-      "^http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\])(?::[1-9]\\d{0,4})?/?$",
-  }),
-]);
-const workerEnvironment = Type.Object(
-  {
-    MAIL_ENDPOINT_DOMAIN: endpointDomain,
-    MAIL_RELAY_SECRET: Type.String({ minLength: 1, pattern: "\\S" }),
-  },
-  { additionalProperties: true },
-);
-const incomingMessageProjection = Type.Object(
-  {
-    from: Type.String({ minLength: 1, pattern: "\\S" }),
-    rawSize: Type.Integer({ minimum: 0 }),
-    to: Type.String({ minLength: 1, pattern: "\\S" }),
-  },
-  { additionalProperties: false },
-);
-const outgoingMailPayload = Type.Object(
-  {
-    from: Type.String({ minLength: 1, pattern: "\\S" }),
-    raw: Type.String({ maxLength: maxRelayPayloadChars, minLength: 1 }),
-    to: Type.String({ minLength: 1, pattern: "\\S" }),
-  },
-  { additionalProperties: false },
-);
+// Deliberately hand-written rather than expressed as schemas: this module is
+// bundled for Cloudflare, and pulling typebox in for three checks over strings
+// and one integer put 372 KB of runtime type registry -- 98.7% of the bundle --
+// on the cold start path. Nothing here is shared with the server: /api/mail
+// validates the request it receives with its own contract.
+type ErrorLogger = {
+  error(message: string): void;
+};
+
+type WorkerEnvironment = {
+  MAIL_ENDPOINT_DOMAIN: string;
+  MAIL_RELAY_SECRET: string;
+};
+
+type MailEnvelope = {
+  from: string;
+  rawSize: number;
+  to: string;
+};
+
+export type IncomingEmailMessage = {
+  from: unknown;
+  raw: BodyInit | null;
+  rawSize: unknown;
+  to: unknown;
+};
+
+// A URL's hostname keeps the brackets for an IPv6 literal, so `[::1]` is the
+// form to compare against.
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isNonblankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "MAIL_ENDPOINT_DOMAIN" in value &&
+    isNonblankString(value.MAIL_ENDPOINT_DOMAIN) &&
+    "MAIL_RELAY_SECRET" in value &&
+    isNonblankString(value.MAIL_RELAY_SECRET)
+  );
+}
+
+function mailEnvelope(message: IncomingEmailMessage): MailEnvelope {
+  const { from, rawSize, to } = message;
+  if (
+    !isNonblankString(from) ||
+    !isNonblankString(to) ||
+    typeof rawSize !== "number" ||
+    !Number.isInteger(rawSize) ||
+    rawSize < 0
+  ) {
+    throw new Error("Invalid incoming email message");
+  }
+  return { from, rawSize, to };
+}
 
 // btoa takes a binary string, and spreading 5 MiB into one call overflows the
 // argument list, so the message is fed through in chunks.
@@ -50,17 +76,6 @@ function toBase64(bytes: Uint8Array): string {
   }
   return btoa(binary);
 }
-
-type ErrorLogger = {
-  error(message: string): void;
-};
-
-export type IncomingEmailMessage = {
-  from: unknown;
-  raw: BodyInit | null;
-  rawSize: unknown;
-  to: unknown;
-};
 
 function mailEndpoint(domain: string): URL {
   let endpoint: URL;
@@ -81,6 +96,14 @@ function mailEndpoint(domain: string): URL {
   ) {
     throw new Error("MAIL_ENDPOINT_DOMAIN must contain only a URL origin");
   }
+  // Plaintext is allowed only where it cannot leave the host, because the
+  // relay secret and the whole message travel in this request.
+  if (
+    endpoint.protocol !== "https:" &&
+    !(endpoint.protocol === "http:" && loopbackHosts.has(endpoint.hostname))
+  ) {
+    throw new Error("MAIL_ENDPOINT_DOMAIN must be https, or http on loopback");
+  }
 
   endpoint.pathname = "/api/mail";
   return endpoint;
@@ -95,19 +118,12 @@ export function createEmailWorker(
   return {
     async email(message: IncomingEmailMessage, env: unknown): Promise<void> {
       try {
-        if (!Value.Check(workerEnvironment, env)) {
+        if (!isWorkerEnvironment(env)) {
           throw new Error("Invalid Cloudflare email worker environment");
         }
-
-        const projection = {
-          from: message.from,
-          rawSize: message.rawSize,
-          to: message.to,
-        };
-        if (!Value.Check(incomingMessageProjection, projection)) {
-          throw new Error("Invalid incoming email message");
-        }
-        if (projection.rawSize > maxRawEmailBytes) {
+        const endpoint = mailEndpoint(env.MAIL_ENDPOINT_DOMAIN);
+        const envelope = mailEnvelope(message);
+        if (envelope.rawSize > maxRawEmailBytes) {
           throw new Error("Raw email exceeds 5 MiB");
         }
 
@@ -117,17 +133,13 @@ export function createEmailWorker(
         if (bytes.byteLength > maxRawEmailBytes) {
           throw new Error("Raw email exceeds 5 MiB");
         }
-        const payload = {
-          from: projection.from,
-          raw: toBase64(bytes),
-          to: projection.to,
-        };
-        if (!Value.Check(outgoingMailPayload, payload)) {
-          throw new Error("Invalid outgoing mail relay payload");
-        }
 
-        const response = await fetcher(mailEndpoint(env.MAIL_ENDPOINT_DOMAIN), {
-          body: JSON.stringify(payload),
+        const response = await fetcher(endpoint, {
+          body: JSON.stringify({
+            from: envelope.from,
+            raw: toBase64(bytes),
+            to: envelope.to,
+          }),
           headers: {
             "content-type": "application/json",
             [mailRelaySecretHeader]: env.MAIL_RELAY_SECRET,

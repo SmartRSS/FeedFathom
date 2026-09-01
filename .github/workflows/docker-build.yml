@@ -781,6 +781,102 @@ jobs:
           trap - ERR
           REMOTE
 
+  deploy_email_worker:
+    name: Deploy Cloudflare email Worker
+    # The Worker POSTs into /api/mail, so it must never run ahead of the
+    # server it talks to: the relay wire format is a shared contract, and a
+    # Worker deployed against a server that has not rolled yet bounces every
+    # message. `needs` alone gives that ordering -- it already requires
+    # success, and `deploy` carries the branch and swarm-enabled conditions.
+    needs: deploy
+    if: vars.EMAIL_WORKER_SCRIPT != ''
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment: production
+    concurrency:
+      group: email-worker
+      cancel-in-progress: false
+    env:
+      ACCOUNT_ID: ${{ vars.EMAIL_WORKER_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MAIL_ENDPOINT_DOMAIN: ${{ vars.MAIL_ENDPOINT_DOMAIN }}
+      MAIL_RELAY_SECRET: ${{ secrets.MAIL_RELAY_SECRET }}
+      SCRIPT_NAME: ${{ vars.EMAIL_WORKER_SCRIPT }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Bun project
+        uses: ./.github/actions/bun-project
+
+      - name: Build the Worker bundle
+        run: bun run build-cloudflare-email-worker
+
+      - name: Upload the Worker when its deployed content differs
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$MAIL_ENDPOINT_DOMAIN"
+          test -n "$MAIL_RELAY_SECRET"
+          API="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}"
+          AUTH=(--header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+
+          # Hash everything the upload carries, not just the bundle: a rotated
+          # MAIL_RELAY_SECRET or a repointed MAIL_ENDPOINT_DOMAIN has to
+          # redeploy too, and neither shows up in the script bytes. The result
+          # rides along as a tag on the script itself, so Cloudflare is the
+          # record of what is deployed -- unlike a runner cache, that cannot
+          # go stale or disagree between branches.
+          CONTENT_HASH="content:$(
+            {
+              cat build/cloudflare-email-worker.js
+              printf '%s\n%s' "$MAIL_ENDPOINT_DOMAIN" "$MAIL_RELAY_SECRET"
+            } | sha256sum | cut -d' ' -f1
+          )"
+          DEPLOYED=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${API}/settings" \
+            | jq -r '[.result.tags[]? | select(startswith("content:"))] | first // ""')
+
+          if [[ "$DEPLOYED" == "$CONTENT_HASH" ]]; then
+            printf 'Worker already at %s -- nothing to upload.\n' "$CONTENT_HASH"
+            exit 0
+          fi
+          printf 'Deployed %s, building %s -- uploading.\n' "${DEPLOYED:-<none>}" "$CONTENT_HASH"
+
+          # The secret reaches jq through the environment rather than --arg so
+          # it never appears in a process argument list. Every binding must be
+          # sent on every upload: the API replaces the whole set, so omitting
+          # one deletes it.
+          jq -n --arg hash "$CONTENT_HASH" --arg domain "$MAIL_ENDPOINT_DOMAIN" '{
+            main_module: "worker.js",
+            compatibility_date: "2025-05-05",
+            tags: [$hash],
+            bindings: [
+              { type: "plain_text", name: "MAIL_ENDPOINT_DOMAIN", text: $domain },
+              { type: "secret_text", name: "MAIL_RELAY_SECRET", text: $ENV.MAIL_RELAY_SECRET }
+            ]
+          }' > metadata.json
+
+          curl --fail-with-body --silent --show-error --request PUT "${AUTH[@]}" "$API" \
+            --form "metadata=@metadata.json;type=application/json" \
+            --form "worker.js=@build/cloudflare-email-worker.js;filename=worker.js;type=application/javascript+module" \
+            | jq -e '.success' > /dev/null
+          rm -f metadata.json
+
+          # The bundle exports an email handler and nothing else, so this is
+          # also the check that the right artifact landed.
+          curl --fail-with-body --silent --show-error "${AUTH[@]}" "${API}/settings" \
+            | jq -e --arg hash "$CONTENT_HASH" '
+                (.result.tags | index($hash)) and
+                ([.result.bindings[].name] | sort == ["MAIL_ENDPOINT_DOMAIN", "MAIL_RELAY_SECRET"])
+              ' > /dev/null
+          printf 'Uploaded %s.\n' "$CONTENT_HASH"
+
   pages:
     name: Publish docs site with signed extension
     needs: build_extension
