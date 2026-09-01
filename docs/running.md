@@ -261,6 +261,42 @@ bun run build-extension
 bun run build-cloudflare-email-worker
 ```
 
+### Deploying the Cloudflare email Worker
+
+`build/cloudflare-email-worker.js` is an ES module whose only export is the
+`email` handler; it has no `fetch` handler, so a `GET` against its
+`workers.dev` URL answering `error code: 1101` is the expected healthy state.
+Upload it with the API rather than pasting into the dashboard quick editor --
+the bundle is ~370 KB, and a hand-edited script in the dashboard is how the
+deployed Worker silently drifted four months behind this repository:
+
+```bash
+cat > /tmp/metadata.json <<JSON
+{ "main_module": "worker.js",
+  "compatibility_date": "2025-05-05",
+  "bindings": [
+    { "type": "plain_text", "name": "MAIL_ENDPOINT_DOMAIN", "text": "https://your-app-host" },
+    { "type": "secret_text", "name": "MAIL_RELAY_SECRET", "text": "$MAIL_RELAY_SECRET" }
+  ] }
+JSON
+
+curl -fsS -X PUT \
+  "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/$CF_SCRIPT" \
+  -H "Authorization: Bearer $CF_TOKEN" \
+  -F "metadata=@/tmp/metadata.json;type=application/json" \
+  -F "worker.js=@build/cloudflare-email-worker.js;filename=worker.js;type=application/javascript+module"
+```
+
+Both bindings are mandatory and the upload replaces every binding, so always
+send the pair. `MAIL_ENDPOINT_DOMAIN` must be an origin only -- no path, no
+credentials -- and must be `https://` unless it is a loopback host; the Worker
+rejects anything else at startup and every message bounces. `MAIL_RELAY_SECRET`
+must equal the server's, and rotating it needs both sides changed.
+
+Cloudflare Email Routing then needs a **catch-all rule** on the mail domain
+whose action is *Send to a Worker* pointing at this script. Newsletter
+addresses are minted client-side at random, so per-address rules cannot work.
+
 ## Development Workflow
 
 `bun run dev` is the normal watch workflow. The individual processes are available for diagnostics:

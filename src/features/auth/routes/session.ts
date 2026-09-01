@@ -23,9 +23,14 @@ export function createSessionRoute({
   // address host is wherever inbound mail is routed, which is a separate
   // deployment decision. Either way it carries the public port for link
   // building (localhost:3456 in dev), and an address host never has one.
-  const domain = (config.MAIL_DOMAIN ?? config.FEED_FATHOM_DOMAIN)
-    ?.trim()
-    .replace(/:\d+$/u, "");
+  // First non-blank wins rather than first non-nullish: compose.yml passes
+  // MAIL_DOMAIN through as `${MAIL_DOMAIN:-}`, so an unset variable arrives as
+  // "" and a `??` chain would let it shadow the fallback -- which is how
+  // production silently stopped advertising a newsletter host at all.
+  const domain = [config.MAIL_DOMAIN, config.FEED_FATHOM_DOMAIN]
+    .map((host) => host?.trim())
+    .find(Boolean)
+    ?.replace(/:\d+$/u, "");
   const mail = config.MAIL_ENABLED && domain ? { mailDomain: domain } : {};
   return new Elysia().get("/api/session", async ({ cookie }) => {
     const user = await userFor(cookie["sid"]?.value, usersDataService);
