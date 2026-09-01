@@ -786,10 +786,21 @@ jobs:
     # The Worker POSTs into /api/mail, so it must never run ahead of the
     # server it talks to: the relay wire format is a shared contract, and a
     # Worker deployed against a server that has not rolled yet bounces every
-    # message. `needs` alone gives that ordering -- it already requires
-    # success, and `deploy` carries the branch and swarm-enabled conditions.
+    # message. `deploy` already carries the branch and swarm-enabled
+    # conditions, so this only has to sit behind it.
+    #
+    # The result check is not redundant with `needs`. An `if` that names no
+    # status function gets an implicit `success()`, and that is false when any
+    # *ancestor* was skipped -- `deploy` always has one, because
+    # release_smoke_dispatch and promote are alternate paths and one of them
+    # is legitimately skipped on every run. A bare `needs: deploy` therefore
+    # skips this job even when the deploy succeeded, which is exactly what it
+    # did on the first run.
     needs: deploy
-    if: vars.EMAIL_WORKER_SCRIPT != ''
+    if: >-
+      !cancelled() &&
+      needs.deploy.result == 'success' &&
+      vars.EMAIL_WORKER_SCRIPT != ''
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
