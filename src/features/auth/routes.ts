@@ -21,19 +21,24 @@ export type PublicAuthRouteDependencies = {
   mailSender: Pick<MailSender, "sendActivationEmail">;
   password: Password;
   secureCookies: boolean;
-  usersDataService: {
+  // Picked rather than restated, so a signature change on the service is a
+  // type error here instead of two descriptions of the same method drifting
+  // apart. The two exceptions are widened deliberately: their results are a
+  // driver-specific execute()/insert() value that no handler reads and no
+  // test double can plausibly produce.
+  usersDataService: Pick<
+    UsersDataService,
+    | "createSession"
+    | "deleteSession"
+    | "findUser"
+    | "findUserByActivationToken"
+    | "getUserBySid"
+    | "getUserCount"
+  > & {
     activateUser(userId: number): Promise<unknown>;
-    createSession(userId: number, userAgent?: null | string): Promise<string>;
-    deleteSession(sid: string): Promise<void>;
     createUser(
       payload: Parameters<UsersDataService["createUser"]>[0],
     ): Promise<unknown>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-    findUserByActivationToken(
-      token: string,
-    ): ReturnType<UsersDataService["findUserByActivationToken"]>;
-    getUserCount(): Promise<number>;
-    getUserBySid(sid: string): ReturnType<UsersDataService["getUserBySid"]>;
   };
 };
 

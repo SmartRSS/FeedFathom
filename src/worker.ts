@@ -52,9 +52,19 @@ async function runWorker() {
     void shutdown();
   });
 
-  // Served before the worker starts consuming, so a worker still waiting on
-  // the migrator reports what it is -- alive and idle -- instead of looking
-  // like a crash loop to Compose's --wait and to Swarm's rollout monitor.
+  let migrationApplied = false;
+
+  // The port opens before the migration wait so a probe gets a definitive
+  // answer rather than a refused connection -- but the answer is 503 until
+  // the schema this build was compiled against is actually present. A worker
+  // that cannot touch the database is not ready to be rolled onto, and
+  // reporting "ok" there let `up --wait` and Swarm's rollout monitor call a
+  // deployment finished against workers that could not do any work yet.
+  //
+  // The healthcheck's start_period is what keeps that not-ready window from
+  // reading as a crash loop, so it has to cover a normal migration; see the
+  // budget and its consequences in compose.yml. A migration too slow for
+  // that budget is rolled out by hand.
   Bun.serve({
     async fetch(request, server) {
       const url = new URL(request.url);
@@ -65,7 +75,9 @@ async function runWorker() {
       }
 
       if (url.pathname === "/healthcheck") {
-        return Response.json({ status: "ok" });
+        return migrationApplied
+          ? Response.json({ status: "ok" })
+          : Response.json({ status: "migrating" }, { status: 503 });
       }
 
       return new Response("Not Found", { status: 404 });
@@ -74,6 +86,7 @@ async function runWorker() {
   });
 
   await waitForMigration(runtime.drizzleConnection.$client);
+  migrationApplied = true;
 
   try {
     await mainWorker.initialize();
