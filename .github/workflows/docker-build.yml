@@ -249,17 +249,35 @@ jobs:
           printf 'Built extension content hash: %s\n' "$CONTENT_HASH"
 
           # The last published hash travels with the release that published
-          # it, so this is branch-independent -- an Actions cache would not
-          # be, since caches do not cross sibling branches and staging/main
-          # would each sign the same content separately.
+          # it, so this needs no Actions cache -- caches do not cross sibling
+          # branches, and staging/main would each sign the same content
+          # separately.
+          #
+          # The comparison is per channel: staging against prereleases, main
+          # against stable releases. Comparing across channels made every main
+          # run report "unchanged" -- staging always publishes the same content
+          # first -- so main uploaded no artifact and the Pages job, which is
+          # gated on changed == 'true', never ran. The docs site sat pinned to
+          # an old extension while three signed builds shipped from staging.
+          if [[ "$GITHUB_REF" == 'refs/heads/main' ]]; then
+            WANT_PRERELEASE=false
+          else
+            WANT_PRERELEASE=true
+          fi
+          # One page is roughly a fortnight of releases. Falling off the end
+          # only costs a redundant signing run, so it is not worth paginating.
+          PREVIOUS_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq "[.[]
+                   | select(.draft | not)
+                   | select(.prerelease == ${WANT_PRERELEASE})
+                   | select([.assets[].name] | index(\"extension-content-hash.txt\"))]
+                  | first | .tag_name // empty")
           PREVIOUS_HASH=""
-          for tag in $(gh release list --limit 30 --json tagName -q '.[].tagName'); do
-            if gh release download "$tag" --pattern extension-content-hash.txt --output - > /tmp/previous-hash 2>/dev/null; then
-              PREVIOUS_HASH=$(tr -d '[:space:]' < /tmp/previous-hash)
-              printf 'Comparing against %s\n' "$tag"
-              break
-            fi
-          done
+          if [ -n "$PREVIOUS_TAG" ]; then
+            gh release download "$PREVIOUS_TAG" --pattern extension-content-hash.txt --output - > /tmp/previous-hash
+            PREVIOUS_HASH=$(tr -d '[:space:]' < /tmp/previous-hash)
+            printf 'Comparing against %s\n' "$PREVIOUS_TAG"
+          fi
 
           if [ -n "$PREVIOUS_HASH" ] && [ "$PREVIOUS_HASH" = "$CONTENT_HASH" ]; then
             printf '%s\n' 'Extension content is unchanged -- skipping signing, release assets, and the docs/update-manifest refresh.'
