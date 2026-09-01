@@ -263,39 +263,46 @@ bun run build-cloudflare-email-worker
 
 ### Deploying the Cloudflare email Worker
 
-`build/cloudflare-email-worker.js` is an ES module whose only export is the
-`email` handler; it has no `fetch` handler, so a `GET` against its
-`workers.dev` URL answering `error code: 1101` is the expected healthy state.
-Upload it with the API rather than pasting into the dashboard quick editor --
-the bundle is ~370 KB, and a hand-edited script in the dashboard is how the
-deployed Worker silently drifted four months behind this repository:
+CI owns this. The `deploy_email_worker` job in `.github/workflows/docker-build.yml`
+runs after the Swarm deploy on `main`, builds the bundle, and uploads it only
+when its content hash differs from the `content:` tag on the deployed script.
+Do not upload by hand -- the Worker spent four months as a stale
+dashboard-edited script precisely because nothing in the repository deployed
+it, and a manual upload silently reintroduces that drift by leaving the tag
+pointing at content that is no longer there.
 
-```bash
-cat > /tmp/metadata.json <<JSON
-{ "main_module": "worker.js",
-  "compatibility_date": "2025-05-05",
-  "bindings": [
-    { "type": "plain_text", "name": "MAIL_ENDPOINT_DOMAIN", "text": "https://your-app-host" },
-    { "type": "secret_text", "name": "MAIL_RELAY_SECRET", "text": "$MAIL_RELAY_SECRET" }
-  ] }
-JSON
+It runs after `deploy`, never beside it: the relay wire format is a contract
+between the Worker and `/api/mail`, so a Worker deployed against a server that
+has not rolled yet bounces every message.
 
-curl -fsS -X PUT \
-  "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/$CF_SCRIPT" \
-  -H "Authorization: Bearer $CF_TOKEN" \
-  -F "metadata=@/tmp/metadata.json;type=application/json" \
-  -F "worker.js=@build/cloudflare-email-worker.js;filename=worker.js;type=application/javascript+module"
-```
+Configuration, all on the repository rather than the `production` environment:
 
-Both bindings are mandatory and the upload replaces every binding, so always
-send the pair. `MAIL_ENDPOINT_DOMAIN` must be an origin only -- no path, no
-credentials -- and must be `https://` unless it is a loopback host; the Worker
-rejects anything else at startup and every message bounces. `MAIL_RELAY_SECRET`
-must equal the server's, and rotating it needs both sides changed.
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `EMAIL_WORKER_SCRIPT` | variable | Worker script name. Empty disables the job. |
+| `EMAIL_WORKER_ACCOUNT_ID` | variable | Cloudflare account the script lives in. |
+| `MAIL_ENDPOINT_DOMAIN` | variable | Origin the Worker relays to, e.g. `https://feeds.example.com`. |
+| `CLOUDFLARE_API_TOKEN` | secret | Needs only *Workers Scripts* read and write on that one account. |
+| `MAIL_RELAY_SECRET` | secret | The same value the server reads. |
 
-Cloudflare Email Routing then needs a **catch-all rule** on the mail domain
-whose action is *Send to a Worker* pointing at this script. Newsletter
-addresses are minted client-side at random, so per-address rules cannot work.
+The hash covers the endpoint and the secret as well as the bundle, so rotating
+`MAIL_RELAY_SECRET` or repointing `MAIL_ENDPOINT_DOMAIN` redeploys the Worker
+on the next run without any change to the code.
+
+Two invariants the job depends on, and that a manual upload would break:
+every binding must be sent on every upload, because the API replaces the whole
+set rather than merging into it; and `MAIL_ENDPOINT_DOMAIN` must be an origin
+only -- no path, no credentials -- and `https://` unless the host is loopback,
+because the relay secret and the entire message travel in that request.
+
+Cloudflare Email Routing itself is configured outside this repository and
+needs a **catch-all rule** on the mail domain whose action is *Send to a
+Worker* pointing at this script. Newsletter addresses are minted client-side
+at random, so per-address rules cannot work.
+
+The bundle exports an `email` handler and nothing else, so a `GET` against the
+script's `workers.dev` URL answering `error code: 1101` is the expected healthy
+state.
 
 ## Development Workflow
 
