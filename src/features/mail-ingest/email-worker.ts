@@ -3,6 +3,7 @@ import { Value } from "typebox/value";
 import {
   mailRelaySecretHeader,
   maxRawEmailBytes,
+  maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
@@ -31,11 +32,24 @@ const incomingMessageProjection = Type.Object(
 const outgoingMailPayload = Type.Object(
   {
     from: Type.String({ minLength: 1, pattern: "\\S" }),
-    raw: Type.String({ maxLength: maxRawEmailBytes, minLength: 1 }),
+    raw: Type.String({ maxLength: maxRelayPayloadChars, minLength: 1 }),
     to: Type.String({ minLength: 1, pattern: "\\S" }),
   },
   { additionalProperties: false },
 );
+
+// btoa takes a binary string, and spreading 5 MiB into one call overflows the
+// argument list, so the message is fed through in chunks.
+function toBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x80_00;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}
 
 type ErrorLogger = {
   error(message: string): void;
@@ -97,13 +111,15 @@ export function createEmailWorker(
           throw new Error("Raw email exceeds 5 MiB");
         }
 
-        const raw = await new Response(message.raw).text();
-        if (new TextEncoder().encode(raw).byteLength > maxRawEmailBytes) {
+        const bytes = new Uint8Array(
+          await new Response(message.raw).arrayBuffer(),
+        );
+        if (bytes.byteLength > maxRawEmailBytes) {
           throw new Error("Raw email exceeds 5 MiB");
         }
         const payload = {
           from: projection.from,
-          raw,
+          raw: toBase64(bytes),
           to: projection.to,
         };
         if (!Value.Check(outgoingMailPayload, payload)) {
