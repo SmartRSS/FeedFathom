@@ -45,6 +45,16 @@ const databaseUrl = Type.Codec(Type.String())
   })
   .Encode(String);
 
+const redisUrl = Type.Codec(Type.String({ default: "redis://redis:6379" }))
+  .Decode((value) => {
+    const parsed = new URL(value);
+    if (!["redis:", "rediss:"].includes(parsed.protocol) || !parsed.hostname) {
+      throw new Error("REDIS_URL must be a redis: or rediss: URL with a host");
+    }
+    return value;
+  })
+  .Encode(String);
+
 const configSchema = Type.Object(
   {
     ALLOWED_EMAILS: Type.Codec(Type.String({ default: "" }))
@@ -87,6 +97,10 @@ const configSchema = Type.Object(
     // account expiry entirely.
     USER_EXPIRY_DAYS: integerString("USER_EXPIRY_DAYS", "730", 0, 36_500),
     DATABASE_URL: databaseUrl,
+    // The queue and the HTTP cache. Defaults to the service name the bundled
+    // compose.yml starts, so a stock deployment needs no value; an operator
+    // pointing at an existing Redis sets it here rather than editing source.
+    REDIS_URL: redisUrl,
     GATHER_JOBS_INTERVAL: integerString(
       "GATHER_JOBS_INTERVAL",
       "1000",

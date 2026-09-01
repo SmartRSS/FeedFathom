@@ -10,7 +10,13 @@ export class UsersDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  public async createSession(userId: number, userAgent?: null | string) {
+  // Annotated rather than inferred: crypto.randomUUID() infers the
+  // `${string}-${string}-...` template literal type, which promises callers
+  // and test doubles a UUID shape nothing depends on.
+  public async createSession(
+    userId: number,
+    userAgent?: null | string,
+  ): Promise<string> {
     const uuid = crypto.randomUUID();
     await this.drizzleConnection.insert(sessions).values({
       sid: uuid,

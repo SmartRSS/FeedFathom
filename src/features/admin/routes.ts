@@ -50,12 +50,13 @@ export type AdminOptionsRouteDependencies = {
       newUrl: string,
     ): Promise<SourceUrlUpdateResult | void>;
   };
-  usersDataService: {
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-    getUserBySid(sid: string): ReturnType<UsersDataService["getUserBySid"]>;
-    touchLastSeen(
-      userId: number,
-    ): ReturnType<UsersDataService["touchLastSeen"]>;
+  // See the note on the same field in features/auth/routes.ts: picked where
+  // the real signature is usable, widened only where the result is a
+  // driver-specific execute() value nothing reads.
+  usersDataService: Pick<
+    UsersDataService,
+    "findUser" | "getUserBySid" | "touchLastSeen"
+  > & {
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;
   };
 };

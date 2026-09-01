@@ -54,6 +54,7 @@ function createDependencies(): ServerDependencies {
     GATHER_JOBS_INTERVAL: 1_000,
     LOCK_DURATION: 1_000,
     MAIL_ENABLED: false,
+    REDIS_URL: "redis://localhost:6379",
     USER_DORMANT_AFTER_DAYS: 365,
     USER_EXPIRY_DAYS: 730,
     WORKER_CONCURRENCY: 1,
