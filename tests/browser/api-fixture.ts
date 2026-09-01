@@ -11,6 +11,7 @@ const user = {
 const source = {
   favicon: null,
   homeUrl: "https://news.example/",
+  kind: "feed",
   name: "Tech News",
   type: "source",
   uid: "3",
@@ -21,6 +22,7 @@ const source = {
 const subscribedSource = {
   favicon: null,
   homeUrl: "https://preview.example/",
+  kind: "feed",
   name: "Tech Preview",
   type: "source",
   uid: "9",

@@ -61,6 +61,11 @@ const treeNodeResponse = Type.Cyclic(
         {
           favicon: Type.Union([Type.String(), Type.Null()]),
           homeUrl: Type.String(),
+          kind: Type.Union([
+            Type.Literal("email"),
+            Type.Literal("feed"),
+            Type.Literal("websub"),
+          ]),
           name: Type.String(),
           type: Type.Literal("source"),
           uid: Type.String(),

@@ -20,6 +20,7 @@ function source(
   return {
     favicon: null,
     homeUrl: `https://${uid}.example`,
+    kind: "feed",
     name: uid,
     type: "source",
     uid,

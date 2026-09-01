@@ -249,6 +249,7 @@ export class UserSourcesDataService {
       .select({
         homeUrl: sources.homeUrl,
         id: sources.id,
+        kind: sources.kind,
         name: userSources.name,
         parentId: userSources.parentId,
         unreadArticlesCount: userSources.unreadCount,
