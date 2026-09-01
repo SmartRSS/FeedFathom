@@ -9,6 +9,7 @@ import {
 } from "./dashboard-behavior.ts";
 import { Icon } from "./icon.tsx";
 import feedRaw from "./assets/icons/System/rss-fill.svg?raw";
+import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
 import arrowDownRaw from "./assets/icons/Arrows/chevron-down-fill.svg?raw";
 import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
@@ -127,7 +128,16 @@ export function TreeItem(props: {
           fallback={
             <Show
               when={favicon() && !faviconFailed()}
-              fallback={<Icon class="node-icon" raw={feedRaw} />}
+              fallback={
+                <Icon
+                  class="node-icon"
+                  raw={
+                    props.node.type === "source" && props.node.kind === "email"
+                      ? mailRaw
+                      : feedRaw
+                  }
+                />
+              }
             >
               <img
                 alt=""

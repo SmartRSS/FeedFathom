@@ -22,6 +22,7 @@ export async function getTreeHandler(
     const item = {
       favicon: `/api/favicon/${source.id}`,
       homeUrl: source.homeUrl ?? "",
+      kind: source.kind ?? "feed",
       name: source.name,
       type: "source",
       uid: source.id?.toString() ?? "",
