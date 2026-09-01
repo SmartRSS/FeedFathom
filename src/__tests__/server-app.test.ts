@@ -242,7 +242,9 @@ test.each([
   [true, "", undefined, undefined],
   [true, "feeds.example.com:8443", undefined, "feeds.example.com"],
   [true, "app.example.com", "mail.example.com", "mail.example.com"],
-  [true, "app.example.com", "", undefined],
+  // Blank is unset, not an override: compose.yml always defines MAIL_DOMAIN.
+  [true, "app.example.com", "", "app.example.com"],
+  [true, "", "", undefined],
 ])(
   "advertises the newsletter domain only with mail enabled (%p, %p, %p)",
   async (mailEnabled, domain, mailDomain, expected) => {
