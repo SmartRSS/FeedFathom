@@ -46,16 +46,8 @@ jobs:
         if: inputs.build_locally
         uses: useblacksmith/setup-docker-builder@v1
 
-      - name: Log in to Docker Hardened Images registry
-        if: inputs.build_locally
-        uses: docker/login-action@v4
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DHI_USERNAME }}
-          password: ${{ secrets.DHI_TOKEN }}
-
       # Only the pull path touches GHCR; a local build reads its bases from
-      # dhi.io and tags the result under the same name compose expects.
+      # Docker Hub and tags the result under the same name compose expects.
       - name: Log in to GitHub Container Registry
         if: ${{ !inputs.build_locally }}
         uses: docker/login-action@v4

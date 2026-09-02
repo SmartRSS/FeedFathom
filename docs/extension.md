@@ -7,7 +7,7 @@ nav_order: 3
 # Browser Extensions
 
 The extension detects feeds on the pages you visit and adds Reader modes to
-the web application. It is optional; the web application works without it,
+the web application. It is optional. The web application works without it,
 except for Reader modes.
 
 ## Download
@@ -50,13 +50,13 @@ mode when it does not match.
 - **Reader modes.** Reader and Reader plain are available in the web
   application only while the extension bridge is installed, available, and
   configured for that exact instance origin. Production instances must use
-  HTTPS; HTTP is accepted only for loopback development. Feed mode remains
+  HTTPS. HTTP is accepted only for loopback development. Feed mode remains
   available when the bridge is not.
 - **Newsletter addresses.** The newsletter action opens a generated address
   in the web preview, where it can be copied. Ingestion requires
   `MAIL_ENABLED` and Cloudflare Email Routing through the bundled Worker to
   `/api/mail`. `MAILJET_API_KEY` and `MAILJET_API_SECRET` enable outbound
-  activation mail for public registration; they do not receive newsletters.
+  activation mail for public registration. They do not receive newsletters.
 
 ## Installation
 

@@ -38,8 +38,6 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/release-smoke.yml
-    # build_locally needs the dhi.io credentials the pull path does not.
-    secrets: inherit
     permissions:
       contents: read
       packages: read
@@ -123,13 +121,6 @@ jobs:
 
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
-
-      - name: Log in to Docker Hardened Images registry
-        uses: docker/login-action@v4
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DHI_USERNAME }}
-          password: ${{ secrets.DHI_TOKEN }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
