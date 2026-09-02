@@ -397,9 +397,59 @@ jobs:
       checkout_ref: ${{ inputs.deploy_tag }}
       feedfathom_tag: ${{ inputs.deploy_tag }}
 
+  # Deploys are single-file, in merge order, while everything above stays
+  # parallel. This job is what orders them, and it deliberately does not use a
+  # `concurrency` group to do it: a group keeps only one *pending* entry, so a
+  # third arrival cancels the second and the merge in the middle is dropped
+  # instead of queued -- which is how production used to end up on an
+  # arbitrary commit. A run counts as in flight for its whole lifetime, so
+  # "wait for every older run to finish" is both the ordering and the mutual
+  # exclusion, with no lock that can be left behind by a cancelled job.
+  #
+  # It is a job rather than a step inside `deploy` so that nothing holds the
+  # `production` group while it waits, which would recreate the very
+  # pending-cancel problem it exists to avoid.
+  #
+  # ponytail: workflow_dispatch runs skip this gate entirely (their path goes
+  # through release_smoke_dispatch), so a manual deploy can still interleave
+  # with a merge. Gate that path too if hand-rolled deploys become routine.
+  await_turn:
+    name: Wait for older merges to finish
+    needs: release_smoke_push
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 90
+    steps:
+      - name: Wait until no older run of this workflow is in flight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 4800))
+          while ((SECONDS < deadline)); do
+            # Run ids are monotonic per repository and a push creates its run
+            # when the merge lands, so a lower id is an earlier merge. The
+            # branch filter matches head_branch, which keeps staging and main
+            # in separate queues and leaves PR runs out of both. Re-runs keep
+            # their original id; the ancestry check in `deploy` is what stops
+            # one of those rolling production back.
+            older=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/docker-build.yml/runs?branch=${GITHUB_REF_NAME}&per_page=100" \
+              --jq "[.workflow_runs[]
+                     | select(.status != \"completed\")
+                     | select(.id < ${GITHUB_RUN_ID})] | length")
+            if ((older == 0)); then
+              printf '%s\n' 'Nothing older in flight; taking the turn.'
+              exit 0
+            fi
+            printf '%s older run(s) in flight; waiting.\n' "$older"
+            sleep 20
+          done
+          echo "::error::Timed out waiting for older runs to finish."
+          exit 1
+
   promote:
     name: Promote verified ${{ matrix.target }} manifest to a channel tag
-    needs: release_smoke_push
+    needs: await_turn
     strategy:
       fail-fast: false
       matrix:
@@ -544,6 +594,8 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (needs.promote.result == 'success' ||
        needs.release_smoke_dispatch.result == 'success')
+    outputs:
+      skipped: ${{ steps.ancestry.outputs.skip }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -610,6 +662,40 @@ jobs:
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      # await_turn already orders merges; this is the backstop for the cases
+      # it cannot see -- a re-run of an older pipeline, or a gate that timed
+      # out -- on the one action here that is not cheap to undo. The live
+      # commit is read off the Swarm itself rather than a side record, because
+      # the running service is the only thing that cannot disagree with what
+      # is actually deployed.
+      - name: Refuse to roll production backwards
+        id: ancestry
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+          SSH_DEST="${SSH_USER}@${SSH_HOST}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts")
+          LIVE=$(ssh "${SSH_OPTS[@]}" "$SSH_DEST" \
+            "docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' ${STACK_NAME}_server" \
+            || true)
+          LIVE="${LIVE%@*}"
+          LIVE="${LIVE##*:}"
+          if [[ ! "$LIVE" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'No 40-hex live tag (%s); treating this as a first deploy.\n' "${LIVE:-<none>}"
+            exit 0
+          fi
+          # "diverged" -- after a revert or a force-push -- still deploys:
+          # forward is the intent. Only already-at-or-past stops us.
+          STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${LIVE}...${GITHUB_SHA}" --jq .status)
+          printf 'Production runs %s (%s relative to %s).\n' "$LIVE" "$STATUS" "$GITHUB_SHA"
+          if [[ "$STATUS" == 'behind' || "$STATUS" == 'identical' ]]; then
+            echo "::notice::Production is already at or past ${GITHUB_SHA}; skipping the deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate protected deployment environment
         run: |
           set -euo pipefail
@@ -629,6 +715,7 @@ jobs:
           chmod 600 deployment.env
 
       - name: Transfer deployment files
+        if: steps.ancestry.outputs.skip != 'true'
         run: |
           set -euo pipefail
           [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
@@ -640,6 +727,7 @@ jobs:
           ssh "${SSH_OPTS[@]}" "$SSH_DEST" "chmod 600 -- $DEPLOY_PATH_Q/deployment.env"
 
       - name: Deploy Swarm stack
+        if: steps.ancestry.outputs.skip != 'true'
         run: |
           set -euo pipefail
           SSH_DEST="${SSH_USER}@${SSH_HOST}"
@@ -805,10 +893,16 @@ jobs:
     # is legitimately skipped on every run. A bare `needs: deploy` therefore
     # skips this job even when the deploy succeeded, which is exactly what it
     # did on the first run.
+    #
+    # `skipped` covers the other half: a deploy that stood down because
+    # production already runs a newer commit reports success, and uploading
+    # this run's Worker on top of that would put an older relay in front of a
+    # newer server -- the exact inversion this job's ordering exists to avoid.
     needs: deploy
     if: >-
       !cancelled() &&
       needs.deploy.result == 'success' &&
+      needs.deploy.outputs.skipped != 'true' &&
       vars.EMAIL_WORKER_SCRIPT != ''
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
@@ -899,7 +993,11 @@ jobs:
 
   pages:
     name: Publish docs site with signed extension
-    needs: build_extension
+    # await_turn as well as the extension: without it an older run could
+    # republish the site on top of a newer one, leaving the docs describing a
+    # commit production has already moved past. It costs the docs a wait on
+    # the deploy ahead of them, which nothing depends on being fast.
+    needs: [build_extension, await_turn]
     # Every push to main republishes, not just the ones that rebuild the
     # extension: the site is rendered from scratch each run, so gating this on
     # the extension meant a docs-only commit never reached the published site.
