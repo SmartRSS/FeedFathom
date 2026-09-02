@@ -32,7 +32,7 @@ docker compose up -d
 ```
 
 Open `http://127.0.0.1:3456` and create the first account. The first account
-can always be created; afterwards registration stays closed unless
+can always be created. Afterwards, registration stays closed unless
 `ENABLE_REGISTRATION` is `true`.
 
 Configure the deployment by putting variables in a `.env` file next to
@@ -45,11 +45,11 @@ WARNING: Serve the instance over HTTPS. The session cookie carries the
 `Secure` attribute, which browsers refuse to store on an insecure origin, so
 plain HTTP on a non-local address produces a login that appears to succeed
 and then fails silently on the next request. Browsers exempt `localhost`
-from this rule; bare IP addresses are not exempt.
+from this rule. Bare IP addresses are not exempt.
 
 Restrict the published port to loopback and terminate TLS in front of it. Set
 `FEEDFATHOM_PORT=127.0.0.1:3456` in `.env`, then point a reverse proxy at it.
-A complete Caddyfile, which obtains and renews a certificate on its own:
+A complete Caddyfile, which gets and renews a certificate on its own:
 
 ```caddy
 feeds.example.com {
@@ -83,13 +83,10 @@ docker compose exec -T postgres pg_dump -U postgres postgres > feedfathom-backup
 
 ## Development
 
-Development additionally requires [Bun](https://bun.sh), Git, and access to
-the Docker Hardened Images registry, because the development image builds
-from `dhi.io` bases.
+Development also requires [Bun](https://bun.sh) and Git.
 
 ```bash
 bun install --frozen-lockfile
-docker login dhi.io
 bun run dev
 ```
 
@@ -107,7 +104,7 @@ bun run quality
 ## Browser extension
 
 The extension adds feed discovery on visited pages and reader views. Reader
-views work only through the extension; the server does not proxy article
+views work only through the extension. The server does not proxy article
 pages.
 
 ```bash

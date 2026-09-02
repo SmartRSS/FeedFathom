@@ -5,7 +5,7 @@
 
 ## Context
 
-The code works; the directory layout no longer describes it. The tree was
+The code works. The directory layout no longer describes it. The tree was
 shaped by successive rounds of patching rather than by a decision anyone wrote
 down.
 
@@ -23,8 +23,8 @@ scanners, the OPML parser, WebSub, the email handler, the worker main loop —
 and `lib/images/icons/*.svg`, SolidJS components imported exclusively by the
 SPA. A frontend asset directory inside a nominally server-side utility folder.
 
-**Two grouping strategies ran at once.** `routes/` was organised by feature;
-`db/data-services/` and `lib/` by kind. One feature was smeared across four
+**Two grouping strategies ran at once.** `routes/` was organised by feature.
+`db/data-services/` and `lib/` were organised by kind. One feature was smeared across four
 trees, so adding a feature meant touching four directories and guessing at
 each.
 
@@ -83,7 +83,7 @@ of dissolving it.
 ### Two placements that differ from the first sketch
 
 **The scanners live in `shared`, not in `features/feeds`.** `src/extension/`
-imports `scan` itself, not merely a type from it, and the scanner tree has no
+imports `scan` itself, not just a type from it, and the scanner tree has no
 dependency on anything else inside `src/`. Under "clients depend on `shared`
 only" the choices were to put the scanners in `shared` or to give the extension
 its own copy of fourteen files. Duplication for the sake of a diagram is worse
@@ -109,7 +109,7 @@ all of them back. The cycle is inherent to where the writes happen, not to a
 bad file placement, so it was broken along the write direction: the articles,
 user-sources and folders data services, `extract-article` and `rewrite-links`
 belong to the feature that writes them. `features/feeds` owns the subscription
-and content store; `features/reader` is the reading surface over it.
+and content store. `features/reader` is the reading surface over it.
 
 **`auth → mail-ingest` closed a second cycle**, via
 `mail-ingest → feeds → auth`. `/api/mail` was in the public-auth route group
