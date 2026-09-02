@@ -122,8 +122,8 @@ describe("resolveFeedOpenUrl", () => {
   });
 
   test("opens the feed address directly when the instance is invalid", () => {
-    expect(
-      resolveFeedOpenUrl("not a url", "https://feed.test/rss"),
-    ).toBe("https://feed.test/rss");
+    expect(resolveFeedOpenUrl("not a url", "https://feed.test/rss")).toBe(
+      "https://feed.test/rss",
+    );
   });
 });

@@ -63,9 +63,7 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
     const openedUrl = new URL(openedPage.url());
     expect(openedUrl.origin).toBe(instance);
     expect(openedUrl.pathname).toBe("/preview");
-    expect(openedUrl.searchParams.get("feedUrl")).toBe(
-      "https://feed.test/rss",
-    );
+    expect(openedUrl.searchParams.get("feedUrl")).toBe("https://feed.test/rss");
   } finally {
     await context.close();
     await rm(profile, { recursive: true });

@@ -51,17 +51,15 @@ void (async () => {
     })();
   });
 
-  document
-    .querySelector("#open-dashboard")
-    ?.addEventListener("click", () => {
-      void (async () => {
-        if (!instance) {
-          await chrome.runtime.openOptionsPage();
-          window.close();
-          return;
-        }
+  document.querySelector("#open-dashboard")?.addEventListener("click", () => {
+    void (async () => {
+      if (!instance) {
+        await chrome.runtime.openOptionsPage();
+        window.close();
+        return;
+      }
 
-        openAndClose(instance);
-      })();
-    });
+      openAndClose(instance);
+    })();
+  });
 })();
