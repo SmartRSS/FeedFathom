@@ -8,7 +8,7 @@ nav_order: 2
 
 ## Deployment Files
 
-`compose.yml` in the repository root is the entire deployment. Everything else is an overlay on it, so a variable, an image, or a health probe is defined exactly once no matter how the project is being run.
+`compose.yml` in the repository root is the entire deployment. Everything else is an overlay on it, so a variable, an image, or a health probe is defined exactly once, however the project runs.
 
 ```bash
 docker compose up -d                                          # self-host
@@ -23,34 +23,36 @@ docker stack deploy -c compose.yml -c deploy/stack.yml NAME    # production
 | `deploy/compose.smoke.yml` | How does CI verify a release image? | `-f compose.yml -f deploy/compose.smoke.yml` |
 | `deploy/stack.yml` | How does this repository run in production? | `-c compose.yml -c deploy/stack.yml` |
 
-The three overlays are alternatives and are never combined with one another.
+The three overlays are alternatives. Never combine them.
 
 ### What the Swarm loader costs the base file
 
-`docker stack deploy` still uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`, and each is marked in place so it does not read as an arbitrary choice.
+`docker stack deploy` uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`. Each constraint is marked in place so it doesn't read as an arbitrary choice.
 
 - **No top-level `name`.** It is rejected outright, so each Compose overlay names its own project instead. A plain `docker compose up -d` therefore takes its project name from the directory you cloned into.
-- **No nested `${}` defaults.** They are not rejected, they are silently mangled into malformed values, so `DATABASE_URL`'s default is flat and does not follow `POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB`. Change those and you must set `DATABASE_URL` to match.
+- **No nested `${}` defaults.** Docker doesn't reject them — it silently mangles them into malformed values, so `DATABASE_URL`'s default stays flat and ignores `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`. Change those, and set `DATABASE_URL` to match.
 - **No long-form `depends_on`.** Only the list form survives, and Swarm ignores even that, so nothing in the file can express "start after migrations finish".
 
 Startup ordering is handled in the application instead, so correctness does not depend on which orchestrator runs the containers.
 
-Every build bundles `drizzle/meta/_journal.json`, so each binary knows the timestamp of the newest migration it was compiled against. The migrator records that same timestamp in `drizzle.__drizzle_migrations` when it applies the migration, in the same transaction — so `waitForMigration` in `src/platform/db/connection.ts` can ask an exact question at startup: *is the schema at the version I was built for?* It stays false midway through an upgrade, which probing for a table's existence would not, and it stays true against a database carrying migrations this build has never heard of, which is what running an older image looks like.
+Every build bundles `drizzle/meta/_journal.json`, so each binary knows the timestamp of the newest migration it was compiled against. The migrator writes that same timestamp to `drizzle.__drizzle_migrations`, in the same transaction that applies the migration. That lets `waitForMigration` (`src/platform/db/connection.ts`) ask an exact question at startup: *is the schema at the version I was built for?*
+
+A plain check for a table's existence can't answer that question. `waitForMigration` can: it stays false mid-upgrade, and it stays true even against a database carrying migrations this build has never seen — which is what running an older image looks like.
 
 Three pieces use it:
 
 - The **migrator** retries its first connection for two minutes rather than exiting on the first refusal, so it can lose the race with PostgreSQL and still succeed.
 - The **worker** opens its healthcheck port first, then waits. It reports healthy and idle while waiting, because nothing routes traffic to it and a crash loop would tell the orchestrator something untrue.
-- The **server** does the opposite: it does not listen at all until its migration is applied, because accepting traffic against a schema it was not built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck therefore gets a 120-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
+- The **server** does the opposite. It refuses to listen at all until its migration is applied, because accepting traffic against a schema it wasn't built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck gets a 120-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
 
-One consequence is worth knowing before you copy a command: `docker compose up --wait` reports the migrator's clean `exit(0)` as a failure, and naming services does not avoid it, because their dependencies are waited on too. Start first and wait second, naming only the services that stay up:
+One thing to know before copying a command: `docker compose up --wait` reports the migrator's clean `exit(0)` as a failure, and naming services doesn't avoid it, since their dependencies get waited on too. Start first and wait second, naming only the services that stay up:
 
 ```bash
 docker compose up -d
 docker compose up -d --wait --wait-timeout 300 server worker
 ```
 
-Nothing is lost by narrowing it. Neither the server nor the worker can report healthy until the migration it needs has been applied, so waiting on them already waits on the migrator.
+This loses nothing. Neither the server nor the worker can report healthy until the migration it needs has been applied, so waiting on them already waits on the migrator.
 
 ## Self-Hosting
 
@@ -62,9 +64,9 @@ cd FeedFathom
 docker compose up -d
 ```
 
-Open `http://127.0.0.1:3456`. Create the first account immediately: the first account can always be created regardless of the registration setting, and once it exists, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
+Open `http://127.0.0.1:3456` and create the first account right away — it's always allowed, regardless of the registration setting. After that, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
 
-Configure the deployment by putting variables in a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change; `.env.example` carries the ones a deployment normally touches, commented out. The rest -- pool sizes, poll intervals and retention windows -- are named with their defaults in `compose.yml` and `src/platform/config.ts`.
+Configure the deployment with a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change — `.env.example` lists the ones a deployment normally touches, commented out. Pool sizes, poll intervals, and retention windows keep their defaults in `compose.yml` and `src/platform/config.ts`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -81,7 +83,7 @@ Configure the deployment by putting variables in a `.env` file next to `compose.
 
 ### Behind a reverse proxy
 
-WARNING: Serve the instance over HTTPS. The session cookie carries the `Secure` attribute, which browsers refuse to store on an insecure origin, so plain HTTP on a non-local address produces a login that appears to succeed and then fails silently on the next request. Browsers exempt `localhost` from this rule; bare IP addresses are not exempt.
+WARNING: Serve the instance over HTTPS. The session cookie carries the `Secure` attribute, which browsers refuse to store on an insecure origin. Plain HTTP on a non-local address makes login appear to succeed, then fail silently on the next request. Browsers exempt `localhost` from this rule. Bare IP addresses are not exempt.
 
 `FEEDFATHOM_PORT` accepts a full binding, so restrict the published port to loopback and terminate TLS in front of it:
 
@@ -89,7 +91,7 @@ WARNING: Serve the instance over HTTPS. The session cookie carries the `Secure` 
 FEEDFATHOM_PORT=127.0.0.1:3456
 ```
 
-A complete Caddyfile, which obtains and renews a certificate on its own:
+A complete Caddyfile, which gets and renews a certificate on its own:
 
 ```caddy
 feeds.example.com {
@@ -103,7 +105,7 @@ NOTE: Some proxies replace `Host` with the upstream address by default, nginx am
 
 `/healthcheck` answers the container health probes and returns 403 to outside callers, so it is not usable as a proxy health probe.
 
-The stack runs no SMTP server and does not expose port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`; `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
+The stack runs no SMTP server and exposes no port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`. `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
 
 Upgrading pulls the new images and reruns migrations, which are forward-only:
 
@@ -112,21 +114,24 @@ docker compose pull
 docker compose up -d
 ```
 
-`docker compose down` stops everything and keeps both volumes. Data lives in the `postgres_storage_17` and `redis_storage` volumes, which is what a backup needs to cover. Compose prefixes them with the project name, and `compose.yml` cannot declare one (see above), so that prefix is the directory you cloned into. Pin it by adding `COMPOSE_PROJECT_NAME=feedfathom` to `.env` if you would rather the volume names not depend on the folder name.
+`docker compose down` stops everything and keeps both volumes: `postgres_storage_17` and `redis_storage`, which is what a backup needs to cover. Compose prefixes them with the project name. Since `compose.yml` can't declare one (see above), that prefix defaults to the directory you cloned into — pin it by adding `COMPOSE_PROJECT_NAME=feedfathom` to `.env` if you'd rather the volume names not depend on the folder name.
 
 ## Development
 
-Development additionally requires Bun, Git, and access to the Docker Hardened Images registry, because the development image builds from `dhi.io` bases. Authenticate without storing credentials in the repository; `docker login dhi.io` prompts for them securely.
+Development also requires Bun and Git.
 
 ```bash
 bun install --frozen-lockfile
-docker login dhi.io
 bun run dev
 ```
 
-Open `http://127.0.0.1:3456`. `bun run dev` builds and starts `compose.yml` plus `deploy/compose.dev.yml`, waits for the server and worker to report healthy, then runs Vite on the host in the foreground. Ctrl-C stops both and preserves the volumes; if startup is interrupted, the idempotent `bun run dev:down` cleans up without removing them.
+Open `http://127.0.0.1:3456`. `bun run dev` builds and starts `compose.yml` plus `deploy/compose.dev.yml`, waits for the server and worker to report healthy, then runs Vite on the host in the foreground. Ctrl-C stops both and keeps the volumes. If startup is interrupted, run the idempotent `bun run dev:down` to clean up without removing them.
 
-The overlay changes three things. The three published images become one image built from the checkout. `src` is mounted read-only into each service so `bun --watch` reloads the backend on save, while the frontend uses native host file watching through Vite. The published port moves to `127.0.0.1:3001`, which leaves `3456` for Vite, which proxies `/api` to the container.
+The overlay changes three things:
+
+- The three published images become one image, built from the checkout.
+- `src` is mounted read-only into each service, so `bun --watch` reloads the backend on save. The frontend uses Vite's native host file watching instead.
+- The published port moves to `127.0.0.1:3001`, freeing `3456` for Vite, which proxies `/api` to the container.
 
 Backend logs come from the same pair of files:
 
@@ -153,7 +158,6 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:3456 bun run test:smoke
 Pull requests have nothing published to pull, so they build the three release targets from the checkout instead and tag them with the local commit SHA. Everything after that is identical:
 
 ```bash
-docker login dhi.io
 export FEEDFATHOM_TAG="$(git rev-parse HEAD)"
 docker compose -f compose.yml -f deploy/compose.smoke.yml pull redis postgres
 docker compose -f compose.yml -f deploy/compose.smoke.yml build migrator server worker
@@ -165,7 +169,7 @@ The overlay uses its own project name, so a smoke run never touches a self-hoste
 
 ## Production Deployment
 
-`deploy/stack.yml` is this repository's single-node Docker Swarm overlay, not the recommended way to self-host — `compose.yml` is. Swarm buys rolling updates with automatic rollback, replica counts, and CPU and memory reservations, at the cost of external volumes, protected secrets, and a migration job that runs as a deployment lock.
+`deploy/stack.yml` is this repository's single-node Docker Swarm overlay, not the recommended way to self-host (`compose.yml` is). Swarm buys rolling updates with automatic rollback, replica counts, and CPU and memory reservations, at the cost of external volumes, protected secrets, and a migration job that runs as a deployment lock.
 
 The overlay adds only what Swarm needs and Compose has no concept of: replica counts, rollout and rollback policy, worker resource limits, and the fact that the data volumes already exist on the host. Images, environment, ports, and health probes all come from `compose.yml`. Validate the pair before deploying:
 
@@ -173,19 +177,26 @@ The overlay adds only what Swarm needs and Compose has no concept of: replica co
 docker stack config -c compose.yml -c deploy/stack.yml
 ```
 
-`docker stack deploy` prints `Ignoring unsupported options: restart` for the base file's `restart: always`. That is expected; `deploy.restart_policy` in the overlay is what governs restarts under Swarm. The migrator is pinned to zero replicas, because Swarm would otherwise restart a completed migration forever — production runs migrations as a separate replicated-job service that doubles as a deployment lock.
+`docker stack deploy` prints `Ignoring unsupported options: restart` for the base file's `restart: always`. That's expected — `deploy.restart_policy` in the overlay governs restarts under Swarm instead. The migrator is pinned to zero replicas, because Swarm would otherwise restart a completed migration forever. Production instead runs migrations as a separate replicated-job service that doubles as a deployment lock.
 
 The port comes from `FEEDFATHOM_PORT`, which the deployment workflow sets from the protected `SERVER_HOST_PORT` variable. Anything in front of that port — TLS termination, a reverse proxy, an ingress network — is the operator's to supply, and the stack makes no assumptions about it.
 
-The Docker workflow calls the reusable quality workflow before every event-specific job. Fork pull requests run quality only. Internal pull requests then authenticate only to `dhi.io`, build and load all three `linux/amd64` release targets, and smoke the exact local SHA without pulling application images. A main push publishes only multi-platform full-SHA manifests, smokes that exact SHA, and promotes each verified manifest to `latest` only after smoke succeeds. Manual dispatch accepts exactly one 40-character lowercase hexadecimal `deploy_tag`; it verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, and smokes them without rebuilding or retagging. There are no branch image tags.
+The Docker workflow calls the reusable quality workflow before every event-specific job:
 
-The protected `production` GitHub environment deploys the stack only when the repository variable `ENABLE_SWARM_DEPLOYMENT` is exactly `true`. Main-push deployment additionally requires successful `latest` promotion; manual deployment uses the same verified `deploy_tag` and does not update `latest`. The production stack defaults to `1` server replica (`APP_REPLICAS`) and `10` worker replicas (`WORKER_REPLICAS`).
+- **Fork pull requests** run quality only.
+- **Internal pull requests** build and load all three `linux/amd64` release targets from the checkout, then smoke the exact local SHA without pulling application images.
+- **A main push** publishes multi-platform full-SHA manifests, smokes that exact SHA, and promotes each verified manifest to `latest` only after smoke succeeds.
+- **Manual dispatch** accepts exactly one 40-character lowercase hexadecimal `deploy_tag`. It verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, and smokes them without rebuilding or retagging.
+
+There are no branch image tags.
+
+The protected `production` GitHub environment deploys the stack only when the repository variable `ENABLE_SWARM_DEPLOYMENT` is exactly `true`. A main-push deployment also requires successful `latest` promotion. Manual deployment uses the same verified `deploy_tag` and doesn't update `latest`. The production stack defaults to `1` server replica (`APP_REPLICAS`) and `10` worker replicas (`WORKER_REPLICAS`).
 
 ### Sizing for a smaller host
 
 The Swarm defaults assume a host with room to spare. On a smaller VPS, shrink these together rather than independently:
 
-- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica; the bare-process fallback is `1`, and it is safe to run that low in production too.
+- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica. The bare-process fallback is `1`, and it's safe to run that low in production too.
 - `DB_POOL_MAX` — PostgreSQL connections opened per server and worker replica (default `10`, matching Bun's SQL client default).
 - `POSTGRES_MAX_CONNECTIONS` — PostgreSQL's own connection ceiling (`deploy/stack.yml` default `1000`, far more than a small deployment needs). Size it against the other two: roughly `1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX`, which leaves room for connection churn during a rolling update without reserving memory for thousands of unused slots. One server and one worker replica at the `DB_POOL_MAX` default of `10` needs `1.5 * 2 * 10 = 30`.
 
@@ -198,8 +209,8 @@ produced, so a database that ran them needs no schema change.
 The one-time shim that stamped such a database as having applied the baseline
 has been removed, so a database that never took the squash upgrade can no
 longer take it at all: the baseline would be replayed and fail on
-`CREATE TABLE`. That failure is safe -- the transaction rolls back and the
-journal is untouched -- but the only way forward is to reach the squash under
+`CREATE TABLE`. That failure is safe — the transaction rolls back and the
+journal is untouched — but the only way forward is to reach the squash under
 an image that still carried the shim.
 
 One consequence is permanent. The legacy `job_queue` table, created by the old
@@ -211,9 +222,14 @@ migration or schema file mentions it any more.
 
 Keep `ENABLE_SWARM_DEPLOYMENT` disabled and complete these operator-owned steps first.
 
-1. Back up PostgreSQL and Redis, then record the actual existing volume names from `docker volume ls`. Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to those exact names; do not infer them from the Compose keys and do not delete or recreate the volumes.
+1. Back up PostgreSQL and Redis, then record the actual existing volume names from `docker volume ls`. Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to those exact names. Do not infer them from the Compose keys, and do not delete or recreate the volumes.
 2. Initialize this host as the single-node Swarm manager with `docker swarm init` if it is not already a manager.
-3. Configure the protected environment with `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `SERVER_HOST_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel. Add `DATABASE_URL` as a protected secret; its PostgreSQL role, password, host, and database must match the initialized volume. The stack initializes new volumes with `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, defaulting all three to `postgres`; for a nondefault installation, set the protected `POSTGRES_DB` variable and the `POSTGRES_USER` and `POSTGRES_PASSWORD` secrets to the same database and credentials embedded in `DATABASE_URL`. Changing these initialization values does not change a database or credentials in an existing volume. Add `MAIL_RELAY_SECRET` as a protected secret with exactly the same value as the Cloudflare Email Worker secret. `FEED_FATHOM_DOMAIN` is required application configuration for email identity and links regardless of how ingress is arranged. The deployment user must already be allowed to run Docker, and the host must provide a coreutils-compatible `timeout` with `-k` support.
+3. Configure the protected environment:
+   - `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `SERVER_HOST_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel.
+   - `DATABASE_URL` as a protected secret. Its PostgreSQL role, password, host, and database must match the initialized volume.
+   - The stack initializes new volumes with `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, all defaulting to `postgres`. For a nondefault installation, set the protected `POSTGRES_DB` variable and the `POSTGRES_USER`/`POSTGRES_PASSWORD` secrets to the same database and credentials embedded in `DATABASE_URL`. Changing these initialization values does not change a database or credentials already in an existing volume.
+   - `MAIL_RELAY_SECRET` as a protected secret, matching the Cloudflare Email Worker secret exactly. `FEED_FATHOM_DOMAIN` is required regardless of how ingress is arranged, since email identity and links are built from it.
+   - The deployment user must already be allowed to run Docker, and the host must provide a coreutils-compatible `timeout` with `-k` support.
 4. Stop the old Compose project without removing volumes. Bootstrap the stack with application and worker replicas set to zero, so Swarm creates the `${STACK_NAME}_backend` network and starts the existing PostgreSQL and Redis data:
 
    ```bash
@@ -271,8 +287,8 @@ on the next run without any change to the code.
 
 Two invariants the job depends on, and that a manual upload would break:
 every binding must be sent on every upload, because the API replaces the whole
-set rather than merging into it; and `MAIL_ENDPOINT_DOMAIN` must be an origin
-only -- no path, no credentials -- and `https://` unless the host is loopback,
+set rather than merging into it. And `MAIL_ENDPOINT_DOMAIN` must be an origin
+only — no path, no credentials — and `https://` unless the host is loopback,
 because the relay secret and the entire message travel in that request.
 
 Cloudflare Email Routing itself is configured outside this repository and
@@ -286,7 +302,7 @@ state.
 
 ## Testing and Code Quality
 
-`bun run dev` is the normal watch workflow; `watch-spa`, `watch-spa-api` and
+`bun run dev` is the normal watch workflow. `watch-spa`, `watch-spa-api`, and
 `watch-worker` run the individual processes for diagnostics.
 
 Run the full gate before feature work or a pull request. It covers unit tests,
@@ -316,7 +332,7 @@ bun run lint:fix
 bun run build-project
 ```
 
-Browser tests use real Chromium and retain traces and screenshots only for failures. Install Chromium once with `bunx playwright install chromium`; CI installs Chromium and its system dependencies automatically. To smoke an already-running production stack instead of starting Vite:
+Browser tests use real Chromium and retain traces and screenshots only for failures. Install Chromium once with `bunx playwright install chromium` — CI installs Chromium and its system dependencies automatically. To smoke an already-running production stack instead of starting Vite:
 
 ```bash
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3456 bun run test:smoke

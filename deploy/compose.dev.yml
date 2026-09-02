@@ -10,8 +10,6 @@
 # /api to the container. Everything else -- Redis, PostgreSQL, health
 # probes, startup order -- is inherited unchanged from compose.yml.
 #
-# Building requires a Docker Hardened Images login: `docker login dhi.io`.
-#
 # It also carries the project name. compose.yml cannot declare a top-level
 # `name`, because the legacy Swarm loader rejects it, so each Compose
 # overlay names the project it belongs to.

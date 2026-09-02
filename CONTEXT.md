@@ -4,7 +4,7 @@ FeedFathom is a self-hosted RSS and newsletter reader. A **server** serves the
 SPA and the JSON API, a **worker** fetches and parses feeds on a schedule, a
 **migrator** brings the schema up to date and exits, and optional browser
 extensions add feed discovery and reader views. PostgreSQL stores accounts,
-subscriptions and articles; Redis holds the job queue and the HTTP cache.
+subscriptions and articles. Redis holds the job queue and the HTTP cache.
 
 ## Where a new file goes
 
@@ -29,14 +29,14 @@ import anything. They are the composition roots.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
 rule, which carries the DAG in its `.oxlintrc.json` options. Prose alone did
-not hold; the lint rule is the load-bearing half. Relative specifiers are
+not hold. The lint rule is the load-bearing half. Relative specifiers are
 resolved and judged by the same rule, so `../../` is not an escape hatch.
-Co-located `*.test.ts` files are exempt — a test arranges state rather than
-wiring the product, and ships in no bundle.
 
-Anything two clients both need is `shared` by that definition, which is where
-the scanner tree, the reader-bridge protocol in `extension-types.ts` and the
-URL-safety helpers in `util/safe-url.ts` live.
+Co-located `*.test.ts` files are exempt: a test arranges state rather than
+wiring the product, and ships in no bundle. Anything two clients both need is
+`shared` by that same definition, which is where the scanner tree, the
+reader-bridge protocol in `extension-types.ts` and the URL-safety helpers in
+`util/safe-url.ts` live.
 
 ## Features
 
@@ -54,16 +54,16 @@ mail-ingest → feeds
 jobs        → feeds, admin
 ```
 
-Any edge not on that list is a lint error. The list must also stay acyclic;
-that part is checked in review rather than by the rule, which is the point of
-keeping the edges in a config file — adding one is a deliberate act that shows
-up in the diff instead of arriving as a quiet new import.
+Any edge not on that list is a lint error. The list must also stay acyclic,
+which is checked in review rather than by the rule. That's the point of
+keeping the edges in a config file: adding one is a deliberate act that shows
+up in the diff, instead of arriving as a quiet new import.
 
 - **`auth`** — sessions, registration, activation, password, the users data
   service, and the mail sender that carries activation mail. The session plugin
   lives here rather than in `platform`: session verification is domain logic
   about users, not infrastructure.
-- **`feeds`** — acquiring content and the store it lands in: feed parsing
+- **`feeds`** — getting content and the store it lands in: feed parsing
   (RSS/Atom, JSON Feed, microformats), OPML import, discovery and preview,
   subscription, WebSub, favicons, article extraction and link rewriting, and
   the sources, articles, user-sources and folders data services.
@@ -109,11 +109,13 @@ answering it requires a database, a Redis, a browser or a network — that
 requirement is the bug, not the size of the file holding it.
 
 The criterion is testability, not line count. A long file whose decisions are
-all extracted is finished; splitting it further buys a smaller file and nothing
-else. Two clusters were deliberately left in place on exactly that basis: the
-WebSub lifecycle methods on the sources data service, and the cache read/write
-half of the HTTP client. Both are pure I/O with the decisions already lifted
-out, so moving them would cost a rewiring across their callers and gain no test.
+all extracted is finished. Splitting it further buys a smaller file and
+nothing else.
+
+Two clusters were deliberately left in place on exactly that basis: the WebSub
+lifecycle methods on the sources data service, and the cache read/write half of
+the HTTP client. Both are pure I/O with the decisions already lifted out, so
+moving them would cost a rewiring across their callers and gain no test.
 
 Extracted SPA logic goes in one behaviour module per view — `behavior.ts` keeps
 only genuinely cross-view concerns. A single shared module would become the new
@@ -135,14 +137,13 @@ own `__tests__/`. `tests/` holds only the Playwright specs under
 `tests/browser/`, which test a running app rather than a module.
 
 A test that asserts on a module's file path, its directory, or which file an
-export comes from is testing structure rather than behaviour. Delete the
-assertion.
+export comes from tests structure rather than behaviour. Delete the assertion.
 
 There is no component test harness. No test imports a `.tsx`: `bun test`
 resolves `.tsx` against React's JSX runtime rather than the configured
 `solid-js` one, and the SPA's `.svg?raw` imports are a Vite feature the test
-runner cannot resolve. Component behaviour is covered by the Playwright specs;
-anything that needs a unit test has to come out of the component first.
+runner cannot resolve. Component behaviour is covered by the Playwright specs.
+Anything that needs a unit test has to come out of the component first.
 
 ## Glossary
 
