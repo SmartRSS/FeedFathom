@@ -1,0 +1,108 @@
+/* Loaded as a file, not inline: the manifest's extension_pages CSP has no
+   style-src, so it falls back to default-src 'self' and a <style> block in
+   popup.html is dropped entirely -- which left the popup rendering at the
+   browser's unstyled defaults.
+
+   Colours are the system keywords the SPA's default "auto" theme resolves
+   to (src/spa/style.css), so these pages track the OS light/dark and accent
+   colours the same way the dashboard does. The SPA's other themes live in
+   localStorage on the instance's origin, which an extension page can't
+   read, so "auto" is the only one worth mirroring. */
+:root {
+  color-scheme: light dark;
+  --border: 1px solid ButtonBorder;
+  --muted: GrayText;
+  --radius: 0.5rem;
+  --surface: Field;
+}
+
+body {
+  margin: 0;
+  padding: 0.75rem;
+  color: CanvasText;
+  font:
+    1rem/1.4 system-ui,
+    sans-serif;
+  background: Canvas;
+  /* Desktop popups size to content; on Firefox for Android the popup fills
+     the screen and this is just a floor. */
+  min-width: 20rem;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  padding: 0.6rem;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  /* Comfortable touch target on a phone. */
+  min-height: 2.75rem;
+}
+button:hover {
+  background: Canvas;
+}
+
+/* Mirrors .found-feeds in src/spa/style.css: a bordered list whose rows are
+   a bold title over the muted URL. Titles on a site like purepc.pl share a
+   long prefix and clip to the same few words, so the URL is what tells the
+   three feeds apart. */
+.found-feeds {
+  display: grid;
+  max-height: 60vh;
+  margin-bottom: 0.75rem;
+  overflow: auto;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.found-feeds button {
+  display: grid;
+  gap: 0.2rem;
+  overflow: hidden;
+  text-align: left;
+  border: 0;
+  border-bottom: var(--border);
+  border-radius: 0;
+}
+.found-feeds button:last-child {
+  border-bottom: 0;
+}
+.found-feeds span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-pane {
+  margin: 0 0 0.75rem;
+  padding: 1rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.popup-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* options.html */
+.form-container {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 32rem;
+}
+.input-block {
+  display: grid;
+  gap: 0.25rem;
+}
+input {
+  font: inherit;
+  color: inherit;
+  padding: 0.6rem;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+}

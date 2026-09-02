@@ -50,12 +50,23 @@ void (async () => {
   if (feedsContainer) {
     const feeds = liveFeeds ?? cachedFeeds ?? [];
     if (feeds.length === 0) {
-      feedsContainer.textContent = "No feeds found on this page.";
+      const empty = document.createElement("p");
+      empty.className = "empty-pane";
+      empty.textContent = "No feeds found on this page.";
+      feedsContainer.append(empty);
     } else {
+      feedsContainer.className = "found-feeds";
       for (const feed of feeds) {
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = feed.title;
+        // Title over URL, as the dashboard's feed discovery list renders it:
+        // a site whose feeds share a long title prefix is otherwise three
+        // identically-clipped rows.
+        const title = document.createElement("strong");
+        title.textContent = feed.title;
+        const url = document.createElement("span");
+        url.textContent = feed.url;
+        button.append(title, url);
         button.addEventListener("click", () => {
           openAndClose(resolveFeedOpenUrl(instance, feed.url));
         });
