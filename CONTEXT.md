@@ -127,14 +127,12 @@ next to `foo.ts` (i.e. `__tests__/foo.test.ts`).
 A co-located test that needs a real PostgreSQL is named
 `foo-integration.test.ts`. `test:unit` skips every `*-integration.test.ts`
 wherever it lives and `test:migrations` names them explicitly, so `bun run
-test:unit` stays runnable with nothing but the repo checked out. Co-location
-still applies -- needing a database is not a reason to move a `src/` module's
-test into `tests/`.
+test:unit` stays runnable with nothing but the repo checked out. Needing a
+database is not a reason to move a test away from its module.
 
-`tests/` holds only what tests something other than a `src/` module: the
-Playwright specs under `tests/browser/`, the migration integration test (which
-needs a disposable database and has its own script), the vendored
-fast-xml-parser shim, `bin/generate-packages.ts` and `tools/oxlint-plugin.js`.
+This holds outside `src/` too: `bin/`, `tools/` and `vendor/` each carry their
+own `__tests__/`. `tests/` holds only the Playwright specs under
+`tests/browser/`, which test a running app rather than a module.
 
 A test that asserts on a module's file path, its directory, or which file an
 export comes from is testing structure rather than behaviour. Delete the

@@ -29,9 +29,6 @@ export class RedirectMap {
     }
   }
 
-  /**
-   * Get the redirect URL for a given URL, if it exists
-   */
   async getRedirect(url: string): Promise<string | null> {
     try {
       const key = `${this.redisKeyPrefix}${this.normalizeUrl(url)}`;
@@ -43,17 +40,11 @@ export class RedirectMap {
     }
   }
 
-  /**
-   * Check if a URL should be redirected and return the new URL if so
-   */
   async resolveUrl(url: string): Promise<string> {
     const redirectUrl = await this.getRedirect(url);
     return redirectUrl ?? url;
   }
 
-  /**
-   * Remove a redirect mapping
-   */
   async removeRedirect(url: string): Promise<void> {
     try {
       const key = `${this.redisKeyPrefix}${this.normalizeUrl(url)}`;
@@ -63,23 +54,16 @@ export class RedirectMap {
     }
   }
 
-  /**
-   * Normalize URL for consistent key generation
-   */
   private normalizeUrl(url: string): string {
     try {
       const urlObj = new URL(url);
-      // Remove trailing slash for consistency
       return urlObj.href.replace(/\/$/, "");
     } catch {
-      // If URL parsing fails, return as-is
       return url;
     }
   }
 
-  /**
-   * Get all redirect mappings (for debugging/admin purposes)
-   */
+  /** For the admin view. */
   async getAllRedirects(): Promise<Record<string, string>> {
     try {
       const keys = await this.redis.keys(`${this.redisKeyPrefix}*`);

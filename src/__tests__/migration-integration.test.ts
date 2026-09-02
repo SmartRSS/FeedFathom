@@ -2,11 +2,11 @@ import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { waitForMigration } from "#platform/db/connection.ts";
-import journal from "../drizzle/meta/_journal.json";
-import { migrateDatabase } from "../src/migrator.ts";
+import journal from "../../drizzle/meta/_journal.json";
+import { migrateDatabase } from "../migrator.ts";
 
 const currentMigrationsFolder = fileURLToPath(
-  new URL("../drizzle", import.meta.url),
+  new URL("../../drizzle", import.meta.url),
 );
 const expectedIndexNames = [
   "articles_source_published_idx",

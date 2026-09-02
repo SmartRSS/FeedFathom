@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { projectExtensionManifest } from "../bin/generate-packages.ts";
-import manifestTemplate from "../src/extension/manifest.json";
+import { projectExtensionManifest } from "../generate-packages.ts";
+import manifestTemplate from "../../src/extension/manifest.json";
 
 const sourceManifest = () => structuredClone(manifestTemplate);
 

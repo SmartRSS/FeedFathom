@@ -31,27 +31,20 @@ export function createPooledDrizzleConnection(
   );
 }
 
-// A worker can outrace the migrator on a cold start, because Compose can
-// only order starts, not completion -- and Swarm orders nothing at all (see
-// compose.yml). Without this the first query hits a schema that is not there
-// yet, the rejection is unhandled, and the process dies before it has even
-// opened its healthcheck port, so an orchestrator sees a crash loop rather
-// than a service waiting its turn.
+// A worker can outrace the migrator on a cold start: Compose orders starts,
+// not completion, and Swarm orders nothing (see compose.yml). Without this the
+// first query hits a missing schema and the process dies before opening its
+// healthcheck port, so the orchestrator sees a crash loop.
 //
-// Drizzle has no runtime schema-verification API, but it does leave a
-// runtime-queryable record: the migrator writes one drizzle.__drizzle_
-// migrations row per applied migration, keyed by the same `when` timestamp
-// that drizzle/meta/_journal.json carries, in the same transaction that
-// applies it. So asking whether this build's newest known migration is
-// present is an exact "is the schema at the version I was compiled for"
-// check -- it stays false midway through an upgrade, which probing for a
-// table's existence would not.
+// The migrator writes one drizzle.__drizzle_migrations row per migration, in
+// the same transaction that applies it, keyed by the `when` timestamp from
+// drizzle/meta/_journal.json. Checking for this build's newest migration is
+// therefore an exact "is the schema at the version I was compiled for" test,
+// and stays false midway through an upgrade -- probing for a table would not.
 //
-// A missing table (schema absent entirely) and a refused connection both
-// surface as a rejected query, so one loop covers every not-ready state.
-// Waiting forever is deliberate: a migration that has not run yet is not
-// this process's problem to fail over. It logs occasionally rather than
-// every second so a genuinely stuck instance is still readable.
+// A missing table and a refused connection both surface as a rejected query,
+// so one loop covers every not-ready state. Waiting forever is deliberate; the
+// log is throttled so a genuinely stuck instance stays readable.
 // Bundled into each build, so this is the newest migration the running
 // binary was compiled against -- not whatever happens to be on disk.
 const latestMigration = Math.max(...journal.entries.map((entry) => entry.when));

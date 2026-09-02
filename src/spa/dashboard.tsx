@@ -45,14 +45,9 @@ import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import { resolvedTheme } from "./preferences.ts";
-// Inlined as raw markup (not <img src>) rather than a plain image import:
-// every icon in this set is fill/stroke="currentColor" by design, so a
-// row's icon automatically matches its own text color (grey by default,
-// --selected-fg when selected, whatever the OS resolves it to under the
-// auto theme's dark-mode-aware colors) with no per-case "is this
-// background light or dark" guessing -- currentColor only resolves that
-// way when the SVG is actually in the page's DOM, not loaded as an
-// external image resource.
+// Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
+// only resolves against the row's text color when the SVG is in the page's
+// DOM. As an external image it would need per-case light/dark guessing.
 import addFolderRaw from "./assets/icons/Document/folder-add-fill.svg?raw";
 import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
@@ -68,11 +63,10 @@ function ReaderBody(props: { content: ReaderContent }) {
   );
 }
 
-// Only used for the very first tree render (see onMount): keeps the tree
-// skeleton up until every favicon has settled (loaded or failed). A failed
-// image still resolves via the .catch() below, so this can't hang on a
-// broken favicon -- only on a request that never settles at all, which the
-// browser's own network timeout bounds anyway.
+// First tree render only (see onMount): holds the skeleton until every
+// favicon settles. A failure resolves via the .catch() below, so a broken
+// favicon can't hang it -- only one that never settles, which the browser's
+// network timeout bounds.
 function preloadFavicons(tree: TreeNode[]): Promise<void> {
   const urls = tree.flatMap(faviconUrls);
   if (!urls.length) return Promise.resolve();
@@ -135,10 +129,9 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
-  // There's no way to detect whether a screen reader is actually running,
-  // so this is always rendered (see the aria-live region below) -- it's
-  // visually hidden either way, and only gets real text (and so only gets
-  // announced) when high contrast mode happens to be off.
+  // A screen reader can't be detected, so this always renders (see the
+  // aria-live region below); it is visually hidden either way and only gets
+  // real text when high contrast mode is off.
   const [accessibilityAnnouncement, setAccessibilityAnnouncement] =
     createSignal("");
   const [displayMode, setDisplayMode] = createSignal<"FEED" | ReaderMode>(
@@ -204,10 +197,8 @@ export function Dashboard(props: {
       "type" in data &&
       data.type === "queued-mutation-failed"
     ) {
-      // The service worker already told the user this action succeeded
-      // (an optimistic response) before discovering, once back online,
-      // that the server definitively rejected it -- nothing else lets
-      // the user find out, so surface it here.
+      // The service worker optimistically reported success before the server,
+      // once back online, rejected it. Nothing else tells the user.
       setError(
         "A change made while offline could not be applied and was discarded. Reload to see the current state.",
       );
@@ -232,23 +223,16 @@ export function Dashboard(props: {
         return (await api("/tree", treeResponse, { signal: controller.signal }))
           .tree;
       } catch (cause) {
-        // Only treat this as "superseded, defer to whoever's current"
-        // when THIS request's own signal is what caused the failure --
-        // a newer loadTree() aborting this one shouldn't surface an
-        // unrelated "Could not create folder"/"Could not subscribe"
-        // toast, but a genuine failure must still propagate even if
-        // another loadTree() happened to start around the same time.
-        // Deferring to the shared in-flight promise (rather than reading
-        // the `tree` signal) matters because abort() settles before the
-        // superseding request's own network round trip finishes, so the
-        // signal can't yet hold that request's result.
+        // "Superseded" only when THIS request's signal caused the failure; a
+        // genuine error must still propagate even if another loadTree()
+        // started around the same time. Defer to the shared in-flight promise
+        // rather than the `tree` signal, because abort() settles before the
+        // superseding request's round trip finishes.
         //
-        // Checking `cause` itself (not just `controller.signal.aborted`)
-        // matters too: a controller can be aborted AFTER its fetch
-        // already resolved, while a later step (JSON parsing, schema
-        // validation) is still throwing a genuine, unrelated error --
-        // `signal.aborted` alone can't tell those apart and would mask
-        // a real bug as a silent supersession.
+        // Check `cause`, not `controller.signal.aborted`: a controller can be
+        // aborted after its fetch resolved while a later step (JSON parsing,
+        // validation) throws for an unrelated reason, and `aborted` alone
+        // would mask that real bug as a silent supersession.
         if (
           cause instanceof DOMException &&
           cause.name === "AbortError" &&
@@ -300,16 +284,13 @@ export function Dashboard(props: {
       reportError(cause, "Unable to load feeds.");
     } finally {
       setTreeLoading(false);
-      // Land keyboard focus on the tree without calling select() -- that
-      // would also kick off an articles load, which isn't wanted just from
-      // landing on the page.
+      // Focus the tree without select(), which would also load articles.
       queueMicrotask(() =>
         document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
       );
     }
-    // Delayed, and only set (not already present at mount) so a screen
-    // reader treats it as a live-region change and actually announces it,
-    // rather than silently including it in the page's first read-through.
+    // Delayed and set rather than present at mount, so a screen reader treats
+    // it as a live-region change instead of part of the first read-through.
     if (resolvedTheme() !== "high-contrast")
       setTimeout(
         () =>
@@ -397,9 +378,7 @@ export function Dashboard(props: {
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
       await loadTree();
-      // The deleted row's DOM node (and the now-disabled toolbar button) is
-      // gone, dropping focus to document.body -- land it back on the tree
-      // instead of leaving keyboard/screen-reader users stranded.
+      // The deleted row's node is gone, dropping focus to document.body.
       queueMicrotask(() =>
         document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
       );
@@ -491,17 +470,14 @@ export function Dashboard(props: {
     if (!ids.length) return;
     setError("");
 
-    // Fire the request first so network time overlaps with the local UI
-    // work below instead of waiting for it; everything after this reads
-    // as background work via .then/.catch, not a blocking await.
+    // Fired first so network time overlaps the local UI work below.
     const deletion = api("/articles", removedArticlesResponse, {
       body: JSON.stringify({ removedArticleIdList: ids }),
       headers: { "Content-Type": "application/json" },
       method: "DELETE",
     });
 
-    // Update the UI immediately; the delete request runs in the background
-    // so removing a batch of articles doesn't block on a round trip.
+    // Optimistic: removing a batch shouldn't block on a round trip.
     const { nextIndex, remaining } = removalOutcome(items, indexes);
     const nextArticle = remaining[nextIndex];
     setArticles(remaining);
@@ -514,26 +490,22 @@ export function Dashboard(props: {
     const restoreIndex = nextArticle ? nextIndex : 0;
     setSelectionAnchor(nextArticle ? nextIndex : undefined);
 
-    // Every article in the list is unread by construction (the server only
-    // returns unread articles), so removing one always frees exactly one
-    // unread slot on its source. Update the tree count immediately instead
-    // of waiting on a full tree refetch, then reconcile in the background.
+    // The server only returns unread articles, so removing one always frees
+    // exactly one unread slot. Adjust the count now, reconcile in background.
     const deltas = new Map<string, number>();
     for (const index of indexes) {
       const sourceUid = items[index]!.sourceId.toString();
       deltas.set(sourceUid, (deltas.get(sourceUid) ?? 0) + 1);
     }
-    // Reuse the computed tree instead of re-reading tree() after the set:
-    // Solid 2.0 defers setter visibility to the microtask flush, so a
-    // synchronous read here would see the pre-decrement tree.
+    // Reuse the computed tree: Solid 2.0 defers setter visibility to the
+    // microtask flush, so a synchronous tree() read sees the pre-decrement one.
     const nextTree = withDecrementedUnread(tree(), deltas);
     setTree(nextTree);
     const current = selectedNode();
     if (current) {
       setSelectedNode(findNode(nextTree, current.type, current.uid));
     }
-    // The removed rows' DOM nodes are gone, which drops focus to
-    // document.body; restore it to the list so keyboard nav keeps working.
+    // The removed rows' nodes are gone, dropping focus to document.body.
     queueMicrotask(() => focusArticleAt(restoreIndex));
 
     deletion
@@ -543,8 +515,7 @@ export function Dashboard(props: {
         ),
       )
       .catch((cause) => {
-        // The delete failed after the optimistic update already applied;
-        // resync from the server instead of hand-reverting local state.
+        // Optimistic update already applied; resync rather than hand-revert.
         reportError(cause, "Could not delete articles");
         setArticles(items);
         void setArticleSelection(new Set(indexes));
@@ -555,11 +526,8 @@ export function Dashboard(props: {
         );
       });
   }
-  // Real DOM focus, same roving-tabindex mechanism as the tree: each row
-  // carries its own tabindex (0 for the current one, -1 otherwise, see the
-  // JSX below), so the browser announces the newly focused row on its own
-  // -- no aria-activedescendant plumbing, no dependency on a screen
-  // reader's support for it.
+  // Real DOM focus with the same roving tabindex as the tree, so the browser
+  // announces the focused row itself -- no aria-activedescendant plumbing.
   function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
     const element = document.querySelector<HTMLElement>(
@@ -579,9 +547,8 @@ export function Dashboard(props: {
     setSelectionAnchor(next.anchor);
     void setArticleSelection(next.indexes);
   }
-  // Ctrl/Cmd held: move the focus cursor only, selection stays exactly as
-  // it was -- Space is what commits a change at the new position. Without
-  // the modifier, movement acts like a click: select just this row.
+  // Ctrl/Cmd moves the focus cursor only; Space commits the change. Without
+  // the modifier, movement acts like a click and selects just this row.
   function moveTo(index: number, event: KeyboardEvent) {
     if (!articles().length) return;
     event.preventDefault();
@@ -745,12 +712,9 @@ export function Dashboard(props: {
             <button
               aria-label="select all"
               onClick={() => {
-                // Clicking this button focuses it natively, same as any
-                // button -- which sits outside .article-list, so its own
-                // Delete/arrow-key handling (handleArticleKeys) never fires
-                // afterward. Ctrl+A doesn't have this problem since it's
-                // triggered from within the list already; this mirrors that
-                // by moving focus back into the list right after selecting.
+                // Clicking focuses this button, which sits outside
+                // .article-list, so handleArticleKeys would stop firing.
+                // Ctrl+A already runs from inside the list; mirror it.
                 void setArticleSelection(
                   new Set(articles().map((_, index) => index)),
                 );
@@ -990,16 +954,12 @@ export function Dashboard(props: {
             }
             if (!savedNode) return;
             await select(savedNode);
-            // Editing only renames/moves an already-subscribed feed --
-            // there's nothing new to fetch, so skip the poll-for-articles
-            // loop below, which exists only to wait out a fresh
-            // subscription's initial (worker-driven) feed fetch.
+            // Editing renames or moves an existing feed; nothing to fetch, so
+            // skip the poll below.
             if (wasEditing) return;
-            // Subscribing only queues the feed fetch (the worker does the
-            // actual network request), so the article list can still be
-            // empty right after subscribing. Poll briefly rather than
-            // leaving the user looking at a blank pane; bail out if they've
-            // navigated elsewhere in the meantime.
+            // Subscribing only queues the fetch (the worker does it), so the
+            // list can be empty right after. Poll briefly rather than showing
+            // a blank pane; bail if the user navigated away.
             for (
               let attempt = 0;
               attempt < 5 &&
@@ -1007,9 +967,8 @@ export function Dashboard(props: {
               selectedNode()?.uid === savedNode.uid;
               attempt++
             ) {
-              // Deliberately sequential: each attempt waits out the delay,
-              // then rechecks state before re-selecting -- not independent
-              // work that Promise.all could parallelize.
+              // Sequential on purpose: each attempt rechecks state after its
+              // delay, so there is nothing for Promise.all to parallelize.
               // oxlint-disable-next-line no-await-in-loop
               await new Promise((resolve) => setTimeout(resolve, 3000));
               if (selectedNode()?.uid !== savedNode.uid) break;

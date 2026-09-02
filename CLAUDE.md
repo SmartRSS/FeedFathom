@@ -14,10 +14,9 @@ subpath imports, with the `.ts` suffix. `feedfathom/layer-boundaries` in
 into an undeclared feature; adding a feature-to-feature edge means editing that
 rule's options in `.oxlintrc.json`.
 
-Unit tests are co-located next to the module they cover. `tests/` holds only
-what tests something other than a `src/` module: the Playwright specs, the
-drizzle migration tests, the vendored shim, and the `bin/` and `tools/` tests.
-A co-located test that needs a real PostgreSQL takes the
+Tests live in a `__tests__/` subdirectory next to the module they cover, in
+`bin/`, `tools/` and `vendor/` as well as `src/`. `tests/` holds only the
+Playwright specs. A test that needs a real PostgreSQL takes the
 `*-integration.test.ts` suffix, which keeps it out of `test:unit`.
 
 Decisions live in `docs/adr/`.
