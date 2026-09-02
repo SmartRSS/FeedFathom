@@ -4,6 +4,7 @@ import {
   buildPreviewUrl,
   canonicalizeInstance,
   normalizeFeedAddress,
+  resolveFeedOpenUrl,
 } from "../url-helpers.ts";
 
 describe("canonicalizeInstance", () => {
@@ -102,5 +103,27 @@ describe("buildNewsletterAddress", () => {
 
   test("returns undefined for an invalid instance", () => {
     expect(buildNewsletterAddress("file:///tmp/feed", "01ABC")).toBeUndefined();
+  });
+});
+
+describe("resolveFeedOpenUrl", () => {
+  test("routes through the preview page when an instance is configured", () => {
+    expect(
+      resolveFeedOpenUrl("https://reader.example", "https://feed.test/rss"),
+    ).toBe(
+      "https://reader.example/preview?feedUrl=https%3A%2F%2Ffeed.test%2Frss",
+    );
+  });
+
+  test("opens the feed address directly with no instance", () => {
+    expect(resolveFeedOpenUrl(null, "feed://feed.test/rss")).toBe(
+      "https://feed.test/rss",
+    );
+  });
+
+  test("opens the feed address directly when the instance is invalid", () => {
+    expect(
+      resolveFeedOpenUrl("not a url", "https://feed.test/rss"),
+    ).toBe("https://feed.test/rss");
   });
 });

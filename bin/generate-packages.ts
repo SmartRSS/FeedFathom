@@ -89,6 +89,7 @@ async function buildSharedExtension(): Promise<void> {
       path.join(root, "src/extension/background-event.ts"),
       path.join(root, "src/extension/content-script.ts"),
       path.join(root, "src/extension/options.ts"),
+      path.join(root, "src/extension/popup.ts"),
     ],
     outdir: commonDirectory,
     target: "browser",
@@ -111,6 +112,10 @@ async function buildSharedExtension(): Promise<void> {
   await copyFile(
     path.join(root, "src/extension/options.html"),
     path.join(commonDirectory, "options.html"),
+  );
+  await copyFile(
+    path.join(root, "src/extension/popup.html"),
+    path.join(commonDirectory, "popup.html"),
   );
 }
 

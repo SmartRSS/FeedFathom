@@ -3,45 +3,22 @@ import {
   isListFeedsMessage,
   isReaderRequest,
   isVisibilityLostMessage,
-  storedInstance,
   type ReaderResponse,
 } from "#shared/extension-types.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
+import { getInstanceUrl, getMailDomain } from "./instance.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
-import {
-  buildNewsletterAddress,
-  buildPreviewUrl,
-  canonicalizeInstance,
-  normalizeFeedAddress,
-} from "./url-helpers.ts";
+import { buildNewsletterAddress, resolveFeedOpenUrl } from "./url-helpers.ts";
 
-const getInstanceUrl = async (): Promise<null | string> => {
-  try {
-    const instance = storedInstance(await chrome.storage.sync.get("instance"));
-    return instance ? (canonicalizeInstance(instance) ?? null) : null;
-  } catch {
-    return null;
-  }
-};
-
-// Undefined when the instance is old, unreachable, or ingests no mail; the
-// address then falls back to the instance hostname.
-const getMailDomain = async (instance: string): Promise<string | undefined> => {
-  try {
-    const response = await fetch(new URL("/api/session", instance).href, {
-      credentials: "include",
-    });
-    if (!response.ok) return undefined;
-    const body: unknown = await response.json();
-    const domain =
-      typeof body === "object" && body !== null && "mailDomain" in body
-        ? body.mailDomain
-        : undefined;
-    return typeof domain === "string" ? domain : undefined;
-  } catch {
-    return undefined;
-  }
-};
+// Firefox for Android has no contextMenus API at all: touching it throws
+// synchronously, which would otherwise abort this whole script (including
+// the runtime.onMessage listener the reader bridge depends on) before it
+// finishes loading. Where it's missing, the toolbar icon opens popup.html
+// instead so subscribing is still possible without a right-click menu.
+const hasContextMenus = Boolean(chrome.contextMenus);
+if (!hasContextMenus) {
+  void chrome.action.setPopup({ popup: "popup.html" });
+}
 
 let clearMenusRequested = false;
 let isMenuUpdateInProgress = false;
@@ -120,44 +97,41 @@ const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
   }
 };
 
-const previewSource = (instance: string, address: string): void => {
-  const previewUrl = buildPreviewUrl(instance, address);
-  if (previewUrl) {
-    void chrome.tabs.create({ url: previewUrl });
-  }
-};
-
-chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId === "FeedFathom") {
-    return;
-  }
-
-  void (async () => {
-    const instance = await getInstanceUrl();
-
-    if (info.menuItemId === "FeedFathom_newsletter") {
-      if (!instance) {
-        await chrome.runtime.openOptionsPage();
-        return;
-      }
-
-      const address = buildNewsletterAddress(
-        instance,
-        globalThis.crypto.randomUUID(),
-        await getMailDomain(instance),
-      );
-      if (address) previewSource(instance, address);
+if (hasContextMenus) {
+  chrome.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId === "FeedFathom") {
       return;
     }
 
-    const feedUrl =
-      typeof info.menuItemId === "string"
-        ? info.menuItemId
-        : info.menuItemId.toString();
-    if (instance) previewSource(instance, feedUrl);
-    else void chrome.tabs.create({ url: normalizeFeedAddress(feedUrl) });
-  })();
-});
+    void (async () => {
+      const instance = await getInstanceUrl();
+
+      if (info.menuItemId === "FeedFathom_newsletter") {
+        if (!instance) {
+          await chrome.runtime.openOptionsPage();
+          return;
+        }
+
+        const address = buildNewsletterAddress(
+          instance,
+          globalThis.crypto.randomUUID(),
+          await getMailDomain(instance),
+        );
+        if (address)
+          void chrome.tabs.create({
+            url: resolveFeedOpenUrl(instance, address),
+          });
+        return;
+      }
+
+      const feedUrl =
+        typeof info.menuItemId === "string"
+          ? info.menuItemId
+          : info.menuItemId.toString();
+      void chrome.tabs.create({ url: resolveFeedOpenUrl(instance, feedUrl) });
+    })();
+  });
+}
 
 const projectReaderSender = (sender: chrome.runtime.MessageSender) => ({
   ...(sender.frameId === undefined ? {} : { frameId: sender.frameId }),
@@ -182,27 +156,37 @@ const messageHandler = (
   }
 
   if (isListFeedsMessage(message)) {
-    if (menuUpdateTimer) {
-      clearTimeout(menuUpdateTimer);
-    }
+    // The popup fallback (no contextMenus) reads this directly, so it's
+    // kept current independent of the menu update below.
+    void chrome.storage.session.set({ feedsData: message.feedsData });
 
-    menuUpdateTimer = setTimeout(() => {
-      void updateContextMenus(message.feedsData);
-      menuUpdateTimer = null;
-    }, debounceTime);
+    if (hasContextMenus) {
+      if (menuUpdateTimer) {
+        clearTimeout(menuUpdateTimer);
+      }
+
+      menuUpdateTimer = setTimeout(() => {
+        void updateContextMenus(message.feedsData);
+        menuUpdateTimer = null;
+      }, debounceTime);
+    }
   }
 
   if (isVisibilityLostMessage(message)) {
-    if (menuUpdateTimer) {
-      clearTimeout(menuUpdateTimer);
-      menuUpdateTimer = null;
-    }
+    void chrome.storage.session.remove("feedsData");
 
-    if (isMenuUpdateInProgress) {
-      clearMenusRequested = true;
-      pendingFeedsData = null;
-    } else {
-      void removeAllContextMenus().catch(() => {});
+    if (hasContextMenus) {
+      if (menuUpdateTimer) {
+        clearTimeout(menuUpdateTimer);
+        menuUpdateTimer = null;
+      }
+
+      if (isMenuUpdateInProgress) {
+        clearMenusRequested = true;
+        pendingFeedsData = null;
+      } else {
+        void removeAllContextMenus().catch(() => {});
+      }
     }
   }
 
