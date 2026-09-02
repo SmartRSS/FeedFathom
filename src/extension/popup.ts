@@ -1,4 +1,5 @@
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { isListFeedsMessage } from "#shared/extension-types.ts";
 import { getInstanceUrl, getMailDomain } from "./instance.ts";
 import { buildNewsletterAddress, resolveFeedOpenUrl } from "./url-helpers.ts";
 
@@ -10,15 +11,44 @@ const openAndClose = (url: string): void => {
   window.close();
 };
 
+// Desktop's context menu can afford to wait for content-script.ts's on-load
+// scan (debounced, pushed to the background). The popup can't -- it's
+// opened on demand, often before that debounce fires -- so it asks the
+// active tab's content script to scan right now instead. Falls back to the
+// cached copy (below) when there's no content script to ask, e.g. this
+// popup was opened directly rather than via the toolbar icon, or the page
+// is one content scripts can't run on.
+const requestLiveFeeds = (): Promise<FeedData[] | null> =>
+  new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      if (!tab?.id) {
+        resolve(null);
+        return;
+      }
+      chrome.tabs.sendMessage(
+        tab.id,
+        { action: "scan-request" },
+        (response: unknown) => {
+          resolve(
+            !chrome.runtime.lastError && isListFeedsMessage(response)
+              ? response.feedsData
+              : null,
+          );
+        },
+      );
+    });
+  });
+
 void (async () => {
-  const [{ feedsData }, instance] = await Promise.all([
+  const [liveFeeds, { feedsData: cachedFeeds }, instance] = await Promise.all([
+    requestLiveFeeds(),
     chrome.storage.session.get<{ feedsData?: FeedData[] }>("feedsData"),
     getInstanceUrl(),
   ]);
 
   const feedsContainer = document.querySelector("#feeds");
   if (feedsContainer) {
-    const feeds = feedsData ?? [];
+    const feeds = liveFeeds ?? cachedFeeds ?? [];
     if (feeds.length === 0) {
       feedsContainer.textContent = "No feeds found on this page.";
     } else {
