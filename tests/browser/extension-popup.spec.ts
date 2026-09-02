@@ -55,6 +55,16 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     const feedButton = popupPage.getByRole("button", { name: "Popup Feed" });
     await expect(feedButton).toBeVisible();
+    // The URL under the title is what tells apart feeds whose titles share a
+    // long prefix and clip to the same words.
+    await expect(popupPage.locator("#feeds span")).toHaveText(
+      "https://feed.test/rss",
+    );
+    // extension.css has to stay an external file: the manifest's
+    // extension_pages CSP sets no style-src, so it falls back to
+    // default-src 'self' and an inline <style> is dropped outright,
+    // leaving the popup at the browser's unstyled defaults.
+    expect(await popupPage.evaluate(() => document.styleSheets.length)).toBe(1);
 
     const [openedPage] = await Promise.all([
       context.waitForEvent("page"),

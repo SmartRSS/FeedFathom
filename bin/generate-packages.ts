@@ -109,14 +109,12 @@ async function buildSharedExtension(): Promise<void> {
       path.join(commonDirectory, name),
     );
   }
-  await copyFile(
-    path.join(root, "src/extension/options.html"),
-    path.join(commonDirectory, "options.html"),
-  );
-  await copyFile(
-    path.join(root, "src/extension/popup.html"),
-    path.join(commonDirectory, "popup.html"),
-  );
+  for (const name of ["extension.css", "options.html", "popup.html"]) {
+    await copyFile(
+      path.join(root, "src/extension", name),
+      path.join(commonDirectory, name),
+    );
+  }
 }
 
 export async function main(
