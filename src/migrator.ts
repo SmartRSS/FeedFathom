@@ -11,17 +11,15 @@ const migrationJournal = Type.Object({
   entries: Type.Array(Type.Object({ tag: Type.String(), when: Type.Number() })),
 });
 
-// drizzle-kit emits a plain `CREATE INDEX`, which the migrator runs inside
-// that migration's transaction -- instant on an empty table, an ACCESS
-// EXCLUSIVE lock held for the whole build on a populated one. Hand-editing
-// the generated statement to `CREATE INDEX IF NOT EXISTS` is how a migration
-// opts out: this pass builds the same index CONCURRENTLY first, and the
-// in-transaction statement then finds it already there and does nothing.
+// A plain `CREATE INDEX` runs inside the migration's transaction: instant on
+// an empty table, an ACCESS EXCLUSIVE lock for the whole build on a populated
+// one. Hand-editing the generated statement to `CREATE INDEX IF NOT EXISTS`
+// opts in here: this pass builds the index CONCURRENTLY first, so the
+// in-transaction statement finds it already there.
 //
-// The statements are read back out of the migration files rather than
-// restated here, so an index is written down in exactly one place and a new
-// migration gets this treatment by being written that way, not by also
-// being registered in this file.
+// The statements are read back out of the migration files, so an index is
+// written down once and a new migration opts in by how it is written, not by
+// also being registered here.
 const concurrentIndexPattern =
   /CREATE INDEX IF NOT EXISTS "(?<name>[^"]+)" ON "(?<table>[^"]+)"[^;]*/giu;
 
@@ -38,10 +36,10 @@ async function journaledTimestamps(client: ReservedSQL) {
   return new Set(applied.map((row) => Number(row.createdAt)));
 }
 
-// Split out from the database work so the derivation can be checked against
-// the real migration files without one: a pattern that silently matched
-// nothing would still leave every index valid, just built the blocking way,
-// which no assertion about the resulting schema can distinguish.
+// Split from the database work so it can be checked against the real
+// migration files without one: a pattern that matched nothing still leaves
+// every index valid, just built the blocking way, which no assertion about the
+// resulting schema can detect.
 export function parseConcurrentIndexes(statements: string): PendingIndex[] {
   const parsed: PendingIndex[] = [];
   for (const match of statements.matchAll(concurrentIndexPattern)) {
@@ -83,8 +81,7 @@ async function prebuildIndexesConcurrently(
   indexes: readonly PendingIndex[],
 ) {
   for (const index of indexes) {
-    // The table is created by a migration that has not run yet on a fresh
-    // database, and there is nothing to pre-build there anyway -- an index
+    // On a fresh database the table's migration hasn't run yet, and an index
     // on a table about to be created empty costs nothing in-transaction.
     // eslint-disable-next-line no-await-in-loop -- Concurrent index maintenance must run sequentially on the reserved session.
     const [target] = await client<
@@ -128,15 +125,10 @@ async function prebuildIndexesConcurrently(
   }
 }
 
-// The migrator is the first thing to touch a fresh PostgreSQL volume, so on
-// a cold start it routinely beats the server to accepting connections. It
-// used to exit 1 on the first refused connection and never come back, which
-// made correctness depend on the orchestrator arranging startup order --
-// something Swarm does not do at all. Retrying here makes readiness the
-// migrator's own problem.
-//
-// Only the initial connection retries. A failure once migrating has started
-// must stay loud.
+// On a cold start the migrator routinely beats PostgreSQL to accepting
+// connections. Retrying here keeps readiness out of the orchestrator's hands,
+// which Swarm does not manage at all. Only the initial connection retries; a
+// failure once migrating has started stays loud.
 //
 // ponytail: fixed one-second poll to a fixed deadline; add backoff if a
 // slow-starting PostgreSQL ever makes the log noise a real complaint.
@@ -185,11 +177,9 @@ export async function migrateDatabase(
       console.log("Migrations complete");
     } finally {
       try {
-        // Best effort. A migration that fails mid-transaction can leave the
-        // session unable to answer, and the unlock throwing on the way out
-        // would replace the error that actually explains the failure. The
-        // lock is session-scoped, so closing the client below releases it
-        // either way.
+        // A migration failing mid-transaction can leave the session unable to
+        // answer, and this throwing would replace the real error. The lock is
+        // session-scoped, so closing the client releases it either way.
         if (locked)
           await reserved`SELECT pg_advisory_unlock(hashtextextended('feedfathom:migrations', 0))`.catch(
             () => undefined,

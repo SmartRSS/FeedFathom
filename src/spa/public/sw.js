@@ -1,11 +1,8 @@
-// The served filename is a content hash of this file, computed and injected
-// by bin/build-spa.ts -- Cloudflare sits in front of production and can hold
-// a cached copy past what Cache-Control alone would suggest, so a changed
-// file getting a new URL (rather than relying on cache headers) is what
-// actually forces clients onto it. CACHE_VERSION is a separate, unrelated
-// knob: bump it only to force-purge every cached entry (a change to the
-// caching scheme itself, not just app code) -- everyday content changes
-// don't need it touched, since the filename hash already changes for those.
+// The served filename is a content hash injected by bin/build-spa.ts: a new
+// URL is what forces clients onto a changed file, since Cloudflare can hold a
+// cached copy past what Cache-Control suggests. CACHE_VERSION is separate --
+// bump it only to force-purge every cached entry when the caching scheme
+// itself changes.
 const CACHE_VERSION = "v5";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
@@ -97,11 +94,9 @@ function openQueueDb() {
   });
 }
 
-// Every call opens then immediately closes its connection once the
-// transaction settles, rather than holding it open: an app-side logout
-// clears this same database (see options-admin.tsx), and a lingering SW
-// connection would block that deletion indefinitely (IndexedDB requires
-// every connection closed before a database can actually be deleted).
+// Every call closes its connection once the transaction settles. Logout
+// deletes this same database (see options.tsx), and IndexedDB blocks a
+// deletion indefinitely while any connection stays open.
 
 async function queueAdd(entry) {
   const db = await openQueueDb();
@@ -179,15 +174,10 @@ async function flushQueue() {
         await queueDelete(key);
         continue;
       }
-      // A 4xx means the server processed and definitively rejected this
-      // request (e.g. the article/source/folder no longer exists, or the
-      // folder isn't empty) -- it will never succeed by retrying, so stop
-      // queueing it forever and tell the page, since the optimistic
-      // response already told the user this action had succeeded. 401 is
-      // excluded: a session that expired while offline isn't a rejection
-      // of the mutation itself, and the old retry-forever behavior lets
-      // it succeed once the user re-authenticates. 5xx is presumed
-      // transient and also keeps the old retry-forever behavior.
+      // A 4xx is a definitive rejection that retrying can't fix, so drop it
+      // and tell the page -- the optimistic response already claimed success.
+      // 401 is excluded (a session that expired offline succeeds once the user
+      // re-authenticates) and 5xx is presumed transient; both retry forever.
       if (
         response.status >= 400 &&
         response.status < 500 &&
@@ -196,10 +186,8 @@ async function flushQueue() {
         // eslint-disable-next-line no-await-in-loop -- replay must preserve order
         await queueDelete(key);
         try {
-          // A failure here (matchAll/postMessage) isn't a connectivity
-          // problem and must not be mistaken for "still offline" by the
-          // outer catch below -- that would wrongly stop processing the
-          // rest of the queue over a best-effort notification failing.
+          // matchAll/postMessage failing is not a connectivity problem; the
+          // outer catch would read it as "still offline" and stop the queue.
           // eslint-disable-next-line no-await-in-loop -- best-effort notify per entry
           await notifyMutationFailed(value, response.status);
         } catch {
@@ -285,11 +273,10 @@ async function responseToDataUrl(response) {
   return `data:${contentType};base64,${btoa(binary)}`;
 }
 
-// Runs for every favicon in the tree, hit or miss. A miss needs fetching so
-// the next load can inline it; a hit needs it too, because a source's favicon
-// can change in place (RefreshFavicon) without its URL changing, and an
-// inlined <img src> never fires its own request -- so nothing else would ever
-// ask the network for it again.
+// Runs for every favicon, hit or miss. A miss needs fetching so the next load
+// can inline it; a hit needs revalidating because RefreshFavicon can change
+// one in place without changing its URL, and an inlined <img src> never fires
+// a request of its own.
 async function refreshFavicon(cache, path) {
   try {
     const response = await fetch(path);
@@ -299,14 +286,10 @@ async function refreshFavicon(cache, path) {
   }
 }
 
-// Inlines whichever favicons are already cached -- a plain cache.match()
-// per URL, no network involved, so this never makes the tree wait. Anything
-// not yet cached is left as a plain /api/favicon/:id URL so the response
-// returns immediately; the page's existing per-icon skeleton (see
-// dashboard.tsx TreeItem) covers those exactly as if this didn't run at
-// all. Misses get fetched in the background so next load has them inlined,
-// and hits get revalidated in the background so an in-place favicon change
-// eventually shows up too.
+// Inlines whichever favicons are already cached -- cache.match() only, no
+// network, so the tree never waits. Uncached ones stay plain
+// /api/favicon/:id URLs, covered by the per-icon skeleton in dashboard.tsx.
+// Both misses and hits are refreshed in the background for next load.
 async function inlineTreeFavicons(event, response, cache) {
   let data;
   try {
@@ -338,10 +321,9 @@ async function inlineTreeFavicons(event, response, cache) {
   });
 }
 
-// Set by shell() the moment a dashboard-bound navigation comes in, so the
-// tree fetch starts before the page's own JS bundle has even loaded --
-// treeWithInlineFavicons below then reuses it instead of firing a second
-// network round trip once the page actually asks for /api/tree.
+// Set by shell() on a dashboard-bound navigation, so the tree fetch starts
+// before the page's JS bundle loads; treeWithInlineFavicons reuses it instead
+// of firing a second round trip.
 let treePreload;
 
 async function treeWithInlineFavicons(event, request, cacheName) {
@@ -364,12 +346,10 @@ async function treeWithInlineFavicons(event, request, cacheName) {
   }
 }
 
-// Favicons rarely change and aren't hash-named like /assets/, so a cached
-// copy is worth serving instantly rather than waiting on a network round
-// trip every time (unlike the rest of /api/*, where a stale response is
-// actually wrong, not just slow) -- but they're not truly immutable either
-// (RefreshFavicon can update one in place), so the cache still gets
-// refreshed in the background for next time instead of kept forever.
+// Favicons rarely change and aren't hash-named, so a cached copy is worth
+// serving instantly -- unlike the rest of /api/*, where stale is wrong rather
+// than just slow. RefreshFavicon can still update one in place, so the cache
+// is refreshed in the background rather than kept forever.
 async function staleWhileRevalidate(event, request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
@@ -379,15 +359,13 @@ async function staleWhileRevalidate(event, request, cacheName) {
       return response;
     })
     .catch(() => undefined);
-  // Without waitUntil, the browser can idle the worker the instant this
-  // function's response resolves -- killing the background refetch above
-  // before it ever reaches the network, silently defeating "next time".
+  // Without waitUntil the browser can idle the worker as soon as the response
+  // resolves, killing the background refetch before it reaches the network.
   event.waitUntil(revalidated);
   return cached ?? (await revalidated) ?? Response.error();
 }
 
-// Routes that never show the dashboard tree -- mirrors the check the page
-// itself used to do before firing its own early tree fetch.
+// Routes that never show the dashboard tree.
 const TREE_PRELOAD_EXCLUDED_PATHS =
   /^\/(admin|login|options|preview|register|activate\/)/;
 

@@ -132,3 +132,8 @@ refactor: folding the `HttpDeferredError` mapping into the central
 `server-app.ts` error handler, extracting the fan-out in `find.ts` into a named
 discovery service, and splitting the migration engine out of `src/migrator.ts`
 so a co-located test does not have to import an entrypoint.
+
+**Status, 2026-09-02.** The first two landed: `HttpDeferredError` is mapped in
+`server-app.ts`, and the discovery fan-out is
+`src/features/feeds/feed-discovery.ts`. Splitting `src/migrator.ts` is still
+open.

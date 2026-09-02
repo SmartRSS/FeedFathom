@@ -88,9 +88,6 @@ export class EmailHandler {
     );
   }
 
-  /**
-   * Creates an article object from a parsed email and source.
-   */
   private createArticleFromEmail(
     email: ParsedMail,
     guid: string,

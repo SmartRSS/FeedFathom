@@ -192,7 +192,7 @@
       // The rule guards against recompiling a validator on a hot path. A
       // compile inside a test body runs once per test run, so the cost it
       // exists to prevent cannot occur there.
-      "files": ["tests/**", "src/**/*.test.ts"],
+      "files": ["**/__tests__/**", "tests/**"],
       "rules": { "feedfathom/schema-compile-module-scope": "off" }
     }
   ]

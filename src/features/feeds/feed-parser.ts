@@ -104,8 +104,7 @@ export function decodeFeedBody(
       buffer,
     );
   } catch {
-    // Unrecognized/unsupported encoding label — UTF-8 is the right default
-    // for the overwhelming majority of feeds anyway.
+    // Unrecognized label; UTF-8 is the right default for almost every feed.
     return new TextDecoder("utf-8").decode(buffer);
   }
 }
@@ -126,9 +125,8 @@ export class FeedParser {
       UserSourcesDataService,
       "recomputeUnreadCounts"
     >,
-    // Undefined skips WebSub entirely (see maybeSubscribeToWebSub) -- there's
-    // no way to build a callback URL a remote hub could reach without a
-    // configured public domain.
+    // Undefined skips WebSub (see maybeSubscribeToWebSub): without a public
+    // domain there is no callback URL a hub could reach.
     private readonly feedFathomDomain?: string,
   ) {}
 
@@ -174,10 +172,8 @@ export class FeedParser {
           { lastSeenInFeedAt: observedAt },
         ),
       );
-      // batchUpsertArticles processes batches sequentially and a later
-      // batch can fail after earlier ones already committed -- recompute
-      // regardless of that outcome so committed articles aren't left
-      // counted as unread-stale, then re-raise the original failure.
+      // batchUpsertArticles commits batch by batch, so a later failure leaves
+      // earlier articles committed. Recompute either way, then re-raise.
       let upsertError: unknown;
       try {
         await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
@@ -187,8 +183,7 @@ export class FeedParser {
       try {
         await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
       } catch (recomputeError) {
-        // The upsert failure is the more actionable root cause -- don't
-        // let a recompute failure silently replace it.
+        // The upsert failure is the root cause; don't let this replace it.
         if (upsertError === undefined) {
           throw recomputeError;
         }
@@ -237,11 +232,9 @@ export class FeedParser {
     );
   }
 
-  // Called directly from the subscribe route so discovery happens as part
-  // of adding the source, not only whenever the next background poll (or
-  // the enqueued initial fetch) happens to run parseSource -- otherwise a
-  // WebSub-capable feed would sit on ordinary polling for however long
-  // that takes before its first real subscribe attempt.
+  // Called from the subscribe route so discovery happens while adding the
+  // source; otherwise a WebSub-capable feed sits on ordinary polling until
+  // some later parseSource run.
   public async discoverAndSubscribeWebSub(
     sourceId: number,
     url: string,
@@ -252,10 +245,8 @@ export class FeedParser {
       const { websub } = await this.parseUrl(url, "interactive");
       if (websub) await this.maybeSubscribeToWebSub(sourceId, websub);
     } catch (error) {
-      // A feed that fails to fetch/parse here isn't this method's problem
-      // to surface -- the article-fetch path running alongside it (the
-      // cached-preview upsert, or the enqueued parseSource job) already
-      // owns reporting that failure through its own error handling.
+      // The article-fetch path running alongside this (cached-preview upsert
+      // or the enqueued parseSource job) already reports fetch/parse failures.
       console.error(
         `WebSub discovery fetch failed for source ${sourceId}:`,
         error,
@@ -263,11 +254,9 @@ export class FeedParser {
     }
   }
 
-  // Errors here are deliberately never allowed to reach parseSource's own
-  // try/catch -- a broken or unreachable hub says nothing about whether the
-  // feed itself is healthy, so it must never mark the *source* as failed
-  // (that would stop polling the actual feed content over a subscribe
-  // attempt failing).
+  // Never allowed to reach parseSource's try/catch: an unreachable hub says
+  // nothing about the feed's health, and marking the source failed would stop
+  // polling the content over a failed subscribe attempt.
   private async maybeSubscribeToWebSub(
     sourceId: number,
     websub: NonNullable<
@@ -322,13 +311,10 @@ export class FeedParser {
     }
   }
 
-  // The tree shows favicons at 1.5cap -- a few dozen CSS px even at a 2x
-  // pixel density -- and since a warm favicon now gets embedded as base64
-  // directly in the /api/tree response (see sw.js), every extra byte here
-  // is paid on every tree load, not just once. 64px covers that display
-  // size with headroom; prefer the smallest candidate that clears it over
-  // always grabbing the biggest available, falling back to the biggest
-  // undersized one when nothing meets the target at all.
+  // The tree shows favicons at 1.5cap, and a warm one is base64-inlined into
+  // /api/tree (see sw.js), so every extra byte is paid on every tree load.
+  // 64px covers that with headroom: take the smallest candidate that clears
+  // it, or the biggest undersized one if none does.
   private async parseGenericFeed(
     fetchedUrl: string,
     originalUrl: string,
@@ -344,21 +330,16 @@ export class FeedParser {
     });
     this.validateFeedResponse(response, fetchedUrl);
     const finalUrl = response.url || fetchedUrl;
-    // A 301/308 redirect is the origin telling us the move is permanent, so
-    // persist it straight onto any subscribed source's URL; 302/303/307 are
-    // temporary and only belong in the short-lived Redis redirect cache.
+    // 301/308 are permanent, so persist onto the subscribed source's URL;
+    // 302/303/307 belong only in the short-lived Redis redirect cache.
     const rememberRedirect = response.redirectedPermanently
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
       : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
-    // Only remember original -> final when *this* fetch actually redirected
-    // (finalUrl !== fetchedUrl). Otherwise, once a cached redirect target
-    // stops redirecting further -- e.g. the origin's redirect was a
-    // transient glitch and has since reverted -- this would keep
-    // rewriting the same stale mapping back into the cache forever, since
-    // fetchedUrl was already pre-substituted from that same cache entry.
-    // Leaving it unrefreshed lets it expire on its own TTL and fall back to
-    // the real original URL.
+    // Only remember original -> final when this fetch actually redirected.
+    // fetchedUrl is already pre-substituted from the cache, so refreshing on a
+    // non-redirect would rewrite a stale mapping forever once the origin's
+    // transient redirect reverted. Left alone, it expires on its TTL.
     if (finalUrl !== fetchedUrl) {
       await rememberRedirect(fetchedUrl, finalUrl);
       if (originalUrl !== fetchedUrl) {

@@ -22,7 +22,7 @@
     "watch-spa": "vite --config src/spa/vite.config.ts",
     "watch-spa-api": "PORT=3001 bun --watch src/server.ts",
     "test:unit": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/feedfathom_test} bun test --path-ignore-patterns='tests/browser/**' --path-ignore-patterns='**/*-integration.test.ts'",
-    "test:migrations": "bun test tests/migration-integration.test.ts tests/maintenance-integration.test.ts tests/article-visibility-integration.test.ts src/features/feeds/__tests__/source-scheduling-integration.test.ts",
+    "test:migrations": "bun test src/__tests__/migration-integration.test.ts src/platform/db/__tests__/maintenance-integration.test.ts src/features/feeds/__tests__/article-visibility-integration.test.ts src/features/feeds/__tests__/source-scheduling-integration.test.ts",
     "test:browser": "bun run build-extension && playwright test --config tests/browser/playwright.config.ts",
     "test:smoke": "bun -e 'if (!process.env.PLAYWRIGHT_BASE_URL) throw new Error(\"PLAYWRIGHT_BASE_URL is required\")' && playwright test --config tests/browser/playwright.config.ts tests/browser/production-smoke.spec.ts",
     "quality": "bun run test:unit && bun run test:browser && bun run lint && bun run build-project",
@@ -84,15 +84,19 @@
       "src/migrator.ts",
       "src/features/mail-ingest/email-worker.ts",
       "src/extension/{background-event,content-script,options}.ts",
-      "tests/**/*.ts",
+      "tests/browser/**/*.ts",
       "bin/**/*.ts",
+      "tools/**/*.js",
+      "vendor/**/__tests__/*.ts",
       "src/**/*.test.ts",
       "src/features/feeds/__tests__/opml-parser-cases/**/*.ts"
     ],
     "project": [
       "src/**/*.{ts,tsx}",
-      "tests/**/*.ts",
-      "bin/**/*.ts"
+      "tests/browser/**/*.ts",
+      "bin/**/*.ts",
+      "tools/**/*.js",
+      "vendor/**/__tests__/*.ts"
     ],
     "ignoreUnresolved": [],
     "ignoreDependencies": [

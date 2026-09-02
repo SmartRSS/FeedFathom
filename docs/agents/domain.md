@@ -18,8 +18,7 @@ Single-context repo (this repo):
 /
 ├── CONTEXT.md
 ├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+│   └── 0001-feature-first-layering.md
 └── src/
 ```
 
@@ -33,4 +32,4 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+> _Contradicts ADR-0001 (feature-first layering) — but worth reopening because…_

@@ -41,11 +41,9 @@ function parseLinkHeaderRels(value: string): Map<string, string> {
   return rels;
 }
 
-// RSS commonly advertises a hub via an `atom:` namespaced link even though
-// the rest of the feed is plain RSS; HTMLRewriter (a tag-soup scanner, not a
-// namespace-aware XML parser) sees that as a literal "atom:link" tag name,
-// so both forms need their own selector -- matches the same pattern already
-// used for HTML feed-autodiscovery in scanner-page.ts.
+// Plain RSS commonly advertises a hub via an `atom:` namespaced link, and
+// HTMLRewriter is a tag-soup scanner, so it sees a literal "atom:link" tag
+// name and both forms need a selector. Same pattern as scanner-page.ts.
 function scanFeedBodyRels(xml: string): Map<string, string> {
   const rels = new Map<string, string>();
   new HTMLRewriter()
@@ -60,11 +58,9 @@ function scanFeedBodyRels(xml: string): Map<string, string> {
   return rels;
 }
 
-// JSON Feed (https://www.jsonfeed.org/) has its own hub advertisement --
-// a `hubs` array in the feed body -- rather than a Link header or an XML
-// <link rel="hub">. Same protocol underneath (a `hubs[].type` of "WebSub"
-// means exactly what an XML feed's rel="hub" link means), just a different
-// place to look for it.
+// JSON Feed advertises hubs in a `hubs` array in the body instead of a Link
+// header or <link rel="hub">. A `hubs[].type` of "WebSub" means the same
+// thing; only the place to look differs.
 function jsonFeedHubUrl(text: string): string | undefined {
   if (!text.trimStart().startsWith("{")) return undefined;
   try {
@@ -76,11 +72,9 @@ function jsonFeedHubUrl(text: string): string | undefined {
   }
 }
 
-// Resolves relative to the feed's own URL and rejects anything that isn't a
-// plain public http(s) URL -- both the hub URL and the topic URL are
-// attacker-influenced (they come from whatever the feed's own content or
-// headers say), not something a user directly typed in, so this needs the
-// same private-network guard as the extension's arbitrary-URL reader fetch.
+// Both the hub and topic URLs come from the feed's own content or headers, so
+// they are attacker-influenced and need the same private-network guard as the
+// extension's arbitrary-URL reader fetch. Resolved against the feed's URL.
 function resolvePublicUrl(value: string, base: string): string | undefined {
   try {
     const url = new URL(value, base);
@@ -93,11 +87,8 @@ function resolvePublicUrl(value: string, base: string): string | undefined {
 }
 
 /**
- * Looks for a WebSub hub advertisement in the HTTP response headers first
- * (per spec, the authoritative source when both agree), falling back to the
- * feed body -- most feeds that advertise a hub only do it in the body, but
- * checking headers first matches the spec's own precedence and costs
- * nothing extra since the response was already fetched for parsing.
+ * Headers take precedence per spec, though most feeds advertise only in the
+ * body. Checking both costs nothing; the response was already fetched.
  */
 export function discoverWebSub(
   headers: Headers,
@@ -122,11 +113,9 @@ export function discoverWebSub(
 export type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
 
 /**
- * POSTs a subscription (or unsubscription) request per the WebSub spec.
- * A 2xx here only means the hub *accepted the request* -- the hub still
- * has to asynchronously GET our callback with a challenge to actually
- * confirm it (see the callback route), so this never marks a source as
- * verified itself.
+ * A 2xx means only that the hub accepted the request. The hub still has to GET
+ * the callback with a challenge (see the callback route), so this never marks
+ * a source verified.
  */
 export async function requestHubSubscription(params: {
   callbackUrl: string;
@@ -152,11 +141,8 @@ export async function requestHubSubscription(params: {
     "hub.mode": params.mode,
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,
-    // Optional/deprecated since the 0.4 spec (verification is always async
-    // via a callback GET regardless), but some hubs -- WordPress.com's
-    // pushpress hub confirmed -- still require it explicitly and reject the
-    // request outright without it ("hub.verify is empty"). Harmless to send
-    // unconditionally since it just states what we already do.
+    // Deprecated since spec 0.4, but some hubs (WordPress.com's pushpress)
+    // still reject the request with "hub.verify is empty" without it.
     "hub.verify": "async",
     ...(params.leaseSeconds
       ? { "hub.lease_seconds": String(params.leaseSeconds) }
@@ -168,10 +154,8 @@ export async function requestHubSubscription(params: {
   try {
     const response = await fetch(hub, {
       body,
-      // A hub redirecting the subscribe request is unusual enough (and
-      // an SSRF-relevant enough surface, since the redirect target is
-      // fully hub-controlled) that treating it as a failure rather than
-      // following it automatically is the safer default.
+      // The redirect target is fully hub-controlled, so following it is an
+      // SSRF surface; a redirecting hub is unusual enough to just fail.
       method: "POST",
       redirect: "manual",
       signal: controller.signal,
@@ -190,12 +174,9 @@ export async function requestHubSubscription(params: {
 }
 
 /**
- * Verifies a push notification's `X-Hub-Signature` (or the newer
- * `X-Hub-Signature-256`) against the secret we gave the hub at subscribe
- * time. Constant-time comparison -- this is the only thing standing
- * between "the hub we subscribed to says the feed changed" and "anyone who
- * finds this callback URL can trigger an immediate re-fetch," so a
- * timing side-channel here would defeat the point of having a secret.
+ * Checks `X-Hub-Signature` (or `X-Hub-Signature-256`) against the secret given
+ * to the hub at subscribe time. The comparison is constant-time: this is all
+ * that stands between the real hub and anyone who finds the callback URL.
  */
 export function verifyHubSignature(
   secret: string,

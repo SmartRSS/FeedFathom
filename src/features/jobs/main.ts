@@ -170,10 +170,9 @@ export class MainWorker {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
               return this.bullmqQueue.add(JobName.RefreshFavicon, source, {
                 jobId,
-                // Jobs with no explicit priority (ParseSource, Cleanup,
-                // GatherJobs) are always processed before prioritized
-                // jobs in BullMQ, so a large favicon-refresh run queued
-                // here can never crowd out feed parsing.
+                // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
+                // GatherJobs) first, so a large favicon run can't crowd out
+                // feed parsing.
                 priority: 10,
                 removeOnComplete: { count: 0 },
                 removeOnFail: { count: 0 },
@@ -218,13 +217,10 @@ export class MainWorker {
             await this.sourcesDataService.getWebSubSubscriptionsNeedingRenewal();
           await Promise.all(
             subscriptions.map(async (subscription) => {
-              // hubUrl/topicUrl/secret/callbackToken are nullable columns
-              // (most sources never subscribe at all), but every row this
-              // query returns is already websubStatus: "verified", which
-              // only happens after all four were written together in
-              // recordWebSubDiscovery -- still checked rather than
-              // asserted, since "the DB row matches the invariant" isn't
-              // something the type system can promise.
+              // All four columns are nullable, but every row here is already
+              // websubStatus: "verified", which only happens once
+              // recordWebSubDiscovery wrote them together. Checked rather than
+              // asserted -- the type system can't promise a DB invariant.
               if (
                 !subscription.hubUrl ||
                 !subscription.topicUrl ||
@@ -268,30 +264,24 @@ export class MainWorker {
           if (isDelayed) {
             throw moveError;
           }
-          // moveToDelayed itself failed (e.g. a genuine Redis/BullMQ
-          // error, or a poisoned retryAt getter) -- fall through to the
-          // guarded failure-recording path below instead of letting this
-          // propagate and fail the job in BullMQ's own state.
+          // moveToDelayed itself failed (a Redis error, or a poisoned retryAt
+          // getter). Fall through to the guarded path below rather than
+          // failing the job in BullMQ's own state.
         }
       }
       try {
-        // Everything here -- logging the error, building its message, and
-        // recording it -- must never itself become a job failure, or a
-        // sufficiently adversarial thrown value (a poisoned `message`
-        // getter, a poisoned custom-inspect symbol console.error relies
-        // on, ...) would put the job into BullMQ's failure state instead
-        // of always acknowledging and keeping outcomes in Postgres, which
-        // is this codebase's established convention. Rather than guard
-        // each statement individually (this has already needed three
-        // rounds of narrowing), the whole block is one try/catch.
+        // Nothing in here -- logging, building the message, recording it --
+        // may become a job failure, or an adversarial thrown value (a poisoned
+        // `message` getter, a poisoned custom-inspect symbol) puts the job into
+        // BullMQ's failure state instead of always acknowledging and keeping
+        // outcomes in Postgres. One try/catch rather than per-statement guards,
+        // which already needed three rounds of narrowing.
         console.error("Error processing job:", error);
         const message = error instanceof Error ? error.message : String(error);
         await this.jobFailuresDataService.record(job.name, message);
       } catch {
-        // Deliberately swallowed with no further logging: logging the
-        // original failure already failed once in this block, so trying
-        // to log *that* failure risks the exact same unguarded-throw
-        // problem all over again. There's nothing more we can safely do.
+        // Swallowed without logging: logging already failed once in this
+        // block, so logging that failure risks the same unguarded throw.
       }
     }
   };
