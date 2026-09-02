@@ -70,7 +70,6 @@ export class ArticlesDataService {
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
-          // Remove user.createdAt filter since userSources.createdAt is more restrictive
           // A removal is terminal -- deleted_at alone hides the article,
           // exactly as recomputeUnreadCounts scores it. It used to be
           // hidden only as a side effect of updated_at > read_at being

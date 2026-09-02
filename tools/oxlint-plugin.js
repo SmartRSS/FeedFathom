@@ -1,32 +1,16 @@
 import { definePlugin, defineRule } from "@oxlint/plugins";
 
-// Custom rules for conventions with no built-in oxlint equivalent. Each was
-// measured against the tree before it was written, and each is at zero
-// violations -- they lock in what the codebase already does rather than
-// scheduling a refactor.
+// Rules for conventions oxlint has no built-in equivalent for. All four use
+// `createOnce`, which runs once per lint run, not per file -- per-file state
+// resets in `before()`, never in the `createOnce` body. Node type names are
+// ESTree-standard (`MemberExpression`, not `StaticMemberExpression`).
 //
-// All four use the `createOnce` API rather than the ESLint-compatible
-// `create`. `createOnce` runs once per lint run instead of once per file,
-// which lets oxlint statically analyse which node types a rule wants and skip
-// traversal when they are absent. Per-file state must therefore be reset in
-// `before()`, never in the `createOnce` body.
-//
-// Node type names are ESTree-standard (`MemberExpression`, not
-// `StaticMemberExpression`); verified against oxlint 1.78.
-//
-// This file is JavaScript, not TypeScript, on purpose. oxlint loads plugins
-// with whatever runtime invokes it: `bun run oxlint` uses Bun, but the bin's
-// shebang is `#!/usr/bin/env node`, and the VS Code Oxc extension uses its own
-// Node. Node only strips TypeScript types from 22.18/20.19 onward, so a .ts
-// plugin fails with an opaque "Failed to parse oxlint configuration file" on
-// older Node. Plain JS with JSDoc types loads everywhere.
+// JavaScript, not TypeScript, on purpose: oxlint's bin shebang is
+// `#!/usr/bin/env node` and the VS Code Oxc extension brings its own Node, so
+// a .ts plugin fails on any Node before 22.18/20.19.
 
-/**
- * `Schema.Compile()` builds a validator. Calling it inside a function body
- * rebuilds that validator on every single call -- a silent performance cliff
- * that reads as completely normal in review. All 19 existing call sites are at
- * module scope.
- */
+/** A `Schema.Compile()` inside a function body rebuilds the validator on every
+ * call, and reads as normal in review. */
 const schemaCompileModuleScope = defineRule({
   meta: {
     docs: {
@@ -68,12 +52,8 @@ const schemaCompileModuleScope = defineRule({
   },
 });
 
-/**
- * Route dependency fields are structurally narrowed -- `Pick<Service, "method">`
- * or an inline literal -- never the whole service type. That is what keeps
- * route tests to small fakes; a bare service type forces every test double for
- * the route to implement the entire interface.
- */
+/** A bare service type forces every test double for the route to implement the
+ * whole interface. `Pick<Service, "method">` keeps the fakes small. */
 const routeDepsNarrowed = defineRule({
   meta: {
     docs: {
@@ -97,8 +77,7 @@ const routeDepsNarrowed = defineRule({
           if (annotation.typeName.type !== "Identifier") continue;
           const service = annotation.typeName.name;
           if (!/(?:DataService|Service)$/u.test(service)) continue;
-          // `Pick<Service, ...>` / `Omit<Service, ...>` carry type arguments;
-          // a bare reference has none.
+          // `Pick`/`Omit` carry type arguments; a bare reference has none.
           if (annotation.typeArguments) continue;
           const field =
             member.key.type === "Identifier" ? member.key.name : "field";
@@ -114,7 +93,6 @@ const routeDepsNarrowed = defineRule({
 });
 
 /**
- * Narrow the rule's untyped options into the allow list, without asserting.
  * @param {unknown} options
  * @returns {string[]}
  */
@@ -126,11 +104,8 @@ function readAllowList(options) {
   return allow.filter((entry) => typeof entry === "string");
 }
 
-/**
- * A barrel is a module that only re-exports other modules. `oxc/no-barrel-file`
- * only counts `export * from`, of which this repo has none, so it can never
- * fire here -- this catches the named-re-export form too.
- */
+/** `oxc/no-barrel-file` only counts `export * from`, which this repo has none
+ * of. This catches the named-re-export form too. */
 const noBarrelFile = defineRule({
   meta: {
     docs: {
@@ -212,7 +187,6 @@ const noBarrelFile = defineRule({
 });
 
 /**
- * Narrow the rule's untyped options into the feature DAG, without asserting.
  * @param {unknown} options
  * @returns {Record<string, string[]>}
  */
@@ -232,8 +206,7 @@ function readFeatureDag(options) {
 }
 
 /**
- * Strip everything before the source root so a rule decision never depends on
- * where the repository is checked out.
+ * Strip everything before `src/` so a decision never depends on the checkout path.
  * @param {string} filename
  * @returns {string}
  */
@@ -245,8 +218,7 @@ function repoRelative(filename) {
 }
 
 /**
- * Which layer a repo-relative path sits in. `null` means ungoverned -- tests,
- * tooling, anything outside src/.
+ * `null` means ungoverned: anything outside `src/`.
  * @param {string} path
  * @returns {{ kind: string, name: string } | null}
  */
@@ -267,8 +239,6 @@ function layerOf(path) {
 }
 
 /**
- * Resolve a relative specifier against the importing file, so a `../../`
- * escape hatch is judged by the same rule as a `#`-prefixed one.
  * @param {string} from
  * @param {string} specifier
  * @returns {string}
@@ -348,21 +318,12 @@ function describeLayer(layer) {
 }
 
 /**
- * The layers may depend only downward -- shared, then platform, then features,
- * with spa and extension able to see shared alone. Cross-feature edges are
- * real in this codebase and are declared in this rule's options rather than
- * wished away, which makes adding one a config change visible in review
- * instead of a quiet new import. CONTEXT.md and docs/adr/0001 explain why.
+ * Layers depend downward only: shared, then platform, then features; spa and
+ * extension see shared alone. Cross-feature edges are declared in this rule's
+ * options so adding one shows up in review. See CONTEXT.md and docs/adr/0001.
  *
- * Relative specifiers are resolved and judged by the same rule, so `../../`
- * is not an escape hatch from the boundary that `#platform/` would enforce.
- *
- * `await import("#features/...")` is checked alongside the static forms --
- * otherwise one dynamic import is all it takes to walk around the rule.
- *
- * Co-located `*.test.ts` files are exempt. A test arranges state rather than
- * wiring the product, and it is not in any shipped bundle, so a test reaching
- * across a boundary says nothing about the product's dependency direction.
+ * Relative specifiers and `await import()` are judged the same way, so neither
+ * is an escape hatch. `*.test.ts` is exempt -- a test ships in no bundle.
  */
 const layerBoundaries = defineRule({
   meta: {

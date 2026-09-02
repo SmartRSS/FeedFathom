@@ -6,7 +6,7 @@ Researched 2026-08-16, Bun section updated 2026-08-20 when 1.4.0 shipped.
 | ----------------- | ------------ | -------- | ------------------- |
 | bun               | 1.4.0        | 1.4.0    | —                   |
 | elysia            | 2.0.0-beta.4 | 1.4.29   | 2.0.0-beta.4        |
-| solid-js          | 1.9.14       | 1.9.14   | 2.0.0-rc.0          |
+| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.0          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
 | typebox           | 1.3.9        | 1.3.14   | —                   |
 
@@ -42,7 +42,7 @@ Worth evaluating once stable, both opt-in and both currently unused here:
 ## Solid 2.0
 
 The real work. Solid 2.0 is a large breaking release, but our surface is
-small — five `.tsx` files, and only these imports:
+small — seven `.tsx` files import from Solid at all, and only these imports:
 
 `createSignal`, `createEffect`, `For`, `Show`, `Switch`, `Match`, `onMount`,
 `onCleanup`, `render`.
@@ -58,8 +58,8 @@ Most of the migration guide simply doesn't apply.
 to `"@solidjs/web"`.
 
 **`classList` is removed** — replaced by object/array forms of `class`.
-12 sites: `dashboard.tsx` (266, 288, 882, 961, 1039, 1072, 1114),
-`feed-discovery.tsx` (256, 387, 409, 428), `options-admin.tsx` (466).
+12 sites: `dashboard.tsx` (5), `feed-discovery.tsx` (4), `tree-item.tsx` (2),
+`admin.tsx` (1). Line numbers move; `grep -n classList src/spa/*.tsx` finds them.
 
 ```jsx
 // now
@@ -68,8 +68,8 @@ to `"@solidjs/web"`.
 <div class={["card", { active: isActive() }]} />
 ```
 
-**`createEffect` splits into compute → apply** — 2 sites (`main.tsx:36`,
-`dashboard.tsx:400`).
+**`createEffect` splits into compute → apply** — 4 sites (`main.tsx` ×3,
+`dashboard.tsx` ×1).
 
 ```js
 createEffect(() => { document.documentElement.dataset.theme = resolvedTheme(); });
@@ -78,9 +78,9 @@ createEffect(resolvedTheme, (theme) => { document.documentElement.dataset.theme 
 ```
 
 **`onMount` → `onSettled`, `onCleanup` folds into the returned cleanup** —
-7 `onMount` and 4 `onCleanup` calls. The paired ones (`main.tsx:72-73`,
-`feed-discovery.tsx:79/84`, `dashboard.tsx`, `account-flows.tsx:127/142`)
-collapse into one call:
+7 `onMount` and 4 `onCleanup` calls. The paired ones (`main.tsx`,
+`feed-discovery.tsx`, `dashboard.tsx`, `account-flows.tsx`) collapse into one
+call:
 
 ```js
 onMount(() => addEventListener("popstate", popstate));
@@ -121,7 +121,7 @@ against a moving prerelease compiler buys nothing.
    `jsxImportSource`. Compile errors then map the rest.
 2. `classList` → `class` (12 sites, purely mechanical).
 3. `onMount`/`onCleanup` → `onSettled` (11 calls).
-4. `createEffect` split (2 sites).
+4. `createEffect` split (4 sites).
 5. Re-run the read-after-set audit — the scan is a `createSignal` regex plus a
    7-line lookahead for a matching read; it caught the one real case here.
 

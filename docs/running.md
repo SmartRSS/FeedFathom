@@ -33,7 +33,7 @@ The three overlays are alternatives and are never combined with one another.
 - **No nested `${}` defaults.** They are not rejected, they are silently mangled into malformed values, so `DATABASE_URL`'s default is flat and does not follow `POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB`. Change those and you must set `DATABASE_URL` to match.
 - **No long-form `depends_on`.** Only the list form survives, and Swarm ignores even that, so nothing in the file can express "start after migrations finish".
 
-That last constraint is the interesting one, because startup ordering had been carrying real weight. It is now handled in the application instead, which is a better place for it: correctness no longer depends on which orchestrator is running the containers.
+Startup ordering is handled in the application instead, so correctness does not depend on which orchestrator runs the containers.
 
 Every build bundles `drizzle/meta/_journal.json`, so each binary knows the timestamp of the newest migration it was compiled against. The migrator records that same timestamp in `drizzle.__drizzle_migrations` when it applies the migration, in the same transaction — so `waitForMigration` in `src/platform/db/connection.ts` can ask an exact question at startup: *is the schema at the version I was built for?* It stays false midway through an upgrade, which probing for a table's existence would not, and it stays true against a database carrying migrations this build has never heard of, which is what running an older image looks like.
 
@@ -41,7 +41,7 @@ Three pieces use it:
 
 - The **migrator** retries its first connection for two minutes rather than exiting on the first refusal, so it can lose the race with PostgreSQL and still succeed.
 - The **worker** opens its healthcheck port first, then waits. It reports healthy and idle while waiting, because nothing routes traffic to it and a crash loop would tell the orchestrator something untrue.
-- The **server** does the opposite: it does not listen at all until its migration is applied, because accepting traffic against a schema it was not built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck therefore gets a 30-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
+- The **server** does the opposite: it does not listen at all until its migration is applied, because accepting traffic against a schema it was not built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck therefore gets a 120-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
 
 One consequence is worth knowing before you copy a command: `docker compose up --wait` reports the migrator's clean `exit(0)` as a failure, and naming services does not avoid it, because their dependencies are waited on too. Start first and wait second, naming only the services that stay up:
 
@@ -64,7 +64,7 @@ docker compose up -d
 
 Open `http://127.0.0.1:3456`. Create the first account immediately: the first account can always be created regardless of the registration setting, and once it exists, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
 
-Configure the deployment by putting variables in a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change; `.env.example` carries the whole list, commented out.
+Configure the deployment by putting variables in a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change; `.env.example` carries the ones a deployment normally touches, commented out. The rest -- pool sizes, poll intervals and retention windows -- are named with their defaults in `compose.yml` and `src/platform/config.ts`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ The overlay uses its own project name, so a smoke run never touches a self-hoste
 
 ## Production Deployment
 
-`deploy/stack.yml` is this repository's single-node Docker Swarm overlay, and it is not the recommended way to self-host — `compose.yml` is. Swarm buys rolling updates with automatic rollback, replica counts, and CPU and memory reservations, at the cost of external volumes, protected secrets, and a migration job that has to run as a deployment lock. Reach for it only if you want that.
+`deploy/stack.yml` is this repository's single-node Docker Swarm overlay, not the recommended way to self-host — `compose.yml` is. Swarm buys rolling updates with automatic rollback, replica counts, and CPU and memory reservations, at the cost of external volumes, protected secrets, and a migration job that runs as a deployment lock.
 
 The overlay adds only what Swarm needs and Compose has no concept of: replica counts, rollout and rollback policy, worker resource limits, and the fact that the data volumes already exist on the host. Images, environment, ports, and health probes all come from `compose.yml`. Validate the pair before deploying:
 
@@ -183,7 +183,7 @@ The protected `production` GitHub environment deploys the stack only when the re
 
 ### Sizing for a smaller host
 
-The Swarm defaults are deliberately generous, sized for a host with room to spare rather than for a minimal footprint. To run on a smaller VPS, shrink these together rather than independently:
+The Swarm defaults assume a host with room to spare. On a smaller VPS, shrink these together rather than independently:
 
 - `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica; the bare-process fallback is `1`, and it is safe to run that low in production too.
 - `DB_POOL_MAX` — PostgreSQL connections opened per server and worker replica (default `10`, matching Bun's SQL client default).
@@ -231,30 +231,14 @@ A migration failure leaves the existing application services untouched. If an in
 
 ## Building the Project
 
-To build the project:
+`bun run build-project` writes every target to `build/`. The five parts also
+run individually:
 
 ```bash
-bun run build-project
-```
-
-This compiles TypeScript files and generates output in the `build` directory.
-
-The build process consists of five parts that can be run individually:
-
-```bash
-# Build the server
 bun run build-server
-
-# Build the database migrator
 bun run build-migrator
-
-# Build the background worker
 bun run build-worker
-
-# Build the browser extensions
 bun run build-extension
-
-# Build the Cloudflare email Worker
 bun run build-cloudflare-email-worker
 ```
 
@@ -263,10 +247,9 @@ bun run build-cloudflare-email-worker
 CI owns this. The `deploy_email_worker` job in `.github/workflows/docker-build.yml`
 runs after the Swarm deploy on `main`, builds the bundle, and uploads it only
 when its content hash differs from the `content:` tag on the deployed script.
-Do not upload by hand -- the Worker spent four months as a stale
-dashboard-edited script precisely because nothing in the repository deployed
-it, and a manual upload silently reintroduces that drift by leaving the tag
-pointing at content that is no longer there.
+Do not upload by hand: it leaves the tag pointing at content that is no longer
+there, which is how the Worker spent four months as a stale dashboard-edited
+script.
 
 It runs after `deploy`, never beside it: the relay wire format is a contract
 between the Worker and `/api/mail`, so a Worker deployed against a server that
@@ -301,25 +284,20 @@ The bundle exports an `email` handler and nothing else, so a `GET` against the
 script's `workers.dev` URL answering `error code: 1101` is the expected healthy
 state.
 
-## Development Workflow
-
-`bun run dev` is the normal watch workflow. The individual processes are available for diagnostics:
-
-```bash
-bun run watch-spa
-bun run watch-spa-api
-bun run watch-worker
-```
-
 ## Testing and Code Quality
 
-Run the complete prerequisite before feature work or a pull request. It runs unit tests, real Chromium tests, formatting, Oxlint, TypeScript, Knip, and every production build target:
+`bun run dev` is the normal watch workflow; `watch-spa`, `watch-spa-api` and
+`watch-worker` run the individual processes for diagnostics.
+
+Run the full gate before feature work or a pull request. It covers unit tests,
+real Chromium tests, formatting, Oxlint, TypeScript, Knip, and every production
+build target:
 
 ```bash
 bun run quality
 ```
 
-Migration integration tests are a separate destructive check and require a clearly disposable PostgreSQL database URL whose database name contains `test`, `migration_test`, or `disposable`:
+The PostgreSQL integration tests (`*-integration.test.ts`) are a separate destructive check and require a clearly disposable database URL whose database name contains `test`, `migration_test`, or `disposable`:
 
 ```bash
 MIGRATION_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test \

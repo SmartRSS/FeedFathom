@@ -23,16 +23,15 @@ const cachePrefix = "http-cache:";
 const cacheLockPrefix = "http-cache-lock:";
 const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 const requestDeadlineMs = 30_000;
-// Sized off the largest feed we actually poll rather than a round number:
-// Project Zero's feed carries ten full exploit writeups with the complete
-// HTML inlined, which is 12.6 MiB today and grows by roughly 1.3 MiB per
-// post. Everything else in a 227-source corpus fits in well under 1 MiB.
+// Sized off the largest feed actually polled, not a round number: Project
+// Zero inlines full exploit writeups (12.6 MiB, +1.3 MiB per post). The rest
+// of a 227-source corpus fits under 1 MiB.
 //
-// ponytail: one global ceiling, not a per-source budget. The worst case is
-// WORKER_CONCURRENCY simultaneous downloads all sitting at the cap against
-// the worker's memory limit (production: 50 and 750 MiB, so this cap is
-// only safe because a single source exceeds even 5 MiB). Give feeds their
-// own per-source budget if a second heavyweight ever shows up.
+// ponytail: one global ceiling, not a per-source budget. Worst case is
+// WORKER_CONCURRENCY downloads all at the cap against the worker's memory
+// limit (50 and 750 MiB in production), which only works because a single
+// source exceeds 5 MiB. Add per-source budgets if a second heavyweight shows
+// up.
 const maximumBodyBytes = 24 * 1024 * 1024;
 const maximumBodyMebibytes = maximumBodyBytes / (1024 * 1024);
 const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
@@ -42,41 +41,31 @@ const userAgentUrl = "+https://github.com/SmartRSS/FeedFathom";
 const shortShaLength = 7;
 
 // Both fields land in an outgoing header, so anything outside this set is
-// dropped rather than escaped: it covers hostnames (with an optional
-// :port) and every tag shape we produce -- a commit SHA, a channel name
-// like "staging", a semver -- and excludes the ";" / ")" / CR / LF that
-// would let a mis-set env var break the header or the convention's own
-// grammar. A field that survives as empty is treated as absent.
+// dropped rather than escaped. It covers hostnames with an optional :port and
+// every tag shape produced here, and excludes the ";" / ")" / CR / LF that
+// would let a mis-set env var break the header. Empty is treated as absent.
 function sanitizeIdentity(value: string | undefined): string | undefined {
   const cleaned = value?.trim().replaceAll(/[^\w.:-]/gu, "");
   if (cleaned === undefined || cleaned === "") return undefined;
   return cleaned;
 }
 
-// A full commit SHA is the usual FEEDFATHOM_TAG, and 40 hex characters in
-// a User-Agent is noise -- the first 7 identify the build just as well.
-// Anything else (a channel tag, a semver) is already short, so pass it
-// through untouched.
+// FEEDFATHOM_TAG is usually a full commit SHA; 7 characters identify the build
+// just as well. Anything shorter (a channel tag, a semver) passes through.
 function normalizeVersion(value: string | undefined): string | undefined {
   const tag = sanitizeIdentity(value);
   if (tag === undefined) return undefined;
   return /^[0-9a-f]{40}$/u.test(tag) ? tag.slice(0, shortShaLength) : tag;
 }
 
-// Feed readers conventionally report how many of their own users subscribe
-// to a feed in the User-Agent -- for most publishers it is the only
-// feedback RSS gives them about their audience. Google's Feedfetcher
-// established the shape ("...; 4 subscribers; feed-id=...") and Feedly,
-// Feedbin and Inoreader all copied it, so publishers scrape it with
-// regexes over the literal word "subscribers".
+// Feed readers report their subscriber count in the User-Agent -- often the
+// only audience feedback RSS gives a publisher. Google's Feedfetcher set the
+// shape ("...; 4 subscribers; feed-id=...") and Feedly, Feedbin and Inoreader
+// copied it, so publishers scrape the literal word "subscribers".
 //
-// The build tag and instance host ride along so a publisher (and our own
-// support) can tell two FeedFathom instances apart, which a bare product
-// token made impossible. The project URL stays in the "+" slot rather than
-// the instance host: it is the stable page explaining what this fetcher
-// is, and a self-hosted domain explains nothing to the publisher reading
-// it. "localhost" stands in when FEED_FATHOM_DOMAIN is unset, which is
-// honest for a dev or LAN-only instance.
+// The build tag and instance host ride along so two FeedFathom instances can
+// be told apart. The "+" slot keeps the project URL, not the instance host: a
+// self-hosted domain explains nothing to the publisher reading it.
 function buildUserAgentPrefix(identity: HttpClientIdentity): string {
   const version = normalizeVersion(identity.version);
   const product = version ? `${userAgentProduct}/${version}` : userAgentProduct;
@@ -84,11 +73,9 @@ function buildUserAgentPrefix(identity: HttpClientIdentity): string {
   return `${product} (${userAgentUrl}; instance=${instance}`;
 }
 
-// Only appended when a real count is known: discovery and preview fetches
-// have no subscribers yet, and claiming otherwise would poison the very
-// numbers this exists to report. Plural even at one, because the regexes
-// reading it match the literal word. Non-integer and negative counts are
-// dropped rather than interpolated.
+// Only appended when a real count is known -- discovery and preview fetches
+// have no subscribers, and claiming otherwise poisons the numbers this exists
+// to report. Plural even at one, because the regexes match the literal word.
 function buildUserAgent(
   prefix: string,
   subscribers: number | undefined,
@@ -128,13 +115,9 @@ type HttpRedis = {
 type HttpRequestOptions = {
   priority?: "background" | "interactive";
   responseType?: "arrayBuffer";
-  // Skips the local TTL short-circuit (trusting our own copy is still
-  // fresh per the origin's own Cache-Control/Expires) without giving up
-  // conditional revalidation -- still sends If-None-Match/If-Modified-Since
-  // from the cached entry, so an origin that genuinely hasn't changed can
-  // still answer 304 cheaply. For callers (like a WebSub push) that already
-  // know something changed and need to actually ask the origin, not just
-  // trust a TTL that hasn't technically expired yet.
+  // Skips the local TTL short-circuit but keeps conditional revalidation, so
+  // an unchanged origin still answers 304 cheaply. For callers (a WebSub push)
+  // that already know something changed.
   skipCache?: boolean;
   // Number of our users subscribed to the feed being fetched, reported to
   // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
@@ -149,9 +132,8 @@ type ArrayBufferRequestOptions = HttpRequestOptions & {
 type HttpClientIdentity = {
   // FEED_FATHOM_DOMAIN. Falls back to "localhost" when unset.
   instance?: string | undefined;
-  // FEEDFATHOM_BUILD -- the commit baked into the image at build time.
-  // Omitted from the User-Agent entirely when unset, rather than guessed
-  // at from whatever tag happened to be pulled.
+  // FEEDFATHOM_BUILD: the commit baked into the image. Omitted from the
+  // User-Agent when unset rather than guessed from the pulled tag.
   version?: string | undefined;
 };
 
@@ -178,9 +160,7 @@ export type HttpResponse<T> = {
 export class HttpClient {
   private readonly deadlineMs: number;
   private readonly transport: NativeHttpTransport;
-  // Identity is fixed for the process, so the constant part of every
-  // User-Agent is built once here and only the subscriber clause varies
-  // per request.
+  // Identity is fixed for the process; only the subscriber clause varies.
   private readonly userAgentPrefix: string;
   private readonly rateLimiter: HttpRateLimiter;
 
@@ -366,9 +346,8 @@ export class HttpClient {
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;
-    // A redirect chain is only "permanent" as a whole if every hop in it is
-    // (301/308); a single temporary hop anywhere means the resolved URL
-    // could still change back, so the chain can't be trusted as permanent.
+    // A chain is permanent only if every hop is (301/308) -- one temporary hop
+    // means the resolved URL could still change back.
     let permanent = true;
     /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response. */
     for (let redirects = 0; redirects <= 5; redirects++) {
@@ -501,8 +480,8 @@ export class HttpClient {
       data: this.decodeBody(body, options),
       freshUntil: response.expiresAt > Date.now() ? response.expiresAt : null,
       headers: new Headers(response.headers),
-      // A cache hit isn't a fresh redirect decision; the original fetch
-      // already handled persisting a permanent redirect, if any.
+      // A cache hit is not a fresh redirect decision; the original fetch
+      // already persisted any permanent redirect.
       redirectedPermanently: false,
       status: response.status,
       url: response.url,

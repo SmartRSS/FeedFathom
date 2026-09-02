@@ -3,9 +3,11 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { cleanupOrphanedData } from "#platform/db/maintenance.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
-import { migrateDatabase } from "../src/migrator.ts";
+import { migrateDatabase } from "../../../migrator.ts";
 
-const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url));
+const migrationsFolder = fileURLToPath(
+  new URL("../../../../drizzle", import.meta.url),
+);
 
 function requireDisposableDatabaseUrl() {
   const databaseUrl = process.env["MIGRATION_TEST_DATABASE_URL"];

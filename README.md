@@ -37,7 +37,7 @@ can always be created; afterwards registration stays closed unless
 
 Configure the deployment by putting variables in a `.env` file next to
 `compose.yml`. Copy `.env.example` to start from the documented defaults.
-[Running and deployment](docs/running.md) lists every variable.
+[Running and deployment](docs/running.md) explains the ones worth setting.
 
 ### Serving over the network
 

@@ -17,16 +17,12 @@ const isAbsoluteUrl = (url: string) => {
 
 const srcsetSplitterExpression = /\s+/u;
 
-// Helper to process "srcset" attributes
 const processSrcset = (srcsetValue: string, baseUrl: string): string => {
   return srcsetValue
     .split(", ")
     .map((path) => {
       const [url, width] = path.trim().split(srcsetSplitterExpression);
-      if (!url) {
-        // Fall back to the original value if the URL is invalid
-        return path;
-      }
+      if (!url) return path;
 
       if (isAbsoluteUrl(url)) {
         return width ? `${url} ${width}` : url;
@@ -37,13 +33,11 @@ const processSrcset = (srcsetValue: string, baseUrl: string): string => {
         return width ? `${absoluteUrl} ${width}` : absoluteUrl;
       }
 
-      // Return original if no valid URL
       return path;
     })
     .join(", ");
 };
 
-// New function to handle element processing
 const handleElement = (
   element: HTMLRewriterTypes.Element,
   tagName: string,

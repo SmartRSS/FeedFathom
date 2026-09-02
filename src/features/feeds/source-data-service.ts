@@ -31,7 +31,6 @@ type SourceQueue = {
   ): Promise<unknown>;
 };
 
-// Define a type for the select statement in listAllSources
 export interface SourceWithSubscriberCount {
   id: number;
   url: string;
@@ -48,22 +47,18 @@ export interface SourceWithSubscriberCount {
 
 // Minimum spacing between successful "feed" polls, regardless of what the
 // origin's Cache-Control says -- see successSource's clamp.
-// Flat per-tick ceiling, replacing a "10% of whatever is due" throttle.
-// That percentage self-balanced into a permanent backlog: at equilibrium
-// each source waited ~3.3 extra minutes for a slot regardless of how many
-// sources existed, stretching an intended 5-minute cadence to ~8.3 (the
-// observed production median was 7.3). Draining what's due is well within
-// capacity -- WORKER_REPLICAS * WORKER_CONCURRENCY is three orders of
-// magnitude above a typical due count -- and notBefore already staggers
-// arrivals, which is the smoothing the percentage was standing in for.
-// The flat cap only bounds the pathological case (a long outage making
-// every source due at once) instead of taxing the steady state.
+// Flat per-tick ceiling, replacing a "10% of whatever is due" throttle that
+// self-balanced into a permanent backlog: every source waited ~3.3 extra
+// minutes for a slot, stretching a 5-minute cadence to a 7.3-minute observed
+// median. Draining what's due is well within capacity and notBefore already
+// staggers arrivals, so the flat cap only bounds the pathological case (an
+// outage making every source due at once).
 const gatherBatchLimit = 500;
 const exact = { additionalProperties: false } as const;
 type SourceSort = Static<typeof sourceSortSchema>;
-// These two maps are the whole defence for the interpolation in
-// listAllSources: an unrecognised key can only ever fall back to a literal
-// spelled out here, so nothing caller-supplied reaches the SQL text.
+// The whole defence for the interpolation in listAllSources: an unrecognised
+// key falls back to a literal spelled out here, so nothing caller-supplied
+// reaches the SQL text.
 const sourceSortSql = new Map([
   ["createdAt", "s.created_at"],
   ["lastAttempt", "s.last_attempt"],
@@ -178,11 +173,9 @@ export class SourcesDataService {
     );
   }
 
-  // subscriberCount rides along because the only caller is the ParseSource
-  // job, which reports it to the origin in the User-Agent (see
-  // buildUserAgent in http-client). A correlated subquery keeps this a
-  // single round trip on the hot polling path rather than a second query
-  // per fetch.
+  // subscriberCount rides along for the ParseSource job's User-Agent (see
+  // buildUserAgent). A correlated subquery keeps the hot polling path to one
+  // round trip.
   public async findSourceById(
     sourceId: number,
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
@@ -221,20 +214,12 @@ export class SourcesDataService {
       .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
   }
 
-  // "email" sources are excluded outright -- there's no HTTP endpoint to
-  // poll at all, unlike the old `url LIKE 'http%'` heuristic this replaced,
-  // which inferred the same fact from the URL's shape instead of an
-  // explicit column. "feed" sources are gated purely by notBefore now --
-  // successSource/failSource write it directly (from Cache-Control, or the
-  // backoff formula on failure) instead of this query recomputing a backoff
-  // interval from recentFailures at read time. "websub" sources use a flat
-  // once-daily last_attempt check regardless of recentFailures -- a hub
-  // push is the primary update path, so this is purely a fallback safety
-  // net for a dropped push, not the same kind of retry/backoff schedule
-  // "feed" sources need, and deliberately ignores notBefore: a
-  // Cache-Control-driven value from a normal fetch could otherwise schedule
-  // a websub source's *next* check sooner than a day out, undermining the
-  // point of the reduced cadence.
+  // "email" has no endpoint to poll. "feed" is gated purely by notBefore,
+  // which successSource/failSource write directly, so nothing is recomputed at
+  // read time. "websub" uses a flat daily last_attempt check as a safety net
+  // for a dropped push, and ignores notBefore on purpose -- a Cache-Control
+  // value from a normal fetch would otherwise pull the next check inside a
+  // day and undo the reduced cadence.
   public async getSourcesToProcess() {
     const result: unknown = await this.drizzleConnection.execute(sql`
       WITH "due_sources" AS (
@@ -302,9 +287,8 @@ export class SourcesDataService {
     return parseSourceListRows(result);
   }
 
-  // Cascades via FK (articles, user_sources, and everything beneath them)
-  // -- an admin-level delete regardless of who's subscribed, distinct from
-  // a user just unsubscribing (UserSourcesDataService.removeSourceFromUser).
+  // Cascades via FK to articles and user_sources. Admin-level, distinct from
+  // unsubscribing (UserSourcesDataService.removeSourceFromUser).
   public async deleteSource(id: number) {
     await this.drizzleConnection.delete(sources).where(eq(sources.id, id));
   }
@@ -330,12 +314,10 @@ export class SourcesDataService {
     sourceId: number,
     cached = false,
     notBefore = new Date(Date.now() + pollFloorMs),
-    // Defaults to a fresh timestamp for callers that don't care, but
-    // parseSource passes its own observedAt here so this stamp exactly
-    // matches the last_seen_in_feed_at it just wrote for this fetch's
-    // articles -- letting cleanupOrphanedData tell "not in this fetch"
-    // apart from "just fetched a moment ago" instead of the two always
-    // differing by whatever this function's own call latency happens to be.
+    // parseSource passes its own observedAt so this matches the
+    // last_seen_in_feed_at written for the same fetch's articles exactly;
+    // otherwise the two differ by this call's latency and cleanupOrphanedData
+    // cannot tell "not in this fetch" from "just fetched".
     observedAt = new Date(),
     trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
   ) {
@@ -355,11 +337,9 @@ export class SourcesDataService {
 
   public async failSource(sourceId: number, reason = "") {
     try {
-      // Same backoff formula getSourcesToProcess used to recompute at read
-      // time from recentFailures -- now stored directly on failure instead,
-      // so the read side is just "notBefore <= NOW()". recentFailures is
-      // incremented in the same expression this reads, so +1 accounts for
-      // the failure being recorded right now.
+      // Stored on failure so the read side is just "notBefore <= NOW()".
+      // recentFailures is incremented in the same expression this reads, so
+      // +1 accounts for the failure being recorded now.
       await this.drizzleConnection
         .update(sources)
         .set({
@@ -396,17 +376,14 @@ export class SourcesDataService {
     return row?.favicon ?? null;
   }
 
-  // Called after a poll discovers a hub advertisement and the source isn't
-  // already tracking that exact hub/topic pair. Generates a fresh per-
-  // subscription secret and callback token and moves straight to "pending"
-  // -- the actual hub POST happens in the caller right after this, using
-  // the returned values, so this and the subscribe attempt always agree on
-  // which secret/token are current.
-  // Atomic claim guarding against concurrent subscribe attempts for the
-  // same source (see the schema comment on websubSubscribeAttemptedAt) --
-  // returns false if another attempt already claimed this source within
-  // the cooldown window, so the caller should skip subscribing rather than
-  // race a second request to the hub with a different callback token.
+  // Generates a fresh per-subscription secret and callback token and moves to
+  // "pending"; the caller POSTs to the hub with the returned values, so the
+  // two always agree on which secret is current.
+  //
+  // Also an atomic claim (see the schema comment on
+  // websubSubscribeAttemptedAt): returns false when another attempt already
+  // claimed this source inside the cooldown, so the caller skips rather than
+  // racing a second hub request with a different callback token.
   public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
     const claimed = await this.drizzleConnection
       .update(sources)
@@ -451,10 +428,9 @@ export class SourcesDataService {
     await this.drizzleConnection
       .update(sources)
       .set({
-        // kind: "websub" is what actually drives the reduced polling
-        // cadence (see getSourcesToProcess) -- WebSub delivery isn't
-        // guaranteed, so this isn't "stop polling entirely," just a much
-        // longer fallback interval than "feed" kind gets.
+        // kind: "websub" drives the reduced cadence in getSourcesToProcess.
+        // Delivery isn't guaranteed, so this is a longer fallback interval,
+        // not "stop polling".
         kind: "websub",
         websubLeaseExpiresAt: leaseExpiresAt,
         websubStatus: "verified",
@@ -466,9 +442,8 @@ export class SourcesDataService {
     await this.drizzleConnection
       .update(sources)
       .set({
-        // Revert to ordinary polling cadence -- staying "websub" kind
-        // with a dead subscription would leave this source checked only
-        // once a day with no push arriving to make up for it.
+        // Back to ordinary cadence: a dead subscription still marked "websub"
+        // would be checked daily with no push to make up for it.
         kind: "feed",
         websubStatus: "failed",
       })
@@ -487,10 +462,9 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  // Subscriptions within a day of expiring -- the renewal job runs daily
-  // (see MainWorker), so this window guarantees every verified subscription
-  // gets at least one renewal attempt before its lease actually lapses,
-  // even if a given day's job run is late or fails outright.
+  // The renewal job runs daily (see MainWorker), so a one-day window
+  // guarantees every verified subscription gets an attempt before its lease
+  // lapses, even if one day's run is late or fails.
   public async getWebSubSubscriptionsNeedingRenewal() {
     return await this.drizzleConnection
       .select({

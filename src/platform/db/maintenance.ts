@@ -17,24 +17,17 @@ import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { users } from "#platform/db/schemas/users.ts";
 
-// How long an article must go unseen before the feed is believed to have
-// dropped it for good. A single fetch omitting an item does NOT mean it is
-// gone -- pagination boundaries, ordering changes and transient truncation
-// all do that routinely -- so this has to span MANY of the source's own
-// fetch cycles, which is what a flat interval fails to do: at the 5-minute
-// poll floor one day is ~288 cycles, but a feed advertising a long
-// max-age parks itself days out (successSource clamps the floor, never the
-// ceiling), and a websub source only falls back to polling once a day. For
-// those, a flat day is less than a single cycle -- no grace at all, which
-// is exactly the false positive that made this rule destroy 89k articles'
-// deletion records once already.
+// How long an article must go unseen before the feed counts as having dropped
+// it. One fetch omitting an item means nothing -- pagination, reordering and
+// truncation all do that -- so the buffer must span many of the source's own
+// cycles. A flat interval can't: a feed advertising a long max-age parks days
+// out and websub only polls daily, so one flat day is less than one cycle.
+// That false positive once destroyed 89k articles' deletion records.
 //
-// So scale it by the source's own cadence. not_before and last_success are
-// written by the same successSource UPDATE, so their difference is the
-// refresh interval the origin itself asked for; websub polls on a flat
-// daily fallback that ignores that column entirely. Every degenerate case
-// (never-set not_before, a long failure backoff) lands on a LARGER buffer,
-// which errs towards keeping an article rather than deleting one.
+// Scaled by cadence instead: not_before - last_success is the refresh interval
+// the origin asked for (both written by the same successSource UPDATE), and
+// websub ignores that column, so it gets the flat daily fallback. Every
+// degenerate case lands on a LARGER buffer, erring towards keeping.
 const confirmedGoneFromFeedBuffer = sql`
   GREATEST(
     INTERVAL '1 day',
@@ -53,10 +46,9 @@ export async function cleanupOrphanedData(
   articleStaleAfterDays: number,
   userExpiryDays: number,
 ) {
-  // Account expiry runs first: it shrinks the "current subscriber" set
-  // (via cascade on user_sources) before every rule below evaluates it, so
-  // an expired user's own subscriptions never need special-casing further
-  // down -- they're simply gone, the same as if they'd never subscribed.
+  // Runs first: the cascade on user_sources shrinks the "current subscriber"
+  // set before every rule below evaluates it, so no rule needs to special-case
+  // expired users.
   if (userExpiryDays > 0) {
     await drizzleConnection
       .delete(users)
@@ -65,15 +57,11 @@ export async function cleanupOrphanedData(
       );
   }
 
-  // "Delete sources nobody subscribes to" is, by construction, "delete
-  // every source" whenever user_sources is empty -- true whether that's
-  // expressed as NOT IN or as a correlated NOT EXISTS per source row.
-  // If nobody has ever subscribed to anything (last subscription just
-  // removed) deleting every source is correct; if user_sources is
-  // empty for any other, transient reason, it isn't. Since this method
-  // can't tell those apart, guard with an uncorrelated existence check
-  // on the whole table, in the same statement so there's no separate
-  // check-then-delete round trip to race against.
+  // "Delete sources nobody subscribes to" means "delete every source" when
+  // user_sources is empty -- correct if the last subscription was just
+  // removed, catastrophic if the table is empty for any transient reason.
+  // This can't tell those apart, so guard on the whole table existing, in the
+  // same statement to leave no check-then-delete race.
   await drizzleConnection
     .delete(sources)
     .where(
@@ -117,31 +105,20 @@ export async function cleanupOrphanedData(
     .delete(articles)
     .where(inArray(articles.id, articlesBeforeSubscription));
 
-  // The above only prunes articles no CURRENT subscriber could ever have
-  // seen. This catches the complement: articles current subscribers COULD
-  // see, but which are gone for good -- confirmed absent across many
-  // consecutive successful fetches of their source (see
-  // confirmedGoneFromFeedBuffer above), and every subscriber who could
-  // have seen it has already deleted it. "Could have seen it" is scoped to
-  // subscribers who joined before it disappeared -- someone who
-  // subscribed later never had the chance to see or delete it, so their
-  // absence of a deletion row doesn't block the prune.
+  // The complement of the rule above: articles current subscribers COULD see,
+  // but which are gone for good -- absent past confirmedGoneFromFeedBuffer and
+  // deleted by everyone who could have seen them. "Could have seen" is scoped
+  // to subscribers who joined before it disappeared; a later subscriber never
+  // had the chance to delete it, so their missing row must not block the prune.
   //
-  // A false positive here used to be unrecoverable: removals lived in
-  // user_articles keyed on articles.id and cascaded away with the row, so
-  // deleting an article also forgot that anyone had removed it, and the
-  // next fetch listing the item again brought it back unread under a fresh
-  // id. user_articles is now keyed on (source, guid) with no foreign key
-  // to articles, so the removal outlives the prune and the re-inserted
-  // article is still removed. The buffer above is no longer load-bearing
-  // for that -- it stays because re-fetching an article's content is still
-  // waste, not because being wrong is still destructive.
+  // A false positive is no longer unrecoverable: user_articles is keyed on
+  // (source, guid) with no foreign key to articles, so a removal outlives the
+  // prune and a re-inserted article stays removed. The buffer stays because
+  // re-fetching content is waste, not because being wrong is destructive.
   //
-  // Email sources stay excluded outright: they have no feed to be absent
-  // from. Each delivery upserts one article and stamps last_success (for
-  // the admin's "last via" column), which under a plain last_seen <
-  // last_success comparison makes every earlier newsletter look dropped
-  // from a feed that does not exist.
+  // Email sources are excluded: they have no feed to be absent from, and each
+  // delivery stamps last_success, which would make every earlier newsletter
+  // look dropped.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -182,15 +159,11 @@ export async function cleanupOrphanedData(
     .delete(articles)
     .where(inArray(articles.id, articlesUnreachableByAnyone));
 
-  // Neither rule above accounts for dormancy: a subscriber who hasn't made
-  // a request in a long time still counts as a full "current subscriber"
-  // for both. This catches articles old enough (articleStaleAfterDays)
-  // that no subscriber who could have seen them is still active --
-  // independent of whether anyone deleted them, since a dormant
-  // subscriber's undeleted article isn't evidence anyone still wants it.
-  // Either threshold at 0 turns this rule off entirely: 0 always means
-  // "disabled", never "no requirement" (a 0-day staleness floor would
-  // defeat the reason that guard exists in the first place).
+  // Neither rule above accounts for dormancy -- a subscriber who hasn't made a
+  // request in months still counts as current. This catches articles old
+  // enough that no subscriber who could have seen them is still active,
+  // regardless of deletions. Either threshold at 0 disables the rule; 0 never
+  // means "no requirement".
   if (userDormantAfterDays > 0 && articleStaleAfterDays > 0) {
     const articlesOnlyDormantCouldSee = drizzleConnection
       .select({ id: articles.id })

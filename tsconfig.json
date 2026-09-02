@@ -34,8 +34,10 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "tests/**/*.ts",
-    "tests/browser/playwright.config.ts",
+    "tests/browser/**/*.ts",
+    "bin/**/*.ts",
+    "tools/**/*.ts",
+    "vendor/**/*.ts",
     "src/spa/vite.config.ts"
   ],
   "exclude": ["node_modules/**", "migrations/**", "build/**", "ext/**"]
