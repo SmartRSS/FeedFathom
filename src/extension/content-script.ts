@@ -3,8 +3,23 @@ import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 import {
   isReaderRequest,
   isReaderResponseForRequest,
+  isScanRequestMessage,
   readerErrorResponse,
 } from "#shared/extension-types.ts";
+
+// The mobile popup fallback (no contextMenus) can't wait out the on-load
+// scan's debounce, so it asks for a fresh scan directly instead of trusting
+// the background's cached copy.
+chrome.runtime.onMessage.addListener(
+  (message: unknown, _sender, sendResponse) => {
+    if (!isScanRequestMessage(message)) return false;
+    sendResponse({
+      action: "list-feeds",
+      feedsData: scan(document.location.href, document),
+    });
+    return false;
+  },
+);
 
 const readerMessage = (event: MessageEvent<unknown>) => {
   if (
