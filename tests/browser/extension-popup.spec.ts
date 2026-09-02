@@ -70,6 +70,51 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
   }
 });
 
+test("mobile popup scans the active tab live, ahead of the on-load cache", async ({
+  baseURL,
+}) => {
+  if (!baseURL) throw new Error("Playwright baseURL is required");
+  const profile = await mkdtemp(`${tmpdir()}/feedfathom-popup-`);
+  const context = await chromium.launchPersistentContext(profile, {
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+    ],
+    channel: "chromium",
+    headless: true,
+  });
+
+  try {
+    const serviceWorker =
+      context.serviceWorkers()[0] ??
+      (await context.waitForEvent("serviceworker"));
+    const extensionId = new URL(serviceWorker.url()).hostname;
+
+    // No chrome.storage.session cache is seeded here -- the popup can only
+    // pass by asking the page's content script for a fresh scan.
+    const feedPage = await context.newPage();
+    await feedPage.goto(baseURL);
+    await feedPage.evaluate(() => {
+      const link = document.createElement("link");
+      link.rel = "alternate";
+      link.type = "application/rss+xml";
+      link.title = "Live Feed";
+      link.href = "https://feed.test/live-rss";
+      document.head.append(link);
+    });
+
+    const popupPage = await context.newPage();
+    await feedPage.bringToFront();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    const feedButton = popupPage.getByRole("button", { name: "Live Feed" });
+    await expect(feedButton).toBeVisible();
+  } finally {
+    await context.close();
+    await rm(profile, { recursive: true });
+  }
+});
+
 test("mobile popup shows an empty state with no cached feeds", async () => {
   const profile = await mkdtemp(`${tmpdir()}/feedfathom-popup-`);
   const context = await chromium.launchPersistentContext(profile, {

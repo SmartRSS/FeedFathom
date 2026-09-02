@@ -105,6 +105,10 @@ const visibilityLostMessageSchema = Type.Object(
   { action: Type.Literal("visibility-lost") },
   { additionalProperties: false },
 );
+const scanRequestMessageSchema = Type.Object(
+  { action: Type.Literal("scan-request") },
+  { additionalProperties: false },
+);
 const instanceStorageResultSchema = Type.Object(
   { instance: Type.Optional(Type.String()) },
   { additionalProperties: false },
@@ -124,6 +128,7 @@ export type ReaderRequest = Static<typeof readerRequestSchema>;
 export type ReaderResponse = Static<typeof readerResponseSchema>;
 export type ListFeedsMessage = Static<typeof listFeedsMessageSchema>;
 export type VisibilityLostMessage = Static<typeof visibilityLostMessageSchema>;
+export type ScanRequestMessage = Static<typeof scanRequestMessageSchema>;
 
 export const storedInstance = (value: unknown): string | undefined =>
   Value.Check(instanceStorageResultSchema, value) ? value.instance : undefined;
@@ -135,6 +140,10 @@ export const isVisibilityLostMessage = (
   value: unknown,
 ): value is VisibilityLostMessage =>
   Value.Check(visibilityLostMessageSchema, value);
+
+export const isScanRequestMessage = (
+  value: unknown,
+): value is ScanRequestMessage => Value.Check(scanRequestMessageSchema, value);
 
 export const isReaderRequest = (value: unknown): value is ReaderRequest =>
   Value.Check(readerRequestSchema, value);
