@@ -83,7 +83,7 @@
       "src/worker.ts",
       "src/migrator.ts",
       "src/features/mail-ingest/email-worker.ts",
-      "src/extension/{background-event,content-script,options}.ts",
+      "src/extension/{background-event,content-script,options,popup}.ts",
       "tests/browser/**/*.ts",
       "bin/**/*.ts",
       "tools/**/*.js",
