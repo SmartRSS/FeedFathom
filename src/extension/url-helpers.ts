@@ -59,6 +59,15 @@ export const buildPreviewUrl = (
   return previewUrl.href;
 };
 
+// With no configured instance there's nowhere to preview through, so the
+// feed address itself is the best we can open.
+export const resolveFeedOpenUrl = (
+  instance: null | string,
+  feedUrl: string,
+): string =>
+  (instance && buildPreviewUrl(instance, feedUrl)) ??
+  normalizeFeedAddress(feedUrl);
+
 // mailDomain comes from the instance's own config (see /api/session):
 // inbound mail is routed wherever Email Routing is configured, which is
 // rarely the host the app is served from. The instance hostname is only a
