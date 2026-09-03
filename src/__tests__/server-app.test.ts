@@ -107,6 +107,9 @@ function createDependencies(): ServerDependencies {
       async removeEmptyUserFolder() {
         return unexpected("foldersDataService.removeEmptyUserFolder");
       },
+      async renameFolder() {
+        return unexpected("foldersDataService.renameFolder");
+      },
     },
     httpClient: {
       async get() {

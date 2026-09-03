@@ -9,6 +9,7 @@ import {
   removeFolderRequest,
   removeSourceRequest,
   subscribeRequest,
+  updateFolderRequest,
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
@@ -31,6 +32,7 @@ import {
 import {
   deleteFoldersHandler,
   getFoldersHandler,
+  patchFoldersHandler,
   postFoldersHandler,
 } from "#features/reader/routes/folders.ts";
 import {
@@ -55,7 +57,7 @@ export type ReaderRouteDependencies = {
   feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
   foldersDataService: Pick<
     FoldersDataService,
-    "createFolder" | "getUserFolders" | "removeEmptyUserFolder"
+    "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
   >;
   httpClient: {
     get(url: string): Promise<{ data: string }>;
@@ -93,6 +95,9 @@ export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
     )
     .delete("/api/folders", { body: removeFolderRequest }, (ctx) =>
       deleteFoldersHandler(ctx, deps),
+    )
+    .patch("/api/folders", { body: updateFolderRequest }, (ctx) =>
+      patchFoldersHandler(ctx, deps),
     )
     .delete("/api/source", { body: removeSourceRequest }, (ctx) =>
       deleteSourceHandler(ctx, deps),
