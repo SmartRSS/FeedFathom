@@ -59,6 +59,10 @@ export const removeArticlesRequest = Type.Object({
   }),
 });
 export const removeFolderRequest = Type.Object({ removeFolderId: id });
+export const updateFolderRequest = Type.Object({
+  folderId: id,
+  folderName: normalizedNonblankString,
+});
 export const removeSourceRequest = Type.Object({ removeSourceId: id });
 export const subscribeRequest = Type.Object({
   sourceFolder: Type.Union([id, Type.Null()]),

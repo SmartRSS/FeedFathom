@@ -1,7 +1,10 @@
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import type { removeFolderRequest } from "#shared/contracts/requests.ts";
-import { createFolderRequest } from "#shared/contracts/requests.ts";
+import {
+  createFolderRequest,
+  updateFolderRequest,
+} from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
@@ -9,7 +12,7 @@ import type { FoldersDataService } from "#features/feeds/folder-data-service.ts"
 export type FoldersRouteDependencies = {
   foldersDataService: Pick<
     FoldersDataService,
-    "createFolder" | "getUserFolders" | "removeEmptyUserFolder"
+    "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
   >;
 };
 
@@ -31,6 +34,23 @@ export async function postFoldersHandler(
   // transforms, so normalized*() fields arrive undecoded; decode by hand.
   const decoded = Value.Decode(createFolderRequest, body);
   return json(await foldersDataService.createFolder(user.id, decoded.name));
+}
+
+export async function patchFoldersHandler(
+  {
+    body,
+    user,
+  }: { body: Static<typeof updateFolderRequest>; user: AuthedUser },
+  { foldersDataService }: FoldersRouteDependencies,
+) {
+  const decoded = Value.Decode(updateFolderRequest, body);
+  const updated = await foldersDataService.renameFolder(
+    user.id,
+    decoded.folderId,
+    decoded.folderName,
+  );
+  if (!updated) return json({ error: "Folder not found" }, 404);
+  return json({ folderId: updated.id });
 }
 
 export async function deleteFoldersHandler(

@@ -456,6 +456,25 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   expect(state.removedSourceIds).toEqual([3]);
 });
 
+test("renaming a folder through properties updates the tree", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await page
+    .locator("button.source.folder")
+    .filter({ hasText: "Reading" })
+    .click();
+
+  page.once("dialog", (dialog) => void dialog.accept("Archive"));
+  await page.getByRole("button", { name: "source properties" }).click();
+
+  await expect(
+    page.locator("button.source.folder").filter({ hasText: "Archive" }),
+  ).toBeVisible();
+  expect(state.updatedFolder).toEqual({ name: "Archive" });
+});
+
 test("blocks deleting a non-empty folder", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");

@@ -94,6 +94,7 @@ type ApiFixtureState = {
   subscribed: boolean;
   subscriptionBodies: object[];
   treeRequests: number;
+  updatedFolder: { name: string } | undefined;
   updatedSource: { name: string; parentId: null | number } | undefined;
 };
 
@@ -119,6 +120,7 @@ export async function installApiFixture(
     subscribed: false,
     subscriptionBodies: [],
     treeRequests: 0,
+    updatedFolder: undefined,
     updatedSource: undefined,
   };
 
@@ -171,7 +173,7 @@ export async function installApiFixture(
                     ? [subscribedSource]
                     : []),
                 ],
-                name: "Reading",
+                name: state.updatedFolder?.name ?? "Reading",
                 type: "folder",
                 uid: "7",
               },
@@ -237,6 +239,13 @@ export async function installApiFixture(
       expect(sourceId).toBe(3);
       state.updatedSource = { name: sourceName, parentId: sourceFolder };
       return respond({ sourceId });
+    }
+
+    if (method === "PATCH" && url.pathname === "/api/folders") {
+      const { folderId, folderName } = request.postDataJSON();
+      expect(folderId).toBe(7);
+      state.updatedFolder = { name: folderName };
+      return respond({ folderId });
     }
 
     if (method === "DELETE" && url.pathname === "/api/folders") {
