@@ -21,6 +21,16 @@ Playwright specs. A test that needs a real PostgreSQL takes the
 
 Decisions live in `docs/adr/`.
 
+## Git workflow
+
+`main` only accepts PRs whose head is `staging` — enforced by
+`branch-guard.yml` as a required status check, not just convention. There is
+no ruleset primitive for "PR must come from branch X", so it's a CI check
+instead, which means it's invisible until you hit it. Feature branches PR
+into `staging`; `staging` promotes to `main` with its own PR once green. A PR
+opened straight from a feature branch to `main` will fail the
+`source_branch` check and needs retargeting with `gh pr edit --base staging`.
+
 ## Agent skills
 
 ### Issue tracker
