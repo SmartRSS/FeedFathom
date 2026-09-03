@@ -657,7 +657,7 @@ test("exposes Reader modes only when the bridge is available", async ({
   await selectSource(page);
 
   const modes = page.getByRole("combobox");
-  await expect(modes).toContainText("Reader plain");
+  await expect(modes).toContainText("Reader (plain text)");
   await modes.selectOption("READABILITY");
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
