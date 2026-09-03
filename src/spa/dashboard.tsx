@@ -846,10 +846,30 @@ export function Dashboard(props: {
                   if (selected()) void open(selected()!);
                 }}
               >
-                <option value="FEED">Feed</option>
-                <option value="READABILITY">Reader</option>
-                <option value="READABILITY_PLAIN">Reader plain</option>
-                <option value="ARTICLE_EXTRACTOR">Reader (alt)</option>
+                <option
+                  value="FEED"
+                  title="The article as published in the feed"
+                >
+                  Feed
+                </option>
+                <option
+                  value="READABILITY"
+                  title="Cleaned-up reading view of the full article"
+                >
+                  Reader
+                </option>
+                <option
+                  value="READABILITY_PLAIN"
+                  title="Reader view as plain text, no formatting or images"
+                >
+                  Reader (plain text)
+                </option>
+                <option
+                  value="ARTICLE_EXTRACTOR"
+                  title="A different extractor -- try this if Reader strips too much"
+                >
+                  Reader (fallback)
+                </option>
               </select>
             </Show>
             <button
