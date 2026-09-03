@@ -294,7 +294,9 @@ test.fixme("uses the real extension bridge only on its configured origin", async
     const origin = new URL(baseURL).origin;
     await setInstance(optionsPage, extensionId, origin);
     await appPage.goto(origin);
-    await expect(appPage.getByRole("combobox")).toContainText("Reader plain");
+    await expect(appPage.getByRole("combobox")).toContainText(
+      "Reader (plain text)",
+    );
     const allowed = await probeCapabilities(appPage);
     expect(allowed).toEqual({
       action: "capabilities",
