@@ -79,9 +79,16 @@ export function Admin(props: {
     void load();
   }
 
-  async function replaceUrl(oldUrl: string) {
+  async function replaceUrl(source: AdminSource) {
+    const oldUrl = source.url;
     const newUrl = prompt("New URL", oldUrl);
     if (!newUrl || newUrl === oldUrl) return;
+    if (
+      !confirm(
+        `Change "${oldUrl}" to "${newUrl}"? This affects ${source.subscriberCount} subscriber(s).`,
+      )
+    )
+      return;
     try {
       await api("/admin", successResponse, {
         body: JSON.stringify({ newUrl, oldUrl }),
@@ -204,7 +211,7 @@ export function Admin(props: {
                   <td class="admin-table-actions">
                     <button
                       type="button"
-                      onClick={() => void replaceUrl(source.url)}
+                      onClick={() => void replaceUrl(source)}
                     >
                       Edit
                     </button>
