@@ -307,19 +307,21 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
 
   return (
     <main>
-      <h1>Account activation</h1>
-      <Switch>
-        <Match when={result() === "loading"}>
-          <p role="status">Activating your account…</p>
-        </Match>
-        <Match when={result() === "success"}>
-          <p role="status">Your account has been activated.</p>
-        </Match>
-        <Match when={result() === "error"}>
-          <p role="alert">{message()}</p>
-        </Match>
-      </Switch>
-      <LoginLink navigate={props.navigate} />
+      <section class="account-result">
+        <h1>Account activation</h1>
+        <Switch>
+          <Match when={result() === "loading"}>
+            <p role="status">Activating your account…</p>
+          </Match>
+          <Match when={result() === "success"}>
+            <p role="status">Your account has been activated.</p>
+          </Match>
+          <Match when={result() === "error"}>
+            <p role="alert">{message()}</p>
+          </Match>
+        </Switch>
+        <LoginLink navigate={props.navigate} />
+      </section>
     </main>
   );
 }
