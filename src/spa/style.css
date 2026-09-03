@@ -20,6 +20,12 @@
   --radius: 0.5rem;
   --font-family: sans-serif;
   --error: #b00020;
+  --status-success-fg: #0b6b2c;
+  --status-success-bg: #d8f3dc;
+  --status-warning-fg: #7a5b00;
+  --status-warning-bg: #fff3cd;
+  --status-error-fg: #8a1c1c;
+  --status-error-bg: #f8d7da;
   color: var(--grey-90);
   font-family: var(--font-family);
 }
@@ -334,16 +340,16 @@ form,
   font-size: 0.75rem;
 }
 .websub-status-verified {
-  color: #0b6b2c;
-  background: #d8f3dc;
+  color: var(--status-success-fg);
+  background: var(--status-success-bg);
 }
 .websub-status-pending {
-  color: #7a5b00;
-  background: #fff3cd;
+  color: var(--status-warning-fg);
+  background: var(--status-warning-bg);
 }
 .websub-status-failed {
-  color: #8a1c1c;
-  background: #f8d7da;
+  color: var(--status-error-fg);
+  background: var(--status-error-bg);
 }
 
 label {
@@ -757,10 +763,10 @@ a {
   display: inline-block;
   margin-left: 0.4rem;
   padding: 0.05rem 0.4rem;
-  color: #0b6b2c;
+  color: var(--status-success-fg);
   font-size: 0.7rem;
   font-weight: 400;
-  background: #d8f3dc;
+  background: var(--status-success-bg);
   border-radius: 1rem;
 }
 .form-actions {
