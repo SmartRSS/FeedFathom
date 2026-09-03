@@ -157,6 +157,7 @@ export const subscriptionResponse = Type.Object({ sourceId: id }, exact);
 export const removedArticlesResponse = Type.Array(id);
 export const removedIdResponse = id;
 export const updatedSourceResponse = Type.Object({ sourceId: id }, exact);
+export const updatedFolderResponse = Type.Object({ folderId: id }, exact);
 
 export const adminSourcesResponse = Type.Array(
   Type.Object(

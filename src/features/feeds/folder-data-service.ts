@@ -32,6 +32,18 @@ export class FoldersDataService {
       .where(eq(userFolders.userId, userId));
   }
 
+  public async renameFolder(userId: number, folderId: number, name: string) {
+    return (
+      await this.drizzleConnection
+        .update(userFolders)
+        .set({ name })
+        .where(
+          and(eq(userFolders.id, folderId), eq(userFolders.userId, userId)),
+        )
+        .returning({ id: userFolders.id })
+    ).at(0);
+  }
+
   public async removeEmptyUserFolder(
     userId: number,
     folderId: number,

@@ -13,6 +13,7 @@ import {
   removedArticlesResponse,
   removedIdResponse,
   treeResponse,
+  updatedFolderResponse,
   type Article,
   type ArticleSummary,
   type TreeNode,
@@ -338,7 +339,7 @@ export function Dashboard(props: {
       if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
     }
   }
-  function showProperties() {
+  async function showProperties() {
     const node = selectedNode();
     if (!node) return;
     if (node.type === "source") {
@@ -347,7 +348,19 @@ export function Dashboard(props: {
       setShowDiscovery(true);
       return;
     }
-    alert(`Name: ${node.name}\nItems: ${node.children?.length ?? 0}`);
+    const name = prompt("Folder name", node.name);
+    if (!name?.trim() || name === node.name) return;
+    setError("");
+    try {
+      await api("/folders", updatedFolderResponse, {
+        body: JSON.stringify({ folderId: Number(node.uid), folderName: name }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      await loadTree();
+    } catch (cause) {
+      reportError(cause, "Could not rename folder");
+    }
   }
   async function removeSelectedNode() {
     const node = selectedNode();
@@ -638,7 +651,7 @@ export function Dashboard(props: {
             <button
               aria-label="source properties"
               disabled={!selectedNode()}
-              onClick={showProperties}
+              onClick={() => void showProperties()}
             >
               <Icon raw={detailsRaw} />
             </button>
