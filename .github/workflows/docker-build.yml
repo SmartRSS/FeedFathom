@@ -95,9 +95,47 @@ jobs:
           echo "::error::Image smoke did not pass (result: $SMOKE)."
           exit 1
 
+  # Both the extension manifest and (on main) the app's own FEEDFATHOM_BUILD
+  # need the same value, computed once so the two don't drift apart by
+  # running `date` a few seconds apart in separate jobs.
+  build_metadata:
+    name: Compute shared release version
+    needs: quality
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - name: Compute version
+        id: metadata
+        run: |
+          # WebExtension manifest versions forbid a leading zero on any
+          # dot-segment (each must be "0" or start 1-9). The same string also
+          # becomes the git tag and the app's UA string, so it should stay
+          # fixed-width too -- padding with "0" is what's banned, not width,
+          # so offsetting each field above its max leading-zero range fakes
+          # the padding legally.
+          # ponytail: YEAR_FIELD is 2-digit-wide only for 2010-2099. It's a
+          # single digit (still legal -- "0" or a bare 1-9 -- just not
+          # fixed-width) for the 10 years either side of a century rollover.
+          # Add a +100 offset, same trick as the other fields, if that
+          # matters before 2100.
+          YEAR_FIELD=$(( 10#$(date -u +%y) ))
+          DOY=$(( 10#$(date -u +%j) ))
+          HOUR=$(( 10#$(date -u +%H) ))
+          MINUTE=$(( 10#$(date -u +%M) ))
+          SECOND=$(( 10#$(date -u +%S) ))
+          MINUTE_OF_DAY=$(( HOUR * 60 + MINUTE ))
+          DOY_FIELD=$(( DOY + 100 ))                      # 101-466, always 3 digits
+          MINUTE_OF_DAY_FIELD=$(( MINUTE_OF_DAY + 1000 )) # 1000-2439, always 4 digits
+          SECOND_FIELD=$(( SECOND + 10 ))                 # 10-69, always 2 digits
+          echo "version=$YEAR_FIELD.$DOY_FIELD.$MINUTE_OF_DAY_FIELD.$SECOND_FIELD" >> "$GITHUB_OUTPUT"
+
   publish_images:
     name: Publish ${{ matrix.target }} immutable image
-    needs: quality
+    needs: [quality, build_metadata]
     if: >-
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
@@ -138,20 +176,20 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            FEEDFATHOM_BUILD=${{ github.sha }}
+            FEEDFATHOM_BUILD=${{ github.ref == 'refs/heads/main' && needs.build_metadata.outputs.version || github.sha }}
           tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.target }}:${{ github.sha }}
           provenance: false
 
   build_extension:
     name: Build and sign browser extension
-    needs: quality
+    needs: [quality, build_metadata]
     if: >-
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       build_date: ${{ steps.metadata.outputs.build_date }}
-      extension_version: ${{ steps.metadata.outputs.extension_version }}
+      extension_version: ${{ needs.build_metadata.outputs.version }}
       changed: ${{ steps.content.outputs.changed }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -165,45 +203,15 @@ jobs:
       - name: Set up Bun project
         uses: ./.github/actions/bun-project
 
-      - name: Set extension release metadata
+      - name: Set build date
         id: metadata
         run: |
-          # WebExtension manifest versions forbid a leading zero on any
-          # dot-segment (each must be "0" or start 1-9) and cap each segment
-          # at 65535, so raw zero-padding and raw seconds-since-midnight are
-          # both out. Instead, offset month/day/hour/second by +10 so every
-          # value is always 2 digits with no leading zero, then pack
-          # month/day into one fixed-width segment (always 4 digits,
-          # 1111-2241) -- the whole version stays fixed-width per segment,
-          # so it sorts correctly both numerically (AMO's own comparator)
-          # and as a plain string (git tag / release list).
-          YEAR=$(date -u +%Y)
-          MONTH=$(( 10#$(date -u +%m) + 10 ))
-          DAY=$(( 10#$(date -u +%d) + 10 ))
-          HOUR=$(( 10#$(date -u +%H) + 10 ))
-          MINUTE=$(( 10#$(date -u +%M) + 10 ))
-          SECOND=$(( 10#$(date -u +%S) + 10 ))
-          MONTH_DAY=$(( MONTH * 100 + DAY ))
-          # Minute and second share the last segment. Leaving the minute out
-          # made two runs in the same hour collide whenever they hit the same
-          # second-of-minute -- a coin flip at ~10 runs an hour, and it did
-          # collide: the release create failed with HTTP 422 because the tag
-          # already existed. Packed range is 1010-6969, so it stays 4 digits,
-          # never leads with a zero, and stays under the 65535 per-segment
-          # cap; left-to-right numeric comparison is now monotonic to the
-          # second.
-          MINUTE_SECOND=$(( MINUTE * 100 + SECOND ))
-          EXTENSION_VERSION="$YEAR.$MONTH_DAY.$HOUR.$MINUTE_SECOND"
-          BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          {
-            echo "extension_version=$EXTENSION_VERSION"
-            echo "build_date=$BUILD_DATE"
-          } >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
       - name: Build extension variants
         env:
           FIREFOX_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.json
-          EXTENSION_VERSION: ${{ steps.metadata.outputs.extension_version }}
+          EXTENSION_VERSION: ${{ needs.build_metadata.outputs.version }}
         run: bun run build-extension
 
       - name: Detect whether the extension actually changed
