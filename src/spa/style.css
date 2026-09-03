@@ -308,6 +308,13 @@ form,
   text-align: left;
   border-bottom: var(--border);
 }
+.admin-table th:nth-child(2),
+.admin-table th:nth-child(3),
+.admin-table td:nth-child(2),
+.admin-table td:nth-child(3) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .admin-table thead {
   position: sticky;
   top: 0;
