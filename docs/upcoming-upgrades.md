@@ -1,10 +1,10 @@
 # Upcoming major upgrades: Bun 1.4, Elysia 2.0, Solid 2.0
 
-Researched 2026-08-16, Bun section updated 2026-08-20 when 1.4.0 shipped.
+Researched 2026-08-16, Bun section updated 2026-09-04 for 1.4.1.
 
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
-| bun               | 1.4.0        | 1.4.0    | —                   |
+| bun               | 1.4.1        | 1.4.1    | —                   |
 | elysia            | 2.0.0-beta.4 | 1.4.29   | 2.0.0-beta.4        |
 | solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.0          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
