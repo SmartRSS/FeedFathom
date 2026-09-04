@@ -139,6 +139,7 @@ FeedFathom is licensed under the MIT License.
 
 ## Acknowledgements
 
-- [Remix Icon](https://remixicon.com/) — Apache License 2.0
+- [Lucide](https://lucide.dev) — ISC License, see
+  [src/spa/assets/icons/LICENSE](src/spa/assets/icons/LICENSE)
 - [Bun](https://bun.sh) — JavaScript runtime
 - [Solid](https://www.solidjs.com/) and [Elysia](https://elysiajs.com/) — web UI and API framework
