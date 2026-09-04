@@ -1,5 +1,5 @@
 # dev image is used for development purposes
-FROM oven/bun:1.4.0-alpine AS dev
+FROM oven/bun:1.4.1-alpine AS dev
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY patches/ /app/patches/
@@ -10,7 +10,7 @@ USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Installer (shared dependencies) ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.0-alpine AS installer
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.1-alpine AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY patches/ /app/patches/
@@ -18,7 +18,7 @@ COPY vendor/ /app/vendor/
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # --- Builder Base ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.0-alpine AS builder-base
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.1-alpine AS builder-base
 WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
@@ -43,7 +43,7 @@ COPY drizzle /app/drizzle/
 RUN bun run build-migrator
 
 # --- Release Base ---
-FROM oven/bun:1.4.0-distroless AS release
+FROM oven/bun:1.4.1-distroless AS release
 WORKDIR /app
 ENV NODE_ENV=production
 USER 65532:65532
@@ -54,7 +54,12 @@ COPY --chown=65532:65532 package.json /app/
 # you actually got. Empty for a local build, which has no commit to claim.
 ARG FEEDFATHOM_BUILD=""
 ENV FEEDFATHOM_BUILD=$FEEDFATHOM_BUILD
-ENTRYPOINT ["/usr/local/bin/bun"]
+# Nothing in the server, worker or migrator bundle loads a native addon --
+# bullmq's msgpackr falls back to its JS codec -- so denying process.dlopen
+# and bun:ffi's cc() costs nothing and takes a code-execution primitive away
+# from anything that manages to inject JavaScript. The dev stage keeps them:
+# vite pulls in lightningcss, which is a real addon.
+ENTRYPOINT ["/usr/local/bin/bun", "--no-addons"]
 
 # --- Server Release ---
 FROM release AS feedfathom-server
