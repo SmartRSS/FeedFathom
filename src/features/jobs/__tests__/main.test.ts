@@ -65,6 +65,12 @@ const idleFaviconRefresher = {
 
 const idleCleanupOrphanedData = async () => {};
 
+const idleHubPoster = {
+  async post() {
+    return { status: 202 };
+  },
+};
+
 const idleJobFailures = {
   async record() {},
 };
@@ -102,6 +108,7 @@ test("initialize schedules configured intervals and starts the worker", async ()
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
 
   await worker.initialize();
@@ -135,6 +142,7 @@ test("captured processor parses the queued source", async () => {
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
 
   await worker.initialize();
@@ -171,6 +179,7 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -208,6 +217,7 @@ test("refreshes favicons only for validated job data", async () => {
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -256,6 +266,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -343,6 +354,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
     },
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   downstreamCalls.length = 0;
@@ -396,6 +408,7 @@ test("cleanup delegates to the worker", async () => {
     idleCleanupOrphanedData,
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
 
@@ -426,6 +439,7 @@ test("records a durable failure for non-ParseSource job errors", async () => {
       },
     },
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -460,6 +474,7 @@ test("a failure while recording a job failure doesn't itself fail the job", asyn
       },
     },
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -493,6 +508,7 @@ test("a poisoned error whose message getter throws doesn't fail the job either",
     },
     idleJobFailures,
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -537,6 +553,7 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
       },
     },
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -579,6 +596,7 @@ test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail 
       },
     },
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");
@@ -622,6 +640,7 @@ test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job",
       },
     },
     createWorker,
+    idleHubPoster,
   );
   await worker.initialize();
   if (!processor) throw new Error("Worker processor was not captured");

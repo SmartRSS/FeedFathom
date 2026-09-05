@@ -150,6 +150,13 @@ type FetchResult = {
   response: NativeHttpResponse;
 };
 
+// A POST has no cached body to hand back and no caller here reads one, so
+// this reports only what the origin decided.
+export type HttpPostResponse = {
+  headers: Headers;
+  status: number;
+};
+
 export type HttpResponse<T> = {
   cached: boolean;
   data: T;
@@ -192,6 +199,59 @@ export class HttpClient {
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
       return await this.getBeforeDeadline(url, options, deadline);
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  /**
+   * A form POST under the same politeness rules as get(): the host's interval
+   * is reserved, its block is honoured, and a Retry-After it sends back is
+   * recorded.
+   *
+   * Neither cached nor redirect-following, on purpose. A POST body is not
+   * cacheable, and a 3xx target is fully origin-controlled -- the WebSub hub
+   * this exists for treats a redirecting hub as a failure rather than an
+   * instruction. The status is returned and the caller decides.
+   *
+   * Interactive priority even though both callers are the worker: a subscribe
+   * is a one-shot side effect with no retry queue behind it, so sitting out
+   * the interval beats dropping the subscription.
+   */
+  async post(url: string, body: URLSearchParams): Promise<HttpPostResponse> {
+    const deadline = new RequestDeadline(this.deadlineMs);
+    try {
+      const hostname = parseHttpUrl(url).hostname;
+      const encoded = body.toString();
+      const headers = new Headers();
+      headers.set("accept", "*/*");
+      headers.set("content-type", "application/x-www-form-urlencoded");
+      headers.set("content-length", String(Buffer.byteLength(encoded)));
+      headers.set(
+        "user-agent",
+        buildUserAgent(this.userAgentPrefix, undefined),
+      );
+
+      await this.rateLimiter.reserve(hostname, "interactive", deadline);
+      const response = await deadline.run(
+        this.transport(url, headers, deadline.controller.signal, encoded),
+      );
+      response.destroy();
+      await this.rateLimiter.applyRateLimitHeaders(
+        hostname,
+        response.headers,
+        deadline,
+      );
+      const retryAfter = response.headers.get("retry-after");
+      if (
+        response.status === rateLimitedStatus ||
+        (retryAfter !== null && response.status >= 400)
+      ) {
+        throw new HttpDeferredError(
+          await this.rateLimiter.block(hostname, retryAfter, deadline),
+        );
+      }
+      return { headers: response.headers, status: response.status };
     } finally {
       deadline.dispose();
     }

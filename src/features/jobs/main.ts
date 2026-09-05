@@ -8,7 +8,10 @@ import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { requestHubSubscription } from "#features/feeds/websub.ts";
+import {
+  type HubPoster,
+  requestHubSubscription,
+} from "#features/feeds/websub.ts";
 import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
@@ -122,6 +125,7 @@ export class MainWorker {
       "record"
     >,
     private readonly createWorker: MainWorkerFactory,
+    private readonly hubPoster: HubPoster,
   ) {}
 
   async initialize() {
@@ -230,6 +234,7 @@ export class MainWorker {
                 return;
               const result = await requestHubSubscription({
                 callbackUrl: `https://${domain}/api/websub/callback/${subscription.callbackToken}`,
+                hubPoster: this.hubPoster,
                 hubUrl: subscription.hubUrl,
                 mode: "subscribe",
                 secret: subscription.secret,

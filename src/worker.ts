@@ -28,6 +28,7 @@ async function runWorker() {
     runtime.cleanupOrphanedData,
     runtime.jobFailuresDataService,
     createWorker,
+    runtime.httpClient,
   );
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () => {
