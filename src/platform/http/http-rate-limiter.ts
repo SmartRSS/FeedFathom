@@ -9,6 +9,7 @@ const blockedPrefix = "http-blocked:";
 const intervalPrefix = "http-interval:";
 const interactivePrefix = "http-interactive:";
 const feedDelayMs = 10_000;
+const pollIntervalMs = 50;
 const fallbackBlockMs = 5 * 60_000;
 
 type RateLimitRedis = {
@@ -81,14 +82,17 @@ export function rateLimitBlockUntil(
 }
 
 export class HttpRateLimiter {
-  constructor(private readonly redis: RateLimitRedis) {}
+  constructor(
+    private readonly redis: RateLimitRedis,
+    private readonly delay = feedDelayMs,
+  ) {}
 
   async reserve(
     hostname: string,
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<void> {
-    const delay = feedDelayMs;
+    const delay = this.delay;
     const until = await this.blockedUntil(hostname, deadline);
     if (until > Date.now()) {
       // Background work defers: the worker has other sources to poll. An
@@ -115,10 +119,14 @@ export class HttpRateLimiter {
 
     // One interval is the longest wait a free slot can need, so waiting
     // longer than that only helps when another waiter keeps winning the race.
-    // Bounded by the deadline as well, which is what makes this a wait the
-    // request can actually afford -- a fixed window shorter than the interval
-    // could only ever succeed by luck.
-    const reservationDeadline = Math.min(Date.now() + delay, deadline.endsAt);
+    // One poll on top, or the last attempt lands just before the slot it is
+    // waiting for expires. Bounded by the deadline as well, which is what
+    // makes this a wait the request can afford -- a fixed window shorter than
+    // the interval could only ever succeed by luck.
+    const reservationDeadline = Math.min(
+      Date.now() + delay + pollIntervalMs,
+      deadline.endsAt,
+    );
     let waiting = false;
     try {
       /* eslint-disable no-await-in-loop -- Reservation and waiter state are updated between polls. */
@@ -133,7 +141,7 @@ export class HttpRateLimiter {
             this.redis.expire(`${interactivePrefix}${hostname}`, 6),
           );
         }
-        await deadline.sleep(50);
+        await deadline.sleep(pollIntervalMs);
       }
       /* eslint-enable no-await-in-loop */
       throw new HttpDeferredError(Date.now() + delay);
