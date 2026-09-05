@@ -23,6 +23,7 @@ import {
 import { createInternalRoutes } from "#platform/http/internal-routes.ts";
 import { deferredResponse } from "#platform/http/deferred-response.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 
 export type ServerDependencies = Omit<
   PublicAuthRouteDependencies,
@@ -115,6 +116,16 @@ export async function createServerApp(
       if (error instanceof DecodeError) {
         console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
         return Response.json({ error: "Invalid request." }, { status: 400 });
+      }
+      // Our own 30 second budget ran out. That is an upstream timeout, not a
+      // malformed request, and the handlers that fetch a user-supplied URL
+      // re-raise it rather than blaming the URL.
+      if (isHttpDeadlineError(error)) {
+        console.error(`Deadline exceeded on ${path}`);
+        return Response.json(
+          { error: "Upstream request timed out." },
+          { status: 504 },
+        );
       }
       console.error(`Unhandled error on ${path}:`, error);
       return Response.json({ error: "Internal Server Error" }, { status: 500 });

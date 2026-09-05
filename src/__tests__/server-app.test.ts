@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
 import { createServerApp, type ServerDependencies } from "../server-app.ts";
 
@@ -774,6 +775,26 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   );
 
   expect(response.status).toBe(500);
+});
+
+// Our own 30 second budget running out is an upstream timeout, not the
+// user's URL being wrong. find used to collapse it into "Invalid feed url".
+test("find reports our own expired deadline as a 504, not a bad url", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => {
+    throw new HttpDeadlineError();
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+
+  expect(response.status).toBe(504);
 });
 
 test("persists a cached preview inline and recomputes unread counts, without reparsing or trusting browser articles", async () => {

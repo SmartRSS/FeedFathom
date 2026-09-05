@@ -16,9 +16,24 @@ export class HttpDeadlineError extends Error {
   }
 }
 
+// Same reason as isHttpDeferredError: what reaches a catch block is whatever
+// was thrown, and `instanceof` can itself throw on a poisoned prototype.
+export function isHttpDeadlineError(
+  error: unknown,
+): error is HttpDeadlineError {
+  try {
+    return error instanceof HttpDeadlineError;
+  } catch {
+    return false;
+  }
+}
+
 export class RequestDeadline {
   readonly controller = new AbortController();
-  private readonly endsAt: number;
+  // Exposed so a caller that has to wait for something else (a rate-limit
+  // slot, a host's block window) can tell whether the wait fits in the
+  // budget instead of guessing at a window of its own.
+  readonly endsAt: number;
   private readonly expired: Promise<never>;
   private timer: ReturnType<typeof setTimeout> | undefined;
 

@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { rateLimitBlockUntil, retryAtFrom } from "../http-rate-limiter.ts";
+import {
+  HttpRateLimiter,
+  rateLimitBlockUntil,
+  retryAtFrom,
+} from "../http-rate-limiter.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { RequestDeadline } from "#platform/http/request-deadline.ts";
 
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;
@@ -169,5 +175,132 @@ describe("rateLimitBlockUntil header spellings and reset units", () => {
         now,
       ),
     ).toBeUndefined();
+  });
+});
+
+// A stub with real PX expiry, because the whole point of these cases is when
+// a key stops existing.
+function expiringRedis() {
+  const values = new Map<string, { expiresAt: number; value: string }>();
+  const live = (key: string) => {
+    const entry = values.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      values.delete(key);
+      return undefined;
+    }
+    return entry;
+  };
+  return {
+    async decr(key: string) {
+      const next = String(Number(live(key)?.value ?? "0") - 1);
+      values.set(key, { expiresAt: Date.now() + 60_000, value: next });
+      return Number(next);
+    },
+    async expire() {
+      return 1;
+    },
+    async get(key: string) {
+      return live(key)?.value ?? null;
+    },
+    async incr(key: string) {
+      const next = String(Number(live(key)?.value ?? "0") + 1);
+      values.set(key, { expiresAt: Date.now() + 60_000, value: next });
+      return Number(next);
+    },
+    seed(key: string, value: string, ttlMs: number) {
+      values.set(key, { expiresAt: Date.now() + ttlMs, value });
+    },
+    async set(key: string, value: string, ...options: Array<number | string>) {
+      if (options.includes("NX") && live(key)) return null;
+      const px = options.indexOf("PX");
+      const ttl = px === -1 ? 60_000 : Number(options[px + 1]);
+      values.set(key, { expiresAt: Date.now() + ttl, value });
+      return "OK";
+    },
+  };
+}
+
+describe("HttpRateLimiter.reserve for an interactive caller", () => {
+  // The window used to be a flat 2.5s against a 10s interval, so waiting could
+  // never succeed on its own -- only by luck, if the slot happened to free
+  // early. 27.5s of a 30s deadline went unused and the SPA got a 429 it has no
+  // retry for.
+  test("waits out an interval longer than the old fixed 2.5s window", async () => {
+    const redis = expiringRedis();
+    redis.seed("http-interval:feeds.example.com", "1", 2_800);
+    const deadline = new RequestDeadline(20_000);
+    const started = Date.now();
+
+    try {
+      await new HttpRateLimiter(redis).reserve(
+        "feeds.example.com",
+        "interactive",
+        deadline,
+      );
+    } finally {
+      deadline.dispose();
+    }
+
+    expect(Date.now() - started).toBeGreaterThan(2_500);
+  }, 20_000);
+
+  // A block that clears inside the deadline used to fail the request outright,
+  // with no wait at all.
+  test("sleeps out a block that clears inside the deadline", async () => {
+    const redis = expiringRedis();
+    redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
+    const deadline = new RequestDeadline(20_000);
+    const started = Date.now();
+
+    try {
+      await new HttpRateLimiter(redis).reserve(
+        "feeds.example.com",
+        "interactive",
+        deadline,
+      );
+    } finally {
+      deadline.dispose();
+    }
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(200);
+  });
+
+  // Past the deadline it is a real deferral: the caller cannot afford the wait.
+  test("still defers a block that outlasts the deadline", async () => {
+    const redis = expiringRedis();
+    const retryAt = Date.now() + 60_000;
+    redis.seed("http-blocked:feeds.example.com", String(retryAt), 60_000);
+    const deadline = new RequestDeadline(1_000);
+
+    try {
+      const error = await new HttpRateLimiter(redis)
+        .reserve("feeds.example.com", "interactive", deadline)
+        .catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(HttpDeferredError);
+      if (!(error instanceof HttpDeferredError)) throw error;
+      expect(error.retryAt).toBe(retryAt);
+    } finally {
+      deadline.dispose();
+    }
+  });
+
+  // Background work defers instead of holding a worker slot for the wait.
+  test("still defers background work behind a block", async () => {
+    const redis = expiringRedis();
+    redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
+    const deadline = new RequestDeadline(20_000);
+
+    try {
+      await expect(
+        new HttpRateLimiter(redis).reserve(
+          "feeds.example.com",
+          "background",
+          deadline,
+        ),
+      ).rejects.toBeInstanceOf(HttpDeferredError);
+    } finally {
+      deadline.dispose();
+    }
   });
 });
