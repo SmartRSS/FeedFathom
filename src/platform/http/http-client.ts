@@ -90,6 +90,11 @@ function buildUserAgent(
   return `${prefix}; ${subscribers} subscribers)`;
 }
 
+// Everything else a push carries is about the push, not about the feed
+// document: the hub's signature, its own cache directives, its Date. Only
+// what the parser reads is kept.
+const seededCacheHeaders = ["content-type", "link"];
+
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
@@ -116,8 +121,10 @@ type HttpRequestOptions = {
   priority?: "background" | "interactive";
   responseType?: "arrayBuffer";
   // Skips the local TTL short-circuit but keeps conditional revalidation, so
-  // an unchanged origin still answers 304 cheaply. For callers (a WebSub push)
-  // that already know something changed.
+  // an unchanged origin still answers 304 cheaply. For an explicit user
+  // action -- a manual refresh -- where serving a still-fresh entry reads as
+  // the button not working. See ADR 0003; a WebSub push arrives with the
+  // document attached and goes through seedCache instead.
   skipCache?: boolean;
   // Number of our users subscribed to the feed being fetched, reported to
   // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
@@ -139,12 +146,22 @@ type HttpClientIdentity = {
 
 type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
+  // The per-host politeness interval. Only set by tests, which cannot afford
+  // to sit out the real one; see HttpRateLimiter for the production value.
+  intervalMs?: number;
   transport?: NativeHttpTransport;
 };
 
 type FetchResult = {
   permanent: boolean;
   response: NativeHttpResponse;
+};
+
+// A POST has no cached body to hand back and no caller here reads one, so
+// this reports only what the origin decided.
+export type HttpPostResponse = {
+  headers: Headers;
+  status: number;
 };
 
 export type HttpResponse<T> = {
@@ -168,7 +185,7 @@ export class HttpClient {
     private readonly redis: HttpRedis,
     options: HttpClientOptions = {},
   ) {
-    this.rateLimiter = new HttpRateLimiter(redis);
+    this.rateLimiter = new HttpRateLimiter(redis, options.intervalMs);
     this.deadlineMs = options.deadlineMs ?? requestDeadlineMs;
     this.transport = options.transport ?? nativeHttpTransport;
     this.userAgentPrefix = buildUserAgentPrefix(options);
@@ -189,6 +206,111 @@ export class HttpClient {
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
       return await this.getBeforeDeadline(url, options, deadline);
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  /**
+   * A form POST under the same politeness rules as get(): the host's interval
+   * is reserved, its block is honoured, and a Retry-After it sends back is
+   * recorded.
+   *
+   * Neither cached nor redirect-following, on purpose. A POST body is not
+   * cacheable, and a 3xx target is fully origin-controlled -- the WebSub hub
+   * this exists for treats a redirecting hub as a failure rather than an
+   * instruction. The status is returned and the caller decides.
+   *
+   * Interactive priority even though both callers are the worker: a subscribe
+   * is a one-shot side effect with no retry queue behind it, so sitting out
+   * the interval beats dropping the subscription.
+   */
+  async post(url: string, body: URLSearchParams): Promise<HttpPostResponse> {
+    const deadline = new RequestDeadline(this.deadlineMs);
+    try {
+      const hostname = parseHttpUrl(url).hostname;
+      const encoded = body.toString();
+      const headers = new Headers();
+      headers.set("accept", "*/*");
+      headers.set("content-type", "application/x-www-form-urlencoded");
+      headers.set("content-length", String(Buffer.byteLength(encoded)));
+      headers.set(
+        "user-agent",
+        buildUserAgent(this.userAgentPrefix, undefined),
+      );
+
+      await this.rateLimiter.reserve(hostname, "interactive", deadline);
+      const response = await deadline.run(
+        this.transport(url, headers, deadline.controller.signal, encoded),
+      );
+      response.destroy();
+      await this.rateLimiter.applyRateLimitHeaders(
+        hostname,
+        response.headers,
+        deadline,
+      );
+      const retryAfter = response.headers.get("retry-after");
+      if (
+        response.status === rateLimitedStatus ||
+        (retryAfter !== null && response.status >= 400)
+      ) {
+        throw new HttpDeferredError(
+          await this.rateLimiter.block(hostname, retryAfter, deadline),
+        );
+      }
+      return { headers: response.headers, status: response.status };
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  /**
+   * Store a body we were handed instead of one we fetched, so the next get()
+   * for this URL is answered from the cache rather than from the network.
+   *
+   * This exists for the WebSub push: the hub sends the feed document and signs
+   * it with the secret we gave that hub, so the content is already in hand.
+   * Fetching it again to learn what the push already said is exactly the
+   * request a cache exists to avoid, and it also leaves the stored entry
+   * stale, which is worse than either.
+   *
+   * No validator is stored. The origin's ETag for this state is unknown, so
+   * the next revalidation goes out unconditional -- one uncompressed response
+   * later, against one saved now. A body too large for the cache is refused by
+   * saveCached, which deletes the stale entry, so the parse falls back to a
+   * normal fetch instead of reading what the push replaced.
+   */
+  async seedCache(
+    url: string,
+    body: Buffer,
+    headers: Headers,
+    freshForMs: number,
+  ): Promise<void> {
+    const parsed = parseHttpUrl(url);
+    const kept = new Headers();
+    for (const name of seededCacheHeaders) {
+      const value = headers.get(name);
+      if (value !== null) kept.set(name, value);
+    }
+
+    const deadline = new RequestDeadline(this.deadlineMs);
+    try {
+      const lock = await this.acquireCacheLock(url, deadline);
+      try {
+        await this.saveCached(
+          url,
+          {
+            body: body.toString("base64"),
+            expiresAt: Date.now() + freshForMs,
+            headers: [...kept],
+            status: 200,
+            url: parsed.toString(),
+          },
+          deadline,
+        );
+      } finally {
+        await this.releaseCacheLock(lock, deadline);
+      }
     } finally {
       deadline.dispose();
     }
@@ -221,12 +343,6 @@ export class HttpClient {
     }
 
     const hostname = parsedUrl.hostname;
-    await this.rateLimiter.reserve(
-      hostname,
-      options.priority ?? "interactive",
-      deadline,
-    );
-
     const headers = new Headers();
     headers.set(
       "accept",
@@ -296,22 +412,38 @@ export class HttpClient {
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
-    /* eslint-disable no-await-in-loop -- Each retry depends on its response, rate-limit state, and backoff. */
+    /* eslint-disable no-await-in-loop -- Each retry depends on its response and on re-reserving the host. */
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;
       try {
-        result = await this.fetchFollowingRedirects(url, headers, deadline);
+        result = await this.fetchFollowingRedirects(
+          url,
+          headers,
+          priority,
+          deadline,
+        );
+        // Whatever answered is what gets held back, which after a redirect
+        // is not the host the request started at.
+        const answeringHost = hostnameOf(result.response.url) ?? hostname;
         await this.rateLimiter.applyRateLimitHeaders(
-          hostname,
+          answeringHost,
           result.response.headers,
           deadline,
         );
-        if (result.response.status === rateLimitedStatus) {
-          const retryAfter = result.response.headers.get("retry-after");
+        const retryAfter = result.response.headers.get("retry-after");
+        // Retry-After is not a 429 header (RFC 9110 10.2.3): a 503 carrying
+        // it is an origin saying when to come back, not a transient failure
+        // to try again. Redirects carry it too, but they never reach here --
+        // fetchFollowingRedirects consumes them -- so this is bounded to
+        // error statuses.
+        if (
+          result.response.status === rateLimitedStatus ||
+          (retryAfter !== null && result.response.status >= 400)
+        ) {
           result.response.destroy();
           result = undefined;
           throw new HttpDeferredError(
-            await this.rateLimiter.block(hostname, retryAfter, deadline),
+            await this.rateLimiter.block(answeringHost, retryAfter, deadline),
           );
         }
         if (
@@ -335,7 +467,6 @@ export class HttpClient {
           throw error;
         }
       }
-      await deadline.sleep(200 * 2 ** attempt);
     }
     /* eslint-enable no-await-in-loop */
   }
@@ -343,14 +474,25 @@ export class HttpClient {
   private async fetchFollowingRedirects(
     url: string,
     headers: Headers,
+    priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;
     // A chain is permanent only if every hop is (301/308) -- one temporary hop
     // means the resolved URL could still change back.
     let permanent = true;
-    /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response. */
+    /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
     for (let redirects = 0; redirects <= 5; redirects++) {
+      // A hop is a request like any other, and it is a request to a host of
+      // its own. Reserving here rather than once per call is also what gives
+      // a retry its interval, since every attempt re-enters this loop. The
+      // hostname is safe to read: the first is already validated and every
+      // later one was built by `new URL` below.
+      await this.rateLimiter.reserve(
+        new URL(next).hostname,
+        priority,
+        deadline,
+      );
       const response = await deadline.run(
         this.transport(next, headers, deadline.controller.signal),
       );
@@ -534,6 +676,14 @@ export class HttpClient {
 
   private isRetryable(status: number): boolean {
     return retryableStatuses.has(status);
+  }
+}
+
+function hostnameOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
   }
 }
 

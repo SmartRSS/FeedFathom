@@ -100,6 +100,19 @@ Guard a caught value with a helper such as `isHttpDeferredError` rather than a
 bare `instanceof` — what reaches an error hook is whatever was thrown, and
 `instanceof` can itself throw on a proxy with a poisoned `getPrototypeOf` trap.
 
+## Outbound HTTP
+
+Every request the server makes to a feed, a hub or a favicon goes through
+`HttpClient` (`get` for feeds and favicons, `post` for a WebSub hub
+subscribe). One path, so one place governs politeness: the per-host interval
+and block in `http-rate-limiter.ts`, the cache in `http-cache-policy.ts`, and
+the private-network guard in the native transport. A second outbound path that
+reaches for the global `fetch` gets none of that, which is how the hub
+subscribe drifted out of the rate limiter.
+
+The rate-limit keys are per hostname; ADR 0002 records why, and what evidence
+would justify revisiting it.
+
 ## Extracting logic
 
 Decision logic lives in a dependency-free module beside whatever uses it, with

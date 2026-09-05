@@ -1,25 +1,26 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import {
   discoverWebSub,
+  type HubPoster,
   requestHubSubscription,
   verifyHubSignature,
 } from "#features/feeds/websub.ts";
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
-type FetchImplementation = (
-  ...arguments_: Parameters<typeof fetch>
-) => ReturnType<typeof fetch>;
-
-const setFetch = (implementation: FetchImplementation) => {
-  globalThis.fetch = Object.assign(implementation, {
-    preconnect: originalFetch.preconnect,
-  });
-};
+// Stands in for HttpClient.post, which is what carries the reservation, the
+// block check and Retry-After for the hub request.
+function recordingPoster(
+  respond: (url: string, body: URLSearchParams) => Promise<{ status: number }>,
+) {
+  const calls: Array<{ body: URLSearchParams; url: string }> = [];
+  const poster: HubPoster = {
+    async post(url, body) {
+      calls.push({ body, url });
+      return respond(url, body);
+    },
+  };
+  return { calls, poster };
+}
 
 describe("discoverWebSub", () => {
   test("prefers the HTTP Link header over the feed body", () => {
@@ -144,13 +145,10 @@ describe("verifyHubSignature", () => {
 
 describe("requestHubSubscription", () => {
   test("blocks a hub URL that resolves to a private address before any network call", async () => {
-    let fetchCalled = false;
-    setFetch(async () => {
-      fetchCalled = true;
-      return new Response(null, { status: 202 });
-    });
+    const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
       callbackUrl: "https://us.example/callback/token",
+      hubPoster: poster,
       hubUrl: "http://169.254.169.254/",
       mode: "subscribe",
       secret: "x",
@@ -160,19 +158,14 @@ describe("requestHubSubscription", () => {
       error: "Hub URL resolves to a private address",
       ok: false,
     });
-    expect(fetchCalled).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 
   test("posts the expected form fields and treats a 2xx as accepted", async () => {
-    let capturedBody: URLSearchParams | undefined;
-    let capturedMethod: string | undefined;
-    setFetch(async (_input, init) => {
-      capturedMethod = init?.method;
-      if (init?.body instanceof URLSearchParams) capturedBody = init.body;
-      return new Response(null, { status: 202 });
-    });
+    const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
       callbackUrl: "https://us.example/callback/token",
+      hubPoster: poster,
       hubUrl: "https://hub.example/",
       leaseSeconds: 86_400,
       mode: "subscribe",
@@ -180,24 +173,24 @@ describe("requestHubSubscription", () => {
       topicUrl: "https://example.com/feed",
     });
     expect(result).toEqual({ ok: true });
-    expect(capturedMethod).toBe("POST");
-    expect(capturedBody?.get("hub.mode")).toBe("subscribe");
-    expect(capturedBody?.get("hub.topic")).toBe("https://example.com/feed");
-    expect(capturedBody?.get("hub.callback")).toBe(
-      "https://us.example/callback/token",
-    );
-    expect(capturedBody?.get("hub.secret")).toBe("s3cr3t");
-    expect(capturedBody?.get("hub.lease_seconds")).toBe("86400");
+    expect(calls[0]?.url).toBe("https://hub.example/");
+    const body = calls[0]?.body;
+    expect(body?.get("hub.mode")).toBe("subscribe");
+    expect(body?.get("hub.topic")).toBe("https://example.com/feed");
+    expect(body?.get("hub.callback")).toBe("https://us.example/callback/token");
+    expect(body?.get("hub.secret")).toBe("s3cr3t");
+    expect(body?.get("hub.lease_seconds")).toBe("86400");
     // Some hubs (WordPress.com's pushpress hub confirmed) reject a
     // subscribe request outright without this, even though verification is
     // always async regardless of what's sent here.
-    expect(capturedBody?.get("hub.verify")).toBe("async");
+    expect(body?.get("hub.verify")).toBe("async");
   });
 
   test("treats a non-2xx hub response as failure", async () => {
-    setFetch(async () => new Response(null, { status: 500 }));
+    const { poster } = recordingPoster(async () => ({ status: 500 }));
     const result = await requestHubSubscription({
       callbackUrl: "https://us.example/callback/token",
+      hubPoster: poster,
       hubUrl: "https://hub.example/",
       mode: "subscribe",
       secret: "x",
@@ -209,12 +202,16 @@ describe("requestHubSubscription", () => {
     });
   });
 
+  // Including a deferral: the hub's own back-off reaches this as a throw now
+  // that the request goes through the client, and it must not escape into
+  // parseSource.
   test("treats a network error as failure instead of throwing", async () => {
-    setFetch(async () => {
+    const { poster } = recordingPoster(async () => {
       throw new Error("boom");
     });
     const result = await requestHubSubscription({
       callbackUrl: "https://us.example/callback/token",
+      hubPoster: poster,
       hubUrl: "https://hub.example/",
       mode: "subscribe",
       secret: "x",

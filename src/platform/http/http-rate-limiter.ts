@@ -9,7 +9,7 @@ const blockedPrefix = "http-blocked:";
 const intervalPrefix = "http-interval:";
 const interactivePrefix = "http-interactive:";
 const feedDelayMs = 10_000;
-const interactiveWaitMs = 2_500;
+const pollIntervalMs = 50;
 const fallbackBlockMs = 5 * 60_000;
 
 type RateLimitRedis = {
@@ -45,38 +45,65 @@ export function retryAtFrom(
   return Number.isFinite(date) ? date : now + fallbackBlockMs;
 }
 
+// RFC 9331 defines RateLimit-Reset as delta-seconds; GitHub and others send a
+// Unix timestamp instead, and nothing in either value says which it is. The
+// magnitudes do not overlap: 1e9 seconds is 2001-09 as an epoch and 31 years
+// as a delta, so anything smaller is a delta and anything larger is an epoch.
+const resetEpochThresholdSeconds = 1e9;
+
+function resetInstant(reset: number, now: number): number | undefined {
+  if (!Number.isFinite(reset) || reset < 0) return undefined;
+  const instant =
+    reset < resetEpochThresholdSeconds ? now + reset * 1_000 : reset * 1_000;
+  return instant > now ? instant : undefined;
+}
+
 /**
- * When an origin's own X-RateLimit headers say to stop, or undefined when they
+ * When an origin's own rate-limit headers say to stop, or undefined when they
  * do not. Acts at one remaining rather than zero: the request that would spend
  * the last unit is the one worth holding back.
+ *
+ * Both spellings are read: RFC 9331 standardised the un-prefixed names, and
+ * the `X-` forms predate it and are still the common ones in the wild.
  */
 export function rateLimitBlockUntil(
   headers: Headers,
   now = Date.now(),
 ): number | undefined {
-  const remainingHeader = headers.get("x-ratelimit-remaining");
-  const resetHeader = headers.get("x-ratelimit-reset");
+  const remainingHeader =
+    headers.get("ratelimit-remaining") ?? headers.get("x-ratelimit-remaining");
+  const resetHeader =
+    headers.get("ratelimit-reset") ?? headers.get("x-ratelimit-reset");
   if (!remainingHeader?.trim() || !resetHeader?.trim()) return undefined;
 
   const remaining = Number(remainingHeader);
-  const reset = Number(resetHeader);
-  if (remaining <= 1 && Number.isFinite(reset) && reset * 1_000 > now) {
-    return reset * 1_000;
-  }
-  return undefined;
+  if (!Number.isFinite(remaining) || remaining > 1) return undefined;
+  return resetInstant(Number(resetHeader), now);
 }
 
 export class HttpRateLimiter {
-  constructor(private readonly redis: RateLimitRedis) {}
+  constructor(
+    private readonly redis: RateLimitRedis,
+    private readonly delay = feedDelayMs,
+  ) {}
 
   async reserve(
     hostname: string,
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<void> {
-    const delay = feedDelayMs;
+    const delay = this.delay;
     const until = await this.blockedUntil(hostname, deadline);
-    if (until > Date.now()) throw new HttpDeferredError(until);
+    if (until > Date.now()) {
+      // Background work defers: the worker has other sources to poll. An
+      // interactive caller is a person waiting on a response, so a block that
+      // clears inside the deadline is waited out rather than reported as a
+      // failure the SPA has no retry for.
+      if (priority === "background" || until >= deadline.endsAt) {
+        throw new HttpDeferredError(until);
+      }
+      await deadline.sleep(until - Date.now());
+    }
 
     if (priority === "background") {
       const waiters = Number(
@@ -90,7 +117,16 @@ export class HttpRateLimiter {
       return;
     }
 
-    const reservationDeadline = Date.now() + interactiveWaitMs;
+    // One interval is the longest wait a free slot can need, so waiting
+    // longer than that only helps when another waiter keeps winning the race.
+    // One poll on top, or the last attempt lands just before the slot it is
+    // waiting for expires. Bounded by the deadline as well, which is what
+    // makes this a wait the request can afford -- a fixed window shorter than
+    // the interval could only ever succeed by luck.
+    const reservationDeadline = Math.min(
+      Date.now() + delay + pollIntervalMs,
+      deadline.endsAt,
+    );
     let waiting = false;
     try {
       /* eslint-disable no-await-in-loop -- Reservation and waiter state are updated between polls. */
@@ -105,7 +141,7 @@ export class HttpRateLimiter {
             this.redis.expire(`${interactivePrefix}${hostname}`, 6),
           );
         }
-        await deadline.sleep(50);
+        await deadline.sleep(pollIntervalMs);
       }
       /* eslint-enable no-await-in-loop */
       throw new HttpDeferredError(Date.now() + delay);

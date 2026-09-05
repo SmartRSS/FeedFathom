@@ -2,6 +2,7 @@ import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { findQuery } from "#shared/contracts/requests.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
 import {
   markWebSubAvailability,
@@ -30,9 +31,12 @@ export async function getFindHandler(
     return json(await markWebSubAvailability(feeds, feedParser));
   } catch (error_: unknown) {
     // A deferral is not this handler's to classify -- the central error hook
-    // turns it into a 429 with a Retry-After. Anything else here is a failure
-    // to fetch a URL the user supplied, which is a client error.
-    if (isHttpDeferredError(error_)) throw error_;
+    // turns it into a 429 with a Retry-After. Neither is our own deadline
+    // running out, which is a 504 and not the user's URL being wrong.
+    // Anything else here is a failure to fetch a URL the user supplied,
+    // which is a client error.
+    if (isHttpDeferredError(error_) || isHttpDeadlineError(error_))
+      throw error_;
     return json({ error: "Invalid feed url" }, 400);
   }
 }

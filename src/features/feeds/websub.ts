@@ -3,7 +3,6 @@ import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 
-const subscribeTimeoutMs = 15_000;
 const supportedSignatureAlgorithms = new Set([
   "sha1",
   "sha256",
@@ -112,6 +111,14 @@ export function discoverWebSub(
 
 export type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
 
+// Narrow on purpose: HttpClient satisfies it, and a test does not have to
+// build one. What matters is that the hub POST goes through the same
+// reservation, block check and Retry-After handling as every other outbound
+// request, instead of a second path with none of them.
+export type HubPoster = {
+  post(url: string, body: URLSearchParams): Promise<{ status: number }>;
+};
+
 /**
  * A 2xx means only that the hub accepted the request. The hub still has to GET
  * the callback with a challenge (see the callback route), so this never marks
@@ -119,6 +126,7 @@ export type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
  */
 export async function requestHubSubscription(params: {
   callbackUrl: string;
+  hubPoster: HubPoster;
   hubUrl: string;
   leaseSeconds?: number;
   mode: "subscribe" | "unsubscribe";
@@ -149,17 +157,11 @@ export async function requestHubSubscription(params: {
       : {}),
   });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), subscribeTimeoutMs);
   try {
-    const response = await fetch(hub, {
-      body,
-      // The redirect target is fully hub-controlled, so following it is an
-      // SSRF surface; a redirecting hub is unusual enough to just fail.
-      method: "POST",
-      redirect: "manual",
-      signal: controller.signal,
-    });
+    // post() does not follow redirects: the target is fully hub-controlled,
+    // so following it is an SSRF surface, and a redirecting hub is unusual
+    // enough to just fail.
+    const response = await params.hubPoster.post(hub.href, body);
     return response.status >= 200 && response.status < 300
       ? { ok: true }
       : { error: `Hub responded with ${response.status}`, ok: false };
@@ -168,8 +170,6 @@ export async function requestHubSubscription(params: {
       error: error instanceof Error ? error.message : String(error),
       ok: false,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

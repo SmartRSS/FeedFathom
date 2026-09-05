@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
 import { createServerApp, type ServerDependencies } from "../server-app.ts";
 
@@ -115,6 +116,7 @@ function createDependencies(): ServerDependencies {
       async get() {
         return { data: "" };
       },
+      async seedCache() {},
     },
     get mailEnabled() {
       return appConfig.MAIL_ENABLED;
@@ -774,6 +776,26 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   );
 
   expect(response.status).toBe(500);
+});
+
+// Our own 30 second budget running out is an upstream timeout, not the
+// user's URL being wrong. find used to collapse it into "Invalid feed url".
+test("find reports our own expired deadline as a 504, not a bad url", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.httpClient.get = async () => {
+    throw new HttpDeadlineError();
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request(
+      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+
+  expect(response.status).toBe(504);
 });
 
 test("persists a cached preview inline and recomputes unread counts, without reparsing or trusting browser articles", async () => {
@@ -1983,16 +2005,32 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
   expect(mismatchedTopic.status).toBe(404);
 });
 
-test("WebSub push requires a valid signature and then enqueues an immediate re-fetch", async () => {
+// The hub sends the feed document and signs it with the secret we gave that
+// hub, so the content is in hand. Re-fetching it to learn what the push
+// already said is a request against a resource we hold, and it leaves the
+// cached copy holding the document the push replaced.
+test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
     ServerDependencies["sourcesDataService"]["enqueueSource"]
   >[] = [];
+  const seeded: Array<{
+    body: string;
+    contentType: null | string;
+    url: string;
+  }> = [];
   dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
   dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
+  };
+  dependencies.httpClient.seedCache = async (url, pushed, headers) => {
+    seeded.push({
+      body: pushed.toString(),
+      contentType: headers.get("content-type"),
+      url,
+    });
   };
   const app = await appFor(dependencies);
   const body = "<rss>updated</rss>";
@@ -2008,14 +2046,93 @@ test("WebSub push requires a valid signature and then enqueues an immediate re-f
   const validPush = await app.handle(
     new Request("http://localhost/api/websub/callback/callback-token", {
       body,
-      headers: { "x-hub-signature-256": validSignature },
+      headers: {
+        "content-type": "application/rss+xml",
+        "x-hub-signature-256": validSignature,
+      },
       method: "POST",
     }),
   );
 
   expect(wrongSignature.status).toBe(403);
   expect(validPush.status).toBe(200);
+  // Only the verified push reaches the cache.
+  expect(seeded).toEqual([
+    {
+      body,
+      contentType: "application/rss+xml",
+      url: websubSource.url,
+    },
+  ]);
+  // skipCache false: the seeded body is what the parse is meant to read.
   expect(enqueued).toEqual([
-    [{ id: websubSource.id, url: websubSource.url }, "websub-push"],
+    [{ id: websubSource.id, url: websubSource.url }, "websub-push", false],
+  ]);
+});
+
+// A thin ping is a notification with no document attached. There is nothing
+// to seed, so the parse has to go and get it.
+test("WebSub push with no body falls back to a fetch", async () => {
+  const dependencies = createDependencies();
+  const enqueued: Parameters<
+    ServerDependencies["sourcesDataService"]["enqueueSource"]
+  >[] = [];
+  let seedCalls = 0;
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+    enqueued.push(parameters);
+  };
+  dependencies.httpClient.seedCache = async () => {
+    seedCalls++;
+  };
+  const app = await appFor(dependencies);
+  const validSignature = `sha256=${createHmac("sha256", websubSource.websubSecret).update("").digest("hex")}`;
+
+  const response = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      headers: { "x-hub-signature-256": validSignature },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(seedCalls).toBe(0);
+  expect(enqueued).toEqual([
+    [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
+  ]);
+});
+
+// Losing the saved request is acceptable; losing the notification is not.
+test("WebSub push still re-parses when the cache seed fails", async () => {
+  const dependencies = createDependencies();
+  const enqueued: Parameters<
+    ServerDependencies["sourcesDataService"]["enqueueSource"]
+  >[] = [];
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+    enqueued.push(parameters);
+  };
+  dependencies.httpClient.seedCache = async () => {
+    throw new Error("redis is down");
+  };
+  const app = await appFor(dependencies);
+  const body = "<rss>updated</rss>";
+  const validSignature = `sha256=${createHmac("sha256", websubSource.websubSecret).update(body).digest("hex")}`;
+
+  const response = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      body,
+      headers: { "x-hub-signature-256": validSignature },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(enqueued).toEqual([
+    [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
   ]);
 });

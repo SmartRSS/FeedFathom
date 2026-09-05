@@ -11,17 +11,30 @@ import {
 
 const maximumBodyBytes = 24 * 1024 * 1024;
 
+// PX is honoured because the rate limiter's whole behaviour is about when a
+// key stops existing: a reservation that never expires makes every retry look
+// like a violation.
 const redis = () => {
+  const expiry = new Map<string, number>();
   const values = new Map<string, string>();
   const deleted: string[] = [];
+  const live = (key: string) => {
+    const expiresAt = expiry.get(key);
+    if (expiresAt !== undefined && expiresAt <= Date.now()) {
+      expiry.delete(key);
+      values.delete(key);
+    }
+    return values.get(key);
+  };
   return {
     async decr(key: string) {
-      const value = String(Number(values.get(key) ?? "0") - 1);
+      const value = String(Number(live(key) ?? "0") - 1);
       values.set(key, value);
       return Number(value);
     },
     async del(key: string) {
       deleted.push(key);
+      expiry.delete(key);
       values.delete(key);
       return 1;
     },
@@ -30,21 +43,28 @@ const redis = () => {
       return 1;
     },
     async get(key: string) {
-      return values.get(key) ?? null;
+      return live(key) ?? null;
     },
     async incr(key: string) {
-      const value = String(Number(values.get(key) ?? "0") + 1);
+      const value = String(Number(live(key) ?? "0") + 1);
       values.set(key, value);
       return Number(value);
     },
     async set(key: string, value: string, ...options: Array<number | string>) {
-      if (options.includes("NX") && values.has(key)) return null;
+      if (options.includes("NX") && live(key) !== undefined) return null;
+      const px = options.indexOf("PX");
+      if (px === -1) expiry.delete(key);
+      else expiry.set(key, Date.now() + Number(options[px + 1]));
       values.set(key, value);
       return "OK";
     },
     values,
   };
 };
+
+// Tests that make more than one request to a host cannot sit out the real
+// 10 second interval; they still have to sit out an interval.
+const shortInterval = 200;
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -83,6 +103,7 @@ function queuedTransport(
 test("caches fresh responses, retries transient failures, and defers background work", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -390,6 +411,7 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
 test("destroys discarded retry bodies", async () => {
   let destroyed = 0;
   const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
     transport: queuedTransport([
       nativeResponse("unavailable", {
         onDestroy: () => destroyed++,
@@ -555,4 +577,279 @@ test("falls back and sanitizes when instance identity is absent or unsafe", asyn
     "SmartRSS/FeedFathom/staging (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com:8443; 2 subscribers)",
     "SmartRSS/FeedFathom/99999subscribers (+https://github.com/SmartRSS/FeedFathom; instance=evil.examplex-injected:1; 2 subscribers)",
   ]);
+});
+
+// Retry-After is not a 429-only header (RFC 9110 10.2.3). A 503 that carries
+// it used to fall through to the ordinary retryable path and be re-requested
+// 200ms later -- the opposite of what the origin asked for.
+test("honours Retry-After on a 503 instead of retrying it", async () => {
+  let requests = 0;
+  const store = redis();
+  const client = new HttpClient(store, {
+    transport: queuedTransport(
+      [
+        nativeResponse("overloaded", {
+          headers: { "retry-after": "3600" },
+          status: 503,
+        }),
+      ],
+      () => requests++,
+    ),
+  });
+  const before = Date.now();
+
+  const error = await client
+    .get("https://1.1.1.1/feed")
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof HttpDeferredError)) throw error;
+  expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
+  expect(requests).toBe(1);
+  expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
+});
+
+// Without the header a 503 is still just a transient failure to retry.
+test("still retries a 503 that carries no Retry-After", async () => {
+  let requests = 0;
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: queuedTransport(
+      [nativeResponse("overloaded", { status: 503 }), nativeResponse("feed")],
+      () => requests++,
+    ),
+  });
+
+  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(requests).toBe(2);
+});
+
+// The host slot used to be reserved once per call, so the three attempts of
+// one retry sequence landed 200ms and 400ms apart -- three requests to one
+// host inside an interval that exists to allow one.
+test("spaces retries by the host interval instead of a fixed backoff", async () => {
+  const sentAt: number[] = [];
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: queuedTransport(
+      [
+        nativeResponse("unavailable", { status: 503 }),
+        nativeResponse("unavailable", { status: 503 }),
+        nativeResponse("feed"),
+      ],
+      () => sentAt.push(Date.now()),
+    ),
+  });
+
+  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(sentAt).toHaveLength(3);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(shortInterval);
+});
+
+// Only the original hostname held a reservation, so every host reached
+// through a redirect was contacted with no interval and no block check --
+// the hop and a following direct request landed in the same millisecond.
+test("reserves the redirect target's slot, not just the original host's", async () => {
+  const sentAt = new Map<string, number>();
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: async (url) => {
+      sentAt.set(url, Date.now());
+      return url === "https://1.1.1.1/a"
+        ? nativeResponse("redirect", {
+            headers: { location: "https://8.8.8.8/real" },
+            status: 302,
+            url,
+          })
+        : nativeResponse("feed", { url });
+    },
+  });
+
+  await client.get("https://1.1.1.1/a");
+  await client.get("https://8.8.8.8/direct");
+
+  expect(
+    sentAt.get("https://8.8.8.8/direct")! - sentAt.get("https://8.8.8.8/real")!,
+  ).toBeGreaterThanOrEqual(shortInterval);
+});
+
+// A host that just answered 429 could be hammered through a redirect from
+// anywhere else, because the block was only ever checked for the host the
+// request started at.
+test("checks the redirect target against its own block", async () => {
+  const store = redis();
+  const retryAt = Date.now() + 60_000;
+  store.values.set("http-blocked:8.8.8.8", String(retryAt));
+  const client = new HttpClient(store, {
+    deadlineMs: 1_000,
+    transport: async (url) =>
+      nativeResponse("redirect", {
+        headers: { location: "https://8.8.8.8/real" },
+        status: 302,
+        url,
+      }),
+  });
+
+  const error = await client
+    .get("https://1.1.1.1/a")
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof HttpDeferredError)) throw error;
+  expect(error.retryAt).toBe(retryAt);
+});
+
+// The 429 belongs to whichever host answered it. Blocking the host the chain
+// started at holds back the wrong origin and leaves the offender free.
+test("blocks the host that answered, not the one the chain started at", async () => {
+  const store = redis();
+  const client = new HttpClient(store, {
+    intervalMs: shortInterval,
+    transport: async (url) =>
+      url === "https://1.1.1.1/a"
+        ? nativeResponse("redirect", {
+            headers: { location: "https://8.8.8.8/real" },
+            status: 302,
+            url,
+          })
+        : nativeResponse("rate limited", {
+            headers: { "retry-after": "600" },
+            status: 429,
+            url,
+          }),
+  });
+
+  await expect(client.get("https://1.1.1.1/a")).rejects.toBeInstanceOf(
+    HttpDeferredError,
+  );
+  expect(store.values.get("http-blocked:8.8.8.8")).toBeDefined();
+  expect(store.values.get("http-blocked:1.1.1.1")).toBeUndefined();
+});
+
+// The WebSub hub POST used to be a bare fetch(): no reservation, no block
+// check, and the hub's own Retry-After discarded. A handful of shared hubs
+// carry a large share of all feeds, so an import fired them back to back.
+test("post reserves the host, sends the body, and does not follow redirects", async () => {
+  const sent: Array<{ body: string | undefined; url: string }> = [];
+  const sentAt: number[] = [];
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: async (url, headers, _signal, body) => {
+      sent.push({ body, url });
+      sentAt.push(Date.now());
+      expect(headers.get("content-type")).toBe(
+        "application/x-www-form-urlencoded",
+      );
+      return nativeResponse("", {
+        headers: { location: "https://8.8.8.8/elsewhere" },
+        status: 302,
+        url,
+      });
+    },
+  });
+  const form = new URLSearchParams({ "hub.mode": "subscribe" });
+
+  const first = await client.post("https://hub.example/", form);
+  const second = await client.post("https://hub.example/", form);
+
+  // A redirecting hub is reported, not followed: the target is fully
+  // hub-controlled.
+  expect(first.status).toBe(302);
+  expect(second.status).toBe(302);
+  expect(sent.map((request) => request.url)).toEqual([
+    "https://hub.example/",
+    "https://hub.example/",
+  ]);
+  expect(sent[0]?.body).toBe("hub.mode=subscribe");
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+});
+
+test("post honours a hub's Retry-After instead of discarding it", async () => {
+  const store = redis();
+  const client = new HttpClient(store, {
+    transport: async (url) =>
+      nativeResponse("", {
+        headers: { "retry-after": "600" },
+        status: 503,
+        url,
+      }),
+  });
+
+  await expect(
+    client.post("https://hub.example/", new URLSearchParams()),
+  ).rejects.toBeInstanceOf(HttpDeferredError);
+  expect(store.values.get("http-blocked:hub.example")).toBeDefined();
+});
+
+// A WebSub push arrives with the feed document attached. Seeding it means the
+// parse that follows reads it instead of asking the origin for what we were
+// just handed -- and the stored entry holds the new document rather than the
+// one the push replaced.
+test("seedCache answers the next get without a request", async () => {
+  let requests = 0;
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([nativeResponse("from the origin")], () => {
+      requests++;
+    }),
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await client.seedCache(
+    url,
+    Buffer.from("<rss>pushed</rss>"),
+    new Headers({
+      // The hub's own directives are about the push, not about the feed.
+      "cache-control": "no-store",
+      "content-type": "application/rss+xml",
+      link: '<https://hub.example/>; rel="hub"',
+      "set-cookie": "session=1",
+    }),
+    60_000,
+  );
+  const response = await client.get(url);
+
+  expect(response.data).toBe("<rss>pushed</rss>");
+  expect(response.cached).toBe(true);
+  expect(requests).toBe(0);
+  expect(response.headers.get("content-type")).toBe("application/rss+xml");
+  expect(response.headers.get("link")).toBe(
+    '<https://hub.example/>; rel="hub"',
+  );
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(response.headers.get("cache-control")).toBeNull();
+});
+
+// Past the freshness window the seeded entry is not a licence to keep serving
+// a body no origin ever confirmed.
+test("a seeded entry stops being fresh and is revalidated", async () => {
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([nativeResponse("from the origin")]),
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await client.seedCache(
+    url,
+    Buffer.from("<rss>pushed</rss>"),
+    new Headers(),
+    1,
+  );
+  await Bun.sleep(5);
+
+  expect((await client.get(url)).data).toBe("from the origin");
+});
+
+test("seedCache refuses an unsafe url", async () => {
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([]),
+  });
+
+  await expect(
+    client.seedCache(
+      "file:///tmp/feed",
+      Buffer.from("x"),
+      new Headers(),
+      1_000,
+    ),
+  ).rejects.toBeInstanceOf(HttpPolicyError);
 });
