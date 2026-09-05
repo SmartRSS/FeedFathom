@@ -45,25 +45,40 @@ export function retryAtFrom(
   return Number.isFinite(date) ? date : now + fallbackBlockMs;
 }
 
+// RFC 9331 defines RateLimit-Reset as delta-seconds; GitHub and others send a
+// Unix timestamp instead, and nothing in either value says which it is. The
+// magnitudes do not overlap: 1e9 seconds is 2001-09 as an epoch and 31 years
+// as a delta, so anything smaller is a delta and anything larger is an epoch.
+const resetEpochThresholdSeconds = 1e9;
+
+function resetInstant(reset: number, now: number): number | undefined {
+  if (!Number.isFinite(reset) || reset < 0) return undefined;
+  const instant =
+    reset < resetEpochThresholdSeconds ? now + reset * 1_000 : reset * 1_000;
+  return instant > now ? instant : undefined;
+}
+
 /**
- * When an origin's own X-RateLimit headers say to stop, or undefined when they
+ * When an origin's own rate-limit headers say to stop, or undefined when they
  * do not. Acts at one remaining rather than zero: the request that would spend
  * the last unit is the one worth holding back.
+ *
+ * Both spellings are read: RFC 9331 standardised the un-prefixed names, and
+ * the `X-` forms predate it and are still the common ones in the wild.
  */
 export function rateLimitBlockUntil(
   headers: Headers,
   now = Date.now(),
 ): number | undefined {
-  const remainingHeader = headers.get("x-ratelimit-remaining");
-  const resetHeader = headers.get("x-ratelimit-reset");
+  const remainingHeader =
+    headers.get("ratelimit-remaining") ?? headers.get("x-ratelimit-remaining");
+  const resetHeader =
+    headers.get("ratelimit-reset") ?? headers.get("x-ratelimit-reset");
   if (!remainingHeader?.trim() || !resetHeader?.trim()) return undefined;
 
   const remaining = Number(remainingHeader);
-  const reset = Number(resetHeader);
-  if (remaining <= 1 && Number.isFinite(reset) && reset * 1_000 > now) {
-    return reset * 1_000;
-  }
-  return undefined;
+  if (!Number.isFinite(remaining) || remaining > 1) return undefined;
+  return resetInstant(Number(resetHeader), now);
 }
 
 export class HttpRateLimiter {

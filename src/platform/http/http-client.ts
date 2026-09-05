@@ -306,8 +306,16 @@ export class HttpClient {
           result.response.headers,
           deadline,
         );
-        if (result.response.status === rateLimitedStatus) {
-          const retryAfter = result.response.headers.get("retry-after");
+        const retryAfter = result.response.headers.get("retry-after");
+        // Retry-After is not a 429 header (RFC 9110 10.2.3): a 503 carrying
+        // it is an origin saying when to come back, and retrying it 200ms
+        // later is exactly what it asked us not to do. Redirects carry it
+        // too, but they never reach here -- fetchFollowingRedirects consumes
+        // them -- so this is bounded to error statuses.
+        if (
+          result.response.status === rateLimitedStatus ||
+          (retryAfter !== null && result.response.status >= 400)
+        ) {
           result.response.destroy();
           result = undefined;
           throw new HttpDeferredError(

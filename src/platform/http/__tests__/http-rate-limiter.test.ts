@@ -92,3 +92,82 @@ describe("rateLimitBlockUntil", () => {
     expect(rateLimitBlockUntil(bad, now)).toBeUndefined();
   });
 });
+
+describe("rateLimitBlockUntil header spellings and reset units", () => {
+  // RFC 9331 standardised the un-prefixed names; the X- forms predate it.
+  test("reads the un-prefixed RFC 9331 names", () => {
+    const reset = (now + 60_000) / 1_000;
+    expect(
+      rateLimitBlockUntil(
+        headers({
+          "ratelimit-remaining": "0",
+          "ratelimit-reset": String(reset),
+        }),
+        now,
+      ),
+    ).toBe(reset * 1_000);
+  });
+
+  test("prefers the un-prefixed name when both are present", () => {
+    const standard = (now + 60_000) / 1_000;
+    expect(
+      rateLimitBlockUntil(
+        headers({
+          "ratelimit-remaining": "0",
+          "ratelimit-reset": String(standard),
+          "x-ratelimit-remaining": "500",
+          "x-ratelimit-reset": String((now + 3_600_000) / 1_000),
+        }),
+        now,
+      ),
+    ).toBe(standard * 1_000);
+  });
+
+  // RFC 9331 defines reset as delta-seconds; GitHub sends an epoch. A delta
+  // of 60 read as an epoch is 1970, which silently dropped the header.
+  test("reads a small reset as delta-seconds", () => {
+    expect(
+      rateLimitBlockUntil(
+        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "60" }),
+        now,
+      ),
+    ).toBe(now + 60_000);
+  });
+
+  test("still reads a large reset as an epoch timestamp", () => {
+    const reset = (now + 60_000) / 1_000;
+    expect(
+      rateLimitBlockUntil(
+        headers({
+          "ratelimit-remaining": "0",
+          "ratelimit-reset": String(reset),
+        }),
+        now,
+      ),
+    ).toBe(reset * 1_000);
+  });
+
+  test("ignores a delta of zero and a negative reset", () => {
+    expect(
+      rateLimitBlockUntil(
+        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "0" }),
+        now,
+      ),
+    ).toBeUndefined();
+    expect(
+      rateLimitBlockUntil(
+        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "-60" }),
+        now,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("ignores an unparseable remaining count", () => {
+    expect(
+      rateLimitBlockUntil(
+        headers({ "ratelimit-remaining": "none", "ratelimit-reset": "60" }),
+        now,
+      ),
+    ).toBeUndefined();
+  });
+});
