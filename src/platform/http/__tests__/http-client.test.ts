@@ -11,17 +11,30 @@ import {
 
 const maximumBodyBytes = 24 * 1024 * 1024;
 
+// PX is honoured because the rate limiter's whole behaviour is about when a
+// key stops existing: a reservation that never expires makes every retry look
+// like a violation.
 const redis = () => {
+  const expiry = new Map<string, number>();
   const values = new Map<string, string>();
   const deleted: string[] = [];
+  const live = (key: string) => {
+    const expiresAt = expiry.get(key);
+    if (expiresAt !== undefined && expiresAt <= Date.now()) {
+      expiry.delete(key);
+      values.delete(key);
+    }
+    return values.get(key);
+  };
   return {
     async decr(key: string) {
-      const value = String(Number(values.get(key) ?? "0") - 1);
+      const value = String(Number(live(key) ?? "0") - 1);
       values.set(key, value);
       return Number(value);
     },
     async del(key: string) {
       deleted.push(key);
+      expiry.delete(key);
       values.delete(key);
       return 1;
     },
@@ -30,21 +43,28 @@ const redis = () => {
       return 1;
     },
     async get(key: string) {
-      return values.get(key) ?? null;
+      return live(key) ?? null;
     },
     async incr(key: string) {
-      const value = String(Number(values.get(key) ?? "0") + 1);
+      const value = String(Number(live(key) ?? "0") + 1);
       values.set(key, value);
       return Number(value);
     },
     async set(key: string, value: string, ...options: Array<number | string>) {
-      if (options.includes("NX") && values.has(key)) return null;
+      if (options.includes("NX") && live(key) !== undefined) return null;
+      const px = options.indexOf("PX");
+      if (px === -1) expiry.delete(key);
+      else expiry.set(key, Date.now() + Number(options[px + 1]));
       values.set(key, value);
       return "OK";
     },
     values,
   };
 };
+
+// Tests that make more than one request to a host cannot sit out the real
+// 10 second interval; they still have to sit out an interval.
+const shortInterval = 200;
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -83,6 +103,7 @@ function queuedTransport(
 test("caches fresh responses, retries transient failures, and defers background work", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -390,6 +411,7 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
 test("destroys discarded retry bodies", async () => {
   let destroyed = 0;
   const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
     transport: queuedTransport([
       nativeResponse("unavailable", {
         onDestroy: () => destroyed++,
@@ -591,6 +613,7 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
 test("still retries a 503 that carries no Retry-After", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
     transport: queuedTransport(
       [nativeResponse("overloaded", { status: 503 }), nativeResponse("feed")],
       () => requests++,
@@ -599,4 +622,27 @@ test("still retries a 503 that carries no Retry-After", async () => {
 
   expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
   expect(requests).toBe(2);
+});
+
+// The host slot used to be reserved once per call, so the three attempts of
+// one retry sequence landed 200ms and 400ms apart -- three requests to one
+// host inside an interval that exists to allow one.
+test("spaces retries by the host interval instead of a fixed backoff", async () => {
+  const sentAt: number[] = [];
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: queuedTransport(
+      [
+        nativeResponse("unavailable", { status: 503 }),
+        nativeResponse("unavailable", { status: 503 }),
+        nativeResponse("feed"),
+      ],
+      () => sentAt.push(Date.now()),
+    ),
+  });
+
+  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(sentAt).toHaveLength(3);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(shortInterval);
 });
