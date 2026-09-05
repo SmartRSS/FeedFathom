@@ -646,3 +646,83 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
   expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
   expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(shortInterval);
 });
+
+// Only the original hostname held a reservation, so every host reached
+// through a redirect was contacted with no interval and no block check --
+// the hop and a following direct request landed in the same millisecond.
+test("reserves the redirect target's slot, not just the original host's", async () => {
+  const sentAt = new Map<string, number>();
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: async (url) => {
+      sentAt.set(url, Date.now());
+      return url === "https://1.1.1.1/a"
+        ? nativeResponse("redirect", {
+            headers: { location: "https://8.8.8.8/real" },
+            status: 302,
+            url,
+          })
+        : nativeResponse("feed", { url });
+    },
+  });
+
+  await client.get("https://1.1.1.1/a");
+  await client.get("https://8.8.8.8/direct");
+
+  expect(
+    sentAt.get("https://8.8.8.8/direct")! - sentAt.get("https://8.8.8.8/real")!,
+  ).toBeGreaterThanOrEqual(shortInterval);
+});
+
+// A host that just answered 429 could be hammered through a redirect from
+// anywhere else, because the block was only ever checked for the host the
+// request started at.
+test("checks the redirect target against its own block", async () => {
+  const store = redis();
+  const retryAt = Date.now() + 60_000;
+  store.values.set("http-blocked:8.8.8.8", String(retryAt));
+  const client = new HttpClient(store, {
+    deadlineMs: 1_000,
+    transport: async (url) =>
+      nativeResponse("redirect", {
+        headers: { location: "https://8.8.8.8/real" },
+        status: 302,
+        url,
+      }),
+  });
+
+  const error = await client
+    .get("https://1.1.1.1/a")
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof HttpDeferredError)) throw error;
+  expect(error.retryAt).toBe(retryAt);
+});
+
+// The 429 belongs to whichever host answered it. Blocking the host the chain
+// started at holds back the wrong origin and leaves the offender free.
+test("blocks the host that answered, not the one the chain started at", async () => {
+  const store = redis();
+  const client = new HttpClient(store, {
+    intervalMs: shortInterval,
+    transport: async (url) =>
+      url === "https://1.1.1.1/a"
+        ? nativeResponse("redirect", {
+            headers: { location: "https://8.8.8.8/real" },
+            status: 302,
+            url,
+          })
+        : nativeResponse("rate limited", {
+            headers: { "retry-after": "600" },
+            status: 429,
+            url,
+          }),
+  });
+
+  await expect(client.get("https://1.1.1.1/a")).rejects.toBeInstanceOf(
+    HttpDeferredError,
+  );
+  expect(store.values.get("http-blocked:8.8.8.8")).toBeDefined();
+  expect(store.values.get("http-blocked:1.1.1.1")).toBeUndefined();
+});
