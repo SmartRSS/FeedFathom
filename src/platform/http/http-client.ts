@@ -139,6 +139,9 @@ type HttpClientIdentity = {
 
 type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
+  // The per-host politeness interval. Only set by tests, which cannot afford
+  // to sit out the real one; see HttpRateLimiter for the production value.
+  intervalMs?: number;
   transport?: NativeHttpTransport;
 };
 
@@ -168,7 +171,7 @@ export class HttpClient {
     private readonly redis: HttpRedis,
     options: HttpClientOptions = {},
   ) {
-    this.rateLimiter = new HttpRateLimiter(redis);
+    this.rateLimiter = new HttpRateLimiter(redis, options.intervalMs);
     this.deadlineMs = options.deadlineMs ?? requestDeadlineMs;
     this.transport = options.transport ?? nativeHttpTransport;
     this.userAgentPrefix = buildUserAgentPrefix(options);
@@ -221,12 +224,6 @@ export class HttpClient {
     }
 
     const hostname = parsedUrl.hostname;
-    await this.rateLimiter.reserve(
-      hostname,
-      options.priority ?? "interactive",
-      deadline,
-    );
-
     const headers = new Headers();
     headers.set(
       "accept",
@@ -296,10 +293,14 @@ export class HttpClient {
     priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
-    /* eslint-disable no-await-in-loop -- Each retry depends on its response, rate-limit state, and backoff. */
+    /* eslint-disable no-await-in-loop -- Each retry depends on its response and on re-reserving the host. */
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;
       try {
+        // Per attempt, not per call: a retry is a second request to the same
+        // host and owes it the same interval. The wait this imposes is the
+        // backoff, which is why there is no separate sleep between attempts.
+        await this.rateLimiter.reserve(hostname, priority, deadline);
         result = await this.fetchFollowingRedirects(url, headers, deadline);
         await this.rateLimiter.applyRateLimitHeaders(
           hostname,
@@ -308,10 +309,10 @@ export class HttpClient {
         );
         const retryAfter = result.response.headers.get("retry-after");
         // Retry-After is not a 429 header (RFC 9110 10.2.3): a 503 carrying
-        // it is an origin saying when to come back, and retrying it 200ms
-        // later is exactly what it asked us not to do. Redirects carry it
-        // too, but they never reach here -- fetchFollowingRedirects consumes
-        // them -- so this is bounded to error statuses.
+        // it is an origin saying when to come back, not a transient failure
+        // to try again. Redirects carry it too, but they never reach here --
+        // fetchFollowingRedirects consumes them -- so this is bounded to
+        // error statuses.
         if (
           result.response.status === rateLimitedStatus ||
           (retryAfter !== null && result.response.status >= 400)
@@ -343,7 +344,6 @@ export class HttpClient {
           throw error;
         }
       }
-      await deadline.sleep(200 * 2 ** attempt);
     }
     /* eslint-enable no-await-in-loop */
   }
