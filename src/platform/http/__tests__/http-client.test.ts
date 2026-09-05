@@ -726,3 +726,58 @@ test("blocks the host that answered, not the one the chain started at", async ()
   expect(store.values.get("http-blocked:8.8.8.8")).toBeDefined();
   expect(store.values.get("http-blocked:1.1.1.1")).toBeUndefined();
 });
+
+// The WebSub hub POST used to be a bare fetch(): no reservation, no block
+// check, and the hub's own Retry-After discarded. A handful of shared hubs
+// carry a large share of all feeds, so an import fired them back to back.
+test("post reserves the host, sends the body, and does not follow redirects", async () => {
+  const sent: Array<{ body: string | undefined; url: string }> = [];
+  const sentAt: number[] = [];
+  const client = new HttpClient(redis(), {
+    intervalMs: shortInterval,
+    transport: async (url, headers, _signal, body) => {
+      sent.push({ body, url });
+      sentAt.push(Date.now());
+      expect(headers.get("content-type")).toBe(
+        "application/x-www-form-urlencoded",
+      );
+      return nativeResponse("", {
+        headers: { location: "https://8.8.8.8/elsewhere" },
+        status: 302,
+        url,
+      });
+    },
+  });
+  const form = new URLSearchParams({ "hub.mode": "subscribe" });
+
+  const first = await client.post("https://hub.example/", form);
+  const second = await client.post("https://hub.example/", form);
+
+  // A redirecting hub is reported, not followed: the target is fully
+  // hub-controlled.
+  expect(first.status).toBe(302);
+  expect(second.status).toBe(302);
+  expect(sent.map((request) => request.url)).toEqual([
+    "https://hub.example/",
+    "https://hub.example/",
+  ]);
+  expect(sent[0]?.body).toBe("hub.mode=subscribe");
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+});
+
+test("post honours a hub's Retry-After instead of discarding it", async () => {
+  const store = redis();
+  const client = new HttpClient(store, {
+    transport: async (url) =>
+      nativeResponse("", {
+        headers: { "retry-after": "600" },
+        status: 503,
+        url,
+      }),
+  });
+
+  await expect(
+    client.post("https://hub.example/", new URLSearchParams()),
+  ).rejects.toBeInstanceOf(HttpDeferredError);
+  expect(store.values.get("http-blocked:hub.example")).toBeDefined();
+});

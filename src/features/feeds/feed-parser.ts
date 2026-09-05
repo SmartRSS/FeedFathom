@@ -278,6 +278,7 @@ export class FeedParser {
         );
       const result = await requestHubSubscription({
         callbackUrl: `https://${this.feedFathomDomain}/api/websub/callback/${callbackToken}`,
+        hubPoster: this.httpClient,
         hubUrl: websub.hubUrl,
         mode: "subscribe",
         secret,

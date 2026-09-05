@@ -23,6 +23,9 @@ export type NativeHttpTransport = (
   url: string,
   headers: Headers,
   signal: AbortSignal,
+  // Present only for a POST. There is no third method here, so the body's
+  // presence is what selects one -- see dispatchNativeRequest.
+  body?: string,
 ) => Promise<NativeHttpResponse>;
 
 type LookupAddress = {
@@ -32,6 +35,7 @@ type LookupAddress = {
 
 type PinnedRequest = {
   address: string;
+  body: string | undefined;
   family: 4 | 6;
   headers: Headers;
   path: string;
@@ -133,7 +137,7 @@ export function createNativeHttpTransport(
     lookup: lookupAddresses,
   },
 ): NativeHttpTransport {
-  return async (value, headers, signal) => {
+  return async (value, headers, signal, body) => {
     const url = parseHttpUrl(value);
     const logicalHostname = hostnameWithoutBrackets(url.hostname);
     const normalizedHostname = logicalHostname.replace(/\.+$/, "");
@@ -163,6 +167,7 @@ export function createNativeHttpTransport(
     requestHeaders.set("host", url.host);
     return dependencies.dispatch({
       address: selected.address,
+      body,
       family: selected.family,
       headers: requestHeaders,
       path: `${url.pathname}${url.search}`,
@@ -221,7 +226,7 @@ async function dispatchNativeRequest(
     family: pinned.family,
     headers,
     hostname: pinned.address,
-    method: "GET",
+    method: pinned.body === undefined ? "GET" : "POST",
     path: pinned.path,
     port: pinned.port,
     signal: pinned.signal,
@@ -246,7 +251,7 @@ async function dispatchNativeRequest(
           )
         : requestHttp(options, received);
     outgoing.once("error", reject);
-    outgoing.end();
+    outgoing.end(pinned.body);
   });
 }
 
