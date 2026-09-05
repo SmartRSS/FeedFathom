@@ -556,3 +556,47 @@ test("falls back and sanitizes when instance identity is absent or unsafe", asyn
     "SmartRSS/FeedFathom/99999subscribers (+https://github.com/SmartRSS/FeedFathom; instance=evil.examplex-injected:1; 2 subscribers)",
   ]);
 });
+
+// Retry-After is not a 429-only header (RFC 9110 10.2.3). A 503 that carries
+// it used to fall through to the ordinary retryable path and be re-requested
+// 200ms later -- the opposite of what the origin asked for.
+test("honours Retry-After on a 503 instead of retrying it", async () => {
+  let requests = 0;
+  const store = redis();
+  const client = new HttpClient(store, {
+    transport: queuedTransport(
+      [
+        nativeResponse("overloaded", {
+          headers: { "retry-after": "3600" },
+          status: 503,
+        }),
+      ],
+      () => requests++,
+    ),
+  });
+  const before = Date.now();
+
+  const error = await client
+    .get("https://1.1.1.1/feed")
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof HttpDeferredError)) throw error;
+  expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
+  expect(requests).toBe(1);
+  expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
+});
+
+// Without the header a 503 is still just a transient failure to retry.
+test("still retries a 503 that carries no Retry-After", async () => {
+  let requests = 0;
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport(
+      [nativeResponse("overloaded", { status: 503 }), nativeResponse("feed")],
+      () => requests++,
+    ),
+  });
+
+  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(requests).toBe(2);
+});
