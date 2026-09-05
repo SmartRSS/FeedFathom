@@ -297,13 +297,17 @@ export class HttpClient {
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;
       try {
-        // Per attempt, not per call: a retry is a second request to the same
-        // host and owes it the same interval. The wait this imposes is the
-        // backoff, which is why there is no separate sleep between attempts.
-        await this.rateLimiter.reserve(hostname, priority, deadline);
-        result = await this.fetchFollowingRedirects(url, headers, deadline);
+        result = await this.fetchFollowingRedirects(
+          url,
+          headers,
+          priority,
+          deadline,
+        );
+        // Whatever answered is what gets held back, which after a redirect
+        // is not the host the request started at.
+        const answeringHost = hostnameOf(result.response.url) ?? hostname;
         await this.rateLimiter.applyRateLimitHeaders(
-          hostname,
+          answeringHost,
           result.response.headers,
           deadline,
         );
@@ -320,7 +324,7 @@ export class HttpClient {
           result.response.destroy();
           result = undefined;
           throw new HttpDeferredError(
-            await this.rateLimiter.block(hostname, retryAfter, deadline),
+            await this.rateLimiter.block(answeringHost, retryAfter, deadline),
           );
         }
         if (
@@ -351,14 +355,25 @@ export class HttpClient {
   private async fetchFollowingRedirects(
     url: string,
     headers: Headers,
+    priority: "background" | "interactive",
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;
     // A chain is permanent only if every hop is (301/308) -- one temporary hop
     // means the resolved URL could still change back.
     let permanent = true;
-    /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response. */
+    /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
     for (let redirects = 0; redirects <= 5; redirects++) {
+      // A hop is a request like any other, and it is a request to a host of
+      // its own. Reserving here rather than once per call is also what gives
+      // a retry its interval, since every attempt re-enters this loop. The
+      // hostname is safe to read: the first is already validated and every
+      // later one was built by `new URL` below.
+      await this.rateLimiter.reserve(
+        new URL(next).hostname,
+        priority,
+        deadline,
+      );
       const response = await deadline.run(
         this.transport(next, headers, deadline.controller.signal),
       );
@@ -542,6 +557,14 @@ export class HttpClient {
 
   private isRetryable(status: number): boolean {
     return retryableStatuses.has(status);
+  }
+}
+
+function hostnameOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
   }
 }
 
