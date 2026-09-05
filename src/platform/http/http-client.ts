@@ -90,6 +90,11 @@ function buildUserAgent(
   return `${prefix}; ${subscribers} subscribers)`;
 }
 
+// Everything else a push carries is about the push, not about the feed
+// document: the hub's signature, its own cache directives, its Date. Only
+// what the parser reads is kept.
+const seededCacheHeaders = ["content-type", "link"];
+
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
@@ -116,8 +121,10 @@ type HttpRequestOptions = {
   priority?: "background" | "interactive";
   responseType?: "arrayBuffer";
   // Skips the local TTL short-circuit but keeps conditional revalidation, so
-  // an unchanged origin still answers 304 cheaply. For callers (a WebSub push)
-  // that already know something changed.
+  // an unchanged origin still answers 304 cheaply. For an explicit user
+  // action -- a manual refresh -- where serving a still-fresh entry reads as
+  // the button not working. See ADR 0003; a WebSub push arrives with the
+  // document attached and goes through seedCache instead.
   skipCache?: boolean;
   // Number of our users subscribed to the feed being fetched, reported to
   // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
@@ -252,6 +259,58 @@ export class HttpClient {
         );
       }
       return { headers: response.headers, status: response.status };
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  /**
+   * Store a body we were handed instead of one we fetched, so the next get()
+   * for this URL is answered from the cache rather than from the network.
+   *
+   * This exists for the WebSub push: the hub sends the feed document and signs
+   * it with the secret we gave that hub, so the content is already in hand.
+   * Fetching it again to learn what the push already said is exactly the
+   * request a cache exists to avoid, and it also leaves the stored entry
+   * stale, which is worse than either.
+   *
+   * No validator is stored. The origin's ETag for this state is unknown, so
+   * the next revalidation goes out unconditional -- one uncompressed response
+   * later, against one saved now. A body too large for the cache is refused by
+   * saveCached, which deletes the stale entry, so the parse falls back to a
+   * normal fetch instead of reading what the push replaced.
+   */
+  async seedCache(
+    url: string,
+    body: Buffer,
+    headers: Headers,
+    freshForMs: number,
+  ): Promise<void> {
+    const parsed = parseHttpUrl(url);
+    const kept = new Headers();
+    for (const name of seededCacheHeaders) {
+      const value = headers.get(name);
+      if (value !== null) kept.set(name, value);
+    }
+
+    const deadline = new RequestDeadline(this.deadlineMs);
+    try {
+      const lock = await this.acquireCacheLock(url, deadline);
+      try {
+        await this.saveCached(
+          url,
+          {
+            body: body.toString("base64"),
+            expiresAt: Date.now() + freshForMs,
+            headers: [...kept],
+            status: 200,
+            url: parsed.toString(),
+          },
+          deadline,
+        );
+      } finally {
+        await this.releaseCacheLock(lock, deadline);
+      }
     } finally {
       deadline.dispose();
     }

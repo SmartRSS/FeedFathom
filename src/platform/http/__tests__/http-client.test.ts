@@ -781,3 +781,75 @@ test("post honours a hub's Retry-After instead of discarding it", async () => {
   ).rejects.toBeInstanceOf(HttpDeferredError);
   expect(store.values.get("http-blocked:hub.example")).toBeDefined();
 });
+
+// A WebSub push arrives with the feed document attached. Seeding it means the
+// parse that follows reads it instead of asking the origin for what we were
+// just handed -- and the stored entry holds the new document rather than the
+// one the push replaced.
+test("seedCache answers the next get without a request", async () => {
+  let requests = 0;
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([nativeResponse("from the origin")], () => {
+      requests++;
+    }),
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await client.seedCache(
+    url,
+    Buffer.from("<rss>pushed</rss>"),
+    new Headers({
+      // The hub's own directives are about the push, not about the feed.
+      "cache-control": "no-store",
+      "content-type": "application/rss+xml",
+      link: '<https://hub.example/>; rel="hub"',
+      "set-cookie": "session=1",
+    }),
+    60_000,
+  );
+  const response = await client.get(url);
+
+  expect(response.data).toBe("<rss>pushed</rss>");
+  expect(response.cached).toBe(true);
+  expect(requests).toBe(0);
+  expect(response.headers.get("content-type")).toBe("application/rss+xml");
+  expect(response.headers.get("link")).toBe(
+    '<https://hub.example/>; rel="hub"',
+  );
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(response.headers.get("cache-control")).toBeNull();
+});
+
+// Past the freshness window the seeded entry is not a licence to keep serving
+// a body no origin ever confirmed.
+test("a seeded entry stops being fresh and is revalidated", async () => {
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([nativeResponse("from the origin")]),
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await client.seedCache(
+    url,
+    Buffer.from("<rss>pushed</rss>"),
+    new Headers(),
+    1,
+  );
+  await Bun.sleep(5);
+
+  expect((await client.get(url)).data).toBe("from the origin");
+});
+
+test("seedCache refuses an unsafe url", async () => {
+  const client = new HttpClient(redis(), {
+    transport: queuedTransport([]),
+  });
+
+  await expect(
+    client.seedCache(
+      "file:///tmp/feed",
+      Buffer.from("x"),
+      new Headers(),
+      1_000,
+    ),
+  ).rejects.toBeInstanceOf(HttpPolicyError);
+});

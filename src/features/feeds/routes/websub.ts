@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
+import type { HttpClient } from "#platform/http/http-client.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
 import {
@@ -10,11 +11,19 @@ import {
 } from "#features/feeds/websub-lease-policy.ts";
 
 export type WebSubRouteDependencies = {
+  httpClient: Pick<HttpClient, "seedCache">;
   sourcesDataService: Pick<
     SourcesDataService,
     "enqueueSource" | "findSourceByWebSubCallbackToken" | "markWebSubVerified"
   >;
 };
+
+// How long the pushed body stays fresh in the cache. Long enough for the job
+// it is queued alongside to pick it up under any normal backlog, and no
+// longer: past that the parse falls back to a real fetch, which is the safe
+// direction to fail in. It also matches successSource's own fallback poll
+// spacing, so a push never pulls the next fetch earlier than a poll would.
+const pushedBodyFreshMs = 5 * 60_000;
 
 // The hub SHOULD send hub.lease_seconds on every verification per spec, but
 // "should" isn't "must" -- if it's missing, assume a short lease instead of
@@ -22,6 +31,7 @@ export type WebSubRouteDependencies = {
 // next day's renewal sweep instead of silently never renewing.
 
 export function createWebSubRoutes({
+  httpClient,
   sourcesDataService,
 }: WebSubRouteDependencies) {
   return new Elysia()
@@ -72,15 +82,35 @@ export function createWebSubRoutes({
         if (!verifyHubSignature(source.websubSecret, signature, body))
           return status(403);
 
-        // Don't trust the pushed body as article data -- it's an unverified
-        // shape from the hub's perspective on the feed, not our own fetch.
-        // The push is just a "something changed, go look" signal; re-fetching
-        // through the normal pipeline reuses all the existing parsing,
-        // caching, and dedup logic instead of a second "trust this POST body"
-        // code path.
+        // The push carries the feed document and the signature above proves
+        // it came from the hub we handed this secret to, so there is nothing
+        // left to fetch. Seeding the cache hands it to the ordinary parse
+        // pipeline -- same parsing, dedup and article mapping, no second
+        // "trust this POST body" path -- and leaves the stored entry holding
+        // the new document rather than the one the push replaced.
+        //
+        // A thin ping carries no body. Nothing to seed, so the parse skips
+        // the cache and fetches, which is what the push used to do always.
+        let seeded = false;
+        if (body.byteLength > 0) {
+          try {
+            await httpClient.seedCache(
+              source.url,
+              body,
+              request.headers,
+              pushedBodyFreshMs,
+            );
+            seeded = true;
+          } catch (error) {
+            // A push we could not store is still a push. Falling through to a
+            // fetch loses the saved request, not the notification.
+            console.error(`WebSub push seed failed for ${source.url}:`, error);
+          }
+        }
         await sourcesDataService.enqueueSource(
           { id: source.id, url: source.url },
           "websub-push",
+          !seeded,
         );
         return json({ ok: true });
       },

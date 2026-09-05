@@ -157,13 +157,18 @@ export class SourcesDataService {
     return existing;
   }
 
+  // skipCache defaults on because every caller here is an explicit signal
+  // that something changed. The exception is a WebSub push that arrived with
+  // the feed document attached: that body is already in the cache by the time
+  // this is called, and skipping it would re-request what the hub just sent.
   public async enqueueSource(
     source: { id: number; url: string },
     trigger: "manual" | "websub-push" = "manual",
+    skipCache = true,
   ) {
     await this.bullmqQueue.add(
       JobName.ParseSource,
-      { id: source.id, skipCache: true, trigger, url: source.url },
+      { id: source.id, skipCache, trigger, url: source.url },
       {
         jobId: `${JobName.ParseSource}-${source.id}`,
         lifo: true,
