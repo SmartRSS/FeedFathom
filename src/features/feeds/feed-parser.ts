@@ -4,6 +4,7 @@ import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import {
   mapFeedItemToArticle,
@@ -304,7 +305,10 @@ export class FeedParser {
         { freshUntil },
       );
     } catch (error_: unknown) {
-      if (isHttpDeferredError(error_)) {
+      // A deferral and our own expired deadline both mean "we never got an
+      // answer", which the error hook maps to a 429 and a 504. Collapsing
+      // them into undefined would report our timeout as the user's bad URL.
+      if (isHttpDeferredError(error_) || isHttpDeadlineError(error_)) {
         throw error_;
       }
       return undefined;

@@ -9,7 +9,6 @@ const blockedPrefix = "http-blocked:";
 const intervalPrefix = "http-interval:";
 const interactivePrefix = "http-interactive:";
 const feedDelayMs = 10_000;
-const interactiveWaitMs = 2_500;
 const fallbackBlockMs = 5 * 60_000;
 
 type RateLimitRedis = {
@@ -91,7 +90,16 @@ export class HttpRateLimiter {
   ): Promise<void> {
     const delay = feedDelayMs;
     const until = await this.blockedUntil(hostname, deadline);
-    if (until > Date.now()) throw new HttpDeferredError(until);
+    if (until > Date.now()) {
+      // Background work defers: the worker has other sources to poll. An
+      // interactive caller is a person waiting on a response, so a block that
+      // clears inside the deadline is waited out rather than reported as a
+      // failure the SPA has no retry for.
+      if (priority === "background" || until >= deadline.endsAt) {
+        throw new HttpDeferredError(until);
+      }
+      await deadline.sleep(until - Date.now());
+    }
 
     if (priority === "background") {
       const waiters = Number(
@@ -105,7 +113,12 @@ export class HttpRateLimiter {
       return;
     }
 
-    const reservationDeadline = Date.now() + interactiveWaitMs;
+    // One interval is the longest wait a free slot can need, so waiting
+    // longer than that only helps when another waiter keeps winning the race.
+    // Bounded by the deadline as well, which is what makes this a wait the
+    // request can actually afford -- a fixed window shorter than the interval
+    // could only ever succeed by luck.
+    const reservationDeadline = Math.min(Date.now() + delay, deadline.endsAt);
     let waiting = false;
     try {
       /* eslint-disable no-await-in-loop -- Reservation and waiter state are updated between polls. */
