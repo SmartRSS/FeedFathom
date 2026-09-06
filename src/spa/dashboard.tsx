@@ -7,6 +7,7 @@ import {
   Show,
 } from "solid-js";
 import {
+  articlePageSize,
   articleResponse,
   articlesResponse,
   folderResponse,
@@ -114,6 +115,10 @@ export function Dashboard(props: {
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
+  // The server caps a page at articlePageSize, so a full page means there is
+  // at least one more to fetch. Not a signal: nothing renders it.
+  let moreArticles = false;
+  let loadingMoreArticles = false;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
@@ -307,6 +312,7 @@ export function Dashboard(props: {
     const selection = selectionGuard.start();
     articleAbortController?.abort();
     const ids = sourceIds(node);
+    moreArticles = false;
     if (!ids.length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
@@ -328,6 +334,7 @@ export function Dashboard(props: {
       });
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
+      moreArticles = nextArticles.length === articlePageSize;
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(nextArticles.length ? 0 : undefined);
@@ -337,6 +344,38 @@ export function Dashboard(props: {
       reportError(cause, "Could not load articles");
     } finally {
       if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
+    }
+  }
+  // Paging is driven by the scroll position rather than a button: the list is
+  // the scroll container in both layouts, and on mobile the pane is
+  // column-reverse, so a control after the list would render above it.
+  async function loadMoreArticles(list: HTMLElement) {
+    const last = articles().at(-1);
+    const node = selectedNode();
+    if (!moreArticles || loadingMoreArticles || !last || !node) return;
+    if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
+    const ids = sourceIds(node);
+    if (!ids.length) return;
+    const selection = selectionGuard.current();
+    loadingMoreArticles = true;
+    try {
+      const nextArticles = await api("/articles", articlesResponse, {
+        body: JSON.stringify({ cursor: last.id, sources: ids }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      if (!selectionGuard.isCurrent(selection)) return;
+      moreArticles = nextArticles.length === articlePageSize;
+      if (!nextArticles.length) return;
+      setArticles((current) => [...current, ...nextArticles]);
+      setAccessibilityAnnouncement(
+        `Loaded ${nextArticles.length} more articles.`,
+      );
+    } catch (cause) {
+      if (selectionGuard.isCurrent(selection))
+        reportError(cause, "Could not load more articles");
+    } finally {
+      loadingMoreArticles = false;
     }
   }
   async function showProperties() {
@@ -759,6 +798,7 @@ export function Dashboard(props: {
             class="article-list"
             role="listbox"
             onKeyDown={handleArticleKeys}
+            onScroll={(event) => void loadMoreArticles(event.currentTarget)}
           >
             <Show
               when={!articlesLoading()}

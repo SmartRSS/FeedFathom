@@ -97,6 +97,11 @@ const articleSummaryResponse = Type.Object(
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
 
+// The article list is keyset-paged: the server never returns more than this
+// many rows, and a full page means the client should ask for the next one
+// with the last row's (publishedAt, id) as the cursor.
+export const articlePageSize = 200;
+
 export const articleResponse = Type.Object(
   {
     author: Type.String(),

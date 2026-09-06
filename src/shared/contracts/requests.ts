@@ -39,6 +39,12 @@ export const articleQuery = Type.Object({
 });
 export const articlesRequest = Type.Object(
   {
+    // Keyset cursor: the id of the last row of the previous page. The server
+    // resolves its published_at rather than taking one from the client, whose
+    // copy is a JSON date and so has lost the microseconds Postgres stores --
+    // a cursor a few hundred microseconds early skips the rest of the batch
+    // its article was published in.
+    cursor: Type.Optional(id),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,

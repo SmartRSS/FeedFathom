@@ -1,5 +1,17 @@
-import { and, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  aliasedTable,
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { articlePageSize } from "#shared/contracts/responses.ts";
 import {
   generateBoundaryDates,
   getDateGroup,
@@ -22,6 +34,10 @@ function userArticleStateJoin(userId: number) {
     eq(userArticles.guid, articles.guid),
   );
 }
+
+// The page cursor names a row rather than carrying its timestamp, so the
+// query has to look at articles twice.
+const cursorRow = aliasedTable(articles, "cursor_row");
 
 function userArticleAccessJoin(userId: number) {
   return and(
@@ -50,7 +66,11 @@ export class ArticlesDataService {
     ).at(0)?.article;
   }
 
-  public async getUserArticlesForSources(sourceIds: number[], userId: number) {
+  public async getUserArticlesForSources(
+    sourceIds: number[],
+    userId: number,
+    cursor?: number,
+  ) {
     if (sourceIds.length === 0) {
       return [];
     }
@@ -86,9 +106,25 @@ export class ArticlesDataService {
           ),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
+          // Keyset rather than OFFSET: a folder fanning out to hundreds of
+          // sources would otherwise make every page rescan everything above
+          // it, and a page-sized LIMIT is the only thing bounding what this
+          // loads into memory and serialises. The cursor row's timestamp is
+          // read back here so it keeps full microsecond precision; a value
+          // round-tripped through the client's JSON date is milliseconds and
+          // lands inside the batch it was meant to sit after.
+          cursor
+            ? sql`(${articles.publishedAt}, ${articles.id}) < (
+                (SELECT ${cursorRow.publishedAt} FROM ${articles} ${cursorRow} WHERE ${cursorRow.id} = ${cursor}),
+                ${cursor}
+              )`
+            : undefined,
         ),
       )
-      .orderBy(desc(articles.publishedAt));
+      // id breaks the tie: published_at is not unique, and a keyset cursor on
+      // an ambiguous ordering repeats or skips rows across pages.
+      .orderBy(desc(articles.publishedAt), desc(articles.id))
+      .limit(articlePageSize);
 
     const boundaryDates = generateBoundaryDates();
     return loadedArticles.map((item) =>

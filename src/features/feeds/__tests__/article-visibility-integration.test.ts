@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
+import { articlePageSize } from "#shared/contracts/responses.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
@@ -90,6 +91,68 @@ test("a removal survives its article row being pruned and re-listed", async () =
     expect(relisted).not.toBe(removed);
 
     expect(await listedIds(source!.id, user!.id)).toEqual([kept]);
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
+
+// A folder can fan out to hundreds of sources, so the list has to come back
+// one page at a time. The cursor is a row comparison on (published_at, id)
+// because published_at is not unique -- a feed publishing a batch on one
+// timestamp straddles the page boundary, and ordering by published_at alone
+// would repeat or skip rows there.
+test("paging is capped and a cursor straddling equal timestamps loses no row", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const articlesDataService = new ArticlesDataService(drizzleConnection);
+  const total = articlePageSize + 50;
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+
+    const [user] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password)
+      VALUES ('pager@example.test', 'pager', 'x') RETURNING id`;
+    const [source] = await client<{ id: number }[]>`
+      INSERT INTO sources (url, home_url, kind, last_success, not_before)
+      VALUES ('https://pager.test/feed', 'https://pager.test', 'feed', NOW(), NOW())
+      RETURNING id`;
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name, created_at)
+      VALUES (${user!.id}, ${source!.id}, 'sub', NOW() - INTERVAL '60 days')`;
+
+    // 30 articles share each published_at, so the page boundary lands inside
+    // a run of ties rather than between two distinct timestamps.
+    await client`
+      INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
+      SELECT ${source!.id}, 'a' || n, 'a', 't', '', 'body',
+             NOW() - (n / 30) * INTERVAL '1 minute', NOW(), NOW()
+      FROM generate_series(1, ${total}) AS n`;
+
+    const first = await articlesDataService.getUserArticlesForSources(
+      [source!.id],
+      user!.id,
+    );
+    expect(first).toHaveLength(articlePageSize);
+
+    const cursor = first.at(-1)!;
+    const second = await articlesDataService.getUserArticlesForSources(
+      [source!.id],
+      user!.id,
+      cursor.id,
+    );
+    expect(second).toHaveLength(total - articlePageSize);
+
+    const paged = [...first, ...second].map((article) => article.id);
+    expect(new Set(paged).size).toBe(total);
+    const expected = await client<{ id: string }[]>`
+      SELECT id FROM articles ORDER BY published_at DESC, id DESC`;
+    expect(paged).toEqual(expected.map((row) => Number(row.id)));
   } finally {
     await drizzleConnection.$client.close();
     await client.close();

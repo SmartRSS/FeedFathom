@@ -33,6 +33,7 @@ export async function postArticlesHandler(
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
     user.id,
+    body.cursor,
   );
   return json(
     articles.map((article) =>
