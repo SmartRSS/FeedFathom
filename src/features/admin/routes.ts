@@ -8,7 +8,10 @@ import {
 } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
-import { createAuthPlugin } from "#features/auth/session-plugin.ts";
+import {
+  createAdminPlugin,
+  createAuthPlugin,
+} from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { OpmlParser } from "#features/feeds/opml-parser.ts";
 import type {
@@ -66,7 +69,11 @@ export type AdminOptionsRouteDependencies = {
   };
 };
 
-export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
+// Two groups rather than one, because /api/options is per-user and /api/admin
+// is not. Splitting them is what lets the admin check be a property of the
+// group instead of something each handler has to remember: a route added to
+// the second instance cannot be reached without it.
+const userOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
   new Elysia()
     .use(createAuthPlugin(deps.usersDataService))
     .get("/api/options", ({ user }) => json({ user }))
@@ -76,7 +83,11 @@ export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
     .post("/api/options/opml", { body: opmlRequest }, (ctx) =>
       postOptionsOpmlHandler(ctx, deps),
     )
-    .get("/api/options/opml", (ctx) => getOptionsOpmlHandler(ctx, deps))
+    .get("/api/options/opml", (ctx) => getOptionsOpmlHandler(ctx, deps));
+
+const adminOnlyRoutes = (deps: AdminOptionsRouteDependencies) =>
+  new Elysia()
+    .use(createAdminPlugin(deps.usersDataService))
     .get("/api/admin", { query: adminQuery }, (ctx) =>
       getAdminHandler(ctx, deps),
     )
@@ -90,3 +101,6 @@ export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
     .delete("/api/admin/redirects", { body: redirectDeletionRequest }, (ctx) =>
       deleteAdminRedirectsHandler(ctx, deps),
     );
+
+export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
+  new Elysia().use(userOptionsRoutes(deps)).use(adminOnlyRoutes(deps));

@@ -2157,6 +2157,21 @@ test("activates valid tokens but rejects expired tokens", async () => {
   expect(tokenLookups).toEqual(["valid", "expired"]);
 });
 
+// Every route in the admin group, not just the one that used to be checked
+// here. The guard is the group's now rather than each handler's, so this is
+// what stops a route added there from being reachable by anyone signed in.
+const adminOnlyRequests = [
+  ["GET", "/api/admin", undefined],
+  [
+    "POST",
+    "/api/admin",
+    { newUrl: "https://b.test/", oldUrl: "https://a.test/" },
+  ],
+  ["DELETE", "/api/admin", { removeSourceId: 1 }],
+  ["GET", "/api/admin/redirects", undefined],
+  ["DELETE", "/api/admin/redirects", { oldUrl: "https://a.test/" }],
+] as const;
+
 test("allows admin sessions and rejects non-admin sessions", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async (sid) => ({
@@ -2164,20 +2179,58 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
     isAdmin: sid === "admin",
   });
   const app = await appFor(dependencies);
+  const call = (
+    [method, path, body]: (typeof adminOnlyRequests)[number],
+    sid: string,
+  ) =>
+    app.handle(
+      new Request(`http://localhost${path}`, {
+        ...(body === undefined
+          ? {}
+          : {
+              body: JSON.stringify(body),
+              headers: { "content-type": "application/json" },
+            }),
+        headers: {
+          cookie: `sid=${sid}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        method,
+      }),
+    );
 
-  const adminResponse = await app.handle(
-    new Request("http://localhost/api/admin", {
-      headers: { cookie: "sid=admin" },
-    }),
+  const reader = await Promise.all(
+    adminOnlyRequests.map((request) => call(request, "reader")),
   );
-  const readerResponse = await app.handle(
-    new Request("http://localhost/api/admin", {
+  const anonymous = await Promise.all(
+    adminOnlyRequests.map((request) => call(request, "")),
+  );
+  const listing = await call(adminOnlyRequests[0], "admin");
+
+  expect(reader.map((response) => response.status)).toEqual(
+    adminOnlyRequests.map(() => 403),
+  );
+  expect(anonymous.map((response) => response.status)).toEqual(
+    adminOnlyRequests.map(() => 401),
+  );
+  expect(listing.status).toBe(200);
+});
+
+test("leaves the per-user options routes open to any signed-in user", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.getUserBySid = async () => ({
+    ...sessionUser,
+    isAdmin: false,
+  });
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/options", {
       headers: { cookie: "sid=reader" },
     }),
   );
 
-  expect(adminResponse.status).toBe(200);
-  expect(readerResponse.status).toBe(403);
+  expect(response.status).toBe(200);
 });
 
 const websubSource = {
