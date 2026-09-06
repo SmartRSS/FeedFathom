@@ -67,6 +67,29 @@ These tests drop the `public` schema before every run, so the URL is checked
 first and rejected unless the database name carries a `test` or `disposable`
 marker. Never point them at a database you care about.
 
+## A second checkout at the same time
+
+`bun run dev` starts one Compose project named `feedfathom`, publishes the
+API on `127.0.0.1:3001` and gives Vite `127.0.0.1:3456`. All three are fixed
+by default, so running it from a second checkout or a git worktree takes the
+first stack's containers over rather than starting its own — and `bun run
+dev:down` from either one stops the same stack.
+
+To run a second stack beside the first, give it its own name and its own two
+ports:
+
+```bash
+COMPOSE_PROJECT_NAME=feedfathom-wt \
+FEEDFATHOM_DEV_API_PORT=3011 \
+FEEDFATHOM_DEV_SPA_PORT=3466 \
+  bun run dev
+```
+
+`COMPOSE_PROJECT_NAME` outranks the `name:` in the overlay, so the second
+stack gets its own containers, network and volumes — including its own
+PostgreSQL, which means its own accounts and subscriptions. Pass the same
+three variables to `bun run dev:down`.
+
 Development setup and the full command reference are in
 [Running the application](./running.md).
 

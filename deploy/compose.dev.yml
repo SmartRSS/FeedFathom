@@ -13,6 +13,13 @@
 # It also carries the project name. compose.yml cannot declare a top-level
 # `name`, because the legacy Swarm loader rejects it, so each Compose
 # overlay names the project it belongs to.
+#
+# One name means one stack per machine: a second checkout running `bun run
+# dev` takes the first one's containers over rather than starting its own,
+# and `bun run dev:down` from either stops the same stack. Set
+# COMPOSE_PROJECT_NAME (which outranks this) together with
+# FEEDFATHOM_DEV_API_PORT and FEEDFATHOM_DEV_SPA_PORT to run two side by
+# side; see docs/contributing.md.
 name: feedfathom
 
 x-dev-image: &dev-image
@@ -40,7 +47,7 @@ services:
     # without it Compose would keep the base's 3456 binding and collide
     # with Vite.
     ports: !override
-      - "127.0.0.1:3001:3000"
+      - "127.0.0.1:${FEEDFATHOM_DEV_API_PORT:-3001}:3000"
     environment:
       ENABLE_REGISTRATION: "true"
       MAIL_RELAY_SECRET: ${MAIL_RELAY_SECRET:-local-development-relay-secret}
