@@ -118,7 +118,9 @@ reaches for the global `fetch` gets none of that, which is how the hub
 subscribe drifted out of the rate limiter.
 
 The rate-limit keys are per hostname; ADR 0002 records why, and what evidence
-would justify revisiting it.
+would justify revisiting it. Inbound throttling is a separate scheme with a
+separate problem — a per-account counter is a lockout anyone can trigger — and
+ADR 0004 records how the login and password-reset counters are keyed instead.
 
 ## Extracting logic
 
