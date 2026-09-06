@@ -76,6 +76,10 @@ deployment would ship without one.
   every user against one address budget. Fifty failures in fifteen minutes
   across a whole instance is generous for a self-hosted reader, but it is
   wrong, so `docs/running.md` says so beside the proxy instructions.
+- The reset route does not wait for the mail to go out. An identical body is
+  only half of not answering "does this account exist": awaiting a round trip
+  to Mailjet, which only a known address reaches, restates the same answer as
+  a stopwatch.
 - Ten wrong passwords in fifteen minutes locks a real user out of their own
   account from their own address for the rest of that window, with no message
   explaining why — the same 401 as a wrong password. Telling them would be the

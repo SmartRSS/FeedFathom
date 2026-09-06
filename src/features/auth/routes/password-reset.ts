@@ -94,7 +94,18 @@ export function createPasswordResetRoute({
           digest(token),
           new Date(Date.now() + tokenLifetimeMs),
         );
-        await mailSender.sendPasswordResetEmail(user.email, token);
+        // Not awaited. Mailjet is a round trip to another host, and only an
+        // address with an account reaches it, so waiting for it would make an
+        // account that exists answer hundreds of milliseconds slower than one
+        // that does not -- the enumeration oracle the identical body is here
+        // to close, restated as a stopwatch. A failure is ours to log: the
+        // token is already stored, and telling the caller the send failed
+        // would leak the same thing.
+        void mailSender
+          .sendPasswordResetEmail(user.email, token)
+          .catch((cause: unknown) => {
+            console.error("Password reset email failed to send:", cause);
+          });
         return accepted;
       },
     )

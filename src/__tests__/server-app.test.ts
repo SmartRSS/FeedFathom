@@ -2088,10 +2088,11 @@ test("resets a password without admitting whether the account exists", async () 
 
   const known = await request(target.email);
   const unknown = await request("nobody@example.com");
+  const unknownBody: unknown = await unknown.json();
 
   expect(known.status).toBe(200);
   expect(unknown.status).toBe(200);
-  expect(await known.json()).toEqual(await unknown.json());
+  expect(await known.json()).toEqual(unknownBody);
   expect(sent).toHaveLength(1);
   expect(sent[0]?.email).toBe(target.email);
 
@@ -2103,6 +2104,15 @@ test("resets a password without admitting whether the account exists", async () 
   expect(started[0]?.tokenHash).toBe(tokenHash);
   expect(started[0]?.tokenHash).not.toBe(token);
   expect(started[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+  // The send is deliberately not awaited, so a Mailjet outage cannot make a
+  // known address answer differently -- or more slowly -- than an unknown one.
+  dependencies.mailSender.sendPasswordResetEmail = async () => {
+    throw new Error("Mailjet unavailable");
+  };
+  const undelivered = await request(target.email);
+  expect(undelivered.status).toBe(200);
+  expect(await undelivered.json()).toEqual(unknownBody);
 });
 
 test("spends a reset token once and refuses an expired one", async () => {
