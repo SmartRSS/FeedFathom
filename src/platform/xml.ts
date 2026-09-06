@@ -28,18 +28,21 @@ export const parseXml = (xml: string): XmlElement => {
 };
 
 /**
- * Text safe to place in element content or a quoted attribute value.
+ * `value` with the characters XML cannot represent removed.
  *
- * Bun.escapeHTML covers `& < > " '`, and every replacement it emits is a
- * valid XML reference. The strip is the part it does not do: XML 1.0 has no
- * escape for most control characters, so a feed title carrying one would
- * otherwise produce a document no parser will accept. Tab, newline and
- * carriage return are the three that are legal, and they stay.
+ * Bun.XML.stringify escapes everything that needs escaping, but for these it
+ * throws instead: U+0000, the other C0 controls except tab, newline and
+ * carriage return, the two noncharacters, and lone surrogates. A feed title
+ * can carry any of them, and an export that throws is a worse outcome than
+ * one missing a character no reader could have displayed.
+ *
+ * `\p{Surrogate}` under `u` matches only lone surrogates: a well-formed pair
+ * is a single astral code point, which is not in the surrogate range.
  */
-export const escapeXml = (value: string): string =>
-  Bun.escapeHTML(
-    value.replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, ""),
-  );
+export const xmlSafeText = (value: string): string =>
+  value
+    .replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/gu, "")
+    .replaceAll(/\p{Surrogate}/gu, "");
 
 /** An element's `name` attribute, or "" when absent or non-textual. */
 export const attribute = (element: XmlElement, name: string): string => {

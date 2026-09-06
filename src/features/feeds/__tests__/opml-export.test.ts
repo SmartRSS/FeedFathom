@@ -51,6 +51,28 @@ test("escapes markup in titles rather than emitting it", () => {
   expect(parser.parseOpml(opml)).toHaveLength(1);
 });
 
+// Bun.XML.stringify throws on these rather than escaping them, so an export
+// would fail outright over one bad byte in one title.
+test("drops a lone surrogate without dropping a real astral character", () => {
+  const opml = buildOpml("Subscriptions", [
+    {
+      homeUrl: "https://x.test",
+      name: `Half${String.fromCharCode(0xd800)} pair, whole 😀`,
+      type: "source",
+      xmlUrl: "https://x.test/feed",
+    },
+  ]);
+
+  expect(parser.parseOpml(opml)).toEqual([
+    {
+      homeUrl: "https://x.test",
+      name: "Half pair, whole 😀",
+      type: "source",
+      xmlUrl: "https://x.test/feed",
+    },
+  ]);
+});
+
 // XML 1.0 has no escape for most control characters, so a title carrying one
 // would otherwise make the whole file unparseable.
 test("drops control characters a title picked up from a feed", () => {
