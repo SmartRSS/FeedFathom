@@ -120,9 +120,15 @@ export function Dashboard(props: {
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
   // The server caps a page at articlePageSize, so a full page means there is
-  // at least one more to fetch. Not a signal: nothing renders it.
+  // at least one more to fetch. Not signals: nothing renders them.
+  //
+  // The cursor is the last row of the last page received, not the last row
+  // still on screen. Deleting rows must not move it: deleting the whole page
+  // would leave no row to take a cursor from at all, which is exactly when
+  // the next page is most wanted.
   let moreArticles = false;
   let loadingMoreArticles = false;
+  let articleCursor: number | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
@@ -318,6 +324,7 @@ export function Dashboard(props: {
     articleAbortController?.abort();
     const ids = sourceIds(node);
     moreArticles = false;
+    articleCursor = undefined;
     if (!ids.length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
@@ -340,6 +347,7 @@ export function Dashboard(props: {
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
       moreArticles = nextArticles.length === articlePageSize;
+      articleCursor = nextArticles.at(-1)?.id;
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(nextArticles.length ? 0 : undefined);
@@ -351,13 +359,26 @@ export function Dashboard(props: {
       if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
     }
   }
+  // The scroll handler is the only thing that asks for the next page, so a
+  // list too short to scroll can never ask. Deleting a whole page is the way
+  // in: select all, delete, and the pane is empty with pages still unread and
+  // nothing left to scroll. The threshold below reads true for a list that
+  // does not overflow (scrollHeight === clientHeight, scrollTop 0), so the
+  // same call covers it -- after the render that shortened the list.
+  function topUpArticles() {
+    queueMicrotask(() => {
+      const list = document.querySelector<HTMLElement>(".article-list");
+      if (list) void loadMoreArticles(list);
+    });
+  }
   // Paging is driven by the scroll position rather than a button: the list is
   // the scroll container in both layouts, and on mobile the pane is
   // column-reverse, so a control after the list would render above it.
   async function loadMoreArticles(list: HTMLElement) {
-    const last = articles().at(-1);
+    const cursor = articleCursor;
     const node = selectedNode();
-    if (!moreArticles || loadingMoreArticles || !last || !node) return;
+    if (!moreArticles || loadingMoreArticles || cursor === undefined || !node)
+      return;
     if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
     const ids = sourceIds(node);
     if (!ids.length) return;
@@ -365,14 +386,16 @@ export function Dashboard(props: {
     loadingMoreArticles = true;
     try {
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ cursor: last.id, sources: ids }),
+        body: JSON.stringify({ cursor, sources: ids }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       if (!selectionGuard.isCurrent(selection)) return;
       moreArticles = nextArticles.length === articlePageSize;
+      articleCursor = nextArticles.at(-1)?.id ?? articleCursor;
       if (!nextArticles.length) return;
       setArticles((current) => [...current, ...nextArticles]);
+      topUpArticles();
       setAccessibilityAnnouncement(
         `Loaded ${nextArticles.length} more articles.`,
       );
@@ -538,6 +561,7 @@ export function Dashboard(props: {
     const { nextIndex, remaining } = removalOutcome(items, indexes);
     const nextArticle = remaining[nextIndex];
     setArticles(remaining);
+    topUpArticles();
     const openNext = setArticleSelection(
       new Set(nextArticle ? [nextIndex] : []),
     );

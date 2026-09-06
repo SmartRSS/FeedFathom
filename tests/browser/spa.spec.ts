@@ -95,6 +95,17 @@ async function installReaderResponder(
   }, available);
 }
 
+// One row of a stubbed article page, in the shape articlesResponse wants.
+const pagedSummary = (id: number) => ({
+  author: "Author",
+  group: "Older",
+  id,
+  publishedAt: "2026-07-20T10:00:00.000Z",
+  sourceId: 3,
+  title: `Article ${id}`,
+  url: `https://articles.example/${id}`,
+});
+
 const selectSource = async (page: Page, name = "Tech News") => {
   await page.locator("button.source").filter({ hasText: name }).click();
 };
@@ -247,6 +258,67 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
 
   await filter.fill("");
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+});
+
+// The article list is keyset-paged and the scroll position is what asks for
+// the next page, so a list too short to scroll can never ask. Deleting a whole
+// page is the way in: select all, delete, and the pane would sit empty with
+// pages still unread and nothing left to scroll.
+test("fetches the next article page after a delete empties the list", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const pageSize = 200;
+  const cursors: (number | undefined)[] = [];
+  // Registered after the fixture, so it wins for this one route and falls
+  // through to the fixture for every other request the page makes.
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    cursors.push(body.cursor);
+    const start = body.cursor === undefined ? 1 : pageSize + 1;
+    const size = body.cursor === undefined ? pageSize : 3;
+    await route.fulfill({
+      json: Array.from({ length: size }, (_, index) =>
+        pagedSummary(start + index),
+      ),
+    });
+  });
+  // Selecting the list also opens its first row, and these ids are not ones
+  // the fixture knows.
+  await page.route("**/api/article?*", async (route) => {
+    const id = Number(
+      new URL(route.request().url()).searchParams.get("article"),
+    );
+    await route.fulfill({
+      json: {
+        author: "Author",
+        content: `<p>Body ${id}</p>`,
+        guid: `guid-${id}`,
+        id,
+        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+        publishedAt: "2026-07-20T10:00:00.000Z",
+        sourceId: 3,
+        title: `Article ${id}`,
+        updatedAt: null,
+        url: `https://articles.example/${id}`,
+      },
+    });
+  });
+  await page.goto("/");
+  await selectSource(page);
+
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+  expect(cursors).toEqual([undefined]);
+
+  await page.getByRole("button", { exact: true, name: "select all" }).click();
+  await page.getByRole("button", { name: "delete articles" }).click();
+
+  // The second page arrives without a scroll, because there was nothing left
+  // to scroll, and it is asked for with the last row of the first page.
+  await expect(rows).toHaveCount(3);
+  expect(cursors).toEqual([undefined, pageSize]);
 });
 
 // The tree is a roving tabindex: exactly one row carries tabindex="0" and the
