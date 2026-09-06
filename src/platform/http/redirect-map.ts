@@ -1,7 +1,18 @@
+// One SCAN page. Redis caps how long a single page takes, which is the whole
+// reason to prefer it to KEYS here.
+const scanPageHint = 500;
+
 type RedirectRedis = {
   del(key: string): Promise<number>;
   get(key: string): Promise<string | null>;
-  keys(pattern: string): Promise<string[]>;
+  mget(...keys: string[]): Promise<(string | null)[]>;
+  scan(
+    cursor: string,
+    match: "MATCH",
+    pattern: string,
+    count: "COUNT",
+    hint: number,
+  ): Promise<[string, string[]]>;
   set(
     key: string,
     value: string,
@@ -63,20 +74,43 @@ export class RedirectMap {
     }
   }
 
-  /** For the admin view. */
+  /**
+   * For the admin view.
+   *
+   * SCAN rather than KEYS. KEYS walks the whole keyspace in one command and
+   * blocks the server for the duration, and this Redis also carries the job
+   * queue and the HTTP response cache -- so an admin opening this page stalled
+   * every feed fetch behind it for as long as the walk took. SCAN covers the
+   * same ground in pages Redis is free to interleave other work between.
+   *
+   * A cursor iteration can return a key twice, which the map absorbs. It can
+   * also miss a key added while it runs, which for an admin listing of a cache
+   * with a one-day TTL is not worth a snapshot to avoid.
+   */
   async getAllRedirects(): Promise<Record<string, string>> {
     try {
-      const keys = await this.redis.keys(`${this.redisKeyPrefix}*`);
-      const entries = await Promise.all(
-        keys.map(async (key) => ({
-          newUrl: await this.redis.get(key),
-          oldUrl: key.replace(this.redisKeyPrefix, ""),
-        })),
-      );
       const redirects: Record<string, string> = {};
-      for (const { newUrl, oldUrl } of entries)
-        if (newUrl) redirects[oldUrl] = newUrl;
-
+      let cursor = "0";
+      do {
+        /* eslint-disable no-await-in-loop -- Each page's cursor comes from the last. */
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          "MATCH",
+          `${this.redisKeyPrefix}*`,
+          "COUNT",
+          scanPageHint,
+        );
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          const values = await this.redis.mget(...keys);
+          for (const [index, key] of keys.entries()) {
+            const newUrl = values[index];
+            if (newUrl)
+              redirects[key.slice(this.redisKeyPrefix.length)] = newUrl;
+          }
+        }
+        /* eslint-enable no-await-in-loop */
+      } while (cursor !== "0");
       return redirects;
     } catch (error) {
       console.error("Failed to get all redirects:", error);
