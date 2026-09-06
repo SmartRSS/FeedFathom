@@ -66,6 +66,8 @@ docker compose up -d
 
 Open `http://127.0.0.1:3456` and create the first account right away — it's always allowed, regardless of the registration setting. After that, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
 
+NOTE: If you do open registration, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` as well. An open signup form sends activation mail to whatever address it is handed, so without a challenge in front of it the form is a way to send mail through your instance to strangers. `ALLOWED_EMAILS` is the stricter alternative where the instance is only ever meant for a known list of people.
+
 Configure the deployment with a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change — `.env.example` lists the ones a deployment normally touches, commented out. Pool sizes, poll intervals, and retention windows keep their defaults in `compose.yml` and `src/platform/config.ts`.
 
 | Variable | Default | Purpose |
@@ -80,6 +82,9 @@ Configure the deployment with a `.env` file next to `compose.yml`. Every variabl
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
 | `MAIL_DOMAIN` | `FEED_FATHOM_DOMAIN` | Domain inbound newsletter mail is routed to. Generated addresses are minted at this host, so set it whenever mail lands on a different domain than the app is served from. |
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
+| `ALLOWED_EMAILS` | unset | Comma-separated list of the only addresses allowed to register. Unset means any address may, subject to `ENABLE_REGISTRATION`. |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | unset | Cloudflare Turnstile on the registration form. Required together, and worth setting whenever `ENABLE_REGISTRATION` is `true`. |
+| `MAILJET_API_KEY`, `MAILJET_API_SECRET` | unset | Outbound mail for registration activation and password reset. Required together; without them there is no reset flow at all. |
 | `TRUSTED_PROXY_HEADER` | unset | Header carrying the real client address behind a reverse proxy, usually `X-Forwarded-For`. Failed logins are counted per address, so leaving it unset behind a proxy counts every user against one budget. Never set it without a proxy that overwrites the header. |
 
 ### Behind a reverse proxy
