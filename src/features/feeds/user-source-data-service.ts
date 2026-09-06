@@ -40,7 +40,9 @@ export class UserSourcesDataService {
           return folder.id === sourcePayload.parentId;
         })
       ) {
-        console.error("no folder", folders[0]);
+        console.error(
+          `Subscription refused: folder ${sourcePayload.parentId} is not one of user ${userId}'s`,
+        );
         return undefined;
       }
     }
