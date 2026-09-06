@@ -34,7 +34,7 @@ export class RedirectMap {
     try {
       const key = `${this.redisKeyPrefix}${this.normalizeUrl(oldUrl)}`;
       await this.redis.set(key, newUrl, "PX", this.ttl);
-      console.error(`Redirect map: ${oldUrl} -> ${newUrl}`);
+      console.log(`Redirect map: ${oldUrl} -> ${newUrl}`);
     } catch (error) {
       console.error("Failed to set redirect map:", error);
     }
