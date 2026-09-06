@@ -3,7 +3,10 @@ import type { AppConfig } from "#platform/config.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import { createActivateRoute } from "#features/auth/routes/activate.ts";
-import { createLoginRoute } from "#features/auth/routes/login.ts";
+import {
+  createLoginRoute,
+  type LoginRouteDependencies,
+} from "#features/auth/routes/login.ts";
 import { createLogoutRoute } from "#features/auth/routes/logout.ts";
 import { createRegisterRoute } from "#features/auth/routes/register.ts";
 import { createSessionRoute } from "#features/auth/routes/session.ts";
@@ -15,6 +18,7 @@ type Password = {
 
 export type PublicAuthRouteDependencies = {
   config: AppConfig;
+  loginThrottle: LoginRouteDependencies["loginThrottle"];
   fetcher: (
     ...args: Parameters<typeof globalThis.fetch>
   ) => ReturnType<typeof globalThis.fetch>;

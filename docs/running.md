@@ -80,6 +80,7 @@ Configure the deployment with a `.env` file next to `compose.yml`. Every variabl
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
 | `MAIL_DOMAIN` | `FEED_FATHOM_DOMAIN` | Domain inbound newsletter mail is routed to. Generated addresses are minted at this host, so set it whenever mail lands on a different domain than the app is served from. |
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
+| `TRUSTED_PROXY_HEADER` | unset | Header carrying the real client address behind a reverse proxy, usually `X-Forwarded-For`. Failed logins are counted per address, so leaving it unset behind a proxy counts every user against one budget. Never set it without a proxy that overwrites the header. |
 
 ### Behind a reverse proxy
 
@@ -102,6 +103,14 @@ feeds.example.com {
 Any reverse proxy works. The requirements are TLS termination, forwarding to the published port, and passing the original `Host` header through. No path rewriting or WebSocket handling is needed.
 
 NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. That does not break the application, but a subscription's stored home link falls back to the upstream address instead of the public host name.
+
+Failed logins are throttled per client address, and behind a proxy every request arrives from the proxy. Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
+
+```bash
+TRUSTED_PROXY_HEADER=X-Forwarded-For
+```
+
+Caddy sets `X-Forwarded-For` itself. Only set this once a proxy is in front and overwrites the header rather than appending to a value the client sent, or the throttle key becomes something the client picks.
 
 `/healthcheck` answers the container health probes and returns 403 to outside callers, so it is not usable as a proxy health probe.
 

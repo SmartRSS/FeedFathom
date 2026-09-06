@@ -6,6 +6,8 @@ import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
+import { LoginThrottle } from "#features/auth/login-throttle.ts";
+import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
 import { createServerApp, type ServerDependencies } from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
@@ -118,6 +120,7 @@ function createDependencies(): ServerDependencies {
       },
       async seedCache() {},
     },
+    loginThrottle: new LoginThrottle(createFakeThrottleRedis()),
     get mailEnabled() {
       return appConfig.MAIL_ENABLED;
     },
@@ -1244,6 +1247,48 @@ test("authenticates only active users without revealing account state", async ()
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ sid: "test-session" });
   expect(response.headers.get("set-cookie")).toContain("sid=test-session");
+});
+
+// Equal-time hashing on a miss closes the enumeration oracle but buys little
+// on its own: an attacker who cannot tell accounts apart can still try
+// passwords as fast as the box answers. The README's reverse-proxy setup adds
+// no rate limiting of its own, so this cannot be left to the deployment.
+test("stops guessing at one account from one address", async () => {
+  const target = { ...account, email: "throttled@example.com" };
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async (email) =>
+    email === target.email ? target : undefined;
+  dependencies.password.verify = async (value, hash) =>
+    hash === target.password && value === "password";
+  const app = await appFor(dependencies);
+  const attempt = (password: string, address: string) =>
+    app.handle(
+      new Request("http://localhost/api/login", {
+        body: JSON.stringify({ email: target.email, password }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": address,
+        },
+        method: "POST",
+      }),
+    );
+
+  for (let guess = 0; guess < 10; guess++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    expect((await attempt("wrong", "203.0.113.7")).status).toBe(401);
+  }
+
+  // Same body and status as a wrong password, so the throttle does not become
+  // the enumeration signal the equal-time hashing was there to avoid.
+  const throttled = await attempt("password", "203.0.113.7");
+  expect(throttled.status).toBe(401);
+  expect(await throttled.json()).toEqual({ error: "Wrong login data" });
+
+  // The account itself is not locked: the counter is keyed on the address as
+  // well, so hammering an address cannot shut its owner out from elsewhere.
+  const elsewhere = await attempt("password", "198.51.100.4");
+  expect(elsewhere.status).toBe(200);
 });
 
 test("treats inactive sessions as unauthenticated everywhere", async () => {

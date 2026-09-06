@@ -114,6 +114,12 @@ const configSchema = Type.Object(
     // supplied by the deployment, so it survives a moving tag. Optional: a
     // local build has no commit to claim.
     FEEDFATHOM_BUILD: Type.Optional(Type.String()),
+    // Header carrying the real client address, for deployments that sit
+    // behind a proxy (`X-Forwarded-For`, or `CF-Connecting-IP` on Cloudflare).
+    // Unset means the socket address is used, which is the right answer when
+    // nothing is in front and the only safe one when something is: a header
+    // trusted without a proxy to set it is a key the client picks.
+    TRUSTED_PROXY_HEADER: Type.Optional(Type.String()),
     TURNSTILE_SITE_KEY: Type.Optional(Type.String()),
     TURNSTILE_SECRET_KEY: Type.Optional(Type.String()),
   },
