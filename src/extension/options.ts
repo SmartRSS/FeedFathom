@@ -8,12 +8,25 @@ void (async () => {
   if (!(instanceInput instanceof HTMLInputElement)) {
     return;
   }
+  const instanceError = document.querySelector("#instance-error");
 
   let displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
   instanceInput.value = displayedValue;
 
+  // An inline message rather than alert(): a browser can offer to suppress
+  // repeat dialogs, and once it does the field just silently reverts to the
+  // old value with nothing said. It also names the rule, which "bad URL" did
+  // not -- plain http being loopback-only is the rejection people hit.
+  const rejectionMessage =
+    "Enter the full address of your FeedFathom instance, such as " +
+    "https://feeds.example.com. Plain http:// is accepted only for localhost.";
+  const showError = (message: string) => {
+    if (instanceError) instanceError.textContent = message;
+  };
+
   instanceInput.addEventListener("change", () => {
     void (async () => {
+      showError("");
       const value = instanceInput.value;
       if (value.trim() === "") {
         await chrome.storage.sync.remove("instance");
@@ -24,7 +37,7 @@ void (async () => {
 
       const canonicalInstance = canonicalizeInstance(value);
       if (!canonicalInstance) {
-        alert("bad URL");
+        showError(rejectionMessage);
         instanceInput.value = displayedValue;
         return;
       }

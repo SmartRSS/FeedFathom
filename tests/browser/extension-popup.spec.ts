@@ -37,8 +37,21 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
     const optionsPage = await context.newPage();
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
     const input = optionsPage.locator("#instance");
+
+    // A plain-http address that is not loopback is the rejection people
+    // actually hit. It used to arrive as an alert(), which a browser can
+    // offer to suppress -- after which the field silently reverted with
+    // nothing said at all.
+    await input.fill("http://feeds.example.com");
+    await input.dispatchEvent("change");
+    await expect(optionsPage.getByRole("alert")).toContainText(
+      "only for localhost",
+    );
+    await expect(input).toHaveValue("");
+
     await input.fill(instance);
     await input.dispatchEvent("change");
+    await expect(optionsPage.locator("#instance-error")).toHaveText("");
     await optionsPage.waitForFunction(
       async (expected) =>
         (await chrome.storage.sync.get("instance"))["instance"] === expected,
