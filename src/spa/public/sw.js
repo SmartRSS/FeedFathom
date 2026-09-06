@@ -367,7 +367,7 @@ async function staleWhileRevalidate(event, request, cacheName) {
 
 // Routes that never show the dashboard tree.
 const TREE_PRELOAD_EXCLUDED_PATHS =
-  /^\/(admin|login|options|preview|register|activate\/)/;
+  /^\/(admin|login|options|password-reset|preview|register|activate\/)/;
 
 async function shell(event, path) {
   const cache = await caches.open(SHELL_CACHE);
