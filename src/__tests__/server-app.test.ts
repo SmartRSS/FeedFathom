@@ -1724,6 +1724,81 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   expect(body).not.toContain("abc123@mail.example.com");
 });
 
+// insertTree creates a folder unconditionally; the only thing that makes
+// re-importing an export a no-op is opml_imports deduping on a hash of the
+// file's bytes. Two exports of an unchanged tree therefore have to be
+// byte-identical, whatever order the queries happened to return rows in.
+test("exports the same bytes whatever order the services return rows in", async () => {
+  const folders = [
+    {
+      createdAt: new Date(),
+      id: 1,
+      name: "Zed",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+    {
+      createdAt: new Date(),
+      id: 2,
+      name: "Alpha",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+  ];
+  const sources = [
+    {
+      homeUrl: "https://b.test",
+      id: 1,
+      kind: "feed" as const,
+      name: "Beta",
+      parentId: 2,
+      unreadArticlesCount: 0,
+      url: "https://b.test/feed",
+    },
+    {
+      homeUrl: "https://a.test",
+      id: 2,
+      kind: "feed" as const,
+      name: "Aardvark",
+      parentId: 2,
+      unreadArticlesCount: 0,
+      url: "https://a.test/feed",
+    },
+    {
+      homeUrl: "https://c.test",
+      id: 3,
+      kind: "feed" as const,
+      name: "Loose",
+      parentId: null,
+      unreadArticlesCount: 0,
+      url: "https://c.test/feed",
+    },
+  ];
+  const exportWith = async (reversed: boolean) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    dependencies.foldersDataService.getUserFolders = async () =>
+      reversed ? folders.toReversed() : folders;
+    dependencies.userSourcesDataService.getUserSources = async () =>
+      reversed ? sources.toReversed() : sources;
+    const app = await appFor(dependencies);
+    return await (
+      await app.handle(
+        new Request("http://localhost/api/options/opml", {
+          headers: { cookie: "sid=test" },
+        }),
+      )
+    ).text();
+  };
+
+  const first = await exportWith(false);
+  const second = await exportWith(true);
+
+  expect(first).toBe(second);
+  expect(first.indexOf("Alpha")).toBeLessThan(first.indexOf("Zed"));
+  expect(first.indexOf("Aardvark")).toBeLessThan(first.indexOf("Beta"));
+});
+
 test("creates active users without registration integrations", async () => {
   const dependencies = createDependencies();
   let created:

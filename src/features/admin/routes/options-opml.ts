@@ -51,6 +51,9 @@ export async function postOptionsOpmlHandler(
 // feed no reader can fetch and, re-imported anywhere else, a subscription
 // nothing would ever deliver to. Everything OPML can actually represent is a
 // source with an http(s) URL.
+const byName = (left: { name: string }, right: { name: string }) =>
+  left.name.localeCompare(right.name);
+
 function subscriptionTree(
   folders: { id: number; name: string }[],
   sources: {
@@ -78,13 +81,19 @@ function subscriptionTree(
       foldered.set(source.parentId, siblings);
     }
   }
+  // Sorted here rather than trusted from the query. Re-importing an export is
+  // a no-op only because opml_imports dedupes on a hash of the file's bytes --
+  // insertTree creates a folder unconditionally, so a file that hashes
+  // differently duplicates every folder in the tree. Two exports of an
+  // unchanged tree therefore have to be byte-identical, which an ORDER BY
+  // nobody has to remember is the way to get.
   return [
-    ...folders.map((folder) => ({
-      children: foldered.get(folder.id) ?? [],
+    ...folders.toSorted(byName).map((folder) => ({
+      children: (foldered.get(folder.id) ?? []).toSorted(byName),
       name: folder.name,
       type: "folder" as const,
     })),
-    ...roots,
+    ...roots.toSorted(byName),
   ];
 }
 
