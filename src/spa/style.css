@@ -279,6 +279,18 @@ form,
 .options-card h2 {
   margin: 0;
 }
+/* Every other options card's action is a full-width button; the OPML export
+   is a link because it downloads a file. ButtonFace/ButtonText are what the
+   UA paints a bare <button> with here -- no rule in this file overrides them
+   -- so borrowing them keeps the two matching under every theme, the same
+   way the System Color keywords elsewhere avoid a per-theme pass. */
+.options-card a.card-action {
+  padding: 0.6rem;
+  background: ButtonFace;
+  color: ButtonText;
+  text-align: center;
+  text-decoration: none;
+}
 
 .admin-page {
   display: grid;

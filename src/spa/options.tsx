@@ -270,7 +270,7 @@ export function Options(props: {
         {/* A plain link rather than a fetch: the API is cookie-authenticated,
             so the browser downloads it without the SPA holding the file in
             memory first. */}
-        <a download="" href="/api/options/opml">
+        <a class="card-action" download="" href="/api/options/opml">
           Download subscriptions
         </a>
         <p>
