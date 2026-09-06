@@ -116,6 +116,8 @@ Caddy sets `X-Forwarded-For` itself. Only set this once a proxy is in front and 
 
 The stack runs no SMTP server and exposes no port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`. `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
 
+WARNING: Password reset needs those same two variables. Without them the login page shows no reset link, `POST /api/password-reset` answers as it does for an address with no account, and a forgotten password can only be recovered by an operator writing a new hash into `users.password` by hand.
+
 Upgrading pulls the new images and reruns migrations, which are forward-only:
 
 ```bash

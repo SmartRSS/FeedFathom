@@ -8,6 +8,10 @@ import {
   type LoginRouteDependencies,
 } from "#features/auth/routes/login.ts";
 import { createLogoutRoute } from "#features/auth/routes/logout.ts";
+import {
+  createPasswordResetRoute,
+  type PasswordResetRouteDependencies,
+} from "#features/auth/routes/password-reset.ts";
 import { createRegisterRoute } from "#features/auth/routes/register.ts";
 import { createSessionRoute } from "#features/auth/routes/session.ts";
 
@@ -22,7 +26,10 @@ export type PublicAuthRouteDependencies = {
   fetcher: (
     ...args: Parameters<typeof globalThis.fetch>
   ) => ReturnType<typeof globalThis.fetch>;
-  mailSender: Pick<MailSender, "sendActivationEmail">;
+  mailSender: Pick<
+    MailSender,
+    "sendActivationEmail" | "sendPasswordResetEmail"
+  >;
   password: Password;
   secureCookies: boolean;
   // Picked rather than restated, so a signature change on the service is a
@@ -36,14 +43,16 @@ export type PublicAuthRouteDependencies = {
     | "deleteSession"
     | "findUser"
     | "findUserByActivationToken"
+    | "findUserByPasswordResetToken"
     | "getUserBySid"
     | "getUserCount"
-  > & {
-    activateUser(userId: number): Promise<unknown>;
-    createUser(
-      payload: Parameters<UsersDataService["createUser"]>[0],
-    ): Promise<unknown>;
-  };
+  > &
+    PasswordResetRouteDependencies["usersDataService"] & {
+      activateUser(userId: number): Promise<unknown>;
+      createUser(
+        payload: Parameters<UsersDataService["createUser"]>[0],
+      ): Promise<unknown>;
+    };
 };
 
 export const createPublicAuthRoutes = (deps: PublicAuthRouteDependencies) =>
@@ -52,4 +61,5 @@ export const createPublicAuthRoutes = (deps: PublicAuthRouteDependencies) =>
     .use(createSessionRoute(deps))
     .use(createLogoutRoute(deps))
     .use(createRegisterRoute(deps))
-    .use(createActivateRoute(deps));
+    .use(createActivateRoute(deps))
+    .use(createPasswordResetRoute(deps));

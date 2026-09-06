@@ -112,13 +112,16 @@ export function registerPath(next: string): string {
 export type Route =
   | { name: "activate"; token: string }
   | { name: "login" | "register"; next: string }
-  | { name: "admin" | "dashboard" | "options" }
+  | { name: "admin" | "dashboard" | "options" | "passwordReset" }
+  | { name: "passwordResetConfirm"; token: string }
   | { feedUrl?: string; name: "preview" };
 
 export function resolveRoute(path: string): Route {
   const url = new URL(path, "http://localhost");
   const activationToken = /^\/activate\/([^/]+)$/.exec(url.pathname)?.[1];
   if (activationToken) return { name: "activate", token: activationToken };
+  const resetToken = /^\/password-reset\/([^/]+)$/.exec(url.pathname)?.[1];
+  if (resetToken) return { name: "passwordResetConfirm", token: resetToken };
 
   switch (url.pathname) {
     case "/admin":
@@ -130,6 +133,8 @@ export function resolveRoute(path: string): Route {
       };
     case "/options":
       return { name: "options" };
+    case "/password-reset":
+      return { name: "passwordReset" };
     case "/preview": {
       const feedUrl = url.searchParams.get("feedUrl");
       return feedUrl ? { feedUrl, name: "preview" } : { name: "preview" };

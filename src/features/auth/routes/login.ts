@@ -5,6 +5,7 @@ import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { LoginThrottle } from "#features/auth/login-throttle.ts";
+import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
 type Password = {
@@ -25,21 +26,6 @@ export type LoginRouteDependencies = {
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
   };
 };
-
-// X-Forwarded-For is a chain the proxies append to, so the leftmost entry is
-// the one the first proxy saw. It is only as trustworthy as the proxy that
-// wrote it, which is what makes reading it opt-in.
-function clientAddress(
-  request: Request,
-  server: { requestIP(request: Request): null | { address: string } } | null,
-  trustedHeader: string | undefined,
-): string {
-  const forwarded = trustedHeader
-    ? request.headers.get(trustedHeader)?.split(",")[0]?.trim()
-    : undefined;
-  if (forwarded) return forwarded;
-  return server?.requestIP(request)?.address ?? "unknown";
-}
 
 export function createLoginRoute({
   config,

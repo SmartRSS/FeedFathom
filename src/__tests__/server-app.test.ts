@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
@@ -42,6 +42,8 @@ const account = {
   lastSeenAt: new Date("2026-07-20T12:00:00.000Z"),
   name: sessionUser.name,
   password: "hashed-password",
+  passwordResetTokenExpiresAt: null,
+  passwordResetTokenHash: null,
   status: "active" as const,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
@@ -126,6 +128,7 @@ function createDependencies(): ServerDependencies {
     },
     mailSender: {
       async sendActivationEmail() {},
+      async sendPasswordResetEmail() {},
     },
     opmlImportService: {
       async insertTree() {
@@ -193,6 +196,9 @@ function createDependencies(): ServerDependencies {
       async activateUser() {
         return unexpected("usersDataService.activateUser");
       },
+      async completePasswordReset() {
+        return unexpected("usersDataService.completePasswordReset");
+      },
       async createSession() {
         return "test-session";
       },
@@ -206,11 +212,17 @@ function createDependencies(): ServerDependencies {
       async findUserByActivationToken() {
         return undefined;
       },
+      async findUserByPasswordResetToken() {
+        return undefined;
+      },
       async getUserBySid() {
         return undefined;
       },
       async getUserCount() {
         return 0;
+      },
+      async startPasswordReset() {
+        return unexpected("usersDataService.startPasswordReset");
       },
       async touchLastSeen() {},
       async updatePassword() {
@@ -1966,6 +1978,140 @@ test("does not create an inactive user when activation email delivery fails", as
 
   expect(response.status).toBe(500);
   expect(createCalls).toBe(0);
+});
+
+// The recovery path a forgotten password needs, and every way it must refuse
+// to say more than it should.
+test("resets a password without admitting whether the account exists", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "key";
+  dependencies.config.MAILJET_API_SECRET = "secret";
+  const target = { ...account, email: "forgetful@example.com" };
+  const sent: { email: string; token: string }[] = [];
+  const started: { expiresAt: Date; tokenHash: string; userId: number }[] = [];
+  dependencies.usersDataService.findUser = async (email) =>
+    email === target.email ? target : undefined;
+  dependencies.usersDataService.startPasswordReset = async (
+    userId,
+    tokenHash,
+    expiresAt,
+  ) => {
+    started.push({ expiresAt, tokenHash, userId });
+  };
+  dependencies.mailSender.sendPasswordResetEmail = async (email, token) => {
+    sent.push({ email, token });
+  };
+  const app = await appFor(dependencies);
+  const request = (email: string) =>
+    app.handle(
+      new Request("http://localhost/api/password-reset", {
+        body: JSON.stringify({ email }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  const known = await request(target.email);
+  const unknown = await request("nobody@example.com");
+
+  expect(known.status).toBe(200);
+  expect(unknown.status).toBe(200);
+  expect(await known.json()).toEqual(await unknown.json());
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.email).toBe(target.email);
+
+  // The token travels in the link and only its digest is stored, so a dump of
+  // the users table is not a set of working reset links.
+  const token = sent[0]!.token;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  expect(started).toHaveLength(1);
+  expect(started[0]?.tokenHash).toBe(tokenHash);
+  expect(started[0]?.tokenHash).not.toBe(token);
+  expect(started[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+});
+
+test("spends a reset token once and refuses an expired one", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "key";
+  dependencies.config.MAILJET_API_SECRET = "secret";
+  const completed: { passwordHash: string; userId: number }[] = [];
+  dependencies.usersDataService.findUserByPasswordResetToken = async (
+    tokenHash,
+  ) => {
+    const valid =
+      tokenHash === createHash("sha256").update("good").digest("hex");
+    return {
+      ...account,
+      passwordResetTokenExpiresAt: valid
+        ? new Date(Date.now() + 60_000)
+        : new Date(Date.now() - 60_000),
+      passwordResetTokenHash: tokenHash,
+    };
+  };
+  dependencies.usersDataService.completePasswordReset = async (
+    userId,
+    passwordHash,
+  ) => {
+    completed.push({ passwordHash, userId });
+  };
+  dependencies.password.hash = async (value) => `hashed:${value}`;
+  const app = await appFor(dependencies);
+  const confirm = (token: string, password1: string, password2 = password1) =>
+    app.handle(
+      new Request("http://localhost/api/password-reset/confirm", {
+        body: JSON.stringify({ password1, password2, token }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  const good = await confirm("good", "a-new-password");
+  const expired = await confirm("stale", "a-new-password");
+  const mismatched = await confirm("good", "one", "two");
+
+  expect(good.status).toBe(200);
+  expect(expired.status).toBe(400);
+  expect(mismatched.status).toBe(422);
+  expect(completed).toEqual([
+    { passwordHash: "hashed:a-new-password", userId: account.id },
+  ]);
+});
+
+test("has no reset flow at all when outgoing mail is not configured", async () => {
+  const dependencies = createDependencies();
+  let sends = 0;
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.mailSender.sendPasswordResetEmail = async () => {
+    sends++;
+  };
+  const app = await appFor(dependencies);
+
+  const info = await app.handle(new Request("http://localhost/api/register"));
+  const requested = await app.handle(
+    new Request("http://localhost/api/password-reset", {
+      body: JSON.stringify({ email: account.email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const confirmed = await app.handle(
+    new Request("http://localhost/api/password-reset/confirm", {
+      body: JSON.stringify({
+        password1: "x",
+        password2: "x",
+        token: "anything",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  // The login view hides the link on this flag, and the request route still
+  // answers exactly as it does for an account that does not exist.
+  expect(await info.json()).toMatchObject({ passwordResetEnabled: false });
+  expect(requested.status).toBe(200);
+  expect(confirmed.status).toBe(400);
+  expect(sends).toBe(0);
 });
 
 test("activates valid tokens but rejects expired tokens", async () => {

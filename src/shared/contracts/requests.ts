@@ -127,6 +127,18 @@ export const passwordRequest = withMatchingChangedPasswords(
     password2: Type.String({ minLength: 1 }),
   }),
 );
+export const passwordResetRequest = Type.Object({
+  email: normalizedEmailAddress,
+});
+// The same two-field policy the signed-in change-password path uses, so a
+// reset cannot set a password the account settings would have rejected.
+export const passwordResetConfirmRequest = withMatchingChangedPasswords(
+  Type.Object({
+    password1: Type.String({ minLength: 1 }),
+    password2: Type.String({ minLength: 1 }),
+    token: normalizedNonblankString,
+  }),
+);
 // Dotted key names ("hub.mode") are the actual WebSub spec query params --
 // not something this app invented, so kept verbatim rather than remapped.
 export const websubVerificationQuery = Type.Object({

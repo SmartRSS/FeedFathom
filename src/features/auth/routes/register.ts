@@ -71,6 +71,9 @@ export function createRegisterRoute({
     .get("/api/register", async () => {
       const count = await usersDataService.getUserCount();
       return json({
+        passwordResetEnabled: Boolean(
+          config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
+        ),
         registrationStatus:
           count === 0
             ? "FIRST_USER"

@@ -157,6 +157,49 @@ export class UsersDataService {
     return Number(result[0]?.count ?? 0);
   }
 
+  public async startPasswordReset(
+    userId: number,
+    tokenHash: string,
+    expiresAt: Date,
+  ) {
+    await this.drizzleConnection
+      .update(users)
+      .set({
+        passwordResetTokenExpiresAt: expiresAt,
+        passwordResetTokenHash: tokenHash,
+      })
+      .where(eq(users.id, userId));
+  }
+
+  public async findUserByPasswordResetToken(tokenHash: string) {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(users)
+        .where(eq(users.passwordResetTokenHash, tokenHash))
+        .limit(1)
+    ).at(0);
+  }
+
+  /**
+   * The new password, the spent token and every session, in one transaction.
+   * Split across three statements a crash between them leaves either a token
+   * that still works against the new password or sessions the old one opened.
+   */
+  public async completePasswordReset(userId: number, passwordHash: string) {
+    await this.drizzleConnection.transaction(async (transaction) => {
+      await transaction
+        .update(users)
+        .set({
+          password: passwordHash,
+          passwordResetTokenExpiresAt: null,
+          passwordResetTokenHash: null,
+        })
+        .where(eq(users.id, userId));
+      await transaction.delete(sessions).where(eq(sessions.userId, userId));
+    });
+  }
+
   public async updatePassword(userId: number, passwordHash: string) {
     return await this.drizzleConnection
       .update(users)

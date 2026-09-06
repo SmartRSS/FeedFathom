@@ -35,6 +35,10 @@ export const sessionResponse = Type.Object(
 
 export const registrationResponse = Type.Object(
   {
+    // Whether outgoing mail is configured, which is what a reset needs to
+    // deliver a link. The login view reads it to decide whether the "forgot
+    // your password" link means anything on this instance.
+    passwordResetEnabled: Type.Boolean(),
     registrationStatus: Type.Union([
       Type.Literal("FIRST_USER"),
       Type.Literal("ENABLED"),

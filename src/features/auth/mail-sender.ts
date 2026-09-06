@@ -12,15 +12,41 @@ export class MailSender {
   ) {}
 
   public async sendActivationEmail(email: string, token: string) {
+    await this.send(
+      email,
+      "activation",
+      "Activate your FeedFathom account",
+      "Please activate your account by clicking this link",
+      `/activate/${token}`,
+    );
+  }
+
+  public async sendPasswordResetEmail(email: string, token: string) {
+    await this.send(
+      email,
+      "password reset",
+      "Reset your FeedFathom password",
+      "Reset your password by clicking this link. It expires in an hour, and ignoring this message leaves the account as it is",
+      `/password-reset/${token}`,
+    );
+  }
+
+  private async send(
+    email: string,
+    kind: string,
+    subject: string,
+    lead: string,
+    path: string,
+  ) {
     const { MAILJET_API_KEY, MAILJET_API_SECRET } = this.appConfig;
     if (!(MAILJET_API_KEY && MAILJET_API_SECRET)) {
-      console.log("Mailjet is not configured. Cannot send activation email.");
+      console.log(`Mailjet is not configured. Cannot send ${kind} email.`);
       return;
     }
 
     const domain = this.appConfig.FEED_FATHOM_DOMAIN ?? "default-domain.com";
     const protocol = domain.startsWith("localhost") ? "http" : "https";
-    const activationLink = `${protocol}://${domain}/activate/${token}`;
+    const link = `${protocol}://${domain}${path}`;
     const response = await this.fetcher(mailjetEndpoint, {
       body: JSON.stringify({
         Messages: [
@@ -29,9 +55,9 @@ export class MailSender {
               Email: `welcome@${domain}`,
               Name: "FeedFathom",
             },
-            HTMLPart: `<p>Please activate your account by clicking this link: <a href="${activationLink}">${activationLink}</a></p>`,
-            Subject: "Activate your FeedFathom account",
-            TextPart: `Please activate your account by clicking this link: ${activationLink}`,
+            HTMLPart: `<p>${lead}: <a href="${link}">${link}</a></p>`,
+            Subject: subject,
+            TextPart: `${lead}: ${link}`,
             To: [{ Email: email }],
           },
         ],

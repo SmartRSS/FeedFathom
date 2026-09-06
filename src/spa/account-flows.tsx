@@ -20,6 +20,20 @@ export function Login(props: { navigate(to: string): void; next: string }) {
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
+  const [resetEnabled, setResetEnabled] = createSignal(false);
+  // With no outgoing mail configured there is no link to deliver, so the
+  // route answers as it would for an unknown account and offering it here
+  // would only send people somewhere that cannot help them. A failure to
+  // load leaves the link hidden, which is the same harmless outcome.
+  onMount(async () => {
+    try {
+      setResetEnabled(
+        (await api("/register", registrationResponse)).passwordResetEnabled,
+      );
+    } catch {
+      setResetEnabled(false);
+    }
+  });
   async function submit(event: Event) {
     event.preventDefault();
     try {
@@ -59,6 +73,17 @@ export function Login(props: { navigate(to: string): void; next: string }) {
           {(message) => <p role="alert">{message()}</p>}
         </Show>
         <button>Login</button>
+        <Show when={resetEnabled()}>
+          <a
+            href="/password-reset"
+            onClick={(event) => {
+              event.preventDefault();
+              props.navigate("/password-reset");
+            }}
+          >
+            Forgot your password?
+          </a>
+        </Show>
         <a
           href={registerPath(props.next)}
           onClick={(event) => {
@@ -322,6 +347,147 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
         </Switch>
         <LoginLink navigate={props.navigate} />
       </section>
+    </main>
+  );
+}
+
+export function PasswordReset(props: { navigate(to: string): void }) {
+  const [email, setEmail] = createSignal("");
+  const [sent, setSent] = createSignal(false);
+  const [message, setMessage] = createSignal("");
+
+  async function submit(event: Event) {
+    event.preventDefault();
+    try {
+      await api("/password-reset", successResponse, {
+        body: JSON.stringify({ email: email() }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      setSent(true);
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error ? cause.message : "Could not send the email.",
+      );
+    }
+  }
+
+  return (
+    <main>
+      <Show
+        when={!sent()}
+        fallback={
+          <section class="account-result">
+            <h1>Reset your password</h1>
+            {/* Deliberately not "we sent you an email": saying so only when
+                the account exists would answer the question the login form
+                refuses to. */}
+            <p role="status">
+              If that address has an account here, a reset link is on its way.
+              The link is good for one hour.
+            </p>
+            <LoginLink navigate={props.navigate} />
+          </section>
+        }
+      >
+        <form onSubmit={submit}>
+          <h1>Reset your password</h1>
+          <label>
+            Email
+            <input
+              autocomplete="email"
+              type="email"
+              value={email()}
+              onInput={(event) => setEmail(event.currentTarget.value)}
+              required
+            />
+          </label>
+          <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
+          <button>Send reset link</button>
+          <LoginLink navigate={props.navigate} />
+        </form>
+      </Show>
+    </main>
+  );
+}
+
+export function PasswordResetConfirm(props: {
+  navigate(to: string): void;
+  token: string;
+}) {
+  const [password, setPassword] = createSignal("");
+  const [confirm, setConfirm] = createSignal("");
+  const [done, setDone] = createSignal(false);
+  const [message, setMessage] = createSignal("");
+
+  async function submit(event: Event) {
+    event.preventDefault();
+    if (password() !== confirm()) {
+      setMessage("The two passwords do not match.");
+      return;
+    }
+    try {
+      await api("/password-reset/confirm", successResponse, {
+        body: JSON.stringify({
+          password1: password(),
+          password2: confirm(),
+          token: props.token,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      setDone(true);
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error
+          ? cause.message
+          : "Could not reset the password.",
+      );
+    }
+  }
+
+  return (
+    <main>
+      <Show
+        when={!done()}
+        fallback={
+          <section class="account-result">
+            <h1>Reset your password</h1>
+            <p role="status">
+              Your password has been changed, and every other session has been
+              signed out.
+            </p>
+            <LoginLink navigate={props.navigate} />
+          </section>
+        }
+      >
+        <form onSubmit={submit}>
+          <h1>Choose a new password</h1>
+          <label>
+            New password
+            <input
+              autocomplete="new-password"
+              type="password"
+              value={password()}
+              onInput={(event) => setPassword(event.currentTarget.value)}
+              required
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              autocomplete="new-password"
+              type="password"
+              value={confirm()}
+              onInput={(event) => setConfirm(event.currentTarget.value)}
+              required
+            />
+          </label>
+          <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
+          <button>Set new password</button>
+          <LoginLink navigate={props.navigate} />
+        </form>
+      </Show>
     </main>
   );
 }
