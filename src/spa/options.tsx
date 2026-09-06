@@ -261,6 +261,23 @@ export function Options(props: {
           )}
         </Show>
       </form>
+      <section class="options-card">
+        <h2>Export OPML</h2>
+        <p>
+          Download every feed subscription as an OPML file any other reader can
+          import.
+        </p>
+        {/* A plain link rather than a fetch: the API is cookie-authenticated,
+            so the browser downloads it without the SPA holding the file in
+            memory first. */}
+        <a download="" href="/api/options/opml">
+          Download subscriptions
+        </a>
+        <p>
+          Newsletter subscriptions are not included. Their addresses are minted
+          by this instance, so they mean nothing to another reader.
+        </p>
+      </section>
       <form class="options-card" onSubmit={submitOpml}>
         <h2>Import OPML</h2>
         <label>

@@ -16,6 +16,8 @@ import type {
   SourceUrlUpdateResult,
 } from "#features/feeds/source-data-service.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
+import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import {
   deleteAdminRedirectsHandler,
   getAdminRedirectsHandler,
@@ -26,6 +28,7 @@ import {
   postAdminHandler,
 } from "#features/admin/routes/admin.ts";
 import {
+  getOptionsOpmlHandler,
   opmlRequest,
   postOptionsOpmlHandler,
 } from "#features/admin/routes/options-opml.ts";
@@ -37,6 +40,7 @@ type Password = {
 };
 
 export type AdminOptionsRouteDependencies = {
+  foldersDataService: Pick<FoldersDataService, "getUserFolders">;
   opmlImportService: Pick<OpmlImportService, "insertTree">;
   opmlParser: Pick<OpmlParser, "parseOpml">;
   password: Password;
@@ -50,6 +54,7 @@ export type AdminOptionsRouteDependencies = {
       newUrl: string,
     ): Promise<SourceUrlUpdateResult | void>;
   };
+  userSourcesDataService: Pick<UserSourcesDataService, "getUserSources">;
   // See the note on the same field in features/auth/routes.ts: picked where
   // the real signature is usable, widened only where the result is a
   // driver-specific execute() value nothing reads.
@@ -71,6 +76,7 @@ export const createAdminOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
     .post("/api/options/opml", { body: opmlRequest }, (ctx) =>
       postOptionsOpmlHandler(ctx, deps),
     )
+    .get("/api/options/opml", (ctx) => getOptionsOpmlHandler(ctx, deps))
     .get("/api/admin", { query: adminQuery }, (ctx) =>
       getAdminHandler(ctx, deps),
     )

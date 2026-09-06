@@ -1654,6 +1654,64 @@ test("validates OPML files and checks plain-text content before parsing", async 
   expect(inserts).toBe(1);
 });
 
+test("exports the subscription tree as OPML, without newsletters", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.foldersDataService.getUserFolders = async () => [
+    {
+      createdAt: new Date(),
+      id: 4,
+      name: "News & views",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+  ];
+  dependencies.userSourcesDataService.getUserSources = async () => [
+    {
+      homeUrl: "https://news.test",
+      id: 1,
+      kind: "feed",
+      name: "Daily",
+      parentId: 4,
+      unreadArticlesCount: 0,
+      url: "https://news.test/feed",
+    },
+    {
+      homeUrl: null,
+      id: 2,
+      kind: "email",
+      name: "A newsletter",
+      parentId: null,
+      unreadArticlesCount: 0,
+      url: "abc123@mail.example.com",
+    },
+  ];
+  const app = await appFor(dependencies);
+
+  const anonymous = await app.handle(
+    new Request("http://localhost/api/options/opml"),
+  );
+  const response = await app.handle(
+    new Request("http://localhost/api/options/opml", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+  const body = await response.text();
+
+  expect(anonymous.status).toBe(401);
+  expect(response.headers.get("content-type")).toBe(
+    "text/x-opml; charset=utf-8",
+  );
+  expect(response.headers.get("content-disposition")).toContain(
+    'filename="feedfathom-subscriptions.opml"',
+  );
+  expect(body).toContain('xmlUrl="https://news.test/feed"');
+  expect(body).toContain('text="News &amp; views"');
+  // The address is one this instance minted and routes mail for. Anywhere
+  // else it is a subscription nothing would ever deliver to.
+  expect(body).not.toContain("abc123@mail.example.com");
+});
+
 test("creates active users without registration integrations", async () => {
   const dependencies = createDependencies();
   let created:
