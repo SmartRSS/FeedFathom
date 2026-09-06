@@ -59,17 +59,24 @@ which is checked in review rather than by the rule. That's the point of
 keeping the edges in a config file: adding one is a deliberate act that shows
 up in the diff, instead of arriving as a quiet new import.
 
-- **`auth`** — sessions, registration, activation, password, the users data
-  service, and the mail sender that carries activation mail. The session plugin
-  lives here rather than in `platform`: session verification is domain logic
-  about users, not infrastructure.
+- **`auth`** — sessions, registration, activation, password change and reset,
+  the failed-login throttle, the users data service, and the mail sender that
+  carries activation and reset mail. The session plugin lives here rather than
+  in `platform`: session verification is domain logic about users, not
+  infrastructure, and the admin variant of it is the same derive with one more
+  test rather than a second plugin.
 - **`feeds`** — getting content and the store it lands in: feed parsing
-  (RSS/Atom, JSON Feed, microformats), OPML import, discovery and preview,
+  (RSS/Atom, JSON Feed, microformats), OPML import and export, discovery and
+  preview,
   subscription, WebSub, favicons, article extraction and link rewriting, and
   the sources, articles, user-sources and folders data services.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes.
 - **`admin`** — the admin and options routes and the job-failures data service.
+  Two route groups rather than one, because `/api/options` is per-user and
+  `/api/admin` is not: the admin group carries `createAdminPlugin`, so the
+  authorisation check is a property of the group instead of something each
+  handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.
