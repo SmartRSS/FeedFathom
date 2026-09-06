@@ -456,6 +456,18 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tree-filter {
+  margin: 0.4rem;
+  padding: 0.4rem;
+  min-width: 0;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.tree-empty {
+  margin: 0 0.4rem;
+  color: var(--grey-50);
+  font-size: 0.8rem;
+}
 .tree {
   margin: 0;
   flex: 1;

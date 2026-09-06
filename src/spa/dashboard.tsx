@@ -22,6 +22,7 @@ import {
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
   faviconUrls,
+  filterTree,
   findNode,
   findParentFolderUid,
   sourceIds,
@@ -112,6 +113,8 @@ export function Dashboard(props: {
   pane(): DashboardPane;
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
+  const [treeFilter, setTreeFilter] = createSignal("");
+  const visibleTree = () => filterTree(tree(), treeFilter());
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
@@ -733,13 +736,26 @@ export function Dashboard(props: {
               </ul>
             }
           >
+            <input
+              aria-label="Filter feeds"
+              class="tree-filter"
+              placeholder="Filter feeds"
+              type="search"
+              value={treeFilter()}
+              onInput={(event) => setTreeFilter(event.currentTarget.value)}
+            />
+            <Show when={treeFilter().trim() && !visibleTree().length}>
+              <p class="tree-empty" role="status">
+                No feeds match that.
+              </p>
+            </Show>
             <ul
               aria-busy={treeLoading()}
               aria-label="Feeds"
               class="tree"
               role="tree"
             >
-              <For each={tree()}>
+              <For each={visibleTree()}>
                 {(node) => (
                   <TreeItem
                     focused={focusedTreeKey() === treeNodeKey(node)}

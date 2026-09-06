@@ -10,6 +10,28 @@ export function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
+/**
+ * The tree narrowed to what matches, case-insensitively.
+ *
+ * A folder whose own name matches keeps all its children -- narrowing "News"
+ * to the one feed that happens to repeat the word would hide the rest of a
+ * folder the user just named. A folder that does not match survives only
+ * through the descendants that do.
+ */
+export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return nodes;
+  const matching = (node: TreeNode): TreeNode | undefined => {
+    if (node.name.toLowerCase().includes(needle)) return node;
+    if (node.type === "source") return undefined;
+    const children = filterTree(node.children, query);
+    return children.length ? { ...node, children } : undefined;
+  };
+  return nodes
+    .map(matching)
+    .filter((node): node is TreeNode => node !== undefined);
+}
+
 export function faviconUrls(node: TreeNode): string[] {
   return node.type === "source"
     ? node.favicon
