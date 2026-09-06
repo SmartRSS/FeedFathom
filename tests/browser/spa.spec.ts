@@ -226,6 +226,55 @@ test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
   await expect(page.locator(`#${owns}`)).toHaveAttribute("role", "group");
 });
 
+test("narrows the tree to what matches, and says so when nothing does", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const filter = page.getByLabel("Filter feeds");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+
+  await filter.fill("tech");
+  // The folder does not match "tech" itself; it survives through its child.
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+
+  await filter.fill("nothing matches this");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("No feeds match that.")).toBeVisible();
+
+  await filter.fill("");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+});
+
+// The route answers as it does for an unknown address when no mail is
+// configured, so offering the link there would only send people somewhere
+// that cannot help them.
+test("offers a password reset link only where mail can deliver one", async ({
+  page,
+}) => {
+  await installApiFixture(page, { authenticated: false });
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Forgot your password?" }),
+  ).toHaveCount(0);
+
+  await installApiFixture(page, {
+    authenticated: false,
+    passwordResetEnabled: true,
+  });
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Forgot your password?" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Reset your password" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/password-reset");
+});
+
 test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");

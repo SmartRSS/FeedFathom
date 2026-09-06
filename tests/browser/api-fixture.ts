@@ -106,6 +106,7 @@ export async function installApiFixture(
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
     multipleArticles?: boolean;
+    passwordResetEnabled?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
     websubFeed?: boolean;
@@ -138,6 +139,16 @@ export async function installApiFixture(
     if (method === "GET" && url.pathname === "/api/session") {
       if (options.sessionFailure) return respond({ user: { id: "malformed" } });
       return respond({ user: state.authenticated ? user : null });
+    }
+
+    // The login view reads this to decide whether to offer a reset link, so
+    // it is fetched on every visit to /login, not just on the register page.
+    if (method === "GET" && url.pathname === "/api/register") {
+      return respond({
+        passwordResetEnabled: options.passwordResetEnabled ?? false,
+        registrationStatus: "DISABLED",
+        turnstileSiteKey: null,
+      });
     }
 
     if (method === "POST" && url.pathname === "/api/login") {
