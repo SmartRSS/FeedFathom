@@ -32,6 +32,32 @@ export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
     .filter((node): node is TreeNode => node !== undefined);
 }
 
+function hasNodeKey(nodes: TreeNode[], key: string): boolean {
+  return nodes.some(
+    (node) =>
+      treeNodeKey(node) === key ||
+      (node.type === "folder" && hasNodeKey(node.children, key)),
+  );
+}
+
+/**
+ * The one row in the tree that is a tab stop.
+ *
+ * The tree is a roving tabindex, so exactly one row carries `tabindex="0"`
+ * and the rest carry `-1`. The row that was last focused is that one -- until
+ * a filter removes it, and a tree whose only tab stop is no longer rendered is
+ * a tree Tab skips over entirely. The first row still showing takes over.
+ */
+export function treeTabStopKey(
+  nodes: TreeNode[],
+  focusedKey: string | undefined,
+): string | undefined {
+  if (focusedKey !== undefined && hasNodeKey(nodes, focusedKey))
+    return focusedKey;
+  const first = nodes[0];
+  return first ? treeNodeKey(first) : undefined;
+}
+
 export function faviconUrls(node: TreeNode): string[] {
   return node.type === "source"
     ? node.favicon

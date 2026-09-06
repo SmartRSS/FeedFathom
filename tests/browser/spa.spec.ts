@@ -249,6 +249,22 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 });
 
+// The tree is a roving tabindex: exactly one row carries tabindex="0" and the
+// rest carry -1. A filter that removed the row holding it would leave none,
+// and Tab would step straight past the whole tree.
+test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  const tabStops = page.locator('[role="treeitem"][tabindex="0"]');
+  await expect(tabStops).toHaveCount(1);
+
+  await page.getByLabel("Filter feeds").fill("tech");
+  await expect(tabStops).toHaveCount(1);
+
+  await page.getByLabel("Filter feeds").fill("");
+  await expect(tabStops).toHaveCount(1);
+});
+
 // The route answers as it does for an unknown address when no mail is
 // configured, so offering the link there would only send people somewhere
 // that cannot help them.

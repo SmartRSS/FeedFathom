@@ -27,6 +27,7 @@ import {
   findParentFolderUid,
   sourceIds,
   treeNodeKey,
+  treeTabStopKey,
   withDecrementedUnread,
 } from "./dashboard-behavior.ts";
 import {
@@ -138,6 +139,7 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
+  const treeTabStop = () => treeTabStopKey(visibleTree(), focusedTreeKey());
   // A screen reader can't be detected, so this always renders (see the
   // aria-live region below); it is visually hidden either way and only gets
   // real text when high contrast mode is off.
@@ -758,8 +760,8 @@ export function Dashboard(props: {
               <For each={visibleTree()}>
                 {(node) => (
                   <TreeItem
-                    focused={focusedTreeKey() === treeNodeKey(node)}
-                    focusedKey={focusedTreeKey()}
+                    focused={treeTabStop() === treeNodeKey(node)}
+                    focusedKey={treeTabStop()}
                     node={node}
                     onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
                     select={(item) => void select(item)}

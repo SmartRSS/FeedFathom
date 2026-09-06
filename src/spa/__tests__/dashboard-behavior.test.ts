@@ -10,6 +10,7 @@ import {
   findParentFolderUid,
   sourceIds,
   treeNodeKey,
+  treeTabStopKey,
   unreadCount,
   withDecrementedUnread,
 } from "../dashboard-behavior.ts";
@@ -210,5 +211,31 @@ describe("filterTree", () => {
   test("drops a folder no descendant matches, and returns the tree unfiltered for a blank query", () => {
     expect(filterTree(tree, "nothing here")).toEqual([]);
     expect(filterTree(tree, "   ")).toBe(tree);
+  });
+});
+
+describe("treeTabStopKey", () => {
+  const tree = [
+    folder("News", [source("bbc")]),
+    folder("Tech", [source("lwn")]),
+  ];
+
+  test("keeps the focused row as the tab stop while it is still shown", () => {
+    expect(treeTabStopKey(tree, "source:lwn")).toBe("source:lwn");
+    expect(treeTabStopKey(tree, "folder:News")).toBe("folder:News");
+  });
+
+  test("falls back to the first row when the focused one is filtered away", () => {
+    // The tree is a roving tabindex: exactly one row is a tab stop. Filtering
+    // out the row that had it would otherwise leave none, and Tab would skip
+    // the whole tree.
+    expect(
+      treeTabStopKey([folder("News", [source("bbc")])], "source:lwn"),
+    ).toBe("folder:News");
+    expect(treeTabStopKey(tree, undefined)).toBe("folder:News");
+  });
+
+  test("has no tab stop to offer for an empty tree", () => {
+    expect(treeTabStopKey([], "source:lwn")).toBeUndefined();
   });
 });
