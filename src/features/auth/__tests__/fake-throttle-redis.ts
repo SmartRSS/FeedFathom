@@ -1,4 +1,4 @@
-// Enough of Redis for LoginThrottle. Counters only, and expiry is recorded
+// Enough of Redis for AuthThrottle. Counters only, and expiry is recorded
 // rather than applied: no test here waits out a fifteen-minute window, but
 // several assert that the TTL is set exactly once per window.
 export function createFakeThrottleRedis() {

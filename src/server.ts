@@ -1,6 +1,6 @@
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
-import { LoginThrottle } from "#features/auth/login-throttle.ts";
+import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { MailSender } from "#features/auth/mail-sender.ts";
 import { OpmlParser } from "#features/feeds/opml-parser.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
@@ -14,6 +14,7 @@ const production = Bun.env.NODE_ENV === "production";
 export const app = await createServerApp(
   {
     ...runtime,
+    authThrottle: new AuthThrottle(runtime.redis),
     config,
     emailHandler: new EmailHandler(
       runtime.sourcesDataService,
@@ -22,7 +23,6 @@ export const app = await createServerApp(
     ),
     feedPreviewCache: new FeedPreviewCache(runtime.redis),
     fetcher: fetch,
-    loginThrottle: new LoginThrottle(runtime.redis),
     mailEnabled: config.MAIL_ENABLED,
     mailSender: new MailSender(config),
     opmlParser: new OpmlParser(),

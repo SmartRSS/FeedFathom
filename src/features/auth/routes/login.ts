@@ -4,7 +4,7 @@ import { loginRequest } from "#shared/contracts/requests.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { LoginThrottle } from "#features/auth/login-throttle.ts";
+import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
@@ -15,8 +15,8 @@ type Password = {
 
 export type LoginRouteDependencies = {
   config: Pick<AppConfig, "TRUSTED_PROXY_HEADER">;
-  loginThrottle: Pick<
-    LoginThrottle,
+  authThrottle: Pick<
+    AuthThrottle,
     "blocked" | "clearFailures" | "recordFailure"
   >;
   password: Password;
@@ -29,7 +29,7 @@ export type LoginRouteDependencies = {
 
 export function createLoginRoute({
   config,
-  loginThrottle,
+  authThrottle,
   password,
   secureCookies,
   usersDataService,
@@ -50,7 +50,7 @@ export function createLoginRoute({
       // exists and someone is guessing at it" for free.
       const wrongLoginData = json({ error: "Wrong login data" }, 401);
 
-      if (await loginThrottle.blocked(address, parsed.email)) {
+      if (await authThrottle.blocked("login", address, parsed.email)) {
         return wrongLoginData;
       }
 
@@ -61,11 +61,11 @@ export function createLoginRoute({
         user.status !== "active"
       ) {
         if (!user) await password.hash(parsed.password);
-        await loginThrottle.recordFailure(address, parsed.email);
+        await authThrottle.recordFailure("login", address, parsed.email);
         return wrongLoginData;
       }
 
-      await loginThrottle.clearFailures(address, parsed.email);
+      await authThrottle.clearFailures("login", address, parsed.email);
       const sid = await usersDataService.createSession(user.id, "");
       return json({ sid }, 200, {
         "set-cookie": sessionHeader(sid, secureCookies),

@@ -6,7 +6,7 @@ import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
-import { LoginThrottle } from "#features/auth/login-throttle.ts";
+import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
 import { createServerApp, type ServerDependencies } from "../server-app.ts";
 
@@ -80,6 +80,7 @@ function createDependencies(): ServerDependencies {
         return unexpected("articlesDataService.removeUserArticles");
       },
     },
+    authThrottle: new AuthThrottle(createFakeThrottleRedis()),
     config: appConfig,
     emailHandler: {
       async processEmail() {
@@ -122,7 +123,6 @@ function createDependencies(): ServerDependencies {
       },
       async seedCache() {},
     },
-    loginThrottle: new LoginThrottle(createFakeThrottleRedis()),
     get mailEnabled() {
       return appConfig.MAIL_ENABLED;
     },

@@ -28,8 +28,8 @@ account alone:
 
 | Key | Limit | Stops |
 | --- | --- | --- |
-| `login-fail:<address>:<email>` | 10 | one source grinding one account |
-| `login-source:<address>` | 50 | one source spraying many accounts |
+| `<scope>-fail:<address>:<email>` | 10 | one source grinding one account |
+| `<scope>-source:<address>` | 50 | one source spraying many accounts |
 
 A throttled attempt returns the same `401 Wrong login data` as a wrong
 password. A distinguishable status would undo the equal-time hashing by
@@ -44,9 +44,11 @@ to read it from. Behind a proxy every request arrives from the proxy, so the
 header is what makes the key mean anything — and trusting one with no proxy in
 front to overwrite it would make the key something the client picks.
 
-`POST /api/password-reset` shares both counters. It sends mail to an address
-the caller names, so it is worth as much to an abuser as the login form is, and
-the same budget bounds both.
+`POST /api/password-reset` is bounded the same way, under its own scope. It
+sends mail to an address the caller names, so it is worth as much to an abuser
+as the login form is. The scopes stay separate because a user whose first reset
+mail went to spam and who asked again a few times must still be able to log in
+with the password that reset then set.
 
 ## Alternatives considered
 

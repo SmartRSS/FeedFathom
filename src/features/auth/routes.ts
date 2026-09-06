@@ -22,7 +22,7 @@ type Password = {
 
 export type PublicAuthRouteDependencies = {
   config: AppConfig;
-  loginThrottle: LoginRouteDependencies["loginThrottle"];
+  authThrottle: LoginRouteDependencies["authThrottle"];
   fetcher: (
     ...args: Parameters<typeof globalThis.fetch>
   ) => ReturnType<typeof globalThis.fetch>;

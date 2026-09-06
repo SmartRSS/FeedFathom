@@ -8,7 +8,7 @@ import {
 import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { LoginThrottle } from "#features/auth/login-throttle.ts";
+import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 
@@ -25,7 +25,7 @@ export type PasswordResetRouteDependencies = {
     AppConfig,
     "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "TRUSTED_PROXY_HEADER"
   >;
-  loginThrottle: Pick<LoginThrottle, "blocked" | "recordFailure">;
+  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
   mailSender: Pick<MailSender, "sendPasswordResetEmail">;
   password: { hash(password: string): Promise<string> };
   usersDataService: {
@@ -44,7 +44,7 @@ export type PasswordResetRouteDependencies = {
 
 export function createPasswordResetRoute({
   config,
-  loginThrottle,
+  authThrottle,
   mailSender,
   password,
   usersDataService,
@@ -73,13 +73,17 @@ export function createPasswordResetRoute({
           config.TRUSTED_PROXY_HEADER,
         );
         // This endpoint sends mail to an address the caller names, so it is
-        // worth as much to an abuser as the login form is. The same counters
-        // bound both: a run of resets from one place stops for the same
-        // fifteen minutes a run of guesses does.
-        if (!mailConfigured || (await loginThrottle.blocked(address, email))) {
+        // worth as much to an abuser as the login form is, and is bounded the
+        // same way. Its own counters, though: a user whose first reset mail
+        // went to spam and who asked again a few times must still be able to
+        // log in with the password they then set.
+        if (
+          !mailConfigured ||
+          (await authThrottle.blocked("password-reset", address, email))
+        ) {
           return accepted;
         }
-        await loginThrottle.recordFailure(address, email);
+        await authThrottle.recordFailure("password-reset", address, email);
 
         const user = await usersDataService.findUser(email);
         if (user?.status !== "active") return accepted;
