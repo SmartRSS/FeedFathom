@@ -5,24 +5,11 @@ import { articlePageSize } from "#shared/contracts/responses.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
+import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
-
-function requireDisposableDatabaseUrl() {
-  const databaseUrl = process.env["MIGRATION_TEST_DATABASE_URL"];
-  if (!databaseUrl) {
-    throw new Error("MIGRATION_TEST_DATABASE_URL is required");
-  }
-  const name = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
-  if (!/(?:^|[_-])(?:disposable|migration_test|test)(?:[_-]|$)/i.test(name)) {
-    throw new Error(
-      "MIGRATION_TEST_DATABASE_URL must target a clearly disposable database",
-    );
-  }
-  return databaseUrl;
-}
 
 // Removing an article is the only user-level state this app writes, and it
 // has to stay removed -- through the article row being pruned and the feed

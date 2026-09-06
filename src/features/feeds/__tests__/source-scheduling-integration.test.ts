@@ -2,26 +2,7 @@ import { expect, test } from "bun:test";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
-
-function requireDisposableDatabaseUrl() {
-  const databaseUrl = process.env["DATABASE_URL"];
-  if (!databaseUrl) throw new Error("DATABASE_URL is required");
-
-  const parsed = new URL(databaseUrl);
-  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
-  if (
-    !["postgres:", "postgresql:"].includes(parsed.protocol) ||
-    !parsed.hostname ||
-    !/(?:^|[_-])(?:disposable|migration_test|test)(?:[_-]|$)/i.test(
-      databaseName,
-    )
-  ) {
-    throw new Error(
-      "DATABASE_URL must target a clearly disposable PostgreSQL database whose name includes a test or disposable marker",
-    );
-  }
-  return databaseUrl;
-}
+import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const databaseUrl = requireDisposableDatabaseUrl();
 // A short connect deadline, because the production default is two minutes

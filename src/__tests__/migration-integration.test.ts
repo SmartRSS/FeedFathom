@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { waitForMigration } from "#platform/db/connection.ts";
 import journal from "../../drizzle/meta/_journal.json";
 import { migrateDatabase } from "../migrator.ts";
+import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const currentMigrationsFolder = fileURLToPath(
   new URL("../../drizzle", import.meta.url),
@@ -16,29 +17,6 @@ const expectedIndexNames = [
   "user_sources_source_id_idx",
   "user_sources_user_source_idx",
 ].toSorted();
-
-function requireDisposableDatabaseUrl() {
-  const databaseUrl = process.env["MIGRATION_TEST_DATABASE_URL"];
-  if (!databaseUrl) {
-    throw new Error("MIGRATION_TEST_DATABASE_URL is required");
-  }
-
-  const parsed = new URL(databaseUrl);
-  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
-  if (
-    !["postgres:", "postgresql:"].includes(parsed.protocol) ||
-    !parsed.hostname ||
-    !/(?:^|[_-])(?:disposable|migration_test|test)(?:[_-]|$)/i.test(
-      databaseName,
-    )
-  ) {
-    throw new Error(
-      "MIGRATION_TEST_DATABASE_URL must target a clearly disposable PostgreSQL database whose name includes a test or disposable marker",
-    );
-  }
-
-  return databaseUrl;
-}
 
 async function resetDatabase(client: SQL) {
   await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;

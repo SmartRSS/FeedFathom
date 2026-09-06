@@ -154,6 +154,13 @@ wherever it lives and `test:migrations` names them explicitly, so `bun run
 test:unit` stays runnable with nothing but the repo checked out. Needing a
 database is not a reason to move a test away from its module.
 
+Those tests read `MIGRATION_TEST_DATABASE_URL` and drop the `public` schema
+before every run, so the URL goes through `requireDisposableDatabaseUrl`
+(`src/platform/db/__tests__/`), which refuses anything whose database name
+does not carry a `test` or `disposable` marker. One copy of that check, read
+from one variable: it is the only thing standing between a mistyped value and
+a real database.
+
 This holds outside `src/` too: `bin/`, `tools/` and `vendor/` each carry their
 own `__tests__/`. `tests/` holds only the Playwright specs under
 `tests/browser/`, which test a running app rather than a module.
