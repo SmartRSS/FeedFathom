@@ -5,7 +5,7 @@ Researched 2026-08-16, versions rechecked 2026-09-07.
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
 | bun               | 1.4.2        | 1.4.2    | —                   |
-| elysia            | 2.0.0-beta.4 | 1.4.30   | 2.0.0-beta.14       |
+| elysia            | 2.0.0-beta.14 | 1.4.30  | 2.0.0-beta.14       |
 | solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.6          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
 | typebox           | 1.3.28       | 1.3.28   | —                   |
@@ -37,7 +37,8 @@ codemod (`bunx @elysia/codemod@latest`) has nothing left to do here.
 
 Remaining work is a version bump when 2.0.0 goes stable: change the pin to
 `^2.0.0`. Until then keep an exact beta pin rather than the `next` tag, so a
-new beta can't land unreviewed on a fresh install.
+new beta can't land unreviewed on a fresh install — moved beta.4 to beta.14
+on 2026-09-07, no source changes needed.
 
 Worth evaluating once stable, both opt-in and both currently unused here:
 
