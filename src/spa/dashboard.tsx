@@ -66,11 +66,7 @@ import {
 } from "./preferences.ts";
 import { ScrollPastQueue } from "./scroll-past.ts";
 import { formatDate } from "./format-date.ts";
-import {
-  coarsePointer,
-  ContextMenu,
-  type ContextMenuItem,
-} from "./context-menu.tsx";
+import { ContextMenu, type ContextMenuItem } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
 import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
 import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
@@ -966,50 +962,6 @@ export function Dashboard(props: {
           ];
     setContextMenu({ items, x, y });
   }
-  function openArticleContext(x: number, y: number, article: ArticleSummary) {
-    const url = safeArticleUrl(article.url, window.location.href);
-    setContextMenu({
-      items: [
-        {
-          kind: "action",
-          label: "Copy article link",
-          onSelect: () =>
-            void copyToClipboard(url, "Article link copied to the clipboard."),
-        },
-        // Acts on the row that was right-clicked, not on the selection: a
-        // right-click that does not change what is selected still has to mean
-        // something, and it is the row under the pointer.
-        {
-          kind: "action",
-          label: article.read ? "Mark unread" : "Mark read",
-          onSelect: () => void markArticlesRead([article.id], !article.read),
-        },
-        {
-          kind: "action",
-          label: "Open original in new tab",
-          onSelect: () => window.open(url, "_blank", "noopener"),
-        },
-        // Only with the extension: window.open cannot open a background tab,
-        // and an item labelled "background" that foregrounds is worse than no
-        // item. Middle-clicking the row is the way without the extension --
-        // the row is a real link, so the browser handles it natively.
-        ...(readerAvailable() && url
-          ? [
-              {
-                kind: "action" as const,
-                label: "Open original in new background tab",
-                onSelect: () =>
-                  void readerBridge.openBackgroundTab(url).catch(() => {
-                    window.open(url, "_blank", "noopener");
-                  }),
-              },
-            ]
-          : []),
-      ],
-      x,
-      y,
-    });
-  }
   async function removeSelectedNode() {
     const node = selectedNode();
     if (!node) return;
@@ -1659,22 +1611,14 @@ export function Dashboard(props: {
                         selectArticle(index(), event);
                         props.focusPane("reader");
                       }}
-                      onContextMenu={(event) => {
-                        // Touch keeps the platform's own long-press menu: its
-                        // "Open in new tab" opens in the background, which is
-                        // the only way to get one on a phone -- window.open
-                        // always foregrounds and there is no middle click.
-                        // The app menu is for a mouse, where right-click's
-                        // native menu adds nothing and middle-click already
-                        // backgrounds a tab.
-                        if (coarsePointer()) return;
-                        event.preventDefault();
-                        openArticleContext(
-                          event.clientX,
-                          event.clientY,
-                          article,
-                        );
-                      }}
+                      // Deliberately no contextmenu override. The row is a
+                      // real link, so the browser's own menu carries "open in
+                      // a background tab" -- the only way to get one on a
+                      // phone, where there is no middle click and window.open
+                      // always foregrounds -- plus copy link address, save,
+                      // search and whatever the reader's own extensions add.
+                      // An app menu is prettier and none of that is worth
+                      // trading for it. Read state lives on the toolbar.
                       role="option"
                       tabIndex={focusedIndex() === index() ? 0 : -1}
                       aria-selected={selectedIndexes().has(index())}

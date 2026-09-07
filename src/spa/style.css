@@ -671,13 +671,14 @@ button.source {
   -webkit-touch-callout: none;
   user-select: none;
 }
-/* Article rows are real links, and on touch the platform's long-press menu is
-   the only place a background tab exists -- suppressing the callout here is
-   what used to take that away. Only a mouse, where the app menu owns
-   right-click, gets the suppression. */
+/* Article rows keep the platform's context menu, so nothing here may suppress
+   it: -webkit-touch-callout: none is exactly what used to remove the iOS long
+   press menu, and user-select: none removes it on some iOS versions too. The
+   mouse still gets the selection guard, where shift-click range select would
+   otherwise drag a text selection across the rows and no callout exists to
+   lose. */
 @media (pointer: fine) {
   a.article {
-    -webkit-touch-callout: none;
     user-select: none;
   }
 }

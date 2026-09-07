@@ -1299,32 +1299,28 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   ).toBe("0");
 });
 
-// Right-click is where a mouse user looks for "do something to this row".
-// The toolbar button needs a selection first, which is a step you have to know
-// about; the menu acts on the row under the pointer.
-test("marks an article read from its context menu", async ({ page }) => {
-  const state = await installApiFixture(page, { multipleArticles: true });
+// Article rows keep the platform's own context menu, on every pointer. It is
+// where "open in a background tab" lives -- the only way to get one on a phone,
+// which has no middle click and where window.open always foregrounds -- along
+// with copy link address, save, and whatever the reader's extensions add. Tree
+// rows are buttons with no platform menu to lose, so they keep the app's.
+test("leaves the article context menu to the browser", async ({ page }) => {
+  await installApiFixture(page);
   await page.goto("/");
+
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+
   await selectSource(page);
-  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
-  await expect(articleOptions(page)).toHaveCount(3);
-
-  await articleOptions(page).nth(1).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark read" }).click();
-
-  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
-  expect([...state.readArticleIds]).toEqual([12]);
-
-  // The label flips with the row it was opened on, so the same menu undoes it.
-  await articleOptions(page).nth(1).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark unread" }).click();
-  await expect(page.locator(".article-list .article.read")).toHaveCount(0);
+  await articleOptions(page).first().click({ button: "right" });
+  await expect(page.getByRole("menu")).toHaveCount(0);
 });
 
-// On a phone the browser's own long-press menu on a link is the only place a
-// background tab exists: window.open always foregrounds and there is no middle
-// click. The app menu used to take that away on article rows, so on a coarse
-// pointer it stands aside.
 test.describe("touch devices", () => {
   test.use({
     hasTouch: true,
@@ -1339,40 +1335,24 @@ test.describe("touch devices", () => {
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
 
-    // Tree rows are buttons, with no platform menu to lose, so they keep theirs.
-    await page
-      .locator("button.source")
-      .filter({ hasText: "Tech News" })
-      .first()
-      .click({ button: "right" });
-    await expect(page.getByRole("menu")).toBeVisible();
-    await page.keyboard.press("Escape");
-
     await selectSource(page);
     await articleOptions(page).first().click({ button: "right" });
     await expect(page.getByRole("menu")).toHaveCount(0);
+
+    // Nothing may suppress the platform menu on the row: both of these are
+    // what removed it before.
+    const styles = await articleOptions(page)
+      .first()
+      .evaluate((element) => {
+        const computed = getComputedStyle(element);
+        return {
+          callout: computed.getPropertyValue("-webkit-touch-callout"),
+          userSelect: computed.userSelect,
+        };
+      });
+    expect(styles.callout).not.toBe("none");
+    expect(styles.userSelect).not.toBe("none");
   });
-});
-
-// window.open cannot open a background tab, so the item that promises one is
-// only offered when the extension is there to deliver it. Middle-clicking the
-// row is the way without it -- the row is a real link.
-test("offers a background tab only with the Reader extension", async ({
-  page,
-}) => {
-  await installApiFixture(page);
-  await page.goto("/");
-  await selectSource(page);
-
-  await articleOptions(page).first().click({ button: "right" });
-  await expect(
-    page.getByRole("menuitem", { name: "Open original in new tab" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("menuitem", {
-      name: "Open original in new background tab",
-    }),
-  ).toHaveCount(0);
 });
 
 // The filter is a dropdown among icon buttons, so it says what it does rather

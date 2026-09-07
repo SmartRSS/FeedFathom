@@ -11,7 +11,6 @@ const requestIdSchema = Type.String({
 const readerActionSchema = Type.Union([
   Type.Literal("capabilities"),
   Type.Literal("fetch"),
-  Type.Literal("open-tab"),
 ]);
 const readerErrorCodeSchema = Type.Union([
   Type.Literal("FETCH_FAILED"),
@@ -47,22 +46,6 @@ const readerRequestSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
-  // A background tab is the one thing a page cannot open for itself:
-  // window.open always foregrounds, and browsers reserve backgrounding for a
-  // real modified click. chrome.tabs.create can, so the extension does it on
-  // the instance's behalf -- gated by the same sender check as every other
-  // action, so only the configured instance can ask.
-  Type.Object(
-    {
-      action: Type.Literal("open-tab"),
-      channel: Type.Literal(readerBridgeChannel),
-      id: requestIdSchema,
-      type: Type.Literal("request"),
-      url: Type.String(),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
 ]);
 const readerResponseSchema = Type.Union([
   Type.Object(
@@ -83,17 +66,6 @@ const readerResponseSchema = Type.Union([
       channel: Type.Literal(readerBridgeChannel),
       finalUrl: Type.String(),
       html: Type.String(),
-      id: requestIdSchema,
-      ok: Type.Literal(true),
-      type: Type.Literal("response"),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      action: Type.Literal("open-tab"),
-      channel: Type.Literal(readerBridgeChannel),
       id: requestIdSchema,
       ok: Type.Literal(true),
       type: Type.Literal("response"),

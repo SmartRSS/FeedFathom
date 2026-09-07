@@ -130,27 +130,6 @@ export const createExtensionReaderBridge = (windowObject: Window = window) => {
         throw new ReaderExtensionError("INVALID_RESPONSE");
       return { finalUrl: response.finalUrl, html: response.html };
     },
-    /**
-     * Opens the article in a background tab, which is the one thing the page
-     * cannot do for itself: window.open always foregrounds, and browsers give
-     * backgrounding only to a real modified click. Throws when the extension
-     * is absent, so the caller can fall back to a foreground tab rather than
-     * silently doing nothing.
-     */
-    async openBackgroundTab(url: string): Promise<void> {
-      const request: ReaderRequest = {
-        action: "open-tab",
-        channel: readerBridgeChannel,
-        id: crypto.randomUUID(),
-        type: "request",
-        url,
-        version: readerBridgeVersion,
-      };
-      const response = await send(request);
-      if (!response.ok) throw new ReaderExtensionError(response.error);
-      if (response.action !== "open-tab")
-        throw new ReaderExtensionError("INVALID_RESPONSE");
-    },
   };
 };
 

@@ -141,19 +141,6 @@ export function ContextMenu(props: {
 
 // Long-press → context menu, for touch screens. Cancels on movement (that's
 // a scroll) and swallows the click a released long-press would produce.
-// Whether the primary pointer is a finger. The article rows use it to leave
-// long-press to the platform: the browser's own menu on a link is the only
-// place a background tab exists on touch, since window.open always foregrounds
-// and there is no middle click to fall back on.
-export function coarsePointer(): boolean {
-  if (typeof matchMedia !== "function") return false;
-  try {
-    return matchMedia("(pointer: coarse)").matches;
-  } catch {
-    return false;
-  }
-}
-
 export function longPressHandlers(open: (x: number, y: number) => void): {
   onTouchCancel(): void;
   onTouchEnd(event: TouchEvent): void;
