@@ -6,7 +6,11 @@ import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
-import { createServerApp, type ServerDependencies } from "../server-app.ts";
+import {
+  createServerApp,
+  MAX_REQUEST_BODY_BYTES,
+  type ServerDependencies,
+} from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
@@ -1157,6 +1161,25 @@ test("allows loopback healthchecks", async () => {
     const origin = `http://127.0.0.1:${app.server?.port}`;
 
     expect((await fetch(`${origin}/healthcheck`)).status).toBe(200);
+  } finally {
+    await app.stop();
+  }
+});
+
+test("rejects an oversized body before any handler runs", async () => {
+  const app = await appFor(createDependencies());
+  app.listen(0);
+  try {
+    const origin = `http://127.0.0.1:${app.server?.port}`;
+    const oversized = "x".repeat(MAX_REQUEST_BODY_BYTES + 1);
+
+    const response = await fetch(`${origin}/api/login`, {
+      body: JSON.stringify({ email: oversized }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(413);
   } finally {
     await app.stop();
   }
