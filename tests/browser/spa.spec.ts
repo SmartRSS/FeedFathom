@@ -230,7 +230,9 @@ test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
 
-  await expect(page).toHaveTitle("FeedFathom");
+  // The dashboard badges the title with the fixture's total unread count;
+  // leaving the dashboard unmounts it and drops the badge again.
+  await expect(page).toHaveTitle("(2) FeedFathom");
   await page.getByRole("button", { name: "options" }).first().click();
   await expect(page).toHaveTitle("Options · FeedFathom");
 });
