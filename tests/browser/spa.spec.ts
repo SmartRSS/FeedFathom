@@ -130,7 +130,15 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
   await installApiFixture(page);
   await page.goto("/");
 
-  const row = page.locator("button.source").first();
+  // The virtual Today row heads the tree but is a view, not a feed: no
+  // menu for it.
+  await page.locator("button.source").first().click({ button: "right" });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  const row = page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first();
   await row.click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
   await expect(
