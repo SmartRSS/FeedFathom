@@ -2,9 +2,12 @@ import {
   and,
   eq,
   exists,
+  gt,
   inArray,
   isNotNull,
+  lt,
   lte,
+  min,
   ne,
   notExists,
   sql,
@@ -48,7 +51,7 @@ const confirmedGoneFromFeedBuffer = sql`
 // by what active subscribers actually keep.
 const emailRetentionDays = 90;
 
-const daysInterval = (days: number) => sql`(${days} * INTERVAL '1 day')`;
+const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
 export async function cleanupOrphanedData(
   drizzleConnection: BunSQLDatabase<typeof schema>,
@@ -62,9 +65,7 @@ export async function cleanupOrphanedData(
   if (userExpiryDays > 0) {
     await drizzleConnection
       .delete(users)
-      .where(
-        sql`${users.lastSeenAt} < NOW() - ${daysInterval(userExpiryDays)}`,
-      );
+      .where(lt(users.lastSeenAt, daysAgo(userExpiryDays)));
   }
 
   // "Delete sources nobody subscribes to" means "delete every source" when
@@ -88,26 +89,25 @@ export async function cleanupOrphanedData(
       ),
     );
 
+  const earliestSubs = drizzleConnection
+    .select({
+      earliestSubscription: min(userSources.createdAt).as(
+        "earliest_subscription",
+      ),
+      sourceId: userSources.sourceId,
+    })
+    .from(userSources)
+    .groupBy(userSources.sourceId)
+    .as("earliest_subs");
+
   const articlesBeforeSubscription = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
-    .leftJoin(
-      drizzleConnection
-        .select({
-          earliestSubscription: sql<Date>`min(${userSources.createdAt})`.as(
-            "earliest_subscription",
-          ),
-          sourceId: userSources.sourceId,
-        })
-        .from(userSources)
-        .groupBy(userSources.sourceId)
-        .as("earliest_subs"),
-      eq(articles.sourceId, sql`earliest_subs.source_id`),
-    )
+    .leftJoin(earliestSubs, eq(articles.sourceId, earliestSubs.sourceId))
     .where(
       and(
-        sql`earliest_subs.source_id IS NOT NULL`,
-        sql`${articles.lastSeenInFeedAt} < earliest_subs.earliest_subscription`,
+        isNotNull(earliestSubs.sourceId),
+        lt(articles.lastSeenInFeedAt, earliestSubs.earliestSubscription),
       ),
     );
 
@@ -138,7 +138,10 @@ export async function cleanupOrphanedData(
       and(
         isNotNull(sources.lastSuccess),
         ne(sources.kind, "email"),
-        sql`${articles.lastSeenInFeedAt} < ${sources.lastSuccess} - ${confirmedGoneFromFeedBuffer}`,
+        lt(
+          articles.lastSeenInFeedAt,
+          sql`${sources.lastSuccess} - ${confirmedGoneFromFeedBuffer}`,
+        ),
         notExists(
           drizzleConnection
             .select({ id: userSources.id })
@@ -184,7 +187,7 @@ export async function cleanupOrphanedData(
     .where(
       and(
         eq(sources.kind, "email"),
-        sql`${articles.lastSeenInFeedAt} < NOW() - ${daysInterval(emailRetentionDays)}`,
+        lt(articles.lastSeenInFeedAt, daysAgo(emailRetentionDays)),
         notExists(
           drizzleConnection
             .select({ id: userSources.id })
@@ -226,7 +229,7 @@ export async function cleanupOrphanedData(
       .from(articles)
       .where(
         and(
-          sql`${articles.lastSeenInFeedAt} < NOW() - ${daysInterval(articleStaleAfterDays)}`,
+          lt(articles.lastSeenInFeedAt, daysAgo(articleStaleAfterDays)),
           notExists(
             drizzleConnection
               .select({ id: userSources.id })
@@ -236,7 +239,7 @@ export async function cleanupOrphanedData(
                 and(
                   eq(userSources.sourceId, articles.sourceId),
                   lte(userSources.createdAt, articles.lastSeenInFeedAt),
-                  sql`${users.lastSeenAt} > NOW() - ${daysInterval(userDormantAfterDays)}`,
+                  gt(users.lastSeenAt, daysAgo(userDormantAfterDays)),
                 ),
               ),
           ),
