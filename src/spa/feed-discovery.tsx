@@ -21,6 +21,7 @@ import {
   withScheme,
 } from "./discovery-behavior.ts";
 import { Icon } from "./icon.tsx";
+import { formatDate } from "./format-date.ts";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {
@@ -439,7 +440,7 @@ export function FeedDiscovery(props: {
                   <span class="details">
                     <span>{article.author}</span>
                     <time datetime={article.publishedAt}>
-                      {new Date(article.publishedAt).toLocaleString()}
+                      {formatDate(article.publishedAt)}
                     </time>
                   </span>
                 </a>
