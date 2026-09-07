@@ -13,6 +13,7 @@ import {
   setTheme,
   theme,
 } from "./preferences.ts";
+import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -195,6 +196,19 @@ export function Options(props: {
             <option value="aero">Aero</option>
             <option value="modern">Modern</option>
             <option value="high-contrast">High contrast (accessibility)</option>
+          </select>
+        </label>
+        <label>
+          Date format
+          <select
+            value={dateFormat()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isDateFormat(value)) setDateFormat(value);
+            }}
+          >
+            <option value="locale">System locale</option>
+            <option value="iso">ISO 8601 (UTC)</option>
           </select>
         </label>
       </section>

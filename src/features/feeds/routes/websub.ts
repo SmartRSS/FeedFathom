@@ -25,6 +25,39 @@ export type WebSubRouteDependencies = {
 // spacing, so a push never pulls the next fetch earlier than a poll would.
 const pushedBodyFreshMs = 5 * 60_000;
 
+// Matches the fetch pipeline's ceiling for a feed document
+// (http-client's maximumBodyBytes): a push replaces a fetch, so it can
+// carry anything a fetch could. The callback is unauthenticated, and the
+// signature only covers bytes we have already buffered, so the cap has to
+// run while streaming the body in -- a declared Content-Length alone is
+// not evidence, and an oversized stream is abandoned mid-read.
+const pushBodyLimitBytes = 24 * 1024 * 1024;
+
+const readCappedPushBody = async (
+  request: Request,
+): Promise<Buffer | undefined> => {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > pushBodyLimitBytes)
+    return undefined;
+
+  const reader = request.body?.getReader();
+  if (!reader) return Buffer.alloc(0);
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > pushBodyLimitBytes) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+};
+
 // The hub SHOULD send hub.lease_seconds on every verification per spec, but
 // "should" isn't "must" -- if it's missing, assume a short lease instead of
 // an indefinite one, so a source without a real lease gets caught by the
@@ -75,7 +108,10 @@ export function createWebSubRoutes({
         );
         if (!source?.websubSecret) return status(404);
 
-        const body = Buffer.from(await request.arrayBuffer());
+        const body = await readCappedPushBody(request);
+        // Too big to even consider: not a feed we handed a secret out for,
+        // whatever the signature says.
+        if (!body) return status(413);
         const signature =
           request.headers.get("x-hub-signature-256") ??
           request.headers.get("x-hub-signature");

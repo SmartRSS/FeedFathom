@@ -49,6 +49,7 @@ import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import { markReadOnOpen, resolvedTheme } from "./preferences.ts";
+import { formatDate } from "./format-date.ts";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
 // DOM. As an external image it would need per-case light/dark guessing.
@@ -1014,9 +1015,7 @@ export function Dashboard(props: {
                       <span class="details">
                         <span>{article.author}</span>
                         <time datetime={article.publishedAt || undefined}>
-                          {article.publishedAt
-                            ? new Date(article.publishedAt).toLocaleString()
-                            : ""}
+                          {formatDate(article.publishedAt)}
                         </time>
                       </span>
                     </a>

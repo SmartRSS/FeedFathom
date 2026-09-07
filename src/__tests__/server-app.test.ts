@@ -8,7 +8,11 @@ import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
 import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
-import { createServerApp, type ServerDependencies } from "../server-app.ts";
+import {
+  createServerApp,
+  MAX_REQUEST_BODY_BYTES,
+  type ServerDependencies,
+} from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
@@ -1175,6 +1179,25 @@ test("allows loopback healthchecks", async () => {
     const origin = `http://127.0.0.1:${app.server?.port}`;
 
     expect((await fetch(`${origin}/healthcheck`)).status).toBe(200);
+  } finally {
+    await app.stop();
+  }
+});
+
+test("rejects an oversized body before any handler runs", async () => {
+  const app = await appFor(createDependencies());
+  app.listen(0);
+  try {
+    const origin = `http://127.0.0.1:${app.server?.port}`;
+    const oversized = "x".repeat(MAX_REQUEST_BODY_BYTES + 1);
+
+    const response = await fetch(`${origin}/api/login`, {
+      body: JSON.stringify({ email: oversized }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(413);
   } finally {
     await app.stop();
   }
@@ -2709,4 +2732,46 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
   expect(enqueued).toEqual([
     [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
   ]);
+});
+
+test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
+  const dependencies = createDependencies();
+  const enqueued: Parameters<
+    ServerDependencies["sourcesDataService"]["enqueueSource"]
+  >[] = [];
+  const seeded: unknown[] = [];
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+    enqueued.push(parameters);
+  };
+  dependencies.httpClient.seedCache = async (_url, pushed) => {
+    seeded.push(pushed);
+  };
+  const app = await appFor(dependencies);
+  const oversized = "x".repeat(24 * 1024 * 1024 + 1);
+  // A body large enough that no hub push is legitimate, streamed without a
+  // declared Content-Length, so the incremental read is what has to stop it.
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Buffer.from(oversized));
+      controller.close();
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      body,
+      // @ts-expect-error -- duplex is required for streaming request bodies
+      // but undici's Request type omits it.
+      duplex: "half",
+      headers: { "x-hub-signature-256": "sha256=deadbeef" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(413);
+  expect(seeded).toEqual([]);
+  expect(enqueued).toEqual([]);
 });

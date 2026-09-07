@@ -67,20 +67,33 @@ test("only prunes articles the feed has really stopped listing", async () => {
     // make every earlier newsletter look dropped.
     const mailbox = await addSource("news@example.test", "email", "5 minutes");
 
-    for (const sourceId of [fastFeed, slowFeed, mailbox]) {
-      // eslint-disable-next-line no-await-in-loop -- three fixture rows.
+    for (const sourceId of [fastFeed, slowFeed]) {
+      // eslint-disable-next-line no-await-in-loop -- two fixture rows.
       await client`
         INSERT INTO user_sources (user_id, source_id, name, created_at)
         VALUES (${user!.id}, ${sourceId}, 'sub', NOW() - INTERVAL '60 days')`;
     }
+    // The mailbox subscription predates the old deliveries below: a current
+    // subscriber has had the chance to (and in one case did) record deleting
+    // them, so their fate is decided by the email age rule, not the
+    // nobody-ever-saw-it rule above it.
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name, created_at)
+      VALUES (${user!.id}, ${mailbox}, 'sub', NOW() - INTERVAL '100 days')`;
 
     const goneForGood = await addArticle(fastFeed, "gone", "5 days");
     const stillSubscribed = await addArticle(fastFeed, "not-removed", "5 days");
     const missedOneFetch = await addArticle(slowFeed, "flaky", "3 days");
+    // Email prunes on flat delivery age, not feed absence: a 30-day-old
+    // delivery is far inside the window, an old deleted one is outside it,
+    // and an old one nobody deleted survives because someone may still want
+    // it.
     const oldNewsletter = await addArticle(mailbox, "letter", "30 days");
+    const prunableNewsletter = await addArticle(mailbox, "stale", "91 days");
+    const keptNewsletter = await addArticle(mailbox, "hoarded", "91 days");
 
-    for (const guid of ["gone", "flaky", "letter"]) {
-      // eslint-disable-next-line no-await-in-loop -- three fixture rows.
+    for (const guid of ["gone", "flaky", "letter", "stale"]) {
+      // eslint-disable-next-line no-await-in-loop -- four fixture rows.
       await client`
         INSERT INTO user_articles (user_id, source_id, guid, deleted_at)
         SELECT ${user!.id}, source_id, guid, NOW()
@@ -95,8 +108,10 @@ test("only prunes articles the feed has really stopped listing", async () => {
       stillSubscribed,
       missedOneFetch,
       oldNewsletter,
+      keptNewsletter,
     ]);
     expect(rows.map((row) => row.id)).not.toContain(goneForGood);
+    expect(rows.map((row) => row.id)).not.toContain(prunableNewsletter);
   } finally {
     await drizzleConnection.$client.close();
     await client.close();
