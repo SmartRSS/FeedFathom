@@ -664,15 +664,23 @@ dialog.app-dialog-actions .app-dialog-danger {
   background: var(--error);
   border: 1px solid var(--error);
 }
-/* The long-press menu (#721) fights the platform's own long-press
-   behaviors: iOS shows the link-preview callout for the article rows'
-   real <a href>, and both platforms start a text selection mid-hold.
-   Suppress both on the interactive rows (not the reader pane, where
-   selecting text is the point). */
-button.source,
-a.article {
+/* The long-press menu (#721) starts a text selection mid-hold, so the
+   interactive rows suppress it (not the reader pane, where selecting text is
+   the point). Tree rows are buttons with no platform menu to lose. */
+button.source {
   -webkit-touch-callout: none;
   user-select: none;
+}
+/* Article rows keep the platform's context menu, so nothing here may suppress
+   it: -webkit-touch-callout: none is exactly what used to remove the iOS long
+   press menu, and user-select: none removes it on some iOS versions too. The
+   mouse still gets the selection guard, where shift-click range select would
+   otherwise drag a text selection across the rows and no callout exists to
+   lose. */
+@media (pointer: fine) {
+  a.article {
+    user-select: none;
+  }
 }
 
 /* First-run empty-tree guidance (#723). Same scroll-container treatment as
