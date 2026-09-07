@@ -140,33 +140,6 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
-  page,
-}) => {
-  await installApiFixture(page);
-  await page.goto("/");
-
-<<<<<<< HEAD
-  await page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .first()
-    .click();
-  // The fixture's article list for the source is nonempty; right after the
-  // list renders, remove the single article and the fallback appears.
-  await page.getByRole("button", { name: "delete articles" }).click();
-  await expect(page.getByText("All caught up.")).toBeVisible();
-=======
-  const row = page.locator("button.source").first();
-  await row.click({ button: "right" });
-  await expect(page.getByRole("menu")).toBeVisible();
-  await expect(
-    page.getByRole("menuitem", { name: "Copy feed URL" }),
-  ).toBeVisible();
-
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("menu")).toHaveCount(0);
->>>>>>> origin/staging
-});
 
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
