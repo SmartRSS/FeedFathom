@@ -67,8 +67,8 @@ import {
 import { ScrollPastQueue } from "./scroll-past.ts";
 import { formatDate } from "./format-date.ts";
 import {
+  coarsePointer,
   ContextMenu,
-  longPressHandlers,
   type ContextMenuItem,
 } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
@@ -1659,10 +1659,15 @@ export function Dashboard(props: {
                         selectArticle(index(), event);
                         props.focusPane("reader");
                       }}
-                      {...longPressHandlers((x, y) =>
-                        openArticleContext(x, y, article),
-                      )}
                       onContextMenu={(event) => {
+                        // Touch keeps the platform's own long-press menu: its
+                        // "Open in new tab" opens in the background, which is
+                        // the only way to get one on a phone -- window.open
+                        // always foregrounds and there is no middle click.
+                        // The app menu is for a mouse, where right-click's
+                        // native menu adds nothing and middle-click already
+                        // backgrounds a tab.
+                        if (coarsePointer()) return;
                         event.preventDefault();
                         openArticleContext(
                           event.clientX,

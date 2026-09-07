@@ -1321,6 +1321,39 @@ test("marks an article read from its context menu", async ({ page }) => {
   await expect(page.locator(".article-list .article.read")).toHaveCount(0);
 });
 
+// On a phone the browser's own long-press menu on a link is the only place a
+// background tab exists: window.open always foregrounds and there is no middle
+// click. The app menu used to take that away on article rows, so on a coarse
+// pointer it stands aside.
+test.describe("touch devices", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { height: 844, width: 390 },
+  });
+
+  test("leaves long-press on an article to the browser", async ({ page }) => {
+    await installApiFixture(page);
+    await page.goto("/");
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+
+    // Tree rows are buttons, with no platform menu to lose, so they keep theirs.
+    await page
+      .locator("button.source")
+      .filter({ hasText: "Tech News" })
+      .first()
+      .click({ button: "right" });
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await selectSource(page);
+    await articleOptions(page).first().click({ button: "right" });
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+});
+
 // window.open cannot open a background tab, so the item that promises one is
 // only offered when the extension is there to deliver it. Middle-clicking the
 // row is the way without it -- the row is a real link.

@@ -664,15 +664,22 @@ dialog.app-dialog-actions .app-dialog-danger {
   background: var(--error);
   border: 1px solid var(--error);
 }
-/* The long-press menu (#721) fights the platform's own long-press
-   behaviors: iOS shows the link-preview callout for the article rows'
-   real <a href>, and both platforms start a text selection mid-hold.
-   Suppress both on the interactive rows (not the reader pane, where
-   selecting text is the point). */
-button.source,
-a.article {
+/* The long-press menu (#721) starts a text selection mid-hold, so the
+   interactive rows suppress it (not the reader pane, where selecting text is
+   the point). Tree rows are buttons with no platform menu to lose. */
+button.source {
   -webkit-touch-callout: none;
   user-select: none;
+}
+/* Article rows are real links, and on touch the platform's long-press menu is
+   the only place a background tab exists -- suppressing the callout here is
+   what used to take that away. Only a mouse, where the app menu owns
+   right-click, gets the suppression. */
+@media (pointer: fine) {
+  a.article {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
 }
 
 /* First-run empty-tree guidance (#723). Same scroll-container treatment as
