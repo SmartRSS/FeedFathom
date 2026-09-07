@@ -976,11 +976,35 @@ export function Dashboard(props: {
           onSelect: () =>
             void copyToClipboard(url, "Article link copied to the clipboard."),
         },
+        // Acts on the row that was right-clicked, not on the selection: a
+        // right-click that does not change what is selected still has to mean
+        // something, and it is the row under the pointer.
+        {
+          kind: "action",
+          label: article.read ? "Mark unread" : "Mark read",
+          onSelect: () => void markArticlesRead([article.id], !article.read),
+        },
         {
           kind: "action",
           label: "Open original in new tab",
           onSelect: () => window.open(url, "_blank", "noopener"),
         },
+        // Only with the extension: window.open cannot open a background tab,
+        // and an item labelled "background" that foregrounds is worse than no
+        // item. Middle-clicking the row is the way without the extension --
+        // the row is a real link, so the browser handles it natively.
+        ...(readerAvailable() && url
+          ? [
+              {
+                kind: "action" as const,
+                label: "Open original in new background tab",
+                onSelect: () =>
+                  void readerBridge.openBackgroundTab(url).catch(() => {
+                    window.open(url, "_blank", "noopener");
+                  }),
+              },
+            ]
+          : []),
       ],
       x,
       y,
@@ -1526,20 +1550,25 @@ export function Dashboard(props: {
             >
               <Icon raw={selectAllRaw} />
             </button>
-            <select
-              aria-label="Show"
-              class="article-filter"
-              value={articleFilter()}
-              onChange={(event) => {
-                const next = event.currentTarget.value;
-                if (next === "all" || next === "read" || next === "unread")
-                  changeArticleFilter(next);
-              }}
-            >
-              <option value="unread">Unread</option>
-              <option value="all">All</option>
-              <option value="read">Read</option>
-            </select>
+            {/* A visible label, not just an aria-label: among icon buttons a
+                bare dropdown reading "Unread" looks like a status, not the
+                control that changes which articles the list shows. */}
+            <label class="article-filter-field">
+              Show
+              <select
+                class="article-filter"
+                value={articleFilter()}
+                onChange={(event) => {
+                  const next = event.currentTarget.value;
+                  if (next === "all" || next === "read" || next === "unread")
+                    changeArticleFilter(next);
+                }}
+              >
+                <option value="unread">Unread</option>
+                <option value="all">All</option>
+                <option value="read">Read</option>
+              </select>
+            </label>
             <button
               class="text-action"
               disabled={!selectedIndexes().size}

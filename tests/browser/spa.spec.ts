@@ -1299,6 +1299,61 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   ).toBe("0");
 });
 
+// Right-click is where a mouse user looks for "do something to this row".
+// The toolbar button needs a selection first, which is a step you have to know
+// about; the menu acts on the row under the pointer.
+test("marks an article read from its context menu", async ({ page }) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  await articleOptions(page).nth(1).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark read" }).click();
+
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+  expect([...state.readArticleIds]).toEqual([12]);
+
+  // The label flips with the row it was opened on, so the same menu undoes it.
+  await articleOptions(page).nth(1).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark unread" }).click();
+  await expect(page.locator(".article-list .article.read")).toHaveCount(0);
+});
+
+// window.open cannot open a background tab, so the item that promises one is
+// only offered when the extension is there to deliver it. Middle-clicking the
+// row is the way without it -- the row is a real link.
+test("offers a background tab only with the Reader extension", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await articleOptions(page).first().click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Open original in new tab" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", {
+      name: "Open original in new background tab",
+    }),
+  ).toHaveCount(0);
+});
+
+// The filter is a dropdown among icon buttons, so it says what it does rather
+// than leaving "Unread" to read as a status.
+test("labels the article filter visibly", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.locator(".article-filter-field")).toContainText("Show");
+  await expect(page.getByRole("combobox", { name: "Show" })).toHaveValue(
+    "unread",
+  );
+});
+
 test("? opens the shortcut help dialog and Escape closes it", async ({
   page,
 }) => {

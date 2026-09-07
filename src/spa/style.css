@@ -876,6 +876,14 @@ a.article {
   flex: 1;
   overflow: auto;
 }
+.article-filter-field {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
 .article-filter {
   min-width: 0;
   font: inherit;
