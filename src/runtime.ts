@@ -11,6 +11,9 @@ import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import { FaviconStore } from "#features/feeds/favicon-store.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
@@ -40,10 +43,10 @@ export async function createFeedRuntime() {
   );
   const articlesDataService = new ArticlesDataService(drizzleConnection);
   const foldersDataService = new FoldersDataService(drizzleConnection);
-  const sourcesDataService = new SourcesDataService(
-    drizzleConnection,
-    bullmqQueue,
-  );
+  const sourcesDataService = new SourcesDataService(drizzleConnection);
+  const websubStateService = new WebSubStateService(drizzleConnection);
+  const faviconStore = new FaviconStore(drizzleConnection);
+  const sourceEnqueuer = new SourceEnqueuer(bullmqQueue);
   const usersDataService = new UsersDataService(drizzleConnection);
   const jobFailuresDataService = new JobFailuresDataService(drizzleConnection);
   const userSourcesDataService = new UserSourcesDataService(
@@ -53,7 +56,7 @@ export async function createFeedRuntime() {
   );
   const opmlImportService = new OpmlImportService(
     drizzleConnection,
-    sourcesDataService,
+    sourceEnqueuer,
   );
   const httpClient = new HttpClient(redis, {
     instance: config.FEED_FATHOM_DOMAIN,
@@ -64,11 +67,12 @@ export async function createFeedRuntime() {
     articlesDataService,
     httpClient,
     sourcesDataService,
+    websubStateService,
     redirectMap,
     userSourcesDataService,
     config.FEED_FATHOM_DOMAIN,
   );
-  const faviconRefresher = new FaviconRefresher(httpClient, sourcesDataService);
+  const faviconRefresher = new FaviconRefresher(httpClient, faviconStore);
   let closePromise: Promise<void> | undefined;
   const close = () =>
     (closePromise ??= Promise.allSettled([
@@ -92,6 +96,7 @@ export async function createFeedRuntime() {
     close,
     drizzleConnection,
     faviconRefresher,
+    faviconStore,
     feedParser,
     foldersDataService,
     httpClient,
@@ -99,8 +104,10 @@ export async function createFeedRuntime() {
     opmlImportService,
     redirectMap,
     redis,
+    sourceEnqueuer,
     sourcesDataService,
     userSourcesDataService,
     usersDataService,
+    websubStateService,
   };
 }

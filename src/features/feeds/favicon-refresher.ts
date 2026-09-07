@@ -3,7 +3,7 @@ import {
   HttpDeferredError,
   isHttpDeferredError,
 } from "#platform/http/http-deferred-error.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { FaviconStore } from "#features/feeds/favicon-store.ts";
 import {
   imageDimensions,
   isBetterFavicon,
@@ -20,10 +20,7 @@ import {
 export class FaviconRefresher {
   constructor(
     private readonly httpClient: HttpClient,
-    private readonly sourcesDataService: Pick<
-      SourcesDataService,
-      "updateFavicon"
-    >,
+    private readonly faviconStore: Pick<FaviconStore, "updateFavicon">,
   ) {}
 
   private async bestFavicon(urls: string[]) {
@@ -110,7 +107,7 @@ export class FaviconRefresher {
     }
 
     if (result.best) {
-      await this.sourcesDataService.updateFavicon(
+      await this.faviconStore.updateFavicon(
         source.id,
         result.best.buffer,
         result.best.contentType,

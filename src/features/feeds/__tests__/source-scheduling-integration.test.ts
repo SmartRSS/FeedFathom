@@ -30,8 +30,7 @@ const databaseUrl = requireDisposableDatabaseUrl();
 // running.
 await migrateDatabase(databaseUrl, "./drizzle", 5_000);
 const drizzleConnection = createDrizzleConnection(databaseUrl);
-const noopQueue = { async add() {} };
-const sourcesDataService = new SourcesDataService(drizzleConnection, noopQueue);
+const sourcesDataService = new SourcesDataService(drizzleConnection);
 
 async function addFeedSource(url: string) {
   return await sourcesDataService.addSource({

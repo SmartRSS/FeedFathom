@@ -1,10 +1,9 @@
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
-import { and, eq, getTableColumns, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { eq, getTableColumns, gt, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { dateType } from "#shared/validation/typebox-policy.ts";
 import type { sourceSortSchema } from "#shared/contracts/requests.ts";
-import { JobName } from "#shared/types/job-name-enum.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
@@ -12,24 +11,6 @@ import {
   clampToPollFloor,
   pollFloorMs,
 } from "#features/feeds/source-schedule-policy.ts";
-
-type SourceQueue = {
-  add(
-    name: JobName,
-    data: {
-      id: number;
-      skipCache: boolean;
-      trigger?: "manual" | "websub-push";
-      url: string;
-    },
-    options: {
-      jobId: string;
-      lifo: boolean;
-      removeOnComplete: { count: number };
-      removeOnFail: { count: number };
-    },
-  ): Promise<unknown>;
-};
 
 export interface SourceWithSubscriberCount {
   id: number;
@@ -132,10 +113,15 @@ const isUniqueViolation = (error: unknown, depth = 0): boolean => {
 
 export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 
+/**
+ * Sources repository: CRUD on the sources table plus the poll-schedule
+ * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
+ * the fetch pipeline. WebSub lease state lives in WebSubStateService, favicon
+ * storage in FaviconStore, and ParseSource enqueueing in SourceEnqueuer.
+ */
 export class SourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly bullmqQueue: SourceQueue,
   ) {}
 
   public async addSource(payload: {
@@ -155,27 +141,6 @@ export class SourcesDataService {
     const existing = await this.findSourceByUrl(payload.url);
     if (!existing) throw new Error("Source conflict resolved without a row");
     return existing;
-  }
-
-  // skipCache defaults on because every caller here is an explicit signal
-  // that something changed. The exception is a WebSub push that arrived with
-  // the feed document attached: that body is already in the cache by the time
-  // this is called, and skipping it would re-request what the hub just sent.
-  public async enqueueSource(
-    source: { id: number; url: string },
-    trigger: "manual" | "websub-push" = "manual",
-    skipCache = true,
-  ) {
-    await this.bullmqQueue.add(
-      JobName.ParseSource,
-      { id: source.id, skipCache, trigger, url: source.url },
-      {
-        jobId: `${JobName.ParseSource}-${source.id}`,
-        lifo: true,
-        removeOnComplete: { count: 0 },
-        removeOnFail: { count: 0 },
-      },
-    );
   }
 
   // subscriberCount rides along for the ParseSource job's User-Agent (see
@@ -357,134 +322,5 @@ export class SourcesDataService {
     } catch (error) {
       console.error("fail source", error);
     }
-  }
-
-  public async updateFavicon(
-    sourceId: number,
-    favicon: Buffer,
-    contentType: string,
-  ) {
-    await this.drizzleConnection
-      .update(sources)
-      .set({
-        favicon: `data:${contentType};base64,${favicon.toString("base64")}`,
-      })
-      .where(eq(sources.id, sourceId));
-  }
-
-  public async getFavicon(sourceId: number) {
-    const [row] = await this.drizzleConnection
-      .select({ favicon: sources.favicon })
-      .from(sources)
-      .where(eq(sources.id, sourceId))
-      .limit(1);
-    return row?.favicon ?? null;
-  }
-
-  // Generates a fresh per-subscription secret and callback token and moves to
-  // "pending"; the caller POSTs to the hub with the returned values, so the
-  // two always agree on which secret is current.
-  //
-  // Also an atomic claim (see the schema comment on
-  // websubSubscribeAttemptedAt): returns false when another attempt already
-  // claimed this source inside the cooldown, so the caller skips rather than
-  // racing a second hub request with a different callback token.
-  public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
-    const claimed = await this.drizzleConnection
-      .update(sources)
-      .set({ websubSubscribeAttemptedAt: sql`NOW()` })
-      .where(
-        and(
-          eq(sources.id, sourceId),
-          or(
-            isNull(sources.websubSubscribeAttemptedAt),
-            lt(
-              sources.websubSubscribeAttemptedAt,
-              sql`NOW() - INTERVAL '30 seconds'`,
-            ),
-          ),
-        ),
-      )
-      .returning({ id: sources.id });
-    return claimed.length > 0;
-  }
-
-  public async recordWebSubDiscovery(
-    sourceId: number,
-    hubUrl: string,
-    topicUrl: string,
-  ): Promise<{ callbackToken: string; secret: string }> {
-    const callbackToken = crypto.randomUUID();
-    const secret = crypto.randomUUID();
-    await this.drizzleConnection
-      .update(sources)
-      .set({
-        websubCallbackToken: callbackToken,
-        websubHubUrl: hubUrl,
-        websubSecret: secret,
-        websubStatus: "pending",
-        websubTopicUrl: topicUrl,
-      })
-      .where(eq(sources.id, sourceId));
-    return { callbackToken, secret };
-  }
-
-  public async markWebSubVerified(sourceId: number, leaseExpiresAt: Date) {
-    await this.drizzleConnection
-      .update(sources)
-      .set({
-        // kind: "websub" drives the reduced cadence in getSourcesToProcess.
-        // Delivery isn't guaranteed, so this is a longer fallback interval,
-        // not "stop polling".
-        kind: "websub",
-        websubLeaseExpiresAt: leaseExpiresAt,
-        websubStatus: "verified",
-      })
-      .where(eq(sources.id, sourceId));
-  }
-
-  public async markWebSubFailed(sourceId: number) {
-    await this.drizzleConnection
-      .update(sources)
-      .set({
-        // Back to ordinary cadence: a dead subscription still marked "websub"
-        // would be checked daily with no push to make up for it.
-        kind: "feed",
-        websubStatus: "failed",
-      })
-      .where(eq(sources.id, sourceId));
-  }
-
-  public async findSourceByWebSubCallbackToken(
-    token: string,
-  ): Promise<Source | undefined> {
-    return (
-      await this.drizzleConnection
-        .select()
-        .from(sources)
-        .where(eq(sources.websubCallbackToken, token))
-        .limit(1)
-    ).at(0);
-  }
-
-  // The renewal job runs daily (see MainWorker), so a one-day window
-  // guarantees every verified subscription gets an attempt before its lease
-  // lapses, even if one day's run is late or fails.
-  public async getWebSubSubscriptionsNeedingRenewal() {
-    return await this.drizzleConnection
-      .select({
-        callbackToken: sources.websubCallbackToken,
-        hubUrl: sources.websubHubUrl,
-        id: sources.id,
-        secret: sources.websubSecret,
-        topicUrl: sources.websubTopicUrl,
-      })
-      .from(sources)
-      .where(
-        and(
-          eq(sources.websubStatus, "verified"),
-          sql`${sources.websubLeaseExpiresAt} <= NOW() + INTERVAL '1 day'`,
-        ),
-      );
   }
 }
