@@ -40,10 +40,12 @@ export type ServerAppOptions = {
 };
 
 // Bun buffers the whole body before any schema validation runs, so the cap
-// has to sit at the server level, not per-route. 5 MiB is the largest
-// per-route ceiling in the app (mail ingestion), plus headroom for multipart
-// encoding overhead; anything larger than this never reaches a handler.
-export const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
+// has to sit at the server level, not per-route. The largest legitimate body
+// is a pushed feed document, which the fetch pipeline caps at 24 MiB
+// (http-client's maximumBodyBytes) -- the server cap must not sit below
+// that or valid WebSub pushes get rejected before their own cap runs.
+// Anything larger than this never reaches a handler.
+export const MAX_REQUEST_BODY_BYTES = 24 * 1024 * 1024;
 
 // A 404 for a browser navigation (not an API call, not a static asset) means
 // the SolidJS router should handle the path client-side, so serve the SPA
