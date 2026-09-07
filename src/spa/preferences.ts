@@ -85,6 +85,57 @@ export function resolvedTheme(): Theme {
   return current;
 }
 
+// When articles get marked read (#714). "manual" is the default on purpose:
+// this app's workflow is delete-as-you-read, and marking anything behind the
+// user's back would quietly empty the unread badge for someone who never
+// asked for read state at all. The two automatic policies still exist because
+// reasonable readers disagree strongly about this.
+export type MarkReadPolicy = "manual" | "on-open" | "on-scroll-past";
+const MARK_READ_POLICIES: readonly MarkReadPolicy[] = [
+  "manual",
+  "on-open",
+  "on-scroll-past",
+];
+const MARK_READ_POLICY_KEY = "markReadPolicy";
+
+export function isMarkReadPolicy(value: string): value is MarkReadPolicy {
+  return (MARK_READ_POLICIES as readonly string[]).includes(value);
+}
+// Pre-#714 the only choice was a boolean stored under its own key; read it
+// once as a fallback so an existing "on" survives the rename.
+const MARK_READ_ON_OPEN_LEGACY_KEY = "markReadOnOpen";
+
+export function parseMarkReadPolicy(
+  stored: string | null,
+  legacyStored: string | null,
+): MarkReadPolicy {
+  if (stored && isMarkReadPolicy(stored)) return stored;
+  if (legacyStored === "true") return "on-open";
+  return "manual";
+}
+
+function readMarkReadPolicy(): MarkReadPolicy {
+  try {
+    return parseMarkReadPolicy(
+      localStorage.getItem(MARK_READ_POLICY_KEY),
+      localStorage.getItem(MARK_READ_ON_OPEN_LEGACY_KEY),
+    );
+  } catch {
+    return "manual";
+  }
+}
+
+const [markReadPolicy, setMarkReadPolicySignal] =
+  createSignal<MarkReadPolicy>(readMarkReadPolicy());
+export { markReadPolicy };
+
+export function setMarkReadPolicy(value: MarkReadPolicy) {
+  setMarkReadPolicySignal(value);
+  try {
+    localStorage.setItem(MARK_READ_POLICY_KEY, value);
+  } catch {}
+}
+
 // The virtual "Today" view in the sidebar (#715). Opt-out rather than
 // opt-in: it is one extra row, but pure source navigation is a legitimate
 // preference and the maintainer wants the choice to exist.
@@ -111,5 +162,36 @@ export function setTodayView(value: OnOff) {
   setTodayViewSignal(value);
   try {
     localStorage.setItem(TODAY_VIEW_KEY, value);
+  } catch {}
+}
+
+// Session restoration (#718). Opt-out rather than opt-in, per the issue:
+// "reopening the app should feel like you never left" is the behaviour a
+// reader expects, and the toggle exists for the people who always want to
+// start at the top. Off means no snapshot is written and none is restored.
+const REMEMBER_READING_POSITION_KEY = "rememberReadingPosition";
+
+export function parseRememberReadingPosition(stored: string | null): boolean {
+  return stored !== "off";
+}
+
+function readRememberReadingPosition(): boolean {
+  try {
+    return parseRememberReadingPosition(
+      localStorage.getItem(REMEMBER_READING_POSITION_KEY),
+    );
+  } catch {
+    return true;
+  }
+}
+
+const [rememberReadingPosition, setRememberReadingPositionSignal] =
+  createSignal(readRememberReadingPosition());
+export { rememberReadingPosition };
+
+export function setRememberReadingPosition(value: boolean) {
+  setRememberReadingPositionSignal(value);
+  try {
+    localStorage.setItem(REMEMBER_READING_POSITION_KEY, value ? "on" : "off");
   } catch {}
 }

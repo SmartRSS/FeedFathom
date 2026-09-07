@@ -5,6 +5,7 @@ import {
   createFolderRequest,
   findQuery,
   previewQuery,
+  readArticlesRequest,
   removeArticlesRequest,
   removeFolderRequest,
   removeSourceRequest,
@@ -15,6 +16,8 @@ import {
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FaviconStore } from "#features/feeds/favicon-store.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
@@ -27,6 +30,7 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 import { getArticleHandler } from "#features/reader/routes/article.ts";
 import {
   deleteArticlesHandler,
+  patchArticlesHandler,
   postArticlesHandler,
 } from "#features/reader/routes/articles.ts";
 import {
@@ -48,6 +52,7 @@ export type ReaderRouteDependencies = {
     | "getUserArticle"
     | "getUserArticlesForSources"
     | "removeUserArticles"
+    | "setUserArticlesRead"
   >;
   usersDataService: Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
   feedParser: Pick<
@@ -63,10 +68,9 @@ export type ReaderRouteDependencies = {
     get(url: string): Promise<{ data: string }>;
   };
   mailEnabled: boolean;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "enqueueSource" | "getFavicon" | "successSource"
-  >;
+  faviconStore: Pick<FaviconStore, "getFavicon">;
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
+  sourcesDataService: Pick<SourcesDataService, "successSource">;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     | "addSourceToUser"
@@ -88,6 +92,9 @@ export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
     )
     .delete("/api/articles", { body: removeArticlesRequest }, (ctx) =>
       deleteArticlesHandler(ctx, deps),
+    )
+    .patch("/api/articles", { body: readArticlesRequest }, (ctx) =>
+      patchArticlesHandler(ctx, deps),
     )
     .get("/api/folders", (ctx) => getFoldersHandler(ctx, deps))
     .post("/api/folders", { body: createFolderRequest }, (ctx) =>

@@ -367,7 +367,7 @@ async function staleWhileRevalidate(event, request, cacheName) {
 
 // Routes that never show the dashboard tree.
 const TREE_PRELOAD_EXCLUDED_PATHS =
-  /^\/(admin|login|options|preview|register|activate\/)/;
+  /^\/(admin|login|options|password-reset|preview|register|activate\/)/;
 
 async function shell(event, path) {
   const cache = await caches.open(SHELL_CACHE);
@@ -408,6 +408,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(treeWithInlineFavicons(event, request, API_CACHE));
     return;
   }
+  // A file download rather than application state. networkFirst would put the
+  // user's whole subscription list in the Cache API and, on an offline click,
+  // hand back a copy from whenever it was last exported without saying so.
+  if (url.pathname === "/api/options/opml") return;
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(networkFirst(request, API_CACHE));
     return;

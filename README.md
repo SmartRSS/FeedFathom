@@ -125,7 +125,8 @@ not expose port 25.
 Set `MAIL_ENABLED=true` and set `MAIL_RELAY_SECRET` to the same value
 configured on the Cloudflare Worker. Outbound activation email for public
 registration is separate and needs `MAILJET_API_KEY` and
-`MAILJET_API_SECRET`.
+`MAILJET_API_SECRET`. Password reset needs the same two: without them there
+is no way to deliver the link, so the login page does not offer one.
 
 ## Documentation
 

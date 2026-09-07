@@ -14,18 +14,35 @@ export async function userFor(
 // handler files import this instead of re-deriving it from UsersDataService.
 export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
 
+type SessionUsers = Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
+
 /**
  * 'plugin' scope: visible to this instance's own routes and to whichever
  * single parent composes it via `.use()` (e.g. reader.ts), but doesn't leak
  * further up into unrelated sibling route groups composed in server-app.ts.
  */
-export function createAuthPlugin(
-  usersDataService: Pick<UsersDataService, "getUserBySid" | "touchLastSeen">,
-) {
+function sessionPlugin(usersDataService: SessionUsers, requireAdmin: boolean) {
   return new Elysia().derive("plugin", async ({ cookie, status }) => {
     const user = await userFor(cookie["sid"]?.value, usersDataService);
     if (!user) return status(401, { error: "Unauthorized" });
+    if (requireAdmin && !user.isAdmin)
+      return status(403, { error: "Unauthorized" });
     await usersDataService.touchLastSeen(user.id);
     return { user };
   });
+}
+
+export function createAuthPlugin(usersDataService: SessionUsers) {
+  return sessionPlugin(usersDataService, false);
+}
+
+/**
+ * The same session check with the admin test folded in, so a route group
+ * carries the requirement instead of each handler restating it. The check
+ * belongs in the derive rather than in a second one chained after it: a
+ * plugin-scoped derive reaches routes, not later hooks on the same instance,
+ * so a separate admin derive would find no `user` to look at.
+ */
+export function createAdminPlugin(usersDataService: SessionUsers) {
+  return sessionPlugin(usersDataService, true);
 }

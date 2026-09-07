@@ -1,21 +1,29 @@
 # Upcoming major upgrades: Bun 1.4, Elysia 2.0, Solid 2.0
 
-Researched 2026-08-16, Bun section updated 2026-09-04 for 1.4.1.
+Researched 2026-08-16, versions rechecked 2026-09-07.
 
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
-| bun               | 1.4.1        | 1.4.1    | —                   |
-| elysia            | 2.0.0-beta.4 | 1.4.29   | 2.0.0-beta.4        |
-| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.0          |
+| bun               | 1.4.2        | 1.4.2    | —                   |
+| elysia            | 2.0.0-beta.14 | 1.4.30  | 2.0.0-beta.14       |
+| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.6          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
-| typebox           | 1.3.9        | 1.3.14   | —                   |
+| typebox           | 1.3.28       | 1.3.28   | —                   |
+
+`npm-check-updates` resolves elysia to its `experimental` dist-tag
+(`2.0.0-exp.64`), which is a different line from the `next` beta the project
+is on. Bumping elysia is a deliberate edit, not something to accept from
+`ncu -u`.
 
 ## Bun 1.4
 
-Released, and we're on it — the bump landed on `main` separately. The version
-is pinned in three places: `packageManager` (CI reads this via
-`oven-sh/setup-bun`'s `bun-version-file`), `devDependencies["bun-types"]`, and
-4 `oven/bun:` tags in the `Dockerfile`.
+Released, and we're on it — 1.4.2 as of 2026-09-07. The version is pinned in
+three places: `packageManager` (CI reads this via `oven-sh/setup-bun`'s
+`bun-version-file`), `devDependencies["bun-types"]`, and 4 `oven/bun:` tags in
+the `Dockerfile`. All three move together, and the suite is run against a
+matching binary before the pin lands: a Bun release has changed test outcomes
+in this repo before, so bumping the pin without running on it is not a bump,
+it is a guess.
 
 The headline for us is `Bun.XML` — a native SIMD XML parser and serializer
 that replaces `fast-xml-parser`. See "XML parsing" below.
@@ -29,7 +37,8 @@ codemod (`bunx @elysia/codemod@latest`) has nothing left to do here.
 
 Remaining work is a version bump when 2.0.0 goes stable: change the pin to
 `^2.0.0`. Until then keep an exact beta pin rather than the `next` tag, so a
-new beta can't land unreviewed on a fresh install.
+new beta can't land unreviewed on a fresh install — moved beta.4 to beta.14
+on 2026-09-07, no source changes needed.
 
 Worth evaluating once stable, both opt-in and both currently unused here:
 
@@ -41,7 +50,30 @@ Worth evaluating once stable, both opt-in and both currently unused here:
 
 ## Solid 2.0
 
-The real work. Solid 2.0 is a large breaking release, but our surface is
+**Blocked on the toolchain, not on us. Rechecked 2026-09-07 by actually
+installing it.**
+
+`solid-js@2.0.0-rc.6` with `vite-plugin-solid@3.0.0-next.27` — the newest of
+each — does not build at all, and not because of anything in this repo:
+
+```
+"./web" is not exported under the conditions ["solid","module","browser",
+"production","import"] from package solid-js
+```
+
+The plugin still resolves `solid-js/web`, which 2.0 no longer exports under
+those conditions. Nothing in `src/` can fix that; it is the build plugin and
+the framework prerelease disagreeing with each other. Typechecking is a
+separate wall — `onMount` is no longer exported from `solid-js`, the JSX
+runtime types do not resolve, and `Show` now requires a children *callback*
+(`ConditionalRenderCallback`), so every plain-children `<Show>` is an error.
+
+So there is no version of this to do today, however small the surface. Recheck
+when `vite-plugin-solid` 3.0 and `solid-js` 2.0 both reach stable, or at least
+reach prereleases that agree on the `solid-js/web` export. Everything below is
+still the plan for when that happens.
+
+Solid 2.0 is a large breaking release, but our surface is
 small — seven `.tsx` files import from Solid at all, and only these imports:
 
 `createSignal`, `createEffect`, `For`, `Show`, `Switch`, `Match`, `onMount`,
@@ -138,12 +170,35 @@ transitive dependencies are gone.
   (`XMLParser` in `preserveOrder` mode, `XMLBuilder` for `innerHtml`) on
   `Bun.XML`'s ordered tree shape. Same arrangement as `vendor/linkedom-shim`.
 
-**The `overrides` entry is load-bearing.** `feed-parser` depends on
-`fast-xml-parser@^5.10.1`, which a `file:` spec does not satisfy, so the
-dependency alone leaves bun installing the real package nested under
-`feed-parser` and the shim silently bypassed. Check
-`node_modules/@rowanmanning/feed-parser/node_modules` is empty after any
-dependency change.
+**The `overrides` entry is load-bearing, for both shims.** `feed-parser`
+depends on `fast-xml-parser@^5.10.1`, which a `file:` spec does not satisfy,
+so the dependency alone leaves bun installing the real package nested under
+`feed-parser` and the shim silently bypassed.
+
+`linkedom` learned this the expensive way. It had the direct dependency and a
+patchfile stripping `linkedom` from `@extractus/article-extractor`'s own
+dependencies, but no override. `patchedDependencies` keys carry an exact
+version, so bumping `^9.0.0` to `^9.0.1` stopped the patch applying without a
+word, bun installed the real 2.6 MB package nested, and the SPA bundle grew
+from 340 KB to 529 KB. It now has an override and no patchfile.
+
+The linkedom shim is also no longer purely standard API. `article-extractor`
+9.0.1 replaced its `sanitize-html` pass with a hand-rolled walk over
+`doc.documentElement.childNodes` and serializes back through `doc.childNodes`,
+and those two are where the browser and linkedom disagree: handed a fragment,
+linkedom roots the document at the fragment itself, while the browser always
+synthesizes `<html><head><body>`. Under the native parser the walk deleted
+head and body -- neither is an allowed tag -- and every extraction came back
+null. The shim now hands back a fragment-rooted view of the document for that
+case. `tests/browser/spa.spec.ts` "extracts article content with the alternate
+extractor" is the check; it needs a real DOM, so it cannot live beside the
+other shim tests.
+
+`vendor/__tests__/shim-fidelity.test.ts` checks both, on every run: no nested
+copy of either package, the installed one is the vendored one, and every name
+the dependent imports is a name the shim exports. That last part is the
+`ncu -u` alarm -- a bump reaching for an unimplemented shim API otherwise
+fails only at runtime, on whichever feed happens to need it.
 
 ### What it was measured against
 
@@ -179,6 +234,9 @@ and ignored, so treat the output shape as fixed.
 - Removed `@sinclair/typebox` 0.34 — a dead dependency since the Elysia 2 move
   to standalone `typebox`, nothing imports it (it was in knip's ignore list,
   which is now gone too).
-- Pinned `elysia` to `2.0.0-beta.4` instead of the floating `next` tag.
+- Pinned `elysia` to an exact beta (now `2.0.0-beta.14`) instead of the
+  floating `next` tag. The workaround it still carries is in
+  `features/auth/routes/login.ts`, where a Codec `.Decode()` transform is run
+  by hand because the beta does not run it on bodies; revisit at 2.0 stable.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.

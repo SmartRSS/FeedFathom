@@ -27,6 +27,23 @@ export const parseXml = (xml: string): XmlElement => {
   return parsed;
 };
 
+/**
+ * `value` with the characters XML cannot represent removed.
+ *
+ * Bun.XML.stringify escapes everything that needs escaping, but for these it
+ * throws instead: U+0000, the other C0 controls except tab, newline and
+ * carriage return, the two noncharacters, and lone surrogates. A feed title
+ * can carry any of them, and an export that throws is a worse outcome than
+ * one missing a character no reader could have displayed.
+ *
+ * `\p{Surrogate}` under `u` matches only lone surrogates: a well-formed pair
+ * is a single astral code point, which is not in the surrogate range.
+ */
+export const xmlSafeText = (value: string): string =>
+  value
+    .replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/gu, "")
+    .replaceAll(/\p{Surrogate}/gu, "");
+
 /** An element's `name` attribute, or "" when absent or non-textual. */
 export const attribute = (element: XmlElement, name: string): string => {
   const value = element[`@${name}`];

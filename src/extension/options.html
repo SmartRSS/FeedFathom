@@ -11,7 +11,23 @@
       <form>
         <div class="input-block">
           <label for="instance">Instance:</label>
-          <input id="instance" type="text" />
+          <input
+            id="instance"
+            type="text"
+            inputmode="url"
+            aria-describedby="instance-error"
+            placeholder="https://feeds.example.com"
+          />
+          <p class="field-error" id="instance-error" role="alert"></p>
+          <div class="connection-row">
+            <button id="test-connection" type="button">Test connection</button>
+            <p
+              aria-live="polite"
+              class="connection-status"
+              id="connection-status"
+              role="status"
+            ></p>
+          </div>
         </div>
       </form>
     </div>

@@ -66,6 +66,8 @@ docker compose up -d
 
 Open `http://127.0.0.1:3456` and create the first account right away — it's always allowed, regardless of the registration setting. After that, registration stays closed unless `ENABLE_REGISTRATION` is `true`. Leave it closed unless the instance is meant to accept public signups.
 
+NOTE: If you do open registration, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` as well. An open signup form sends activation mail to whatever address it is handed, so without a challenge in front of it the form is a way to send mail through your instance to strangers. `ALLOWED_EMAILS` is the stricter alternative where the instance is only ever meant for a known list of people.
+
 Configure the deployment with a `.env` file next to `compose.yml`. Every variable has a working default, so set only what you need to change — `.env.example` lists the ones a deployment normally touches, commented out. Pool sizes, poll intervals, and retention windows keep their defaults in `compose.yml` and `src/platform/config.ts`.
 
 | Variable | Default | Purpose |
@@ -80,6 +82,10 @@ Configure the deployment with a `.env` file next to `compose.yml`. Every variabl
 | `MAIL_ENABLED` | `false` | Whether newsletter subscription and ingestion are available. Requires `MAIL_RELAY_SECRET`. |
 | `MAIL_DOMAIN` | `FEED_FATHOM_DOMAIN` | Domain inbound newsletter mail is routed to. Generated addresses are minted at this host, so set it whenever mail lands on a different domain than the app is served from. |
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
+| `ALLOWED_EMAILS` | unset | Comma-separated list of the only addresses allowed to register. Unset means any address may, subject to `ENABLE_REGISTRATION`. |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | unset | Cloudflare Turnstile on the registration form. Required together, and worth setting whenever `ENABLE_REGISTRATION` is `true`. |
+| `MAILJET_API_KEY`, `MAILJET_API_SECRET` | unset | Outbound mail for registration activation and password reset. Required together; without them there is no reset flow at all. |
+| `TRUSTED_PROXY_HEADER` | unset | Header carrying the real client address behind a reverse proxy, usually `X-Forwarded-For`. Failed logins are counted per address, so leaving it unset behind a proxy counts every user against one budget. Never set it without a proxy that overwrites the header. |
 
 ### Behind a reverse proxy
 
@@ -103,9 +109,19 @@ Any reverse proxy works. The requirements are TLS termination, forwarding to the
 
 NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. That does not break the application, but a subscription's stored home link falls back to the upstream address instead of the public host name.
 
+Failed logins, password resets and activation mail are throttled per client address, and behind a proxy every request arrives from the proxy. Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
+
+```bash
+TRUSTED_PROXY_HEADER=X-Forwarded-For
+```
+
+Caddy sets `X-Forwarded-For` itself. Only set this once a proxy is in front and overwrites the header rather than appending to a value the client sent, or the throttle key becomes something the client picks.
+
 `/healthcheck` answers the container health probes and returns 403 to outside callers, so it is not usable as a proxy health probe.
 
 The stack runs no SMTP server and exposes no port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`. `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
+
+WARNING: Password reset needs those same two variables. Without them the login page shows no reset link, `POST /api/password-reset` answers as it does for an address with no account, and a forgotten password can only be recovered by an operator writing a new hash into `users.password` by hand.
 
 Upgrading pulls the new images and reruns migrations, which are forward-only:
 

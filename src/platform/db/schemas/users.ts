@@ -31,6 +31,17 @@ export const users = pgTable(
     activationTokenExpiresAt: timestamp("activation_token_expires_at", {
       withTimezone: true,
     }),
+    // The reset token is stored as a SHA-256 digest, unlike the activation
+    // token beside it: this one is enough on its own to take an account over,
+    // so a dump of this table must not be a set of working reset links. The
+    // token is 122 random bits, which is past brute force without stretching.
+    passwordResetTokenHash: varchar("password_reset_token_hash"),
+    passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at", {
+      withTimezone: true,
+    }),
   },
-  (table) => [unique().on(table.activationToken)],
+  (table) => [
+    unique().on(table.activationToken),
+    unique().on(table.passwordResetTokenHash),
+  ],
 );

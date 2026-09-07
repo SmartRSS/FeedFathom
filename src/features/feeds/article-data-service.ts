@@ -1,5 +1,11 @@
-import { and, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { aliasedTable, and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { articlePageSize } from "#shared/contracts/responses.ts";
+import {
+  articleFilterCondition,
+  readCondition,
+  type ArticleFilter,
+} from "#features/feeds/article-read-state.ts";
 import {
   generateBoundaryDates,
   getDateGroup,
@@ -22,6 +28,10 @@ function userArticleStateJoin(userId: number) {
     eq(userArticles.guid, articles.guid),
   );
 }
+
+// The page cursor names a row rather than carrying its timestamp, so the
+// query has to look at articles twice.
+const cursorRow = aliasedTable(articles, "cursor_row");
 
 function userArticleAccessJoin(userId: number) {
   return and(
@@ -53,6 +63,8 @@ export class ArticlesDataService {
   public async getUserArticlesForSources(
     sourceIds: number[],
     userId: number,
+    cursor?: number,
+    filter: ArticleFilter = "unread",
     options: {
       // Scope to every source the user subscribes to instead of an explicit
       // id list -- the userSources join is what authorizes the rows, so
@@ -66,11 +78,20 @@ export class ArticlesDataService {
       return [];
     }
 
+    const readStateColumns = {
+      articleUpdatedAt: articles.updatedAt,
+      deletedAt: userArticles.deletedAt,
+      readAt: userArticles.readAt,
+      userId: userArticles.userId,
+    };
     const loadedArticles = await this.drizzleConnection
       .select({
         author: articles.author,
         id: articles.id,
         publishedAt: articles.publishedAt,
+        // Answered by the same expression that filters, so the "all" view
+        // cannot mark a row read that the "read" view would not have listed.
+        read: sql<boolean>`${readCondition(readStateColumns)}`,
         sourceId: articles.sourceId,
         title: articles.title,
         url: articles.url,
@@ -91,25 +112,32 @@ export class ArticlesDataService {
                 sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,
               ]
             : []),
-          // A removal is terminal -- deleted_at alone hides the article,
-          // exactly as recomputeUnreadCounts scores it. It used to be
-          // hidden only as a side effect of updated_at > read_at being
-          // NULL for rows nothing writes read_at into any more; a row
-          // still carrying a legacy read_at older than the article's
-          // updated_at (the publisher edited it after that stamp) came
-          // back into the list while the unread count still said zero.
-          or(
-            isNull(userArticles.userId),
-            and(
-              isNull(userArticles.deletedAt),
-              gt(articles.updatedAt, userArticles.readAt),
-            ),
-          ),
+          // Unread is shared with recomputeUnreadCounts, so the list and the
+          // badge beside the source cannot disagree about what it means. A
+          // removal is terminal and hidden in every filter -- exactly as
+          // recomputeUnreadCounts scores it.
+          articleFilterCondition(filter, readStateColumns),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
+          // Keyset rather than OFFSET: a folder fanning out to hundreds of
+          // sources would otherwise make every page rescan everything above
+          // it, and a page-sized LIMIT is the only thing bounding what this
+          // loads into memory and serialises. The cursor row's timestamp is
+          // read back here so it keeps full microsecond precision; a value
+          // round-tripped through the client's JSON date is milliseconds and
+          // lands inside the batch it was meant to sit after.
+          cursor
+            ? sql`(${articles.publishedAt}, ${articles.id}) < (
+                (SELECT ${cursorRow.publishedAt} FROM ${articles} ${cursorRow} WHERE ${cursorRow.id} = ${cursor}),
+                ${cursor}
+              )`
+            : undefined,
         ),
       )
-      .orderBy(desc(articles.publishedAt));
+      // id breaks the tie: published_at is not unique, and a keyset cursor on
+      // an ambiguous ordering repeats or skips rows across pages.
+      .orderBy(desc(articles.publishedAt), desc(articles.id))
+      .limit(articlePageSize);
 
     const boundaryDates = generateBoundaryDates();
     return loadedArticles.map((item) =>
@@ -216,6 +244,67 @@ export class ArticlesDataService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Marks articles read or unread for one user.
+   *
+   * Shares `removeUserArticles`'s authorization: article ids are a guessable
+   * serial primary key, so the caller's list is filtered down to articles
+   * whose source this user is actually subscribed to before anything is
+   * written. `deleted_at` is left alone -- read and removed are different
+   * states, and a removal outranks either of them.
+   */
+  public async setUserArticlesRead(
+    articleIdList: number[],
+    userId: number,
+    read: boolean,
+  ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
+    if (articleIdList.length === 0) {
+      return { articleIds: [], sourceIds: [] };
+    }
+
+    const readAt = read ? new Date() : null;
+
+    return await this.drizzleConnection.transaction(async (trx) => {
+      const authorizedArticles = await trx
+        .selectDistinct({
+          guid: articles.guid,
+          id: articles.id,
+          sourceId: articles.sourceId,
+        })
+        .from(articles)
+        .innerJoin(userSources, userArticleAccessJoin(userId))
+        .where(inArray(articles.id, articleIdList));
+
+      if (authorizedArticles.length === 0) {
+        return { articleIds: [], sourceIds: [] };
+      }
+
+      await trx
+        .insert(userArticles)
+        .values(
+          authorizedArticles.map((row) => ({
+            guid: row.guid,
+            readAt,
+            sourceId: row.sourceId,
+            userId,
+          })),
+        )
+        .onConflictDoUpdate({
+          set: { readAt },
+          target: [
+            userArticles.userId,
+            userArticles.sourceId,
+            userArticles.guid,
+          ],
+        });
+
+      return {
+        articleIds: authorizedArticles.map((row) => row.id),
+        sourceIds: [...new Set(authorizedArticles.map((row) => row.sourceId))],
+      };
+    });
   }
 
   public async removeUserArticles(

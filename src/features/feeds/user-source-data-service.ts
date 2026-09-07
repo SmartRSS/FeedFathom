@@ -4,6 +4,7 @@ import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import { unreadCondition } from "#features/feeds/article-read-state.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 
 type SubscriptionResult = {
@@ -40,7 +41,9 @@ export class UserSourcesDataService {
           return folder.id === sourcePayload.parentId;
         })
       ) {
-        console.error("no folder", folders[0]);
+        console.error(
+          `Subscription refused: folder ${sourcePayload.parentId} is not one of user ${userId}'s`,
+        );
         return undefined;
       }
     }
@@ -276,17 +279,20 @@ export class UserSourcesDataService {
       SET unread_count = counts.unread
       FROM (
         SELECT us2.id,
-          (
-            coalesce(count(a.id), 0) -
-            coalesce(count(CASE
-              WHEN ua.deleted_at IS NOT NULL
-              OR (
-                ua.read_at IS NOT NULL
-                AND (a.updated_at IS NULL OR ua.read_at >= a.updated_at)
-              )
-              THEN 1
-            END), 0)
-          )::int AS unread
+          -- Counting what is unread, rather than subtracting what is not, so
+          -- this is literally the same expression the article list filters on
+          -- (see article-read-state.ts). The a.id test is what the LEFT JOIN
+          -- needs: with no article row at all, ua.user_id IS NULL is true and
+          -- an empty subscription would otherwise score one unread.
+          coalesce(count(CASE
+            WHEN a.id IS NOT NULL AND ${unreadCondition({
+              articleUpdatedAt: sql.raw("a.updated_at"),
+              deletedAt: sql.raw("ua.deleted_at"),
+              readAt: sql.raw("ua.read_at"),
+              userId: sql.raw("ua.user_id"),
+            })}
+            THEN 1
+          END), 0)::int AS unread
         FROM user_sources us2
         LEFT JOIN articles a
           ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at

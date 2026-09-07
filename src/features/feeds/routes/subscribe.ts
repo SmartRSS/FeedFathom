@@ -9,6 +9,7 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import {
   deserializeFeedPreview,
   type FeedPreviewCache,
@@ -22,10 +23,8 @@ export type SubscribeRouteDependencies = {
   feedParser: Pick<FeedParser, "discoverAndSubscribeWebSub">;
   feedPreviewCache: Pick<FeedPreviewCache, "get">;
   mailEnabled: boolean;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "enqueueSource" | "successSource"
-  >;
+  sourcesDataService: Pick<SourcesDataService, "successSource">;
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     | "addSourceToUser"
@@ -63,6 +62,7 @@ export async function postSubscribeHandler(
     feedParser,
     feedPreviewCache,
     mailEnabled,
+    sourceEnqueuer,
     sourcesDataService,
     userSourcesDataService,
   }: SubscribeRouteDependencies,
@@ -173,10 +173,10 @@ export async function postSubscribeHandler(
               new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
             );
           } catch {
-            await sourcesDataService.enqueueSource(subscription.source);
+            await sourceEnqueuer.enqueueSource(subscription.source);
           }
         } else {
-          await sourcesDataService.enqueueSource(subscription.source);
+          await sourceEnqueuer.enqueueSource(subscription.source);
         }
       },
     ),

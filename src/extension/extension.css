@@ -106,3 +106,34 @@ input {
   border: var(--border);
   border-radius: var(--radius);
 }
+/* The SPA's --error is one red for every theme, which is fine there because
+   its surfaces are known. This page's Canvas follows the OS, so the red has
+   to as well -- light-dark() is live here because :root already declares
+   color-scheme. An empty message renders nothing, so the field does not
+   shift when one appears and disappears. */
+.field-error {
+  margin: 0;
+  color: light-dark(#b00020, #ff9aa2);
+  font-size: 0.85rem;
+}
+.field-error:empty {
+  display: none;
+}
+
+/* The "Test connection" row on options.html: the button sits beside the
+   outcome message, which wraps under it on narrow (mobile) widths. */
+.connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-top: 0.25rem;
+}
+.connection-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.connection-status:empty {
+  display: none;
+}

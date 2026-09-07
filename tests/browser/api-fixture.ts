@@ -62,6 +62,22 @@ const thirdArticle = {
   url: "https://articles.example/third",
 };
 
+// Tall enough to scroll the reader pane well past one viewport (#718).
+const longContent = Array.from(
+  { length: 300 },
+  (_, index) => `<p>Paragraph ${index} of a very long article.</p>`,
+).join("");
+
+// A first page worth of rows, so the article list overflows and a scroll
+// position exists to restore (#718).
+const manyArticles = Array.from({ length: 60 }, (_, index) => ({
+  ...article,
+  guid: `article-${100 + index}`,
+  id: 100 + index,
+  title: `Article ${100 + index}`,
+  url: `https://articles.example/${100 + index}`,
+}));
+
 const subscribedArticle = {
   author: "Preview Author",
   content: "<p>Subscribed feed content</p>",
@@ -75,18 +91,24 @@ const subscribedArticle = {
   url: "https://articles.example/subscribed",
 };
 
-const summary = (item: typeof article) => ({
+const summary = (item: typeof article, read = false) => ({
   author: item.author,
   group: "Today",
   id: item.id,
   publishedAt: item.publishedAt,
+  read,
   sourceId: item.sourceId,
   title: item.title,
   url: item.url,
 });
 
 type ApiFixtureState = {
+  articleRequests: number;
   authenticated: boolean;
+  // One entry per PATCH /api/articles: the articleIdList it carried, so the
+  // mark-as-read policy tests can count requests and check batching (#714).
+  readMarks: number[][];
+  readArticleIds: Set<number>;
   findRequests: number;
   removedArticleIds: number[];
   removedFolderIds: number[];
@@ -105,15 +127,21 @@ export async function installApiFixture(
     discoveryRace?: boolean;
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
+    longArticle?: boolean;
+    manyArticles?: boolean;
     multipleArticles?: boolean;
+    passwordResetEnabled?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
     websubFeed?: boolean;
   } = {},
 ): Promise<ApiFixtureState> {
   const state: ApiFixtureState = {
+    articleRequests: 0,
     authenticated: options.authenticated ?? true,
     findRequests: 0,
+    readArticleIds: new Set<number>(),
+    readMarks: [],
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
@@ -138,6 +166,16 @@ export async function installApiFixture(
     if (method === "GET" && url.pathname === "/api/session") {
       if (options.sessionFailure) return respond({ user: { id: "malformed" } });
       return respond({ user: state.authenticated ? user : null });
+    }
+
+    // The login view reads this to decide whether to offer a reset link, so
+    // it is fetched on every visit to /login, not just on the register page.
+    if (method === "GET" && url.pathname === "/api/register") {
+      return respond({
+        passwordResetEnabled: options.passwordResetEnabled ?? false,
+        registrationStatus: "DISABLED",
+        turnstileSiteKey: null,
+      });
     }
 
     if (method === "POST" && url.pathname === "/api/login") {
@@ -183,6 +221,7 @@ export async function installApiFixture(
 
     if (method === "POST" && url.pathname === "/api/articles") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      state.articleRequests += 1;
       const sources = request.postDataJSON().sources;
       expect(
         sources.every((sourceId: number) => [3, 9].includes(sourceId)),
@@ -190,14 +229,35 @@ export async function installApiFixture(
       if (sources.length === 1 && sources[0] === 9) {
         return respond([summary(subscribedArticle)]);
       }
-      const techNewsArticles = options.multipleArticles
-        ? [article, secondArticle, thirdArticle]
-        : [article];
+      const techNewsArticles = options.manyArticles
+        ? manyArticles
+        : options.multipleArticles
+          ? [article, secondArticle, thirdArticle]
+          : options.longArticle
+            ? [{ ...article, content: longContent }]
+            : [article];
+      const filter: string = request.postDataJSON().filter ?? "unread";
       return respond(
         techNewsArticles
           .filter((item) => !state.removedArticleIds.includes(item.id))
-          .map(summary),
+          .filter((item) => {
+            if (filter === "all") return true;
+            const read = state.readArticleIds.has(item.id);
+            return filter === "read" ? read : !read;
+          })
+          .map((item) => summary(item, state.readArticleIds.has(item.id))),
       );
+    }
+
+    if (method === "PATCH" && url.pathname === "/api/articles") {
+      const { articleIdList, read } = request.postDataJSON();
+      expect(articleIdList.length > 0).toBe(true);
+      state.readMarks.push(articleIdList);
+      for (const id of articleIdList) {
+        if (read) state.readArticleIds.add(id);
+        else state.readArticleIds.delete(id);
+      }
+      return respond(articleIdList);
     }
 
     if (method === "DELETE" && url.pathname === "/api/articles") {
@@ -209,11 +269,23 @@ export async function installApiFixture(
 
     if (method === "GET" && url.pathname === "/api/article") {
       const id = url.searchParams.get("article");
+      const numeric = Number(id);
+      const fromMany =
+        options.manyArticles === true &&
+        Number.isInteger(numeric) &&
+        numeric >= 100 &&
+        numeric < 100 + manyArticles.length;
+      if (fromMany) {
+        const item = manyArticles[numeric - 100]!;
+        return respond({ ...item, content: longContent });
+      }
       expect(["11", "12", "13", "19"]).toContain(id);
       if (id === "19") return respond(subscribedArticle);
       if (id === "12") return respond(secondArticle);
       if (id === "13") return respond(thirdArticle);
-      return respond(article);
+      return respond(
+        options.longArticle ? { ...article, content: longContent } : article,
+      );
     }
 
     if (method === "POST" && url.pathname === "/api/folders") {

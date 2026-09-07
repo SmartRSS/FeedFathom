@@ -7,7 +7,12 @@ import {
 import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import {
+  isMarkReadPolicy,
   isTheme,
+  markReadPolicy,
+  rememberReadingPosition,
+  setMarkReadPolicy,
+  setRememberReadingPosition,
   setTheme,
   setTodayView,
   theme,
@@ -22,6 +27,7 @@ import {
   backgroundPollEnabled,
 } from "./news-signal.ts";
 import { prefetchNextEnabled, setPrefetchNext } from "./reading-prefetch.ts";
+import { helpDialog } from "./dialog.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -358,6 +364,76 @@ export function Options(props: {
           )}
         </Show>
       </form>
+      <section class="options-card">
+        <h2>Reading</h2>
+        <label>
+          When articles get marked read
+          <select
+            value={markReadPolicy()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isMarkReadPolicy(value)) setMarkReadPolicy(value);
+            }}
+          >
+            <option value="manual">
+              Manually only (m key or the Mark read button)
+            </option>
+            <option value="on-open">
+              On open (opening an article marks it read, All view)
+            </option>
+            <option value="on-scroll-past">
+              On scroll-past (a row left visible for a second is marked read)
+            </option>
+          </select>
+        </label>
+        <label>
+          Remember reading position
+          <select
+            value={rememberReadingPosition() ? "on" : "off"}
+            onChange={(event) =>
+              setRememberReadingPosition(event.currentTarget.value === "on")
+            }
+          >
+            <option value="on">
+              On (reopening the app resumes where you stopped)
+            </option>
+            <option value="off">Off (always start at the top)</option>
+          </select>
+        </label>
+        <p>
+          Manual only, by default. This reader is built around deleting an
+          article once you are done with it, so nothing is marked read behind
+          your back unless you ask for it. Automatic marking uses the same
+          read-state path as the button, so filtered lists still update the same
+          way.
+        </p>
+      </section>
+      <section class="options-card">
+        <h2>Keyboard</h2>
+        <p>The dashboard is keyboard-first.</p>
+        {/* The same DialogHost dialog the `?` shortcut opens; it works on
+            this route too because the host is mounted app-wide. */}
+        <button type="button" onClick={() => void helpDialog()}>
+          Keyboard shortcuts
+        </button>
+      </section>
+      <section class="options-card">
+        <h2>Export OPML</h2>
+        <p>
+          Download every feed subscription as an OPML file any other reader can
+          import.
+        </p>
+        {/* A plain link rather than a fetch: the API is cookie-authenticated,
+            so the browser downloads it without the SPA holding the file in
+            memory first. */}
+        <a class="card-action" download="" href="/api/options/opml">
+          Download subscriptions
+        </a>
+        <p>
+          Newsletter subscriptions are not included. Their addresses are minted
+          by this instance, so they mean nothing to another reader.
+        </p>
+      </section>
       <form id="import-opml" class="options-card" onSubmit={submitOpml}>
         <h2>Import OPML</h2>
         <label>
