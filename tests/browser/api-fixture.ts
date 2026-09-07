@@ -62,6 +62,22 @@ const thirdArticle = {
   url: "https://articles.example/third",
 };
 
+// Tall enough to scroll the reader pane well past one viewport (#718).
+const longContent = Array.from(
+  { length: 300 },
+  (_, index) => `<p>Paragraph ${index} of a very long article.</p>`,
+).join("");
+
+// A first page worth of rows, so the article list overflows and a scroll
+// position exists to restore (#718).
+const manyArticles = Array.from({ length: 60 }, (_, index) => ({
+  ...article,
+  guid: `article-${100 + index}`,
+  id: 100 + index,
+  title: `Article ${100 + index}`,
+  url: `https://articles.example/${100 + index}`,
+}));
+
 const subscribedArticle = {
   author: "Preview Author",
   content: "<p>Subscribed feed content</p>",
@@ -111,6 +127,8 @@ export async function installApiFixture(
     discoveryRace?: boolean;
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
+    longArticle?: boolean;
+    manyArticles?: boolean;
     multipleArticles?: boolean;
     passwordResetEnabled?: boolean;
     sessionFailure?: boolean;
@@ -211,9 +229,13 @@ export async function installApiFixture(
       if (sources.length === 1 && sources[0] === 9) {
         return respond([summary(subscribedArticle)]);
       }
-      const techNewsArticles = options.multipleArticles
-        ? [article, secondArticle, thirdArticle]
-        : [article];
+      const techNewsArticles = options.manyArticles
+        ? manyArticles
+        : options.multipleArticles
+          ? [article, secondArticle, thirdArticle]
+          : options.longArticle
+            ? [{ ...article, content: longContent }]
+            : [article];
       const filter: string = request.postDataJSON().filter ?? "unread";
       return respond(
         techNewsArticles
@@ -247,11 +269,23 @@ export async function installApiFixture(
 
     if (method === "GET" && url.pathname === "/api/article") {
       const id = url.searchParams.get("article");
+      const numeric = Number(id);
+      const fromMany =
+        options.manyArticles === true &&
+        Number.isInteger(numeric) &&
+        numeric >= 100 &&
+        numeric < 100 + manyArticles.length;
+      if (fromMany) {
+        const item = manyArticles[numeric - 100]!;
+        return respond({ ...item, content: longContent });
+      }
       expect(["11", "12", "13", "19"]).toContain(id);
       if (id === "19") return respond(subscribedArticle);
       if (id === "12") return respond(secondArticle);
       if (id === "13") return respond(thirdArticle);
-      return respond(article);
+      return respond(
+        options.longArticle ? { ...article, content: longContent } : article,
+      );
     }
 
     if (method === "POST" && url.pathname === "/api/folders") {

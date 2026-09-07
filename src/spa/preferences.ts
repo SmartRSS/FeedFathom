@@ -164,3 +164,34 @@ export function setTodayView(value: OnOff) {
     localStorage.setItem(TODAY_VIEW_KEY, value);
   } catch {}
 }
+
+// Session restoration (#718). Opt-out rather than opt-in, per the issue:
+// "reopening the app should feel like you never left" is the behaviour a
+// reader expects, and the toggle exists for the people who always want to
+// start at the top. Off means no snapshot is written and none is restored.
+const REMEMBER_READING_POSITION_KEY = "rememberReadingPosition";
+
+export function parseRememberReadingPosition(stored: string | null): boolean {
+  return stored !== "off";
+}
+
+function readRememberReadingPosition(): boolean {
+  try {
+    return parseRememberReadingPosition(
+      localStorage.getItem(REMEMBER_READING_POSITION_KEY),
+    );
+  } catch {
+    return true;
+  }
+}
+
+const [rememberReadingPosition, setRememberReadingPositionSignal] =
+  createSignal(readRememberReadingPosition());
+export { rememberReadingPosition };
+
+export function setRememberReadingPosition(value: boolean) {
+  setRememberReadingPositionSignal(value);
+  try {
+    localStorage.setItem(REMEMBER_READING_POSITION_KEY, value ? "on" : "off");
+  } catch {}
+}
