@@ -107,6 +107,48 @@ test.afterEach(async ({ page }) => {
   expect(browserFailures.get(page) ?? []).toEqual([]);
 });
 
+test("shows an all-caught-up empty state for a feed with no unread", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .click();
+  // The fixture's article list for the source is nonempty; right after the
+  // list renders, remove the single article and the fallback appears.
+  await page.getByRole("button", { name: "delete articles" }).click();
+  await expect(page.getByText("All caught up.")).toBeVisible();
+});
+
+test("opens a keyboard-dismissable context menu on tree rows", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  // The virtual Today row heads the tree but is a view, not a feed: no
+  // menu for it.
+  await page.locator("button.source").first().click({ button: "right" });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  const row = page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first();
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Copy feed URL" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
 }) => {
@@ -118,6 +160,32 @@ test("boots Solid and renders the authenticated nested tree", async ({
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();
+});
+
+test("offers first-run guidance while the tree is empty", async ({ page }) => {
+  await installApiFixture(page);
+  // Registered after the fixture's own **/api/** handler, so it wins.
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      body: JSON.stringify({ tree: [] }),
+      contentType: "application/json",
+      status: 200,
+    }),
+  );
+  await page.goto("/");
+
+  await expect(page.getByText("No feeds yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Add your first feed" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Discover feed" }),
+  ).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Import an OPML file" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Import OPML" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("#import-opml");
 });
 
 // A nested list also matches .tree, so it easily picks that rule's
@@ -230,7 +298,9 @@ test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
 
-  await expect(page).toHaveTitle("FeedFathom");
+  // The dashboard badges the title with the fixture's total unread count;
+  // leaving the dashboard unmounts it and drops the badge again.
+  await expect(page).toHaveTitle("(2) FeedFathom");
   await page.getByRole("button", { name: "options" }).first().click();
   await expect(page).toHaveTitle("Options · FeedFathom");
 });

@@ -29,10 +29,13 @@ export async function postArticlesHandler(
   },
   { articlesDataService }: ArticlesRouteDependencies,
 ) {
-  if (!body.sources.length) return json([]);
+  if (!body.sources.length && body.view !== "today") return json([]);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
     user.id,
+    body.view === "today"
+      ? { allSubscribed: true, publishedWithinHours: 24 }
+      : {},
   );
   return json(
     articles.map((article) =>

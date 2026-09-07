@@ -23,9 +23,13 @@ import {
   faviconUrls,
   findNode,
   findParentFolderUid,
+  isTodayNode,
+  nextPollDelayMs,
   sourceIds,
+  totalUnread,
   treeNodeKey,
   withDecrementedUnread,
+  withTodayNode,
 } from "./dashboard-behavior.ts";
 import {
   removalOutcome,
@@ -45,7 +49,25 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { resolvedTheme } from "./preferences.ts";
+import { resolvedTheme, todayView } from "./preferences.ts";
+import { formatDate } from "./format-date.ts";
+import {
+  ContextMenu,
+  longPressHandlers,
+  type ContextMenuItem,
+} from "./context-menu.tsx";
+import { shareArticle } from "./share-article.ts";
+import {
+  navigatorConnection,
+  prefetchNextEnabled,
+  shouldPrefetch,
+} from "./reading-prefetch.ts";
+import {
+  backgroundPollEnabled,
+  newArticlesCount,
+  setNewArticlesCount,
+  setUnreadTotal,
+} from "./news-signal.ts";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
 // DOM. As an external image it would need per-case light/dark guessing.
@@ -54,6 +76,8 @@ import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
 import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
 import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
+import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
+import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
@@ -135,6 +159,9 @@ export function Dashboard(props: {
   // real text when high contrast mode is off.
   const [accessibilityAnnouncement, setAccessibilityAnnouncement] =
     createSignal("");
+  const [contextMenu, setContextMenu] = createSignal<
+    { items: ContextMenuItem[]; x: number; y: number } | undefined
+  >();
   const [displayMode, setDisplayMode] = createSignal<"FEED" | ReaderMode>(
     "FEED",
   );
@@ -166,6 +193,78 @@ export function Dashboard(props: {
   createEffect(() => {
     if (props.initialDiscovery) setShowDiscovery(true);
   });
+  // The tab-title badge reads this (main.tsx); global total by decision.
+  // Reset on unmount so a logged-out tab does not keep a stale count.
+  createEffect(() => {
+    setUnreadTotal(totalUnread(tree()));
+  });
+  onCleanup(() => {
+    clearTimeout(pollTimer);
+    setUnreadTotal(0);
+    setNewArticlesCount(0);
+  });
+  // Background new-article poll (#717). The tree already carries every
+  // source's unread count, so a rise in the total is the whole signal --
+  // and the open article list is never mutated mid-read; the toast asks
+  // instead. Spacing backs off from 30s to a 5-minute ceiling and resets
+  // when the user refreshes, and hidden tabs skip cycles entirely.
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  let pollCycles = 0;
+  let lastSeenUnread: number | undefined;
+  const schedulePoll = () => {
+    if (!backgroundPollEnabled()) return;
+    pollTimer = setTimeout(() => {
+      if (document.hidden) {
+        schedulePoll();
+        return;
+      }
+      void pollForNewArticles();
+    }, nextPollDelayMs(pollCycles));
+  };
+  const pollForNewArticles = async () => {
+    try {
+      const nextTree = await loadTree();
+      const total = totalUnread(nextTree);
+      if (lastSeenUnread !== undefined && total > lastSeenUnread) {
+        const arrived = total - lastSeenUnread;
+        setNewArticlesCount((count) => Math.max(count, arrived));
+      }
+      lastSeenUnread = total;
+    } catch {
+      // Background polling stays silent: the next cycle retries, and the
+      // ordinary error surfaces already cover the user-visible paths.
+    } finally {
+      pollCycles += 1;
+      schedulePoll();
+    }
+  };
+  async function shareSelected() {
+    const article = selected();
+    if (!article) return;
+    // The share sheet needs no feedback; the clipboard fallback does, and
+    // the existing polite live region is exactly that.
+    try {
+      const outcome = await shareArticle(article);
+      if (outcome === "copied")
+        setAccessibilityAnnouncement("Article link copied to the clipboard.");
+    } catch {
+      // The clipboard can be denied or missing (insecure context), and the
+      // button must not fail silently the way a rejected void promise does.
+      setError("Could not share the article.");
+    }
+  }
+  async function refreshCurrentView() {
+    setNewArticlesCount(0);
+    pollCycles = 0;
+    try {
+      const nextTree = await loadTree();
+      lastSeenUnread = totalUnread(nextTree);
+      const node = selectedNode();
+      if (node) await select(node);
+    } catch (cause) {
+      reportError(cause, "Could not refresh articles");
+    }
+  }
   const selectionGuard = createSupersessionGuard();
   const articleRequestGuard = createSupersessionGuard();
   const capabilityProbeGuard = createSupersessionGuard();
@@ -250,7 +349,13 @@ export function Dashboard(props: {
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
-      setSelectedNode(findNode(nextTree, current.type, current.uid));
+      // The virtual Today node is not in the stored tree; keep it selected
+      // across refreshes instead of letting findNode drop it.
+      setSelectedNode(
+        isTodayNode(current)
+          ? current
+          : findNode(nextTree, current.type, current.uid),
+      );
     }
     return nextTree;
   }
@@ -280,6 +385,8 @@ export function Dashboard(props: {
       const nextTree = await loadTree();
       await preloadFavicons(nextTree);
       setAuthenticated(true);
+      lastSeenUnread = totalUnread(nextTree);
+      schedulePoll();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       reportError(cause, "Unable to load feeds.");
@@ -306,6 +413,10 @@ export function Dashboard(props: {
     setSelectedNode(node);
     const selection = selectionGuard.start();
     articleAbortController?.abort();
+    if (isTodayNode(node)) {
+      await fetchArticlesForBody({ sources: [], view: "today" }, selection);
+      return;
+    }
     const ids = sourceIds(node);
     if (!ids.length) {
       setArticles([]);
@@ -314,6 +425,12 @@ export function Dashboard(props: {
       setSelectionAnchor(undefined);
       return;
     }
+    await fetchArticlesForBody({ sources: ids }, selection);
+  }
+  async function fetchArticlesForBody(
+    body: { sources: number[]; view?: "today" },
+    selection: ReturnType<typeof selectionGuard.start>,
+  ) {
     setArticlesLoading(true);
     const controller = new AbortController();
     articleAbortController = controller;
@@ -321,7 +438,7 @@ export function Dashboard(props: {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ sources: ids }),
+        body: JSON.stringify(body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
         signal: controller.signal,
@@ -362,6 +479,89 @@ export function Dashboard(props: {
       reportError(cause, "Could not rename folder");
     }
   }
+  async function copyToClipboard(url: string, announcement: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setAccessibilityAnnouncement(announcement);
+    } catch {
+      setError("Could not access the clipboard.");
+    }
+  }
+  // Right-click / long-press menus (#721). The tree menu selects the row
+  // first, so the existing rename/unsubscribe actions -- which operate on
+  // selectedNode() -- keep working unchanged, and no re-filing action
+  // exists here by design: manual ordering stays a non-feature.
+  function openTreeContext(x: number, y: number, node: TreeNode) {
+    // The virtual Today row is a view, not a feed: it has no feed URL to
+    // copy, no properties to edit, and no subscription to remove, so it
+    // opens no menu at all (the tree item still swallows the native menu).
+    if (isTodayNode(node)) return;
+    setSelectedNode(node);
+    const items: ContextMenuItem[] =
+      node.type === "folder"
+        ? [
+            {
+              kind: "action",
+              label: "Rename folder",
+              onSelect: () => void showProperties(),
+            },
+            {
+              disabled: Boolean(node.children?.length),
+              kind: "action",
+              label: "Delete folder",
+              onSelect: () => void removeSelectedNode(),
+            },
+          ]
+        : [
+            {
+              disabled: !node.homeUrl,
+              kind: "action",
+              label: "Open original site",
+              onSelect: () => window.open(node.homeUrl, "_blank", "noopener"),
+            },
+            {
+              kind: "action",
+              label: "Copy feed URL",
+              onSelect: () =>
+                void copyToClipboard(
+                  node.xmlUrl,
+                  "Feed URL copied to the clipboard.",
+                ),
+            },
+            {
+              kind: "action",
+              label: "Edit feed",
+              onSelect: () => void showProperties(),
+            },
+            { kind: "separator" },
+            {
+              kind: "action",
+              label: "Unsubscribe",
+              onSelect: () => void removeSelectedNode(),
+            },
+          ];
+    setContextMenu({ items, x, y });
+  }
+  function openArticleContext(x: number, y: number, article: ArticleSummary) {
+    const url = safeArticleUrl(article.url, window.location.href);
+    setContextMenu({
+      items: [
+        {
+          kind: "action",
+          label: "Copy article link",
+          onSelect: () =>
+            void copyToClipboard(url, "Article link copied to the clipboard."),
+        },
+        {
+          kind: "action",
+          label: "Open original in new tab",
+          onSelect: () => window.open(url, "_blank", "noopener"),
+        },
+      ],
+      x,
+      y,
+    });
+  }
   async function removeSelectedNode() {
     const node = selectedNode();
     if (!node) return;
@@ -399,6 +599,26 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
+  // Prefetch the article after the one just opened (#716), so keyboard
+  // navigation into it feels instant. One article only, feed mode only --
+  // Reader modes fetch through the extension, so there is nothing server-
+  // side to warm. The plain GET flows through the service worker's
+  // networkFirst handler, so the prefetched copy also replays offline.
+  function schedulePrefetch() {
+    if (!prefetchNextEnabled()) return;
+    if (!shouldPrefetch(navigatorConnection())) return;
+    const selectedIndex = soleSelectedIndex(selectedIndexes());
+    const next =
+      selectedIndex === undefined ? undefined : articles()[selectedIndex + 1];
+    if (!next) return;
+    const run = () => {
+      void api(`/article?article=${next.id}`, articleResponse).catch(() => {
+        // Best-effort: opening the article fetches it properly anyway.
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run);
+    else setTimeout(run, 200);
+  }
   async function open(
     article: ArticleSummary,
     selection = selectionGuard.current(),
@@ -426,6 +646,7 @@ export function Dashboard(props: {
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
+      if (mode === "FEED") schedulePrefetch();
 
       if (mode !== "FEED") {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
@@ -622,12 +843,36 @@ export function Dashboard(props: {
       <div aria-live="polite" class="sr-only" role="status">
         {accessibilityAnnouncement()}
       </div>
+      <Show when={contextMenu()}>
+        {(menu) => (
+          <ContextMenu
+            items={menu().items}
+            x={menu().x}
+            y={menu().y}
+            onClose={() => setContextMenu(undefined)}
+          />
+        )}
+      </Show>
       <Show when={error()}>
         {(message) => (
-          <p class="dashboard-alert" role="alert">
-            {message()}
-          </p>
+          <div class="dashboard-alert" role="alert">
+            <p>{message()}</p>
+            <button type="button" onClick={() => void refreshCurrentView()}>
+              Retry
+            </button>
+          </div>
         )}
+      </Show>
+      <Show when={newArticlesCount() > 0}>
+        <div class="update-banner" role="status">
+          <span>
+            {newArticlesCount()} new article
+            {newArticlesCount() === 1 ? "" : "s"}.
+          </span>
+          <button type="button" onClick={() => void refreshCurrentView()}>
+            Refresh
+          </button>
+        </div>
       </Show>
       <Show when={!showDiscovery() || !authenticated()}>
         <aside
@@ -694,25 +939,54 @@ export function Dashboard(props: {
               </ul>
             }
           >
-            <ul
-              aria-busy={treeLoading()}
-              aria-label="Feeds"
-              class="tree"
-              role="tree"
+            {/* First-run guidance (#723): only ever visible while the tree
+                is empty, so it dismisses itself the moment a source exists
+                and never needs its own persistence. */}
+            <Show
+              when={tree().length > 0}
+              fallback={
+                <div class="tree-empty">
+                  <p class="tree-empty-heading">No feeds yet.</p>
+                  <button type="button" onClick={() => setShowDiscovery(true)}>
+                    Add your first feed
+                  </button>
+                  <p>
+                    Moving from another reader?{" "}
+                    <a
+                      href="/options#import-opml"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        props.navigate("/options#import-opml");
+                      }}
+                    >
+                      Import an OPML file
+                    </a>
+                    .
+                  </p>
+                </div>
+              }
             >
-              <For each={tree()}>
-                {(node) => (
-                  <TreeItem
-                    focused={focusedTreeKey() === treeNodeKey(node)}
-                    focusedKey={focusedTreeKey()}
-                    node={node}
-                    onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
-                    select={(item) => void select(item)}
-                    selected={selectedNode()}
-                  />
-                )}
-              </For>
-            </ul>
+              <ul
+                aria-busy={treeLoading()}
+                aria-label="Feeds"
+                class="tree"
+                role="tree"
+              >
+                <For each={withTodayNode(tree(), todayView() === "on")}>
+                  {(node) => (
+                    <TreeItem
+                      focused={focusedTreeKey() === treeNodeKey(node)}
+                      onContext={openTreeContext}
+                      focusedKey={focusedTreeKey()}
+                      node={node}
+                      onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
+                      select={(item) => void select(item)}
+                      selected={selectedNode()}
+                    />
+                  )}
+                </For>
+              </ul>
+            </Show>
           </Show>
         </aside>
         <section
@@ -742,6 +1016,12 @@ export function Dashboard(props: {
               onClick={() => removeSelected()}
             >
               <Icon raw={removeRaw} />
+            </button>
+            <button
+              aria-label="refresh"
+              onClick={() => void refreshCurrentView()}
+            >
+              <Icon raw={refreshRaw} />
             </button>
             <span />
             <button
@@ -808,6 +1088,17 @@ export function Dashboard(props: {
                         selectArticle(index(), event);
                         props.focusPane("reader");
                       }}
+                      {...longPressHandlers((x, y) =>
+                        openArticleContext(x, y, article),
+                      )}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        openArticleContext(
+                          event.clientX,
+                          event.clientY,
+                          article,
+                        );
+                      }}
                       role="option"
                       tabIndex={focusedIndex() === index() ? 0 : -1}
                       aria-selected={selectedIndexes().has(index())}
@@ -816,15 +1107,31 @@ export function Dashboard(props: {
                       <span class="details">
                         <span>{article.author}</span>
                         <time datetime={article.publishedAt || undefined}>
-                          {article.publishedAt
-                            ? new Date(article.publishedAt).toLocaleString()
-                            : ""}
+                          {formatDate(article.publishedAt)}
                         </time>
                       </span>
                     </a>
                   </>
                 )}
               </For>
+              <Show
+                when={
+                  !articlesLoading() &&
+                  articles().length === 0 &&
+                  selectedNode()
+                }
+              >
+                <div class="article-list-empty" role="status">
+                  <p>All caught up.</p>
+                </div>
+              </Show>
+              <Show
+                when={!articlesLoading() && !selectedNode() && authenticated()}
+              >
+                <div class="article-list-empty" role="status">
+                  <p>Select a feed to read.</p>
+                </div>
+              </Show>
             </Show>
           </div>
         </section>
@@ -841,6 +1148,13 @@ export function Dashboard(props: {
               onClick={() => removeSelected()}
             >
               <Icon raw={removeRaw} />
+            </button>
+            <button
+              aria-label="share article"
+              disabled={!selected()}
+              onClick={() => void shareSelected()}
+            >
+              <Icon raw={shareRaw} />
             </button>
             <span />
             <Show when={readerAvailable()}>

@@ -388,9 +388,31 @@ a {
   top: 0.5rem;
   right: 0.5rem;
   left: 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.5rem;
   border: var(--border);
   background: var(--white);
+}
+.dashboard-alert p {
+  margin: 0;
+}
+.dashboard-alert button {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  background: var(--blue-60);
+  color: var(--white);
+}
+/* Empty-list fallbacks (#710): quiet, centered, never read as an error. */
+.article-list-empty {
+  padding: 2rem 1rem;
+  color: var(--grey-60);
+  text-align: center;
+}
+.article-list-empty p {
+  margin: 0;
 }
 
 .dashboard-pane {
@@ -485,6 +507,63 @@ a {
 }
 .tree::-webkit-scrollbar-track {
   background: transparent;
+}
+/* Custom context menu (#721). Fixed under the pointer, above every pane;
+   items are plain buttons so forced-colors keeps its own treatment. */
+.context-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 12rem;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--grey-90);
+  color: var(--white);
+  border: 1px solid var(--grey-40);
+  border-radius: var(--radius);
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 30%);
+}
+.context-menu button {
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  color: inherit;
+  border-radius: 0.25rem;
+}
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background: var(--blue-60);
+}
+.context-menu button:disabled {
+  color: var(--grey-40);
+}
+.context-menu-separator {
+  height: 1px;
+  margin: 0.25rem 0.4rem;
+  background: var(--grey-40);
+}
+
+/* First-run empty-tree guidance (#723). Same scroll-container treatment as
+   .tree (flex child of the pane), so it scrolls rather than overflows. */
+.tree-empty {
+  flex: 1;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.tree-empty-heading {
+  margin: 0;
+  font-weight: 600;
+}
+.tree-empty button {
+  padding: 0.4rem 0.8rem;
+  background: var(--blue-60);
+  color: var(--white);
 }
 /* A nested list matches .tree too, so it would otherwise inherit that
    rule's scroll-container treatment and reserve a scrollbar gutter of its
