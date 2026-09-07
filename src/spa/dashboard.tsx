@@ -57,6 +57,7 @@ import {
   type ContextMenuItem,
 } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
+import { confirmDialog, promptDialog } from "./dialog.tsx";
 import {
   navigatorConnection,
   prefetchNextEnabled,
@@ -360,7 +361,7 @@ export function Dashboard(props: {
     return nextTree;
   }
   async function addNewFolder() {
-    const name = prompt("Folder name");
+    const name = await promptDialog("Folder name");
     if (!name?.trim()) return;
     setError("");
     try {
@@ -465,7 +466,7 @@ export function Dashboard(props: {
       setShowDiscovery(true);
       return;
     }
-    const name = prompt("Folder name", node.name);
+    const name = await promptDialog("Folder name", node.name);
     if (!name?.trim() || name === node.name) return;
     setError("");
     try {
@@ -569,7 +570,8 @@ export function Dashboard(props: {
       setError("Folder is not empty");
       return;
     }
-    if (!confirm(`Delete "${node.name}"?`)) return;
+    if (!(await confirmDialog(`Delete "${node.name}"?`, { danger: true })))
+      return;
     try {
       setError("");
       await api(

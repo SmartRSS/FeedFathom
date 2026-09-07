@@ -6,6 +6,7 @@ import {
   successResponse,
 } from "#shared/contracts/responses.ts";
 import { api } from "./api.ts";
+import { confirmDialog, promptDialog } from "./dialog.tsx";
 
 type AdminSource = Static<typeof adminSourcesResponse>[number];
 type SourceSort =
@@ -81,12 +82,12 @@ export function Admin(props: {
 
   async function replaceUrl(source: AdminSource) {
     const oldUrl = source.url;
-    const newUrl = prompt("New URL", oldUrl);
+    const newUrl = await promptDialog("New URL", oldUrl);
     if (!newUrl || newUrl === oldUrl) return;
     if (
-      !confirm(
+      !(await confirmDialog(
         `Change "${oldUrl}" to "${newUrl}"? This affects ${source.subscriberCount} subscriber(s).`,
-      )
+      ))
     )
       return;
     try {
@@ -106,7 +107,10 @@ export function Admin(props: {
 
   async function removeSource(source: AdminSource) {
     if (
-      !confirm(`Delete "${source.url}"? This removes it for every subscriber.`)
+      !(await confirmDialog(
+        `Delete "${source.url}"? This removes it for every subscriber.`,
+        { danger: true },
+      ))
     )
       return;
     try {

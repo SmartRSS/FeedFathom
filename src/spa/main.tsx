@@ -19,6 +19,7 @@ import {
 import { Activate, Login, Register } from "./account-flows.tsx";
 import { Dashboard } from "./dashboard.tsx";
 import { Admin } from "./admin.tsx";
+import { DialogHost } from "./dialog.tsx";
 import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
 import { resolvedTheme } from "./preferences.ts";
@@ -131,6 +132,8 @@ function App() {
       >
         Skip to accessibility settings
       </a>
+      {/* One dialog host for every confirm()/prompt() replacement (#698). */}
+      <DialogHost />
       <Show when={updateAvailable()}>
         <div class="update-banner" role="status">
           <span>A new version is available.</span>
