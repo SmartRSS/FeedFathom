@@ -1,4 +1,4 @@
-import { onCleanup, onMount, For, Show } from "solid-js";
+import { createSignal, onCleanup, onMount, For, Show } from "solid-js";
 
 export type ContextMenuItem =
   | {
@@ -23,8 +23,29 @@ export function ContextMenu(props: {
   let list: HTMLUListElement | undefined;
   let invoker: Element | null;
 
+  // Anchor point, nudged so the menu never opens under the cursor where a
+  // stray pointerup would immediately activate the first item. Clamped to
+  // the viewport once the menu has a real size: long-press near a screen
+  // edge is the common case on touch, and an unclamped menu renders its
+  // items off-screen there.
+  const menuMargin = 8;
+  const [pos, setPos] = createSignal({ x: props.x + 2, y: props.y + 2 });
+
   onMount(() => {
     invoker = document.activeElement;
+    const rect = list?.getBoundingClientRect();
+    if (rect) {
+      setPos({
+        x: Math.max(
+          menuMargin,
+          Math.min(props.x + 2, window.innerWidth - menuMargin - rect.width),
+        ),
+        y: Math.max(
+          menuMargin,
+          Math.min(props.y + 2, window.innerHeight - menuMargin - rect.height),
+        ),
+      });
+    }
     // Focus the first enabled item, like a native menu.
     const first = list?.querySelector<HTMLElement>(
       "[role='menuitem']:not([disabled])",
@@ -79,9 +100,7 @@ export function ContextMenu(props: {
     }
   };
 
-  // Anchor point, nudged so the menu never opens under the cursor where a
-  // stray pointerup would immediately activate the first item.
-  const style = () => ({ left: `${props.x + 2}px`, top: `${props.y + 2}px` });
+  const style = () => ({ left: `${pos().x}px`, top: `${pos().y}px` });
 
   return (
     <ul
