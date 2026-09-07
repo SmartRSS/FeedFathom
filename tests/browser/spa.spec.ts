@@ -375,6 +375,38 @@ test("marks an article read, moving it between the filters", async ({
   expect(state.articleRequests).toBe(3);
 });
 
+// Colour cannot carry this. forced-colors mode replaces every colour the
+// stylesheet sets with the system palette, and a selected row already has to
+// put a read title back to the selected text colour or it drops under 1.5:1.
+// Weight survives both, which is what the tree already relies on for a source
+// with unread articles.
+test("tells read from unread by weight, not only colour", async ({ page }) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+
+  const weightOf = (index: number) =>
+    articleOptions(page)
+      .nth(index)
+      .locator(".title")
+      .evaluate((title) => getComputedStyle(title).fontWeight);
+
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+  const unreadWeight = await weightOf(0);
+
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark read" }).click();
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  // Still selected from the click above, which is the case colour cannot
+  // answer at all.
+  await expect(articleOptions(page).first()).toHaveClass(/selected/);
+  const readWeight = await weightOf(0);
+  expect(readWeight).not.toBe(unreadWeight);
+  expect(Number(unreadWeight)).toBeGreaterThan(Number(readWeight));
+});
+
 // The tree is a roving tabindex: exactly one row carries tabindex="0" and the
 // rest carry -1. A filter that removed the row holding it would leave none,
 // and Tab would step straight past the whole tree.
