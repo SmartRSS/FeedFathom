@@ -41,7 +41,7 @@ const SHORTCUTS: [string[][], string][] = [
   [[["o"]], "Move between the list and the reader pane"],
   [[["m"]], "Mark read / unread"],
   [[["Delete"]], "Delete the selection"],
-  [[["Ctrl"], ["A"]], "Select all articles"],
+  [[["Ctrl", "A"]], "Select all articles"],
   [[["←"]], "Back to the feed list"],
   [[["r"]], "Refresh"],
   [[["?"], ["Esc"]], "This cheat sheet / close"],

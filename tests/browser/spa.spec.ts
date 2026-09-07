@@ -1314,6 +1314,11 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();
   await expect(dialog.getByText("Mark read / unread")).toBeVisible();
+  // Ctrl+A is a chord, not two alternatives: keys inside one group join with
+  // "+", and only separate groups read as "or".
+  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText(
+    "Ctrl + A",
+  );
 
   // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");
