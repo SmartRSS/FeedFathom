@@ -773,25 +773,53 @@ export function Dashboard(props: {
               </ul>
             }
           >
-            <ul
-              aria-busy={treeLoading()}
-              aria-label="Feeds"
-              class="tree"
-              role="tree"
+            {/* First-run guidance (#723): only ever visible while the tree
+                is empty, so it dismisses itself the moment a source exists
+                and never needs its own persistence. */}
+            <Show
+              when={tree().length > 0}
+              fallback={
+                <div class="tree-empty">
+                  <p class="tree-empty-heading">No feeds yet.</p>
+                  <button type="button" onClick={() => setShowDiscovery(true)}>
+                    Add your first feed
+                  </button>
+                  <p>
+                    Moving from another reader?{" "}
+                    <a
+                      href="/options#import-opml"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        props.navigate("/options#import-opml");
+                      }}
+                    >
+                      Import an OPML file
+                    </a>
+                    .
+                  </p>
+                </div>
+              }
             >
-              <For each={tree()}>
-                {(node) => (
-                  <TreeItem
-                    focused={focusedTreeKey() === treeNodeKey(node)}
-                    focusedKey={focusedTreeKey()}
-                    node={node}
-                    onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
-                    select={(item) => void select(item)}
-                    selected={selectedNode()}
-                  />
-                )}
-              </For>
-            </ul>
+              <ul
+                aria-busy={treeLoading()}
+                aria-label="Feeds"
+                class="tree"
+                role="tree"
+              >
+                <For each={tree()}>
+                  {(node) => (
+                    <TreeItem
+                      focused={focusedTreeKey() === treeNodeKey(node)}
+                      focusedKey={focusedTreeKey()}
+                      node={node}
+                      onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
+                      select={(item) => void select(item)}
+                      selected={selectedNode()}
+                    />
+                  )}
+                </For>
+              </ul>
+            </Show>
           </Show>
         </aside>
         <section

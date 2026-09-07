@@ -49,6 +49,15 @@ export function Options(props: {
         cause instanceof Error ? cause.message : "Could not load session.",
       );
     }
+    // The empty-tree guidance links here with a hash; the SPA navigation
+    // never scrolls on its own, so honour the target once it is rendered.
+    if (location.hash) {
+      queueMicrotask(() => {
+        document
+          .querySelector(location.hash)
+          ?.scrollIntoView({ block: "start" });
+      });
+    }
   });
 
   async function logout() {
@@ -311,7 +320,7 @@ export function Options(props: {
           )}
         </Show>
       </form>
-      <form class="options-card" onSubmit={submitOpml}>
+      <form id="import-opml" class="options-card" onSubmit={submitOpml}>
         <h2>Import OPML</h2>
         <label>
           OPML file
