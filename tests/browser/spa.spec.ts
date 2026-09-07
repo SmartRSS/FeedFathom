@@ -120,6 +120,32 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
+test("offers first-run guidance while the tree is empty", async ({ page }) => {
+  await installApiFixture(page);
+  // Registered after the fixture's own **/api/** handler, so it wins.
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      body: JSON.stringify({ tree: [] }),
+      contentType: "application/json",
+      status: 200,
+    }),
+  );
+  await page.goto("/");
+
+  await expect(page.getByText("No feeds yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Add your first feed" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Discover feed" }),
+  ).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Import an OPML file" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Import OPML" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("#import-opml");
+});
+
 // A nested list also matches .tree, so it easily picks that rule's
 // scroll-container treatment back up and reserves a scrollbar gutter of its
 // own, indenting every source row's right edge by the gutter width while the
