@@ -170,12 +170,35 @@ transitive dependencies are gone.
   (`XMLParser` in `preserveOrder` mode, `XMLBuilder` for `innerHtml`) on
   `Bun.XML`'s ordered tree shape. Same arrangement as `vendor/linkedom-shim`.
 
-**The `overrides` entry is load-bearing.** `feed-parser` depends on
-`fast-xml-parser@^5.10.1`, which a `file:` spec does not satisfy, so the
-dependency alone leaves bun installing the real package nested under
-`feed-parser` and the shim silently bypassed. Check
-`node_modules/@rowanmanning/feed-parser/node_modules` is empty after any
-dependency change.
+**The `overrides` entry is load-bearing, for both shims.** `feed-parser`
+depends on `fast-xml-parser@^5.10.1`, which a `file:` spec does not satisfy,
+so the dependency alone leaves bun installing the real package nested under
+`feed-parser` and the shim silently bypassed.
+
+`linkedom` learned this the expensive way. It had the direct dependency and a
+patchfile stripping `linkedom` from `@extractus/article-extractor`'s own
+dependencies, but no override. `patchedDependencies` keys carry an exact
+version, so bumping `^9.0.0` to `^9.0.1` stopped the patch applying without a
+word, bun installed the real 2.6 MB package nested, and the SPA bundle grew
+from 340 KB to 529 KB. It now has an override and no patchfile.
+
+The linkedom shim is also no longer purely standard API. `article-extractor`
+9.0.1 replaced its `sanitize-html` pass with a hand-rolled walk over
+`doc.documentElement.childNodes` and serializes back through `doc.childNodes`,
+and those two are where the browser and linkedom disagree: handed a fragment,
+linkedom roots the document at the fragment itself, while the browser always
+synthesizes `<html><head><body>`. Under the native parser the walk deleted
+head and body -- neither is an allowed tag -- and every extraction came back
+null. The shim now hands back a fragment-rooted view of the document for that
+case. `tests/browser/spa.spec.ts` "extracts article content with the alternate
+extractor" is the check; it needs a real DOM, so it cannot live beside the
+other shim tests.
+
+`vendor/__tests__/shim-fidelity.test.ts` checks both, on every run: no nested
+copy of either package, the installed one is the vendored one, and every name
+the dependent imports is a name the shim exports. That last part is the
+`ncu -u` alarm -- a bump reaching for an unimplemented shim API otherwise
+fails only at runtime, on whichever feed happens to need it.
 
 ### What it was measured against
 
@@ -211,6 +234,9 @@ and ignored, so treat the output shape as fixed.
 - Removed `@sinclair/typebox` 0.34 — a dead dependency since the Elysia 2 move
   to standalone `typebox`, nothing imports it (it was in knip's ignore list,
   which is now gone too).
-- Pinned `elysia` to `2.0.0-beta.4` instead of the floating `next` tag.
+- Pinned `elysia` to an exact beta (now `2.0.0-beta.14`) instead of the
+  floating `next` tag. The workaround it still carries is in
+  `features/auth/routes/login.ts`, where a Codec `.Decode()` transform is run
+  by hand because the beta does not run it on bodies; revisit at 2.0 stable.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.

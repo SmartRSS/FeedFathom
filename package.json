@@ -73,7 +73,8 @@
   },
   "peerDependencies": {},
   "overrides": {
-    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim"
+    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
+    "linkedom": "file:./vendor/linkedom-shim"
   },
   "packageManager": "bun@1.4.2",
   "knip": {
@@ -102,8 +103,5 @@
     "ignoreDependencies": [
       "linkedom"
     ]
-  },
-  "patchedDependencies": {
-    "@extractus/article-extractor@9.0.0": "patches/@extractus%2Farticle-extractor@9.0.0.patch"
   }
 }
