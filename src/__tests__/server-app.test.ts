@@ -2159,3 +2159,45 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
     [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
   ]);
 });
+
+test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
+  const dependencies = createDependencies();
+  const enqueued: Parameters<
+    ServerDependencies["sourcesDataService"]["enqueueSource"]
+  >[] = [];
+  const seeded: unknown[] = [];
+  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+    token,
+  ) => (token === "callback-token" ? websubSource : undefined);
+  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+    enqueued.push(parameters);
+  };
+  dependencies.httpClient.seedCache = async (_url, pushed) => {
+    seeded.push(pushed);
+  };
+  const app = await appFor(dependencies);
+  const oversized = "x".repeat(24 * 1024 * 1024 + 1);
+  // A body large enough that no hub push is legitimate, streamed without a
+  // declared Content-Length, so the incremental read is what has to stop it.
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Buffer.from(oversized));
+      controller.close();
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://localhost/api/websub/callback/callback-token", {
+      body,
+      // @ts-expect-error -- duplex is required for streaming request bodies
+      // but undici's Request type omits it.
+      duplex: "half",
+      headers: { "x-hub-signature-256": "sha256=deadbeef" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(413);
+  expect(seeded).toEqual([]);
+  expect(enqueued).toEqual([]);
+});
