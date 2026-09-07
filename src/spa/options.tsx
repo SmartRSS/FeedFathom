@@ -24,6 +24,7 @@ import {
   backgroundPollEnabled,
 } from "./news-signal.ts";
 import { prefetchNextEnabled, setPrefetchNext } from "./reading-prefetch.ts";
+import { helpDialog } from "./dialog.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -376,6 +377,15 @@ export function Options(props: {
           otherwise. Applies in the All view, where a read article stays in the
           list.
         </p>
+      </section>
+      <section class="options-card">
+        <h2>Keyboard</h2>
+        <p>The dashboard is keyboard-first.</p>
+        {/* The same DialogHost dialog the `?` shortcut opens; it works on
+            this route too because the host is mounted app-wide. */}
+        <button type="button" onClick={() => void helpDialog()}>
+          Keyboard shortcuts
+        </button>
       </section>
       <section class="options-card">
         <h2>Export OPML</h2>
