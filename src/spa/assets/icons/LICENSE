@@ -15,6 +15,7 @@ name follows each one:
   System/mail-fill.svg              mail
   System/rss-fill.svg               rss
   System/settings-5-fill.svg        settings
+  System/refresh-fill.svg           refresh-cw
   System/share-fill.svg             share
 
 Lucide is ISC-licensed. Some of these glyphs descend from Feather and carry a

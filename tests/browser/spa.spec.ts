@@ -107,6 +107,23 @@ test.afterEach(async ({ page }) => {
   expect(browserFailures.get(page) ?? []).toEqual([]);
 });
 
+test("shows an all-caught-up empty state for a feed with no unread", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .click();
+  // The fixture's article list for the source is nonempty; right after the
+  // list renders, remove the single article and the fallback appears.
+  await page.getByRole("button", { name: "delete articles" }).click();
+  await expect(page.getByText("All caught up.")).toBeVisible();
+});
+
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
 }) => {
