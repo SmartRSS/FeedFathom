@@ -50,7 +50,30 @@ Worth evaluating once stable, both opt-in and both currently unused here:
 
 ## Solid 2.0
 
-The real work. Solid 2.0 is a large breaking release, but our surface is
+**Blocked on the toolchain, not on us. Rechecked 2026-09-07 by actually
+installing it.**
+
+`solid-js@2.0.0-rc.6` with `vite-plugin-solid@3.0.0-next.27` — the newest of
+each — does not build at all, and not because of anything in this repo:
+
+```
+"./web" is not exported under the conditions ["solid","module","browser",
+"production","import"] from package solid-js
+```
+
+The plugin still resolves `solid-js/web`, which 2.0 no longer exports under
+those conditions. Nothing in `src/` can fix that; it is the build plugin and
+the framework prerelease disagreeing with each other. Typechecking is a
+separate wall — `onMount` is no longer exported from `solid-js`, the JSX
+runtime types do not resolve, and `Show` now requires a children *callback*
+(`ConditionalRenderCallback`), so every plain-children `<Show>` is an error.
+
+So there is no version of this to do today, however small the surface. Recheck
+when `vite-plugin-solid` 3.0 and `solid-js` 2.0 both reach stable, or at least
+reach prereleases that agree on the `solid-js/web` export. Everything below is
+still the plan for when that happens.
+
+Solid 2.0 is a large breaking release, but our surface is
 small — seven `.tsx` files import from Solid at all, and only these imports:
 
 `createSignal`, `createEffect`, `For`, `Show`, `Switch`, `Match`, `onMount`,
