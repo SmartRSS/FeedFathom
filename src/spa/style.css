@@ -508,8 +508,12 @@ a {
 .tree::-webkit-scrollbar-track {
   background: transparent;
 }
-/* Custom context menu (#721). Fixed under the pointer, above every pane;
-   items are plain buttons so forced-colors keeps its own treatment. */
+/* Custom context menu (#721). Fixed under the pointer, above every pane.
+   Uses the app's own surface/text tokens rather than an inverted native
+   menu look, so it follows light/dark and the selectable themes for free.
+   Item buttons need an explicit background: the UA default (buttonface)
+   is a mid grey that turns white-on-grey text unreadable in light mode.
+   In forced-colors modes the system overrides all of it either way. */
 .context-menu {
   position: fixed;
   z-index: 300;
@@ -517,22 +521,28 @@ a {
   margin: 0;
   padding: 0.25rem;
   list-style: none;
-  background: var(--grey-90);
-  color: var(--white);
-  border: 1px solid var(--grey-40);
+  background: var(--white);
+  color: var(--grey-90);
+  border: var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 30%);
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
 .context-menu button {
   width: 100%;
   padding: 0.35rem 0.6rem;
   text-align: left;
   color: inherit;
+  background: transparent;
   border-radius: 0.25rem;
 }
+/* :focus, not :focus-visible: the menu focuses its first item
+   programmatically, and browsers skip :focus-visible after pointer
+   input -- the current item must read as current however the menu was
+   opened. Highlight is the same treatment selected tree rows get. */
 .context-menu button:hover:not(:disabled),
-.context-menu button:focus-visible {
-  background: var(--blue-60);
+.context-menu button:focus {
+  background: var(--selected-bg);
+  color: var(--selected-fg);
 }
 .context-menu button:disabled {
   color: var(--grey-40);
@@ -540,7 +550,17 @@ a {
 .context-menu-separator {
   height: 1px;
   margin: 0.25rem 0.4rem;
-  background: var(--grey-40);
+  background: var(--grey-20);
+}
+/* The long-press menu (#721) fights the platform's own long-press
+   behaviors: iOS shows the link-preview callout for the article rows'
+   real <a href>, and both platforms start a text selection mid-hold.
+   Suppress both on the interactive rows (not the reader pane, where
+   selecting text is the point). */
+button.source,
+a.article {
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 /* First-run empty-tree guidance (#723). Same scroll-container treatment as
