@@ -252,13 +252,60 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   const state = await installApiFixture(page, { folderCreateFailure: true });
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
-  page.once("dialog", (dialog) => dialog.accept("Saved"));
   await page.getByRole("button", { name: "add folder" }).click();
+  await page.getByRole("dialog").getByRole("textbox").fill("Saved");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
     "Invalid response from /api/folders",
   );
   expect(state.treeRequests).toBe(1);
+});
+
+// The in-app prompt dialog (#698) replacing native prompt(): a successful
+// create drives the same API call the native dialog used to.
+test("creates a folder through the in-app prompt", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "add folder" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("textbox")).toHaveValue("");
+  await dialog.getByRole("textbox").fill("Saved");
+  await dialog.getByRole("button", { name: "OK" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  // The fixture's POST /api/folders handler asserts the body is exactly
+  // { name: "Saved" }, so reaching here without a console/request failure
+  // proves the prompt value reached the API; the reload bumps the count.
+  await expect.poll(() => state.treeRequests).toBe(2);
+});
+
+// Cancel must resolve exactly like the native cancel path: no delete, and
+// focus back on the button that opened the dialog.
+test("cancelling the delete confirmation keeps the source", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await page.getByRole("button", { name: "delete source" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Delete "Tech News"?');
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "delete source" }),
+  ).toBeFocused();
+  expect(state.removedSourceIds).toEqual([]);
 });
 
 test("keeps folder state usable when localStorage throws", async ({ page }) => {
@@ -550,9 +597,12 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   await page.goto("/");
   await selectSource(page);
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "delete source" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "OK" }).click();
 
+  await expect(dialog).toHaveCount(0);
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toHaveCount(0);
@@ -569,8 +619,13 @@ test("renaming a folder through properties updates the tree", async ({
     .filter({ hasText: "Reading" })
     .click();
 
-  page.once("dialog", (dialog) => void dialog.accept("Archive"));
   await page.getByRole("button", { name: "source properties" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // The rename prompt opens pre-filled with the current name (#698).
+  await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
+  await dialog.getByRole("textbox").fill("Archive");
+  await dialog.getByRole("button", { name: "OK" }).click();
 
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
@@ -586,11 +641,11 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
     .filter({ hasText: "Reading" })
     .click();
 
-  page.once("dialog", (dialog) => {
-    throw new Error(`Unexpected confirm dialog: ${dialog.message()}`);
-  });
   await page.getByRole("button", { name: "delete source" }).click();
 
+  // No confirmation dialog may open for a non-empty folder (#698 moved the
+  // confirm in-app, so absence is directly assertable).
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Folder is not empty");
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),

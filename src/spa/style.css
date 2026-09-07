@@ -552,6 +552,57 @@ a {
   margin: 0.25rem 0.4rem;
   background: var(--grey-20);
 }
+/* In-app dialog replacements for prompt()/confirm() (#698), hosted once by
+   DialogHost. Same token approach as the context menu: surface, text and
+   border tokens make it follow every theme (including auto+dark and
+   high-contrast) with no per-theme overrides. The dialog element is centered
+   by the UA when open via showModal(); it only needs its own surface styling.
+   The form width, not the dialog's, keeps the box modest on phones, where
+   the 150% root font at the 768px breakpoint would otherwise widen it. */
+dialog.app-dialog {
+  padding: 1rem;
+  background: var(--white);
+  color: var(--grey-90);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
+}
+dialog.app-dialog::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+dialog.app-dialog form {
+  display: flex;
+  flex-flow: column;
+  gap: 1rem;
+  max-width: 24rem;
+}
+dialog.app-dialog label {
+  display: flex;
+  flex-flow: column;
+  gap: 0.35rem;
+}
+dialog.app-dialog input {
+  padding: 0.4rem;
+  font: inherit;
+  color: inherit;
+  background: var(--grey-10);
+  border: var(--border);
+  border-radius: 0.25rem;
+}
+dialog.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+/* Destructive confirms (delete source/folder, admin remove) get the same
+   error color [role="alert"] uses, so the risky button reads as risky in
+   every theme -- --error is re-tokened per theme (e.g. #ff6b6b under
+   auto+dark) already. */
+dialog.app-dialog-actions .app-dialog-danger {
+  color: var(--white);
+  background: var(--error);
+  border: 1px solid var(--error);
+}
 /* The long-press menu (#721) fights the platform's own long-press
    behaviors: iOS shows the link-preview callout for the article rows'
    real <a href>, and both platforms start a text selection mid-hold.
