@@ -618,6 +618,43 @@ dialog.app-dialog-actions {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+/* The keyboard cheat sheet (#709) rides in the same DialogHost dialog: same
+   surface, border and text tokens as the form variant, so every theme and
+   the 768px breakpoint come along for free. The list scrolls rather than
+   growing the dialog past a phone screen. */
+dialog.app-dialog .app-dialog-title {
+  margin: 0;
+  font-size: 1rem;
+}
+dialog.app-dialog .app-dialog-shortcuts {
+  margin: 0;
+  display: flex;
+  flex-flow: column;
+  gap: 0.35rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+dialog.app-dialog .app-dialog-shortcuts div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+dialog.app-dialog .app-dialog-shortcuts dt {
+  white-space: nowrap;
+}
+dialog.app-dialog .app-dialog-shortcuts dd {
+  margin: 0;
+  text-align: right;
+}
+dialog.app-dialog .app-dialog-shortcuts kbd {
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0 0.3rem;
+  background: var(--grey-10);
+  border: var(--border);
+  border-radius: 0.25rem;
+}
 /* Destructive confirms (delete source/folder, admin remove) get the same
    error color [role="alert"] uses, so the risky button reads as risky in
    every theme -- --error is re-tokened per theme (e.g. #ff6b6b under

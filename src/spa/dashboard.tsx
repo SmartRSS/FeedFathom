@@ -60,7 +60,8 @@ import {
   type ContextMenuItem,
 } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
-import { confirmDialog, promptDialog } from "./dialog.tsx";
+import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
+import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
   prefetchNextEnabled,
@@ -959,6 +960,16 @@ export function Dashboard(props: {
     setSelectionAnchor(index);
     void setArticleSelection(indexes);
   }
+  // Enter and `v` (#709) share one open-original path: the same safeArticleUrl
+  // wrapping and the same window.open options the branch always used, with no
+  // mark-as-read side effect -- deleting, not reading, is this reader's flow.
+  function openOriginalInNewTab() {
+    for (const index of selectedIndexes()) {
+      const value = articles()[index]?.url;
+      const url = value ? safeArticleUrl(value, window.location.href) : "";
+      if (url) window.open(url, "_blank", "noopener");
+    }
+  }
   function handleArticleKeys(event: KeyboardEvent) {
     if (event.key === "ArrowDown") moveSelection(1, event);
     else if (event.key === "ArrowUp") moveSelection(-1, event);
@@ -987,11 +998,7 @@ export function Dashboard(props: {
       void setArticleSelection(new Set(articles().map((_, index) => index)));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      for (const index of selectedIndexes()) {
-        const value = articles()[index]?.url;
-        const url = value ? safeArticleUrl(value, window.location.href) : "";
-        if (url) window.open(url, "_blank", "noopener");
-      }
+      openOriginalInNewTab();
     } else if (event.key === "ArrowLeft") {
       const node = selectedNode();
       if (!node) return;
@@ -1000,6 +1007,42 @@ export function Dashboard(props: {
       document
         .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
         ?.focus();
+    } else if (
+      mapArticleShortcut(event) &&
+      !isTextEntry(event.target) &&
+      // A showModal() dialog sits on top of the list anyway, so its keys
+      // already can't reach here; the check only covers a non-modal edge.
+      !document.querySelector("dialog[open]")
+    ) {
+      // The industry-standard layer (#709), on top of everything above:
+      // j/k mirror the arrow keys exactly, v aliases Enter's open-original,
+      // r reuses the refresh button's handler, ? opens the cheat sheet.
+      const shortcut = mapArticleShortcut(event);
+      if (shortcut === "next") moveSelection(1, event);
+      else if (shortcut === "previous") moveSelection(-1, event);
+      else if (shortcut === "open") {
+        event.preventDefault();
+        // The reader pane has no separate close affordance -- it always
+        // shows whatever the single selection opened -- so "toggle" is the
+        // pane toggle: list -> reader, reader -> back to the list row, the
+        // same journey ArrowLeft's focus hand-off already takes.
+        if (props.pane() === "reader") {
+          props.focusPane("articles");
+          focusArticleAt(focusedIndex());
+        } else {
+          props.focusPane("reader");
+        }
+      } else if (shortcut === "openOriginal") {
+        event.preventDefault();
+        openOriginalInNewTab();
+      } else if (shortcut === "refresh") {
+        event.preventDefault();
+        void refreshCurrentView();
+      } else if (shortcut === "help") {
+        event.preventDefault();
+        // DialogHost captures the focused row and hands focus back on close.
+        void helpDialog();
+      }
     }
   }
   return (

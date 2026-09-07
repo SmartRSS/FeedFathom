@@ -1124,3 +1124,106 @@ test("surfaces tree failures without masquerading as logout", async ({
   );
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
 });
+
+// The #709 keyboard vocabulary: j/k alias the arrow keys' selection movement,
+// which already opens the article in the reader pane; ? opens the cheat sheet
+// hosted in the shared DialogHost.
+test("j and k move the selection like the arrow keys", async ({ page }) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  // Selecting a source lands the cursor on the first article.
+  await articleOptions(page).first().focus();
+  await expect(articleOptions(page).first()).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await page.keyboard.press("j");
+  await expect(
+    page.getByRole("option", { name: /Second article/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  expect(
+    await page.evaluate(() =>
+      document.activeElement?.getAttribute("data-index"),
+    ),
+  ).toBe("1");
+
+  await page.keyboard.press("k");
+  await expect(
+    page.getByRole("option", { name: /First article/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  expect(
+    await page.evaluate(() =>
+      document.activeElement?.getAttribute("data-index"),
+    ),
+  ).toBe("0");
+});
+
+test("? opens the shortcut help dialog and Escape closes it", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+  await articleOptions(page).first().focus();
+
+  await page.keyboard.press("?");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
+  ).toBeVisible();
+  await expect(dialog.getByText("Mark read / unread")).toBeVisible();
+
+  // Esc dismisses, and focus returns to the article row that invoked it.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(
+    await page.evaluate(() => document.activeElement?.getAttribute("role")),
+  ).toBe("option");
+});
+
+test("the options page can open the shortcut help dialog without a keyboard", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/options");
+
+  await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
+  ).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test("typing j in the feed filter does not move the selection", async ({
+  page,
+}) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(3);
+  await articleOptions(page).first().focus();
+  await expect(articleOptions(page).first()).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  const filter = page.getByRole("searchbox", { name: "Filter feeds" });
+  await filter.focus();
+  await page.keyboard.type("j");
+  // The selection stays on the row, and focus stays in the input: the
+  // keydown was text, not a command.
+  await expect(articleOptions(page).first()).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(filter).toBeFocused();
+  await expect(filter).toHaveValue("j");
+});
