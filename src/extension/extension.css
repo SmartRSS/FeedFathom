@@ -119,3 +119,21 @@ input {
 .field-error:empty {
   display: none;
 }
+
+/* The "Test connection" row on options.html: the button sits beside the
+   outcome message, which wraps under it on narrow (mobile) widths. */
+.connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-top: 0.25rem;
+}
+.connection-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.connection-status:empty {
+  display: none;
+}

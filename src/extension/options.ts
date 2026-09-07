@@ -1,4 +1,5 @@
 import { storedInstance } from "#shared/extension-types.ts";
+import { pingInstance } from "./instance.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
 void (async () => {
@@ -23,10 +24,47 @@ void (async () => {
   const showError = (message: string) => {
     if (instanceError) instanceError.textContent = message;
   };
+  const connectionStatus = document.querySelector("#connection-status");
+  const showStatus = (message: string) => {
+    if (connectionStatus) connectionStatus.textContent = message;
+  };
+  const testButton = document.querySelector("#test-connection");
+
+  testButton?.addEventListener("click", () => {
+    void (async () => {
+      if (
+        !(testButton instanceof HTMLButtonElement) ||
+        !connectionStatus ||
+        !instanceError
+      )
+        return;
+      const value = instanceInput.value.trim();
+      if (value === "") {
+        showStatus("Enter an instance address to test first.");
+        return;
+      }
+      const candidate = canonicalizeInstance(value);
+      if (!candidate) {
+        showError(rejectionMessage);
+        return;
+      }
+
+      testButton.disabled = true;
+      showStatus("Checking…");
+      const reachable = await pingInstance(candidate);
+      testButton.disabled = false;
+      showStatus(
+        reachable
+          ? `Connected to ${candidate}.`
+          : `Could not reach ${candidate}. Check the address and that the instance is running.`,
+      );
+    })();
+  });
 
   instanceInput.addEventListener("change", () => {
     void (async () => {
       showError("");
+      showStatus("");
       const value = instanceInput.value;
       if (value.trim() === "") {
         await chrome.storage.sync.remove("instance");
