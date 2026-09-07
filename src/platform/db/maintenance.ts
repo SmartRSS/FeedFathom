@@ -159,6 +159,38 @@ export async function cleanupOrphanedData(
     .delete(articles)
     .where(inArray(articles.id, articlesUnreachableByAnyone));
 
+  // The rule above cannot reach an email source, and email is the one kind
+  // anyone can write to without asking. A delivery's guid falls back to
+  // sha256 of the raw message, so the same newsletter re-sent with a byte of
+  // padding is a new row every time, and there is no sender to pin: a
+  // newsletter legitimately changes address and domain.
+  //
+  // So age is the only bound left, and unlike the dormancy rule below it does
+  // not wait for the subscriber to go quiet -- an active one is exactly the
+  // case that grows without limit. The threshold is the same year-long
+  // ARTICLE_STALE_AFTER_DAYS, which is generous for a newsletter and is what
+  // a deployment already turns down if it wants less kept.
+  //
+  // ponytail: bounds the table at flood rate times retention, not at a fixed
+  // size. A per-source article cap would bound it outright; it needs its own
+  // setting, so it can wait until an instance actually fills up.
+  if (articleStaleAfterDays > 0) {
+    const staleEmailArticles = drizzleConnection
+      .select({ id: articles.id })
+      .from(articles)
+      .innerJoin(sources, eq(sources.id, articles.sourceId))
+      .where(
+        and(
+          eq(sources.kind, "email"),
+          sql`${articles.lastSeenInFeedAt} < NOW() - ${daysInterval(articleStaleAfterDays)}`,
+        ),
+      );
+
+    await drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, staleEmailArticles));
+  }
+
   // Neither rule above accounts for dormancy -- a subscriber who hasn't made a
   // request in months still counts as current. This catches articles old
   // enough that no subscriber who could have seen them is still active,
