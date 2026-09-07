@@ -87,6 +87,7 @@ const summary = (item: typeof article, read = false) => ({
 });
 
 type ApiFixtureState = {
+  articleRequests: number;
   authenticated: boolean;
   readArticleIds: Set<number>;
   findRequests: number;
@@ -115,6 +116,7 @@ export async function installApiFixture(
   } = {},
 ): Promise<ApiFixtureState> {
   const state: ApiFixtureState = {
+    articleRequests: 0,
     authenticated: options.authenticated ?? true,
     findRequests: 0,
     readArticleIds: new Set<number>(),
@@ -197,6 +199,7 @@ export async function installApiFixture(
 
     if (method === "POST" && url.pathname === "/api/articles") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      state.articleRequests += 1;
       const sources = request.postDataJSON().sources;
       expect(
         sources.every((sourceId: number) => [3, 9].includes(sourceId)),

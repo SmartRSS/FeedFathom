@@ -368,6 +368,11 @@ test("marks an article read, moving it between the filters", async ({
   await page.keyboard.press("m");
   await expect(page.locator(".article-list .article.read")).toHaveCount(1);
   expect([...state.readArticleIds]).toEqual([11]);
+
+  // Three list requests, all of them a change of question: the initial
+  // selection and the two filter changes. Marking read answers itself
+  // locally -- re-asking would flash the skeleton over rows already correct.
+  expect(state.articleRequests).toBe(3);
 });
 
 // The tree is a roving tabindex: exactly one row carries tabindex="0" and the

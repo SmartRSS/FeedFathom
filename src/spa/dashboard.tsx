@@ -441,12 +441,37 @@ export function Dashboard(props: {
     void markArticlesRead(ids, read);
   }
   async function markArticlesRead(ids: number[], read: boolean) {
+    const items = articles();
     const affected = new Set(ids);
-    setArticles((current) =>
-      current.map((article) =>
-        affected.has(article.id) ? { ...article, read } : article,
-      ),
-    );
+    if (articleFilter() === "all") {
+      setArticles(
+        items.map((article) =>
+          affected.has(article.id) ? { ...article, read } : article,
+        ),
+      );
+    } else {
+      // In the unread view a read article no longer belongs, and in the read
+      // view an unread one does not either, so the row leaves the list the
+      // same way a removed one does -- re-asking the server would flash the
+      // skeleton over a list that is already correct.
+      const indexes = new Set(
+        items.flatMap((article, index) =>
+          affected.has(article.id) ? [index] : [],
+        ),
+      );
+      const { nextIndex, remaining } = removalOutcome(items, indexes);
+      const nextArticle = remaining[nextIndex];
+      setArticles(remaining);
+      topUpArticles();
+      const openNext = setArticleSelection(
+        new Set(nextArticle ? [nextIndex] : []),
+      );
+      openNext?.catch((cause) =>
+        reportError(cause, "Could not refresh articles"),
+      );
+      setSelectionAnchor(nextArticle ? nextIndex : undefined);
+      queueMicrotask(() => focusArticleAt(nextArticle ? nextIndex : 0));
+    }
     try {
       await api("/articles", removedArticlesResponse, {
         body: JSON.stringify({ articleIdList: ids, read }),
@@ -454,13 +479,6 @@ export function Dashboard(props: {
         method: "PATCH",
       });
       await loadTree();
-      // In the unread view a read article no longer belongs, and in the read
-      // view an unread one does not either. Re-ask rather than guess which
-      // rows to drop and where the cursor lands.
-      if (articleFilter() !== "all") {
-        const node = selectedNode();
-        if (node) await select(node);
-      }
     } catch (cause) {
       reportError(cause, "Could not update read state");
       const node = selectedNode();
