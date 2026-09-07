@@ -9,12 +9,13 @@ import { loginPath } from "./behavior.ts";
 import { isTheme, setTheme, theme } from "./preferences.ts";
 import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
 import {
-  backgroundPollEnabled,
   isOnOff,
   setBackgroundPollEnabled,
   setUnreadBadgeEnabled,
   unreadBadgeEnabled,
+  backgroundPollEnabled,
 } from "./news-signal.ts";
+import { prefetchNextEnabled, setPrefetchNext } from "./reading-prefetch.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -248,6 +249,24 @@ export function Options(props: {
           >
             <option value="on">On (shows a "new articles" toast)</option>
             <option value="off">Off (no background requests)</option>
+          </select>
+        </label>
+      </section>
+      <section class="options-card">
+        <h2>Reading</h2>
+        <label>
+          Prefetch next article
+          <select
+            value={prefetchNextEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setPrefetchNext(value);
+            }}
+          >
+            <option value="off">Off</option>
+            <option value="on">
+              On (fetches the next article after you open one)
+            </option>
           </select>
         </label>
       </section>

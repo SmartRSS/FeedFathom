@@ -51,6 +51,11 @@ import { resolvedTheme } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
 import { shareArticle } from "./share-article.ts";
 import {
+  navigatorConnection,
+  prefetchNextEnabled,
+  shouldPrefetch,
+} from "./reading-prefetch.ts";
+import {
   backgroundPollEnabled,
   newArticlesCount,
   setNewArticlesCount,
@@ -478,6 +483,26 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
+  // Prefetch the article after the one just opened (#716), so keyboard
+  // navigation into it feels instant. One article only, feed mode only --
+  // Reader modes fetch through the extension, so there is nothing server-
+  // side to warm. The plain GET flows through the service worker's
+  // networkFirst handler, so the prefetched copy also replays offline.
+  function schedulePrefetch() {
+    if (!prefetchNextEnabled()) return;
+    if (!shouldPrefetch(navigatorConnection())) return;
+    const selectedIndex = soleSelectedIndex(selectedIndexes());
+    const next =
+      selectedIndex === undefined ? undefined : articles()[selectedIndex + 1];
+    if (!next) return;
+    const run = () => {
+      void api(`/article?article=${next.id}`, articleResponse).catch(() => {
+        // Best-effort: opening the article fetches it properly anyway.
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run);
+    else setTimeout(run, 200);
+  }
   async function open(
     article: ArticleSummary,
     selection = selectionGuard.current(),
@@ -505,6 +530,7 @@ export function Dashboard(props: {
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
+      if (mode === "FEED") schedulePrefetch();
 
       if (mode !== "FEED") {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
