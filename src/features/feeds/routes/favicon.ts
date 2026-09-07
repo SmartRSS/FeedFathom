@@ -1,7 +1,7 @@
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { FaviconStore } from "#features/feeds/favicon-store.ts";
 
 export type FaviconRouteDependencies = {
-  sourcesDataService: Pick<SourcesDataService, "getFavicon">;
+  faviconStore: Pick<FaviconStore, "getFavicon">;
 };
 
 export async function getFaviconHandler(
@@ -9,11 +9,11 @@ export async function getFaviconHandler(
     params,
     status,
   }: { params: { id: string }; status: (code: number) => unknown },
-  { sourcesDataService }: FaviconRouteDependencies,
+  { faviconStore }: FaviconRouteDependencies,
 ) {
   const sourceId = Number(params.id);
   const dataUrl = Number.isInteger(sourceId)
-    ? await sourcesDataService.getFavicon(sourceId)
+    ? await faviconStore.getFavicon(sourceId)
     : null;
   const match = dataUrl ? /^data:([^;]+);base64,(.+)$/.exec(dataUrl) : null;
   if (!match) return status(404);

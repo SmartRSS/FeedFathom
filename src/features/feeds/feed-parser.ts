@@ -19,6 +19,7 @@ import {
   parseMicroformatFeed,
 } from "#features/feeds/microformat-feed-parser.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import {
   discoverWebSub,
   requestHubSubscription,
@@ -120,7 +121,16 @@ export class FeedParser {
   constructor(
     private readonly articlesDataService: ArticlesDataService,
     private readonly httpClient: HttpClient,
-    private readonly sourcesDataService: SourcesDataService,
+    private readonly sourcesDataService: Pick<
+      SourcesDataService,
+      "failSource" | "successSource" | "updateSourceUrl"
+    >,
+    private readonly websubStateService: Pick<
+      WebSubStateService,
+      | "claimWebSubSubscribeAttempt"
+      | "markWebSubFailed"
+      | "recordWebSubDiscovery"
+    >,
     private readonly redirectMap: RedirectMap,
     private readonly userSourcesDataService: Pick<
       UserSourcesDataService,
@@ -267,11 +277,11 @@ export class FeedParser {
     if (!this.feedFathomDomain) return;
     try {
       if (
-        !(await this.sourcesDataService.claimWebSubSubscribeAttempt(sourceId))
+        !(await this.websubStateService.claimWebSubSubscribeAttempt(sourceId))
       )
         return;
       const { callbackToken, secret } =
-        await this.sourcesDataService.recordWebSubDiscovery(
+        await this.websubStateService.recordWebSubDiscovery(
           sourceId,
           websub.hubUrl,
           websub.topicUrl,
@@ -288,11 +298,11 @@ export class FeedParser {
         console.error(
           `WebSub subscribe failed for source ${sourceId}: ${result.error}`,
         );
-        await this.sourcesDataService.markWebSubFailed(sourceId);
+        await this.websubStateService.markWebSubFailed(sourceId);
       }
     } catch (error) {
       console.error(`WebSub subscribe threw for source ${sourceId}:`, error);
-      await this.sourcesDataService.markWebSubFailed(sourceId);
+      await this.websubStateService.markWebSubFailed(sourceId);
     }
   }
 

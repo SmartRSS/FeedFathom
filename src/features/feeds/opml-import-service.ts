@@ -6,7 +6,7 @@ import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 
 type PendingImportNode = {
   node: OpmlNode;
@@ -16,7 +16,7 @@ type PendingImportNode = {
 export class OpmlImportService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly sourcesDataService: SourcesDataService,
+    private readonly sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">,
   ) {}
 
   public async insertTree(
@@ -107,9 +107,7 @@ export class OpmlImportService {
     );
 
     await Promise.all(
-      sourcesToQueue.map((source) =>
-        this.sourcesDataService.enqueueSource(source),
-      ),
+      sourcesToQueue.map((source) => this.sourceEnqueuer.enqueueSource(source)),
     );
   }
 }

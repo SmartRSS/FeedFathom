@@ -3,7 +3,8 @@ import { Value } from "typebox/value";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import type { HttpClient } from "#platform/http/http-client.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
 import {
   leaseExpiresAt,
@@ -12,9 +13,10 @@ import {
 
 export type WebSubRouteDependencies = {
   httpClient: Pick<HttpClient, "seedCache">;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "enqueueSource" | "findSourceByWebSubCallbackToken" | "markWebSubVerified"
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
+  websubStateService: Pick<
+    WebSubStateService,
+    "findSourceByWebSubCallbackToken" | "markWebSubVerified"
   >;
 };
 
@@ -65,14 +67,15 @@ const readCappedPushBody = async (
 
 export function createWebSubRoutes({
   httpClient,
-  sourcesDataService,
+  sourceEnqueuer,
+  websubStateService,
 }: WebSubRouteDependencies) {
   return new Elysia()
     .get(
       "/api/websub/callback/:token",
       { query: websubVerificationQuery },
       async ({ params, query, status }) => {
-        const source = await sourcesDataService.findSourceByWebSubCallbackToken(
+        const source = await websubStateService.findSourceByWebSubCallbackToken(
           params.token,
         );
         // A hub MUST get a 404 for a subscription it can't verify -- that's
@@ -88,7 +91,7 @@ export function createWebSubRoutes({
         if (decoded["hub.topic"] !== source.websubTopicUrl) return status(404);
 
         const leaseSeconds = resolveLeaseSeconds(decoded["hub.lease_seconds"]);
-        await sourcesDataService.markWebSubVerified(
+        await websubStateService.markWebSubVerified(
           source.id,
           leaseExpiresAt(leaseSeconds, Date.now()),
         );
@@ -103,7 +106,7 @@ export function createWebSubRoutes({
     .post(
       "/api/websub/callback/:token",
       async ({ params, request, status }) => {
-        const source = await sourcesDataService.findSourceByWebSubCallbackToken(
+        const source = await websubStateService.findSourceByWebSubCallbackToken(
           params.token,
         );
         if (!source?.websubSecret) return status(404);
@@ -143,7 +146,7 @@ export function createWebSubRoutes({
             console.error(`WebSub push seed failed for ${source.url}:`, error);
           }
         }
-        await sourcesDataService.enqueueSource(
+        await sourceEnqueuer.enqueueSource(
           { id: source.id, url: source.url },
           "websub-push",
           !seeded,
