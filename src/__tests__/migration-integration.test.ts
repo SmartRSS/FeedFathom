@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { waitForMigration } from "#platform/db/connection.ts";
 import journal from "../../drizzle/meta/_journal.json";
 import { migrateDatabase } from "../migrator.ts";
-import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#features/feeds/__tests__/disposable-database-url.ts";
 
 const currentMigrationsFolder = fileURLToPath(
   new URL("../../drizzle", import.meta.url),

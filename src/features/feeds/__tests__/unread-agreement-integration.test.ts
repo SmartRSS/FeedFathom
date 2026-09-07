@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#features/feeds/__tests__/disposable-database-url.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
@@ -26,11 +26,7 @@ test("the article list and the unread count agree in every read state", async ()
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
     new FoldersDataService(drizzleConnection),
-    new SourcesDataService(drizzleConnection, {
-      async add() {
-        return undefined;
-      },
-    }),
+    new SourcesDataService(drizzleConnection),
   );
 
   try {
@@ -210,11 +206,7 @@ test("an empty subscription counts zero unread", async () => {
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
     new FoldersDataService(drizzleConnection),
-    new SourcesDataService(drizzleConnection, {
-      async add() {
-        return undefined;
-      },
-    }),
+    new SourcesDataService(drizzleConnection),
   );
 
   try {

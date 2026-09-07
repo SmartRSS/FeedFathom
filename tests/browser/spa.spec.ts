@@ -125,6 +125,81 @@ test.afterEach(async ({ page }) => {
   expect(browserFailures.get(page) ?? []).toEqual([]);
 });
 
+test("shows an all-caught-up empty state for a feed with no unread", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .click();
+  // The fixture's article list for the source is nonempty; right after the
+  // list renders, remove the single article and the fallback appears.
+  await page.getByRole("button", { name: "delete articles" }).click();
+  await expect(page.getByText("All caught up.")).toBeVisible();
+});
+
+test("opens a keyboard-dismissable context menu on tree rows", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  // The virtual Today row heads the tree but is a view, not a feed: no
+  // menu for it.
+  await page.locator("button.source").first().click({ button: "right" });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  const row = page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first();
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Copy feed URL" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
+test("keeps the context menu inside a narrow viewport", async ({ page }) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+
+  // Long-press near a screen edge is the common case on touch, so open
+  // the menu from a point a few pixels from the right edge of a row.
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .evaluate((row) => {
+      const rect = row.getBoundingClientRect();
+      row.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.right - 4,
+          clientY: rect.top + rect.height / 2,
+        }),
+      );
+    });
+  await expect(page.getByRole("menu")).toBeVisible();
+
+  const menu = await page.locator(".context-menu").boundingBox();
+  expect(menu).toBeTruthy();
+  expect(menu!.x).toBeGreaterThanOrEqual(0);
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(390);
+  await expect(
+    page.getByRole("menuitem", { name: "Copy feed URL" }),
+  ).toBeVisible();
+});
+
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
 }) => {
@@ -136,6 +211,32 @@ test("boots Solid and renders the authenticated nested tree", async ({
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();
+});
+
+test("offers first-run guidance while the tree is empty", async ({ page }) => {
+  await installApiFixture(page);
+  // Registered after the fixture's own **/api/** handler, so it wins.
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      body: JSON.stringify({ tree: [] }),
+      contentType: "application/json",
+      status: 200,
+    }),
+  );
+  await page.goto("/");
+
+  await expect(page.getByText("No feeds yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Add your first feed" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Discover feed" }),
+  ).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Import an OPML file" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Import OPML" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("#import-opml");
 });
 
 // A nested list also matches .tree, so it easily picks that rule's
@@ -169,13 +270,60 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   const state = await installApiFixture(page, { folderCreateFailure: true });
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
-  page.once("dialog", (dialog) => dialog.accept("Saved"));
   await page.getByRole("button", { name: "add folder" }).click();
+  await page.getByRole("dialog").getByRole("textbox").fill("Saved");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
     "Invalid response from /api/folders",
   );
   expect(state.treeRequests).toBe(1);
+});
+
+// The in-app prompt dialog (#698) replacing native prompt(): a successful
+// create drives the same API call the native dialog used to.
+test("creates a folder through the in-app prompt", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "add folder" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("textbox")).toHaveValue("");
+  await dialog.getByRole("textbox").fill("Saved");
+  await dialog.getByRole("button", { name: "OK" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  // The fixture's POST /api/folders handler asserts the body is exactly
+  // { name: "Saved" }, so reaching here without a console/request failure
+  // proves the prompt value reached the API; the reload bumps the count.
+  await expect.poll(() => state.treeRequests).toBe(2);
+});
+
+// Cancel must resolve exactly like the native cancel path: no delete, and
+// focus back on the button that opened the dialog.
+test("cancelling the delete confirmation keeps the source", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await page.getByRole("button", { name: "delete source" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Delete "Tech News"?');
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "delete source" }),
+  ).toBeFocused();
+  expect(state.removedSourceIds).toEqual([]);
 });
 
 test("keeps folder state usable when localStorage throws", async ({ page }) => {
@@ -453,7 +601,9 @@ test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
 
-  await expect(page).toHaveTitle("FeedFathom");
+  // The dashboard badges the title with the fixture's total unread count;
+  // leaving the dashboard unmounts it and drops the badge again.
+  await expect(page).toHaveTitle("(2) FeedFathom");
   await page.getByRole("button", { name: "options" }).first().click();
   await expect(page).toHaveTitle("Options · FeedFathom");
 });
@@ -670,9 +820,12 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   await page.goto("/");
   await selectSource(page);
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "delete source" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "OK" }).click();
 
+  await expect(dialog).toHaveCount(0);
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toHaveCount(0);
@@ -689,8 +842,13 @@ test("renaming a folder through properties updates the tree", async ({
     .filter({ hasText: "Reading" })
     .click();
 
-  page.once("dialog", (dialog) => void dialog.accept("Archive"));
   await page.getByRole("button", { name: "source properties" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // The rename prompt opens pre-filled with the current name (#698).
+  await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
+  await dialog.getByRole("textbox").fill("Archive");
+  await dialog.getByRole("button", { name: "OK" }).click();
 
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
@@ -706,11 +864,11 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
     .filter({ hasText: "Reading" })
     .click();
 
-  page.once("dialog", (dialog) => {
-    throw new Error(`Unexpected confirm dialog: ${dialog.message()}`);
-  });
   await page.getByRole("button", { name: "delete source" }).click();
 
+  // No confirmation dialog may open for a non-empty folder (#698 moved the
+  // confirm in-app, so absence is directly assertable).
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Folder is not empty");
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),

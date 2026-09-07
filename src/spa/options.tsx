@@ -11,9 +11,19 @@ import {
   markReadOnOpen,
   setMarkReadOnOpen,
   setTheme,
+  setTodayView,
   theme,
+  todayView,
 } from "./preferences.ts";
 import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
+import {
+  isOnOff,
+  setBackgroundPollEnabled,
+  setUnreadBadgeEnabled,
+  unreadBadgeEnabled,
+  backgroundPollEnabled,
+} from "./news-signal.ts";
+import { prefetchNextEnabled, setPrefetchNext } from "./reading-prefetch.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -47,6 +57,15 @@ export function Options(props: {
       setSessionMessage(
         cause instanceof Error ? cause.message : "Could not load session.",
       );
+    }
+    // The empty-tree guidance links here with a hash; the SPA navigation
+    // never scrolls on its own, so honour the target once it is rendered.
+    if (location.hash) {
+      queueMicrotask(() => {
+        document
+          .querySelector(location.hash)
+          ?.scrollIntoView({ block: "start" });
+      });
     }
   });
 
@@ -212,6 +231,66 @@ export function Options(props: {
           </select>
         </label>
       </section>
+      <section class="options-card">
+        <h2>New-article signal</h2>
+        <label>
+          Unread count in tab title
+          <select
+            value={unreadBadgeEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setUnreadBadgeEnabled(value);
+            }}
+          >
+            <option value="on">Show</option>
+            <option value="off">Hide</option>
+          </select>
+        </label>
+        <label>
+          Background check for new articles
+          <select
+            value={backgroundPollEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setBackgroundPollEnabled(value);
+            }}
+          >
+            <option value="on">On (shows a "new articles" toast)</option>
+            <option value="off">Off (no background requests)</option>
+          </select>
+        </label>
+      </section>
+      <section class="options-card">
+        <h2>Reading</h2>
+        <label>
+          Prefetch next article
+          <select
+            value={prefetchNextEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setPrefetchNext(value);
+            }}
+          >
+            <option value="off">Off</option>
+            <option value="on">
+              On (fetches the next article after you open one)
+            </option>
+          </select>
+        </label>
+        <label>
+          "Today" view in the sidebar
+          <select
+            value={todayView()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setTodayView(value);
+            }}
+          >
+            <option value="on">Show (unread from the last 24h)</option>
+            <option value="off">Hide</option>
+          </select>
+        </label>
+      </section>
       <Show when={user()}>
         {(account) => (
           <section class="options-card">
@@ -315,7 +394,7 @@ export function Options(props: {
           by this instance, so they mean nothing to another reader.
         </p>
       </section>
-      <form class="options-card" onSubmit={submitOpml}>
+      <form id="import-opml" class="options-card" onSubmit={submitOpml}>
         <h2>Import OPML</h2>
         <label>
           OPML file

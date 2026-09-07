@@ -8,6 +8,7 @@ import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import {
   type HubPoster,
   requestHubSubscription,
@@ -103,11 +104,12 @@ type MainWorkerConfig = Pick<
 
 type MainWorkerSources = Pick<
   SourcesDataService,
-  | "findSourceById"
-  | "getRecentlySuccessfulSources"
-  | "getSourcesToProcess"
-  | "getWebSubSubscriptionsNeedingRenewal"
-  | "markWebSubFailed"
+  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
+>;
+
+type MainWorkerWebSubState = Pick<
+  WebSubStateService,
+  "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
 >;
 
 export class MainWorker {
@@ -119,6 +121,7 @@ export class MainWorker {
     private readonly feedParser: Pick<FeedParser, "parseSource">,
     private readonly faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
     private readonly sourcesDataService: MainWorkerSources,
+    private readonly websubStateService: MainWorkerWebSubState,
     private readonly cleanupOrphanedData: () => Promise<void>,
     private readonly jobFailuresDataService: Pick<
       JobFailuresDataService,
@@ -218,7 +221,7 @@ export class MainWorker {
           const domain = this.appConfig.FEED_FATHOM_DOMAIN;
           if (!domain) break;
           const subscriptions =
-            await this.sourcesDataService.getWebSubSubscriptionsNeedingRenewal();
+            await this.websubStateService.getWebSubSubscriptionsNeedingRenewal();
           await Promise.all(
             subscriptions.map(async (subscription) => {
               // All four columns are nullable, but every row here is already
@@ -244,7 +247,7 @@ export class MainWorker {
                 console.error(
                   `WebSub renewal failed for source ${subscription.id}: ${result.error}`,
                 );
-                await this.sourcesDataService.markWebSubFailed(subscription.id);
+                await this.websubStateService.markWebSubFailed(subscription.id);
               }
             }),
           );

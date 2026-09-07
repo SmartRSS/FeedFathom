@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#features/feeds/__tests__/disposable-database-url.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";

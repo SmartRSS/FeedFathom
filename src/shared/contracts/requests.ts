@@ -57,6 +57,10 @@ export const articlesRequest = Type.Object(
       maxItems: maximumRequestIds,
       uniqueItems: true,
     }),
+    // The virtual "Today" view (#715): unread across every subscribed
+    // source from the last 24h. `sources` is then ignored (sent empty),
+    // and subscription itself is what authorizes the rows.
+    view: Type.Optional(Type.Union([Type.Literal("today")])),
   },
   { additionalProperties: false },
 );

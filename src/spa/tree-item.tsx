@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
+import { longPressHandlers } from "./context-menu.tsx";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
   folderOpenFromStored,
@@ -53,10 +54,14 @@ export function TreeItem(props: {
   focused: boolean;
   focusedKey: string | undefined;
   node: TreeNode;
+  onContext(x: number, y: number, node: TreeNode): void;
   onFocus(node: TreeNode): void;
   select(node: TreeNode): void;
   selected: TreeNode | undefined;
 }) {
+  const longPress = longPressHandlers((x, y) =>
+    props.onContext(x, y, props.node),
+  );
   const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
   // The nested <ul role="group"> below is a DOM *sibling* of this row's
   // treeitem (a button can't contain a list), and the presentational <li>
@@ -118,7 +123,12 @@ export function TreeItem(props: {
         }}
         data-tree-key={treeNodeKey(props.node)}
         onClick={() => props.select(props.node)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          props.onContext(event.clientX, event.clientY, props.node);
+        }}
         onKeyDown={handleKeyDown}
+        {...longPress}
         role="treeitem"
         tabIndex={props.focused ? 0 : -1}
         onFocus={() => props.onFocus(props.node)}
@@ -185,6 +195,7 @@ export function TreeItem(props: {
                 focused={props.focusedKey === treeNodeKey(child)}
                 focusedKey={props.focusedKey}
                 node={child}
+                onContext={props.onContext}
                 onFocus={props.onFocus}
                 select={props.select}
                 selected={props.selected}

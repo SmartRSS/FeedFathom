@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
-import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#features/feeds/__tests__/disposable-database-url.ts";
 
 const databaseUrl = requireDisposableDatabaseUrl();
 // A short connect deadline, because the production default is two minutes
@@ -11,8 +11,7 @@ const databaseUrl = requireDisposableDatabaseUrl();
 // running.
 await migrateDatabase(databaseUrl, "./drizzle", 5_000);
 const drizzleConnection = createDrizzleConnection(databaseUrl);
-const noopQueue = { async add() {} };
-const sourcesDataService = new SourcesDataService(drizzleConnection, noopQueue);
+const sourcesDataService = new SourcesDataService(drizzleConnection);
 
 async function addFeedSource(url: string) {
   return await sourcesDataService.addSource({

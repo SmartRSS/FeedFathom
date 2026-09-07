@@ -89,9 +89,9 @@ const ipv6Groups = (
 
   const sections = tail.split("::");
   if (sections.length > 2) return undefined;
-  const head = sections[0] ? sections[0]!.split(":") : [];
+  const head = sections[0] ? sections[0].split(":") : [];
   const back =
-    sections.length === 2 ? (sections[1] ? sections[1]!.split(":") : []) : [];
+    sections.length === 2 ? (sections[1] ? sections[1].split(":") : []) : [];
   const missing = 8 - head.length - back.length;
   if (sections.length === 2 ? missing < 1 : missing !== 0) return undefined;
   const groups = [
@@ -126,7 +126,7 @@ const isBlockedIpv6 = (address: string): boolean => {
       if (g6 === 0 && g7 === 1) return true; // loopback ::1
     }
     if (g5 === 0xffff)
-      return isBlockedIpv4([g6! >> 8, g6! & 255, g7! >> 8, g7! & 255]);
+      return isBlockedIpv4([g6 >> 8, g6 & 255, g7 >> 8, g7 & 255]);
   }
   return (
     (g0 & 0xfe00) === 0xfc00 ||

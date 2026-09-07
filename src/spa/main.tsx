@@ -25,9 +25,11 @@ import {
 } from "./account-flows.tsx";
 import { Dashboard } from "./dashboard.tsx";
 import { Admin } from "./admin.tsx";
+import { DialogHost } from "./dialog.tsx";
 import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
 import { resolvedTheme } from "./preferences.ts";
+import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
 import "./style.css";
 
 // A route swap replaces the whole page without the title change and focus
@@ -94,7 +96,13 @@ function App() {
 
   createEffect(() => {
     const title = ROUTE_TITLES[route().name];
-    document.title = title === "FeedFathom" ? title : `${title} · FeedFathom`;
+    const base = title === "FeedFathom" ? title : `${title} · FeedFathom`;
+    // The tab-title unread badge (#717). Only the dashboard produces a
+    // count; elsewhere it reads whatever the last dashboard left behind,
+    // and zero (badge hidden) once the dashboard is gone.
+    const badge =
+      unreadBadgeEnabled() && unreadTotal() > 0 ? `(${unreadTotal()}) ` : "";
+    document.title = `${badge}${base}`;
   });
 
   // Skips the first render (nothing was replaced yet). Pane changes keep the
@@ -132,6 +140,8 @@ function App() {
       >
         Skip to accessibility settings
       </a>
+      {/* One dialog host for every confirm()/prompt() replacement (#698). */}
+      <DialogHost />
       <Show when={updateAvailable()}>
         <div class="update-banner" role="status">
           <span>A new version is available.</span>

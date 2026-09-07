@@ -126,6 +126,52 @@ export function unreadCount(node: TreeNode): number {
       );
 }
 
+// The virtual "Today" view (#715): not a real source, so it never reaches
+// sourceIds() or the server as an id -- callers branch on isTodayNode and
+// request the view instead.
+const todayNodeUid = "today";
+
+export function isTodayNode(node: TreeNode | undefined): boolean {
+  return node?.type === "source" && node.uid === todayNodeUid;
+}
+
+// Prepends the Today entry ahead of the user's own tree. Never shown on an
+// empty tree (the first-run guidance owns that state), and carries no
+// unread count of its own -- that number would need its own server
+// aggregate, and the view itself is one click away.
+export function withTodayNode(nodes: TreeNode[], enabled: boolean): TreeNode[] {
+  if (!enabled || nodes.length === 0) return nodes;
+  return [
+    {
+      favicon: null,
+      homeUrl: "",
+      kind: "feed",
+      name: "Today",
+      type: "source",
+      uid: todayNodeUid,
+      unreadCount: 0,
+      xmlUrl: "",
+    },
+    ...nodes,
+  ];
+}
+
+export function totalUnread(nodes: TreeNode[]): number {
+  return nodes.reduce((count, node) => count + unreadCount(node), 0);
+}
+
+// Background poll spacing, backing off so a long-idle tab asks less often:
+// 30s doubling to a 5-minute ceiling.
+const firstPollDelayMs = 30_000;
+const maxPollDelayMs = 5 * 60_000;
+
+export function nextPollDelayMs(completedCycles: number): number {
+  return Math.min(
+    maxPollDelayMs,
+    firstPollDelayMs * 2 ** Math.max(0, completedCycles),
+  );
+}
+
 // Folder open/closed state persists as a string. Only the literal "closed"
 // collapses a folder: an absent key (never toggled), a value written by an
 // older build, or a corrupted one all read as open, so a bad entry can never

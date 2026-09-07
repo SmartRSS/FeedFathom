@@ -65,8 +65,16 @@ export class ArticlesDataService {
     userId: number,
     cursor?: number,
     filter: ArticleFilter = "unread",
+    options: {
+      // Scope to every source the user subscribes to instead of an explicit
+      // id list -- the userSources join is what authorizes the rows, so
+      // this is safe with sources left empty.
+      allSubscribed?: boolean;
+      // Only articles published within this many hours of now.
+      publishedWithinHours?: number;
+    } = {},
   ) {
-    if (sourceIds.length === 0) {
+    if (!options.allSubscribed && sourceIds.length === 0) {
       return [];
     }
 
@@ -93,9 +101,21 @@ export class ArticlesDataService {
       .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
-          inArray(articles.sourceId, sourceIds),
+          // The time window rides the same index as the source filter
+          // (articles_source_published_idx), so the Today query stays a
+          // plain range scan.
+          ...(options.allSubscribed
+            ? []
+            : [inArray(articles.sourceId, sourceIds)]),
+          ...(options.publishedWithinHours
+            ? [
+                sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,
+              ]
+            : []),
           // Unread is shared with recomputeUnreadCounts, so the list and the
-          // badge beside the source cannot disagree about what it means.
+          // badge beside the source cannot disagree about what it means. A
+          // removal is terminal and hidden in every filter -- exactly as
+          // recomputeUnreadCounts scores it.
           articleFilterCondition(filter, readStateColumns),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,

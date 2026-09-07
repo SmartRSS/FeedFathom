@@ -8,11 +8,15 @@ import {
   folderOpenToStored,
   findNode,
   findParentFolderUid,
+  isTodayNode,
+  nextPollDelayMs,
   sourceIds,
+  totalUnread,
   treeNodeKey,
   treeTabStopKey,
   unreadCount,
   withDecrementedUnread,
+  withTodayNode,
 } from "../dashboard-behavior.ts";
 
 function source(
@@ -82,6 +86,36 @@ describe("unreadCount", () => {
 
   test("a source reports its own count", () => {
     expect(unreadCount(source("1", { unreadCount: 5 }))).toBe(5);
+  });
+});
+
+describe("totalUnread", () => {
+  test("sums every root, folders included", () => {
+    const nodes = [
+      source("1", { unreadCount: 3 }),
+      folder("f", [source("2", { unreadCount: 4 })]),
+    ];
+    expect(totalUnread(nodes)).toBe(7);
+  });
+
+  test("an empty tree reads as zero", () => {
+    expect(totalUnread([])).toBe(0);
+  });
+});
+
+describe("nextPollDelayMs", () => {
+  test("starts at 30 seconds and doubles to a 5-minute ceiling", () => {
+    expect(nextPollDelayMs(0)).toBe(30_000);
+    expect(nextPollDelayMs(1)).toBe(60_000);
+    expect(nextPollDelayMs(2)).toBe(120_000);
+    expect(nextPollDelayMs(3)).toBe(240_000);
+    expect(nextPollDelayMs(4)).toBe(300_000);
+    expect(nextPollDelayMs(5)).toBe(300_000);
+    expect(nextPollDelayMs(50)).toBe(300_000);
+  });
+
+  test("negative attempt counts read as the first interval", () => {
+    expect(nextPollDelayMs(-1)).toBe(30_000);
   });
 });
 
@@ -237,5 +271,32 @@ describe("treeTabStopKey", () => {
 
   test("has no tab stop to offer for an empty tree", () => {
     expect(treeTabStopKey([], "source:lwn")).toBeUndefined();
+  });
+});
+
+describe("withTodayNode", () => {
+  test("prepends the virtual node ahead of the user's tree", () => {
+    const nodes = [source("1")];
+    const next = withTodayNode(nodes, true);
+    expect(next).toHaveLength(2);
+    expect(isTodayNode(next[0])).toBe(true);
+    expect(next[1]).toBe(nodes[0]);
+    expect(next[0]!.type === "source" && next[0]!.name).toBe("Today");
+  });
+
+  test("leaves an empty tree alone so first-run guidance owns it", () => {
+    expect(withTodayNode([], true)).toEqual([]);
+  });
+
+  test("disabled drops the node entirely", () => {
+    expect(withTodayNode([source("1")], false)).toHaveLength(1);
+  });
+
+  test("the virtual node yields no usable source id", () => {
+    const node = withTodayNode([source("1")], true)[0]!;
+    expect(isTodayNode(node)).toBe(true);
+    // Number("today") is NaN -- which is exactly why select() must branch
+    // on isTodayNode before reaching for sourceIds().
+    expect(Number.isNaN(sourceIds(node)[0])).toBe(true);
   });
 });
