@@ -107,6 +107,23 @@ test.afterEach(async ({ page }) => {
   expect(browserFailures.get(page) ?? []).toEqual([]);
 });
 
+test("opens a keyboard-dismissable context menu on tree rows", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const row = page.locator("button.source").first();
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Copy feed URL" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
 }) => {
