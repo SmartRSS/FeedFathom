@@ -1,17 +1,7 @@
-import {
-  aliasedTable,
-  and,
-  desc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  or,
-  sql,
-} from "drizzle-orm";
+import { aliasedTable, and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { articlePageSize } from "#shared/contracts/responses.ts";
+import { unreadCondition } from "#features/feeds/article-read-state.ts";
 import {
   generateBoundaryDates,
   getDateGroup,
@@ -90,20 +80,14 @@ export class ArticlesDataService {
       .where(
         and(
           inArray(articles.sourceId, sourceIds),
-          // A removal is terminal -- deleted_at alone hides the article,
-          // exactly as recomputeUnreadCounts scores it. It used to be
-          // hidden only as a side effect of updated_at > read_at being
-          // NULL for rows nothing writes read_at into any more; a row
-          // still carrying a legacy read_at older than the article's
-          // updated_at (the publisher edited it after that stamp) came
-          // back into the list while the unread count still said zero.
-          or(
-            isNull(userArticles.userId),
-            and(
-              isNull(userArticles.deletedAt),
-              gt(articles.updatedAt, userArticles.readAt),
-            ),
-          ),
+          // Shared with recomputeUnreadCounts, so the list and the badge
+          // beside the source cannot disagree about what "unread" means.
+          unreadCondition({
+            articleUpdatedAt: articles.updatedAt,
+            deletedAt: userArticles.deletedAt,
+            readAt: userArticles.readAt,
+            userId: userArticles.userId,
+          }),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
           // Keyset rather than OFFSET: a folder fanning out to hundreds of
