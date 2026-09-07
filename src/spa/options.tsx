@@ -6,7 +6,13 @@ import {
 } from "#shared/contracts/responses.ts";
 import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
-import { isTheme, setTheme, theme } from "./preferences.ts";
+import {
+  isTheme,
+  markReadOnOpen,
+  setMarkReadOnOpen,
+  setTheme,
+  theme,
+} from "./preferences.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -261,6 +267,23 @@ export function Options(props: {
           )}
         </Show>
       </form>
+      <section class="options-card">
+        <h2>Reading</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={markReadOnOpen()}
+            onChange={(event) => setMarkReadOnOpen(event.currentTarget.checked)}
+          />{" "}
+          Mark an article read when you open it
+        </label>
+        <p>
+          Off by default. This reader is built around deleting an article once
+          you are done with it, so opening one leaves it unread unless you ask
+          otherwise. Applies in the All view, where a read article stays in the
+          list.
+        </p>
+      </section>
       <section class="options-card">
         <h2>Export OPML</h2>
         <p>

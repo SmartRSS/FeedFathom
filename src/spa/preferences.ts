@@ -84,3 +84,27 @@ export function resolvedTheme(): Theme {
   if (current === "auto" && osHighContrast()) return "high-contrast";
   return current;
 }
+
+// Off by default, deliberately. This app's workflow is delete-as-you-read,
+// and turning every opened article read behind the user's back would quietly
+// empty the unread badge for someone who never asked for read state at all.
+const MARK_READ_ON_OPEN_KEY = "markReadOnOpen";
+
+function readMarkReadOnOpen(): boolean {
+  try {
+    return localStorage.getItem(MARK_READ_ON_OPEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+const [markReadOnOpen, setMarkReadOnOpenSignal] =
+  createSignal(readMarkReadOnOpen());
+export { markReadOnOpen };
+
+export function setMarkReadOnOpen(value: boolean) {
+  setMarkReadOnOpenSignal(value);
+  try {
+    localStorage.setItem(MARK_READ_ON_OPEN_KEY, String(value));
+  } catch {}
+}

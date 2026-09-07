@@ -101,10 +101,17 @@ const pagedSummary = (id: number) => ({
   group: "Older",
   id,
   publishedAt: "2026-07-20T10:00:00.000Z",
+  read: false,
   sourceId: 3,
   title: `Article ${id}`,
   url: `https://articles.example/${id}`,
 });
+
+// The article rows are role="option" inside the list. So are the three
+// options of the filter <select> beside them, which is why this is scoped
+// rather than asking the page for every option it has.
+const articleOptions = (page: Page) =>
+  page.locator(".article-list").getByRole("option");
 
 const selectSource = async (page: Page, name = "Tech News") => {
   await page.locator("button.source").filter({ hasText: name }).click();
@@ -321,6 +328,42 @@ test("fetches the next article page after a delete empties the list", async ({
   expect(cursors).toEqual([undefined, pageSize]);
 });
 
+// Read state is the alternative to the delete-as-you-read workflow: an
+// article you are finished with but want to keep. Marking one read has to
+// take it out of the Unread view without taking it out of the store.
+test("marks an article read, moving it between the filters", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  const filter = page.getByRole("combobox", { name: "Show" });
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark read" }).click();
+
+  // Gone from Unread, and the server was told rather than the row merely
+  // hidden client-side.
+  await expect(articleOptions(page)).toHaveCount(2);
+  expect([...state.readArticleIds]).toEqual([11]);
+
+  await filter.selectOption("read");
+  await expect(articleOptions(page)).toHaveCount(1);
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  await filter.selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+  // Only the one marked renders as read, from the server's own flag.
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  // The button offers the reverse action once the selection is already read.
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark unread" }).click();
+  await expect(page.locator(".article-list .article.read")).toHaveCount(0);
+  expect([...state.readArticleIds]).toEqual([]);
+});
+
 // The tree is a roving tabindex: exactly one row carries tabindex="0" and the
 // rest carry -1. A filter that removed the row holding it would leave none,
 // and Tab would step straight past the whole tree.
@@ -421,7 +464,7 @@ test("select all moves focus into the list so Delete works immediately", async (
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   await page.getByRole("button", { name: "select all" }).click();
   await expect(
@@ -438,7 +481,7 @@ test("select all moves focus into the list so Delete works immediately", async (
   ).toBe("option");
 
   await page.keyboard.press("Delete");
-  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect(articleOptions(page)).toHaveCount(0);
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
@@ -452,7 +495,7 @@ test("select all does not scroll the article list", async ({ page }) => {
   await page.goto("/");
   await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   const list = page.locator(".article-list");
   await list.evaluate((element) => {
@@ -471,12 +514,12 @@ test("select all then clicking Delete removes every article", async ({
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   await page.getByRole("button", { name: "select all" }).click();
   await page.getByRole("button", { name: "delete articles" }).click();
 
-  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect(articleOptions(page)).toHaveCount(0);
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
@@ -492,7 +535,7 @@ test("selecting a single article then pressing Delete removes only it", async ({
   await page.getByRole("option", { name: /Second article/ }).click();
   await page.keyboard.press("Delete");
 
-  await expect(page.getByRole("option")).toHaveCount(2);
+  await expect(articleOptions(page)).toHaveCount(2);
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toBeVisible();
@@ -812,7 +855,7 @@ test("exposes Reader modes only when the bridge is available", async ({
   await page.goto("/");
   await selectSource(page);
 
-  const modes = page.getByRole("combobox");
+  const modes = page.getByRole("combobox", { name: "Article display mode" });
   await expect(modes).toContainText("Reader (plain text)");
   await modes.selectOption("READABILITY");
   await expect(
@@ -829,7 +872,9 @@ test("extracts article content with the alternate extractor", async ({
   await page.goto("/");
   await selectSource(page);
 
-  await page.getByRole("combobox").selectOption("ARTICLE_EXTRACTOR");
+  await page
+    .getByRole("combobox", { name: "Article display mode" })
+    .selectOption("ARTICLE_EXTRACTOR");
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
@@ -843,7 +888,9 @@ test("keeps Feed mode when the Reader bridge is unavailable", async ({
   await page.goto("/");
   await selectSource(page);
 
-  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "Article display mode" }),
+  ).toHaveCount(0);
   await expect(page.getByText("Feed article content")).toBeVisible();
 });
 

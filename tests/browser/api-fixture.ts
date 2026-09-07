@@ -75,11 +75,12 @@ const subscribedArticle = {
   url: "https://articles.example/subscribed",
 };
 
-const summary = (item: typeof article) => ({
+const summary = (item: typeof article, read = false) => ({
   author: item.author,
   group: "Today",
   id: item.id,
   publishedAt: item.publishedAt,
+  read,
   sourceId: item.sourceId,
   title: item.title,
   url: item.url,
@@ -87,6 +88,7 @@ const summary = (item: typeof article) => ({
 
 type ApiFixtureState = {
   authenticated: boolean;
+  readArticleIds: Set<number>;
   findRequests: number;
   removedArticleIds: number[];
   removedFolderIds: number[];
@@ -115,6 +117,7 @@ export async function installApiFixture(
   const state: ApiFixtureState = {
     authenticated: options.authenticated ?? true,
     findRequests: 0,
+    readArticleIds: new Set<number>(),
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
@@ -204,11 +207,27 @@ export async function installApiFixture(
       const techNewsArticles = options.multipleArticles
         ? [article, secondArticle, thirdArticle]
         : [article];
+      const filter: string = request.postDataJSON().filter ?? "unread";
       return respond(
         techNewsArticles
           .filter((item) => !state.removedArticleIds.includes(item.id))
-          .map(summary),
+          .filter((item) => {
+            if (filter === "all") return true;
+            const read = state.readArticleIds.has(item.id);
+            return filter === "read" ? read : !read;
+          })
+          .map((item) => summary(item, state.readArticleIds.has(item.id))),
       );
+    }
+
+    if (method === "PATCH" && url.pathname === "/api/articles") {
+      const { articleIdList, read } = request.postDataJSON();
+      expect(articleIdList.length > 0).toBe(true);
+      for (const id of articleIdList) {
+        if (read) state.readArticleIds.add(id);
+        else state.readArticleIds.delete(id);
+      }
+      return respond(articleIdList);
     }
 
     if (method === "DELETE" && url.pathname === "/api/articles") {

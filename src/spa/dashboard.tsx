@@ -48,7 +48,7 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { resolvedTheme } from "./preferences.ts";
+import { markReadOnOpen, resolvedTheme } from "./preferences.ts";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
 // DOM. As an external image it would need per-case light/dark guessing.
@@ -115,6 +115,11 @@ export function Dashboard(props: {
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
+  // Unread is what the list has always shown; the other two are new views
+  // over the same store rather than a change to the default.
+  const [articleFilter, setArticleFilter] = createSignal<
+    "all" | "read" | "unread"
+  >("unread");
   const visibleTree = () => filterTree(tree(), treeFilter());
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
@@ -339,7 +344,7 @@ export function Dashboard(props: {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ sources: ids }),
+        body: JSON.stringify({ filter: articleFilter(), sources: ids }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
         signal: controller.signal,
@@ -386,7 +391,7 @@ export function Dashboard(props: {
     loadingMoreArticles = true;
     try {
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ cursor, sources: ids }),
+        body: JSON.stringify({ cursor, filter: articleFilter(), sources: ids }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -404,6 +409,62 @@ export function Dashboard(props: {
         reportError(cause, "Could not load more articles");
     } finally {
       loadingMoreArticles = false;
+    }
+  }
+  // Changing the filter is a different question about the same selection, so
+  // it re-runs select() rather than filtering what is already loaded: only one
+  // page is in hand, and the rest of the answer is on the server.
+  function changeArticleFilter(next: "all" | "read" | "unread") {
+    if (next === articleFilter()) return;
+    setArticleFilter(next);
+    const node = selectedNode();
+    if (node) void select(node);
+  }
+  // Marking read is the same shape as removing: optimistic locally, the badge
+  // reconciled from the tree afterwards. Unlike a removal it is reversible,
+  // so a failure resyncs rather than trying to explain itself.
+  // What the toolbar button offers: with everything selected already read,
+  // the useful action is the reverse one.
+  const allSelectedRead = () => {
+    const items = articles();
+    const chosen = [...selectedIndexes()]
+      .map((index) => items[index])
+      .filter((article) => article !== undefined);
+    return chosen.length > 0 && chosen.every((article) => article.read);
+  };
+  function setSelectedRead(read: boolean) {
+    const items = articles();
+    const indexes = [...selectedIndexes()].filter((index) => items[index]);
+    const ids = indexes.map((index) => items[index]!.id);
+    if (!ids.length) return;
+    setError("");
+    void markArticlesRead(ids, read);
+  }
+  async function markArticlesRead(ids: number[], read: boolean) {
+    const affected = new Set(ids);
+    setArticles((current) =>
+      current.map((article) =>
+        affected.has(article.id) ? { ...article, read } : article,
+      ),
+    );
+    try {
+      await api("/articles", removedArticlesResponse, {
+        body: JSON.stringify({ articleIdList: ids, read }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      await loadTree();
+      // In the unread view a read article no longer belongs, and in the read
+      // view an unread one does not either. Re-ask rather than guess which
+      // rows to drop and where the cursor lands.
+      if (articleFilter() !== "all") {
+        const node = selectedNode();
+        if (node) await select(node);
+      }
+    } catch (cause) {
+      reportError(cause, "Could not update read state");
+      const node = selectedNode();
+      if (node) void select(node);
     }
   }
   async function showProperties() {
@@ -493,6 +554,12 @@ export function Dashboard(props: {
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
+      // Opt-in, and only in the "all" view. In the unread view marking on
+      // open would pull the row out from under the person reading it; there,
+      // the toolbar button is the way.
+      if (markReadOnOpen() && !article.read && articleFilter() === "all") {
+        void markArticlesRead([article.id], true);
+      }
 
       if (mode !== "FEED") {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
@@ -817,6 +884,27 @@ export function Dashboard(props: {
             >
               <Icon raw={selectAllRaw} />
             </button>
+            <select
+              aria-label="Show"
+              class="article-filter"
+              value={articleFilter()}
+              onChange={(event) => {
+                const next = event.currentTarget.value;
+                if (next === "all" || next === "read" || next === "unread")
+                  changeArticleFilter(next);
+              }}
+            >
+              <option value="unread">Unread</option>
+              <option value="all">All</option>
+              <option value="read">Read</option>
+            </select>
+            <button
+              class="text-action"
+              disabled={!selectedIndexes().size}
+              onClick={() => setSelectedRead(!allSelectedRead())}
+            >
+              {allSelectedRead() ? "Mark unread" : "Mark read"}
+            </button>
             <button
               aria-label="delete articles"
               disabled={selectedIndexes().size === 0}
@@ -881,6 +969,7 @@ export function Dashboard(props: {
                       class="article"
                       classList={{
                         active: focusedIndex() === index(),
+                        read: article.read,
                         selected: selectedIndexes().has(index()),
                       }}
                       data-index={index()}

@@ -45,6 +45,14 @@ export const articlesRequest = Type.Object(
     // a cursor a few hundred microseconds early skips the rest of the batch
     // its article was published in.
     cursor: Type.Optional(id),
+    // Absent means unread, which is the only thing the list has ever shown.
+    filter: Type.Optional(
+      Type.Union([
+        Type.Literal("unread"),
+        Type.Literal("read"),
+        Type.Literal("all"),
+      ]),
+    ),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,
@@ -57,6 +65,14 @@ export const createFolderRequest = Type.Object({
 });
 export const findQuery = Type.Object({ link: normalizedWebUrl });
 export const previewQuery = Type.Object({ feedUrl: normalizedWebUrl });
+export const readArticlesRequest = Type.Object({
+  articleIdList: Type.Array(id, {
+    maxItems: maximumRequestIds,
+    minItems: 1,
+    uniqueItems: true,
+  }),
+  read: Type.Boolean(),
+});
 export const removeArticlesRequest = Type.Object({
   removedArticleIdList: Type.Array(id, {
     maxItems: maximumRequestIds,

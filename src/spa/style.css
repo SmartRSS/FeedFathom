@@ -629,7 +629,17 @@ a {
      transparent (the default) is invisible, only Aero sets one. */
   box-shadow: inset 0 0 0 1px var(--selected-border);
 }
-.article.selected .details {
+/* Only ever visible in the All and Read views: in Unread, by definition, no
+   row is read. Dimming the title rather than the whole row keeps the author
+   and date at the contrast they already have. */
+.article.read .title {
+  color: var(--muted);
+}
+.article.selected .details,
+/* Same reason as .details below: --muted on a selected row measured under
+   1.5:1 against every theme's selected background, so a read row's title has
+   to drop back to the selected text color while it is selected. */
+.article.selected.read .title {
   color: inherit;
 }
 /* Classic desktop list/tree controls render a selected item's text in
@@ -670,6 +680,18 @@ a {
 .article-list {
   flex: 1;
   overflow: auto;
+}
+.article-filter {
+  min-width: 0;
+  font: inherit;
+}
+/* The toolbar is otherwise icon buttons. This one has no glyph in the icon
+   set and inventing one would not read as "mark read" anyway, so it says so. */
+.toolbar button.text-action {
+  width: auto;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 .title,
 .details > span {

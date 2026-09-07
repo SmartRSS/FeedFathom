@@ -41,3 +41,41 @@ export const unreadCondition = (columns: ReadStateColumns): SQL =>
       )
     )
   )`;
+
+/**
+ * A removal is terminal and stays hidden in every filter. Read and unread are
+ * the two halves of what is left, and they partition it: an article that is
+ * not removed is in exactly one of them, whichever way `updated_at` and
+ * `read_at` fall. The integration test holds them to that.
+ */
+const notRemovedCondition = (columns: ReadStateColumns): SQL =>
+  sql`(${columns.userId} IS NULL OR ${columns.deletedAt} IS NULL)`;
+
+/**
+ * The complement of {@link unreadCondition} within the articles that are not
+ * removed. `updated_at IS NULL` has to be spelled out rather than left to
+ * `NOT (updated_at > read_at)`: an article nobody has edited has no
+ * `updated_at` at all, and in SQL that comparison is NULL, not false.
+ */
+export const readCondition = (columns: ReadStateColumns): SQL =>
+  sql`(
+    ${columns.userId} IS NOT NULL
+    AND ${columns.deletedAt} IS NULL
+    AND ${columns.readAt} IS NOT NULL
+    AND (
+      ${columns.articleUpdatedAt} IS NULL
+      OR ${columns.articleUpdatedAt} <= ${columns.readAt}
+    )
+  )`;
+
+/** Which articles a list request wants. Unread is what the app has shown all along. */
+export type ArticleFilter = "all" | "read" | "unread";
+
+export const articleFilterCondition = (
+  filter: ArticleFilter,
+  columns: ReadStateColumns,
+): SQL => {
+  if (filter === "unread") return unreadCondition(columns);
+  if (filter === "read") return readCondition(columns);
+  return notRemovedCondition(columns);
+};

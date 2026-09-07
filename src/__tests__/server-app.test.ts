@@ -79,6 +79,9 @@ function createDependencies(): ServerDependencies {
       async removeUserArticles() {
         return unexpected("articlesDataService.removeUserArticles");
       },
+      async setUserArticlesRead() {
+        return unexpected("articlesDataService.setUserArticlesRead");
+      },
     },
     authThrottle: new AuthThrottle(createFakeThrottleRedis()),
     config: appConfig,
@@ -1301,6 +1304,97 @@ test("stops guessing at one account from one address", async () => {
   // well, so hammering an address cannot shut its owner out from elsewhere.
   const elsewhere = await attempt("password", "198.51.100.4");
   expect(elsewhere.status).toBe(200);
+});
+
+test("marks articles read and recomputes the badge from the store", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const marked: { articleIdList: number[]; read: boolean }[] = [];
+  const recomputed: [number[], number | undefined][] = [];
+  dependencies.articlesDataService.setUserArticlesRead = async (
+    articleIdList,
+    _userId,
+    read,
+  ) => {
+    marked.push({ articleIdList, read });
+    return { articleIds: articleIdList, sourceIds: [3] };
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async (
+    sourceIds,
+    userId,
+  ) => {
+    recomputed.push([sourceIds, userId]);
+  };
+  const app = await appFor(dependencies);
+  const patch = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "PATCH",
+      }),
+    );
+
+  const read = await patch({ articleIdList: [11, 12], read: true });
+  const unread = await patch({ articleIdList: [11], read: false });
+  const malformed = await patch({ articleIdList: [], read: true });
+  const anonymous = await app.handle(
+    new Request("http://localhost/api/articles", {
+      body: JSON.stringify({ articleIdList: [11], read: true }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    }),
+  );
+
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual([11, 12]);
+  expect(unread.status).toBe(200);
+  // An empty list is a client bug, not a no-op worth accepting.
+  expect(malformed.status).toBe(422);
+  expect(anonymous.status).toBe(401);
+  expect(marked).toEqual([
+    { articleIdList: [11, 12], read: true },
+    { articleIdList: [11], read: false },
+  ]);
+  // The badge is recomputed rather than adjusted by a delta kept in the route.
+  expect(recomputed).toEqual([
+    [[3], sessionUser.id],
+    [[3], sessionUser.id],
+  ]);
+});
+
+test("passes the article list filter through to the query", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const filters: (string | undefined)[] = [];
+  dependencies.articlesDataService.getUserArticlesForSources = async (
+    _sources,
+    _userId,
+    _cursor,
+    filter,
+  ) => {
+    filters.push(filter);
+    return [];
+  };
+  const app = await appFor(dependencies);
+  const list = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+
+  await list({ sources: [3] });
+  await list({ filter: "read", sources: [3] });
+  await list({ filter: "all", sources: [3] });
+  const rejected = await list({ filter: "everything", sources: [3] });
+
+  // Absent means unread, which is all the list has ever shown; the default
+  // lives in the data service rather than being spelled out per caller.
+  expect(filters).toEqual([undefined, "read", "all"]);
+  expect(rejected.status).toBe(422);
 });
 
 test("treats inactive sessions as unauthenticated everywhere", async () => {

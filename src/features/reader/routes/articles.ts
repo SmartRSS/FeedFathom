@@ -1,6 +1,7 @@
 import type { Static } from "typebox";
 import type {
   articlesRequest,
+  readArticlesRequest,
   removeArticlesRequest,
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
@@ -12,7 +13,7 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 export type ArticlesRouteDependencies = {
   articlesDataService: Pick<
     ArticlesDataService,
-    "getUserArticlesForSources" | "removeUserArticles"
+    "getUserArticlesForSources" | "removeUserArticles" | "setUserArticlesRead"
   >;
   userSourcesDataService: Pick<UserSourcesDataService, "recomputeUnreadCounts">;
 };
@@ -34,6 +35,7 @@ export async function postArticlesHandler(
     body.sources,
     user.id,
     body.cursor,
+    body.filter,
   );
   return json(
     articles.map((article) =>
@@ -56,6 +58,25 @@ export async function deleteArticlesHandler(
       body.removedArticleIdList,
       user.id,
     );
+  await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
+  return json(articleIds);
+}
+
+export async function patchArticlesHandler(
+  {
+    body,
+    user,
+  }: { body: Static<typeof readArticlesRequest>; user: AuthedUser },
+  { articlesDataService, userSourcesDataService }: ArticlesRouteDependencies,
+) {
+  const { articleIds, sourceIds } =
+    await articlesDataService.setUserArticlesRead(
+      body.articleIdList,
+      user.id,
+      body.read,
+    );
+  // Same as the delete path: the badge beside every affected source is
+  // recomputed from the store rather than adjusted by a count kept here.
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
   return json(articleIds);
 }

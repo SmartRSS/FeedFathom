@@ -93,6 +93,9 @@ const articleSummaryResponse = Type.Object(
     group: Type.String(),
     id,
     publishedAt: jsonDate,
+    // Decided by the server, with the same expression the read filter uses,
+    // so a row can never render as read that the read view would not list.
+    read: Type.Boolean(),
     sourceId: id,
     title: Type.String(),
     url: Type.String(),

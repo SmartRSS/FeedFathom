@@ -118,6 +118,89 @@ test("the article list and the unread count agree in every read state", async ()
   }
 });
 
+// Read and unread partition what is not removed: every article that is still
+// listable is in exactly one of them, and a removal is in neither. If that
+// ever stops holding, "all" gains or loses rows that neither other view shows.
+test("marking read moves an article between the filters and nowhere else", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const articlesDataService = new ArticlesDataService(drizzleConnection);
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+
+    const [user] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password)
+      VALUES ('marker@example.test', 'marker', 'x') RETURNING id`;
+    const [source] = await client<{ id: number }[]>`
+      INSERT INTO sources (url, home_url, kind, last_success, not_before)
+      VALUES ('https://mark.test/feed', 'https://mark.test', 'feed', NOW(), NOW())
+      RETURNING id`;
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name, created_at)
+      VALUES (${user!.id}, ${source!.id}, 'sub', NOW() - INTERVAL '60 days')`;
+    const ids = await client<{ id: string }[]>`
+      INSERT INTO articles (source_id, guid, author, title, url, content, published_at, last_seen_in_feed_at)
+      SELECT ${source!.id}, 'g' || n, 'a', 't' || n, '', 'body', NOW() - (n || ' minutes')::interval, NOW()
+      FROM generate_series(1, 3) n
+      RETURNING id`;
+    const [first, second, third] = ids.map((row) => Number(row.id));
+
+    const listed = async (filter: "all" | "read" | "unread") =>
+      (
+        await articlesDataService.getUserArticlesForSources(
+          [source!.id],
+          user!.id,
+          undefined,
+          filter,
+        )
+      )
+        .map((article) => article.id)
+        .toSorted((left, right) => left - right);
+
+    await articlesDataService.removeUserArticles([third!], user!.id);
+    await articlesDataService.setUserArticlesRead([first!], user!.id, true);
+
+    expect(await listed("unread")).toEqual([second!]);
+    expect(await listed("read")).toEqual([first!]);
+    // A removal is terminal in every filter, "all" included.
+    expect(await listed("all")).toEqual(
+      [first!, second!].toSorted((left, right) => left - right),
+    );
+
+    // The flag the client renders comes from the same expression the filter
+    // uses, so the "all" view cannot disagree with the "read" view.
+    const all = await articlesDataService.getUserArticlesForSources(
+      [source!.id],
+      user!.id,
+      undefined,
+      "all",
+    );
+    expect(
+      all.filter((article) => article.read).map((article) => article.id),
+    ).toEqual([first!]);
+
+    await articlesDataService.setUserArticlesRead([first!], user!.id, false);
+    expect(await listed("unread")).toEqual(
+      [first!, second!].toSorted((left, right) => left - right),
+    );
+    expect(await listed("read")).toEqual([]);
+
+    // Marking a removed article read must not resurrect it.
+    await articlesDataService.setUserArticlesRead([third!], user!.id, true);
+    expect(await listed("all")).toEqual(
+      [first!, second!].toSorted((left, right) => left - right),
+    );
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
+
 // A subscription with no articles at all: the LEFT JOIN leaves ua.user_id
 // NULL, which reads as unread unless the article row itself is tested for.
 test("an empty subscription counts zero unread", async () => {
