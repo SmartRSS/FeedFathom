@@ -476,6 +476,67 @@ test("fetches the next article page after a delete empties the list", async ({
   expect(cursors).toEqual([undefined, pageSize]);
 });
 
+// Today is scoped by `view`, not by an id list, and its tree row's uid is the
+// string "today" rather than a source id. The second page has to be asked for
+// the same way the first one was: running that uid through sourceIds gives
+// [NaN], which serialises to [null] and the server refuses the request.
+test("pages the Today view with the view, not its node uid", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const pageSize = 200;
+  const bodies: { cursor?: number; sources: number[]; view?: string }[] = [];
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    const start = body.cursor === undefined ? 1 : pageSize + 1;
+    const size = body.cursor === undefined ? pageSize : 3;
+    await route.fulfill({
+      json: Array.from({ length: size }, (_, index) =>
+        pagedSummary(start + index),
+      ),
+    });
+  });
+  await page.route("**/api/article?*", async (route) => {
+    const id = Number(
+      new URL(route.request().url()).searchParams.get("article"),
+    );
+    await route.fulfill({
+      json: {
+        author: "Author",
+        content: `<p>Body ${id}</p>`,
+        guid: `guid-${id}`,
+        id,
+        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+        publishedAt: "2026-07-20T10:00:00.000Z",
+        sourceId: 3,
+        title: `Article ${id}`,
+        updatedAt: null,
+        url: `https://articles.example/${id}`,
+      },
+    });
+  });
+  await page.goto("/");
+  await selectSource(page, "Today");
+
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+
+  // Same emptying trick as the test above: nothing left to scroll is what
+  // makes the app ask for the next page without a scroll gesture.
+  await page.getByRole("button", { exact: true, name: "select all" }).click();
+  await page.getByRole("button", { name: "delete articles" }).click();
+  await expect(rows).toHaveCount(3);
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toMatchObject({
+    cursor: pageSize,
+    sources: [],
+    view: "today",
+  });
+});
+
 // Read state is the alternative to the delete-as-you-read workflow: an
 // article you are finished with but want to keep. Marking one read has to
 // take it out of the Unread view without taking it out of the store.
@@ -1253,6 +1314,11 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();
   await expect(dialog.getByText("Mark read / unread")).toBeVisible();
+  // Ctrl+A is a chord, not two alternatives: keys inside one group join with
+  // "+", and only separate groups read as "or".
+  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText(
+    "Ctrl + A",
+  );
 
   // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");

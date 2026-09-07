@@ -681,13 +681,23 @@ export function Dashboard(props: {
     if (!moreArticles || loadingMoreArticles || cursor === undefined || !node)
       return;
     if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
-    const ids = sourceIds(node);
-    if (!ids.length) return;
+    // Today is scoped by `view`, not by an id list -- its node uid is the
+    // string "today", so running it through sourceIds yields [NaN], which
+    // serialises to [null] and the request is refused. The next page has to
+    // be asked the same way the first one was.
+    const today = isTodayNode(node);
+    const ids = today ? [] : sourceIds(node);
+    if (!today && !ids.length) return;
     const selection = selectionGuard.current();
     loadingMoreArticles = true;
     try {
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ cursor, filter: articleFilter(), sources: ids }),
+        body: JSON.stringify({
+          cursor,
+          filter: articleFilter(),
+          sources: ids,
+          ...(today ? { view: "today" } : {}),
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -812,14 +822,18 @@ export function Dashboard(props: {
     const queue = new ScrollPastQueue({
       flush: (ids) => void markArticlesRead(ids, true),
     });
-    // Already-read rows and the article currently open in the reader pane are
-    // never queued: re-marking the one being read would pull its row out from
-    // under it in the unread view, the same reason on-open stays in "all".
+    // Already-read rows and the article the reader pane holds are never
+    // queued: re-marking the one being read would pull its row out from under
+    // it in the unread view, the same reason on-open stays in "all".
+    //
+    // The selection, not `openedArticle`, says which row that is. Selecting a
+    // row is what opens it, but `openedArticle` only fills in once the fetch
+    // for its body lands, and the observer's first pass runs before that --
+    // so keying on the fetched article let the row auto-selected on load be
+    // queued during the round trip and marked read behind the reader.
     const eligible = (id: number) => {
       const article = items.find((item) => item.id === id);
-      return (
-        article !== undefined && !article.read && openedArticle()?.id !== id
-      );
+      return article !== undefined && !article.read && selected()?.id !== id;
     };
     let primed = !passiveFirstPass;
     const observer = new IntersectionObserver(
@@ -1166,7 +1180,14 @@ export function Dashboard(props: {
     setTree(nextTree);
     const current = selectedNode();
     if (current) {
-      setSelectedNode(findNode(nextTree, current.type, current.uid));
+      // Same as loadTree: the virtual Today node is not in the stored tree,
+      // so findNode would drop the selection and leave the pane with nothing
+      // to page, refresh or re-select against.
+      setSelectedNode(
+        isTodayNode(current)
+          ? current
+          : findNode(nextTree, current.type, current.uid),
+      );
     }
     // The removed rows' nodes are gone, dropping focus to document.body.
     queueMicrotask(() => focusArticleAt(restoreIndex));
