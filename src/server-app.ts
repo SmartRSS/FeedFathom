@@ -1,5 +1,6 @@
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
+import { maxRelayPayloadChars } from "#shared/contracts/mail-relay.ts";
 import {
   createPublicAuthRoutes,
   type PublicAuthRouteDependencies,
@@ -33,6 +34,21 @@ export type ServerDependencies = Omit<
   AdminOptionsRouteDependencies &
   WebSubRouteDependencies &
   MailRouteDependencies;
+
+// Bun buffers a request body in full before any handler or schema sees it,
+// and its own default ceiling is 128 MiB -- so every unauthenticated route,
+// /api/login included, would hold that much per in-flight request before the
+// first maxLength check runs. The largest body the application legitimately
+// accepts is a relayed email: 5 MiB of MIME base64-encoded, plus a JSON
+// envelope that is a few hundred bytes of addresses. 64 KiB covers the
+// envelope with room to spare.
+//
+// A WebSub push carries a feed document and so is bounded by this too, well
+// under the 24 MiB the fetch path allows for a feed. That is deliberate: the
+// callback URL is unauthenticated, hubs push recent entries rather than an
+// archive, and a push refused here is a notification lost, not data -- the
+// fallback poll still comes around.
+const maximumRequestBodyBytes = maxRelayPayloadChars + 64 * 1_024;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -72,7 +88,7 @@ export async function createServerApp(
       })
     : new Elysia();
 
-  return new Elysia()
+  return new Elysia({ serve: { maxRequestBodySize: maximumRequestBodyBytes } })
     .use(createInternalRoutes())
     .use(
       createPublicAuthRoutes({

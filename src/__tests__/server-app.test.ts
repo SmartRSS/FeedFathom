@@ -242,6 +242,38 @@ const authenticated = (dependencies: ServerDependencies) => {
   dependencies.usersDataService.getUserBySid = async () => sessionUser;
 };
 
+// app.handle() hands a Request straight to the router, so it cannot see this
+// at all -- the cap belongs to Bun.serve, which buffers the body before any
+// handler or schema runs. Only a real socket exercises it.
+test("refuses a request body larger than a relayed email", async () => {
+  const app = await appFor(createDependencies());
+  const server = app.listen(0);
+  const { port } = server.server ?? {};
+  if (port === undefined) throw new Error("Server did not bind a port");
+  try {
+    // A well-formed login body padded out with an unexpected field, so the
+    // only thing separating the two calls is size.
+    const post = (bytes: number) =>
+      fetch(`http://localhost:${port.toString()}/api/login`, {
+        body: JSON.stringify({
+          email: "nobody@example.com",
+          padding: "x".repeat(bytes),
+          password: "password",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+
+    // Bun answers the oversized one itself, before any handler or schema
+    // sees it. The smaller one reaches the route and is answered on its
+    // merits.
+    expect((await post(8 * 1_024 * 1_024)).status).toBe(413);
+    expect((await post(1_024)).status).toBe(401);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 test("returns a session matching the browser contract", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
