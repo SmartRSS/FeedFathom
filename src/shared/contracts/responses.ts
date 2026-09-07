@@ -35,6 +35,10 @@ export const sessionResponse = Type.Object(
 
 export const registrationResponse = Type.Object(
   {
+    // Whether outgoing mail is configured, which is what a reset needs to
+    // deliver a link. The login view reads it to decide whether the "forgot
+    // your password" link means anything on this instance.
+    passwordResetEnabled: Type.Boolean(),
     registrationStatus: Type.Union([
       Type.Literal("FIRST_USER"),
       Type.Literal("ENABLED"),
@@ -89,6 +93,9 @@ const articleSummaryResponse = Type.Object(
     group: Type.String(),
     id,
     publishedAt: jsonDate,
+    // Decided by the server, with the same expression the read filter uses,
+    // so a row can never render as read that the read view would not list.
+    read: Type.Boolean(),
     sourceId: id,
     title: Type.String(),
     url: Type.String(),
@@ -96,6 +103,11 @@ const articleSummaryResponse = Type.Object(
   exact,
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
+
+// The article list is keyset-paged: the server never returns more than this
+// many rows, and a full page means the client should ask for the next one
+// with the last row's (publishedAt, id) as the cursor.
+export const articlePageSize = 200;
 
 export const articleResponse = Type.Object(
   {

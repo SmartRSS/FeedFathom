@@ -4,24 +4,11 @@ import { fileURLToPath } from "node:url";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
+import { requireDisposableDatabaseUrl } from "./disposable-database-url.ts";
 
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
-
-function requireDisposableDatabaseUrl() {
-  const databaseUrl = process.env["MIGRATION_TEST_DATABASE_URL"];
-  if (!databaseUrl) {
-    throw new Error("MIGRATION_TEST_DATABASE_URL is required");
-  }
-  const name = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
-  if (!/(?:^|[_-])(?:disposable|migration_test|test)(?:[_-]|$)/i.test(name)) {
-    throw new Error(
-      "MIGRATION_TEST_DATABASE_URL must target a clearly disposable database",
-    );
-  }
-  return databaseUrl;
-}
 
 // Deleting an article cascades away every user's record of having removed
 // it, so a false "gone from the feed" reading doesn't just delete an

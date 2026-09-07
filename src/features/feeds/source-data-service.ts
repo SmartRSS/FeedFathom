@@ -248,7 +248,11 @@ export class SourcesDataService {
             s.websub_status as "websubStatus"
         FROM sources AS s
         LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
-        ORDER BY ${resolved.sort} ${resolved.order}
+        -- id breaks the tie: every column the admin table can sort by holds
+        -- duplicates (recent_failures is 0 for almost every row), and without
+        -- a unique last key the tied rows reshuffle between two loads of the
+        -- same sort, which reads as the table changing on its own.
+        ORDER BY ${resolved.sort} ${resolved.order}, s.id ASC
     `;
 
     const result: unknown = await this.drizzleConnection.execute(

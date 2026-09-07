@@ -10,6 +10,54 @@ export function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
+/**
+ * The tree narrowed to what matches, case-insensitively.
+ *
+ * A folder whose own name matches keeps all its children -- narrowing "News"
+ * to the one feed that happens to repeat the word would hide the rest of a
+ * folder the user just named. A folder that does not match survives only
+ * through the descendants that do.
+ */
+export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return nodes;
+  const matching = (node: TreeNode): TreeNode | undefined => {
+    if (node.name.toLowerCase().includes(needle)) return node;
+    if (node.type === "source") return undefined;
+    const children = filterTree(node.children, query);
+    return children.length ? { ...node, children } : undefined;
+  };
+  return nodes
+    .map(matching)
+    .filter((node): node is TreeNode => node !== undefined);
+}
+
+function hasNodeKey(nodes: TreeNode[], key: string): boolean {
+  return nodes.some(
+    (node) =>
+      treeNodeKey(node) === key ||
+      (node.type === "folder" && hasNodeKey(node.children, key)),
+  );
+}
+
+/**
+ * The one row in the tree that is a tab stop.
+ *
+ * The tree is a roving tabindex, so exactly one row carries `tabindex="0"`
+ * and the rest carry `-1`. The row that was last focused is that one -- until
+ * a filter removes it, and a tree whose only tab stop is no longer rendered is
+ * a tree Tab skips over entirely. The first row still showing takes over.
+ */
+export function treeTabStopKey(
+  nodes: TreeNode[],
+  focusedKey: string | undefined,
+): string | undefined {
+  if (focusedKey !== undefined && hasNodeKey(nodes, focusedKey))
+    return focusedKey;
+  const first = nodes[0];
+  return first ? treeNodeKey(first) : undefined;
+}
+
 export function faviconUrls(node: TreeNode): string[] {
   return node.type === "source"
     ? node.favicon

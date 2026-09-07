@@ -16,7 +16,13 @@ import {
   type DashboardPane,
   type Route,
 } from "./behavior.ts";
-import { Activate, Login, Register } from "./account-flows.tsx";
+import {
+  Activate,
+  Login,
+  PasswordReset,
+  PasswordResetConfirm,
+  Register,
+} from "./account-flows.tsx";
 import { Dashboard } from "./dashboard.tsx";
 import { Admin } from "./admin.tsx";
 import { DialogHost } from "./dialog.tsx";
@@ -35,6 +41,8 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
   dashboard: "FeedFathom",
   login: "Login",
   options: "Options",
+  passwordReset: "Reset password",
+  passwordResetConfirm: "Reset password",
   preview: "Discover feed",
   register: "Register",
 };
@@ -185,6 +193,21 @@ function Router(props: {
             {(route) =>
               route().name === "activate" && (
                 <Activate token={route().token} navigate={props.navigate} />
+              )
+            }
+          </Match>
+          <Match when={props.route.name === "passwordReset"}>
+            <PasswordReset navigate={props.navigate} />
+          </Match>
+          <Match
+            when={props.route.name === "passwordResetConfirm" && props.route}
+          >
+            {(route) =>
+              route().name === "passwordResetConfirm" && (
+                <PasswordResetConfirm
+                  token={route().token}
+                  navigate={props.navigate}
+                />
               )
             }
           </Match>

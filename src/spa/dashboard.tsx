@@ -7,6 +7,7 @@ import {
   Show,
 } from "solid-js";
 import {
+  articlePageSize,
   articleResponse,
   articlesResponse,
   folderResponse,
@@ -21,6 +22,7 @@ import {
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
   faviconUrls,
+  filterTree,
   findNode,
   findParentFolderUid,
   isTodayNode,
@@ -28,6 +30,7 @@ import {
   sourceIds,
   totalUnread,
   treeNodeKey,
+  treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
 } from "./dashboard-behavior.ts";
@@ -49,7 +52,7 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { resolvedTheme, todayView } from "./preferences.ts";
+import { markReadOnOpen, resolvedTheme, todayView } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
 import {
   ContextMenu,
@@ -136,9 +139,27 @@ export function Dashboard(props: {
   pane(): DashboardPane;
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
+  const [treeFilter, setTreeFilter] = createSignal("");
+  // Unread is what the list has always shown; the other two are new views
+  // over the same store rather than a change to the default.
+  const [articleFilter, setArticleFilter] = createSignal<
+    "all" | "read" | "unread"
+  >("unread");
+  const visibleTree = () =>
+    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter());
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
+  // The server caps a page at articlePageSize, so a full page means there is
+  // at least one more to fetch. Not signals: nothing renders them.
+  //
+  // The cursor is the last row of the last page received, not the last row
+  // still on screen. Deleting rows must not move it: deleting the whole page
+  // would leave no row to take a cursor from at all, which is exactly when
+  // the next page is most wanted.
+  let moreArticles = false;
+  let loadingMoreArticles = false;
+  let articleCursor: number | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
@@ -155,6 +176,7 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
+  const treeTabStop = () => treeTabStopKey(visibleTree(), focusedTreeKey());
   // A screen reader can't be detected, so this always renders (see the
   // aria-live region below); it is visually hidden either way and only gets
   // real text when high contrast mode is off.
@@ -419,6 +441,8 @@ export function Dashboard(props: {
       return;
     }
     const ids = sourceIds(node);
+    moreArticles = false;
+    articleCursor = undefined;
     if (!ids.length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
@@ -429,7 +453,7 @@ export function Dashboard(props: {
     await fetchArticlesForBody({ sources: ids }, selection);
   }
   async function fetchArticlesForBody(
-    body: { sources: number[]; view?: "today" },
+    body: { sources: number[]; view?: "today"; cursor?: number },
     selection: ReturnType<typeof selectionGuard.start>,
   ) {
     setArticlesLoading(true);
@@ -439,13 +463,15 @@ export function Dashboard(props: {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify(body),
+        body: JSON.stringify({ filter: articleFilter(), ...body }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
         signal: controller.signal,
       });
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
+      moreArticles = nextArticles.length === articlePageSize;
+      articleCursor = nextArticles.at(-1)?.id;
       const nextIndexes = new Set(nextArticles.length ? [0] : []);
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(nextArticles.length ? 0 : undefined);
@@ -455,6 +481,127 @@ export function Dashboard(props: {
       reportError(cause, "Could not load articles");
     } finally {
       if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
+    }
+  }
+  // The scroll handler is the only thing that asks for the next page, so a
+  // list too short to scroll can never ask. Deleting a whole page is the way
+  // in: select all, delete, and the pane is empty with pages still unread and
+  // nothing left to scroll. The threshold below reads true for a list that
+  // does not overflow (scrollHeight === clientHeight, scrollTop 0), so the
+  // same call covers it -- after the render that shortened the list.
+  function topUpArticles() {
+    queueMicrotask(() => {
+      const list = document.querySelector<HTMLElement>(".article-list");
+      if (list) void loadMoreArticles(list);
+    });
+  }
+  // Paging is driven by the scroll position rather than a button: the list is
+  // the scroll container in both layouts, and on mobile the pane is
+  // column-reverse, so a control after the list would render above it.
+  async function loadMoreArticles(list: HTMLElement) {
+    const cursor = articleCursor;
+    const node = selectedNode();
+    if (!moreArticles || loadingMoreArticles || cursor === undefined || !node)
+      return;
+    if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
+    const ids = sourceIds(node);
+    if (!ids.length) return;
+    const selection = selectionGuard.current();
+    loadingMoreArticles = true;
+    try {
+      const nextArticles = await api("/articles", articlesResponse, {
+        body: JSON.stringify({ cursor, filter: articleFilter(), sources: ids }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      if (!selectionGuard.isCurrent(selection)) return;
+      moreArticles = nextArticles.length === articlePageSize;
+      articleCursor = nextArticles.at(-1)?.id ?? articleCursor;
+      if (!nextArticles.length) return;
+      setArticles((current) => [...current, ...nextArticles]);
+      topUpArticles();
+      setAccessibilityAnnouncement(
+        `Loaded ${nextArticles.length} more articles.`,
+      );
+    } catch (cause) {
+      if (selectionGuard.isCurrent(selection))
+        reportError(cause, "Could not load more articles");
+    } finally {
+      loadingMoreArticles = false;
+    }
+  }
+  // Changing the filter is a different question about the same selection, so
+  // it re-runs select() rather than filtering what is already loaded: only one
+  // page is in hand, and the rest of the answer is on the server.
+  function changeArticleFilter(next: "all" | "read" | "unread") {
+    if (next === articleFilter()) return;
+    setArticleFilter(next);
+    const node = selectedNode();
+    if (node) void select(node);
+  }
+  // Marking read is the same shape as removing: optimistic locally, the badge
+  // reconciled from the tree afterwards. Unlike a removal it is reversible,
+  // so a failure resyncs rather than trying to explain itself.
+  // What the toolbar button offers: with everything selected already read,
+  // the useful action is the reverse one.
+  const allSelectedRead = () => {
+    const items = articles();
+    const chosen = [...selectedIndexes()]
+      .map((index) => items[index])
+      .filter((article) => article !== undefined);
+    return chosen.length > 0 && chosen.every((article) => article.read);
+  };
+  function setSelectedRead(read: boolean) {
+    const items = articles();
+    const indexes = [...selectedIndexes()].filter((index) => items[index]);
+    const ids = indexes.map((index) => items[index]!.id);
+    if (!ids.length) return;
+    setError("");
+    void markArticlesRead(ids, read);
+  }
+  async function markArticlesRead(ids: number[], read: boolean) {
+    const items = articles();
+    const affected = new Set(ids);
+    if (articleFilter() === "all") {
+      setArticles(
+        items.map((article) =>
+          affected.has(article.id) ? { ...article, read } : article,
+        ),
+      );
+    } else {
+      // In the unread view a read article no longer belongs, and in the read
+      // view an unread one does not either, so the row leaves the list the
+      // same way a removed one does -- re-asking the server would flash the
+      // skeleton over a list that is already correct.
+      const indexes = new Set(
+        items.flatMap((article, index) =>
+          affected.has(article.id) ? [index] : [],
+        ),
+      );
+      const { nextIndex, remaining } = removalOutcome(items, indexes);
+      const nextArticle = remaining[nextIndex];
+      setArticles(remaining);
+      topUpArticles();
+      const openNext = setArticleSelection(
+        new Set(nextArticle ? [nextIndex] : []),
+      );
+      openNext?.catch((cause) =>
+        reportError(cause, "Could not refresh articles"),
+      );
+      setSelectionAnchor(nextArticle ? nextIndex : undefined);
+      queueMicrotask(() => focusArticleAt(nextArticle ? nextIndex : 0));
+    }
+    try {
+      await api("/articles", removedArticlesResponse, {
+        body: JSON.stringify({ articleIdList: ids, read }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      await loadTree();
+    } catch (cause) {
+      reportError(cause, "Could not update read state");
+      const node = selectedNode();
+      if (node) void select(node);
     }
   }
   async function showProperties() {
@@ -648,6 +795,12 @@ export function Dashboard(props: {
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
+      // Opt-in, and only in the "all" view. In the unread view marking on
+      // open would pull the row out from under the person reading it; there,
+      // the toolbar button is the way.
+      if (markReadOnOpen() && !article.read && articleFilter() === "all") {
+        void markArticlesRead([article.id], true);
+      }
       if (mode === "FEED") schedulePrefetch();
 
       if (mode !== "FEED") {
@@ -717,6 +870,7 @@ export function Dashboard(props: {
     const { nextIndex, remaining } = removalOutcome(items, indexes);
     const nextArticle = remaining[nextIndex];
     setArticles(remaining);
+    topUpArticles();
     const openNext = setArticleSelection(
       new Set(nextArticle ? [nextIndex] : []),
     );
@@ -816,6 +970,15 @@ export function Dashboard(props: {
     } else if (event.key === "Delete") {
       event.preventDefault();
       removeSelected();
+    } else if (
+      event.key.toLowerCase() === "m" &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      // The list is driven from the keyboard -- Delete already is -- so the
+      // other thing you can do to a selection should be too.
+      event.preventDefault();
+      setSelectedRead(!allSelectedRead());
     } else if (
       event.key.toLowerCase() === "a" &&
       (event.ctrlKey || event.metaKey)
@@ -968,18 +1131,31 @@ export function Dashboard(props: {
                 </div>
               }
             >
+              <input
+                aria-label="Filter feeds"
+                class="tree-filter"
+                placeholder="Filter feeds"
+                type="search"
+                value={treeFilter()}
+                onInput={(event) => setTreeFilter(event.currentTarget.value)}
+              />
+              <Show when={treeFilter().trim() && !visibleTree().length}>
+                <p class="tree-empty" role="status">
+                  No feeds match that.
+                </p>
+              </Show>
               <ul
                 aria-busy={treeLoading()}
                 aria-label="Feeds"
                 class="tree"
                 role="tree"
               >
-                <For each={withTodayNode(tree(), todayView() === "on")}>
+                <For each={visibleTree()}>
                   {(node) => (
                     <TreeItem
-                      focused={focusedTreeKey() === treeNodeKey(node)}
+                      focused={treeTabStop() === treeNodeKey(node)}
                       onContext={openTreeContext}
-                      focusedKey={focusedTreeKey()}
+                      focusedKey={treeTabStop()}
                       node={node}
                       onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
                       select={(item) => void select(item)}
@@ -1012,6 +1188,27 @@ export function Dashboard(props: {
             >
               <Icon raw={selectAllRaw} />
             </button>
+            <select
+              aria-label="Show"
+              class="article-filter"
+              value={articleFilter()}
+              onChange={(event) => {
+                const next = event.currentTarget.value;
+                if (next === "all" || next === "read" || next === "unread")
+                  changeArticleFilter(next);
+              }}
+            >
+              <option value="unread">Unread</option>
+              <option value="all">All</option>
+              <option value="read">Read</option>
+            </select>
+            <button
+              class="text-action"
+              disabled={!selectedIndexes().size}
+              onClick={() => setSelectedRead(!allSelectedRead())}
+            >
+              {allSelectedRead() ? "Mark unread" : "Mark read"}
+            </button>
             <button
               aria-label="delete articles"
               disabled={selectedIndexes().size === 0}
@@ -1041,6 +1238,7 @@ export function Dashboard(props: {
             class="article-list"
             role="listbox"
             onKeyDown={handleArticleKeys}
+            onScroll={(event) => void loadMoreArticles(event.currentTarget)}
           >
             <Show
               when={!articlesLoading()}
@@ -1081,6 +1279,7 @@ export function Dashboard(props: {
                       class="article"
                       classList={{
                         active: focusedIndex() === index(),
+                        read: article.read,
                         selected: selectedIndexes().has(index()),
                       }}
                       data-index={index()}

@@ -59,17 +59,24 @@ which is checked in review rather than by the rule. That's the point of
 keeping the edges in a config file: adding one is a deliberate act that shows
 up in the diff, instead of arriving as a quiet new import.
 
-- **`auth`** — sessions, registration, activation, password, the users data
-  service, and the mail sender that carries activation mail. The session plugin
-  lives here rather than in `platform`: session verification is domain logic
-  about users, not infrastructure.
+- **`auth`** — sessions, registration, activation, password change and reset,
+  the throttle over the three endpoints that guess or send mail, the users
+  data service, and the mail sender that carries activation and reset mail. The session plugin lives here rather than
+  in `platform`: session verification is domain logic about users, not
+  infrastructure, and the admin variant of it is the same derive with one more
+  test rather than a second plugin.
 - **`feeds`** — getting content and the store it lands in: feed parsing
-  (RSS/Atom, JSON Feed, microformats), OPML import, discovery and preview,
+  (RSS/Atom, JSON Feed, microformats), OPML import and export, discovery and
+  preview,
   subscription, WebSub, favicons, article extraction and link rewriting, and
   the sources, articles, user-sources and folders data services.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes.
 - **`admin`** — the admin and options routes and the job-failures data service.
+  Two route groups rather than one, because `/api/options` is per-user and
+  `/api/admin` is not: the admin group carries `createAdminPlugin`, so the
+  authorisation check is a property of the group instead of something each
+  handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.
@@ -111,7 +118,9 @@ reaches for the global `fetch` gets none of that, which is how the hub
 subscribe drifted out of the rate limiter.
 
 The rate-limit keys are per hostname; ADR 0002 records why, and what evidence
-would justify revisiting it.
+would justify revisiting it. Inbound throttling is a separate scheme with a
+separate problem — a per-account counter is a lockout anyone can trigger — and
+ADR 0004 records how the login and password-reset counters are keyed instead.
 
 ## Extracting logic
 
@@ -144,6 +153,13 @@ A co-located test that needs a real PostgreSQL is named
 wherever it lives and `test:migrations` names them explicitly, so `bun run
 test:unit` stays runnable with nothing but the repo checked out. Needing a
 database is not a reason to move a test away from its module.
+
+Those tests read `MIGRATION_TEST_DATABASE_URL` and drop the `public` schema
+before every run, so the URL goes through `requireDisposableDatabaseUrl`
+(`src/platform/db/__tests__/`), which refuses anything whose database name
+does not carry a `test` or `disposable` marker. One copy of that check, read
+from one variable: it is the only thing standing between a mistyped value and
+a real database.
 
 This holds outside `src/` too: `bin/`, `tools/` and `vendor/` each carry their
 own `__tests__/`. `tests/` holds only the Playwright specs under

@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { Value } from "typebox/value";
@@ -6,6 +6,8 @@ import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
+import { AuthThrottle } from "#features/auth/auth-throttle.ts";
+import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
 import {
   createServerApp,
   MAX_REQUEST_BODY_BYTES,
@@ -44,6 +46,8 @@ const account = {
   lastSeenAt: new Date("2026-07-20T12:00:00.000Z"),
   name: sessionUser.name,
   password: "hashed-password",
+  passwordResetTokenExpiresAt: null,
+  passwordResetTokenHash: null,
   status: "active" as const,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
@@ -79,7 +83,11 @@ function createDependencies(): ServerDependencies {
       async removeUserArticles() {
         return unexpected("articlesDataService.removeUserArticles");
       },
+      async setUserArticlesRead() {
+        return unexpected("articlesDataService.setUserArticlesRead");
+      },
     },
+    authThrottle: new AuthThrottle(createFakeThrottleRedis()),
     config: appConfig,
     emailHandler: {
       async processEmail() {
@@ -132,6 +140,7 @@ function createDependencies(): ServerDependencies {
     },
     mailSender: {
       async sendActivationEmail() {},
+      async sendPasswordResetEmail() {},
     },
     opmlImportService: {
       async insertTree() {
@@ -194,6 +203,9 @@ function createDependencies(): ServerDependencies {
       async activateUser() {
         return unexpected("usersDataService.activateUser");
       },
+      async completePasswordReset() {
+        return unexpected("usersDataService.completePasswordReset");
+      },
       async createSession() {
         return "test-session";
       },
@@ -207,11 +219,17 @@ function createDependencies(): ServerDependencies {
       async findUserByActivationToken() {
         return undefined;
       },
+      async findUserByPasswordResetToken() {
+        return undefined;
+      },
       async getUserBySid() {
         return undefined;
       },
       async getUserCount() {
         return 0;
+      },
+      async startPasswordReset() {
+        return unexpected("usersDataService.startPasswordReset");
       },
       async touchLastSeen() {},
       async updatePassword() {
@@ -488,14 +506,18 @@ test("routes the Today view to every subscribed source with a 24h window", async
   const calls: [
     number[],
     number,
+    number | undefined,
+    "all" | "read" | "unread" | undefined,
     { allSubscribed?: boolean; publishedWithinHours?: number } | undefined,
   ][] = [];
   dependencies.articlesDataService.getUserArticlesForSources = async (
     sourceIds,
     userId,
+    cursor,
+    filter,
     options,
   ) => {
-    calls.push([sourceIds, userId, options]);
+    calls.push([sourceIds, userId, cursor, filter, options]);
     return [];
   };
   const app = await appFor(dependencies);
@@ -519,7 +541,13 @@ test("routes the Today view to every subscribed source with a 24h window", async
   expect(today.status).toBe(200);
   expect(unknownView.status).toBe(422);
   expect(calls).toEqual([
-    [[], 42, { allSubscribed: true, publishedWithinHours: 24 }],
+    [
+      [],
+      42,
+      undefined,
+      undefined,
+      { allSubscribed: true, publishedWithinHours: 24 },
+    ],
   ]);
 });
 
@@ -1316,6 +1344,139 @@ test("authenticates only active users without revealing account state", async ()
   expect(response.headers.get("set-cookie")).toContain("sid=test-session");
 });
 
+// Equal-time hashing on a miss closes the enumeration oracle but buys little
+// on its own: an attacker who cannot tell accounts apart can still try
+// passwords as fast as the box answers. The README's reverse-proxy setup adds
+// no rate limiting of its own, so this cannot be left to the deployment.
+test("stops guessing at one account from one address", async () => {
+  const target = { ...account, email: "throttled@example.com" };
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async (email) =>
+    email === target.email ? target : undefined;
+  dependencies.password.verify = async (value, hash) =>
+    hash === target.password && value === "password";
+  const app = await appFor(dependencies);
+  const attempt = (password: string, address: string) =>
+    app.handle(
+      new Request("http://localhost/api/login", {
+        body: JSON.stringify({ email: target.email, password }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": address,
+        },
+        method: "POST",
+      }),
+    );
+
+  for (let guess = 0; guess < 10; guess++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    expect((await attempt("wrong", "203.0.113.7")).status).toBe(401);
+  }
+
+  // Same body and status as a wrong password, so the throttle does not become
+  // the enumeration signal the equal-time hashing was there to avoid.
+  const throttled = await attempt("password", "203.0.113.7");
+  expect(throttled.status).toBe(401);
+  expect(await throttled.json()).toEqual({ error: "Wrong login data" });
+
+  // The account itself is not locked: the counter is keyed on the address as
+  // well, so hammering an address cannot shut its owner out from elsewhere.
+  const elsewhere = await attempt("password", "198.51.100.4");
+  expect(elsewhere.status).toBe(200);
+});
+
+test("marks articles read and recomputes the badge from the store", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const marked: { articleIdList: number[]; read: boolean }[] = [];
+  const recomputed: [number[], number | undefined][] = [];
+  dependencies.articlesDataService.setUserArticlesRead = async (
+    articleIdList,
+    _userId,
+    read,
+  ) => {
+    marked.push({ articleIdList, read });
+    return { articleIds: articleIdList, sourceIds: [3] };
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async (
+    sourceIds,
+    userId,
+  ) => {
+    recomputed.push([sourceIds, userId]);
+  };
+  const app = await appFor(dependencies);
+  const patch = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "PATCH",
+      }),
+    );
+
+  const read = await patch({ articleIdList: [11, 12], read: true });
+  const unread = await patch({ articleIdList: [11], read: false });
+  const malformed = await patch({ articleIdList: [], read: true });
+  const anonymous = await app.handle(
+    new Request("http://localhost/api/articles", {
+      body: JSON.stringify({ articleIdList: [11], read: true }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    }),
+  );
+
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual([11, 12]);
+  expect(unread.status).toBe(200);
+  // An empty list is a client bug, not a no-op worth accepting.
+  expect(malformed.status).toBe(422);
+  expect(anonymous.status).toBe(401);
+  expect(marked).toEqual([
+    { articleIdList: [11, 12], read: true },
+    { articleIdList: [11], read: false },
+  ]);
+  // The badge is recomputed rather than adjusted by a delta kept in the route.
+  expect(recomputed).toEqual([
+    [[3], sessionUser.id],
+    [[3], sessionUser.id],
+  ]);
+});
+
+test("passes the article list filter through to the query", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const filters: (string | undefined)[] = [];
+  dependencies.articlesDataService.getUserArticlesForSources = async (
+    _sources,
+    _userId,
+    _cursor,
+    filter,
+  ) => {
+    filters.push(filter);
+    return [];
+  };
+  const app = await appFor(dependencies);
+  const list = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+
+  await list({ sources: [3] });
+  await list({ filter: "read", sources: [3] });
+  await list({ filter: "all", sources: [3] });
+  const rejected = await list({ filter: "everything", sources: [3] });
+
+  // Absent means unread, which is all the list has ever shown; the default
+  // lives in the data service rather than being spelled out per caller.
+  expect(filters).toEqual([undefined, "read", "all"]);
+  expect(rejected.status).toBe(422);
+});
+
 test("treats inactive sessions as unauthenticated everywhere", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async () => ({
@@ -1679,6 +1840,139 @@ test("validates OPML files and checks plain-text content before parsing", async 
   expect(inserts).toBe(1);
 });
 
+test("exports the subscription tree as OPML, without newsletters", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.foldersDataService.getUserFolders = async () => [
+    {
+      createdAt: new Date(),
+      id: 4,
+      name: "News & views",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+  ];
+  dependencies.userSourcesDataService.getUserSources = async () => [
+    {
+      homeUrl: "https://news.test",
+      id: 1,
+      kind: "feed",
+      name: "Daily",
+      parentId: 4,
+      unreadArticlesCount: 0,
+      url: "https://news.test/feed",
+    },
+    {
+      homeUrl: null,
+      id: 2,
+      kind: "email",
+      name: "A newsletter",
+      parentId: null,
+      unreadArticlesCount: 0,
+      url: "abc123@mail.example.com",
+    },
+  ];
+  const app = await appFor(dependencies);
+
+  const anonymous = await app.handle(
+    new Request("http://localhost/api/options/opml"),
+  );
+  const response = await app.handle(
+    new Request("http://localhost/api/options/opml", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+  const body = await response.text();
+
+  expect(anonymous.status).toBe(401);
+  expect(response.headers.get("content-type")).toBe(
+    "text/x-opml; charset=utf-8",
+  );
+  expect(response.headers.get("content-disposition")).toContain(
+    'filename="feedfathom-subscriptions.opml"',
+  );
+  expect(body).toContain('xmlUrl="https://news.test/feed"');
+  expect(body).toContain('text="News &amp; views"');
+  // The address is one this instance minted and routes mail for. Anywhere
+  // else it is a subscription nothing would ever deliver to.
+  expect(body).not.toContain("abc123@mail.example.com");
+});
+
+// insertTree creates a folder unconditionally; the only thing that makes
+// re-importing an export a no-op is opml_imports deduping on a hash of the
+// file's bytes. Two exports of an unchanged tree therefore have to be
+// byte-identical, whatever order the queries happened to return rows in.
+test("exports the same bytes whatever order the services return rows in", async () => {
+  const folders = [
+    {
+      createdAt: new Date(),
+      id: 1,
+      name: "Zed",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+    {
+      createdAt: new Date(),
+      id: 2,
+      name: "Alpha",
+      updatedAt: new Date(),
+      userId: 1,
+    },
+  ];
+  const sources = [
+    {
+      homeUrl: "https://b.test",
+      id: 1,
+      kind: "feed" as const,
+      name: "Beta",
+      parentId: 2,
+      unreadArticlesCount: 0,
+      url: "https://b.test/feed",
+    },
+    {
+      homeUrl: "https://a.test",
+      id: 2,
+      kind: "feed" as const,
+      name: "Aardvark",
+      parentId: 2,
+      unreadArticlesCount: 0,
+      url: "https://a.test/feed",
+    },
+    {
+      homeUrl: "https://c.test",
+      id: 3,
+      kind: "feed" as const,
+      name: "Loose",
+      parentId: null,
+      unreadArticlesCount: 0,
+      url: "https://c.test/feed",
+    },
+  ];
+  const exportWith = async (reversed: boolean) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    dependencies.foldersDataService.getUserFolders = async () =>
+      reversed ? folders.toReversed() : folders;
+    dependencies.userSourcesDataService.getUserSources = async () =>
+      reversed ? sources.toReversed() : sources;
+    const app = await appFor(dependencies);
+    return await (
+      await app.handle(
+        new Request("http://localhost/api/options/opml", {
+          headers: { cookie: "sid=test" },
+        }),
+      )
+    ).text();
+  };
+
+  const first = await exportWith(false);
+  const second = await exportWith(true);
+
+  expect(first).toBe(second);
+  expect(first.indexOf("Alpha")).toBeLessThan(first.indexOf("Zed"));
+  expect(first.indexOf("Aardvark")).toBeLessThan(first.indexOf("Beta"));
+});
+
 test("creates active users without registration integrations", async () => {
   const dependencies = createDependencies();
   let created:
@@ -1780,6 +2074,99 @@ test.each([
     expect(calls).toEqual([]);
   },
 );
+
+// Registration with mail configured is a way to send a message from this
+// instance's domain to an address a stranger chose. ENABLE_REGISTRATION and
+// ALLOWED_EMAILS say who may hold an account; neither bounds how many mails
+// an open form will emit. Turnstile is the documented answer and this is the
+// floor under a deployment that has not set it.
+test("stops an open signup form from mailing strangers on demand", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.ENABLE_REGISTRATION = true;
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  let mailCalls = 0;
+  dependencies.password.hash = async () => "hashed-password";
+  dependencies.usersDataService.getUserCount = async () => 1;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.mailSender.sendActivationEmail = async () => {
+    mailCalls++;
+  };
+  const app = await appFor(dependencies);
+  const register = (email: string, address: string) =>
+    app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email,
+          password: "password",
+          passwordConfirm: "password",
+          username: "Stranger",
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": address,
+        },
+        method: "POST",
+      }),
+    );
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await register("stranger@example.com", "203.0.113.7");
+  }
+  expect(mailCalls).toBe(10);
+
+  // The same generic success the route already gives a disposable address or
+  // an existing account, so the throttle is not itself an answer about who
+  // exists -- but no mail leaves.
+  const blocked = await register("stranger@example.com", "203.0.113.7");
+  expect(blocked.status).toBe(200);
+  expect(await blocked.json()).toEqual({ success: true });
+  expect(mailCalls).toBe(10);
+
+  // Keyed on the address too, so spending one address's budget cannot stop
+  // anyone else from signing up.
+  await register("stranger@example.com", "198.51.100.4");
+  expect(mailCalls).toBe(11);
+});
+
+// A fresh install answers registration regardless of ENABLE_REGISTRATION, and
+// answers it identically whether or not it worked. Someone fumbling their way
+// into their own empty instance must not be able to lock themselves out of it
+// for fifteen minutes with no way to tell that is what happened.
+test("never throttles the first operator of an empty instance", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  let mailCalls = 0;
+  dependencies.password.hash = async () => "hashed-password";
+  dependencies.usersDataService.getUserCount = async () => 0;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.mailSender.sendActivationEmail = async () => {
+    mailCalls++;
+  };
+  const app = await appFor(dependencies);
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "operator@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Operator",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+  }
+  expect(mailCalls).toBe(12);
+});
 
 test("rejects missing or malformed Turnstile responses before database mutation", async () => {
   const dependencies = createDependencies();
@@ -1935,6 +2322,150 @@ test("does not create an inactive user when activation email delivery fails", as
   expect(createCalls).toBe(0);
 });
 
+// The recovery path a forgotten password needs, and every way it must refuse
+// to say more than it should.
+test("resets a password without admitting whether the account exists", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "key";
+  dependencies.config.MAILJET_API_SECRET = "secret";
+  const target = { ...account, email: "forgetful@example.com" };
+  const sent: { email: string; token: string }[] = [];
+  const started: { expiresAt: Date; tokenHash: string; userId: number }[] = [];
+  dependencies.usersDataService.findUser = async (email) =>
+    email === target.email ? target : undefined;
+  dependencies.usersDataService.startPasswordReset = async (
+    userId,
+    tokenHash,
+    expiresAt,
+  ) => {
+    started.push({ expiresAt, tokenHash, userId });
+  };
+  dependencies.mailSender.sendPasswordResetEmail = async (email, token) => {
+    sent.push({ email, token });
+  };
+  const app = await appFor(dependencies);
+  const request = (email: string) =>
+    app.handle(
+      new Request("http://localhost/api/password-reset", {
+        body: JSON.stringify({ email }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  const known = await request(target.email);
+  const unknown = await request("nobody@example.com");
+  const unknownBody: unknown = await unknown.json();
+
+  expect(known.status).toBe(200);
+  expect(unknown.status).toBe(200);
+  expect(await known.json()).toEqual(unknownBody);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.email).toBe(target.email);
+
+  // The token travels in the link and only its digest is stored, so a dump of
+  // the users table is not a set of working reset links.
+  const token = sent[0]!.token;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  expect(started).toHaveLength(1);
+  expect(started[0]?.tokenHash).toBe(tokenHash);
+  expect(started[0]?.tokenHash).not.toBe(token);
+  expect(started[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+  // The send is deliberately not awaited, so a Mailjet outage cannot make a
+  // known address answer differently -- or more slowly -- than an unknown one.
+  dependencies.mailSender.sendPasswordResetEmail = async () => {
+    throw new Error("Mailjet unavailable");
+  };
+  const undelivered = await request(target.email);
+  expect(undelivered.status).toBe(200);
+  expect(await undelivered.json()).toEqual(unknownBody);
+});
+
+test("spends a reset token once and refuses an expired one", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "key";
+  dependencies.config.MAILJET_API_SECRET = "secret";
+  const completed: { passwordHash: string; userId: number }[] = [];
+  dependencies.usersDataService.findUserByPasswordResetToken = async (
+    tokenHash,
+  ) => {
+    const valid =
+      tokenHash === createHash("sha256").update("good").digest("hex");
+    return {
+      ...account,
+      passwordResetTokenExpiresAt: valid
+        ? new Date(Date.now() + 60_000)
+        : new Date(Date.now() - 60_000),
+      passwordResetTokenHash: tokenHash,
+    };
+  };
+  dependencies.usersDataService.completePasswordReset = async (
+    userId,
+    passwordHash,
+  ) => {
+    completed.push({ passwordHash, userId });
+  };
+  dependencies.password.hash = async (value) => `hashed:${value}`;
+  const app = await appFor(dependencies);
+  const confirm = (token: string, password1: string, password2 = password1) =>
+    app.handle(
+      new Request("http://localhost/api/password-reset/confirm", {
+        body: JSON.stringify({ password1, password2, token }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  const good = await confirm("good", "a-new-password");
+  const expired = await confirm("stale", "a-new-password");
+  const mismatched = await confirm("good", "one", "two");
+
+  expect(good.status).toBe(200);
+  expect(expired.status).toBe(400);
+  expect(mismatched.status).toBe(422);
+  expect(completed).toEqual([
+    { passwordHash: "hashed:a-new-password", userId: account.id },
+  ]);
+});
+
+test("has no reset flow at all when outgoing mail is not configured", async () => {
+  const dependencies = createDependencies();
+  let sends = 0;
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.mailSender.sendPasswordResetEmail = async () => {
+    sends++;
+  };
+  const app = await appFor(dependencies);
+
+  const info = await app.handle(new Request("http://localhost/api/register"));
+  const requested = await app.handle(
+    new Request("http://localhost/api/password-reset", {
+      body: JSON.stringify({ email: account.email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const confirmed = await app.handle(
+    new Request("http://localhost/api/password-reset/confirm", {
+      body: JSON.stringify({
+        password1: "x",
+        password2: "x",
+        token: "anything",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  // The login view hides the link on this flag, and the request route still
+  // answers exactly as it does for an account that does not exist.
+  expect(await info.json()).toMatchObject({ passwordResetEnabled: false });
+  expect(requested.status).toBe(200);
+  expect(confirmed.status).toBe(400);
+  expect(sends).toBe(0);
+});
+
 test("activates valid tokens but rejects expired tokens", async () => {
   const dependencies = createDependencies();
   const activated: number[] = [];
@@ -1978,6 +2509,21 @@ test("activates valid tokens but rejects expired tokens", async () => {
   expect(tokenLookups).toEqual(["valid", "expired"]);
 });
 
+// Every route in the admin group, not just the one that used to be checked
+// here. The guard is the group's now rather than each handler's, so this is
+// what stops a route added there from being reachable by anyone signed in.
+const adminOnlyRequests = [
+  ["GET", "/api/admin", undefined],
+  [
+    "POST",
+    "/api/admin",
+    { newUrl: "https://b.test/", oldUrl: "https://a.test/" },
+  ],
+  ["DELETE", "/api/admin", { removeSourceId: 1 }],
+  ["GET", "/api/admin/redirects", undefined],
+  ["DELETE", "/api/admin/redirects", { oldUrl: "https://a.test/" }],
+] as const;
+
 test("allows admin sessions and rejects non-admin sessions", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async (sid) => ({
@@ -1985,20 +2531,58 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
     isAdmin: sid === "admin",
   });
   const app = await appFor(dependencies);
+  const call = (
+    [method, path, body]: (typeof adminOnlyRequests)[number],
+    sid: string,
+  ) =>
+    app.handle(
+      new Request(`http://localhost${path}`, {
+        ...(body === undefined
+          ? {}
+          : {
+              body: JSON.stringify(body),
+              headers: { "content-type": "application/json" },
+            }),
+        headers: {
+          cookie: `sid=${sid}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        method,
+      }),
+    );
 
-  const adminResponse = await app.handle(
-    new Request("http://localhost/api/admin", {
-      headers: { cookie: "sid=admin" },
-    }),
+  const reader = await Promise.all(
+    adminOnlyRequests.map((request) => call(request, "reader")),
   );
-  const readerResponse = await app.handle(
-    new Request("http://localhost/api/admin", {
+  const anonymous = await Promise.all(
+    adminOnlyRequests.map((request) => call(request, "")),
+  );
+  const listing = await call(adminOnlyRequests[0], "admin");
+
+  expect(reader.map((response) => response.status)).toEqual(
+    adminOnlyRequests.map(() => 403),
+  );
+  expect(anonymous.map((response) => response.status)).toEqual(
+    adminOnlyRequests.map(() => 401),
+  );
+  expect(listing.status).toBe(200);
+});
+
+test("leaves the per-user options routes open to any signed-in user", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.getUserBySid = async () => ({
+    ...sessionUser,
+    isAdmin: false,
+  });
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/options", {
       headers: { cookie: "sid=reader" },
     }),
   );
 
-  expect(adminResponse.status).toBe(200);
-  expect(readerResponse.status).toBe(403);
+  expect(response.status).toBe(200);
 });
 
 const websubSource = {

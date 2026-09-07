@@ -39,6 +39,20 @@ export const articleQuery = Type.Object({
 });
 export const articlesRequest = Type.Object(
   {
+    // Keyset cursor: the id of the last row of the previous page. The server
+    // resolves its published_at rather than taking one from the client, whose
+    // copy is a JSON date and so has lost the microseconds Postgres stores --
+    // a cursor a few hundred microseconds early skips the rest of the batch
+    // its article was published in.
+    cursor: Type.Optional(id),
+    // Absent means unread, which is the only thing the list has ever shown.
+    filter: Type.Optional(
+      Type.Union([
+        Type.Literal("unread"),
+        Type.Literal("read"),
+        Type.Literal("all"),
+      ]),
+    ),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,
@@ -55,6 +69,14 @@ export const createFolderRequest = Type.Object({
 });
 export const findQuery = Type.Object({ link: normalizedWebUrl });
 export const previewQuery = Type.Object({ feedUrl: normalizedWebUrl });
+export const readArticlesRequest = Type.Object({
+  articleIdList: Type.Array(id, {
+    maxItems: maximumRequestIds,
+    minItems: 1,
+    uniqueItems: true,
+  }),
+  read: Type.Boolean(),
+});
 export const removeArticlesRequest = Type.Object({
   removedArticleIdList: Type.Array(id, {
     maxItems: maximumRequestIds,
@@ -123,6 +145,18 @@ export const passwordRequest = withMatchingChangedPasswords(
     oldPassword: Type.String({ minLength: 1 }),
     password1: Type.String({ minLength: 1 }),
     password2: Type.String({ minLength: 1 }),
+  }),
+);
+export const passwordResetRequest = Type.Object({
+  email: normalizedEmailAddress,
+});
+// The same two-field policy the signed-in change-password path uses, so a
+// reset cannot set a password the account settings would have rejected.
+export const passwordResetConfirmRequest = withMatchingChangedPasswords(
+  Type.Object({
+    password1: Type.String({ minLength: 1 }),
+    password2: Type.String({ minLength: 1 }),
+    token: normalizedNonblankString,
   }),
 );
 // Dotted key names ("hub.mode") are the actual WebSub spec query params --

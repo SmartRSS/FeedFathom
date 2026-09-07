@@ -22,7 +22,7 @@
     "watch-spa": "vite --config src/spa/vite.config.ts",
     "watch-spa-api": "PORT=3001 bun --watch src/server.ts",
     "test:unit": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/feedfathom_test} bun test --path-ignore-patterns='tests/browser/**' --path-ignore-patterns='**/*-integration.test.ts'",
-    "test:migrations": "bun test src/__tests__/migration-integration.test.ts src/features/feeds/__tests__/retention-integration.test.ts src/features/feeds/__tests__/article-visibility-integration.test.ts src/features/feeds/__tests__/source-scheduling-integration.test.ts",
+    "test:migrations": "bun test src/__tests__/migration-integration.test.ts src/features/feeds/__tests__/retention-integration.test.ts src/features/feeds/__tests__/article-visibility-integration.test.ts src/features/feeds/__tests__/folder-order-integration.test.ts src/features/feeds/__tests__/source-scheduling-integration.test.ts src/features/feeds/__tests__/unread-agreement-integration.test.ts",
     "test:browser": "bun run build-extension && playwright test --config tests/browser/playwright.config.ts",
     "test:smoke": "bun -e 'if (!process.env.PLAYWRIGHT_BASE_URL) throw new Error(\"PLAYWRIGHT_BASE_URL is required\")' && playwright test --config tests/browser/playwright.config.ts tests/browser/production-smoke.spec.ts",
     "quality": "bun run test:unit && bun run test:browser && bun run lint && bun run build-project",
@@ -36,46 +36,47 @@
     "generate-migrations": "drizzle-kit generate --config drizzle/config.json && bun run format:fix"
   },
   "dependencies": {
-    "@extractus/article-extractor": "^9.0.0",
+    "@extractus/article-extractor": "^9.0.1",
     "@mozilla/readability": "^0.6.0",
     "@rowanmanning/feed-parser": "^2.1.4",
-    "bullmq": "^5.80.12",
+    "bullmq": "^6.3.4",
     "disposable-email-domains-js": "^1.25.0",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.15",
     "drizzle-orm": "^0.45.2",
-    "elysia": "2.0.0-beta.4",
+    "elysia": "2.0.0-beta.14",
     "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "linkedom": "file:./vendor/linkedom-shim",
-    "mailparser": "^3.9.14",
+    "mailparser": "^3.9.22",
     "microformats-parser": "^2.0.6",
-    "sanitize-html": "^2.17.6",
-    "solid-js": "^1.9.14",
-    "typebox": "1.3.9"
+    "sanitize-html": "^2.17.7",
+    "solid-js": "^1.9.15",
+    "typebox": "1.3.28"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.78.0",
-    "@playwright/test": "1.61.1",
-    "@types/chrome": "^0.2.2",
+    "@oxlint/plugins": "1.81.0",
+    "@playwright/test": "1.63.0",
+    "@types/chrome": "^0.2.9",
     "@types/mailparser": "^3.4.6",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.4.1",
     "@types/sanitize-html": "^2.16.1",
-    "bun-types": "^1.4.1",
+    "bun-types": "^1.4.2",
     "drizzle-kit": "^0.31.10",
-    "knip": "^6.29.0",
-    "oxfmt": "^0.59.0",
-    "oxlint": "^1.75.0",
+    "knip": "^6.34.0",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
-    "vite-plugin-solid": "^2.11.13",
-    "web-ext": "10.5.0"
+    "vite": "^8.2.2",
+    "vite-plugin-solid": "^2.11.14",
+    "web-ext": "10.6.0"
   },
   "peerDependencies": {},
   "overrides": {
-    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim"
+    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
+    "linkedom": "file:./vendor/linkedom-shim"
   },
-  "packageManager": "bun@1.4.1",
+  "packageManager": "bun@1.4.2",
   "knip": {
     "$schema": "https://unpkg.com/knip@5/schema.json",
     "entry": [
@@ -102,8 +103,5 @@
     "ignoreDependencies": [
       "linkedom"
     ]
-  },
-  "patchedDependencies": {
-    "@extractus/article-extractor@9.0.0": "patches/@extractus%2Farticle-extractor@9.0.0.patch"
   }
 }

@@ -75,18 +75,21 @@ const subscribedArticle = {
   url: "https://articles.example/subscribed",
 };
 
-const summary = (item: typeof article) => ({
+const summary = (item: typeof article, read = false) => ({
   author: item.author,
   group: "Today",
   id: item.id,
   publishedAt: item.publishedAt,
+  read,
   sourceId: item.sourceId,
   title: item.title,
   url: item.url,
 });
 
 type ApiFixtureState = {
+  articleRequests: number;
   authenticated: boolean;
+  readArticleIds: Set<number>;
   findRequests: number;
   removedArticleIds: number[];
   removedFolderIds: number[];
@@ -106,14 +109,17 @@ export async function installApiFixture(
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
     multipleArticles?: boolean;
+    passwordResetEnabled?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
     websubFeed?: boolean;
   } = {},
 ): Promise<ApiFixtureState> {
   const state: ApiFixtureState = {
+    articleRequests: 0,
     authenticated: options.authenticated ?? true,
     findRequests: 0,
+    readArticleIds: new Set<number>(),
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
@@ -138,6 +144,16 @@ export async function installApiFixture(
     if (method === "GET" && url.pathname === "/api/session") {
       if (options.sessionFailure) return respond({ user: { id: "malformed" } });
       return respond({ user: state.authenticated ? user : null });
+    }
+
+    // The login view reads this to decide whether to offer a reset link, so
+    // it is fetched on every visit to /login, not just on the register page.
+    if (method === "GET" && url.pathname === "/api/register") {
+      return respond({
+        passwordResetEnabled: options.passwordResetEnabled ?? false,
+        registrationStatus: "DISABLED",
+        turnstileSiteKey: null,
+      });
     }
 
     if (method === "POST" && url.pathname === "/api/login") {
@@ -183,6 +199,7 @@ export async function installApiFixture(
 
     if (method === "POST" && url.pathname === "/api/articles") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      state.articleRequests += 1;
       const sources = request.postDataJSON().sources;
       expect(
         sources.every((sourceId: number) => [3, 9].includes(sourceId)),
@@ -193,11 +210,27 @@ export async function installApiFixture(
       const techNewsArticles = options.multipleArticles
         ? [article, secondArticle, thirdArticle]
         : [article];
+      const filter: string = request.postDataJSON().filter ?? "unread";
       return respond(
         techNewsArticles
           .filter((item) => !state.removedArticleIds.includes(item.id))
-          .map(summary),
+          .filter((item) => {
+            if (filter === "all") return true;
+            const read = state.readArticleIds.has(item.id);
+            return filter === "read" ? read : !read;
+          })
+          .map((item) => summary(item, state.readArticleIds.has(item.id))),
       );
+    }
+
+    if (method === "PATCH" && url.pathname === "/api/articles") {
+      const { articleIdList, read } = request.postDataJSON();
+      expect(articleIdList.length > 0).toBe(true);
+      for (const id of articleIdList) {
+        if (read) state.readArticleIds.add(id);
+        else state.readArticleIds.delete(id);
+      }
+      return respond(articleIdList);
     }
 
     if (method === "DELETE" && url.pathname === "/api/articles") {

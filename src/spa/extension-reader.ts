@@ -221,9 +221,9 @@ const extractWithReadability = (
 // @extractus/article-extractor: a different heuristic set (falls back to
 // meta tags/OpenGraph data more readily than Readability), offered as a
 // manual alternative in the mode picker for articles Readability mangles.
-// Its own DOM calls are all standard APIs -- see vendor/linkedom-shim --
-// so this runs against the browser's native parser, not a second copy of
-// Readability's own dependency.
+// Runs against the browser's native parser rather than a second pure-JS DOM
+// -- see vendor/linkedom-shim, which is nearly all standard API and one
+// documented divergence over how a fragment is rooted.
 const extractWithArticleExtractor = async (
   html: string,
   finalUrl: string,

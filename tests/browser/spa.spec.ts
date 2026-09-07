@@ -95,6 +95,24 @@ async function installReaderResponder(
   }, available);
 }
 
+// One row of a stubbed article page, in the shape articlesResponse wants.
+const pagedSummary = (id: number) => ({
+  author: "Author",
+  group: "Older",
+  id,
+  publishedAt: "2026-07-20T10:00:00.000Z",
+  read: false,
+  sourceId: 3,
+  title: `Article ${id}`,
+  url: `https://articles.example/${id}`,
+});
+
+// The article rows are role="option" inside the list. So are the three
+// options of the filter <select> beside them, which is why this is scoped
+// rather than asking the page for every option it has.
+const articleOptions = (page: Page) =>
+  page.locator(".article-list").getByRole("option");
+
 const selectSource = async (page: Page, name = "Tech News") => {
   await page.locator("button.source").filter({ hasText: name }).click();
 };
@@ -374,6 +392,211 @@ test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
   await expect(page.locator(`#${owns}`)).toHaveAttribute("role", "group");
 });
 
+test("narrows the tree to what matches, and says so when nothing does", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const filter = page.getByLabel("Filter feeds");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+
+  await filter.fill("tech");
+  // The folder does not match "tech" itself; it survives through its child.
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+
+  await filter.fill("nothing matches this");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("No feeds match that.")).toBeVisible();
+
+  await filter.fill("");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+});
+
+// The article list is keyset-paged and the scroll position is what asks for
+// the next page, so a list too short to scroll can never ask. Deleting a whole
+// page is the way in: select all, delete, and the pane would sit empty with
+// pages still unread and nothing left to scroll.
+test("fetches the next article page after a delete empties the list", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const pageSize = 200;
+  const cursors: (number | undefined)[] = [];
+  // Registered after the fixture, so it wins for this one route and falls
+  // through to the fixture for every other request the page makes.
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    cursors.push(body.cursor);
+    const start = body.cursor === undefined ? 1 : pageSize + 1;
+    const size = body.cursor === undefined ? pageSize : 3;
+    await route.fulfill({
+      json: Array.from({ length: size }, (_, index) =>
+        pagedSummary(start + index),
+      ),
+    });
+  });
+  // Selecting the list also opens its first row, and these ids are not ones
+  // the fixture knows.
+  await page.route("**/api/article?*", async (route) => {
+    const id = Number(
+      new URL(route.request().url()).searchParams.get("article"),
+    );
+    await route.fulfill({
+      json: {
+        author: "Author",
+        content: `<p>Body ${id}</p>`,
+        guid: `guid-${id}`,
+        id,
+        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+        publishedAt: "2026-07-20T10:00:00.000Z",
+        sourceId: 3,
+        title: `Article ${id}`,
+        updatedAt: null,
+        url: `https://articles.example/${id}`,
+      },
+    });
+  });
+  await page.goto("/");
+  await selectSource(page);
+
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+  expect(cursors).toEqual([undefined]);
+
+  await page.getByRole("button", { exact: true, name: "select all" }).click();
+  await page.getByRole("button", { name: "delete articles" }).click();
+
+  // The second page arrives without a scroll, because there was nothing left
+  // to scroll, and it is asked for with the last row of the first page.
+  await expect(rows).toHaveCount(3);
+  expect(cursors).toEqual([undefined, pageSize]);
+});
+
+// Read state is the alternative to the delete-as-you-read workflow: an
+// article you are finished with but want to keep. Marking one read has to
+// take it out of the Unread view without taking it out of the store.
+test("marks an article read, moving it between the filters", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  const filter = page.getByRole("combobox", { name: "Show" });
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark read" }).click();
+
+  // Gone from Unread, and the server was told rather than the row merely
+  // hidden client-side.
+  await expect(articleOptions(page)).toHaveCount(2);
+  expect([...state.readArticleIds]).toEqual([11]);
+
+  await filter.selectOption("read");
+  await expect(articleOptions(page)).toHaveCount(1);
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  await filter.selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+  // Only the one marked renders as read, from the server's own flag.
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  // The button offers the reverse action once the selection is already read.
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark unread" }).click();
+  await expect(page.locator(".article-list .article.read")).toHaveCount(0);
+  expect([...state.readArticleIds]).toEqual([]);
+
+  // Same action from the keyboard, which is how Delete already works.
+  await articleOptions(page).first().click();
+  await page.keyboard.press("m");
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+  expect([...state.readArticleIds]).toEqual([11]);
+
+  // Three list requests, all of them a change of question: the initial
+  // selection and the two filter changes. Marking read answers itself
+  // locally -- re-asking would flash the skeleton over rows already correct.
+  expect(state.articleRequests).toBe(3);
+});
+
+// Colour cannot carry this. forced-colors mode replaces every colour the
+// stylesheet sets with the system palette, and a selected row already has to
+// put a read title back to the selected text colour or it drops under 1.5:1.
+// Weight survives both, which is what the tree already relies on for a source
+// with unread articles.
+test("tells read from unread by weight, not only colour", async ({ page }) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+
+  const weightOf = (index: number) =>
+    articleOptions(page)
+      .nth(index)
+      .locator(".title")
+      .evaluate((title) => getComputedStyle(title).fontWeight);
+
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+  const unreadWeight = await weightOf(0);
+
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "Mark read" }).click();
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+
+  // Still selected from the click above, which is the case colour cannot
+  // answer at all.
+  await expect(articleOptions(page).first()).toHaveClass(/selected/);
+  const readWeight = await weightOf(0);
+  expect(readWeight).not.toBe(unreadWeight);
+  expect(Number(unreadWeight)).toBeGreaterThan(Number(readWeight));
+});
+
+// The tree is a roving tabindex: exactly one row carries tabindex="0" and the
+// rest carry -1. A filter that removed the row holding it would leave none,
+// and Tab would step straight past the whole tree.
+test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  const tabStops = page.locator('[role="treeitem"][tabindex="0"]');
+  await expect(tabStops).toHaveCount(1);
+
+  await page.getByLabel("Filter feeds").fill("tech");
+  await expect(tabStops).toHaveCount(1);
+
+  await page.getByLabel("Filter feeds").fill("");
+  await expect(tabStops).toHaveCount(1);
+});
+
+// The route answers as it does for an unknown address when no mail is
+// configured, so offering the link there would only send people somewhere
+// that cannot help them.
+test("offers a password reset link only where mail can deliver one", async ({
+  page,
+}) => {
+  await installApiFixture(page, { authenticated: false });
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Forgot your password?" }),
+  ).toHaveCount(0);
+
+  await installApiFixture(page, {
+    authenticated: false,
+    passwordResetEnabled: true,
+  });
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Forgot your password?" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Reset your password" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/password-reset");
+});
+
 test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
@@ -434,7 +657,7 @@ test("select all moves focus into the list so Delete works immediately", async (
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   await page.getByRole("button", { name: "select all" }).click();
   await expect(
@@ -451,7 +674,7 @@ test("select all moves focus into the list so Delete works immediately", async (
   ).toBe("option");
 
   await page.keyboard.press("Delete");
-  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect(articleOptions(page)).toHaveCount(0);
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
@@ -465,7 +688,7 @@ test("select all does not scroll the article list", async ({ page }) => {
   await page.goto("/");
   await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   const list = page.locator(".article-list");
   await list.evaluate((element) => {
@@ -484,12 +707,12 @@ test("select all then clicking Delete removes every article", async ({
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(articleOptions(page)).toHaveCount(3);
 
   await page.getByRole("button", { name: "select all" }).click();
   await page.getByRole("button", { name: "delete articles" }).click();
 
-  await expect(page.getByRole("option")).toHaveCount(0);
+  await expect(articleOptions(page)).toHaveCount(0);
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
@@ -505,7 +728,7 @@ test("selecting a single article then pressing Delete removes only it", async ({
   await page.getByRole("option", { name: /Second article/ }).click();
   await page.keyboard.press("Delete");
 
-  await expect(page.getByRole("option")).toHaveCount(2);
+  await expect(articleOptions(page)).toHaveCount(2);
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toBeVisible();
@@ -833,7 +1056,7 @@ test("exposes Reader modes only when the bridge is available", async ({
   await page.goto("/");
   await selectSource(page);
 
-  const modes = page.getByRole("combobox");
+  const modes = page.getByRole("combobox", { name: "Article display mode" });
   await expect(modes).toContainText("Reader (plain text)");
   await modes.selectOption("READABILITY");
   await expect(
@@ -850,7 +1073,9 @@ test("extracts article content with the alternate extractor", async ({
   await page.goto("/");
   await selectSource(page);
 
-  await page.getByRole("combobox").selectOption("ARTICLE_EXTRACTOR");
+  await page
+    .getByRole("combobox", { name: "Article display mode" })
+    .selectOption("ARTICLE_EXTRACTOR");
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
@@ -864,7 +1089,9 @@ test("keeps Feed mode when the Reader bridge is unavailable", async ({
   await page.goto("/");
   await selectSource(page);
 
-  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "Article display mode" }),
+  ).toHaveCount(0);
   await expect(page.getByText("Feed article content")).toBeVisible();
 });
 

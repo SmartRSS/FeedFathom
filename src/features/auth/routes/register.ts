@@ -8,7 +8,9 @@ import { registerRequest } from "#shared/contracts/requests.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
+import { clientAddress } from "#features/auth/routes/client-address.ts";
 
 const turnstileResponse = Type.Object(
   { success: Type.Boolean() },
@@ -18,6 +20,7 @@ const turnstileResponseCheck = Schema.Compile(turnstileResponse);
 
 export type RegisterRouteDependencies = {
   config: AppConfig;
+  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
   fetcher: (
     ...args: Parameters<typeof globalThis.fetch>
   ) => ReturnType<typeof globalThis.fetch>;
@@ -58,6 +61,7 @@ async function validateCaptcha(
 
 export function createRegisterRoute({
   config,
+  authThrottle,
   fetcher,
   mailSender,
   password,
@@ -66,11 +70,17 @@ export function createRegisterRoute({
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
   );
+  const useEmailActivation = Boolean(
+    config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
+  );
 
   return new Elysia()
     .get("/api/register", async () => {
       const count = await usersDataService.getUserCount();
       return json({
+        passwordResetEnabled: Boolean(
+          config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
+        ),
         registrationStatus:
           count === 0
             ? "FIRST_USER"
@@ -80,62 +90,82 @@ export function createRegisterRoute({
         turnstileSiteKey: config.TURNSTILE_SITE_KEY ?? null,
       });
     })
-    .post("/api/register", { body: registerRequest }, async ({ body }) => {
-      const request = Value.Decode(registerRequest, body);
-      if (
-        config.TURNSTILE_SECRET_KEY &&
-        !(await validateCaptcha(
-          request["cf-turnstile-response"],
-          config.TURNSTILE_SECRET_KEY,
-          fetcher,
-        ))
-      ) {
-        return json({ error: "Invalid CAPTCHA", success: false }, 400);
-      }
-      if (
-        (await usersDataService.getUserCount()) > 0 &&
-        !config.ENABLE_REGISTRATION
-      ) {
-        return json(
-          { error: "Registration is currently disabled", success: false },
-          403,
-        );
-      }
-      if (!Value.Check(allowedEmailPolicy, request.email)) {
-        return json({ error: "", success: false }, 403);
-      }
-      if (Value.Check(disposableEmailPolicy, request.email))
+    .post(
+      "/api/register",
+      { body: registerRequest },
+      async ({ body, request: httpRequest, server }) => {
+        const request = Value.Decode(registerRequest, body);
+        if (
+          config.TURNSTILE_SECRET_KEY &&
+          !(await validateCaptcha(
+            request["cf-turnstile-response"],
+            config.TURNSTILE_SECRET_KEY,
+            fetcher,
+          ))
+        ) {
+          return json({ error: "Invalid CAPTCHA", success: false }, 400);
+        }
+        const userCount = await usersDataService.getUserCount();
+        if (userCount > 0 && !config.ENABLE_REGISTRATION) {
+          return json(
+            { error: "Registration is currently disabled", success: false },
+            403,
+          );
+        }
+        if (!Value.Check(allowedEmailPolicy, request.email)) {
+          return json({ error: "", success: false }, 403);
+        }
+        if (Value.Check(disposableEmailPolicy, request.email))
+          return json({ success: true });
+
+        const existing = await usersDataService.findUser(request.email);
+        if (existing) return json({ success: true });
+
+        // The only thing worth abusing here is the send: who may hold an
+        // account is settled by the checks above, but the activation mail
+        // goes to an address the caller named, from this instance's domain.
+        // So the count sits on the branch that sends, ahead of the password
+        // hash an attempt would otherwise make us pay for. On an empty
+        // instance there is nobody to send to but the first operator, who
+        // has no second address to try and must not be locked out of their
+        // own install, so the count does not start until they exist.
+        if (useEmailActivation && userCount > 0) {
+          const address = clientAddress(
+            httpRequest,
+            server,
+            config.TRUSTED_PROXY_HEADER,
+          );
+          // Same generic body as a disposable address or an existing account,
+          // so being throttled is not itself an answer about who exists.
+          if (await authThrottle.blocked("register", address, request.email))
+            return json({ success: true });
+          await authThrottle.recordFailure("register", address, request.email);
+        }
+
+        const passwordHash = await password.hash(request.password);
+        if (useEmailActivation) {
+          const activationToken = randomUUID();
+          const activationTokenExpiresAt = new Date(
+            Date.now() + 24 * 60 * 60 * 1_000,
+          );
+          await mailSender.sendActivationEmail(request.email, activationToken);
+          await usersDataService.createUser({
+            activationToken,
+            activationTokenExpiresAt,
+            email: request.email,
+            name: request.username,
+            passwordHash,
+            status: "inactive",
+          });
+        } else {
+          await usersDataService.createUser({
+            email: request.email,
+            name: request.username,
+            passwordHash,
+            status: "active",
+          });
+        }
         return json({ success: true });
-
-      const existing = await usersDataService.findUser(request.email);
-      if (existing) return json({ success: true });
-
-      const passwordHash = await password.hash(request.password);
-      const useEmailActivation = Boolean(
-        config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
-      );
-      if (useEmailActivation) {
-        const activationToken = randomUUID();
-        const activationTokenExpiresAt = new Date(
-          Date.now() + 24 * 60 * 60 * 1_000,
-        );
-        await mailSender.sendActivationEmail(request.email, activationToken);
-        await usersDataService.createUser({
-          activationToken,
-          activationTokenExpiresAt,
-          email: request.email,
-          name: request.username,
-          passwordHash,
-          status: "inactive",
-        });
-      } else {
-        await usersDataService.createUser({
-          email: request.email,
-          name: request.username,
-          passwordHash,
-          status: "active",
-        });
-      }
-      return json({ success: true });
-    });
+      },
+    );
 }

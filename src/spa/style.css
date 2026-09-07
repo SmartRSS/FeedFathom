@@ -279,6 +279,18 @@ form,
 .options-card h2 {
   margin: 0;
 }
+/* Every other options card's action is a full-width button; the OPML export
+   is a link because it downloads a file. ButtonFace/ButtonText are what the
+   UA paints a bare <button> with here -- no rule in this file overrides them
+   -- so borrowing them keeps the two matching under every theme, the same
+   way the System Color keywords elsewhere avoid a per-theme pass. */
+.options-card a.card-action {
+  padding: 0.6rem;
+  background: ButtonFace;
+  color: ButtonText;
+  text-align: center;
+  text-decoration: none;
+}
 
 .admin-page {
   display: grid;
@@ -477,6 +489,18 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.tree-filter {
+  margin: 0.4rem;
+  padding: 0.4rem;
+  min-width: 0;
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.tree-empty {
+  margin: 0 0.4rem;
+  color: var(--grey-50);
+  font-size: 0.8rem;
 }
 .tree {
   margin: 0;
@@ -755,7 +779,25 @@ a.article {
      transparent (the default) is invisible, only Aero sets one. */
   box-shadow: inset 0 0 0 1px var(--selected-border);
 }
-.article.selected .details {
+/* Weight carries the distinction, colour only reinforces it. The two places
+   colour cannot reach are forced-colors mode, where the system palette
+   replaces everything set here including --muted, and a selected row, whose
+   own rule below has to put the title back to the selected text colour.
+   Weight survives both. Same rule .source.unread already uses in the tree. */
+.article:not(.read) .title {
+  font-weight: 700;
+}
+/* Only ever visible in the All and Read views: in Unread, by definition, no
+   row is read. Dimming the title rather than the whole row keeps the author
+   and date at the contrast they already have. */
+.article.read .title {
+  color: var(--muted);
+}
+.article.selected .details,
+/* Same reason as .details below: --muted on a selected row measured under
+   1.5:1 against every theme's selected background, so a read row's title has
+   to drop back to the selected text color while it is selected. */
+.article.selected.read .title {
   color: inherit;
 }
 /* Classic desktop list/tree controls render a selected item's text in
@@ -796,6 +838,18 @@ a.article {
 .article-list {
   flex: 1;
   overflow: auto;
+}
+.article-filter {
+  min-width: 0;
+  font: inherit;
+}
+/* The toolbar is otherwise icon buttons. This one has no glyph in the icon
+   set and inventing one would not read as "mark read" anyway, so it says so. */
+.toolbar button.text-action {
+  width: auto;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 .title,
 .details > span {

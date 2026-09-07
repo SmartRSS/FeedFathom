@@ -11,7 +11,14 @@
       <form>
         <div class="input-block">
           <label for="instance">Instance:</label>
-          <input id="instance" type="text" />
+          <input
+            id="instance"
+            type="text"
+            inputmode="url"
+            aria-describedby="instance-error"
+            placeholder="https://feeds.example.com"
+          />
+          <p class="field-error" id="instance-error" role="alert"></p>
         </div>
       </form>
     </div>

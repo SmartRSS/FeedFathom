@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
   faviconUrls,
+  filterTree,
   folderOpenFromStored,
   folderOpenStorageKey,
   folderOpenToStored,
@@ -12,6 +13,7 @@ import {
   sourceIds,
   totalUnread,
   treeNodeKey,
+  treeTabStopKey,
   unreadCount,
   withDecrementedUnread,
   withTodayNode,
@@ -208,6 +210,67 @@ describe("folder open persistence", () => {
 
   test("namespaces the key by uid", () => {
     expect(folderOpenStorageKey("inbox")).toBe("folder:inbox");
+  });
+});
+
+describe("filterTree", () => {
+  const tree = [
+    folder("News", [
+      source("bbc", { name: "BBC World" }),
+      source("ap", { name: "Associated Press" }),
+    ]),
+    folder("Tech", [source("lwn", { name: "LWN" })]),
+    source("loose", { name: "Daily Newsletter" }),
+  ];
+
+  test("keeps a matching source and the folder it lives in", () => {
+    expect(filterTree(tree, "lwn")).toEqual([
+      folder("Tech", [source("lwn", { name: "LWN" })]),
+    ]);
+  });
+
+  test("keeps every child of a folder whose own name matches", () => {
+    // Narrowing to the one child that repeats the folder's word would hide
+    // the rest of a folder the user just named, which is not what "filter to
+    // News" asks for.
+    expect(filterTree(tree, "news")).toEqual([
+      folder("News", [
+        source("bbc", { name: "BBC World" }),
+        source("ap", { name: "Associated Press" }),
+      ]),
+      source("loose", { name: "Daily Newsletter" }),
+    ]);
+  });
+
+  test("drops a folder no descendant matches, and returns the tree unfiltered for a blank query", () => {
+    expect(filterTree(tree, "nothing here")).toEqual([]);
+    expect(filterTree(tree, "   ")).toBe(tree);
+  });
+});
+
+describe("treeTabStopKey", () => {
+  const tree = [
+    folder("News", [source("bbc")]),
+    folder("Tech", [source("lwn")]),
+  ];
+
+  test("keeps the focused row as the tab stop while it is still shown", () => {
+    expect(treeTabStopKey(tree, "source:lwn")).toBe("source:lwn");
+    expect(treeTabStopKey(tree, "folder:News")).toBe("folder:News");
+  });
+
+  test("falls back to the first row when the focused one is filtered away", () => {
+    // The tree is a roving tabindex: exactly one row is a tab stop. Filtering
+    // out the row that had it would otherwise leave none, and Tab would skip
+    // the whole tree.
+    expect(
+      treeTabStopKey([folder("News", [source("bbc")])], "source:lwn"),
+    ).toBe("folder:News");
+    expect(treeTabStopKey(tree, undefined)).toBe("folder:News");
+  });
+
+  test("has no tab stop to offer for an empty tree", () => {
+    expect(treeTabStopKey([], "source:lwn")).toBeUndefined();
   });
 });
 

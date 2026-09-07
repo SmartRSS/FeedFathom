@@ -8,6 +8,8 @@ import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import {
   isTheme,
+  markReadOnOpen,
+  setMarkReadOnOpen,
   setTheme,
   setTodayView,
   theme,
@@ -358,6 +360,40 @@ export function Options(props: {
           )}
         </Show>
       </form>
+      <section class="options-card">
+        <h2>Reading</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={markReadOnOpen()}
+            onChange={(event) => setMarkReadOnOpen(event.currentTarget.checked)}
+          />{" "}
+          Mark an article read when you open it
+        </label>
+        <p>
+          Off by default. This reader is built around deleting an article once
+          you are done with it, so opening one leaves it unread unless you ask
+          otherwise. Applies in the All view, where a read article stays in the
+          list.
+        </p>
+      </section>
+      <section class="options-card">
+        <h2>Export OPML</h2>
+        <p>
+          Download every feed subscription as an OPML file any other reader can
+          import.
+        </p>
+        {/* A plain link rather than a fetch: the API is cookie-authenticated,
+            so the browser downloads it without the SPA holding the file in
+            memory first. */}
+        <a class="card-action" download="" href="/api/options/opml">
+          Download subscriptions
+        </a>
+        <p>
+          Newsletter subscriptions are not included. Their addresses are minted
+          by this instance, so they mean nothing to another reader.
+        </p>
+      </section>
       <form id="import-opml" class="options-card" onSubmit={submitOpml}>
         <h2>Import OPML</h2>
         <label>

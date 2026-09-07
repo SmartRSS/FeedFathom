@@ -5,6 +5,7 @@ import {
   createFolderRequest,
   findQuery,
   previewQuery,
+  readArticlesRequest,
   removeArticlesRequest,
   removeFolderRequest,
   removeSourceRequest,
@@ -29,6 +30,7 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 import { getArticleHandler } from "#features/reader/routes/article.ts";
 import {
   deleteArticlesHandler,
+  patchArticlesHandler,
   postArticlesHandler,
 } from "#features/reader/routes/articles.ts";
 import {
@@ -50,6 +52,7 @@ export type ReaderRouteDependencies = {
     | "getUserArticle"
     | "getUserArticlesForSources"
     | "removeUserArticles"
+    | "setUserArticlesRead"
   >;
   usersDataService: Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
   feedParser: Pick<
@@ -89,6 +92,9 @@ export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
     )
     .delete("/api/articles", { body: removeArticlesRequest }, (ctx) =>
       deleteArticlesHandler(ctx, deps),
+    )
+    .patch("/api/articles", { body: readArticlesRequest }, (ctx) =>
+      patchArticlesHandler(ctx, deps),
     )
     .get("/api/folders", (ctx) => getFoldersHandler(ctx, deps))
     .post("/api/folders", { body: createFolderRequest }, (ctx) =>
