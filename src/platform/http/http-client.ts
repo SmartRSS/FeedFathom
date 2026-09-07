@@ -1,7 +1,6 @@
 import {
   cacheable,
   type CachedResponse,
-  cachedResponseCheck,
   refresh,
   sharedCacheAllowed,
 } from "#platform/http/http-cache-policy.ts";
@@ -18,104 +17,29 @@ import {
   nativeHttpTransport,
   parseHttpUrl,
 } from "#platform/http/http-native-transport.ts";
+import {
+  HttpCacheStore,
+  maximumBodyBytes,
+  maximumBodyMebibytes,
+  type HttpRedis,
+} from "#platform/http/http-cache-store.ts";
+import {
+  buildUserAgent,
+  buildUserAgentPrefix,
+  type HttpClientIdentity,
+} from "#platform/http/identity.ts";
+import { RedirectPolicy } from "#platform/http/redirect-policy.ts";
 
-const cachePrefix = "http-cache:";
-const cacheLockPrefix = "http-cache-lock:";
-const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 const requestDeadlineMs = 30_000;
-// Sized off the largest feed actually polled, not a round number: Project
-// Zero inlines full exploit writeups (12.6 MiB, +1.3 MiB per post). The rest
-// of a 227-source corpus fits under 1 MiB.
-//
-// ponytail: one global ceiling, not a per-source budget. Worst case is
-// WORKER_CONCURRENCY downloads all at the cap against the worker's memory
-// limit (50 and 750 MiB in production), which only works because a single
-// source exceeds 5 MiB. Add per-source budgets if a second heavyweight shows
-// up.
-const maximumBodyBytes = 24 * 1024 * 1024;
-const maximumBodyMebibytes = maximumBodyBytes / (1024 * 1024);
-const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
-const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
-const userAgentProduct = "SmartRSS/FeedFathom";
-const userAgentUrl = "+https://github.com/SmartRSS/FeedFathom";
-const shortShaLength = 7;
 
-// Both fields land in an outgoing header, so anything outside this set is
-// dropped rather than escaped. It covers hostnames with an optional :port and
-// every tag shape produced here, and excludes the ";" / ")" / CR / LF that
-// would let a mis-set env var break the header. Empty is treated as absent.
-function sanitizeIdentity(value: string | undefined): string | undefined {
-  const cleaned = value?.trim().replaceAll(/[^\w.:-]/gu, "");
-  if (cleaned === undefined || cleaned === "") return undefined;
-  return cleaned;
-}
-
-// FEEDFATHOM_TAG is usually a full commit SHA; 7 characters identify the build
-// just as well. Anything shorter (a channel tag, a semver) passes through.
-function normalizeVersion(value: string | undefined): string | undefined {
-  const tag = sanitizeIdentity(value);
-  if (tag === undefined) return undefined;
-  return /^[0-9a-f]{40}$/u.test(tag) ? tag.slice(0, shortShaLength) : tag;
-}
-
-// Feed readers report their subscriber count in the User-Agent -- often the
-// only audience feedback RSS gives a publisher. Google's Feedfetcher set the
-// shape ("...; 4 subscribers; feed-id=...") and Feedly, Feedbin and Inoreader
-// copied it, so publishers scrape the literal word "subscribers".
-//
-// The build tag and instance host ride along so two FeedFathom instances can
-// be told apart. The "+" slot keeps the project URL, not the instance host: a
-// self-hosted domain explains nothing to the publisher reading it.
-function buildUserAgentPrefix(identity: HttpClientIdentity): string {
-  const version = normalizeVersion(identity.version);
-  const product = version ? `${userAgentProduct}/${version}` : userAgentProduct;
-  const instance = sanitizeIdentity(identity.instance) ?? "localhost";
-  return `${product} (${userAgentUrl}; instance=${instance}`;
-}
-
-// Only appended when a real count is known -- discovery and preview fetches
-// have no subscribers, and claiming otherwise poisons the numbers this exists
-// to report. Plural even at one, because the regexes match the literal word.
-function buildUserAgent(
-  prefix: string,
-  subscribers: number | undefined,
-): string {
-  if (
-    subscribers === undefined ||
-    !Number.isInteger(subscribers) ||
-    subscribers < 0
-  ) {
-    return `${prefix})`;
-  }
-  return `${prefix}; ${subscribers} subscribers)`;
-}
+const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
+const rateLimitedStatus = 429;
+const notModifiedStatus = 304;
 
 // Everything else a push carries is about the push, not about the feed
 // document: the hub's signature, its own cache directives, its Date. Only
 // what the parser reads is kept.
 const seededCacheHeaders = ["content-type", "link"];
-
-const releaseCacheLockScript =
-  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-
-const redirectStatuses = new Set([301, 302, 303, 307, 308]);
-const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
-const rateLimitedStatus = 429;
-const notModifiedStatus = 304;
-
-type HttpRedis = {
-  decr(key: string): Promise<number>;
-  del(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
-  get(key: string): Promise<null | string>;
-  incr(key: string): Promise<number>;
-  send?(command: string, args: string[]): Promise<unknown>;
-  set(
-    key: string,
-    value: string,
-    ...options: Array<number | string>
-  ): Promise<null | string>;
-};
 
 type HttpRequestOptions = {
   priority?: "background" | "interactive";
@@ -134,14 +58,6 @@ type HttpRequestOptions = {
 
 type ArrayBufferRequestOptions = HttpRequestOptions & {
   responseType: "arrayBuffer";
-};
-
-type HttpClientIdentity = {
-  // FEED_FATHOM_DOMAIN. Falls back to "localhost" when unset.
-  instance?: string | undefined;
-  // FEEDFATHOM_BUILD: the commit baked into the image. Omitted from the
-  // User-Agent when unset rather than guessed from the pulled tag.
-  version?: string | undefined;
 };
 
 type HttpClientOptions = HttpClientIdentity & {
@@ -180,15 +96,16 @@ export class HttpClient {
   // Identity is fixed for the process; only the subscriber clause varies.
   private readonly userAgentPrefix: string;
   private readonly rateLimiter: HttpRateLimiter;
+  private readonly cacheStore: HttpCacheStore;
+  private readonly redirects: RedirectPolicy;
 
-  constructor(
-    private readonly redis: HttpRedis,
-    options: HttpClientOptions = {},
-  ) {
+  constructor(redis: HttpRedis, options: HttpClientOptions = {}) {
     this.rateLimiter = new HttpRateLimiter(redis, options.intervalMs);
     this.deadlineMs = options.deadlineMs ?? requestDeadlineMs;
     this.transport = options.transport ?? nativeHttpTransport;
     this.userAgentPrefix = buildUserAgentPrefix(options);
+    this.cacheStore = new HttpCacheStore(redis, this.deadlineMs);
+    this.redirects = new RedirectPolicy(this.rateLimiter, this.transport);
   }
 
   async get(
@@ -295,9 +212,9 @@ export class HttpClient {
 
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
-      const lock = await this.acquireCacheLock(url, deadline);
+      const lock = await this.cacheStore.acquireCacheLock(url, deadline);
       try {
-        await this.saveCached(
+        await this.cacheStore.saveCached(
           url,
           {
             body: body.toString("base64"),
@@ -309,7 +226,7 @@ export class HttpClient {
           deadline,
         );
       } finally {
-        await this.releaseCacheLock(lock, deadline);
+        await this.cacheStore.releaseCacheLock(lock, deadline);
       }
     } finally {
       deadline.dispose();
@@ -321,11 +238,11 @@ export class HttpClient {
     options: HttpRequestOptions,
     deadline: RequestDeadline,
   ): Promise<HttpResponse<ArrayBuffer | string>> {
-    const lock = await this.acquireCacheLock(url, deadline);
+    const lock = await this.cacheStore.acquireCacheLock(url, deadline);
     try {
       return await this.getWhileCacheLocked(url, options, deadline);
     } finally {
-      await this.releaseCacheLock(lock, deadline);
+      await this.cacheStore.releaseCacheLock(lock, deadline);
     }
   }
 
@@ -335,7 +252,7 @@ export class HttpClient {
     deadline: RequestDeadline,
   ): Promise<HttpResponse<ArrayBuffer | string>> {
     const parsedUrl = parseHttpUrl(url);
-    const cached = await this.getCached(url, deadline);
+    const cached = await this.cacheStore.getCached(url, deadline);
     if (cached && cached.expiresAt > Date.now() && !options.skipCache) {
       const response = this.fromCached(cached, options);
       deadline.assertActive();
@@ -372,11 +289,8 @@ export class HttpClient {
       const refreshed = refresh(cached, response.headers);
       const refreshedHeaders = new Headers(refreshed.headers);
       const retain = sharedCacheAllowed(refreshedHeaders);
-      if (retain) await this.saveCached(url, refreshed, deadline);
-      else
-        await deadline.run(
-          this.redis.del(`${cachePrefix}${this.cacheKey(url)}`),
-        );
+      if (retain) await this.cacheStore.saveCached(url, refreshed, deadline);
+      else await this.cacheStore.delete(url, deadline);
       const result = this.fromCached(
         retain ? refreshed : { ...refreshed, expiresAt: Date.now() },
         options,
@@ -387,10 +301,8 @@ export class HttpClient {
 
     const body = await this.readBody(response, deadline);
     const next = cacheable(response, body, url);
-    if (next) await this.saveCached(url, next, deadline);
-    else {
-      await deadline.run(this.redis.del(`${cachePrefix}${this.cacheKey(url)}`));
-    }
+    if (next) await this.cacheStore.saveCached(url, next, deadline);
+    else await this.cacheStore.delete(url, deadline);
 
     const data = this.decodeBody(body, options);
     deadline.assertActive();
@@ -416,12 +328,7 @@ export class HttpClient {
     for (let attempt = 0; ; attempt++) {
       let result: FetchResult | undefined;
       try {
-        result = await this.fetchFollowingRedirects(
-          url,
-          headers,
-          priority,
-          deadline,
-        );
+        result = await this.redirects.follow(url, headers, priority, deadline);
         // Whatever answered is what gets held back, which after a redirect
         // is not the host the request started at.
         const answeringHost = hostnameOf(result.response.url) ?? hostname;
@@ -469,147 +376,6 @@ export class HttpClient {
       }
     }
     /* eslint-enable no-await-in-loop */
-  }
-
-  private async fetchFollowingRedirects(
-    url: string,
-    headers: Headers,
-    priority: "background" | "interactive",
-    deadline: RequestDeadline,
-  ): Promise<FetchResult> {
-    let next = url;
-    // A chain is permanent only if every hop is (301/308) -- one temporary hop
-    // means the resolved URL could still change back.
-    let permanent = true;
-    /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
-    for (let redirects = 0; redirects <= 5; redirects++) {
-      // A hop is a request like any other, and it is a request to a host of
-      // its own. Reserving here rather than once per call is also what gives
-      // a retry its interval, since every attempt re-enters this loop. The
-      // hostname is safe to read: the first is already validated and every
-      // later one was built by `new URL` below.
-      await this.rateLimiter.reserve(
-        new URL(next).hostname,
-        priority,
-        deadline,
-      );
-      const response = await deadline.run(
-        this.transport(next, headers, deadline.controller.signal),
-      );
-      if (!redirectStatuses.has(response.status)) {
-        return { permanent: redirects > 0 && permanent, response };
-      }
-
-      if (response.status !== 301 && response.status !== 308) {
-        permanent = false;
-      }
-      const location = response.headers.get("location");
-      response.destroy();
-      if (!location) {
-        throw new HttpPolicyError("Redirect response is missing Location");
-      }
-      try {
-        next = new URL(location, next).toString();
-      } catch {
-        throw new HttpPolicyError("Redirect Location is malformed");
-      }
-    }
-    /* eslint-enable no-await-in-loop */
-    throw new HttpPolicyError("Too many redirects");
-  }
-
-  private async acquireCacheLock(
-    url: string,
-    deadline: RequestDeadline,
-  ): Promise<{ key: string; token: string }> {
-    if (!this.redis.send) return { key: "", token: "" };
-    const key = `${cacheLockPrefix}${this.cacheKey(url)}`;
-    const token = Bun.randomUUIDv7();
-    /* eslint-disable no-await-in-loop -- The lock must be acquired before the cache is read. */
-    for (;;) {
-      const acquired = await deadline.run(
-        this.redis.set(
-          key,
-          token,
-          "PX",
-          (this.deadlineMs + 5_000).toString(),
-          "NX",
-        ),
-      );
-      if (acquired === "OK") return { key, token };
-      await deadline.sleep(25);
-    }
-    /* eslint-enable no-await-in-loop */
-  }
-
-  private async releaseCacheLock(
-    lock: { key: string; token: string },
-    deadline: RequestDeadline,
-  ): Promise<void> {
-    try {
-      if (!lock.key || !this.redis.send) return;
-      await deadline.run(
-        this.redis.send("EVAL", [
-          releaseCacheLockScript,
-          "1",
-          lock.key,
-          lock.token,
-        ]),
-      );
-    } catch {
-      // The lock expires shortly after the request deadline.
-    }
-  }
-
-  private async getCached(
-    url: string,
-    deadline: RequestDeadline,
-  ): Promise<CachedResponse | undefined> {
-    const key = `${cachePrefix}${this.cacheKey(url)}`;
-    const value = await deadline.run(this.redis.get(key));
-    if (!value) return undefined;
-    if (Buffer.byteLength(value) > maximumCacheWireCharacters) {
-      await deadline.run(this.redis.del(key));
-      return undefined;
-    }
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (!cachedResponseCheck.Check(parsed) || !isBoundedBase64(parsed.body)) {
-        await deadline.run(this.redis.del(key));
-        return undefined;
-      }
-      parseHttpUrl(parsed.url);
-      return parsed;
-    } catch (error) {
-      if (error instanceof HttpDeadlineError) throw error;
-      await deadline.run(this.redis.del(key));
-      return undefined;
-    }
-  }
-
-  private async saveCached(
-    url: string,
-    response: CachedResponse,
-    deadline: RequestDeadline,
-  ): Promise<void> {
-    const key = `${cachePrefix}${this.cacheKey(url)}`;
-    const value = JSON.stringify(response);
-    if (Buffer.byteLength(value) > maximumCacheWireCharacters) {
-      await deadline.run(this.redis.del(key));
-      return;
-    }
-    await deadline.run(
-      this.redis.set(
-        key,
-        value,
-        "PX",
-        Math.max(cacheRetentionMs, response.expiresAt - Date.now()),
-      ),
-    );
-  }
-
-  private cacheKey(url: string): string {
-    return Buffer.from(url).toString("base64url");
   }
 
   private fromCached(
@@ -685,21 +451,4 @@ function hostnameOf(url: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/u;
-
-function isBoundedBase64(value: string): boolean {
-  return (
-    value.length <= maximumBase64Characters &&
-    value.length % 4 === 0 &&
-    decodedBase64Length(value) <= maximumBodyBytes &&
-    base64Pattern.test(value)
-  );
-}
-
-function decodedBase64Length(value: string): number {
-  if (!value) return 0;
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-  return (value.length / 4) * 3 - padding;
 }
