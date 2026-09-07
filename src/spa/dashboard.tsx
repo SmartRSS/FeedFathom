@@ -76,6 +76,7 @@ import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
 import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
 import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
+import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
 import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
 
@@ -246,7 +247,7 @@ export function Dashboard(props: {
     if (outcome === "copied")
       setAccessibilityAnnouncement("Article link copied to the clipboard.");
   }
-  async function refreshFromToast() {
+  async function refreshCurrentView() {
     setNewArticlesCount(0);
     pollCycles = 0;
     try {
@@ -844,9 +845,12 @@ export function Dashboard(props: {
       </Show>
       <Show when={error()}>
         {(message) => (
-          <p class="dashboard-alert" role="alert">
-            {message()}
-          </p>
+          <div class="dashboard-alert" role="alert">
+            <p>{message()}</p>
+            <button type="button" onClick={() => void refreshCurrentView()}>
+              Retry
+            </button>
+          </div>
         )}
       </Show>
       <Show when={newArticlesCount() > 0}>
@@ -855,7 +859,7 @@ export function Dashboard(props: {
             {newArticlesCount()} new article
             {newArticlesCount() === 1 ? "" : "s"}.
           </span>
-          <button type="button" onClick={() => void refreshFromToast()}>
+          <button type="button" onClick={() => void refreshCurrentView()}>
             Refresh
           </button>
         </div>
@@ -1003,6 +1007,12 @@ export function Dashboard(props: {
             >
               <Icon raw={removeRaw} />
             </button>
+            <button
+              aria-label="refresh"
+              onClick={() => void refreshCurrentView()}
+            >
+              <Icon raw={refreshRaw} />
+            </button>
             <span />
             <button
               aria-label="options"
@@ -1094,6 +1104,24 @@ export function Dashboard(props: {
                   </>
                 )}
               </For>
+              <Show
+                when={
+                  !articlesLoading() &&
+                  articles().length === 0 &&
+                  selectedNode()
+                }
+              >
+                <div class="article-list-empty" role="status">
+                  <p>All caught up.</p>
+                </div>
+              </Show>
+              <Show
+                when={!articlesLoading() && !selectedNode() && authenticated()}
+              >
+                <div class="article-list-empty" role="status">
+                  <p>Select a feed to read.</p>
+                </div>
+              </Show>
             </Show>
           </div>
         </section>

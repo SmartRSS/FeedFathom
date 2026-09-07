@@ -388,9 +388,31 @@ a {
   top: 0.5rem;
   right: 0.5rem;
   left: 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.5rem;
   border: var(--border);
   background: var(--white);
+}
+.dashboard-alert p {
+  margin: 0;
+}
+.dashboard-alert button {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  background: var(--blue-60);
+  color: var(--white);
+}
+/* Empty-list fallbacks (#710): quiet, centered, never read as an error. */
+.article-list-empty {
+  padding: 2rem 1rem;
+  color: var(--grey-60);
+  text-align: center;
+}
+.article-list-empty p {
+  margin: 0;
 }
 
 .dashboard-pane {
