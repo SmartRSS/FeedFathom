@@ -476,6 +476,47 @@ test("normalizes reader inputs and rejects malformed values before dependencies"
   expect(folders).toEqual([[42, "Reading"]]);
 });
 
+test("routes the Today view to every subscribed source with a 24h window", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const calls: [
+    number[],
+    number,
+    { allSubscribed?: boolean; publishedWithinHours?: number } | undefined,
+  ][] = [];
+  dependencies.articlesDataService.getUserArticlesForSources = async (
+    sourceIds,
+    userId,
+    options,
+  ) => {
+    calls.push([sourceIds, userId, options]);
+    return [];
+  };
+  const app = await appFor(dependencies);
+  const cookie = { cookie: "sid=test" };
+
+  const today = await app.handle(
+    new Request("http://localhost/api/articles", {
+      body: JSON.stringify({ sources: [], view: "today" }),
+      headers: { ...cookie, "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const unknownView = await app.handle(
+    new Request("http://localhost/api/articles", {
+      body: JSON.stringify({ sources: [3], view: "week" }),
+      headers: { ...cookie, "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(today.status).toBe(200);
+  expect(unknownView.status).toBe(422);
+  expect(calls).toEqual([
+    [[], 42, { allSubscribed: true, publishedWithinHours: 24 }],
+  ]);
+});
+
 test("rejects invalid subscription policies before cache or database calls", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);

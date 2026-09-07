@@ -78,6 +78,36 @@ export function unreadCount(node: TreeNode): number {
       );
 }
 
+// The virtual "Today" view (#715): not a real source, so it never reaches
+// sourceIds() or the server as an id -- callers branch on isTodayNode and
+// request the view instead.
+const todayNodeUid = "today";
+
+export function isTodayNode(node: TreeNode | undefined): boolean {
+  return node?.type === "source" && node.uid === todayNodeUid;
+}
+
+// Prepends the Today entry ahead of the user's own tree. Never shown on an
+// empty tree (the first-run guidance owns that state), and carries no
+// unread count of its own -- that number would need its own server
+// aggregate, and the view itself is one click away.
+export function withTodayNode(nodes: TreeNode[], enabled: boolean): TreeNode[] {
+  if (!enabled || nodes.length === 0) return nodes;
+  return [
+    {
+      favicon: null,
+      homeUrl: "",
+      kind: "feed",
+      name: "Today",
+      type: "source",
+      uid: todayNodeUid,
+      unreadCount: 0,
+      xmlUrl: "",
+    },
+    ...nodes,
+  ];
+}
+
 export function totalUnread(nodes: TreeNode[]): number {
   return nodes.reduce((count, node) => count + unreadCount(node), 0);
 }

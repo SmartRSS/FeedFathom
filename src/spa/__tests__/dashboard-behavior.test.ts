@@ -7,12 +7,14 @@ import {
   folderOpenToStored,
   findNode,
   findParentFolderUid,
+  isTodayNode,
   nextPollDelayMs,
   sourceIds,
   totalUnread,
   treeNodeKey,
   unreadCount,
   withDecrementedUnread,
+  withTodayNode,
 } from "../dashboard-behavior.ts";
 
 function source(
@@ -206,5 +208,32 @@ describe("folder open persistence", () => {
 
   test("namespaces the key by uid", () => {
     expect(folderOpenStorageKey("inbox")).toBe("folder:inbox");
+  });
+});
+
+describe("withTodayNode", () => {
+  test("prepends the virtual node ahead of the user's tree", () => {
+    const nodes = [source("1")];
+    const next = withTodayNode(nodes, true);
+    expect(next).toHaveLength(2);
+    expect(isTodayNode(next[0])).toBe(true);
+    expect(next[1]).toBe(nodes[0]);
+    expect(next[0]!.type === "source" && next[0]!.name).toBe("Today");
+  });
+
+  test("leaves an empty tree alone so first-run guidance owns it", () => {
+    expect(withTodayNode([], true)).toEqual([]);
+  });
+
+  test("disabled drops the node entirely", () => {
+    expect(withTodayNode([source("1")], false)).toHaveLength(1);
+  });
+
+  test("the virtual node yields no usable source id", () => {
+    const node = withTodayNode([source("1")], true)[0]!;
+    expect(isTodayNode(node)).toBe(true);
+    // Number("today") is NaN -- which is exactly why select() must branch
+    // on isTodayNode before reaching for sourceIds().
+    expect(Number.isNaN(sourceIds(node)[0])).toBe(true);
   });
 });
