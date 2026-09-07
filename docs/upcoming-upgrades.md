@@ -1,21 +1,29 @@
 # Upcoming major upgrades: Bun 1.4, Elysia 2.0, Solid 2.0
 
-Researched 2026-08-16, Bun section updated 2026-09-04 for 1.4.1.
+Researched 2026-08-16, versions rechecked 2026-09-07.
 
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
-| bun               | 1.4.1        | 1.4.1    | —                   |
-| elysia            | 2.0.0-beta.4 | 1.4.29   | 2.0.0-beta.4        |
-| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.0          |
+| bun               | 1.4.2        | 1.4.2    | —                   |
+| elysia            | 2.0.0-beta.4 | 1.4.30   | 2.0.0-beta.14       |
+| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.6          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
-| typebox           | 1.3.9        | 1.3.14   | —                   |
+| typebox           | 1.3.28       | 1.3.28   | —                   |
+
+`npm-check-updates` resolves elysia to its `experimental` dist-tag
+(`2.0.0-exp.64`), which is a different line from the `next` beta the project
+is on. Bumping elysia is a deliberate edit, not something to accept from
+`ncu -u`.
 
 ## Bun 1.4
 
-Released, and we're on it — the bump landed on `main` separately. The version
-is pinned in three places: `packageManager` (CI reads this via
-`oven-sh/setup-bun`'s `bun-version-file`), `devDependencies["bun-types"]`, and
-4 `oven/bun:` tags in the `Dockerfile`.
+Released, and we're on it — 1.4.2 as of 2026-09-07. The version is pinned in
+three places: `packageManager` (CI reads this via `oven-sh/setup-bun`'s
+`bun-version-file`), `devDependencies["bun-types"]`, and 4 `oven/bun:` tags in
+the `Dockerfile`. All three move together, and the suite is run against a
+matching binary before the pin lands: a Bun release has changed test outcomes
+in this repo before, so bumping the pin without running on it is not a bump,
+it is a guess.
 
 The headline for us is `Bun.XML` — a native SIMD XML parser and serializer
 that replaces `fast-xml-parser`. See "XML parsing" below.
