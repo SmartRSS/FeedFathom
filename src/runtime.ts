@@ -3,7 +3,7 @@ import { RedisClient } from "bun";
 import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
-import { cleanupOrphanedData } from "#platform/db/maintenance.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { RedirectMap } from "#platform/http/redirect-map.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";

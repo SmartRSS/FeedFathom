@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { cleanupOrphanedData } from "#platform/db/maintenance.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
