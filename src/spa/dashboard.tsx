@@ -23,7 +23,9 @@ import {
   faviconUrls,
   findNode,
   findParentFolderUid,
+  nextPollDelayMs,
   sourceIds,
+  totalUnread,
   treeNodeKey,
   withDecrementedUnread,
 } from "./dashboard-behavior.ts";
@@ -47,6 +49,12 @@ import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import { resolvedTheme } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
+import {
+  backgroundPollEnabled,
+  newArticlesCount,
+  setNewArticlesCount,
+  setUnreadTotal,
+} from "./news-signal.ts";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
 // DOM. As an external image it would need per-case light/dark guessing.
@@ -167,6 +175,63 @@ export function Dashboard(props: {
   createEffect(() => {
     if (props.initialDiscovery) setShowDiscovery(true);
   });
+  // The tab-title badge reads this (main.tsx); global total by decision.
+  // Reset on unmount so a logged-out tab does not keep a stale count.
+  createEffect(() => {
+    setUnreadTotal(totalUnread(tree()));
+  });
+  onCleanup(() => {
+    clearTimeout(pollTimer);
+    setUnreadTotal(0);
+    setNewArticlesCount(0);
+  });
+  // Background new-article poll (#717). The tree already carries every
+  // source's unread count, so a rise in the total is the whole signal --
+  // and the open article list is never mutated mid-read; the toast asks
+  // instead. Spacing backs off from 30s to a 5-minute ceiling and resets
+  // when the user refreshes, and hidden tabs skip cycles entirely.
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  let pollCycles = 0;
+  let lastSeenUnread: number | undefined;
+  const schedulePoll = () => {
+    if (!backgroundPollEnabled()) return;
+    pollTimer = setTimeout(() => {
+      if (document.hidden) {
+        schedulePoll();
+        return;
+      }
+      void pollForNewArticles();
+    }, nextPollDelayMs(pollCycles));
+  };
+  const pollForNewArticles = async () => {
+    try {
+      const nextTree = await loadTree();
+      const total = totalUnread(nextTree);
+      if (lastSeenUnread !== undefined && total > lastSeenUnread) {
+        const arrived = total - lastSeenUnread;
+        setNewArticlesCount((count) => Math.max(count, arrived));
+      }
+      lastSeenUnread = total;
+    } catch {
+      // Background polling stays silent: the next cycle retries, and the
+      // ordinary error surfaces already cover the user-visible paths.
+    } finally {
+      pollCycles += 1;
+      schedulePoll();
+    }
+  };
+  async function refreshFromToast() {
+    setNewArticlesCount(0);
+    pollCycles = 0;
+    try {
+      const nextTree = await loadTree();
+      lastSeenUnread = totalUnread(nextTree);
+      const node = selectedNode();
+      if (node) await select(node);
+    } catch (cause) {
+      reportError(cause, "Could not refresh articles");
+    }
+  }
   const selectionGuard = createSupersessionGuard();
   const articleRequestGuard = createSupersessionGuard();
   const capabilityProbeGuard = createSupersessionGuard();
@@ -281,6 +346,8 @@ export function Dashboard(props: {
       const nextTree = await loadTree();
       await preloadFavicons(nextTree);
       setAuthenticated(true);
+      lastSeenUnread = totalUnread(nextTree);
+      schedulePoll();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       reportError(cause, "Unable to load feeds.");
@@ -629,6 +696,17 @@ export function Dashboard(props: {
             {message()}
           </p>
         )}
+      </Show>
+      <Show when={newArticlesCount() > 0}>
+        <div class="update-banner" role="status">
+          <span>
+            {newArticlesCount()} new article
+            {newArticlesCount() === 1 ? "" : "s"}.
+          </span>
+          <button type="button" onClick={() => void refreshFromToast()}>
+            Refresh
+          </button>
+        </div>
       </Show>
       <Show when={!showDiscovery() || !authenticated()}>
         <aside

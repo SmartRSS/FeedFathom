@@ -78,6 +78,22 @@ export function unreadCount(node: TreeNode): number {
       );
 }
 
+export function totalUnread(nodes: TreeNode[]): number {
+  return nodes.reduce((count, node) => count + unreadCount(node), 0);
+}
+
+// Background poll spacing, backing off so a long-idle tab asks less often:
+// 30s doubling to a 5-minute ceiling.
+const firstPollDelayMs = 30_000;
+const maxPollDelayMs = 5 * 60_000;
+
+export function nextPollDelayMs(completedCycles: number): number {
+  return Math.min(
+    maxPollDelayMs,
+    firstPollDelayMs * 2 ** Math.max(0, completedCycles),
+  );
+}
+
 // Folder open/closed state persists as a string. Only the literal "closed"
 // collapses a folder: an absent key (never toggled), a value written by an
 // older build, or a corrupted one all read as open, so a bad entry can never

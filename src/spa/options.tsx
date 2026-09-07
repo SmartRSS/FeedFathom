@@ -8,6 +8,13 @@ import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import { isTheme, setTheme, theme } from "./preferences.ts";
 import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
+import {
+  backgroundPollEnabled,
+  isOnOff,
+  setBackgroundPollEnabled,
+  setUnreadBadgeEnabled,
+  unreadBadgeEnabled,
+} from "./news-signal.ts";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -203,6 +210,35 @@ export function Options(props: {
           >
             <option value="locale">System locale</option>
             <option value="iso">ISO 8601 (UTC)</option>
+          </select>
+        </label>
+      </section>
+      <section class="options-card">
+        <h2>New-article signal</h2>
+        <label>
+          Unread count in tab title
+          <select
+            value={unreadBadgeEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setUnreadBadgeEnabled(value);
+            }}
+          >
+            <option value="on">Show</option>
+            <option value="off">Hide</option>
+          </select>
+        </label>
+        <label>
+          Background check for new articles
+          <select
+            value={backgroundPollEnabled()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setBackgroundPollEnabled(value);
+            }}
+          >
+            <option value="on">On (shows a "new articles" toast)</option>
+            <option value="off">Off (no background requests)</option>
           </select>
         </label>
       </section>

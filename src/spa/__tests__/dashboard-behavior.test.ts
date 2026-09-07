@@ -7,7 +7,9 @@ import {
   folderOpenToStored,
   findNode,
   findParentFolderUid,
+  nextPollDelayMs,
   sourceIds,
+  totalUnread,
   treeNodeKey,
   unreadCount,
   withDecrementedUnread,
@@ -80,6 +82,36 @@ describe("unreadCount", () => {
 
   test("a source reports its own count", () => {
     expect(unreadCount(source("1", { unreadCount: 5 }))).toBe(5);
+  });
+});
+
+describe("totalUnread", () => {
+  test("sums every root, folders included", () => {
+    const nodes = [
+      source("1", { unreadCount: 3 }),
+      folder("f", [source("2", { unreadCount: 4 })]),
+    ];
+    expect(totalUnread(nodes)).toBe(7);
+  });
+
+  test("an empty tree reads as zero", () => {
+    expect(totalUnread([])).toBe(0);
+  });
+});
+
+describe("nextPollDelayMs", () => {
+  test("starts at 30 seconds and doubles to a 5-minute ceiling", () => {
+    expect(nextPollDelayMs(0)).toBe(30_000);
+    expect(nextPollDelayMs(1)).toBe(60_000);
+    expect(nextPollDelayMs(2)).toBe(120_000);
+    expect(nextPollDelayMs(3)).toBe(240_000);
+    expect(nextPollDelayMs(4)).toBe(300_000);
+    expect(nextPollDelayMs(5)).toBe(300_000);
+    expect(nextPollDelayMs(50)).toBe(300_000);
+  });
+
+  test("negative attempt counts read as the first interval", () => {
+    expect(nextPollDelayMs(-1)).toBe(30_000);
   });
 });
 
