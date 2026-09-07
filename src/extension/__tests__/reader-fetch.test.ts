@@ -393,3 +393,80 @@ describe("handleReaderRequest", () => {
     if (!oversized.ok) expect(oversized.error).toBe("TOO_LARGE");
   });
 });
+
+// A background tab is the one thing the SPA cannot open for itself, so the
+// extension does it -- behind the same sender check and the same URL
+// validation as a fetch, because the URL comes from a feed.
+describe("open-tab", () => {
+  const openTabRequest = (
+    url: string,
+  ): Extract<ReaderRequest, { action: "open-tab" }> => ({
+    action: "open-tab",
+    channel: readerBridgeChannel,
+    id: crypto.randomUUID(),
+    type: "request",
+    url,
+    version: readerBridgeVersion,
+  });
+
+  const withStubbedTabs = async <T>(
+    run: (calls: { active?: boolean; url?: string }[]) => Promise<T>,
+  ): Promise<T> => {
+    const calls: { active?: boolean; url?: string }[] = [];
+    const original = globalThis.chrome;
+    globalThis.chrome = {
+      tabs: {
+        create(options: { active?: boolean; url?: string }) {
+          calls.push(options);
+          return Promise.resolve({});
+        },
+      },
+    } as unknown as typeof globalThis.chrome;
+    try {
+      return await run(calls);
+    } finally {
+      globalThis.chrome = original;
+    }
+  };
+
+  test("opens the tab inactive", async () => {
+    await withStubbedTabs(async (calls) => {
+      const response = await handleReaderRequest(
+        openTabRequest("https://example.com/story"),
+        sender,
+        instance,
+      );
+      expect(response.ok).toBe(true);
+      expect(response.action).toBe("open-tab");
+      expect(calls).toEqual([
+        { active: false, url: "https://example.com/story" },
+      ]);
+    });
+  });
+
+  test.each(unsafeUrls)("refuses %s", async (url, code) => {
+    await withStubbedTabs(async (calls) => {
+      const response = await handleReaderRequest(
+        openTabRequest(url),
+        sender,
+        instance,
+      );
+      expect(response.ok).toBe(false);
+      if (!response.ok) expect(response.error).toBe(code);
+      expect(calls).toEqual([]);
+    });
+  });
+
+  test("refuses a sender that is not the configured instance", async () => {
+    await withStubbedTabs(async (calls) => {
+      const response = await handleReaderRequest(
+        openTabRequest("https://example.com/story"),
+        { frameId: 0, url: "https://elsewhere.example/" },
+        instance,
+      );
+      expect(response.ok).toBe(false);
+      if (!response.ok) expect(response.error).toBe("UNAUTHORIZED");
+      expect(calls).toEqual([]);
+    });
+  });
+});

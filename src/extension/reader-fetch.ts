@@ -162,6 +162,31 @@ const fetchArticle = async (
   /* eslint-enable no-await-in-loop */
 };
 
+// Opened inactive and next to the tab that asked, which is where a middle
+// click would have put it. The URL goes through the same validation a fetch
+// does: it arrives from a feed, and "open whatever you are handed" is how a
+// javascript: or file: target would get a click it never earned.
+const openBackgroundTab = async (
+  request: Extract<ReaderRequest, { action: "open-tab" }>,
+): Promise<ReaderResponse> => {
+  const validated = validateArticleUrl(request.url);
+  if ("error" in validated)
+    return readerErrorResponse(request, validated.error);
+  try {
+    await chrome.tabs.create({ active: false, url: validated.url.href });
+  } catch {
+    return readerErrorResponse(request, "FETCH_FAILED");
+  }
+  return {
+    action: "open-tab",
+    channel: readerBridgeChannel,
+    id: request.id,
+    ok: true,
+    type: "response",
+    version: readerBridgeVersion,
+  };
+};
+
 export const handleReaderRequest = async (
   request: ReaderRequest,
   sender: unknown,
@@ -182,6 +207,8 @@ export const handleReaderRequest = async (
       type: "response",
       version: readerBridgeVersion,
     };
+
+  if (request.action === "open-tab") return openBackgroundTab(request);
 
   return fetchArticle(request, fetchImplementation);
 };
