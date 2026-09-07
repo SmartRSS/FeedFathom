@@ -14,7 +14,7 @@
 // The scope keeps each endpoint's budget its own. Sharing them would mean a
 // user who re-requested a password reset a few times -- because the first mail
 // went to spam -- could not then log in with the password they had just set.
-export type ThrottleScope = "login" | "password-reset";
+export type ThrottleScope = "login" | "password-reset" | "register";
 
 const windowSeconds = 15 * 60;
 const accountFailureLimit = 10;

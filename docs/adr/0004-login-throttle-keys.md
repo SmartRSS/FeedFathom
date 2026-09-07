@@ -50,6 +50,14 @@ as the login form is. The scopes stay separate because a user whose first reset
 mail went to spam and who asked again a few times must still be able to log in
 with the password that reset then set.
 
+`POST /api/register` is bounded under a third scope, but only on the branch
+that sends activation mail — the abuse is the send, not the account, and who
+may hold one is already settled by `ENABLE_REGISTRATION` and `ALLOWED_EMAILS`.
+The count does not start until a user exists: a fresh install accepts
+registration regardless of that setting and answers identically whether or not
+it worked, so counting there would let the first operator lock themselves out
+of their own instance with no way to tell that is what happened.
+
 ## Alternatives considered
 
 **A per-account counter.** The obvious one, and the reason for everything

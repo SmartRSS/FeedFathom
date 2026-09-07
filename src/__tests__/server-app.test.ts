@@ -1995,6 +1995,99 @@ test.each([
   },
 );
 
+// Registration with mail configured is a way to send a message from this
+// instance's domain to an address a stranger chose. ENABLE_REGISTRATION and
+// ALLOWED_EMAILS say who may hold an account; neither bounds how many mails
+// an open form will emit. Turnstile is the documented answer and this is the
+// floor under a deployment that has not set it.
+test("stops an open signup form from mailing strangers on demand", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.ENABLE_REGISTRATION = true;
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  let mailCalls = 0;
+  dependencies.password.hash = async () => "hashed-password";
+  dependencies.usersDataService.getUserCount = async () => 1;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.mailSender.sendActivationEmail = async () => {
+    mailCalls++;
+  };
+  const app = await appFor(dependencies);
+  const register = (email: string, address: string) =>
+    app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email,
+          password: "password",
+          passwordConfirm: "password",
+          username: "Stranger",
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": address,
+        },
+        method: "POST",
+      }),
+    );
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await register("stranger@example.com", "203.0.113.7");
+  }
+  expect(mailCalls).toBe(10);
+
+  // The same generic success the route already gives a disposable address or
+  // an existing account, so the throttle is not itself an answer about who
+  // exists -- but no mail leaves.
+  const blocked = await register("stranger@example.com", "203.0.113.7");
+  expect(blocked.status).toBe(200);
+  expect(await blocked.json()).toEqual({ success: true });
+  expect(mailCalls).toBe(10);
+
+  // Keyed on the address too, so spending one address's budget cannot stop
+  // anyone else from signing up.
+  await register("stranger@example.com", "198.51.100.4");
+  expect(mailCalls).toBe(11);
+});
+
+// A fresh install answers registration regardless of ENABLE_REGISTRATION, and
+// answers it identically whether or not it worked. Someone fumbling their way
+// into their own empty instance must not be able to lock themselves out of it
+// for fifteen minutes with no way to tell that is what happened.
+test("never throttles the first operator of an empty instance", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  let mailCalls = 0;
+  dependencies.password.hash = async () => "hashed-password";
+  dependencies.usersDataService.getUserCount = async () => 0;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.mailSender.sendActivationEmail = async () => {
+    mailCalls++;
+  };
+  const app = await appFor(dependencies);
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "operator@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Operator",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+  }
+  expect(mailCalls).toBe(12);
+});
+
 test("rejects missing or malformed Turnstile responses before database mutation", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;

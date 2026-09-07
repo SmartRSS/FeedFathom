@@ -60,8 +60,8 @@ keeping the edges in a config file: adding one is a deliberate act that shows
 up in the diff, instead of arriving as a quiet new import.
 
 - **`auth`** — sessions, registration, activation, password change and reset,
-  the failed-login throttle, the users data service, and the mail sender that
-  carries activation and reset mail. The session plugin lives here rather than
+  the throttle over the three endpoints that guess or send mail, the users
+  data service, and the mail sender that carries activation and reset mail. The session plugin lives here rather than
   in `platform`: session verification is domain logic about users, not
   infrastructure, and the admin variant of it is the same derive with one more
   test rather than a second plugin.
