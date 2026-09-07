@@ -5,6 +5,7 @@ import {
   isVisibilityLostMessage,
   type ReaderResponse,
 } from "#shared/extension-types.ts";
+import { badgeColor, formatBadgeCount } from "./badge.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
 import { getInstanceUrl, getMailDomain } from "./instance.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
@@ -19,6 +20,31 @@ const hasContextMenus = Boolean(chrome.contextMenus);
 if (!hasContextMenus) {
   void chrome.action.setPopup({ popup: "popup.html" });
 }
+
+// Content scripts can't touch chrome.action, so they report the found-feed
+// count via the existing list-feeds / visibility-lost messages and the
+// background keeps the per-tab badge honest. setBadgeText with a tabId is
+// per-tab; without one it would stamp every tab with the last report.
+const setTabBadge = (tabId: number, feedsFound: number): void => {
+  try {
+    void chrome.action.setBadgeText({
+      tabId,
+      text: formatBadgeCount(feedsFound),
+    });
+  } catch {}
+};
+const clearTabBadge = (tabId: number): void => setTabBadge(tabId, 0);
+
+try {
+  void chrome.action.setBadgeBackgroundColor({ color: badgeColor });
+} catch {}
+
+// A navigation wipes whatever the previous page reported; the content script
+// (run_at document_start) re-reports once its own debounced scan finishes.
+// Only status is read here, which needs no "tabs" permission.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading") clearTabBadge(tabId);
+});
 
 let clearMenusRequested = false;
 let isMenuUpdateInProgress = false;
@@ -160,6 +186,9 @@ const messageHandler = (
     // kept current independent of the menu update below.
     void chrome.storage.session.set({ feedsData: message.feedsData });
 
+    if (sender.tab?.id !== undefined)
+      setTabBadge(sender.tab.id, message.feedsData.length);
+
     if (hasContextMenus) {
       if (menuUpdateTimer) {
         clearTimeout(menuUpdateTimer);
@@ -174,6 +203,8 @@ const messageHandler = (
 
   if (isVisibilityLostMessage(message)) {
     void chrome.storage.session.remove("feedsData");
+
+    if (sender.tab?.id !== undefined) clearTabBadge(sender.tab.id);
 
     if (hasContextMenus) {
       if (menuUpdateTimer) {

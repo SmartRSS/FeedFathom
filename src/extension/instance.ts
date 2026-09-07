@@ -10,6 +10,34 @@ export const getInstanceUrl = async (): Promise<null | string> => {
   }
 };
 
+// Narrower than typeof fetch: tests can stub it without Response's full
+// static surface, and the extension only ever calls it with a string URL.
+export type FetchLike = (
+  input: string | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
+// The cheapest request that proves the address is a reachable FeedFathom:
+// /api/session answers 200 whether or not anyone is signed in, which is what
+// the options page's "Test connection" button reports on. False rather than a
+// thrown error because "why" is the caller's message to write, not ours.
+export const pingInstance = async (
+  instance: string,
+  fetchImplementation: FetchLike = fetch,
+): Promise<boolean> => {
+  const origin = canonicalizeInstance(instance);
+  if (!origin) return false;
+  try {
+    const response = await fetchImplementation(
+      new URL("/api/session", origin).href,
+      { credentials: "include" },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
 // Undefined when the instance is old, unreachable, or ingests no mail; the
 // address then falls back to the instance hostname.
 export const getMailDomain = async (
