@@ -243,9 +243,15 @@ export function Dashboard(props: {
     if (!article) return;
     // The share sheet needs no feedback; the clipboard fallback does, and
     // the existing polite live region is exactly that.
-    const outcome = await shareArticle(article);
-    if (outcome === "copied")
-      setAccessibilityAnnouncement("Article link copied to the clipboard.");
+    try {
+      const outcome = await shareArticle(article);
+      if (outcome === "copied")
+        setAccessibilityAnnouncement("Article link copied to the clipboard.");
+    } catch {
+      // The clipboard can be denied or missing (insecure context), and the
+      // button must not fail silently the way a rejected void promise does.
+      setError("Could not share the article.");
+    }
   }
   async function refreshCurrentView() {
     setNewArticlesCount(0);
@@ -486,6 +492,10 @@ export function Dashboard(props: {
   // selectedNode() -- keep working unchanged, and no re-filing action
   // exists here by design: manual ordering stays a non-feature.
   function openTreeContext(x: number, y: number, node: TreeNode) {
+    // The virtual Today row is a view, not a feed: it has no feed URL to
+    // copy, no properties to edit, and no subscription to remove, so it
+    // opens no menu at all (the tree item still swallows the native menu).
+    if (isTodayNode(node)) return;
     setSelectedNode(node);
     const items: ContextMenuItem[] =
       node.type === "folder"
