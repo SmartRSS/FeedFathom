@@ -23,11 +23,13 @@ import {
   faviconUrls,
   findNode,
   findParentFolderUid,
+  isTodayNode,
   nextPollDelayMs,
   sourceIds,
   totalUnread,
   treeNodeKey,
   withDecrementedUnread,
+  withTodayNode,
 } from "./dashboard-behavior.ts";
 import {
   removalOutcome,
@@ -47,7 +49,7 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { resolvedTheme } from "./preferences.ts";
+import { resolvedTheme, todayView } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
 import { shareArticle } from "./share-article.ts";
 import {
@@ -332,7 +334,13 @@ export function Dashboard(props: {
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
-      setSelectedNode(findNode(nextTree, current.type, current.uid));
+      // The virtual Today node is not in the stored tree; keep it selected
+      // across refreshes instead of letting findNode drop it.
+      setSelectedNode(
+        isTodayNode(current)
+          ? current
+          : findNode(nextTree, current.type, current.uid),
+      );
     }
     return nextTree;
   }
@@ -390,6 +398,10 @@ export function Dashboard(props: {
     setSelectedNode(node);
     const selection = selectionGuard.start();
     articleAbortController?.abort();
+    if (isTodayNode(node)) {
+      await fetchArticlesForBody({ sources: [], view: "today" }, selection);
+      return;
+    }
     const ids = sourceIds(node);
     if (!ids.length) {
       setArticles([]);
@@ -398,6 +410,12 @@ export function Dashboard(props: {
       setSelectionAnchor(undefined);
       return;
     }
+    await fetchArticlesForBody({ sources: ids }, selection);
+  }
+  async function fetchArticlesForBody(
+    body: { sources: number[]; view?: "today" },
+    selection: ReturnType<typeof selectionGuard.start>,
+  ) {
     setArticlesLoading(true);
     const controller = new AbortController();
     articleAbortController = controller;
@@ -405,7 +423,7 @@ export function Dashboard(props: {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ sources: ids }),
+        body: JSON.stringify(body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
         signal: controller.signal,
@@ -843,7 +861,7 @@ export function Dashboard(props: {
                 class="tree"
                 role="tree"
               >
-                <For each={tree()}>
+                <For each={withTodayNode(tree(), todayView() === "on")}>
                   {(node) => (
                     <TreeItem
                       focused={focusedTreeKey() === treeNodeKey(node)}

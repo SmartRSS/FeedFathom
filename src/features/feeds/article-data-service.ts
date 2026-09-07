@@ -50,8 +50,19 @@ export class ArticlesDataService {
     ).at(0)?.article;
   }
 
-  public async getUserArticlesForSources(sourceIds: number[], userId: number) {
-    if (sourceIds.length === 0) {
+  public async getUserArticlesForSources(
+    sourceIds: number[],
+    userId: number,
+    options: {
+      // Scope to every source the user subscribes to instead of an explicit
+      // id list -- the userSources join is what authorizes the rows, so
+      // this is safe with sources left empty.
+      allSubscribed?: boolean;
+      // Only articles published within this many hours of now.
+      publishedWithinHours?: number;
+    } = {},
+  ) {
+    if (!options.allSubscribed && sourceIds.length === 0) {
       return [];
     }
 
@@ -69,7 +80,17 @@ export class ArticlesDataService {
       .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
-          inArray(articles.sourceId, sourceIds),
+          // The time window rides the same index as the source filter
+          // (articles_source_published_idx), so the Today query stays a
+          // plain range scan.
+          ...(options.allSubscribed
+            ? []
+            : [inArray(articles.sourceId, sourceIds)]),
+          ...(options.publishedWithinHours
+            ? [
+                sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,
+              ]
+            : []),
           // A removal is terminal -- deleted_at alone hides the article,
           // exactly as recomputeUnreadCounts scores it. It used to be
           // hidden only as a side effect of updated_at > read_at being

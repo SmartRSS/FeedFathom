@@ -6,7 +6,13 @@ import {
 } from "#shared/contracts/responses.ts";
 import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
-import { isTheme, setTheme, theme } from "./preferences.ts";
+import {
+  isTheme,
+  setTheme,
+  setTodayView,
+  theme,
+  todayView,
+} from "./preferences.ts";
 import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
 import {
   isOnOff,
@@ -267,6 +273,19 @@ export function Options(props: {
             <option value="on">
               On (fetches the next article after you open one)
             </option>
+          </select>
+        </label>
+        <label>
+          "Today" view in the sidebar
+          <select
+            value={todayView()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isOnOff(value)) setTodayView(value);
+            }}
+          >
+            <option value="on">Show (unread from the last 24h)</option>
+            <option value="off">Hide</option>
           </select>
         </label>
       </section>

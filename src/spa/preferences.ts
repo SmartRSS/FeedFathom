@@ -84,3 +84,32 @@ export function resolvedTheme(): Theme {
   if (current === "auto" && osHighContrast()) return "high-contrast";
   return current;
 }
+
+// The virtual "Today" view in the sidebar (#715). Opt-out rather than
+// opt-in: it is one extra row, but pure source navigation is a legitimate
+// preference and the maintainer wants the choice to exist.
+const TODAY_VIEW_KEY = "todayView";
+
+export type OnOff = "off" | "on";
+function isOnOff(value: string): value is OnOff {
+  return value === "off" || value === "on";
+}
+
+function readTodayView(): OnOff {
+  try {
+    const stored = localStorage.getItem(TODAY_VIEW_KEY);
+    return stored && isOnOff(stored) ? stored : "on";
+  } catch {
+    return "on";
+  }
+}
+
+const [todayView, setTodayViewSignal] = createSignal<OnOff>(readTodayView());
+export { todayView };
+
+export function setTodayView(value: OnOff) {
+  setTodayViewSignal(value);
+  try {
+    localStorage.setItem(TODAY_VIEW_KEY, value);
+  } catch {}
+}
