@@ -86,6 +86,11 @@ function createDependencies(): ServerDependencies {
         return unexpected("emailHandler.processEmail");
       },
     },
+    faviconStore: {
+      async getFavicon() {
+        return null;
+      },
+    },
     feedParser: {
       async discoverAndSubscribeWebSub() {},
       async parseUrl() {
@@ -152,19 +157,14 @@ function createDependencies(): ServerDependencies {
       },
       async removeRedirect() {},
     },
+    sourceEnqueuer: {
+      async enqueueSource() {},
+    },
     sourcesDataService: {
       async deleteSource() {},
-      async enqueueSource() {},
-      async findSourceByWebSubCallbackToken() {
-        return undefined;
-      },
-      async getFavicon() {
-        return null;
-      },
       async listAllSources() {
         return [];
       },
-      async markWebSubVerified() {},
       async successSource() {},
       async updateSourceUrl() {},
     },
@@ -217,6 +217,12 @@ function createDependencies(): ServerDependencies {
       async updatePassword() {
         return unexpected("usersDataService.updatePassword");
       },
+    },
+    websubStateService: {
+      async findSourceByWebSubCallbackToken() {
+        return undefined;
+      },
+      async markWebSubVerified() {},
     },
   };
 }
@@ -860,7 +866,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     ServerDependencies["sourcesDataService"]["successSource"]
   >[] = [];
   const enqueues: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
   let parserCalls = 0;
 
@@ -892,7 +898,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   dependencies.sourcesDataService.successSource = async (...parameters) => {
     successes.push(parameters);
   };
-  dependencies.sourcesDataService.enqueueSource = async (source) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push(source);
   };
   const app = await appFor(dependencies);
@@ -949,7 +955,7 @@ test("falls back to queueing when inline persistence fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const enqueues: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
   dependencies.feedPreviewCache.get = async () => cachedPreview;
@@ -963,7 +969,7 @@ test("falls back to queueing when inline persistence fails", async () => {
   dependencies.articlesDataService.batchUpsertArticles = async () => {
     throw new Error("Database unavailable");
   };
-  dependencies.sourcesDataService.enqueueSource = async (source) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push(source);
   };
   const app = await appFor(dependencies);
@@ -1009,7 +1015,7 @@ test("queues URL cache misses but never email subscriptions", async () => {
   };
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
-  dependencies.sourcesDataService.enqueueSource = async (source) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push([source.id, source.url]);
   };
   const app = await appFor(dependencies);
@@ -1056,7 +1062,7 @@ test("triggers WebSub discovery immediately at subscribe time, but not for email
   });
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
-  dependencies.sourcesDataService.enqueueSource = async () => {};
+  dependencies.sourceEnqueuer.enqueueSource = async () => {};
   const app = await appFor(dependencies);
 
   await subscribe(app, {
@@ -2008,10 +2014,10 @@ test("WebSub callback verification requires no session and echoes the challenge"
   const dependencies = createDependencies();
   let verifiedId: number | undefined;
   let verifiedLease: Date | undefined;
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.markWebSubVerified = async (id, lease) => {
+  dependencies.websubStateService.markWebSubVerified = async (id, lease) => {
     verifiedId = id;
     verifiedLease = lease;
   };
@@ -2037,11 +2043,11 @@ test("WebSub callback verification requires no session and echoes the challenge"
 
 test("WebSub callback verification 404s for an unknown token or mismatched topic", async () => {
   const dependencies = createDependencies();
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.markWebSubVerified = async () =>
-    unexpected("sourcesDataService.markWebSubVerified");
+  dependencies.websubStateService.markWebSubVerified = async () =>
+    unexpected("websubStateService.markWebSubVerified");
   const app = await appFor(dependencies);
 
   const unknownToken = await app.handle(
@@ -2076,17 +2082,17 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
 test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
   const seeded: Array<{
     body: string;
     contentType: null | string;
     url: string;
   }> = [];
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
   dependencies.httpClient.seedCache = async (url, pushed, headers) => {
@@ -2139,13 +2145,13 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
 test("WebSub push with no body falls back to a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
   let seedCalls = 0;
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
   dependencies.httpClient.seedCache = async () => {
@@ -2172,12 +2178,12 @@ test("WebSub push with no body falls back to a fetch", async () => {
 test("WebSub push still re-parses when the cache seed fails", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
   dependencies.httpClient.seedCache = async () => {
@@ -2204,13 +2210,13 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerDependencies["sourcesDataService"]["enqueueSource"]
+    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
   const seeded: unknown[] = [];
-  dependencies.sourcesDataService.findSourceByWebSubCallbackToken = async (
+  dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourcesDataService.enqueueSource = async (...parameters) => {
+  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
   dependencies.httpClient.seedCache = async (_url, pushed) => {

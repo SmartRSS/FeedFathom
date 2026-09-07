@@ -15,6 +15,8 @@ import {
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FaviconStore } from "#features/feeds/favicon-store.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
@@ -63,10 +65,9 @@ export type ReaderRouteDependencies = {
     get(url: string): Promise<{ data: string }>;
   };
   mailEnabled: boolean;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "enqueueSource" | "getFavicon" | "successSource"
-  >;
+  faviconStore: Pick<FaviconStore, "getFavicon">;
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
+  sourcesDataService: Pick<SourcesDataService, "successSource">;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     | "addSourceToUser"

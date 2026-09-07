@@ -25,6 +25,7 @@ async function runWorker() {
     runtime.feedParser,
     runtime.faviconRefresher,
     runtime.sourcesDataService,
+    runtime.websubStateService,
     runtime.cleanupOrphanedData,
     runtime.jobFailuresDataService,
     createWorker,
