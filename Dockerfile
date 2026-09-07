@@ -2,7 +2,6 @@
 FROM oven/bun:1.4.2-alpine AS dev
 WORKDIR /app
 COPY package.json bun.lock /app/
-COPY patches/ /app/patches/
 COPY vendor/ /app/vendor/
 RUN bun install --frozen-lockfile
 COPY tsconfig.json /app/
@@ -13,7 +12,6 @@ ENTRYPOINT ["/usr/local/bin/bun"]
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
-COPY patches/ /app/patches/
 COPY vendor/ /app/vendor/
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
