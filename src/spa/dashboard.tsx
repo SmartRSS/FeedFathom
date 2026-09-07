@@ -35,6 +35,12 @@ import {
   withTodayNode,
 } from "./dashboard-behavior.ts";
 import {
+  createThrottledRecorder,
+  ratioToScrollTop,
+  ReadingSessionStore,
+  scrollRatio,
+} from "./reading-session.ts";
+import {
   removalOutcome,
   soleSelectedIndex,
   transitionArticleSelection,
@@ -52,7 +58,12 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { markReadPolicy, resolvedTheme, todayView } from "./preferences.ts";
+import {
+  markReadPolicy,
+  rememberReadingPosition,
+  resolvedTheme,
+  todayView,
+} from "./preferences.ts";
 import { ScrollPastQueue } from "./scroll-past.ts";
 import { formatDate } from "./format-date.ts";
 import {
@@ -202,6 +213,38 @@ export function Dashboard(props: {
   const [authenticated, setAuthenticated] = createSignal(false);
   // Reader documents are extension-only; never proxy them through the FeedFathom backend.
   const readerBridge = createExtensionReaderBridge();
+  // Session restoration (#718). `restoring` holds the scroll-past observer
+  // (and the reader-scroll recorder) off until the stored positions have been
+  // applied, so a restore never looks like the user scrolled past rows. The
+  // variable pairs with it to make that observer's very first intersection
+  // pass passive: the rows that happen to be visible at the restored position
+  // were not scrolled past by anyone, so they are not queued; they become
+  // eligible the next time they re-enter the viewport.
+  const [restoringSession, setRestoringSession] = createSignal(false);
+  let skipObserverFirstPass = false;
+  // The article a restored reader pane should resume: applied once its
+  // content renders, then dropped.
+  let pendingReaderScrollId: number | undefined;
+  const readingSession = new ReadingSessionStore({
+    local: localStorage,
+    session: sessionStorage,
+  });
+  const recordAppSnapshot = (
+    patch: Parameters<ReadingSessionStore["recordApp"]>[0],
+  ) => {
+    if (!rememberReadingPosition() || restoringSession()) return;
+    readingSession.recordApp(patch);
+  };
+  // Throttled scroll recorders: at most one storage write each per interval.
+  const recordListScroll = createThrottledRecorder((top: number) => {
+    recordAppSnapshot({ listScrollTop: top });
+  });
+  const recordReaderScroll = createThrottledRecorder((element: HTMLElement) => {
+    const id = openedArticle()?.id;
+    if (id === undefined || !rememberReadingPosition() || restoringSession())
+      return;
+    readingSession.recordReaderScroll(id, scrollRatio(element));
+  });
   const displayedArticle = ():
     | { article: Article; content: ReaderContent }
     | undefined => {
@@ -406,14 +449,25 @@ export function Dashboard(props: {
       handleServiceWorkerMessage,
     );
     void probeReader();
+    // Read the snapshot up front (before any await) so a reload restores the
+    // state the tab actually left in, not whatever a faster boot wrote.
+    const restored = rememberReadingPosition()
+      ? readingSession.snapshot()
+      : undefined;
+    if (restored) {
+      setRestoringSession(true);
+      skipObserverFirstPass = true;
+    }
     try {
       const nextTree = await loadTree();
       await preloadFavicons(nextTree);
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
+      if (restored) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
+      setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {
       setTreeLoading(false);
@@ -433,13 +487,81 @@ export function Dashboard(props: {
         2000,
       );
   });
-  async function select(node: TreeNode) {
+  // Session restoration (#718). The snapshot names a tree node; the tree is
+  // the source of truth, so a source deleted since the snapshot was written
+  // simply isn't found and the whole snapshot is dropped -- the normal boot
+  // path proceeds, silently. Re-selecting the node runs the one and only
+  // article fetch boot would ever run; no second fetch races it.
+  async function restoreFromSnapshot(snapshot: {
+    articleFilter: "all" | "read" | "unread";
+    articleId: number | undefined;
+    listScrollTop: number;
+    nodeType: "folder" | "source";
+    nodeUid: string;
+  }) {
+    try {
+      const node = findNode(
+        withTodayNode(tree(), todayView() === "on"),
+        snapshot.nodeType,
+        snapshot.nodeUid,
+      );
+      if (!node) {
+        readingSession.clear();
+        setRestoringSession(false);
+        return;
+      }
+      setArticleFilter(snapshot.articleFilter);
+      await select(node, {
+        articleId: snapshot.articleId ?? -1,
+        listScrollTop: snapshot.listScrollTop,
+      });
+    } catch {
+      // A restore must never surface as an error; boot continues as usual.
+      readingSession.clear();
+      setRestoringSession(false);
+    }
+  }
+  // Applies a restored reader ratio once that article's content has
+  // rendered. Content height varies (images, Reader extraction), so the
+  // stored value is a ratio, resolved against the rendered document.
+  createEffect(() => {
+    const item = displayedArticle();
+    if (!item || item.article.id !== pendingReaderScrollId) return;
+    const id = pendingReaderScrollId;
+    pendingReaderScrollId = undefined;
+    if (!rememberReadingPosition()) return;
+    const ratio = readingSession.readerScroll(id);
+    if (ratio === undefined) return;
+    queueMicrotask(() => {
+      const reader = document.querySelector<HTMLElement>(".reader");
+      if (!reader) return;
+      reader.scrollTop = ratioToScrollTop(
+        ratio,
+        reader.scrollHeight,
+        reader.clientHeight,
+      );
+    });
+  });
+  async function select(
+    node: TreeNode,
+    restore?: { articleId: number; listScrollTop: number },
+  ) {
     props.focusPane("articles");
     setSelectedNode(node);
+    recordAppSnapshot({
+      articleFilter: articleFilter(),
+      listScrollTop: 0,
+      nodeType: node.type,
+      nodeUid: node.uid,
+    });
     const selection = selectionGuard.start();
     articleAbortController?.abort();
     if (isTodayNode(node)) {
-      await fetchArticlesForBody({ sources: [], view: "today" }, selection);
+      await fetchArticlesForBody(
+        { sources: [], view: "today" },
+        selection,
+        restore,
+      );
       return;
     }
     const ids = sourceIds(node);
@@ -450,13 +572,20 @@ export function Dashboard(props: {
       void setArticleSelection(new Set<number>(), selection);
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
+      if (restore) {
+        readingSession.clear();
+        setRestoringSession(false);
+      }
       return;
     }
-    await fetchArticlesForBody({ sources: ids }, selection);
+    await fetchArticlesForBody({ sources: ids }, selection, restore);
   }
   async function fetchArticlesForBody(
     body: { sources: number[]; view?: "today"; cursor?: number },
     selection: ReturnType<typeof selectionGuard.start>,
+    // Session restore (#718): re-select the article the snapshot had open
+    // rather than always row 0, so the restore is one fetch, not two.
+    restore?: { articleId: number; listScrollTop: number },
   ) {
     setArticlesLoading(true);
     const controller = new AbortController();
@@ -474,16 +603,62 @@ export function Dashboard(props: {
       setArticles(nextArticles);
       moreArticles = nextArticles.length === articlePageSize;
       articleCursor = nextArticles.at(-1)?.id;
-      const nextIndexes = new Set(nextArticles.length ? [0] : []);
+      // A stale snapshot (article gone, list refilled) degrades to row 0 --
+      // the normal boot path -- without any error surface.
+      const restoredIndex = restore
+        ? nextArticles.findIndex((item) => item.id === restore.articleId)
+        : -1;
+      const openIndex = restoredIndex >= 0 ? restoredIndex : 0;
+      const nextIndexes = new Set(nextArticles.length ? [openIndex] : []);
       void setArticleSelection(nextIndexes, selection);
-      setSelectionAnchor(nextArticles.length ? 0 : undefined);
-      queueMicrotask(() => focusArticleAt(0));
+      setSelectionAnchor(nextArticles.length ? openIndex : undefined);
+      queueMicrotask(() => focusArticleAt(openIndex));
+      if (restore) {
+        recordAppSnapshot({
+          articleFilter: articleFilter(),
+          articleId: nextArticles[openIndex]?.id,
+          listIds: nextArticles.map((item) => item.id),
+          listScrollTop: restoredIndex >= 0 ? restore.listScrollTop : 0,
+        });
+        if (restoredIndex >= 0) {
+          pendingReaderScrollId = restore.articleId;
+          props.focusPane("reader");
+          applyRestoredScroll(restore.listScrollTop);
+        } else {
+          readingSession.clear();
+          setRestoringSession(false);
+        }
+      } else {
+        recordAppSnapshot({
+          articleFilter: articleFilter(),
+          articleId: nextArticles[openIndex]?.id,
+          listIds: nextArticles.map((item) => item.id),
+          listScrollTop: 0,
+        });
+      }
     } catch (cause) {
       if (!selectionGuard.isCurrent(selection)) return;
       reportError(cause, "Could not load articles");
+      if (restore) {
+        readingSession.clear();
+        setRestoringSession(false);
+      }
     } finally {
       if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
     }
+  }
+  // Scrolls the restored list position in once the rows are on screen. Runs
+  // while `restoringSession` is still true, so the scroll-past observer has
+  // not been created yet and cannot read the programmatic scroll as reading.
+  function applyRestoredScroll(top: number) {
+    queueMicrotask(() =>
+      requestAnimationFrame(() => {
+        const list = document.querySelector<HTMLElement>(".article-list");
+        if (list) list.scrollTop = top;
+        skipObserverFirstPass = true;
+        setRestoringSession(false);
+      }),
+    );
   }
   // The scroll handler is the only thing that asks for the next page, so a
   // list too short to scroll can never ask. Deleting a whole page is the way
@@ -599,6 +774,9 @@ export function Dashboard(props: {
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
       });
+      // Marked finished: its half-read position has no future (#718).
+      if (read && rememberReadingPosition())
+        readingSession.clearReaderScrolls(ids);
       await loadTree();
     } catch (cause) {
       reportError(cause, "Could not update read state");
@@ -616,10 +794,21 @@ export function Dashboard(props: {
   // second request shape races them.
   createEffect(() => {
     if (markReadPolicy() !== "on-scroll-past") return;
+    // A session restore is mid-flight: it is about to scroll this list to
+    // the stored position, and the observer must not be watching yet, or the
+    // programmatic scroll would count as the user scrolling past rows (#718).
+    // The signal read here re-runs the effect when the restore finishes.
+    if (restoringSession()) return;
     const items = articles();
     if (articlesLoading() || !items.length) return;
     const list = document.querySelector<HTMLElement>(".article-list");
     if (!list) return;
+    // The rows visible at the moment a restore put the list mid-scroll got
+    // there programmatically: the observer's first pass only takes note and
+    // queues nothing. They become eligible again once they leave and
+    // re-enter the viewport.
+    const passiveFirstPass = skipObserverFirstPass;
+    skipObserverFirstPass = false;
     const queue = new ScrollPastQueue({
       flush: (ids) => void markArticlesRead(ids, true),
     });
@@ -632,8 +821,21 @@ export function Dashboard(props: {
         article !== undefined && !article.read && openedArticle()?.id !== id
       );
     };
+    let primed = !passiveFirstPass;
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!primed) {
+          primed = true;
+          for (const entry of entries) {
+            const dataset =
+              entry.target instanceof HTMLElement
+                ? entry.target.dataset
+                : undefined;
+            const id = items[Number(dataset?.["index"] ?? Number.NaN)]?.id;
+            if (id !== undefined) queue.cancel(id);
+          }
+          return;
+        }
         for (const entry of entries) {
           const dataset =
             entry.target instanceof HTMLElement
@@ -796,6 +998,10 @@ export function Dashboard(props: {
       );
       setSelectedNode(undefined);
       setArticles([]);
+      // The source (and everything under a deleted folder) is gone: no
+      // snapshot may point at it, and none of its articles keep a
+      // reading position (#718).
+      readingSession.clear();
       void setArticleSelection(new Set<number>());
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
@@ -848,6 +1054,8 @@ export function Dashboard(props: {
     setReaderContent(undefined);
     setLoadingArticle(true);
     setError("");
+    // Whatever restore was waiting to apply belongs to the previous article.
+    pendingReaderScrollId = undefined;
     try {
       const opened = await api(
         `/article?article=${article.id}`,
@@ -855,6 +1063,7 @@ export function Dashboard(props: {
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
+      recordAppSnapshot({ articleId: opened.id });
       // Opt-in, and only in the "all" view. In the unread view marking on
       // open would pull the row out from under the person reading it; there,
       // the toolbar button is the way.
@@ -963,11 +1172,13 @@ export function Dashboard(props: {
     queueMicrotask(() => focusArticleAt(restoreIndex));
 
     deletion
-      .then(() =>
-        loadTree().catch((cause) =>
+      .then(() => {
+        // Deleted articles have no reading position to remember (#718).
+        if (rememberReadingPosition()) readingSession.clearReaderScrolls(ids);
+        return loadTree().catch((cause) =>
           reportError(cause, "Could not refresh tree"),
-        ),
-      )
+        );
+      })
       .catch((cause) => {
         // Optimistic update already applied; resync rather than hand-revert.
         reportError(cause, "Could not delete articles");
@@ -1344,7 +1555,10 @@ export function Dashboard(props: {
             class="article-list"
             role="listbox"
             onKeyDown={handleArticleKeys}
-            onScroll={(event) => void loadMoreArticles(event.currentTarget)}
+            onScroll={(event) => {
+              void loadMoreArticles(event.currentTarget);
+              recordListScroll(event.currentTarget.scrollTop);
+            }}
           >
             <Show
               when={!articlesLoading()}
@@ -1516,6 +1730,7 @@ export function Dashboard(props: {
           <div
             class="reader"
             classList={{ skeleton: loadingArticle() && !displayedArticle() }}
+            onScroll={(event) => recordReaderScroll(event.currentTarget)}
           >
             <Show
               when={displayedArticle()}

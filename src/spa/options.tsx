@@ -10,7 +10,9 @@ import {
   isMarkReadPolicy,
   isTheme,
   markReadPolicy,
+  rememberReadingPosition,
   setMarkReadPolicy,
+  setRememberReadingPosition,
   setTheme,
   setTodayView,
   theme,
@@ -382,6 +384,20 @@ export function Options(props: {
             <option value="on-scroll-past">
               On scroll-past (a row left visible for a second is marked read)
             </option>
+          </select>
+        </label>
+        <label>
+          Remember reading position
+          <select
+            value={rememberReadingPosition() ? "on" : "off"}
+            onChange={(event) =>
+              setRememberReadingPosition(event.currentTarget.value === "on")
+            }
+          >
+            <option value="on">
+              On (reopening the app resumes where you stopped)
+            </option>
+            <option value="off">Off (always start at the top)</option>
           </select>
         </label>
         <p>

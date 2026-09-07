@@ -1303,3 +1303,125 @@ test("typing j in the feed filter does not move the selection", async ({
   await expect(filter).toBeFocused();
   await expect(filter).toHaveValue("j");
 });
+
+// Session restoration (#718). Each spec scrolls with real scroll events and
+// waits out the 500ms write throttle once -- everything after that is the
+// app's own state machine, no timers.
+test.describe("session restoration", () => {
+  test("a reload restores the selected article and the list scroll", async ({
+    page,
+  }) => {
+    await installApiFixture(page, { manyArticles: true });
+    await page.goto("/");
+
+    await selectSource(page);
+    const target = articleOptions(page).nth(30);
+    await target.click();
+    await expect(page.locator(".reader h1")).toHaveText("Article 130");
+
+    const list = page.locator(".article-list");
+    await list.evaluate((element) => {
+      element.scrollTop = 900;
+    });
+    await page.waitForTimeout(700);
+
+    await page.reload();
+    // The restored selection re-opens the article in the reader pane and
+    // puts the list back at the stored offset -- all from one boot fetch.
+    await expect(page.locator(".reader h1")).toHaveText("Article 130");
+    await expect
+      .poll(() => list.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(500);
+    await expect(articleOptions(page).nth(30)).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  test("a reload resumes the scroll position inside a long article", async ({
+    page,
+  }) => {
+    await installApiFixture(page, { longArticle: true });
+    await page.goto("/");
+
+    // select() opens the first row automatically.
+    await selectSource(page);
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    const reader = page.locator(".reader");
+    const halfScroll = await reader.evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
+      return element.scrollTop;
+    });
+    expect(halfScroll).toBeGreaterThan(200);
+    await page.waitForTimeout(700);
+
+    await page.reload();
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(200);
+  });
+
+  test("with the preference off, no snapshot is written and nothing restores", async ({
+    page,
+  }) => {
+    await installApiFixture(page, { longArticle: true });
+    await page.addInitScript(() => {
+      localStorage.setItem("rememberReadingPosition", "off");
+    });
+    await page.goto("/");
+
+    await selectSource(page);
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    const reader = page.locator(".reader");
+    await reader.evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
+    });
+    await page.waitForTimeout(700);
+
+    await page.reload();
+    await selectSource(page);
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    // No snapshot ever existed, so the article opens at the top.
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBe(0);
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("feedfathom:reading-session:v1"),
+      ),
+    ).toBeNull();
+  });
+
+  test("a stale snapshot (deleted source) boots normally", async ({ page }) => {
+    await installApiFixture(page);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "feedfathom:reading-session:v1",
+        JSON.stringify({
+          app: {
+            articleFilter: "unread",
+            articleId: 11,
+            listIds: [11],
+            listScrollTop: 0,
+            nodeType: "source",
+            nodeUid: "999",
+          },
+          reader: [],
+          version: 1,
+        }),
+      );
+    });
+    await page.goto("/");
+
+    // The node is gone: the snapshot is dropped silently and the ordinary
+    // empty boot path takes over -- no error, no broken pane.
+    await expect(page.getByText("Select a feed to read.")).toBeVisible();
+    await expect(page.locator(".dashboard-alert")).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("feedfathom:reading-session:v1"),
+      ),
+    ).toBeNull();
+  });
+});

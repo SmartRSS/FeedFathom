@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { isMarkReadPolicy, parseMarkReadPolicy } from "../preferences.ts";
+import {
+  isMarkReadPolicy,
+  parseMarkReadPolicy,
+  parseRememberReadingPosition,
+} from "../preferences.ts";
 
 describe("parseMarkReadPolicy", () => {
   test("defaults to manual when nothing is stored", () => {
@@ -33,5 +37,21 @@ describe("parseMarkReadPolicy", () => {
     expect(isMarkReadPolicy("on-scroll-past")).toBe(true);
     expect(isMarkReadPolicy("true")).toBe(false);
     expect(isMarkReadPolicy("")).toBe(false);
+  });
+});
+
+describe("parseRememberReadingPosition", () => {
+  test("defaults to on when nothing is stored", () => {
+    expect(parseRememberReadingPosition(null)).toBe(true);
+  });
+
+  test("reads the stored toggle", () => {
+    expect(parseRememberReadingPosition("on")).toBe(true);
+    expect(parseRememberReadingPosition("off")).toBe(false);
+  });
+
+  test("anything malformed falls back to on", () => {
+    expect(parseRememberReadingPosition("true")).toBe(true);
+    expect(parseRememberReadingPosition("")).toBe(true);
   });
 });
