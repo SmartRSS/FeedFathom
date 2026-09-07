@@ -729,6 +729,15 @@ export function Dashboard(props: {
       event.preventDefault();
       removeSelected();
     } else if (
+      event.key.toLowerCase() === "m" &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      // The list is driven from the keyboard -- Delete already is -- so the
+      // other thing you can do to a selection should be too.
+      event.preventDefault();
+      setSelectedRead(!allSelectedRead());
+    } else if (
       event.key.toLowerCase() === "a" &&
       (event.ctrlKey || event.metaKey)
     ) {

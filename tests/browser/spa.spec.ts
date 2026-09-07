@@ -362,6 +362,12 @@ test("marks an article read, moving it between the filters", async ({
   await page.getByRole("button", { name: "Mark unread" }).click();
   await expect(page.locator(".article-list .article.read")).toHaveCount(0);
   expect([...state.readArticleIds]).toEqual([]);
+
+  // Same action from the keyboard, which is how Delete already works.
+  await articleOptions(page).first().click();
+  await page.keyboard.press("m");
+  await expect(page.locator(".article-list .article.read")).toHaveCount(1);
+  expect([...state.readArticleIds]).toEqual([11]);
 });
 
 // The tree is a roving tabindex: exactly one row carries tabindex="0" and the
