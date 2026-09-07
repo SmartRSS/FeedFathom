@@ -38,6 +38,16 @@ const confirmedGoneFromFeedBuffer = sql`
   )
 `;
 
+// Email deliveries have no feed to go absent from, so the gone-from-feed
+// reading does not apply to them. Their retention is flat delivery age: the
+// same message re-sent with a padding byte is a fresh article row forever,
+// so email tables need a hard bound. 90 days is several times the dormancy
+// thresholds' default order and comfortably past any "read the newsletter
+// eventually" window; the rule below still requires everyone who could have
+// seen a delivery to have recorded deleting it, so what survives is bounded
+// by what active subscribers actually keep.
+const emailRetentionDays = 90;
+
 const daysInterval = (days: number) => sql`(${days} * INTERVAL '1 day')`;
 
 export async function cleanupOrphanedData(
@@ -116,9 +126,10 @@ export async function cleanupOrphanedData(
   // prune and a re-inserted article stays removed. The buffer stays because
   // re-fetching content is waste, not because being wrong is destructive.
   //
-  // Email sources are excluded: they have no feed to be absent from, and each
-  // delivery stamps last_success, which would make every earlier newsletter
-  // look dropped.
+  // Email sources are excluded from the rule below; they prune separately on
+  // flat delivery age (see emailRetentionDays) because they have no feed to
+  // be absent from, and each delivery stamps last_success, which would make
+  // every earlier newsletter look dropped if read as an absence.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -158,6 +169,51 @@ export async function cleanupOrphanedData(
   await drizzleConnection
     .delete(articles)
     .where(inArray(articles.id, articlesUnreachableByAnyone));
+
+  // Email sources prune separately: they have no feed to be absent from, and
+  // each delivery stamps last_success, which would make every earlier
+  // newsletter look dropped if read as an absence. Instead they age out on
+  // flat delivery age (see emailRetentionDays), and their guard is stricter
+  // about join dates: a delivery is not "gone" the way a feed item is, so
+  // any current subscriber who has not recorded deleting it keeps it, however
+  // recently they subscribed.
+  const emailArticlesPastRetention = drizzleConnection
+    .select({ id: articles.id })
+    .from(articles)
+    .innerJoin(sources, eq(sources.id, articles.sourceId))
+    .where(
+      and(
+        eq(sources.kind, "email"),
+        sql`${articles.lastSeenInFeedAt} < NOW() - ${daysInterval(emailRetentionDays)}`,
+        notExists(
+          drizzleConnection
+            .select({ id: userSources.id })
+            .from(userSources)
+            .where(
+              and(
+                eq(userSources.sourceId, articles.sourceId),
+                notExists(
+                  drizzleConnection
+                    .select({ userId: userArticles.userId })
+                    .from(userArticles)
+                    .where(
+                      and(
+                        eq(userArticles.userId, userSources.userId),
+                        eq(userArticles.sourceId, articles.sourceId),
+                        eq(userArticles.guid, articles.guid),
+                        isNotNull(userArticles.deletedAt),
+                      ),
+                    ),
+                ),
+              ),
+            ),
+        ),
+      ),
+    );
+
+  await drizzleConnection
+    .delete(articles)
+    .where(inArray(articles.id, emailArticlesPastRetention));
 
   // Neither rule above accounts for dormancy -- a subscriber who hasn't made a
   // request in months still counts as current. This catches articles old
