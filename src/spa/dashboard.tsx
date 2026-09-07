@@ -49,6 +49,7 @@ import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import { resolvedTheme } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
+import { shareArticle } from "./share-article.ts";
 import {
   backgroundPollEnabled,
   newArticlesCount,
@@ -63,6 +64,7 @@ import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
 import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
 import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
+import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
@@ -220,6 +222,15 @@ export function Dashboard(props: {
       schedulePoll();
     }
   };
+  async function shareSelected() {
+    const article = selected();
+    if (!article) return;
+    // The share sheet needs no feedback; the clipboard fallback does, and
+    // the existing polite live region is exactly that.
+    const outcome = await shareArticle(article);
+    if (outcome === "copied")
+      setAccessibilityAnnouncement("Article link copied to the clipboard.");
+  }
   async function refreshFromToast() {
     setNewArticlesCount(0);
     pollCycles = 0;
@@ -946,6 +957,13 @@ export function Dashboard(props: {
               onClick={() => removeSelected()}
             >
               <Icon raw={removeRaw} />
+            </button>
+            <button
+              aria-label="share article"
+              disabled={!selected()}
+              onClick={() => void shareSelected()}
+            >
+              <Icon raw={shareRaw} />
             </button>
             <span />
             <Show when={readerAvailable()}>
