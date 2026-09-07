@@ -89,6 +89,9 @@ const summary = (item: typeof article, read = false) => ({
 type ApiFixtureState = {
   articleRequests: number;
   authenticated: boolean;
+  // One entry per PATCH /api/articles: the articleIdList it carried, so the
+  // mark-as-read policy tests can count requests and check batching (#714).
+  readMarks: number[][];
   readArticleIds: Set<number>;
   findRequests: number;
   removedArticleIds: number[];
@@ -120,6 +123,7 @@ export async function installApiFixture(
     authenticated: options.authenticated ?? true,
     findRequests: 0,
     readArticleIds: new Set<number>(),
+    readMarks: [],
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
@@ -226,6 +230,7 @@ export async function installApiFixture(
     if (method === "PATCH" && url.pathname === "/api/articles") {
       const { articleIdList, read } = request.postDataJSON();
       expect(articleIdList.length > 0).toBe(true);
+      state.readMarks.push(articleIdList);
       for (const id of articleIdList) {
         if (read) state.readArticleIds.add(id);
         else state.readArticleIds.delete(id);

@@ -85,27 +85,54 @@ export function resolvedTheme(): Theme {
   return current;
 }
 
-// Off by default, deliberately. This app's workflow is delete-as-you-read,
-// and turning every opened article read behind the user's back would quietly
-// empty the unread badge for someone who never asked for read state at all.
-const MARK_READ_ON_OPEN_KEY = "markReadOnOpen";
+// When articles get marked read (#714). "manual" is the default on purpose:
+// this app's workflow is delete-as-you-read, and marking anything behind the
+// user's back would quietly empty the unread badge for someone who never
+// asked for read state at all. The two automatic policies still exist because
+// reasonable readers disagree strongly about this.
+export type MarkReadPolicy = "manual" | "on-open" | "on-scroll-past";
+const MARK_READ_POLICIES: readonly MarkReadPolicy[] = [
+  "manual",
+  "on-open",
+  "on-scroll-past",
+];
+const MARK_READ_POLICY_KEY = "markReadPolicy";
 
-function readMarkReadOnOpen(): boolean {
+export function isMarkReadPolicy(value: string): value is MarkReadPolicy {
+  return (MARK_READ_POLICIES as readonly string[]).includes(value);
+}
+// Pre-#714 the only choice was a boolean stored under its own key; read it
+// once as a fallback so an existing "on" survives the rename.
+const MARK_READ_ON_OPEN_LEGACY_KEY = "markReadOnOpen";
+
+export function parseMarkReadPolicy(
+  stored: string | null,
+  legacyStored: string | null,
+): MarkReadPolicy {
+  if (stored && isMarkReadPolicy(stored)) return stored;
+  if (legacyStored === "true") return "on-open";
+  return "manual";
+}
+
+function readMarkReadPolicy(): MarkReadPolicy {
   try {
-    return localStorage.getItem(MARK_READ_ON_OPEN_KEY) === "true";
+    return parseMarkReadPolicy(
+      localStorage.getItem(MARK_READ_POLICY_KEY),
+      localStorage.getItem(MARK_READ_ON_OPEN_LEGACY_KEY),
+    );
   } catch {
-    return false;
+    return "manual";
   }
 }
 
-const [markReadOnOpen, setMarkReadOnOpenSignal] =
-  createSignal(readMarkReadOnOpen());
-export { markReadOnOpen };
+const [markReadPolicy, setMarkReadPolicySignal] =
+  createSignal<MarkReadPolicy>(readMarkReadPolicy());
+export { markReadPolicy };
 
-export function setMarkReadOnOpen(value: boolean) {
-  setMarkReadOnOpenSignal(value);
+export function setMarkReadPolicy(value: MarkReadPolicy) {
+  setMarkReadPolicySignal(value);
   try {
-    localStorage.setItem(MARK_READ_ON_OPEN_KEY, String(value));
+    localStorage.setItem(MARK_READ_POLICY_KEY, value);
   } catch {}
 }
 
