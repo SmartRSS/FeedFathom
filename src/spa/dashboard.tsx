@@ -51,6 +51,11 @@ import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import { resolvedTheme, todayView } from "./preferences.ts";
 import { formatDate } from "./format-date.ts";
+import {
+  ContextMenu,
+  longPressHandlers,
+  type ContextMenuItem,
+} from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
 import {
   navigatorConnection,
@@ -154,6 +159,9 @@ export function Dashboard(props: {
   // real text when high contrast mode is off.
   const [accessibilityAnnouncement, setAccessibilityAnnouncement] =
     createSignal("");
+  const [contextMenu, setContextMenu] = createSignal<
+    { items: ContextMenuItem[]; x: number; y: number } | undefined
+  >();
   const [displayMode, setDisplayMode] = createSignal<"FEED" | ReaderMode>(
     "FEED",
   );
@@ -465,6 +473,85 @@ export function Dashboard(props: {
       reportError(cause, "Could not rename folder");
     }
   }
+  async function copyToClipboard(url: string, announcement: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setAccessibilityAnnouncement(announcement);
+    } catch {
+      setError("Could not access the clipboard.");
+    }
+  }
+  // Right-click / long-press menus (#721). The tree menu selects the row
+  // first, so the existing rename/unsubscribe actions -- which operate on
+  // selectedNode() -- keep working unchanged, and no re-filing action
+  // exists here by design: manual ordering stays a non-feature.
+  function openTreeContext(x: number, y: number, node: TreeNode) {
+    setSelectedNode(node);
+    const items: ContextMenuItem[] =
+      node.type === "folder"
+        ? [
+            {
+              kind: "action",
+              label: "Rename folder",
+              onSelect: () => void showProperties(),
+            },
+            {
+              disabled: Boolean(node.children?.length),
+              kind: "action",
+              label: "Delete folder",
+              onSelect: () => void removeSelectedNode(),
+            },
+          ]
+        : [
+            {
+              disabled: !node.homeUrl,
+              kind: "action",
+              label: "Open original site",
+              onSelect: () => window.open(node.homeUrl, "_blank", "noopener"),
+            },
+            {
+              kind: "action",
+              label: "Copy feed URL",
+              onSelect: () =>
+                void copyToClipboard(
+                  node.xmlUrl,
+                  "Feed URL copied to the clipboard.",
+                ),
+            },
+            {
+              kind: "action",
+              label: "Edit feed",
+              onSelect: () => void showProperties(),
+            },
+            { kind: "separator" },
+            {
+              kind: "action",
+              label: "Unsubscribe",
+              onSelect: () => void removeSelectedNode(),
+            },
+          ];
+    setContextMenu({ items, x, y });
+  }
+  function openArticleContext(x: number, y: number, article: ArticleSummary) {
+    const url = safeArticleUrl(article.url, window.location.href);
+    setContextMenu({
+      items: [
+        {
+          kind: "action",
+          label: "Copy article link",
+          onSelect: () =>
+            void copyToClipboard(url, "Article link copied to the clipboard."),
+        },
+        {
+          kind: "action",
+          label: "Open original in new tab",
+          onSelect: () => window.open(url, "_blank", "noopener"),
+        },
+      ],
+      x,
+      y,
+    });
+  }
   async function removeSelectedNode() {
     const node = selectedNode();
     if (!node) return;
@@ -746,6 +833,16 @@ export function Dashboard(props: {
       <div aria-live="polite" class="sr-only" role="status">
         {accessibilityAnnouncement()}
       </div>
+      <Show when={contextMenu()}>
+        {(menu) => (
+          <ContextMenu
+            items={menu().items}
+            x={menu().x}
+            y={menu().y}
+            onClose={() => setContextMenu(undefined)}
+          />
+        )}
+      </Show>
       <Show when={error()}>
         {(message) => (
           <div class="dashboard-alert" role="alert">
@@ -869,6 +966,7 @@ export function Dashboard(props: {
                   {(node) => (
                     <TreeItem
                       focused={focusedTreeKey() === treeNodeKey(node)}
+                      onContext={openTreeContext}
                       focusedKey={focusedTreeKey()}
                       node={node}
                       onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
@@ -979,6 +1077,17 @@ export function Dashboard(props: {
                         event.preventDefault();
                         selectArticle(index(), event);
                         props.focusPane("reader");
+                      }}
+                      {...longPressHandlers((x, y) =>
+                        openArticleContext(x, y, article),
+                      )}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        openArticleContext(
+                          event.clientX,
+                          event.clientY,
+                          article,
+                        );
                       }}
                       role="option"
                       tabIndex={focusedIndex() === index() ? 0 : -1}
