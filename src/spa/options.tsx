@@ -7,9 +7,10 @@ import {
 import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import {
+  isMarkReadPolicy,
   isTheme,
-  markReadOnOpen,
-  setMarkReadOnOpen,
+  markReadPolicy,
+  setMarkReadPolicy,
   setTheme,
   setTodayView,
   theme,
@@ -364,18 +365,31 @@ export function Options(props: {
       <section class="options-card">
         <h2>Reading</h2>
         <label>
-          <input
-            type="checkbox"
-            checked={markReadOnOpen()}
-            onChange={(event) => setMarkReadOnOpen(event.currentTarget.checked)}
-          />{" "}
-          Mark an article read when you open it
+          When articles get marked read
+          <select
+            value={markReadPolicy()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isMarkReadPolicy(value)) setMarkReadPolicy(value);
+            }}
+          >
+            <option value="manual">
+              Manually only (m key or the Mark read button)
+            </option>
+            <option value="on-open">
+              On open (opening an article marks it read, All view)
+            </option>
+            <option value="on-scroll-past">
+              On scroll-past (a row left visible for a second is marked read)
+            </option>
+          </select>
         </label>
         <p>
-          Off by default. This reader is built around deleting an article once
-          you are done with it, so opening one leaves it unread unless you ask
-          otherwise. Applies in the All view, where a read article stays in the
-          list.
+          Manual only, by default. This reader is built around deleting an
+          article once you are done with it, so nothing is marked read behind
+          your back unless you ask for it. Automatic marking uses the same
+          read-state path as the button, so filtered lists still update the same
+          way.
         </p>
       </section>
       <section class="options-card">

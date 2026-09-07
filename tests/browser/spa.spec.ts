@@ -523,6 +523,82 @@ test("marks an article read, moving it between the filters", async ({
   expect(state.articleRequests).toBe(3);
 });
 
+// The scroll-past policy (#714): rows held in view for the dwell time are
+// marked read in ONE batched request, not one per article. The All view keeps
+// rows in place, and the row open in the reader is excluded so nothing is
+// pulled out from under the person reading it.
+test("scroll-past policy batches dwelled rows into one PATCH", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("markReadPolicy", "on-scroll-past");
+  });
+  const state = await installApiFixture(page, { multipleArticles: true });
+  // Short enough that the last rows start out of view and need scrolling to.
+  await page.setViewportSize({ height: 320, width: 1280 });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  await articleOptions(page)
+    .last()
+    .evaluate((row) => row.scrollIntoView());
+  await expect
+    .poll(() => state.readMarks, { timeout: 10_000 })
+    .toEqual([[12, 13]]);
+
+  // One request for both rows, and the rows render as read from the same
+  // optimistic update the Mark read button uses.
+  await expect(page.locator(".article-list .article.read")).toHaveCount(2);
+  expect([...state.readArticleIds].toSorted((a, b) => a - b)).toEqual([12, 13]);
+});
+
+// Manual is the default policy: scrolling changes nothing, and no observer
+// work happens at all.
+test("default policy never marks read on scroll", async ({ page }) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await page.setViewportSize({ height: 320, width: 1280 });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  await articleOptions(page)
+    .last()
+    .evaluate((row) => row.scrollIntoView());
+  await page.waitForTimeout(1500);
+
+  expect(state.readMarks).toEqual([]);
+  expect(state.readArticleIds.size).toBe(0);
+});
+
+test("the options page offers and persists the read-mark policy", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/options");
+
+  const policy = page.getByRole("combobox", {
+    name: "When articles get marked read",
+  });
+  await expect(policy).toHaveValue("manual");
+  await expect(policy.locator("option")).toHaveCount(3);
+  await expect(policy.locator("option[value=manual]")).toHaveText(
+    /Manually only/,
+  );
+  await expect(policy.locator("option[value=on-open]")).toHaveText(/On open/);
+  await expect(policy.locator("option[value=on-scroll-past]")).toHaveText(
+    /scroll-past/,
+  );
+
+  await policy.selectOption("on-scroll-past");
+  await page.reload();
+  await expect(
+    page.getByRole("combobox", { name: "When articles get marked read" }),
+  ).toHaveValue("on-scroll-past");
+});
+
 // Colour cannot carry this. forced-colors mode replaces every colour the
 // stylesheet sets with the system palette, and a selected row already has to
 // put a read title back to the selected text colour or it drops under 1.5:1.

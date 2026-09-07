@@ -52,7 +52,8 @@ import {
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
-import { markReadOnOpen, resolvedTheme, todayView } from "./preferences.ts";
+import { markReadPolicy, resolvedTheme, todayView } from "./preferences.ts";
+import { ScrollPastQueue } from "./scroll-past.ts";
 import { formatDate } from "./format-date.ts";
 import {
   ContextMenu,
@@ -605,6 +606,64 @@ export function Dashboard(props: {
       if (node) void select(node);
     }
   }
+  // Scroll-past marking (#714). Only built when the policy asks for it, so
+  // every other reader pays nothing: no observer, no timers, no requests.
+  // The effect re-runs -- and the previous observer is flushed, disconnected
+  // and dropped via onCleanup -- whenever the list changes, because the rows
+  // it watches are the ones this render put in the DOM. Batches ride the very
+  // same markArticlesRead the `m` key and toolbar button use, so the
+  // optimistic removal and selection handling apply identically and no
+  // second request shape races them.
+  createEffect(() => {
+    if (markReadPolicy() !== "on-scroll-past") return;
+    const items = articles();
+    if (articlesLoading() || !items.length) return;
+    const list = document.querySelector<HTMLElement>(".article-list");
+    if (!list) return;
+    const queue = new ScrollPastQueue({
+      flush: (ids) => void markArticlesRead(ids, true),
+    });
+    // Already-read rows and the article currently open in the reader pane are
+    // never queued: re-marking the one being read would pull its row out from
+    // under it in the unread view, the same reason on-open stays in "all".
+    const eligible = (id: number) => {
+      const article = items.find((item) => item.id === id);
+      return (
+        article !== undefined && !article.read && openedArticle()?.id !== id
+      );
+    };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const dataset =
+            entry.target instanceof HTMLElement
+              ? entry.target.dataset
+              : undefined;
+          const index = Number(dataset?.["index"] ?? Number.NaN);
+          const id = items[index]?.id;
+          if (id === undefined) continue;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+            if (eligible(id)) queue.add(id);
+            else queue.cancel(id);
+          } else {
+            queue.cancel(id);
+          }
+        }
+      },
+      { root: list, threshold: [0.5] },
+    );
+    for (const row of list.querySelectorAll<HTMLElement>(
+      ".article[data-index]",
+    ))
+      observer.observe(row);
+    onCleanup(() => {
+      // A change of list or an unmount must not silently drop rows that had
+      // finished dwelling when the policy said they count as read.
+      queue.flushNow();
+      queue.dispose();
+      observer.disconnect();
+    });
+  });
   async function showProperties() {
     const node = selectedNode();
     if (!node) return;
@@ -799,7 +858,11 @@ export function Dashboard(props: {
       // Opt-in, and only in the "all" view. In the unread view marking on
       // open would pull the row out from under the person reading it; there,
       // the toolbar button is the way.
-      if (markReadOnOpen() && !article.read && articleFilter() === "all") {
+      if (
+        markReadPolicy() === "on-open" &&
+        !article.read &&
+        articleFilter() === "all"
+      ) {
         void markArticlesRead([article.id], true);
       }
       if (mode === "FEED") schedulePrefetch();
