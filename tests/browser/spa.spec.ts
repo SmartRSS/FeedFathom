@@ -149,6 +149,39 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
 
+test("keeps the context menu inside a narrow viewport", async ({ page }) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+
+  // Long-press near a screen edge is the common case on touch, so open
+  // the menu from a point a few pixels from the right edge of a row.
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first()
+    .evaluate((row) => {
+      const rect = row.getBoundingClientRect();
+      row.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.right - 4,
+          clientY: rect.top + rect.height / 2,
+        }),
+      );
+    });
+  await expect(page.getByRole("menu")).toBeVisible();
+
+  const menu = await page.locator(".context-menu").boundingBox();
+  expect(menu).toBeTruthy();
+  expect(menu!.x).toBeGreaterThanOrEqual(0);
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(390);
+  await expect(
+    page.getByRole("menuitem", { name: "Copy feed URL" }),
+  ).toBeVisible();
+});
+
 test("boots Solid and renders the authenticated nested tree", async ({
   page,
 }) => {
