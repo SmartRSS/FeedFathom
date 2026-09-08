@@ -61,9 +61,13 @@ function App() {
     document.documentElement.dataset["theme"] = resolvedTheme();
   });
   // On the same element as the theme, so the reader rules can key off either
-  // without a second host to reason about.
+  // without a second host to reason about. One effect each rather than one
+  // for both: each attribute follows exactly one signal, which is the shape
+  // Solid 2.0's compute-then-apply split wants (docs/upcoming-upgrades.md).
   createEffect(() => {
     document.documentElement.dataset["readerText"] = readerText();
+  });
+  createEffect(() => {
     document.documentElement.dataset["readerWidth"] = readerWidth();
   });
 
