@@ -276,6 +276,34 @@ html[data-route="options"] body {
 .options-page h1 {
   margin: 0;
 }
+/* Section tabs: one group renders at a time, keyed to the location hash so
+   the page's deep links keep working -- a #section id selects that group,
+   and the empty-tree guidance's #import-opml resolves into the Data group.
+   The active chip borrows the selected-row treatment, so every theme (and
+   forced colors) follows without a pass of its own. */
+.options-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.options-nav a {
+  padding: 0.35rem 0.75rem;
+  border: var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.options-nav a[aria-current="true"] {
+  color: var(--selected-fg);
+  background: var(--selected-bg);
+  /* Inset, not a real border, so the chip can't shift when it becomes the
+     current one -- same trick as .source.selected. */
+  box-shadow: inset 0 0 0 1px var(--selected-border);
+}
+/* The visible section's cards, spaced like the page grid they came from. */
+.options-section {
+  display: grid;
+  gap: 1.5rem;
+}
 .options-card {
   display: grid;
   gap: 1rem;
