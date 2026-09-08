@@ -42,6 +42,11 @@ const sessionEntry = Type.Object(
     current: Type.Boolean(),
     expiresAt: jsonDate,
     id,
+    // Last request this sid answered. Creation time alone cannot
+    // distinguish the old rows the created_at migration backfilled with
+    // one shared timestamp, and it goes stale the moment a browser
+    // updates -- activity is what the session list actually shows.
+    lastUsedAt: jsonDate,
     userAgent: Type.String(),
   },
   exact,

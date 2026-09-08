@@ -135,12 +135,15 @@ export class UsersDataService {
     ).at(0);
   }
 
-  // One row per active session of the user's, newest first, with the
-  // requesting session flagged so the options page can label it and keep
-  // the revoke buttons off it. The same expiry predicate getUserBySid
-  // enforces applies here: a session that no longer resolves must not be
-  // listed as active -- the retention pass only prunes the dead rows on
-  // its own schedule, not before every listing.
+  // One row per active session of the user's, most recently active first,
+  // with the requesting session flagged so the options page can label it
+  // and keep the revoke buttons off it. The same expiry predicate
+  // getUserBySid enforces applies here: a session that no longer resolves
+  // must not be listed as active -- the retention pass only prunes the
+  // dead rows on its own schedule, not before every listing. Ordered by
+  // activity rather than creation because the migration that introduced
+  // created_at backfilled every pre-existing row with one shared
+  // ALTER-time timestamp, making creation order unrecoverable there.
   public async listSessions(userId: number, currentSid: string) {
     return await this.drizzleConnection
       .select({
@@ -148,13 +151,36 @@ export class UsersDataService {
         current: sql<boolean>`${sessions.sid} = ${currentSid}`,
         expiresAt: sessions.expiresAt,
         id: sessions.id,
+        lastUsedAt: sessions.lastUsedAt,
         userAgent: sessions.userAgent,
       })
       .from(sessions)
       .where(
         and(eq(sessions.userId, userId), gt(sessions.expiresAt, sql`NOW()`)),
       )
-      .orderBy(desc(sessions.createdAt));
+      .orderBy(desc(sessions.lastUsedAt), desc(sessions.id));
+  }
+
+  // The session-level counterpart of touchLastSeen: stamps activity and
+  // the current User-Agent onto the row, so a session's device label
+  // follows the browser across updates instead of freezing at login-time.
+  // Self-guarding like touchLastSeen -- a no-op write on every request
+  // except when the header changed or the staleness window elapsed -- and
+  // COALESCE keeps a missing header from overwriting a known agent with
+  // the UNKNOWN sentinel.
+  public async refreshSession(sid: string, userAgent: null | string) {
+    await this.drizzleConnection
+      .update(sessions)
+      .set({
+        lastUsedAt: sql`NOW()`,
+        userAgent: sql`COALESCE(${userAgent}, ${sessions.userAgent})`,
+      })
+      .where(
+        and(
+          eq(sessions.sid, sid),
+          sql`(${sessions.lastUsedAt} < NOW() - INTERVAL '1 minute' OR ${sessions.userAgent} IS DISTINCT FROM COALESCE(${userAgent}, ${sessions.userAgent}))`,
+        ),
+      );
   }
 
   // Both revocation paths scope by userId so a guessed or forged id can

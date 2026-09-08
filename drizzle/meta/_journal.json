@@ -29,6 +29,13 @@
       "when": 1788856685060,
       "tag": "0003_gifted_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788872661804,
+      "tag": "0004_rich_silk_fever",
+      "breakpoints": true
     }
   ]
 }

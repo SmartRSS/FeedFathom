@@ -62,8 +62,8 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
     // The list the options page renders enforces the same expiry as the
     // lookup: the aged-out session is not listed as active -- not even as
-    // the requesting one -- while the live rows stay, newest first, with
-    // the requesting session flagged.
+    // the requesting one -- while the live rows stay, most recently active
+    // first, with the requesting session flagged.
     expect(
       (await usersDataService.listSessions(userId, phoneSid)).map(
         (session) => session.userAgent,
@@ -79,6 +79,43 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       { sid: true, ua: "Tablet" },
       { sid: false, ua: "This browser" },
     ]);
+
+    // Activity, not creation, orders the list: the created_at migration
+    // backfilled pre-existing rows with one shared timestamp, so rows the
+    // list must still distinguish are separated by their last_used_at.
+    await client`
+      UPDATE sessions SET last_used_at = NOW() - INTERVAL '2 days'
+      WHERE sid = ${tabletSid}`;
+    expect(
+      (await usersDataService.listSessions(userId, tabletSid)).map(
+        (session) => session.userAgent,
+      ),
+    ).toEqual(["This browser", "Tablet"]);
+
+    // Each answered request refreshes the row's activity stamp and its
+    // User-Agent, so the device label follows the browser across updates.
+    await usersDataService.refreshSession(browserSid, "This browser 2.0");
+    const [refreshed] = await client<
+      {
+        last_used_at: Date;
+        user_agent: string;
+      }[]
+    >`
+      SELECT last_used_at, user_agent FROM sessions WHERE sid = ${browserSid}`;
+    expect(refreshed!.user_agent).toBe("This browser 2.0");
+    expect(refreshed!.last_used_at.getTime()).toBeGreaterThan(
+      Date.now() - 60_000,
+    );
+
+    // A missing header never overwrites a known agent with the UNKNOWN
+    // sentinel, and a stale row within its freshness window is left alone.
+    await usersDataService.refreshSession(browserSid, null);
+    expect(
+      (
+        await client<{ user_agent: string }[]>`
+          SELECT user_agent FROM sessions WHERE sid = ${browserSid}`
+      )[0]!.user_agent,
+    ).toBe("This browser 2.0");
 
     // A session id from another account is out of reach.
     const [stolenRow] = await client<{ id: number }[]>`

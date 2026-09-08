@@ -233,6 +233,7 @@ function createDependencies(): ServerDependencies {
       async listSessions() {
         return [];
       },
+      async refreshSession() {},
       async startPasswordReset() {
         return unexpected("usersDataService.startPasswordReset");
       },
