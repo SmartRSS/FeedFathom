@@ -26,11 +26,56 @@ const setFetch = (implementation: FetchImplementation) => {
   });
 };
 
+// navigator.onLine is a getter on the prototype; the property has to be
+// redefined on the instance to fake it, and removed again so the online case
+// reads the real one.
+const withOnLine = async (value: boolean, body: () => Promise<void>) => {
+  Object.defineProperty(globalThis.navigator, "onLine", {
+    configurable: true,
+    value,
+  });
+  try {
+    await body();
+  } finally {
+    Reflect.deleteProperty(globalThis.navigator, "onLine");
+  }
+};
+
 const returnResponse = (response: Response) => {
   setFetch(async () => response);
 };
 
 describe("schema-first SPA API", () => {
+  const rejectedApiCall = async (): Promise<unknown> => {
+    setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+    return await api("/session", sessionResponse).catch(
+      (cause: unknown) => cause,
+    );
+  };
+
+  test("names the offline case when the request never reaches the server", async () => {
+    await withOnLine(false, async () => {
+      const failure = await rejectedApiCall();
+      // Not an ApiError: there is no status, and the 401 check must not match.
+      expect(isUnauthorizedError(failure)).toBe(false);
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) return;
+      expect(failure.message).toBe("You are offline. This could not be sent.");
+      expect(failure.cause).toBeInstanceOf(TypeError);
+    });
+  });
+
+  test("does not blame the network when the browser thinks it is online", async () => {
+    await withOnLine(true, async () => {
+      const failure = await rejectedApiCall();
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) return;
+      expect(failure.message).toBe(
+        "Could not reach the server. It may be restarting.",
+      );
+    });
+  });
+
   test("owns fetch details and returns the schema-decoded value", async () => {
     let input: Parameters<typeof fetch>[0] | undefined;
     let init: Parameters<typeof fetch>[1];

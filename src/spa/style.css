@@ -368,6 +368,19 @@ label {
   display: grid;
   gap: 0.25rem;
 }
+/* Label and input keep their own stacked grid; the reveal button is a sibling
+   of the label, not a child, because a <label> may not hold interactive
+   content other than its own control. align-items: end puts the button on the
+   input's row rather than the label text's. The button is left bare so it
+   picks up the same UA ButtonFace/ButtonText the other bare buttons here do,
+   which is what keeps it right under all seven themes and forced-colors
+   without a per-theme rule. */
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 0.25rem;
+}
 input,
 button {
   padding: 0.6rem;
@@ -941,15 +954,45 @@ button.source {
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
+/* A measure of 65ch, the long end of the usual 45-75 character range, held by
+   the padding rather than by a max-width on the children. The unit is the
+   reason: ch resolves against the element's own font-size, so the same
+   max-width on the children would give the 1.4rem h1 a line half again as
+   long as the body's and no shared column at all. Declared once here, it
+   resolves once, against this element's font-size, and every child inherits
+   the same column. It also keeps .reader the full-width scroll container, so
+   the scrollbar stays at the pane edge instead of tracking a centred column,
+   and max() leaves the original 30px gutter in place whenever the pane is too
+   narrow for the measure to bind -- which is every pane on mobile. */
 .reader {
+  --reader-measure: 65ch;
+
   overflow: auto;
-  padding: 20px 30px;
+  padding: 20px max(30px, (100% - var(--reader-measure)) / 2);
   font-size: 0.9rem;
-  line-height: 1.5;
+  line-height: 1.6;
+}
+/* The two reader steps from #712. Only the off-centre steps need a rule; the
+   middle one is the declaration above, which is also what an unset or
+   unrecognised attribute falls back to. The measure is in ch, so raising the
+   text size widens the column by the same proportion and the line count per
+   paragraph holds -- the two settings stay independent of each other. */
+:root[data-reader-text="small"] .reader {
+  font-size: 0.8rem;
+}
+:root[data-reader-text="large"] .reader {
+  font-size: 1.05rem;
+}
+:root[data-reader-width="small"] .reader {
+  --reader-measure: 50ch;
+}
+:root[data-reader-width="large"] .reader {
+  --reader-measure: 80ch;
 }
 .reader h1 {
   margin-top: 0;
   font-size: 1.4rem;
+  line-height: 1.25;
 }
 .reader img,
 .reader video {
@@ -1075,5 +1118,25 @@ button.source {
   }
   .toolbar button.only-mobile {
     display: flex;
+  }
+}
+
+/* Both animations here loop forever, which is exactly what "reduce" is about:
+   motion that never resolves and that nobody asked to start. Neither carries
+   information the page would lose by stopping. The skeleton is a placeholder
+   whose shape already says "not loaded yet", so it keeps its bar and drops
+   the sweep -- pinned at the 50% vertical offset the keyframes hold it at,
+   since a stopped animation would otherwise fall back to the 0% top edge and
+   pull .skeleton-text's short gradient off its line box. The spinner sits
+   inside a role="status" next to the text that names what is loading, so with
+   the spin gone the ring is decoration and the label still answers. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row,
+  .skeleton-text {
+    animation: none;
+    background-position: 0 50%;
+  }
+  .spinner {
+    animation: none;
   }
 }

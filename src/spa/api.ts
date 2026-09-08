@@ -48,12 +48,32 @@ async function responseJson(
   }
 }
 
+// A request that never reaches the server rejects with a browser-specific
+// TypeError -- "Failed to fetch" in Chrome, "NetworkError when attempting to
+// fetch resource" in Firefox -- and that string is what the dashboard's alert
+// puts in front of the user. Replaced once here, where every call passes,
+// rather than at each call site. navigator.onLine is only trustworthy in the
+// negative: true means an interface is up, not that anything is reachable, so
+// a false reading is allowed to name the cause and a true one is not.
+const unreachable = (cause: unknown): Error =>
+  new Error(
+    navigator.onLine
+      ? "Could not reach the server. It may be restarting."
+      : "You are offline. This could not be sent.",
+    { cause },
+  );
+
 export async function api<T extends TSchema>(
   path: string,
   schema: T,
   init?: RequestInit,
 ): Promise<StaticDecode<T>> {
-  const response = await fetch(`/api${path}`, init);
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, init);
+  } catch (cause) {
+    throw unreachable(cause);
+  }
   const payload = await responseJson(path, response);
 
   if (!response.ok) {

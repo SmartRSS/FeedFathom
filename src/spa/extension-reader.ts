@@ -192,6 +192,16 @@ const sanitizeExtractedHtml = (html: string, baseUrl: URL): string => {
   const extracted = document.createElement("body");
   extracted.innerHTML = html;
   rewriteDocumentUrls(extracted, baseUrl);
+  // Same reason as the server-side sanitizer in extract-article.ts: a whole
+  // extracted page lands in a pane the reader scrolls, so the images below
+  // the fold should not all fetch on open. Only images the page did not
+  // already give a hint of its own, and both attributes survive DOMPurify's
+  // default allowlist.
+  for (const image of extracted.querySelectorAll("img")) {
+    if (!image.hasAttribute("loading")) image.setAttribute("loading", "lazy");
+    if (!image.hasAttribute("decoding"))
+      image.setAttribute("decoding", "async");
+  }
   return domPurify(window).sanitize(extracted.innerHTML, {
     FORBID_ATTR: ["style"],
     FORBID_TAGS: ["style"],
