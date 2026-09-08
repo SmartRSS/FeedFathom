@@ -599,7 +599,6 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
     localStorage.setItem("markReadPolicy", "on-scroll-past");
   });
   const state = await installApiFixture(page, { multipleArticles: true });
-  // Short enough that the last rows start out of view and need scrolling to.
   await page.setViewportSize({ height: 320, width: 1280 });
   await page.goto("/");
   await selectSource(page);
@@ -609,6 +608,12 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
   await articleOptions(page)
     .last()
     .evaluate((row) => row.scrollIntoView());
+  // Whether that scrolled anything is not the point and is not asserted: all
+  // three rows fit this viewport, so on most runs it moves nothing. What the
+  // rows share is that they dwell, and 11 is excluded because the reader has
+  // it open. The batching rule itself is pinned in scroll-past.test.ts against
+  // a stepping clock -- including the millisecond-apart case that used to
+  // split this into [[12], [13]] on a loaded runner and pass everywhere else.
   await expect
     .poll(() => state.readMarks, { timeout: 10_000 })
     .toEqual([[12, 13]]);
