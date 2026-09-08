@@ -92,8 +92,8 @@ import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
 import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
 import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
-import mailOpenRaw from "./assets/icons/System/mail-open-fill.svg?raw";
-import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
+import checkCircleRaw from "./assets/icons/System/check-circle-fill.svg?raw";
+import dotCircleRaw from "./assets/icons/System/dot-circle-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
@@ -1514,9 +1514,11 @@ export function Dashboard(props: {
               disabled={!selectedIndexes().size}
               onClick={() => setSelectedRead(!allSelectedRead())}
             >
-              {/* Open envelope = read, closed = unread: the state the
-                  action will produce, so the glyph flips with it (#766). */}
-              <Icon raw={allSelectedRead() ? mailRaw : mailOpenRaw} />
+              {/* Circle-check = read, dot-circle = unread: the state the
+                  action will produce, so the glyph flips with it (#766).
+                  Reader convention, not email's: a check marks read, a dot
+                  marks unread, and neither reads as a mail action. */}
+              <Icon raw={allSelectedRead() ? dotCircleRaw : checkCircleRaw} />
             </button>
             <button
               aria-label="delete articles"
