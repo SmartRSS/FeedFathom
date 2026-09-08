@@ -1077,3 +1077,23 @@ button.source {
     display: flex;
   }
 }
+
+/* Both animations here loop forever, which is exactly what "reduce" is about:
+   motion that never resolves and that nobody asked to start. Neither carries
+   information the page would lose by stopping. The skeleton is a placeholder
+   whose shape already says "not loaded yet", so it keeps its bar and drops
+   the sweep -- pinned at the 50% vertical offset the keyframes hold it at,
+   since a stopped animation would otherwise fall back to the 0% top edge and
+   pull .skeleton-text's short gradient off its line box. The spinner sits
+   inside a role="status" next to the text that names what is loading, so with
+   the spin gone the ring is decoration and the label still answers. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row,
+  .skeleton-text {
+    animation: none;
+    background-position: 0 50%;
+  }
+  .spinner {
+    animation: none;
+  }
+}
