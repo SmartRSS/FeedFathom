@@ -82,7 +82,11 @@ async function installReaderResponder(
             action: "fetch",
             channel: "feedfathom-reader",
             finalUrl: "https://articles.example/first",
-            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p></article></body></html>`,
+            // The <img> carries no loading hint, so whatever the sanitize
+            // step gives it is the app's own default. A data: URL keeps it
+            // off the network: a failed request would land in the console
+            // error guard rather than in the assertion.
+            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
             id: request.id,
             ok: true,
             type: "response",
@@ -660,6 +664,77 @@ test("the options page offers and persists the read-mark policy", async ({
   ).toHaveValue("on-scroll-past");
 });
 
+test("the options page offers and persists the reader typography steps", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/options");
+
+  const size = page.getByRole("combobox", { name: "Text size" });
+  const width = page.getByRole("combobox", { name: "Line width" });
+  await expect(size).toHaveValue("medium");
+  await expect(width).toHaveValue("medium");
+  // One stored vocabulary for both; the width select only labels its ends
+  // differently, so a value here that reads "small" is the narrow column.
+  await expect(width.locator("option[value=small]")).toHaveText("Narrow");
+  await expect(width.locator("option[value=large]")).toHaveText("Wide");
+
+  await size.selectOption("large");
+  await width.selectOption("small");
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Text size" })).toHaveValue(
+    "large",
+  );
+  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
+    "small",
+  );
+});
+
+// The unit test covers the guard; this covers the part that can silently stop
+// working -- the settings reaching the stylesheet at all. A renamed data
+// attribute or a dropped effect leaves both selects working and the reader
+// unchanged, which no unit test would notice.
+test("the reader steps change the rendered column, not just storage", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.locator(".reader h1")).toBeVisible();
+
+  const reader = page.locator(".reader");
+  const columnOf = () =>
+    reader.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        inlinePadding: Number.parseFloat(style.paddingLeft),
+      };
+    });
+
+  const medium = await columnOf();
+
+  await page.goto("/options");
+  await page.getByRole("combobox", { name: "Text size" }).selectOption("large");
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.locator(".reader h1")).toBeVisible();
+  const large = await columnOf();
+  expect(large.fontSize).toBeGreaterThan(medium.fontSize);
+
+  // Narrowing the measure widens the padding that centres it, so the effect
+  // is visible on the box even though no width is set on the element.
+  await page.goto("/options");
+  await page
+    .getByRole("combobox", { name: "Line width" })
+    .selectOption("small");
+  await page.goto("/");
+  await selectSource(page);
+  await expect(page.locator(".reader h1")).toBeVisible();
+  const narrow = await columnOf();
+  expect(narrow.inlinePadding).toBeGreaterThan(large.inlinePadding);
+});
+
 // Colour cannot carry this. forced-colors mode replaces every colour the
 // stylesheet sets with the system palette, and a selected row already has to
 // put a read title back to the selected text colour or it drops under 1.5:1.
@@ -1199,6 +1274,26 @@ test("exposes Reader modes only when the bridge is available", async ({
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
+});
+
+test("gives extracted images the app's own loading defaults", async ({
+  context,
+  page,
+}) => {
+  await installReaderResponder(context, true);
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await page
+    .getByRole("combobox", { name: "Article display mode" })
+    .selectOption("READABILITY");
+  // The bridge's HTML sets neither attribute, so these are what
+  // sanitizeExtractedHtml added -- and they have to survive DOMPurify, which
+  // is the half of that change nothing else here would catch.
+  const image = page.locator(".reader img");
+  await expect(image).toHaveAttribute("loading", "lazy");
+  await expect(image).toHaveAttribute("decoding", "async");
 });
 
 test("extracts article content with the alternate extractor", async ({

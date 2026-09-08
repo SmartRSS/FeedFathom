@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   isMarkReadPolicy,
+  isReaderStep,
   parseMarkReadPolicy,
   parseRememberReadingPosition,
 } from "../preferences.ts";
@@ -53,5 +54,16 @@ describe("parseRememberReadingPosition", () => {
   test("anything malformed falls back to on", () => {
     expect(parseRememberReadingPosition("true")).toBe(true);
     expect(parseRememberReadingPosition("")).toBe(true);
+  });
+});
+
+describe("isReaderStep", () => {
+  test("accepts exactly the three steps both reader settings share", () => {
+    for (const value of ["small", "medium", "large"])
+      expect(isReaderStep(value)).toBe(true);
+    // "narrow"/"wide" are the width select's labels, not its stored values;
+    // one vocabulary keeps one guard honest for both settings.
+    for (const value of ["narrow", "wide", "", "Medium"])
+      expect(isReaderStep(value)).toBe(false);
   });
 });

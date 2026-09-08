@@ -100,8 +100,8 @@ to `"@solidjs/web"`.
 <div class={["card", { active: isActive() }]} />
 ```
 
-**`createEffect` splits into compute → apply** — 4 sites (`main.tsx` ×3,
-`dashboard.tsx` ×1).
+**`createEffect` splits into compute → apply** — 10 sites (`main.tsx` ×5,
+`dashboard.tsx` ×4, `dialog.tsx` ×1).
 
 ```js
 createEffect(() => { document.documentElement.dataset.theme = resolvedTheme(); });
@@ -110,9 +110,9 @@ createEffect(resolvedTheme, (theme) => { document.documentElement.dataset.theme 
 ```
 
 **`onMount` → `onSettled`, `onCleanup` folds into the returned cleanup** —
-7 `onMount` and 4 `onCleanup` calls. The paired ones (`main.tsx`,
-`feed-discovery.tsx`, `dashboard.tsx`, `account-flows.tsx`) collapse into one
-call:
+9 `onMount` and 8 `onCleanup` calls. The paired ones (`main.tsx`,
+`feed-discovery.tsx`, `dashboard.tsx`, `account-flows.tsx`, `context-menu.tsx`)
+collapse into one call:
 
 ```js
 onMount(() => addEventListener("popstate", popstate));

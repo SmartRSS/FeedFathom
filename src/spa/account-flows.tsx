@@ -15,6 +15,7 @@ import {
 import type { Turnstile } from "./turnstile.d.ts";
 import { api } from "./api.ts";
 import { loginPath, registerPath } from "./behavior.ts";
+import { PasswordInput } from "./password-input.tsx";
 
 export function Login(props: { navigate(to: string): void; next: string }) {
   const [email, setEmail] = createSignal("");
@@ -60,15 +61,12 @@ export function Login(props: { navigate(to: string): void; next: string }) {
             required
           />
         </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password()}
-            onInput={(event) => setPassword(event.currentTarget.value)}
-            required
-          />
-        </label>
+        <PasswordInput
+          autocomplete="current-password"
+          label="Password"
+          value={password()}
+          onInput={setPassword}
+        />
         <Show when={error()}>
           {(message) => <p role="alert">{message()}</p>}
         </Show>
@@ -254,26 +252,18 @@ export function Register(props: { navigate(to: string): void; next: string }) {
                   required
                 />
               </label>
-              <label>
-                Password
-                <input
-                  autocomplete="new-password"
-                  type="password"
-                  value={password()}
-                  onInput={(event) => setPassword(event.currentTarget.value)}
-                  required
-                />
-              </label>
-              <label>
-                Confirm password
-                <input
-                  autocomplete="new-password"
-                  type="password"
-                  value={confirm()}
-                  onInput={(event) => setConfirm(event.currentTarget.value)}
-                  required
-                />
-              </label>
+              <PasswordInput
+                autocomplete="new-password"
+                label="Password"
+                value={password()}
+                onInput={setPassword}
+              />
+              <PasswordInput
+                autocomplete="new-password"
+                label="Confirm password"
+                value={confirm()}
+                onInput={setConfirm}
+              />
               <Show when={info().turnstileSiteKey}>
                 <div ref={turnstileContainer} />
               </Show>
@@ -463,26 +453,18 @@ export function PasswordResetConfirm(props: {
       >
         <form onSubmit={submit}>
           <h1>Choose a new password</h1>
-          <label>
-            New password
-            <input
-              autocomplete="new-password"
-              type="password"
-              value={password()}
-              onInput={(event) => setPassword(event.currentTarget.value)}
-              required
-            />
-          </label>
-          <label>
-            Confirm password
-            <input
-              autocomplete="new-password"
-              type="password"
-              value={confirm()}
-              onInput={(event) => setConfirm(event.currentTarget.value)}
-              required
-            />
-          </label>
+          <PasswordInput
+            autocomplete="new-password"
+            label="New password"
+            value={password()}
+            onInput={setPassword}
+          />
+          <PasswordInput
+            autocomplete="new-password"
+            label="Confirm password"
+            value={confirm()}
+            onInput={setConfirm}
+          />
           <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
           <button>Set new password</button>
           <LoginLink navigate={props.navigate} />

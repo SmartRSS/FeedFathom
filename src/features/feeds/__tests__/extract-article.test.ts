@@ -29,6 +29,30 @@ describe("extractArticle", () => {
     );
   });
 
+  test("marks images lazy and async-decoding", () => {
+    expect(
+      extractArticle('<img src="https://example.com/a.png" alt="a">'),
+    ).toBe(
+      '<img decoding="async" loading="lazy" src="https://example.com/a.png" alt="a" />',
+    );
+  });
+
+  test("leaves an author's own loading and decoding choices alone", () => {
+    const result = extractArticle(
+      '<img src="https://example.com/a.png" loading="eager" decoding="sync">',
+    );
+    expect(result).toContain('loading="eager"');
+    expect(result).toContain('decoding="sync"');
+  });
+
+  test("keeps the width and height that let the browser reserve space", () => {
+    const result = extractArticle(
+      '<img src="https://example.com/a.png" width="640" height="360">',
+    );
+    expect(result).toContain('width="640"');
+    expect(result).toContain('height="360"');
+  });
+
   test("returns an empty string for null/undefined content", () => {
     expect(extractArticle(null)).toBe("");
     expect(extractArticle(undefined)).toBe("");
