@@ -195,3 +195,51 @@ export function setRememberReadingPosition(value: boolean) {
     localStorage.setItem(REMEMBER_READING_POSITION_KEY, value ? "on" : "off");
   } catch {}
 }
+
+// Reader typography (#712). Two axes, three steps each, rather than a free
+// number: the defaults set in #719 are the middle step, and a slider would
+// invite widths the measure argument exists to rule out. The steps land on
+// the stylesheet as data attributes, the same way the theme does, so the
+// values stay in CSS with the rules that use them.
+const READER_TEXT_KEY = "readerText";
+const READER_WIDTH_KEY = "readerWidth";
+
+export type ReaderStep = "large" | "medium" | "small";
+const READER_STEPS: readonly ReaderStep[] = ["small", "medium", "large"];
+
+export function isReaderStep(value: string): value is ReaderStep {
+  return (READER_STEPS as readonly string[]).includes(value);
+}
+
+function readStep(key: string): ReaderStep {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored && isReaderStep(stored) ? stored : "medium";
+  } catch {
+    return "medium";
+  }
+}
+
+const [readerText, setReaderTextSignal] = createSignal<ReaderStep>(
+  readStep(READER_TEXT_KEY),
+);
+export { readerText };
+
+export function setReaderText(value: ReaderStep) {
+  setReaderTextSignal(value);
+  try {
+    localStorage.setItem(READER_TEXT_KEY, value);
+  } catch {}
+}
+
+const [readerWidth, setReaderWidthSignal] = createSignal<ReaderStep>(
+  readStep(READER_WIDTH_KEY),
+);
+export { readerWidth };
+
+export function setReaderWidth(value: ReaderStep) {
+  setReaderWidthSignal(value);
+  try {
+    localStorage.setItem(READER_WIDTH_KEY, value);
+  } catch {}
+}

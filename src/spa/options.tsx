@@ -9,10 +9,15 @@ import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
   isMarkReadPolicy,
+  isReaderStep,
   isTheme,
   markReadPolicy,
+  readerText,
+  readerWidth,
   rememberReadingPosition,
   setMarkReadPolicy,
+  setReaderText,
+  setReaderWidth,
   setRememberReadingPosition,
   setTheme,
   setTodayView,
@@ -233,6 +238,37 @@ export function Options(props: {
           >
             <option value="locale">System locale</option>
             <option value="iso">ISO 8601 (UTC)</option>
+          </select>
+        </label>
+      </section>
+      <section class="options-card">
+        <h2>Reader</h2>
+        <label>
+          Text size
+          <select
+            value={readerText()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isReaderStep(value)) setReaderText(value);
+            }}
+          >
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
+        <label>
+          Line width
+          <select
+            value={readerWidth()}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              if (isReaderStep(value)) setReaderWidth(value);
+            }}
+          >
+            <option value="small">Narrow</option>
+            <option value="medium">Medium</option>
+            <option value="large">Wide</option>
           </select>
         </label>
       </section>

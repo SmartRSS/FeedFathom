@@ -28,7 +28,7 @@ import { Admin } from "./admin.tsx";
 import { DialogHost } from "./dialog.tsx";
 import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
-import { resolvedTheme } from "./preferences.ts";
+import { readerText, readerWidth, resolvedTheme } from "./preferences.ts";
 import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
 import "./style.css";
 
@@ -59,6 +59,12 @@ function App() {
 
   createEffect(() => {
     document.documentElement.dataset["theme"] = resolvedTheme();
+  });
+  // On the same element as the theme, so the reader rules can key off either
+  // without a second host to reason about.
+  createEffect(() => {
+    document.documentElement.dataset["readerText"] = readerText();
+    document.documentElement.dataset["readerWidth"] = readerWidth();
   });
 
   if (initialRoute.name === "dashboard" || initialRoute.name === "preview")

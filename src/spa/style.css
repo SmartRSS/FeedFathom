@@ -965,10 +965,29 @@ button.source {
    and max() leaves the original 30px gutter in place whenever the pane is too
    narrow for the measure to bind -- which is every pane on mobile. */
 .reader {
+  --reader-measure: 65ch;
+
   overflow: auto;
-  padding: 20px max(30px, (100% - 65ch) / 2);
+  padding: 20px max(30px, (100% - var(--reader-measure)) / 2);
   font-size: 0.9rem;
   line-height: 1.6;
+}
+/* The two reader steps from #712. Only the off-centre steps need a rule; the
+   middle one is the declaration above, which is also what an unset or
+   unrecognised attribute falls back to. The measure is in ch, so raising the
+   text size widens the column by the same proportion and the line count per
+   paragraph holds -- the two settings stay independent of each other. */
+:root[data-reader-text="small"] .reader {
+  font-size: 0.8rem;
+}
+:root[data-reader-text="large"] .reader {
+  font-size: 1.05rem;
+}
+:root[data-reader-width="small"] .reader {
+  --reader-measure: 50ch;
+}
+:root[data-reader-width="large"] .reader {
+  --reader-measure: 80ch;
 }
 .reader h1 {
   margin-top: 0;
