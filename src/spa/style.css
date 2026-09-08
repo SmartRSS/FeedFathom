@@ -264,14 +264,14 @@ form,
   gap: 1.5rem;
   align-content: start;
   width: min(100%, 32rem);
-  /* body never scrolls, so this route must be its own scroll container --
-     with a plain margin-ed block, everything below the viewport fold was
-     clipped by body's overflow:hidden and unreachable. The spacing lives
-     in padding so the scrollable area includes it. */
-  height: 100%;
-  padding: 2rem 1rem;
-  margin: 0 auto;
-  overflow-y: auto;
+  margin: 2rem auto;
+}
+/* The options route is the one page the document itself scrolls: #app is a
+   fixed-height shell because the dashboard's panes scroll themselves, but
+   this route replaces the dashboard, and a scroll trapped inside the column
+   read as a cut-off page. main.tsx stamps the route onto <html>. */
+html[data-route="options"] body {
+  overflow: auto;
 }
 .options-page h1 {
   margin: 0;
