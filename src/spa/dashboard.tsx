@@ -92,6 +92,8 @@ import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
 import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
 import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
+import mailOpenRaw from "./assets/icons/System/mail-open-fill.svg?raw";
+import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
@@ -1507,11 +1509,14 @@ export function Dashboard(props: {
               <Icon raw={selectAllRaw} />
             </button>
             <button
-              class="text-action"
+              aria-label={allSelectedRead() ? "Mark unread" : "Mark read"}
+              title={allSelectedRead() ? "Mark unread" : "Mark read"}
               disabled={!selectedIndexes().size}
               onClick={() => setSelectedRead(!allSelectedRead())}
             >
-              {allSelectedRead() ? "Mark unread" : "Mark read"}
+              {/* Open envelope = read, closed = unread: the state the
+                  action will produce, so the glyph flips with it (#766). */}
+              <Icon raw={allSelectedRead() ? mailRaw : mailOpenRaw} />
             </button>
             <button
               aria-label="delete articles"

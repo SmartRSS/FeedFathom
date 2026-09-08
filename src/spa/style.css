@@ -909,14 +909,6 @@ button.source {
   min-width: 0;
   font: inherit;
 }
-/* The toolbar is otherwise icon buttons. This one has no glyph in the icon
-   set and inventing one would not read as "mark read" anyway, so it says so. */
-.toolbar button.text-action {
-  width: auto;
-  padding: 0 0.5rem;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
 .title,
 .details > span {
   overflow: hidden;
