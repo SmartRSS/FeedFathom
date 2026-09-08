@@ -941,15 +941,26 @@ button.source {
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
+/* A measure of 65ch, the long end of the usual 45-75 character range, held by
+   the padding rather than by a max-width on the children. The unit is the
+   reason: ch resolves against the element's own font-size, so the same
+   max-width on the children would give the 1.4rem h1 a line half again as
+   long as the body's and no shared column at all. Declared once here, it
+   resolves once, against this element's font-size, and every child inherits
+   the same column. It also keeps .reader the full-width scroll container, so
+   the scrollbar stays at the pane edge instead of tracking a centred column,
+   and max() leaves the original 30px gutter in place whenever the pane is too
+   narrow for the measure to bind -- which is every pane on mobile. */
 .reader {
   overflow: auto;
-  padding: 20px 30px;
+  padding: 20px max(30px, (100% - 65ch) / 2);
   font-size: 0.9rem;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 .reader h1 {
   margin-top: 0;
   font-size: 1.4rem;
+  line-height: 1.25;
 }
 .reader img,
 .reader video {
