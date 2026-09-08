@@ -826,8 +826,11 @@ jobs:
           export FEEDFATHOM_PORT="${SERVER_HOST_PORT:-3458}"
 
           docker stack config -c compose.yml -c stack.yml >/dev/null
-          docker pull "$SERVER_IMAGE"
-          docker pull "$WORKER_IMAGE"
+          # Only the migrator is pulled on the manager, and only to pin the
+          # service to an immutable digest. The server and worker images are
+          # pulled by whichever nodes run them -- --with-registry-auth hands
+          # the GHCR credentials through -- so fetching them here too just
+          # serialised hundreds of MB onto the deploy's critical path.
           docker pull "$MIGRATOR_IMAGE"
           MIGRATOR_REPOSITORY="${MIGRATOR_IMAGE%:*}"
           MIGRATOR_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$MIGRATOR_IMAGE")
