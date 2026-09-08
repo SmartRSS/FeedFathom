@@ -74,9 +74,8 @@ test("only prunes articles the feed has really stopped listing", async () => {
         VALUES (${user!.id}, ${sourceId}, 'sub', NOW() - INTERVAL '60 days')`;
     }
     // The mailbox subscription predates the old deliveries below: a current
-    // subscriber has had the chance to (and in one case did) record deleting
-    // them, so their fate is decided by the email age rule, not the
-    // nobody-ever-saw-it rule above it.
+    // subscriber has had the chance to see them, so their fate is decided by
+    // the email age rule, not the nobody-ever-saw-it rule above it.
     await client`
       INSERT INTO user_sources (user_id, source_id, name, created_at)
       VALUES (${user!.id}, ${mailbox}, 'sub', NOW() - INTERVAL '100 days')`;
@@ -84,13 +83,13 @@ test("only prunes articles the feed has really stopped listing", async () => {
     const goneForGood = await addArticle(fastFeed, "gone", "5 days");
     const stillSubscribed = await addArticle(fastFeed, "not-removed", "5 days");
     const missedOneFetch = await addArticle(slowFeed, "flaky", "3 days");
-    // Email prunes on flat delivery age, not feed absence: a 30-day-old
-    // delivery is far inside the window, an old deleted one is outside it,
-    // and an old one nobody deleted survives because someone may still want
-    // it.
+    // Email prunes on flat delivery age, deletions not gating it: a
+    // 30-day-old delivery is far inside the window, and both 91-day-old
+    // ones are outside it -- one recorded as deleted, one that an active
+    // subscriber never deleted, which used to keep it forever.
     const oldNewsletter = await addArticle(mailbox, "letter", "30 days");
     const prunableNewsletter = await addArticle(mailbox, "stale", "91 days");
-    const keptNewsletter = await addArticle(mailbox, "hoarded", "91 days");
+    const hoardedNewsletter = await addArticle(mailbox, "hoarded", "91 days");
 
     for (const guid of ["gone", "flaky", "letter", "stale"]) {
       // eslint-disable-next-line no-await-in-loop -- four fixture rows.
@@ -108,10 +107,10 @@ test("only prunes articles the feed has really stopped listing", async () => {
       stillSubscribed,
       missedOneFetch,
       oldNewsletter,
-      keptNewsletter,
     ]);
     expect(rows.map((row) => row.id)).not.toContain(goneForGood);
     expect(rows.map((row) => row.id)).not.toContain(prunableNewsletter);
+    expect(rows.map((row) => row.id)).not.toContain(hoardedNewsletter);
   } finally {
     await drizzleConnection.$client.close();
     await client.close();

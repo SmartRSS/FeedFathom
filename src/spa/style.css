@@ -262,8 +262,16 @@ form,
 .options-page {
   display: grid;
   gap: 1.5rem;
+  align-content: start;
   width: min(100%, 32rem);
-  margin: 2rem auto;
+  /* body never scrolls, so this route must be its own scroll container --
+     with a plain margin-ed block, everything below the viewport fold was
+     clipped by body's overflow:hidden and unreachable. The spacing lives
+     in padding so the scrollable area includes it. */
+  height: 100%;
+  padding: 2rem 1rem;
+  margin: 0 auto;
+  overflow-y: auto;
 }
 .options-page h1 {
   margin: 0;
@@ -278,6 +286,28 @@ form,
 }
 .options-card h2 {
   margin: 0;
+}
+/* One active session per row: the agent string truncates (user agents run
+   long), the date/current label holds its natural width, and the sign-out
+   button follows. Rows wrap on narrow screens rather than squeezing the
+   label out. */
+.session-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+}
+.session-row .session-agent {
+  flex: 1;
+  min-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row .session-date {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 /* Every other options card's action is a full-width button; the OPML export
    is a link because it downloads a file. ButtonFace/ButtonText are what the
@@ -908,14 +938,6 @@ button.source {
 .article-filter {
   min-width: 0;
   font: inherit;
-}
-/* The toolbar is otherwise icon buttons. This one has no glyph in the icon
-   set and inventing one would not read as "mark read" anyway, so it says so. */
-.toolbar button.text-action {
-  width: auto;
-  padding: 0 0.5rem;
-  font-size: 0.8rem;
-  white-space: nowrap;
 }
 .title,
 .details > span {

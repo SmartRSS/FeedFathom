@@ -1,7 +1,8 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import type { Static } from "typebox";
 import {
   sessionResponse,
+  sessionsResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
 import { api } from "./api.ts";
@@ -24,7 +25,12 @@ import {
   theme,
   todayView,
 } from "./preferences.ts";
-import { dateFormat, isDateFormat, setDateFormat } from "./format-date.ts";
+import {
+  dateFormat,
+  formatDate,
+  isDateFormat,
+  setDateFormat,
+} from "./format-date.ts";
 import {
   isOnOff,
   setBackgroundPollEnabled,
@@ -53,6 +59,11 @@ export function Options(props: {
   const [user, setUser] = createSignal<SessionUser>();
   const [sessionMessage, setSessionMessage] = createSignal("");
   const [logoutLoading, setLogoutLoading] = createSignal(false);
+  const [sessions, setSessions] = createSignal<
+    Static<typeof sessionsResponse>["sessions"]
+  >([]);
+  const [sessionsMessage, setSessionsMessage] = createSignal("");
+  const [revokingId, setRevokingId] = createSignal<number>();
 
   onMount(async () => {
     try {
@@ -62,6 +73,7 @@ export function Options(props: {
         return;
       }
       setUser(session.user);
+      void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setSessionMessage(
@@ -78,6 +90,52 @@ export function Options(props: {
       });
     }
   });
+
+  async function loadSessions() {
+    try {
+      const listed = await api("/options/sessions", sessionsResponse);
+      setSessions(listed.sessions);
+    } catch (cause) {
+      if (props.handleUnauthorized(cause)) return;
+      setSessionsMessage(
+        cause instanceof Error ? cause.message : "Could not load sessions.",
+      );
+    }
+  }
+
+  async function revokeSession(id: number) {
+    setRevokingId(id);
+    setSessionsMessage("");
+    try {
+      await api(`/options/sessions/${id}`, successResponse, {
+        method: "DELETE",
+      });
+      await loadSessions();
+    } catch (cause) {
+      if (props.handleUnauthorized(cause)) return;
+      setSessionsMessage(
+        cause instanceof Error ? cause.message : "Could not sign out session.",
+      );
+    } finally {
+      setRevokingId(undefined);
+    }
+  }
+
+  async function revokeOtherSessions() {
+    setRevokingId(-1);
+    setSessionsMessage("");
+    try {
+      await api("/options/sessions", successResponse, { method: "DELETE" });
+      await loadSessions();
+    } catch (cause) {
+      if (props.handleUnauthorized(cause)) return;
+      setSessionsMessage(
+        cause instanceof Error ? cause.message : "Could not sign out sessions.",
+      );
+    } finally {
+      setRevokingId(undefined);
+    }
+  }
 
   async function logout() {
     setLogoutLoading(true);
@@ -359,6 +417,48 @@ export function Options(props: {
             </button>
           </section>
         )}
+      </Show>
+      <Show when={user()}>
+        <section class="options-card">
+          <h2>Active sessions</h2>
+          <For each={sessions()}>
+            {(session) => (
+              <div class="session-row">
+                <span class="session-agent" title={session.userAgent}>
+                  {session.userAgent}
+                </span>
+                <span class="session-date">
+                  {session.current
+                    ? "This session"
+                    : `Signed in ${formatDate(session.createdAt)}`}
+                </span>
+                <Show when={!session.current}>
+                  <button
+                    type="button"
+                    disabled={revokingId() !== undefined}
+                    onClick={() => void revokeSession(session.id)}
+                  >
+                    {revokingId() === session.id ? "Signing out…" : "Sign out"}
+                  </button>
+                </Show>
+              </div>
+            )}
+          </For>
+          <Show when={sessions().some((session) => !session.current)}>
+            <button
+              type="button"
+              disabled={revokingId() !== undefined}
+              onClick={() => void revokeOtherSessions()}
+            >
+              {revokingId() === -1
+                ? "Signing out…"
+                : "Sign out all other sessions"}
+            </button>
+          </Show>
+          <Show when={sessionsMessage()}>
+            {(message) => <p role="alert">{message()}</p>}
+          </Show>
+        </section>
       </Show>
       <Show when={sessionMessage()}>
         {(message) => <p role="alert">{message()}</p>}

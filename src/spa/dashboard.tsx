@@ -92,6 +92,8 @@ import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
 import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
 import shareRaw from "./assets/icons/System/share-fill.svg?raw";
 import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
+import mailOpenRaw from "./assets/icons/System/mail-open-fill.svg?raw";
+import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
 
 function ReaderBody(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
@@ -276,7 +278,9 @@ export function Dashboard(props: {
   let pollCycles = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
-    if (!backgroundPollEnabled()) return;
+    // The signal holds "on"/"off" strings and "off" is truthy, so !value
+    // never returned here and Off still polled. Compare explicitly.
+    if (backgroundPollEnabled() !== "on") return;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
         schedulePoll();
@@ -1010,7 +1014,9 @@ export function Dashboard(props: {
   // side to warm. The plain GET flows through the service worker's
   // networkFirst handler, so the prefetched copy also replays offline.
   function schedulePrefetch() {
-    if (!prefetchNextEnabled()) return;
+    // Same truthy-"off" trap as the background poll above: compare, don't
+    // negate.
+    if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
     const selectedIndex = soleSelectedIndex(selectedIndexes());
     const next =
@@ -1502,9 +1508,35 @@ export function Dashboard(props: {
             >
               <Icon raw={selectAllRaw} />
             </button>
+            <button
+              aria-label={allSelectedRead() ? "Mark unread" : "Mark read"}
+              title={allSelectedRead() ? "Mark unread" : "Mark read"}
+              disabled={!selectedIndexes().size}
+              onClick={() => setSelectedRead(!allSelectedRead())}
+            >
+              {/* Open envelope = read, closed = unread: the state the
+                  action will produce, so the glyph flips with it (#766). */}
+              <Icon raw={allSelectedRead() ? mailRaw : mailOpenRaw} />
+            </button>
+            <button
+              aria-label="delete articles"
+              disabled={selectedIndexes().size === 0}
+              onClick={() => removeSelected()}
+            >
+              <Icon raw={removeRaw} />
+            </button>
+            <button
+              aria-label="refresh"
+              onClick={() => void refreshCurrentView()}
+            >
+              <Icon raw={refreshRaw} />
+            </button>
+            <span />
             {/* A visible label, not just an aria-label: among icon buttons a
                 bare dropdown reading "Unread" looks like a status, not the
-                control that changes which articles the list shows. */}
+                control that changes which articles the list shows. It is a
+                view option, not an action, so it sits right of the spacer
+                with the reader pane's display-mode dropdown (#767). */}
             <label class="article-filter-field">
               Show
               <select
@@ -1521,27 +1553,6 @@ export function Dashboard(props: {
                 <option value="read">Read</option>
               </select>
             </label>
-            <button
-              class="text-action"
-              disabled={!selectedIndexes().size}
-              onClick={() => setSelectedRead(!allSelectedRead())}
-            >
-              {allSelectedRead() ? "Mark unread" : "Mark read"}
-            </button>
-            <button
-              aria-label="delete articles"
-              disabled={selectedIndexes().size === 0}
-              onClick={() => removeSelected()}
-            >
-              <Icon raw={removeRaw} />
-            </button>
-            <button
-              aria-label="refresh"
-              onClick={() => void refreshCurrentView()}
-            >
-              <Icon raw={refreshRaw} />
-            </button>
-            <span />
             <button
               aria-label="options"
               class="only-mobile"

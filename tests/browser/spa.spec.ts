@@ -695,6 +695,76 @@ test("the options page offers and persists the reader typography steps", async (
   );
 });
 
+// body never scrolls (the dashboard manages its own panes), so the options
+// page must be its own scroll container: once the settings grew past a
+// viewport, overflow:hidden on the body silently clipped every card below
+// the fold with no way to reach them.
+test("scrolls the options page when the settings exceed the viewport", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 500, width: 800 });
+  await page.goto("/options");
+  await expect(page.locator(".options-page h1")).toBeVisible();
+
+  const optionsPane = page.locator(".options-page");
+  await expect
+    .poll(async () =>
+      optionsPane.evaluate((el) => el.scrollHeight - el.clientHeight),
+    )
+    .toBeGreaterThan(0);
+
+  await optionsPane.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  const lastCard = optionsPane.locator(".options-card").last();
+  await expect(lastCard).toBeVisible();
+  await expect
+    .poll(async () =>
+      lastCard.evaluate((el) => el.getBoundingClientRect().bottom),
+    )
+    .toBeLessThanOrEqual(500);
+});
+
+// The options page lists the account's active sessions (#695): the one
+// making the request is labelled and gets no sign-out button -- logout
+// already covers it -- and every other session can be revoked singly or
+// all at once, with the list shrinking to prove the revoke landed.
+test("lists active sessions and signs out another one", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/options");
+  await expect(page.getByText("This browser")).toBeVisible();
+  await expect(page.getByText("This session")).toBeVisible();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  // The current session offers no revoke button; logout is its way out.
+  const currentRow = page
+    .locator(".session-row")
+    .filter({ hasText: "This browser" });
+  await expect(currentRow.getByRole("button")).toHaveCount(0);
+
+  await page
+    .locator(".session-row")
+    .filter({ hasText: "Phone" })
+    .getByRole("button", { exact: true, name: "Sign out" })
+    .click();
+  await expect
+    .poll(() => state.revokedSessionIds, { timeout: 5_000 })
+    .toEqual([2]);
+  await expect(page.getByText("Phone")).toHaveCount(0);
+});
+
+test("signs out all other sessions at once", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/options");
+  await expect(page.getByText("This browser")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Sign out all other sessions" })
+    .click();
+  await expect.poll(() => state.revokedOtherSessions).toBe(true);
+  await expect(page.getByText("Phone")).toHaveCount(0);
+  await expect(page.getByText("This browser")).toBeVisible();
+});
+
 // The unit test covers the guard; this covers the part that can silently stop
 // working -- the settings reaching the stylesheet at all. A renamed data
 // attribute or a dropped effect leaves both selects working and the reader
@@ -823,6 +893,86 @@ test("retitles the document on route changes", async ({ page }) => {
   await expect(page).toHaveTitle("(2) FeedFathom");
   await page.getByRole("button", { name: "options" }).first().click();
   await expect(page).toHaveTitle("Options · FeedFathom");
+});
+
+// #765: Hide in the New-article signal options must remove the "(N) "
+// prefix, immediately and for good -- the title effect reads the setting
+// signal directly, so no reload or dashboard visit may bring it back.
+test("hides the tab-title unread count when the setting is Hide", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await expect(page).toHaveTitle("(2) FeedFathom");
+
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page
+    .getByRole("combobox", { name: "Unread count in tab title" })
+    .selectOption("off");
+  // The effect reruns wherever the app is, not only over the dashboard.
+  await expect(page).toHaveTitle("Options · FeedFathom");
+
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page).toHaveTitle("FeedFathom");
+
+  // A reload re-reads the persisted setting from localStorage.
+  await page.reload();
+  await expect(page).toHaveTitle("FeedFathom");
+});
+
+// The prefetch setting's Off used to read as on like every string-"off"
+// signal consumed bare (#765's root cause), so the requests it was
+// supposed to save went out anyway. These two pin both sides of the
+// toggle around the same open.
+const requestedArticleIds = (page: Page) => {
+  const ids: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/article")
+      ids.push(url.searchParams.get("article") ?? "");
+  });
+  return ids;
+};
+
+test("prefetches the next article when the setting is On", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "on");
+  });
+  await installApiFixture(page, { multipleArticles: true });
+  const ids = requestedArticleIds(page);
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  await articleOptions(page).first().click();
+  await expect
+    .poll(() => new Set(ids).size, { timeout: 5_000 })
+    .toBeGreaterThan(1);
+});
+
+test("skips the next-article prefetch when the setting is Off", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "off");
+  });
+  await installApiFixture(page, { multipleArticles: true });
+  const ids = requestedArticleIds(page);
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  await articleOptions(page).first().click();
+  await expect.poll(() => ids.length).toBeGreaterThanOrEqual(1);
+  // A beat for a wrongly-scheduled prefetch to fire; the only article
+  // fetched may be the one that was opened (which row that is depends on
+  // the fixture's list order, so only the count is pinned here -- the On
+  // case above pins that a second id really does get fetched).
+  await page.waitForTimeout(1_000);
+  expect(new Set(ids).size).toBe(1);
+  expect(["11", "12", "13"]).toContain(ids[0]);
 });
 
 test("shows the current account and logs out", async ({ page }) => {
