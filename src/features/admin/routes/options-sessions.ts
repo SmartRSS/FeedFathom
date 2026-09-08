@@ -3,10 +3,10 @@ import { json } from "#platform/http/json.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 
 // Elysia's cookie jar types a value opaquely (logout guards it the same
-  // way), so the sid extraction is narrowed here rather than at each route.
-export const currentSidFromCookie = (
-  cookie: { sid?: { value?: unknown } },
-): string => {
+// way), so the sid extraction is narrowed here rather than at each route.
+export const currentSidFromCookie = (cookie: {
+  sid?: { value?: unknown };
+}): string => {
   const value = cookie.sid?.value;
   return typeof value === "string" ? value : "";
 };

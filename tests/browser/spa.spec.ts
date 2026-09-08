@@ -763,7 +763,6 @@ test("signs out all other sessions at once", async ({ page }) => {
   await expect.poll(() => state.revokedOtherSessions).toBe(true);
   await expect(page.getByText("Phone")).toHaveCount(0);
   await expect(page.getByText("This browser")).toBeVisible();
-
 });
 
 // The unit test covers the guard; this covers the part that can silently stop
