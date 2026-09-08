@@ -262,8 +262,16 @@ form,
 .options-page {
   display: grid;
   gap: 1.5rem;
+  align-content: start;
   width: min(100%, 32rem);
-  margin: 2rem auto;
+  /* body never scrolls, so this route must be its own scroll container --
+     with a plain margin-ed block, everything below the viewport fold was
+     clipped by body's overflow:hidden and unreachable. The spacing lives
+     in padding so the scrollable area includes it. */
+  height: 100%;
+  padding: 2rem 1rem;
+  margin: 0 auto;
+  overflow-y: auto;
 }
 .options-page h1 {
   margin: 0;

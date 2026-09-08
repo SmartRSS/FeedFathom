@@ -695,6 +695,34 @@ test("the options page offers and persists the reader typography steps", async (
   );
 });
 
+// body never scrolls (the dashboard manages its own panes), so the options
+// page must be its own scroll container: once the settings grew past a
+// viewport, overflow:hidden on the body silently clipped every card below
+// the fold with no way to reach them.
+test("scrolls the options page when the settings exceed the viewport", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 500, width: 800 });
+  await page.goto("/options");
+  await expect(page.locator(".options-page h1")).toBeVisible();
+
+  const optionsPane = page.locator(".options-page");
+  await expect
+    .poll(async () =>
+      optionsPane.evaluate((el) => el.scrollHeight - el.clientHeight),
+    )
+    .toBeGreaterThan(0);
+
+  await optionsPane.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  const lastCard = optionsPane.locator(".options-card").last();
+  await expect(lastCard).toBeVisible();
+  await expect
+    .poll(async () =>
+      lastCard.evaluate((el) => el.getBoundingClientRect().bottom),
+    )
+    .toBeLessThanOrEqual(500);
+
 // The options page lists the account's active sessions (#695): the one
 // making the request is labelled and gets no sign-out button -- logout
 // already covers it -- and every other session can be revoked singly or
@@ -734,6 +762,7 @@ test("signs out all other sessions at once", async ({ page }) => {
   await expect.poll(() => state.revokedOtherSessions).toBe(true);
   await expect(page.getByText("Phone")).toHaveCount(0);
   await expect(page.getByText("This browser")).toBeVisible();
+
 });
 
 // The unit test covers the guard; this covers the part that can silently stop
