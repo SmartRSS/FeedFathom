@@ -278,7 +278,9 @@ export function Dashboard(props: {
   let pollCycles = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
-    if (!backgroundPollEnabled()) return;
+    // The signal holds "on"/"off" strings and "off" is truthy, so !value
+    // never returned here and Off still polled. Compare explicitly.
+    if (backgroundPollEnabled() !== "on") return;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
         schedulePoll();
@@ -1012,7 +1014,9 @@ export function Dashboard(props: {
   // side to warm. The plain GET flows through the service worker's
   // networkFirst handler, so the prefetched copy also replays offline.
   function schedulePrefetch() {
-    if (!prefetchNextEnabled()) return;
+    // Same truthy-"off" trap as the background poll above: compare, don't
+    // negate.
+    if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
     const selectedIndex = soleSelectedIndex(selectedIndexes());
     const next =

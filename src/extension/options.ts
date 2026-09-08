@@ -1,4 +1,4 @@
-import { storedInstance } from "#shared/extension-types.ts";
+import { storedBadgeEnabled, storedInstance } from "#shared/extension-types.ts";
 import { pingInstance } from "./instance.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
@@ -85,4 +85,17 @@ void (async () => {
       instanceInput.value = displayedValue;
     })();
   });
+
+  // The badge toggle (#768): checked state straight from storage so the
+  // page is honest even before any change, and every change persisted
+  // immediately -- the background clears live badges as the key flips off.
+  const badgeToggle = document.querySelector("#show-badge");
+  if (badgeToggle instanceof HTMLInputElement) {
+    badgeToggle.checked = storedBadgeEnabled(
+      await chrome.storage.sync.get("showBadge"),
+    );
+    badgeToggle.addEventListener("change", () => {
+      void chrome.storage.sync.set({ showBadge: badgeToggle.checked });
+    });
+  }
 })();
