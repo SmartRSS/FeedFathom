@@ -39,6 +39,7 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       "This browser",
     );
     const phoneSid = await usersDataService.createSession(userId, "Phone");
+    const tabletSid = await usersDataService.createSession(userId, "Tablet");
     const stolenSid = await usersDataService.createSession(otherId, "Stolen");
 
     // A fresh session resolves, and carries the same window the cookie
@@ -59,15 +60,23 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     expect(await usersDataService.getUserBySid(phoneSid)).toBeUndefined();
     expect((await usersDataService.getUserBySid(browserSid))?.id).toBe(userId);
 
-    // The current session is flagged, the others are not, newest first.
-    const listed = await usersDataService.listSessions(userId, phoneSid);
+    // The list the options page renders enforces the same expiry as the
+    // lookup: the aged-out session is not listed as active -- not even as
+    // the requesting one -- while the live rows stay, newest first, with
+    // the requesting session flagged.
+    expect(
+      (await usersDataService.listSessions(userId, phoneSid)).map(
+        (session) => session.userAgent,
+      ),
+    ).toEqual(["Tablet", "This browser"]);
+    const listed = await usersDataService.listSessions(userId, tabletSid);
     expect(
       listed.map((session) => ({
         sid: session.current,
         ua: session.userAgent,
       })),
     ).toEqual([
-      { sid: true, ua: "Phone" },
+      { sid: true, ua: "Tablet" },
       { sid: false, ua: "This browser" },
     ]);
 

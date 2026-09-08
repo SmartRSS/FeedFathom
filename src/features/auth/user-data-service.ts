@@ -137,7 +137,10 @@ export class UsersDataService {
 
   // One row per active session of the user's, newest first, with the
   // requesting session flagged so the options page can label it and keep
-  // the revoke buttons off it.
+  // the revoke buttons off it. The same expiry predicate getUserBySid
+  // enforces applies here: a session that no longer resolves must not be
+  // listed as active -- the retention pass only prunes the dead rows on
+  // its own schedule, not before every listing.
   public async listSessions(userId: number, currentSid: string) {
     return await this.drizzleConnection
       .select({
@@ -148,7 +151,9 @@ export class UsersDataService {
         userAgent: sessions.userAgent,
       })
       .from(sessions)
-      .where(eq(sessions.userId, userId))
+      .where(
+        and(eq(sessions.userId, userId), gt(sessions.expiresAt, sql`NOW()`)),
+      )
       .orderBy(desc(sessions.createdAt));
   }
 
