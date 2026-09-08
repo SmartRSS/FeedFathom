@@ -142,6 +142,18 @@ function App() {
   onMount(() => addEventListener("popstate", popstate));
   onCleanup(() => removeEventListener("popstate", popstate));
 
+  // The options route is the one page the document scrolls (its settings run
+  // past a viewport, and a scroll trapped inside the centered column read as
+  // a cut-off page); everywhere else body stays clipped because the
+  // dashboard's panes scroll themselves. Leaving it also drops the page
+  // scroll -- hidden overflow would otherwise trap the viewport wherever
+  // the options page left it.
+  createEffect(() => {
+    const name = route().name;
+    document.documentElement.dataset["route"] = name;
+    if (name !== "options") window.scrollTo(0, 0);
+  });
+
   return (
     <>
       <a
