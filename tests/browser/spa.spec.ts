@@ -695,10 +695,11 @@ test("the options page offers and persists the reader typography steps", async (
   );
 });
 
-// body never scrolls (the dashboard manages its own panes), so the options
-// page must be its own scroll container: once the settings grew past a
-// viewport, overflow:hidden on the body silently clipped every card below
-// the fold with no way to reach them.
+// The options route is the one page the document itself scrolls: once the
+// settings grew past a viewport, body's overflow:hidden clipped every card
+// below the fold, and making the column itself the scroller instead read as
+// a cut-off page with a scrollbar trapped inside it. Now the document
+// scrolls and the column stays a plain block at its full width.
 test("scrolls the options page when the settings exceed the viewport", async ({
   page,
 }) => {
@@ -707,15 +708,28 @@ test("scrolls the options page when the settings exceed the viewport", async ({
   await page.goto("/options");
   await expect(page.locator(".options-page h1")).toBeVisible();
 
-  const optionsPane = page.locator(".options-page");
   await expect
     .poll(async () =>
-      optionsPane.evaluate((el) => el.scrollHeight - el.clientHeight),
+      page.evaluate(
+        () => document.documentElement.scrollHeight - window.innerHeight,
+      ),
     )
     .toBeGreaterThan(0);
+  expect(
+    await page
+      .locator(".options-page")
+      .evaluate((el) => el.scrollHeight - el.clientHeight),
+  ).toBe(0);
 
-  await optionsPane.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  const lastCard = optionsPane.locator(".options-card").last();
+  // A wheel over the column must move the document, not the column.
+  await page.mouse.move(400, 250);
+  await page.mouse.wheel(0, 600);
+  await expect
+    .poll(async () => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(0);
+
+  await page.mouse.wheel(0, 5000);
+  const lastCard = page.locator(".options-card").last();
   await expect(lastCard).toBeVisible();
   await expect
     .poll(async () =>
