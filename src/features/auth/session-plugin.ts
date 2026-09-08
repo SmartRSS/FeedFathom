@@ -14,7 +14,10 @@ export async function userFor(
 // handler files import this instead of re-deriving it from UsersDataService.
 export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
 
-type SessionUsers = Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
+type SessionUsers = Pick<
+  UsersDataService,
+  "getUserBySid" | "refreshSession" | "touchLastSeen"
+>;
 
 /**
  * 'plugin' scope: visible to this instance's own routes and to whichever
@@ -22,12 +25,18 @@ type SessionUsers = Pick<UsersDataService, "getUserBySid" | "touchLastSeen">;
  * further up into unrelated sibling route groups composed in server-app.ts.
  */
 function sessionPlugin(usersDataService: SessionUsers, requireAdmin: boolean) {
-  return new Elysia().derive("plugin", async ({ cookie, status }) => {
-    const user = await userFor(cookie["sid"]?.value, usersDataService);
+  return new Elysia().derive("plugin", async ({ cookie, request, status }) => {
+    const sid = cookie["sid"]?.value;
+    const user = await userFor(sid, usersDataService);
     if (!user) return status(401, { error: "Unauthorized" });
     if (requireAdmin && !user.isAdmin)
       return status(403, { error: "Unauthorized" });
     await usersDataService.touchLastSeen(user.id);
+    if (typeof sid === "string")
+      await usersDataService.refreshSession(
+        sid,
+        request.headers.get("user-agent"),
+      );
     return { user };
   });
 }

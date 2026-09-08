@@ -207,6 +207,7 @@ export async function installApiFixture(
           current: true,
           expiresAt: "2027-09-08T00:00:00.000Z",
           id: 1,
+          lastUsedAt: "2026-09-08T12:00:00.000Z",
           userAgent: "This browser",
         },
         {
@@ -214,6 +215,7 @@ export async function installApiFixture(
           current: false,
           expiresAt: "2027-09-01T00:00:00.000Z",
           id: 2,
+          lastUsedAt: "2026-09-01T12:00:00.000Z",
           userAgent: "Phone",
         },
       ].filter(
