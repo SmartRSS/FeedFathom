@@ -24,6 +24,14 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Last request this sid answered, refreshed by the auth plugin with a
+  // self-guarded write. Distinct from createdAt because the migration that
+  // introduced created_at backfilled every pre-existing row with one
+  // shared ALTER-time timestamp, so sign-in dates for old sessions are
+  // unrecoverable -- activity is the honest per-row clock.
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   // The DDL default needs a plain SQL literal, so the interval cannot be
   // built from SESSION_TTL_DAYS here -- keep the two in step.
   expiresAt: timestamp("expires_at", { withTimezone: true })
