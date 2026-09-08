@@ -66,7 +66,13 @@ export function createLoginRoute({
       }
 
       await authThrottle.clearFailures("login", address, parsed.email);
-      const sid = await usersDataService.createSession(user.id, "");
+      // Store what the client says it is, so the options page's session list
+      // can tell rows apart; createSession falls back to "UNKNOWN" when the
+      // header is absent.
+      const sid = await usersDataService.createSession(
+        user.id,
+        request.headers.get("user-agent"),
+      );
       return json({ sid }, 200, {
         "set-cookie": sessionHeader(sid, secureCookies),
       });
