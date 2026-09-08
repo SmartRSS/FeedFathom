@@ -6,6 +6,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
+import { PasswordInput } from "./password-input.tsx";
 import {
   isMarkReadPolicy,
   isTheme,
@@ -328,33 +329,21 @@ export function Options(props: {
       </Show>
       <form class="options-card" onSubmit={submitPassword}>
         <h2>Change password</h2>
-        <label>
-          Current password
-          <input
-            autocomplete="current-password"
-            type="password"
-            onInput={(event) => setOldPassword(event.currentTarget.value)}
-            required
-          />
-        </label>
-        <label>
-          New password
-          <input
-            autocomplete="new-password"
-            type="password"
-            onInput={(event) => setPassword(event.currentTarget.value)}
-            required
-          />
-        </label>
-        <label>
-          Confirm new password
-          <input
-            autocomplete="new-password"
-            type="password"
-            onInput={(event) => setPasswordConfirm(event.currentTarget.value)}
-            required
-          />
-        </label>
+        <PasswordInput
+          autocomplete="current-password"
+          label="Current password"
+          onInput={setOldPassword}
+        />
+        <PasswordInput
+          autocomplete="new-password"
+          label="New password"
+          onInput={setPassword}
+        />
+        <PasswordInput
+          autocomplete="new-password"
+          label="Confirm new password"
+          onInput={setPasswordConfirm}
+        />
         <button disabled={passwordLoading()}>
           {passwordLoading() ? "Changing password…" : "Change password"}
         </button>

@@ -368,6 +368,19 @@ label {
   display: grid;
   gap: 0.25rem;
 }
+/* Label and input keep their own stacked grid; the reveal button is a sibling
+   of the label, not a child, because a <label> may not hold interactive
+   content other than its own control. align-items: end puts the button on the
+   input's row rather than the label text's. The button is left bare so it
+   picks up the same UA ButtonFace/ButtonText the other bare buttons here do,
+   which is what keeps it right under all seven themes and forced-colors
+   without a per-theme rule. */
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 0.25rem;
+}
 input,
 button {
   padding: 0.6rem;
