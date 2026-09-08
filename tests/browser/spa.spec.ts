@@ -722,6 +722,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
       lastCard.evaluate((el) => el.getBoundingClientRect().bottom),
     )
     .toBeLessThanOrEqual(500);
+});
 
 // The options page lists the account's active sessions (#695): the one
 // making the request is labelled and gets no sign-out button -- logout
