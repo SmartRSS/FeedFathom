@@ -74,6 +74,7 @@ export type AdminOptionsRouteDependencies = {
     | "listSessions"
     | "deleteSessionById"
     | "deleteOtherSessions"
+    | "refreshSession"
     | "touchLastSeen"
   > & {
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;

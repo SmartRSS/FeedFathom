@@ -583,7 +583,7 @@ export function Options(props: {
                     <span class="session-date">
                       {session.current
                         ? "This session"
-                        : `Signed in ${formatDate(session.createdAt)} · expires ${formatDate(session.expiresAt)}`}
+                        : `Active ${formatDate(session.lastUsedAt)} · expires ${formatDate(session.expiresAt)}`}
                     </span>
                     <Show when={!session.current}>
                       <button
