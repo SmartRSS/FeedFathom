@@ -40,6 +40,9 @@ export class ScrollPastQueue {
   #dwelling = new Map<number, number>();
   // Dwell completed, waiting to ride the next flush.
   #pending: number[] = [];
+  // When the current batch got its first row, so the batch can stay open for
+  // rows still mid-dwell without a long scroll holding it open forever.
+  #pendingSince: number | undefined;
   #handle: unknown;
   // -Infinity so the first batch with anything pending flushes immediately;
   // the throttle only spaces out the flushes after that.
@@ -81,6 +84,7 @@ export class ScrollPastQueue {
     if (!this.#pending.length) return;
     const ids = this.#pending;
     this.#pending = [];
+    this.#pendingSince = undefined;
     this.#lastFlushAt = this.#now();
     this.#flush(ids);
     this.#arm();
@@ -91,6 +95,7 @@ export class ScrollPastQueue {
     this.#disarm();
     this.#dwelling.clear();
     this.#pending = [];
+    this.#pendingSince = undefined;
   }
 
   #disarm() {
@@ -106,9 +111,36 @@ export class ScrollPastQueue {
     this.#handle = this.#schedule(() => this.#onTimer(), delay);
   }
 
+  /** The time the current batch may go out, or undefined with nothing
+   *  pending. Two constraints, and the later one wins:
+   *
+   *  - Spacing. Never sooner than one window after the last flush, which is
+   *    what keeps a long scroll to one request per window.
+   *  - Filling. While any row is still mid-dwell it belongs to the same
+   *    gesture as the rows already pending, so the batch stays open for it --
+   *    but only for one window, or a scroll that never stops would hold the
+   *    batch open forever. With nothing dwelling there is nobody left to wait
+   *    for and this constraint drops out.
+   *
+   *  Without the filling half, two rows whose dwells complete a millisecond
+   *  apart leave as two requests: the timer fires on the first completion,
+   *  finds the batch nonempty and the spacing satisfied, and goes. That is
+   *  the ordinary case, not an edge one -- rows enter the viewport as the
+   *  scroll carries them, never in lockstep. */
+  #readyAt(): number | undefined {
+    if (this.#pendingSince === undefined) return undefined;
+    const spacing = this.#lastFlushAt + this.#flushEveryMs;
+    // 0 rather than -Infinity: times here are non-negative, so it reads as
+    // "no constraint" against any real clock while staying a number.
+    const filling = this.#dwelling.size
+      ? this.#pendingSince + this.#flushEveryMs
+      : 0;
+    return Math.max(spacing, filling);
+  }
+
   /** When the next deadline falls: the earliest dwell completion, or the
-   *  earliest moment the throttle lets a pending batch out -- whichever is
-   *  sooner. Undefined when there is nothing to wait for. */
+   *  moment the pending batch is allowed out -- whichever is sooner.
+   *  Undefined when there is nothing to wait for. */
   #nextDelay(): number | undefined {
     const time = this.#now();
     let delay: number | undefined;
@@ -116,8 +148,9 @@ export class ScrollPastQueue {
       const remaining = Math.max(0, since + this.#dwellMs - time);
       if (delay === undefined || remaining < delay) delay = remaining;
     }
-    if (this.#pending.length) {
-      const due = Math.max(0, this.#lastFlushAt + this.#flushEveryMs - time);
+    const readyAt = this.#readyAt();
+    if (readyAt !== undefined) {
+      const due = Math.max(0, readyAt - time);
       if (delay === undefined || due < delay) delay = due;
     }
     return delay;
@@ -130,17 +163,16 @@ export class ScrollPastQueue {
       if (time - since < this.#dwellMs) continue;
       this.#dwelling.delete(id);
       if (!this.#pending.includes(id)) this.#pending.push(id);
+      this.#pendingSince ??= time;
     }
     if (this.#pending.length >= this.#cap) {
       this.flushNow();
       return;
     }
-    // The throttle deadline can fall on the same tick a dwell completes;
-    // flush on that tick rather than scheduling a zero-delay timer.
-    if (
-      this.#pending.length &&
-      this.#now() >= this.#lastFlushAt + this.#flushEveryMs
-    ) {
+    // The deadline can fall on the same tick a dwell completes; flush on that
+    // tick rather than scheduling a zero-delay timer.
+    const readyAt = this.#readyAt();
+    if (readyAt !== undefined && this.#now() >= readyAt) {
       this.flushNow();
       return;
     }
