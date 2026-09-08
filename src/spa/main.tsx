@@ -109,9 +109,13 @@ function App() {
     const base = title === "FeedFathom" ? title : `${title} · FeedFathom`;
     // The tab-title unread badge (#717). Only the dashboard produces a
     // count; elsewhere it reads whatever the last dashboard left behind,
-    // and zero (badge hidden) once the dashboard is gone.
+    // and zero (badge hidden) once the dashboard is gone. The signal holds
+    // "on"/"off" strings -- "off" is truthy, so compare it explicitly
+    // (the bare && read it as always-on: #765).
     const badge =
-      unreadBadgeEnabled() && unreadTotal() > 0 ? `(${unreadTotal()}) ` : "";
+      unreadBadgeEnabled() === "on" && unreadTotal() > 0
+        ? `(${unreadTotal()}) `
+        : "";
     document.title = `${badge}${base}`;
   });
 
