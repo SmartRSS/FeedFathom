@@ -46,7 +46,7 @@ services:
         delay: 10s
         order: start-first
         # Must stay >= the healthcheck's worst-case time-to-unhealthy
-        # (start_period 120s + retries 3 * interval 5s = 135s in
+        # (start_period 45s + retries 3 * interval 5s = 60s in
         # compose.yml), or a rollout can be reported successful before a
         # slow-to-start task is actually confirmed healthy. start-first also
         # runs the new task alongside the one it replaces, doubling resource
@@ -55,8 +55,10 @@ services:
         #
         # The workflow migrates to completion before deploying, so tasks here
         # normally find the schema already applied and go healthy in seconds
-        # -- this budget is the ceiling, not the usual wait.
-        monitor: 150s
+        # -- this budget is the ceiling, not the usual wait. It is a fixed
+        # serial cost per batch under --detach=false regardless of how fast
+        # tasks go healthy, so it is kept tight.
+        monitor: 60s
         failure_action: rollback
       rollback_config:
         <<: *server-rollout
@@ -85,9 +87,9 @@ services:
         order: start-first
         # Same invariant as the server's monitor above. At the default 10
         # replicas this is three batches, so a worst case where every batch
-        # waits out the full budget is a ~8 minute rollout; the usual case is
+        # waits out the full budget is a ~3 minute rollout; the usual case is
         # seconds per batch, because the migration already finished.
-        monitor: 150s
+        monitor: 60s
         failure_action: rollback
       rollback_config:
         <<: *worker-rollout

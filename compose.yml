@@ -32,7 +32,7 @@ x-database-env: &database-env
 # Neither application service reports healthy until the schema this build was
 # compiled against is applied: the server does not listen at all until then
 # (src/server.ts) and the worker answers 503 (src/worker.ts). So start_period
-# is not a boot budget, it is a migration budget -- 120s covers a cold start
+# is not a boot budget, it is a migration budget -- 45s covers a cold start
 # plus an ordinary migration.
 #
 # A migration that cannot finish inside it is a manual rollout: run the
@@ -45,7 +45,10 @@ x-database-env: &database-env
 # together.
 #
 # Raising it means raising deploy/stack.yml's rollout monitors to match; the
-# invariant is written down there.
+# invariant is written down there. It is also the floor the stack.yml monitors
+# are derived from (45s + retries 3 * interval 5s = 60s), and those monitors
+# are a fixed serial cost on every production rollout, so do not grow this
+# casually.
 x-app-healthcheck: &app-healthcheck
   test:
     [
@@ -57,7 +60,7 @@ x-app-healthcheck: &app-healthcheck
   interval: 5s
   timeout: 2s
   retries: 3
-  start_period: 120s
+  start_period: 45s
 
 services:
   redis:
@@ -168,7 +171,12 @@ services:
       ARTICLE_STALE_AFTER_DAYS: ${ARTICLE_STALE_AFTER_DAYS:-365}
       USER_EXPIRY_DAYS: ${USER_EXPIRY_DAYS:-730}
     healthcheck: *app-healthcheck
-    stop_grace_period: 5m
+    # start-first rollouts stop a worker only after its replacement is
+    # healthy, and SIGTERM triggers the BullMQ graceful close, which waits
+    # out the active job. 2m is enough for that to usually finish; if it
+    # does not, the job is not lost -- SIGKILL turns it into a stalled job
+    # that BullMQ reassigns to another worker.
+    stop_grace_period: 2m
     depends_on:
       - redis
       - postgres
