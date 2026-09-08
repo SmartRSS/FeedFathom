@@ -1502,25 +1502,6 @@ export function Dashboard(props: {
             >
               <Icon raw={selectAllRaw} />
             </button>
-            {/* A visible label, not just an aria-label: among icon buttons a
-                bare dropdown reading "Unread" looks like a status, not the
-                control that changes which articles the list shows. */}
-            <label class="article-filter-field">
-              Show
-              <select
-                class="article-filter"
-                value={articleFilter()}
-                onChange={(event) => {
-                  const next = event.currentTarget.value;
-                  if (next === "all" || next === "read" || next === "unread")
-                    changeArticleFilter(next);
-                }}
-              >
-                <option value="unread">Unread</option>
-                <option value="all">All</option>
-                <option value="read">Read</option>
-              </select>
-            </label>
             <button
               class="text-action"
               disabled={!selectedIndexes().size}
@@ -1542,6 +1523,27 @@ export function Dashboard(props: {
               <Icon raw={refreshRaw} />
             </button>
             <span />
+            {/* A visible label, not just an aria-label: among icon buttons a
+                bare dropdown reading "Unread" looks like a status, not the
+                control that changes which articles the list shows. It is a
+                view option, not an action, so it sits right of the spacer
+                with the reader pane's display-mode dropdown (#767). */}
+            <label class="article-filter-field">
+              Show
+              <select
+                class="article-filter"
+                value={articleFilter()}
+                onChange={(event) => {
+                  const next = event.currentTarget.value;
+                  if (next === "all" || next === "read" || next === "unread")
+                    changeArticleFilter(next);
+                }}
+              >
+                <option value="unread">Unread</option>
+                <option value="all">All</option>
+                <option value="read">Read</option>
+              </select>
+            </label>
             <button
               aria-label="options"
               class="only-mobile"
