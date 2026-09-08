@@ -5,7 +5,7 @@ import {
   isVisibilityLostMessage,
   type ReaderResponse,
 } from "#shared/extension-types.ts";
-import { badgeColor, formatBadgeCount } from "./badge.ts";
+import { badgeColor, formatBadgeCount, getBadgeEnabled } from "./badge.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
 import { getInstanceUrl, getMailDomain } from "./instance.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
@@ -44,6 +44,21 @@ try {
 // Only status is read here, which needs no "tabs" permission.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") clearTabBadge(tabId);
+});
+
+// Turning the badge off has to clear the badges already on screen: the
+// content script re-reports only on its next scan, which may be never for a
+// page left open. query() needs no "tabs" permission -- only reading a tab's
+// url or title does -- and ids are filtered because some pseudo-tabs
+// (devtools) have none.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync" || changes["showBadge"]?.newValue !== false) return;
+  void (async () => {
+    try {
+      for (const tab of await chrome.tabs.query({}))
+        if (tab.id !== undefined) clearTabBadge(tab.id);
+    } catch {}
+  })();
 });
 
 let clearMenusRequested = false;
@@ -186,8 +201,16 @@ const messageHandler = (
     // kept current independent of the menu update below.
     void chrome.storage.session.set({ feedsData: message.feedsData });
 
-    if (sender.tab?.id !== undefined)
-      setTabBadge(sender.tab.id, message.feedsData.length);
+    const tabId = sender.tab?.id;
+    if (tabId !== undefined) {
+      // The badge is opt-out (#768): with the setting off a report only
+      // clears whatever the page's previous state left behind.
+      void (async () => {
+        if (await getBadgeEnabled())
+          setTabBadge(tabId, message.feedsData.length);
+        else clearTabBadge(tabId);
+      })();
+    }
 
     if (hasContextMenus) {
       if (menuUpdateTimer) {

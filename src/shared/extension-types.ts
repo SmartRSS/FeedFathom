@@ -113,6 +113,10 @@ const instanceStorageResultSchema = Type.Object(
   { instance: Type.Optional(Type.String()) },
   { additionalProperties: false },
 );
+const badgeStorageResultSchema = Type.Object(
+  { showBadge: Type.Optional(Type.Boolean()) },
+  { additionalProperties: false },
+);
 
 const readerResponseForRequestSchema = (request: ReaderRequest) =>
   Type.Intersect([
@@ -132,6 +136,14 @@ export type ScanRequestMessage = Static<typeof scanRequestMessageSchema>;
 
 export const storedInstance = (value: unknown): string | undefined =>
   Value.Check(instanceStorageResultSchema, value) ? value.instance : undefined;
+
+// The toolbar badge is opt-out (#768): an absent key means on, and so does an
+// unreadable storage result -- a storage failure must never silently turn a
+// feature off.
+export const storedBadgeEnabled = (value: unknown): boolean =>
+  Value.Check(badgeStorageResultSchema, value)
+    ? value.showBadge !== false
+    : true;
 
 export const isListFeedsMessage = (value: unknown): value is ListFeedsMessage =>
   Value.Check(listFeedsMessageSchema, value);
