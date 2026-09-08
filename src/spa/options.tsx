@@ -31,6 +31,7 @@ import {
   isDateFormat,
   setDateFormat,
 } from "./format-date.ts";
+import { describeUserAgent } from "./user-agent.ts";
 import {
   isOnOff,
   setBackgroundPollEnabled,
@@ -61,12 +62,6 @@ function sectionFromHash(hash: string): SectionId {
   const id = hash.slice(1);
   return sections.find((section) => section.id === id)?.id ?? "reading";
 }
-
-// Sessions created before the login route stored the request's User-Agent
-// carry an empty string, and the data layer writes "UNKNOWN" when the header
-// is absent -- neither says anything about a device, so render one label.
-const sessionAgentLabel = (userAgent: string) =>
-  userAgent === "" || userAgent === "UNKNOWN" ? "Unknown device" : userAgent;
 
 export function Options(props: {
   handleUnauthorized(cause: unknown): boolean;
@@ -574,9 +569,16 @@ export function Options(props: {
                   <div class="session-row">
                     <span
                       class="session-agent"
-                      title={sessionAgentLabel(session.userAgent)}
+                      // The raw header survives as hover detail for
+                      // anything the parsed label leaves ambiguous.
+                      title={
+                        session.userAgent.trim() &&
+                        session.userAgent !== "UNKNOWN"
+                          ? session.userAgent
+                          : undefined
+                      }
                     >
-                      {sessionAgentLabel(session.userAgent)}
+                      {describeUserAgent(session.userAgent)}
                     </span>
                     <span class="session-date">
                       {session.current

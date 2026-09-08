@@ -315,10 +315,11 @@ html[data-route="options"] body {
 .options-card h2 {
   margin: 0;
 }
-/* One active session per row: the agent string truncates (user agents run
-   long), the date/current label holds its natural width, and the sign-out
-   button follows. Rows wrap on narrow screens rather than squeezing the
-   label out. */
+/* One active session per row: the agent string truncates (raw headers,
+   kept as the hover title, run long), and the date/current label wraps
+   rather than widening the card -- a "signed in ... expires ..." pair of
+   timestamps is wider than the column, and nowrap here is what pushed
+   Account & security past the page's centered width. */
 .session-row {
   display: flex;
   flex-wrap: wrap;
@@ -335,7 +336,6 @@ html[data-route="options"] body {
 .session-row .session-date {
   color: var(--muted);
   font-size: 0.85rem;
-  white-space: nowrap;
 }
 /* Every other options card's action is a full-width button; the OPML export
    is a link because it downloads a file. ButtonFace/ButtonText are what the
