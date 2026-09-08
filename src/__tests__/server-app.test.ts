@@ -275,6 +275,38 @@ test("returns a session matching the browser contract", async () => {
   expect(body).toEqual({ user: sessionUser });
 });
 
+// The session row's activity stamp and device label are refreshed by the
+// auth plugin on every request that resolves the cookie -- if that call
+// silently stops happening, the options list quietly reverts to
+// login-time snapshots and nothing else in the app would notice.
+test("each authenticated request refreshes the session row", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const refreshed: Array<[string, null | string]> = [];
+  dependencies.usersDataService.refreshSession = async (sid, userAgent) => {
+    refreshed.push([sid, userAgent]);
+  };
+  const app = await appFor(dependencies);
+
+  await app.handle(
+    new Request("http://localhost/api/options", {
+      headers: { cookie: "sid=test", "user-agent": "Mozilla/5.0 TestClient" },
+    }),
+  );
+  expect(refreshed).toEqual([["test", "Mozilla/5.0 TestClient"]]);
+
+  // An unauthenticated request resolves no sid, so there is no row to
+  // refresh -- and the plugin answers 401 before touching anything.
+  refreshed.length = 0;
+  const unauthorized = await app.handle(
+    new Request("http://localhost/api/options", {
+      headers: { "user-agent": "Mozilla/5.0 TestClient" },
+    }),
+  );
+  expect(unauthorized.status).toBe(401);
+  expect(refreshed).toEqual([]);
+});
+
 // MAIL_DOMAIN is where inbound mail is routed and FEED_FATHOM_DOMAIN is
 // where the app is served; they coincide only in single-domain setups, so
 // the app host is a fallback and never an override.
