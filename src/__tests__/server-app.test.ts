@@ -212,7 +212,9 @@ function createDependencies(): ServerDependencies {
       async createUser() {
         return undefined;
       },
+      async deleteOtherSessions() {},
       async deleteSession() {},
+      async deleteSessionById() {},
       async findUser() {
         return undefined;
       },
@@ -227,6 +229,9 @@ function createDependencies(): ServerDependencies {
       },
       async getUserCount() {
         return 0;
+      },
+      async listSessions() {
+        return [];
       },
       async startPasswordReset() {
         return unexpected("usersDataService.startPasswordReset");

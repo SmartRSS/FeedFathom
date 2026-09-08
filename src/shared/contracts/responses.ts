@@ -33,6 +33,24 @@ export const sessionResponse = Type.Object(
   exact,
 );
 
+const sessionEntry = Type.Object(
+  {
+    createdAt: jsonDate,
+    // The session that made the request, which the options page labels
+    // "this session" and does not offer a sign-out button for -- that is
+    // what logout is for.
+    current: Type.Boolean(),
+    expiresAt: jsonDate,
+    id,
+    userAgent: Type.String(),
+  },
+  exact,
+);
+export const sessionsResponse = Type.Object(
+  { sessions: Type.Array(sessionEntry) },
+  exact,
+);
+
 export const registrationResponse = Type.Object(
   {
     // Whether outgoing mail is configured, which is what a reset needs to

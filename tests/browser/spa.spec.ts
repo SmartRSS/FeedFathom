@@ -724,6 +724,47 @@ test("scrolls the options page when the settings exceed the viewport", async ({
     .toBeLessThanOrEqual(500);
 });
 
+// The options page lists the account's active sessions (#695): the one
+// making the request is labelled and gets no sign-out button -- logout
+// already covers it -- and every other session can be revoked singly or
+// all at once, with the list shrinking to prove the revoke landed.
+test("lists active sessions and signs out another one", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/options");
+  await expect(page.getByText("This browser")).toBeVisible();
+  await expect(page.getByText("This session")).toBeVisible();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  // The current session offers no revoke button; logout is its way out.
+  const currentRow = page
+    .locator(".session-row")
+    .filter({ hasText: "This browser" });
+  await expect(currentRow.getByRole("button")).toHaveCount(0);
+
+  await page
+    .locator(".session-row")
+    .filter({ hasText: "Phone" })
+    .getByRole("button", { exact: true, name: "Sign out" })
+    .click();
+  await expect
+    .poll(() => state.revokedSessionIds, { timeout: 5_000 })
+    .toEqual([2]);
+  await expect(page.getByText("Phone")).toHaveCount(0);
+});
+
+test("signs out all other sessions at once", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await page.goto("/options");
+  await expect(page.getByText("This browser")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Sign out all other sessions" })
+    .click();
+  await expect.poll(() => state.revokedOtherSessions).toBe(true);
+  await expect(page.getByText("Phone")).toHaveCount(0);
+  await expect(page.getByText("This browser")).toBeVisible();
+});
+
 // The unit test covers the guard; this covers the part that can silently stop
 // working -- the settings reaching the stylesheet at all. A renamed data
 // attribute or a dropped effect leaves both selects working and the reader

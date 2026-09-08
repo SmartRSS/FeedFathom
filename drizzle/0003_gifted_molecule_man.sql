@@ -1,0 +1,2 @@
+ALTER TABLE "sessions" ADD COLUMN "created_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "expires_at" timestamp with time zone DEFAULT NOW() + INTERVAL '365 days' NOT NULL;
