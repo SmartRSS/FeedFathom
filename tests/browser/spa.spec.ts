@@ -82,7 +82,11 @@ async function installReaderResponder(
             action: "fetch",
             channel: "feedfathom-reader",
             finalUrl: "https://articles.example/first",
-            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p></article></body></html>`,
+            // The <img> carries no loading hint, so whatever the sanitize
+            // step gives it is the app's own default. A data: URL keeps it
+            // off the network: a failed request would land in the console
+            // error guard rather than in the assertion.
+            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
             id: request.id,
             ok: true,
             type: "response",
@@ -1270,6 +1274,26 @@ test("exposes Reader modes only when the bridge is available", async ({
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
+});
+
+test("gives extracted images the app's own loading defaults", async ({
+  context,
+  page,
+}) => {
+  await installReaderResponder(context, true);
+  await installApiFixture(page);
+  await page.goto("/");
+  await selectSource(page);
+
+  await page
+    .getByRole("combobox", { name: "Article display mode" })
+    .selectOption("READABILITY");
+  // The bridge's HTML sets neither attribute, so these are what
+  // sanitizeExtractedHtml added -- and they have to survive DOMPurify, which
+  // is the half of that change nothing else here would catch.
+  const image = page.locator(".reader img");
+  await expect(image).toHaveAttribute("loading", "lazy");
+  await expect(image).toHaveAttribute("decoding", "async");
 });
 
 test("extracts article content with the alternate extractor", async ({
