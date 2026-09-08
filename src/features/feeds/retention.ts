@@ -15,6 +15,7 @@ import {
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { articles } from "#platform/db/schemas/articles.ts";
+import { sessions } from "#platform/db/schemas/sessions.ts";
 import { sources } from "#platform/db/schemas/sources.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
@@ -67,6 +68,13 @@ export async function cleanupOrphanedData(
       .delete(users)
       .where(lt(users.lastSeenAt, daysAgo(userExpiryDays)));
   }
+
+  // Expired sessions are dead weight, not data: enforcement lives in the
+  // session lookup itself, so these rows are unreachable the moment they
+  // age out and only the delete is left to do.
+  await drizzleConnection
+    .delete(sessions)
+    .where(lt(sessions.expiresAt, sql`NOW()`));
 
   // "Delete sources nobody subscribes to" means "delete every source" when
   // user_sources is empty -- correct if the last subscription was just

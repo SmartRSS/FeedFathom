@@ -279,6 +279,28 @@ form,
 .options-card h2 {
   margin: 0;
 }
+/* One active session per row: the agent string truncates (user agents run
+   long), the date/current label holds its natural width, and the sign-out
+   button follows. Rows wrap on narrow screens rather than squeezing the
+   label out. */
+.session-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+}
+.session-row .session-agent {
+  flex: 1;
+  min-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row .session-date {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
 /* Every other options card's action is a full-width button; the OPML export
    is a link because it downloads a file. ButtonFace/ButtonText are what the
    UA paints a bare <button> with here -- no rule in this file overrides them

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
@@ -114,6 +114,10 @@ export class UsersDataService {
       .execute();
   }
 
+  // The expiry predicate lives here rather than in a caller-side check
+  // because this lookup is the one choke point every request's session
+  // flows through: an expired sid resolves to no user at all, which the
+  // auth plugin already answers with a 401.
   public async getUserBySid(sid: string) {
     return (
       await this.drizzleConnection
@@ -125,10 +129,41 @@ export class UsersDataService {
           status: users.status,
         })
         .from(users)
-        .where(eq(sessions.sid, sid))
+        .where(and(eq(sessions.sid, sid), gt(sessions.expiresAt, sql`NOW()`)))
         .leftJoin(sessions, eq(sessions.userId, users.id))
         .limit(1)
     ).at(0);
+  }
+
+  // One row per active session of the user's, newest first, with the
+  // requesting session flagged so the options page can label it and keep
+  // the revoke buttons off it.
+  public async listSessions(userId: number, currentSid: string) {
+    return await this.drizzleConnection
+      .select({
+        createdAt: sessions.createdAt,
+        current: sql<boolean>`${sessions.sid} = ${currentSid}`,
+        expiresAt: sessions.expiresAt,
+        id: sessions.id,
+        userAgent: sessions.userAgent,
+      })
+      .from(sessions)
+      .where(eq(sessions.userId, userId))
+      .orderBy(desc(sessions.createdAt));
+  }
+
+  // Both revocation paths scope by userId so a guessed or forged id can
+  // only ever land on the caller's own rows.
+  public async deleteSessionById(userId: number, sessionId: number) {
+    await this.drizzleConnection
+      .delete(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.id, sessionId)));
+  }
+
+  public async deleteOtherSessions(userId: number, currentSid: string) {
+    await this.drizzleConnection
+      .delete(sessions)
+      .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
   }
 
   // Self-guarding: the WHERE clause makes this a no-op write on every

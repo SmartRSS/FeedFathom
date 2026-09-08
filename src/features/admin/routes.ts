@@ -36,6 +36,12 @@ import {
   postOptionsOpmlHandler,
 } from "#features/admin/routes/options-opml.ts";
 import { postOptionsPasswordHandler } from "#features/admin/routes/options-password.ts";
+import {
+  currentSidFromCookie,
+  deleteOptionsSessionHandler,
+  deleteOtherSessionsHandler,
+  getOptionsSessionsHandler,
+} from "#features/admin/routes/options-sessions.ts";
 
 type Password = {
   hash(password: string): Promise<string>;
@@ -63,7 +69,12 @@ export type AdminOptionsRouteDependencies = {
   // driver-specific execute() value nothing reads.
   usersDataService: Pick<
     UsersDataService,
-    "findUser" | "getUserBySid" | "touchLastSeen"
+    | "findUser"
+    | "getUserBySid"
+    | "listSessions"
+    | "deleteSessionById"
+    | "deleteOtherSessions"
+    | "touchLastSeen"
   > & {
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;
   };
@@ -83,7 +94,16 @@ const userOptionsRoutes = (deps: AdminOptionsRouteDependencies) =>
     .post("/api/options/opml", { body: opmlRequest }, (ctx) =>
       postOptionsOpmlHandler(ctx, deps),
     )
-    .get("/api/options/opml", (ctx) => getOptionsOpmlHandler(ctx, deps));
+    .get("/api/options/opml", (ctx) => getOptionsOpmlHandler(ctx, deps))
+    .get("/api/options/sessions", ({ user, cookie }) =>
+      getOptionsSessionsHandler(user, currentSidFromCookie(cookie), deps),
+    )
+    .delete("/api/options/sessions/:id", ({ user, params }) =>
+      deleteOptionsSessionHandler(user, params, deps),
+    )
+    .delete("/api/options/sessions", ({ user, cookie }) =>
+      deleteOtherSessionsHandler(user, currentSidFromCookie(cookie), deps),
+    );
 
 const adminOnlyRoutes = (deps: AdminOptionsRouteDependencies) =>
   new Elysia()

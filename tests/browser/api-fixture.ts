@@ -113,6 +113,8 @@ type ApiFixtureState = {
   removedArticleIds: number[];
   removedFolderIds: number[];
   removedSourceIds: number[];
+  revokedSessionIds: number[];
+  revokedOtherSessions: boolean;
   subscribed: boolean;
   subscriptionBodies: object[];
   treeRequests: number;
@@ -145,6 +147,8 @@ export async function installApiFixture(
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
+    revokedOtherSessions: false,
+    revokedSessionIds: [],
     subscribed: false,
     subscriptionBodies: [],
     treeRequests: 0,
@@ -189,6 +193,55 @@ export async function installApiFixture(
 
     if (method === "POST" && url.pathname === "/api/logout") {
       state.authenticated = false;
+      return respond({ success: true });
+    }
+
+    // Two sessions for the signed-in account: id 1 stands in for the
+    // browser making the request, id 2 for a second device. Revocations
+    // update the list, so the options page can be asserted to shrink.
+    if (method === "GET" && url.pathname === "/api/options/sessions") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      const sessions = [
+        {
+          createdAt: "2026-09-08T00:00:00.000Z",
+          current: true,
+          expiresAt: "2027-09-08T00:00:00.000Z",
+          id: 1,
+          userAgent: "This browser",
+        },
+        {
+          createdAt: "2026-09-01T00:00:00.000Z",
+          current: false,
+          expiresAt: "2027-09-01T00:00:00.000Z",
+          id: 2,
+          userAgent: "Phone",
+        },
+      ].filter(
+        (session) =>
+          !state.revokedSessionIds.includes(session.id) &&
+          !(state.revokedOtherSessions && !session.current),
+      );
+      return respond({ sessions });
+    }
+
+    if (method === "DELETE" && url.pathname === "/api/options/sessions") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      state.revokedOtherSessions = true;
+      return respond({ success: true });
+    }
+
+    if (
+      method === "DELETE" &&
+      url.pathname.startsWith("/api/options/sessions/")
+    ) {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      const id = Number(url.pathname.slice("/api/options/sessions/".length));
+      if (id === 1)
+        return respond(
+          { error: "The current session signs out via Logout instead." },
+          400,
+        );
+      state.revokedSessionIds.push(id);
       return respond({ success: true });
     }
 
