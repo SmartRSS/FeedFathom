@@ -42,13 +42,12 @@ const confirmedGoneFromFeedBuffer = sql`
 `;
 
 // Email deliveries have no feed to go absent from, so the gone-from-feed
-// reading does not apply to them. Their retention is flat delivery age: the
-// same message re-sent with a padding byte is a fresh article row forever,
-// so email tables need a hard bound. 90 days is several times the dormancy
-// thresholds' default order and comfortably past any "read the newsletter
-// eventually" window; the rule below still requires everyone who could have
-// seen a delivery to have recorded deleting it, so what survives is bounded
-// by what active subscribers actually keep.
+// reading does not apply to them. Their retention is flat delivery age, the
+// same bound every other article's lifetime has: an article is an article,
+// and a delivery nobody deletes must still age out, or one active subscriber
+// who never removes anything would accumulate rows forever. 90 days is
+// several times the dormancy thresholds' default order and comfortably past
+// any "read the newsletter eventually" window.
 const emailRetentionDays = 90;
 
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
@@ -176,10 +175,9 @@ export async function cleanupOrphanedData(
   // Email sources prune separately: they have no feed to be absent from, and
   // each delivery stamps last_success, which would make every earlier
   // newsletter look dropped if read as an absence. Instead they age out on
-  // flat delivery age (see emailRetentionDays), and their guard is stricter
-  // about join dates: a delivery is not "gone" the way a feed item is, so
-  // any current subscriber who has not recorded deleting it keeps it, however
-  // recently they subscribed.
+  // flat delivery age (see emailRetentionDays), deletion records not
+  // gating it: a delivery is an article like any other, and an active
+  // subscriber's missing deletion would otherwise hold every row forever.
   const emailArticlesPastRetention = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -188,29 +186,6 @@ export async function cleanupOrphanedData(
       and(
         eq(sources.kind, "email"),
         lt(articles.lastSeenInFeedAt, daysAgo(emailRetentionDays)),
-        notExists(
-          drizzleConnection
-            .select({ id: userSources.id })
-            .from(userSources)
-            .where(
-              and(
-                eq(userSources.sourceId, articles.sourceId),
-                notExists(
-                  drizzleConnection
-                    .select({ userId: userArticles.userId })
-                    .from(userArticles)
-                    .where(
-                      and(
-                        eq(userArticles.userId, userSources.userId),
-                        eq(userArticles.sourceId, articles.sourceId),
-                        eq(userArticles.guid, articles.guid),
-                        isNotNull(userArticles.deletedAt),
-                      ),
-                    ),
-                ),
-              ),
-            ),
-        ),
       ),
     );
 
