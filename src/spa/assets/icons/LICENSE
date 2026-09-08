@@ -9,11 +9,12 @@ name follows each one:
   Document/folder-fill.svg          folder
   Document/folder-open-fill.svg     folder-open
   System/add-box-fill.svg           square-plus
+  System/check-circle-fill.svg      circle-check
   System/check-double-fill.svg      check-check
   System/delete-bin-7-fill.svg      trash-2
+  System/dot-circle-fill.svg        circle-dot
   System/information-fill.svg       info
   System/mail-fill.svg              mail
-  System/mail-open-fill.svg         mail-open
   System/rss-fill.svg               rss
   System/settings-5-fill.svg        settings
   System/refresh-fill.svg           refresh-cw
