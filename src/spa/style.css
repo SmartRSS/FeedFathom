@@ -269,9 +269,20 @@ form,
 /* The options route is the one page the document itself scrolls: #app is a
    fixed-height shell because the dashboard's panes scroll themselves, but
    this route replaces the dashboard, and a scroll trapped inside the column
-   read as a cut-off page. main.tsx stamps the route onto <html>. */
-html[data-route="options"] body {
-  overflow: auto;
+   read as a cut-off page. main.tsx stamps the route onto <html>.
+   The route opts out of the fixed-height shell entirely rather than putting
+   overflow:auto on body: Chromium propagates that to the viewport, but
+   Gecko leaves body a scroll container in its own right -- and browser
+   scroll commands (Home/End, Floorp's rocker gestures) resolve the nearest
+   scrollable ancestor of the focused element, scroll the body invisibly,
+   and appear to do nothing. With the shell open, the viewport is the one
+   scroller on every engine. */
+html[data-route="options"],
+html[data-route="options"] body,
+html[data-route="options"] #app {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }
 .options-page h1 {
   margin: 0;

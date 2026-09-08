@@ -721,6 +721,20 @@ test("scrolls the options page when the settings exceed the viewport", async ({
       .evaluate((el) => el.scrollHeight - el.clientHeight),
   ).toBe(0);
 
+  // The viewport must be the only scroller: with overflow:auto left on
+  // body, Gecko keeps it a scroll container (Chromium propagates it to the
+  // viewport), and scroll commands aimed at the focused element's nearest
+  // scrollable ancestor -- Home/End, Floorp's rocker gestures -- scroll the
+  // body invisibly instead of the page.
+  expect(
+    await page.evaluate(() => getComputedStyle(document.body).overflowY),
+  ).toBe("visible");
+  expect(
+    await page.evaluate(
+      () => document.body.scrollHeight - document.body.clientHeight,
+    ),
+  ).toBe(0);
+
   // A wheel over the column must move the document, not the column.
   await page.mouse.move(400, 250);
   await page.mouse.wheel(0, 600);
