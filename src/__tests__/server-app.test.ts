@@ -1349,6 +1349,44 @@ test("authenticates only active users without revealing account state", async ()
   expect(response.headers.get("set-cookie")).toContain("sid=test-session");
 });
 
+// The options page's session list is only as distinguishable as the stored
+// agents: the route must hand the request's own User-Agent to createSession
+// instead of a hardcoded blank. A missing header stays null here -- the
+// "UNKNOWN" fallback is the data layer's decision.
+test("login stores the request's user agent on the created session", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.password.verify = async (value, hash) =>
+    hash === account.password && value === "password";
+  const createdSessions: Array<{
+    userId: number;
+    userAgent: null | string | undefined;
+  }> = [];
+  dependencies.usersDataService.createSession = async (userId, userAgent) => {
+    createdSessions.push({ userAgent, userId });
+    return "test-session";
+  };
+  const app = await appFor(dependencies);
+  const login = (userAgent?: string) =>
+    app.handle(
+      new Request("http://localhost/api/login", {
+        body: JSON.stringify({ email: account.email, password: "password" }),
+        headers: {
+          "content-type": "application/json",
+          ...(userAgent === undefined ? {} : { "user-agent": userAgent }),
+        },
+        method: "POST",
+      }),
+    );
+
+  expect((await login("Mozilla/5.0 FeedFathom Test")).status).toBe(200);
+  expect((await login()).status).toBe(200);
+  expect(createdSessions).toEqual([
+    { userAgent: "Mozilla/5.0 FeedFathom Test", userId: account.id },
+    { userAgent: null, userId: account.id },
+  ]);
+});
+
 // Equal-time hashing on a miss closes the enumeration oracle but buys little
 // on its own: an attacker who cannot tell accounts apart can still try
 // passwords as fast as the box answers. The README's reverse-proxy setup adds

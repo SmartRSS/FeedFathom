@@ -43,6 +43,12 @@ import { helpDialog } from "./dialog.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
+// Sessions created before the login route stored the request's User-Agent
+// carry an empty string, and the data layer writes "UNKNOWN" when the header
+// is absent -- neither says anything about a device, so render one label.
+const sessionAgentLabel = (userAgent: string) =>
+  userAgent === "" || userAgent === "UNKNOWN" ? "Unknown device" : userAgent;
+
 export function Options(props: {
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
@@ -424,13 +430,16 @@ export function Options(props: {
           <For each={sessions()}>
             {(session) => (
               <div class="session-row">
-                <span class="session-agent" title={session.userAgent}>
-                  {session.userAgent}
+                <span
+                  class="session-agent"
+                  title={sessionAgentLabel(session.userAgent)}
+                >
+                  {sessionAgentLabel(session.userAgent)}
                 </span>
                 <span class="session-date">
                   {session.current
                     ? "This session"
-                    : `Signed in ${formatDate(session.createdAt)}`}
+                    : `Signed in ${formatDate(session.createdAt)} · expires ${formatDate(session.expiresAt)}`}
                 </span>
                 <Show when={!session.current}>
                   <button
