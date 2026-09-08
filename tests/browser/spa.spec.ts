@@ -745,6 +745,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
 test("lists active sessions and signs out another one", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
   await expect(page.getByText("This session")).toBeVisible();
   await expect(page.getByText("Phone")).toBeVisible();
@@ -769,6 +770,7 @@ test("lists active sessions and signs out another one", async ({ page }) => {
 test("signs out all other sessions at once", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
 
   await page
@@ -920,6 +922,7 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("(2) FeedFathom");
 
   await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
     .selectOption("off");
@@ -992,6 +995,7 @@ test("skips the next-article prefetch when the setting is Off", async ({
 test("shows the current account and logs out", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
 
   await expect(page.getByText("Reader (reader@example.com)")).toBeVisible();
   await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
