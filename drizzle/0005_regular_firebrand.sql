@@ -1,0 +1,1 @@
+ALTER TABLE "user_sources" ADD COLUMN "paused_until" timestamp with time zone;
