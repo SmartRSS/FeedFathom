@@ -895,6 +895,18 @@ button.source {
   font-size: 0.8rem;
   font-style: italic;
 }
+/* A snoozed source (#725) shows no unread badge by design, so the row
+   carries a text mark instead -- weight, not colour alone, so the
+   distinction survives forced-colors mode like .source.unread does. */
+.source .snoozed-badge {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.source.selected .snoozed-badge {
+  color: inherit;
+}
 .source.unread {
   font-weight: 700;
 }

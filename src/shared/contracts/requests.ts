@@ -4,6 +4,7 @@ import {
   maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
 import {
+  jsonDatePolicy,
   normalizedEmailAddress,
   normalizedNonblankString,
   normalizedSubscriptionTarget,
@@ -90,6 +91,13 @@ export const updateFolderRequest = Type.Object({
   folderName: normalizedNonblankString,
 });
 export const removeSourceRequest = Type.Object({ removeSourceId: id });
+export const snoozeSourceRequest = Type.Object({
+  // Null clears the snooze early; any timestamp (past or future) is stored
+  // as-is and evaluated lazily at read time, so a past value reads as
+  // already expired rather than failing validation.
+  pausedUntil: Type.Union([jsonDatePolicy, Type.Null()]),
+  sourceId: id,
+});
 export const subscribeRequest = Type.Object({
   sourceFolder: Type.Union([id, Type.Null()]),
   sourceName: normalizedNonblankString,

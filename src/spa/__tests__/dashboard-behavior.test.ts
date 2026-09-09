@@ -8,9 +8,12 @@ import {
   folderOpenToStored,
   findNode,
   findParentFolderUid,
+  isSnoozedNode,
   isTodayNode,
   nextPollDelayMs,
   sourceIds,
+  snoozePresets,
+  snoozeUntilIso,
   totalUnread,
   treeNodeKey,
   treeTabStopKey,
@@ -298,5 +301,41 @@ describe("withTodayNode", () => {
     // Number("today") is NaN -- which is exactly why select() must branch
     // on isTodayNode before reaching for sourceIds().
     expect(Number.isNaN(sourceIds(node)[0])).toBe(true);
+  });
+});
+
+describe("source snooze", () => {
+  const now = new Date("2026-09-09T12:00:00.000Z").getTime();
+
+  test("a future pausedUntil reads as snoozed", () => {
+    expect(
+      isSnoozedNode(
+        source("1", { pausedUntil: "2026-09-10T12:00:00.000Z" }),
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  test("a missing or past pausedUntil reads as not snoozed", () => {
+    expect(isSnoozedNode(source("1"), now)).toBe(false);
+    expect(isSnoozedNode(source("1", { pausedUntil: null }), now)).toBe(false);
+    expect(
+      isSnoozedNode(
+        source("1", { pausedUntil: "2026-09-08T12:00:00.000Z" }),
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  test("presets resolve to future timestamps", () => {
+    for (const preset of snoozePresets) {
+      const until = new Date(snoozeUntilIso(preset.hours, now)).getTime();
+      expect(until).toBeGreaterThan(now);
+    }
+    expect(snoozePresets.map((preset) => preset.label)).toEqual([
+      "Snooze 1 day",
+      "Snooze 1 week",
+      "Snooze forever",
+    ]);
   });
 });

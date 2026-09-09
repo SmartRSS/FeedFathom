@@ -94,6 +94,9 @@ const treeNodeResponse = Type.Cyclic(
             Type.Literal("websub"),
           ]),
           name: Type.String(),
+          // Absent on servers older than per-source snooze (#725); clients
+          // read a missing value as not snoozed.
+          pausedUntil: Type.Optional(Type.Union([jsonDate, Type.Null()])),
           type: Type.Literal("source"),
           uid: Type.String(),
           unreadCount: Type.Number(),
@@ -189,6 +192,10 @@ export const previewResponse = Type.Object(
 );
 
 export const subscriptionResponse = Type.Object({ sourceId: id }, exact);
+export const snoozedSourceResponse = Type.Object(
+  { pausedUntil: Type.Union([jsonDate, Type.Null()]), sourceId: id },
+  exact,
+);
 export const removedArticlesResponse = Type.Array(id);
 export const removedIdResponse = id;
 export const updatedSourceResponse = Type.Object({ sourceId: id }, exact);

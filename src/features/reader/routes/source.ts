@@ -1,6 +1,7 @@
 import type { Static } from "typebox";
 import type {
   removeSourceRequest,
+  snoozeSourceRequest,
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
@@ -10,7 +11,7 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 export type SourceRouteDependencies = {
   userSourcesDataService: Pick<
     UserSourcesDataService,
-    "removeSourceFromUser" | "updateUserSource"
+    "removeSourceFromUser" | "setSourceSnooze" | "updateUserSource"
   >;
 };
 
@@ -42,4 +43,28 @@ export async function patchSourceHandler(
   );
   if (!updated) return json({ error: "Invalid folder or source" }, 400);
   return json({ sourceId: updated.id });
+}
+
+/**
+ * Sets (or clears, with null) one subscription's snooze (#725). The write
+ * touches only the timestamp -- article state and unread counts are left
+ * alone, and suppression is evaluated lazily wherever unread is read.
+ */
+export async function snoozeSourceHandler(
+  {
+    body,
+    user,
+  }: { body: Static<typeof snoozeSourceRequest>; user: AuthedUser },
+  { userSourcesDataService }: SourceRouteDependencies,
+) {
+  const updated = await userSourcesDataService.setSourceSnooze(
+    user.id,
+    body.sourceId,
+    body.pausedUntil === null ? null : new Date(body.pausedUntil),
+  );
+  if (!updated) return json({ error: "Invalid source" }, 400);
+  return json({
+    pausedUntil: updated.pausedUntil?.toJSON() ?? null,
+    sourceId: updated.id,
+  });
 }

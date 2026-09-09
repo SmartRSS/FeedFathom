@@ -9,6 +9,7 @@ import {
   removeArticlesRequest,
   removeFolderRequest,
   removeSourceRequest,
+  snoozeSourceRequest,
   subscribeRequest,
   updateFolderRequest,
   updateSourceRequest,
@@ -42,6 +43,7 @@ import {
 import {
   deleteSourceHandler,
   patchSourceHandler,
+  snoozeSourceHandler,
 } from "#features/reader/routes/source.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 
@@ -80,6 +82,7 @@ export type ReaderRouteDependencies = {
     | "recomputeUnreadCounts"
     | "getUserSources"
     | "removeSourceFromUser"
+    | "setSourceSnooze"
     | "updateUserSource"
     | "withSubscriptionInitializationLease"
   >;
@@ -114,6 +117,9 @@ export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
     )
     .patch("/api/source", { body: updateSourceRequest }, (ctx) =>
       patchSourceHandler(ctx, deps),
+    )
+    .patch("/api/source/snooze", { body: snoozeSourceRequest }, (ctx) =>
+      snoozeSourceHandler(ctx, deps),
     )
     .get("/api/preview", { query: previewQuery }, (ctx) =>
       getPreviewHandler(ctx, deps),
