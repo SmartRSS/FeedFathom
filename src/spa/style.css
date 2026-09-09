@@ -1167,15 +1167,41 @@ button.source {
     width: 100%;
     min-width: 100%;
     max-width: 100%;
-    flex-flow: column-reverse;
     border-right: 0;
     border-bottom: var(--border);
+  }
+  /* The bottom-anchored mobile layout is opt-in via the mobile-layout
+     setting: column-reverse moves every pane's toolbar to the bottom edge
+     (with the article rows pulled down to meet it, below). "off" keeps the
+     desktop order -- toolbars on top -- merely made responsive. */
+  html[data-mobile-list-anchor="on"] .dashboard-pane {
+    flex-flow: column-reverse;
   }
   .dashboard .reader-pane {
     display: flex;
   }
   .dashboard-pane:not(.focused-pane) {
     display: none;
+  }
+  /* Short article lists: the list pane always fills the viewport, so a list
+     shorter than one screen leaves a blank stretch that reads as unfinished.
+     "on" pushes the rows down to the toolbar at the pane's bottom edge. The
+     auto margin sits
+     on the first child rather than justify-content: flex-end on the list
+     itself, because justified overflow spills past the top edge and makes the
+     first rows unreachable by scrolling -- an auto margin collapses to zero
+     once the content overflows, so the long-list path is untouched. */
+  html[data-mobile-list-anchor="on"] .articles-pane > .article-list {
+    /* Auto margins only absorb free space in a flex container, so the list
+       becomes one here; the rows are block links and lay out unchanged. */
+    display: flex;
+    flex-direction: column;
+  }
+  html[data-mobile-list-anchor="on"]
+    .articles-pane
+    > .article-list
+    > :first-child:not(.skeleton) {
+    margin-top: auto;
   }
   .toolbar button.only-mobile {
     display: flex;

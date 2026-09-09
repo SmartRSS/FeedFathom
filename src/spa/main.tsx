@@ -28,7 +28,12 @@ import { Admin } from "./admin.tsx";
 import { DialogHost } from "./dialog.tsx";
 import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
-import { readerText, readerWidth, resolvedTheme } from "./preferences.ts";
+import {
+  mobileListAnchor,
+  readerText,
+  readerWidth,
+  resolvedTheme,
+} from "./preferences.ts";
 import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
 import "./style.css";
 
@@ -69,6 +74,9 @@ function App() {
   });
   createEffect(() => {
     document.documentElement.dataset["readerWidth"] = readerWidth();
+  });
+  createEffect(() => {
+    document.documentElement.dataset["mobileListAnchor"] = mobileListAnchor();
   });
 
   if (initialRoute.name === "dashboard" || initialRoute.name === "preview")

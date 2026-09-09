@@ -13,10 +13,12 @@ import {
   isReaderStep,
   isTheme,
   markReadPolicy,
+  mobileListAnchor,
   readerText,
   readerWidth,
   rememberReadingPosition,
   setMarkReadPolicy,
+  setMobileListAnchor,
   setReaderText,
   setReaderWidth,
   setRememberReadingPosition,
@@ -53,6 +55,15 @@ const sections = [
 ] as const;
 
 type SectionId = (typeof sections)[number]["id"];
+
+// The mobile-layout knob only means anything where the mobile layout exists,
+// so its card tracks the same 768px breakpoint the stylesheet's mobile rules
+// use and disappears entirely on wider viewports.
+const mobileViewQuery = matchMedia("(max-width: 768px)");
+const [mobileView, setMobileView] = createSignal(mobileViewQuery.matches);
+mobileViewQuery.addEventListener("change", (event) =>
+  setMobileView(event.matches),
+);
 
 // A hash usually names a section, but anchors into the old card stack must
 // keep resolving: the empty-tree guidance links #import-opml, which now
@@ -488,6 +499,24 @@ export function Options(props: {
               </select>
             </label>
           </section>
+          <Show when={mobileView()}>
+            <section class="options-card">
+              <h2>Mobile layout</h2>
+              <label>
+                Layout variant
+                <select
+                  value={mobileListAnchor()}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    if (isOnOff(value)) setMobileListAnchor(value);
+                  }}
+                >
+                  <option value="off">Regular</option>
+                  <option value="on">Pull down</option>
+                </select>
+              </label>
+            </section>
+          </Show>
         </section>
       </Show>
       <Show when={active() === "signal"}>
