@@ -196,6 +196,34 @@ export function setRememberReadingPosition(value: boolean) {
   } catch {}
 }
 
+// On a phone the article list always fills the viewport, so a list shorter
+// than one screen leaves a blank stretch under its last row. Bottom-anchoring
+// the rows closes that gap; some readers prefer the list to simply end where
+// its content ends, hence the toggle. It ships on: the blank stretch reads as
+// unfinished, and the rows still scroll normally once the list overflows.
+const MOBILE_LIST_ANCHOR_KEY = "mobileListAnchor";
+
+function readMobileListAnchor(): OnOff {
+  try {
+    const stored = localStorage.getItem(MOBILE_LIST_ANCHOR_KEY);
+    return stored && isOnOff(stored) ? stored : "on";
+  } catch {
+    return "on";
+  }
+}
+
+const [mobileListAnchor, setMobileListAnchorSignal] = createSignal<OnOff>(
+  readMobileListAnchor(),
+);
+export { mobileListAnchor };
+
+export function setMobileListAnchor(value: OnOff) {
+  setMobileListAnchorSignal(value);
+  try {
+    localStorage.setItem(MOBILE_LIST_ANCHOR_KEY, value);
+  } catch {}
+}
+
 // Reader typography (#712). Two axes, three steps each, rather than a free
 // number: the defaults set in #719 are the middle step, and a slider would
 // invite widths the measure argument exists to rule out. The steps land on
