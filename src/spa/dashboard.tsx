@@ -13,6 +13,7 @@ import {
   folderResponse,
   removedArticlesResponse,
   removedIdResponse,
+  snoozedSourceResponse,
   treeResponse,
   updatedFolderResponse,
   type Article,
@@ -25,9 +26,12 @@ import {
   filterTree,
   findNode,
   findParentFolderUid,
+  isSnoozedNode,
   isTodayNode,
   nextPollDelayMs,
   sourceIds,
+  snoozePresets,
+  snoozeUntilIso,
   totalUnread,
   treeNodeKey,
   treeTabStopKey,
@@ -911,6 +915,34 @@ export function Dashboard(props: {
       setError("Could not access the clipboard.");
     }
   }
+  // Per-source snooze (#725). Parsing and saving continue on the server
+  // during the pause; this only stores the timestamp and reloads the tree,
+  // whose badges and unread list suppress the source until it lapses.
+  async function snoozeNode(node: TreeNode, pausedUntil: string | null) {
+    if (node.type !== "source" || isTodayNode(node)) return;
+    setError("");
+    try {
+      await api("/source/snooze", snoozedSourceResponse, {
+        body: JSON.stringify({
+          pausedUntil,
+          sourceId: Number(node.uid),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      await loadTree();
+      setAccessibilityAnnouncement(
+        pausedUntil === null ? "Feed unsnoozed." : "Feed snoozed.",
+      );
+    } catch (cause) {
+      reportError(
+        cause,
+        pausedUntil === null
+          ? "Could not unsnooze feed"
+          : "Could not snooze feed",
+      );
+    }
+  }
   // Right-click / long-press menus (#721). The tree menu selects the row
   // first, so the existing rename/unsubscribe actions -- which operate on
   // selectedNode() -- keep working unchanged, and no re-filing action
@@ -921,6 +953,26 @@ export function Dashboard(props: {
     // opens no menu at all (the tree item still swallows the native menu).
     if (isTodayNode(node)) return;
     setSelectedNode(node);
+    const snoozeItems: ContextMenuItem[] =
+      node.type === "source"
+        ? [
+            ...(isSnoozedNode(node)
+              ? [
+                  {
+                    kind: "action",
+                    label: "Unsnooze",
+                    onSelect: () => void snoozeNode(node, null),
+                  } as const,
+                ]
+              : []),
+            ...snoozePresets.map((preset): ContextMenuItem => ({
+              kind: "action",
+              label: preset.label,
+              onSelect: () =>
+                void snoozeNode(node, snoozeUntilIso(preset.hours)),
+            })),
+          ]
+        : [];
     const items: ContextMenuItem[] =
       node.type === "folder"
         ? [
@@ -957,6 +1009,8 @@ export function Dashboard(props: {
               label: "Edit feed",
               onSelect: () => void showProperties(),
             },
+            { kind: "separator" },
+            ...snoozeItems,
             { kind: "separator" },
             {
               kind: "action",

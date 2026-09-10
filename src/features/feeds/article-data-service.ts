@@ -117,6 +117,16 @@ export class ArticlesDataService {
           // removal is terminal and hidden in every filter -- exactly as
           // recomputeUnreadCounts scores it.
           articleFilterCondition(filter, readStateColumns),
+          // Snoozed sources (#725) never surface as unread while the pause
+          // is active. The timestamp is tested lazily here at read time, so
+          // expiry needs no job: the backlog accumulated during the pause
+          // is still stored unread and reappears on its own. The "all" and
+          // "read" views are unsuppressed, so the backlog stays reachable.
+          ...(filter === "unread"
+            ? [
+                sql`(${userSources.pausedUntil} IS NULL OR ${userSources.pausedUntil} <= NOW())`,
+              ]
+            : []),
           // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
           // Keyset rather than OFFSET: a folder fanning out to hundreds of

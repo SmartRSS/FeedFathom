@@ -160,6 +160,40 @@ export function totalUnread(nodes: TreeNode[]): number {
   return nodes.reduce((count, node) => count + unreadCount(node), 0);
 }
 
+// Per-source snooze (#725): how long each context-menu preset mutes a feed.
+// "Forever" is ten years out -- far past any real pause, near enough that
+// the stored timestamp stays an honest date rather than a sentinel.
+export const snoozePresets = [
+  { hours: 24, label: "Snooze 1 day" },
+  { hours: 24 * 7, label: "Snooze 1 week" },
+  { hours: 24 * 365 * 10, label: "Snooze forever" },
+] as const;
+
+/** The `pausedUntil` value to store for a preset picked now. */
+export function snoozeUntilIso(
+  hours: number,
+  now: number = Date.now(),
+): string {
+  return new Date(now + hours * 3_600_000).toJSON();
+}
+
+/**
+ * Whether a tree node is a source whose `pausedUntil` is still in the
+ * future. Folders are never snoozed, and a missing or past value reads as
+ * not snoozed, which is also how expiry and early un-pausing fall out with
+ * no job behind them.
+ */
+export function isSnoozedNode(
+  node: TreeNode,
+  now: number = Date.now(),
+): boolean {
+  if (node.type !== "source") return false;
+  const pausedUntil = node.pausedUntil;
+  if (pausedUntil === undefined || pausedUntil === null) return false;
+  const time = new Date(pausedUntil).getTime();
+  return Number.isFinite(time) && time > now;
+}
+
 // Background poll spacing, backing off so a long-idle tab asks less often:
 // 30s doubling to a 5-minute ceiling.
 const firstPollDelayMs = 30_000;

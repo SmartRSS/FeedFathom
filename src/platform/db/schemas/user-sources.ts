@@ -35,6 +35,7 @@ export const userSources = pgTable(
       .notNull()
       .default(sql`'1970-01-01 00:00:00+00'::timestamptz`),
     unreadCount: integer("unread_count").notNull().default(0),
+    pausedUntil: timestamp("paused_until", { withTimezone: true }),
   },
   (table) => [
     unique().on(table.userId, table.sourceId),
