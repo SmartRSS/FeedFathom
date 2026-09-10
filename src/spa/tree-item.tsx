@@ -124,7 +124,6 @@ export function TreeItem(props: {
         classList={{
           folder: isFolder(),
           selected: props.selected === props.node,
-          snoozed: snoozed(),
           unread: unread() > 0,
         }}
         data-tree-key={treeNodeKey(props.node)}
@@ -190,7 +189,7 @@ export function TreeItem(props: {
             class="snoozed-badge"
             title={
               props.node.type === "source" && props.node.pausedUntil
-                ? `Snoozed until ${props.node.pausedUntil}`
+                ? `Snoozed until ${new Date(props.node.pausedUntil).toLocaleString()}`
                 : "Snoozed"
             }
           >

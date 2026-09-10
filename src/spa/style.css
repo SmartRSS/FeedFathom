@@ -896,7 +896,7 @@ button.source {
   font-style: italic;
 }
 /* A snoozed source (#725) shows no unread badge by design, so the row
-   carries a text mark instead -- weight, not colour alone, so the
+   carries a literal "Snoozed" word instead: text, not colour alone, so the
    distinction survives forced-colors mode like .source.unread does. */
 .source .snoozed-badge {
   margin-left: auto;
