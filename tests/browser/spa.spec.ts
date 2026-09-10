@@ -419,6 +419,35 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 });
 
+// Search spans every subscription: the article a reader half-remembers is
+// exactly the one whose feed they cannot name, so the results cannot be scoped
+// to the selected row -- and the unread default would answer for an article
+// they remember because they read it.
+test("searches across subscriptions and says when nothing matches", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const search = page.getByLabel("Search articles");
+  await search.fill("subscribed");
+  await search.press("Enter");
+
+  // "Subscribed article" belongs to a feed that was never selected.
+  await expect(
+    page.getByRole("option", { name: /Subscribed article/ }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Show")).toHaveValue("all");
+
+  await search.fill("nothing matches this");
+  await search.press("Enter");
+  await expect(page.getByText("No articles match that.")).toBeVisible();
+
+  // Emptying the box leaves search without a submit.
+  await search.fill("");
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+});
+
 // The article list is keyset-paged and the scroll position is what asks for
 // the next page, so a list too short to scroll can never ask. Deleting a whole
 // page is the way in: select all, delete, and the pane would sit empty with

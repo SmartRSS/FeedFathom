@@ -12,11 +12,7 @@ import {
 } from "#shared/util/get-date-group.ts";
 import { userSources } from "#platform/db/schema.ts";
 import type * as schema from "#platform/db/schema.ts";
-import {
-  type Article,
-  type ArticleInsert,
-  articles,
-} from "#platform/db/schemas/articles.ts";
+import { type ArticleInsert, articles } from "#platform/db/schemas/articles.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
 
 // user_articles is keyed on the article's (source, guid) rather than its id,
@@ -46,18 +42,29 @@ export class ArticlesDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  public async getUserArticle(
-    articleId: number,
-    userId: number,
-  ): Promise<Article | undefined> {
+  // Columns are listed rather than selecting the whole row: articles carries
+  // a generated tsvector for search (#697), and neither the reader nor the
+  // article response has any use for a copy of the body split into lexemes.
+  public async getUserArticle(articleId: number, userId: number) {
     return (
       await this.drizzleConnection
-        .select({ article: articles })
+        .select({
+          author: articles.author,
+          content: articles.content,
+          guid: articles.guid,
+          id: articles.id,
+          lastSeenInFeedAt: articles.lastSeenInFeedAt,
+          publishedAt: articles.publishedAt,
+          sourceId: articles.sourceId,
+          title: articles.title,
+          updatedAt: articles.updatedAt,
+          url: articles.url,
+        })
         .from(articles)
         .innerJoin(userSources, userArticleAccessJoin(userId))
         .where(eq(articles.id, articleId))
         .limit(1)
-    ).at(0)?.article;
+    ).at(0);
   }
 
   public async getUserArticlesForSources(
@@ -72,6 +79,11 @@ export class ArticlesDataService {
       allSubscribed?: boolean;
       // Only articles published within this many hours of now.
       publishedWithinHours?: number;
+      // Full-text search (#697): matched against the stored tsvector over
+      // title and body. An empty or stopword-only query matches nothing,
+      // which is what an empty tsquery does rather than something special
+      // here.
+      query?: string;
     } = {},
   ) {
     if (!options.allSubscribed && sourceIds.length === 0) {
@@ -110,6 +122,17 @@ export class ArticlesDataService {
           ...(options.publishedWithinHours
             ? [
                 sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,
+              ]
+            : []),
+          // Search rides the GIN index on the same generated column the
+          // schema defines, and stays inside the keyset paging above rather
+          // than ordering by ts_rank: a rank order has no cursor, and the
+          // list this feeds pages by (published_at, id).
+          // ponytail: newest-first, not best-first. Rank ordering needs a
+          // cursor over (rank, id) before it can page.
+          ...(options.query
+            ? [
+                sql`${articles.searchVector} @@ plainto_tsquery('english', ${options.query})`,
               ]
             : []),
           // Unread is shared with recomputeUnreadCounts, so the list and the
