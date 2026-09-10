@@ -978,6 +978,30 @@ button.source {
   flex: 1;
   overflow: auto;
 }
+/* Article search (#697) sits in its own row above the list, styled as the
+   tree's filter box is: the two are the same kind of control, and a reader
+   who has met one should recognise the other. */
+.article-search-field {
+  display: flex;
+  flex-shrink: 0;
+  /* `form` itself is styled as the account-page card up at the top of this
+     file -- 2rem of padding, a border and an 8vh auto margin -- so an inline
+     form has to hand those back. */
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.article-search {
+  min-width: 0;
+  flex: 1;
+  margin: 0.4rem;
+  padding: 0.4rem;
+  border: var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
 .article-filter-field {
   display: flex;
   flex-shrink: 0;

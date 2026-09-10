@@ -277,6 +277,18 @@ export async function installApiFixture(
     if (method === "POST" && url.pathname === "/api/articles") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       state.articleRequests += 1;
+      // Search (#697) is answered by Postgres full text in the real app; the
+      // fixture only has to prove the client asked across subscriptions
+      // rather than for the selected feed, so a title substring will do.
+      const query: string | undefined = request.postDataJSON().query;
+      if (query) {
+        const terms = query.toLowerCase();
+        return respond(
+          [article, secondArticle, thirdArticle, subscribedArticle]
+            .filter((item) => item.title.toLowerCase().includes(terms))
+            .map((item) => summary(item, state.readArticleIds.has(item.id))),
+        );
+      }
       const sources = request.postDataJSON().sources;
       expect(
         sources.every((sourceId: number) => [3, 9].includes(sourceId)),

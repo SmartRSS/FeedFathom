@@ -1556,6 +1556,52 @@ test("passes the article list filter through to the query", async () => {
   expect(rejected.status).toBe(422);
 });
 
+test("searches every subscription rather than the selected sources", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const calls: { options: unknown; sources: number[] }[] = [];
+  dependencies.articlesDataService.getUserArticlesForSources = async (
+    sources,
+    _userId,
+    _cursor,
+    _filter,
+    options,
+  ) => {
+    calls.push({ options, sources });
+    return [];
+  };
+  const app = await appFor(dependencies);
+  const list = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+
+  const searched = await list({ query: "  service mesh ", sources: [] });
+  const scoped = await list({ query: "mesh", sources: [3] });
+  const blank = await list({ query: "   ", sources: [] });
+  const tooLong = await list({ query: "x".repeat(201), sources: [] });
+  const noQuery = await list({ sources: [] });
+
+  expect(searched.status).toBe(200);
+  expect(scoped.status).toBe(200);
+  // Trimmed, and `sources` is ignored the way the Today view ignores it: the
+  // point of search is the article whose feed the reader has forgotten.
+  expect(calls).toEqual([
+    { options: { allSubscribed: true, query: "service mesh" }, sources: [] },
+    { options: { allSubscribed: true, query: "mesh" }, sources: [3] },
+  ]);
+  expect(blank.status).toBe(422);
+  expect(tooLong.status).toBe(422);
+  // No query and no sources is still the early return, not a search for
+  // everything.
+  expect(noQuery.status).toBe(200);
+  expect(await noQuery.json()).toEqual([]);
+});
+
 test("snoozes and unsnoozes one subscription without touching article state", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);

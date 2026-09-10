@@ -29,6 +29,13 @@ const normalizedMailEnvelopeValue = Type.Codec(mailEnvelopeValue)
 const normalizedMailRecipient = Type.Codec(mailEnvelopeValue)
   .Decode((value) => value.trim().toLowerCase())
   .Encode((value) => value);
+// Article search terms (#697). plainto_tsquery parses whatever it is given,
+// so the cap here bounds the payload rather than the syntax.
+const searchTerms = Type.Codec(
+  Type.String({ maxLength: 200, minLength: 1, pattern: "\\S" }),
+)
+  .Decode((value) => value.trim())
+  .Encode((value) => value);
 const idQueryTransform = Type.Codec(
   Type.Union([id, Type.String({ pattern: "^[1-9]\\d*$" })]),
 )
@@ -54,6 +61,10 @@ export const articlesRequest = Type.Object(
         Type.Literal("all"),
       ]),
     ),
+    // Full-text search (#697): present means the list is search results
+    // across every subscription rather than the selected node, so `sources`
+    // is ignored and sent empty, exactly as the Today view does it.
+    query: Type.Optional(searchTerms),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,

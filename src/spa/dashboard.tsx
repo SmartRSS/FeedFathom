@@ -155,6 +155,11 @@ export function Dashboard(props: {
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
+  // Article search (#697). Two signals because the box has to be clearable
+  // from outside itself: `searchTerms` is what is typed, `activeSearch` is
+  // what the server was last asked, and selecting a feed clears both.
+  const [searchTerms, setSearchTerms] = createSignal("");
+  const [activeSearch, setActiveSearch] = createSignal("");
   // Unread is what the list has always shown; the other two are new views
   // over the same store rather than a change to the default.
   const [articleFilter, setArticleFilter] = createSignal<
@@ -331,6 +336,11 @@ export function Dashboard(props: {
     try {
       const nextTree = await loadTree();
       lastSeenUnread = totalUnread(nextTree);
+      const search = activeSearch();
+      if (search) {
+        await runSearch(search);
+        return;
+      }
       const node = selectedNode();
       if (node) await select(node);
     } catch (cause) {
@@ -551,6 +561,10 @@ export function Dashboard(props: {
     restore?: { articleId: number; listScrollTop: number },
   ) {
     props.focusPane("articles");
+    // Picking a feed answers a different question than the search did, so the
+    // box empties with the list rather than describing rows that are gone.
+    setSearchTerms("");
+    setActiveSearch("");
     setSelectedNode(node);
     recordAppSnapshot({
       articleFilter: articleFilter(),
@@ -585,7 +599,12 @@ export function Dashboard(props: {
     await fetchArticlesForBody({ sources: ids }, selection, restore);
   }
   async function fetchArticlesForBody(
-    body: { sources: number[]; view?: "today"; cursor?: number },
+    body: {
+      sources: number[];
+      view?: "today";
+      cursor?: number;
+      query?: string;
+    },
     selection: ReturnType<typeof selectionGuard.start>,
     // Session restore (#718): re-select the article the snapshot had open
     // rather than always row 0, so the restore is one fetch, not two.
@@ -682,16 +701,24 @@ export function Dashboard(props: {
   async function loadMoreArticles(list: HTMLElement) {
     const cursor = articleCursor;
     const node = selectedNode();
-    if (!moreArticles || loadingMoreArticles || cursor === undefined || !node)
+    const search = activeSearch();
+    // Search results are their own list, so they page without a selected node
+    // -- searching before ever picking a feed is a normal way in.
+    if (
+      !moreArticles ||
+      loadingMoreArticles ||
+      cursor === undefined ||
+      (!node && !search)
+    )
       return;
     if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
     // Today is scoped by `view`, not by an id list -- its node uid is the
     // string "today", so running it through sourceIds yields [NaN], which
     // serialises to [null] and the request is refused. The next page has to
     // be asked the same way the first one was.
-    const today = isTodayNode(node);
-    const ids = today ? [] : sourceIds(node);
-    if (!today && !ids.length) return;
+    const today = !search && node !== undefined && isTodayNode(node);
+    const ids = search || today || !node ? [] : sourceIds(node);
+    if (!search && !today && !ids.length) return;
     const selection = selectionGuard.current();
     loadingMoreArticles = true;
     try {
@@ -701,6 +728,7 @@ export function Dashboard(props: {
           filter: articleFilter(),
           sources: ids,
           ...(today ? { view: "today" } : {}),
+          ...(search ? { query: search } : {}),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -721,12 +749,48 @@ export function Dashboard(props: {
       loadingMoreArticles = false;
     }
   }
+  // Article search (#697) is a mode over the list rather than a filter of what
+  // is already loaded: the terms go to the server, which answers across every
+  // subscription -- the article whose feed you no longer remember is the case
+  // that makes search worth having -- and pages by the same keyset cursor.
+  async function runSearch(terms: string) {
+    const query = terms.trim();
+    if (!query) {
+      await exitSearch();
+      return;
+    }
+    // Searching for something already read is the ordinary case, and the
+    // unread default would answer it with an empty list. Only entering search
+    // moves the dropdown: re-running the same terms under a filter the user
+    // then chose has to keep that choice.
+    if (!activeSearch()) setArticleFilter("all");
+    setActiveSearch(query);
+    props.focusPane("articles");
+    setError("");
+    const selection = selectionGuard.start();
+    articleAbortController?.abort();
+    moreArticles = false;
+    articleCursor = undefined;
+    await fetchArticlesForBody({ query, sources: [] }, selection);
+  }
+  async function exitSearch() {
+    if (!activeSearch()) return;
+    setActiveSearch("");
+    const node = selectedNode();
+    if (node) await select(node);
+    else setArticles([]);
+  }
   // Changing the filter is a different question about the same selection, so
   // it re-runs select() rather than filtering what is already loaded: only one
   // page is in hand, and the rest of the answer is on the server.
   function changeArticleFilter(next: "all" | "read" | "unread") {
     if (next === articleFilter()) return;
     setArticleFilter(next);
+    const search = activeSearch();
+    if (search) {
+      void runSearch(search);
+      return;
+    }
     const node = selectedNode();
     if (node) void select(node);
   }
@@ -1617,6 +1681,36 @@ export function Dashboard(props: {
               <Icon raw={settingsRaw} />
             </button>
           </div>
+          {/* Its own row rather than a slot in the toolbar: that row is eight
+              icon buttons and a dropdown in a pane that is 320px wide, and a
+              text input squeezed in there had no room to show what was typed.
+              This mirrors the tree's filter box, which sits above the tree for
+              the same reason. A form, so Enter submits and the browser gives
+              the box its own clear affordance; search runs on submit rather
+              than per keystroke, because every query is a full-text scan on
+              someone's home server (#697). */}
+          <form
+            class="article-search-field"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void runSearch(searchTerms());
+            }}
+          >
+            <input
+              aria-label="Search articles"
+              class="article-search"
+              placeholder="Search articles"
+              type="search"
+              value={searchTerms()}
+              onInput={(event) => {
+                setSearchTerms(event.currentTarget.value);
+                // Emptying the box -- typing back or the native clear button
+                // -- leaves search without needing a submit.
+                if (!event.currentTarget.value.trim()) void exitSearch();
+              }}
+            />
+          </form>
           <div
             aria-busy={articlesLoading()}
             aria-label="Articles"
@@ -1701,23 +1795,33 @@ export function Dashboard(props: {
                   </>
                 )}
               </For>
-              <Show
-                when={
-                  !articlesLoading() &&
-                  articles().length === 0 &&
-                  selectedNode()
-                }
-              >
-                <div class="article-list-empty" role="status">
-                  <p>All caught up.</p>
-                </div>
-              </Show>
-              <Show
-                when={!articlesLoading() && !selectedNode() && authenticated()}
-              >
-                <div class="article-list-empty" role="status">
-                  <p>Select a feed to read.</p>
-                </div>
+              <Show when={!articlesLoading() && !articles().length}>
+                {/* Search answers for every subscription, so an empty result
+                    is "no such article", not "all caught up" -- and the
+                    prompt to pick a feed would be wrong advice besides. */}
+                <Show
+                  when={activeSearch()}
+                  fallback={
+                    <Show
+                      when={selectedNode()}
+                      fallback={
+                        <Show when={authenticated()}>
+                          <div class="article-list-empty" role="status">
+                            <p>Select a feed to read.</p>
+                          </div>
+                        </Show>
+                      }
+                    >
+                      <div class="article-list-empty" role="status">
+                        <p>All caught up.</p>
+                      </div>
+                    </Show>
+                  }
+                >
+                  <div class="article-list-empty" role="status">
+                    <p>No articles match that.</p>
+                  </div>
+                </Show>
               </Show>
             </Show>
           </div>
