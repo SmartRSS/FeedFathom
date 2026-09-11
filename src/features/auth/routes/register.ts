@@ -1,3 +1,10 @@
+import { fetcher, password } from "#platform/runtime.ts";
+import {
+  authThrottle,
+  mailSender,
+  usersDataService,
+} from "#features/auth/services.ts";
+import { config } from "#platform/config.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { Type } from "typebox";
@@ -5,11 +12,7 @@ import Schema from "typebox/schema";
 import { Value } from "typebox/value";
 import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
 import { registerRequest } from "#shared/contracts/requests.ts";
-import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
-import type { MailSender } from "#features/auth/mail-sender.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 
 const turnstileResponse = Type.Object(
@@ -18,27 +21,10 @@ const turnstileResponse = Type.Object(
 );
 const turnstileResponseCheck = Schema.Compile(turnstileResponse);
 
-export type RegisterRouteDependencies = {
-  config: AppConfig;
-  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
-  fetcher: (
-    ...args: Parameters<typeof globalThis.fetch>
-  ) => ReturnType<typeof globalThis.fetch>;
-  mailSender: Pick<MailSender, "sendActivationEmail">;
-  password: { hash(password: string): Promise<string> };
-  usersDataService: {
-    createUser(
-      payload: Parameters<UsersDataService["createUser"]>[0],
-    ): Promise<unknown>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-    getUserCount(): Promise<number>;
-  };
-};
-
 async function validateCaptcha(
   token: string | undefined,
   secret: string,
-  fetcher: RegisterRouteDependencies["fetcher"],
+  fetcher: typeof globalThis.fetch,
 ) {
   if (!token) return false;
   try {
@@ -59,14 +45,7 @@ async function validateCaptcha(
   }
 }
 
-export function createRegisterRoute({
-  config,
-  authThrottle,
-  fetcher,
-  mailSender,
-  password,
-  usersDataService,
-}: RegisterRouteDependencies) {
+export function createRegisterRoute() {
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
   );

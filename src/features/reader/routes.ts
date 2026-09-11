@@ -15,19 +15,10 @@ import {
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { createAuthPlugin } from "#features/auth/session-plugin.ts";
-import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { FaviconStore } from "#features/feeds/favicon-store.ts";
-import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
 import { getFindHandler } from "#features/feeds/routes/find.ts";
 import { getPreviewHandler } from "#features/feeds/routes/preview.ts";
 import { postSubscribeHandler } from "#features/feeds/routes/subscribe.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { getArticleHandler } from "#features/reader/routes/article.ts";
 import {
   deleteArticlesHandler,
@@ -47,87 +38,46 @@ import {
 } from "#features/reader/routes/source.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 
-export type ReaderRouteDependencies = {
-  articlesDataService: Pick<
-    ArticlesDataService,
-    | "batchUpsertArticles"
-    | "getUserArticle"
-    | "getUserArticlesForSources"
-    | "removeUserArticles"
-    | "setUserArticlesRead"
-  >;
-  usersDataService: Pick<
-    UsersDataService,
-    "getUserBySid" | "refreshSession" | "touchLastSeen"
-  >;
-  feedParser: Pick<
-    FeedParser,
-    "discoverAndSubscribeWebSub" | "parseUrl" | "preview"
-  >;
-  feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
-  foldersDataService: Pick<
-    FoldersDataService,
-    "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
-  >;
-  httpClient: {
-    get(url: string): Promise<{ data: string }>;
-  };
-  mailEnabled: boolean;
-  faviconStore: Pick<FaviconStore, "getFavicon">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  sourcesDataService: Pick<SourcesDataService, "successSource">;
-  userSourcesDataService: Pick<
-    UserSourcesDataService,
-    | "addSourceToUser"
-    | "recomputeUnreadCounts"
-    | "getUserSources"
-    | "removeSourceFromUser"
-    | "setSourceSnooze"
-    | "updateUserSource"
-    | "withSubscriptionInitializationLease"
-  >;
-};
-
-export const createReaderRoutes = (deps: ReaderRouteDependencies) =>
+export const createReaderRoutes = () =>
   new Elysia()
-    .use(createAuthPlugin(deps.usersDataService))
-    .get("/api/tree", (ctx) => getTreeHandler(ctx, deps))
-    .get("/api/favicon/:id", (ctx) => getFaviconHandler(ctx, deps))
+    .use(createAuthPlugin())
+    .get("/api/tree", (ctx) => getTreeHandler(ctx))
+    .get("/api/favicon/:id", (ctx) => getFaviconHandler(ctx))
     .post("/api/articles", { body: articlesRequest }, (ctx) =>
-      postArticlesHandler(ctx, deps),
+      postArticlesHandler(ctx),
     )
     .delete("/api/articles", { body: removeArticlesRequest }, (ctx) =>
-      deleteArticlesHandler(ctx, deps),
+      deleteArticlesHandler(ctx),
     )
     .patch("/api/articles", { body: readArticlesRequest }, (ctx) =>
-      patchArticlesHandler(ctx, deps),
+      patchArticlesHandler(ctx),
     )
-    .get("/api/folders", (ctx) => getFoldersHandler(ctx, deps))
+    .get("/api/folders", (ctx) => getFoldersHandler(ctx))
     .post("/api/folders", { body: createFolderRequest }, (ctx) =>
-      postFoldersHandler(ctx, deps),
+      postFoldersHandler(ctx),
     )
     .delete("/api/folders", { body: removeFolderRequest }, (ctx) =>
-      deleteFoldersHandler(ctx, deps),
+      deleteFoldersHandler(ctx),
     )
     .patch("/api/folders", { body: updateFolderRequest }, (ctx) =>
-      patchFoldersHandler(ctx, deps),
+      patchFoldersHandler(ctx),
     )
     .delete("/api/source", { body: removeSourceRequest }, (ctx) =>
-      deleteSourceHandler(ctx, deps),
+      deleteSourceHandler(ctx),
     )
     .patch("/api/source", { body: updateSourceRequest }, (ctx) =>
-      patchSourceHandler(ctx, deps),
+      patchSourceHandler(ctx),
     )
     .patch("/api/source/snooze", { body: snoozeSourceRequest }, (ctx) =>
-      snoozeSourceHandler(ctx, deps),
+      snoozeSourceHandler(ctx),
     )
     .get("/api/preview", { query: previewQuery }, (ctx) =>
-      getPreviewHandler(ctx, deps),
+      getPreviewHandler(ctx),
     )
-    .get("/api/find", { query: findQuery }, (ctx) => getFindHandler(ctx, deps))
+    .get("/api/find", { query: findQuery }, (ctx) => getFindHandler(ctx))
     .get("/api/article", { query: articleQuery }, (ctx) =>
-      getArticleHandler(ctx, deps),
+      getArticleHandler(ctx),
     )
     .post("/api/subscribe", { body: subscribeRequest }, (ctx) =>
-      postSubscribeHandler(ctx, deps),
+      postSubscribeHandler(ctx),
     );

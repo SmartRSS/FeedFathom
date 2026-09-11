@@ -1,24 +1,17 @@
+import {
+  sourceEnqueuer,
+  websubStateService,
+} from "#features/feeds/services.ts";
+import { httpClient } from "#platform/runtime.ts";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
-import type { HttpClient } from "#platform/http/http-client.ts";
-import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
 import {
   leaseExpiresAt,
   resolveLeaseSeconds,
 } from "#features/feeds/websub-lease-policy.ts";
-
-export type WebSubRouteDependencies = {
-  httpClient: Pick<HttpClient, "seedCache">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  websubStateService: Pick<
-    WebSubStateService,
-    "findSourceByWebSubCallbackToken" | "markWebSubVerified"
-  >;
-};
 
 // How long the pushed body stays fresh in the cache. Long enough for the job
 // it is queued alongside to pick it up under any normal backlog, and no
@@ -65,11 +58,7 @@ const readCappedPushBody = async (
 // an indefinite one, so a source without a real lease gets caught by the
 // next day's renewal sweep instead of silently never renewing.
 
-export function createWebSubRoutes({
-  httpClient,
-  sourceEnqueuer,
-  websubStateService,
-}: WebSubRouteDependencies) {
+export function createWebSubRoutes() {
   return new Elysia()
     .get(
       "/api/websub/callback/:token",

@@ -1,75 +1,16 @@
-import { Worker } from "bullmq";
+import { close, drizzleConnection } from "#platform/runtime.ts";
 import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
-import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
-import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
-import { FaviconStore } from "#features/feeds/favicon-store.ts";
-import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
-import { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
-import { MainWorker, type MainWorkerFactory } from "#features/jobs/main.ts";
-import { createFeedRuntime } from "./runtime.ts";
+import { MainWorker } from "#features/jobs/main.ts";
 
 async function runWorker() {
-  const runtime = await createFeedRuntime();
-  const { drizzleConnection, httpClient } = runtime;
-  const sourcesDataService = new SourcesDataService(drizzleConnection);
-  const websubStateService = new WebSubStateService(drizzleConnection);
-  const createWorker: MainWorkerFactory = (processor, options) => {
-    const worker = new Worker("tasks", processor, {
-      ...options,
-      connection: runtime.bullmqRedis,
-    });
-    return {
-      close: () => worker.close(),
-      onFailed: (listener) => {
-        worker.on("failed", listener);
-      },
-    };
-  };
-  const foldersDataService = new FoldersDataService(drizzleConnection);
-  const mainWorker = new MainWorker(
-    config,
-    runtime.bullmqQueue,
-    new FeedParser(
-      new ArticlesDataService(drizzleConnection),
-      httpClient,
-      sourcesDataService,
-      websubStateService,
-      new RedirectMap(runtime.redis),
-      new UserSourcesDataService(
-        drizzleConnection,
-        foldersDataService,
-        sourcesDataService,
-      ),
-      config.FEED_FATHOM_DOMAIN,
-    ),
-    new FaviconRefresher(httpClient, new FaviconStore(drizzleConnection)),
-    sourcesDataService,
-    websubStateService,
-    () =>
-      cleanupOrphanedData(
-        drizzleConnection,
-        config.USER_DORMANT_AFTER_DAYS,
-        config.ARTICLE_STALE_AFTER_DAYS,
-        config.USER_EXPIRY_DAYS,
-      ),
-    new JobFailuresDataService(drizzleConnection),
-    createWorker,
-    httpClient,
-  );
+  const mainWorker = new MainWorker();
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () => {
     shutdownPromise ??= (async () => {
       try {
         await mainWorker.cleanup();
-        await runtime.close();
+        await close();
         console.log("Worker closed gracefully");
         process.exit(0);
       } catch (error) {
@@ -120,7 +61,7 @@ async function runWorker() {
     port: 3000,
   });
 
-  await waitForMigration(runtime.drizzleConnection.$client);
+  await waitForMigration(drizzleConnection.$client);
   migrationApplied = true;
 
   try {

@@ -1,38 +1,14 @@
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
-import {
-  createPublicAuthRoutes,
-  type PublicAuthRouteDependencies,
-} from "#features/auth/routes.ts";
-import {
-  createWebSubRoutes,
-  type WebSubRouteDependencies,
-} from "#features/feeds/routes/websub.ts";
-import {
-  createReaderRoutes,
-  type ReaderRouteDependencies,
-} from "#features/reader/routes.ts";
-import {
-  type AdminOptionsRouteDependencies,
-  createAdminOptionsRoutes,
-} from "#features/admin/routes.ts";
-import {
-  createMailRoute,
-  type MailRouteDependencies,
-} from "#features/mail-ingest/routes/mail.ts";
+import { createPublicAuthRoutes } from "#features/auth/routes.ts";
+import { createWebSubRoutes } from "#features/feeds/routes/websub.ts";
+import { createReaderRoutes } from "#features/reader/routes.ts";
+import { createAdminOptionsRoutes } from "#features/admin/routes.ts";
+import { createMailRoute } from "#features/mail-ingest/routes/mail.ts";
 import { createInternalRoutes } from "#platform/http/internal-routes.ts";
 import { deferredResponse } from "#platform/http/deferred-response.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
-
-export type ServerDependencies = Omit<
-  PublicAuthRouteDependencies,
-  "secureCookies"
-> &
-  ReaderRouteDependencies &
-  AdminOptionsRouteDependencies &
-  WebSubRouteDependencies &
-  MailRouteDependencies;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -61,10 +37,7 @@ function wantsSpaShellFallback(request: Request, path: string): boolean {
   );
 }
 
-export async function createServerApp(
-  dependencies: ServerDependencies,
-  options: ServerAppOptions = {},
-) {
+export async function createServerApp(options: ServerAppOptions = {}) {
   const production = options.production ?? false;
   const spaDirectory = options.spaDirectory ?? "spa";
   const spaRoutes = production
@@ -84,16 +57,11 @@ export async function createServerApp(
     serve: { maxRequestBodySize: MAX_REQUEST_BODY_BYTES },
   })
     .use(createInternalRoutes())
-    .use(
-      createPublicAuthRoutes({
-        ...dependencies,
-        secureCookies: production,
-      }),
-    )
-    .use(createReaderRoutes(dependencies))
-    .use(createAdminOptionsRoutes(dependencies))
-    .use(createWebSubRoutes(dependencies))
-    .use(createMailRoute(dependencies))
+    .use(createPublicAuthRoutes(production))
+    .use(createReaderRoutes())
+    .use(createAdminOptionsRoutes())
+    .use(createWebSubRoutes())
+    .use(createMailRoute())
     .use(spaRoutes)
     .error(({ error, request }) => {
       const path = new URL(request.url).pathname;

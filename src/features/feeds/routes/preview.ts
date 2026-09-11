@@ -1,21 +1,18 @@
+import { feedParser, feedPreviewCache } from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { previewQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
-import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 
-export type PreviewRouteDependencies = {
-  feedParser: Pick<FeedParser, "preview">;
-  feedPreviewCache: Pick<FeedPreviewCache, "save">;
-};
-
-export async function getPreviewHandler(
-  { query, user }: { query: Static<typeof previewQuery>; user: AuthedUser },
-  { feedParser, feedPreviewCache }: PreviewRouteDependencies,
-) {
+export async function getPreviewHandler({
+  query,
+  user,
+}: {
+  query: Static<typeof previewQuery>;
+  user: AuthedUser;
+}) {
   const decoded = Value.Decode(previewQuery, query);
   const source = await feedParser.preview(decoded.feedUrl);
   if (!source) return json({ error: "Invalid feed url" }, 400);

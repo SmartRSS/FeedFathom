@@ -1,3 +1,12 @@
+import {
+  articlesDataService,
+  feedParser,
+  feedPreviewCache,
+  sourceEnqueuer,
+  sourcesDataService,
+  userSourcesDataService,
+} from "#features/feeds/services.ts";
+import { config } from "#platform/config.ts";
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import {
@@ -7,31 +16,10 @@ import {
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
-import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import {
   deserializeFeedPreview,
-  type FeedPreviewCache,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-
-export type SubscribeRouteDependencies = {
-  articlesDataService: Pick<ArticlesDataService, "batchUpsertArticles">;
-  feedParser: Pick<FeedParser, "discoverAndSubscribeWebSub">;
-  feedPreviewCache: Pick<FeedPreviewCache, "get">;
-  mailEnabled: boolean;
-  sourcesDataService: Pick<SourcesDataService, "successSource">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  userSourcesDataService: Pick<
-    UserSourcesDataService,
-    | "addSourceToUser"
-    | "recomputeUnreadCounts"
-    | "withSubscriptionInitializationLease"
-  >;
-};
 
 // Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
 // string -> {kind,value} transform) in some environments but not others, so
@@ -45,31 +33,20 @@ function decodedSubscriptionTarget(
     : value;
 }
 
-export async function postSubscribeHandler(
-  {
-    body,
-    request,
-    user,
-  }: {
-    body: Omit<Static<typeof subscribeRequest>, "sourceUrl"> & {
-      sourceUrl: SubscriptionTarget | string;
-    };
-    request: Request;
-    user: AuthedUser;
-  },
-  {
-    articlesDataService,
-    feedParser,
-    feedPreviewCache,
-    mailEnabled,
-    sourceEnqueuer,
-    sourcesDataService,
-    userSourcesDataService,
-  }: SubscribeRouteDependencies,
-) {
+export async function postSubscribeHandler({
+  body,
+  request,
+  user,
+}: {
+  body: Omit<Static<typeof subscribeRequest>, "sourceUrl"> & {
+    sourceUrl: SubscriptionTarget | string;
+  };
+  request: Request;
+  user: AuthedUser;
+}) {
   const sourceUrl = decodedSubscriptionTarget(body.sourceUrl);
   const isEmail = sourceUrl.kind === "email";
-  if (!mailEnabled && isEmail)
+  if (!config.MAIL_ENABLED && isEmail)
     return json({ error: "Email subscriptions are not allowed." }, 400);
   let homeUrl = new URL(request.url).origin;
   const cachedPreview = isEmail

@@ -1,3 +1,10 @@
+import { password } from "#platform/runtime.ts";
+import {
+  authThrottle,
+  mailSender,
+  usersDataService,
+} from "#features/auth/services.ts";
+import { config } from "#platform/config.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
@@ -5,11 +12,7 @@ import {
   passwordResetConfirmRequest,
   passwordResetRequest,
 } from "#shared/contracts/requests.ts";
-import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
-import type { MailSender } from "#features/auth/mail-sender.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 
 const tokenLifetimeMs = 60 * 60 * 1_000;
@@ -20,35 +23,7 @@ const tokenLifetimeMs = 60 * 60 * 1_000;
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 
-export type PasswordResetRouteDependencies = {
-  config: Pick<
-    AppConfig,
-    "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "TRUSTED_PROXY_HEADER"
-  >;
-  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
-  mailSender: Pick<MailSender, "sendPasswordResetEmail">;
-  password: { hash(password: string): Promise<string> };
-  usersDataService: {
-    completePasswordReset(userId: number, passwordHash: string): Promise<void>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-    findUserByPasswordResetToken(
-      tokenHash: string,
-    ): ReturnType<UsersDataService["findUserByPasswordResetToken"]>;
-    startPasswordReset(
-      userId: number,
-      tokenHash: string,
-      expiresAt: Date,
-    ): Promise<void>;
-  };
-};
-
-export function createPasswordResetRoute({
-  config,
-  authThrottle,
-  mailSender,
-  password,
-  usersDataService,
-}: PasswordResetRouteDependencies) {
+export function createPasswordResetRoute() {
   // Gated on outgoing mail the same way public registration is: with no way
   // to deliver a link there is no flow, and the routes answer as they would
   // for an account that does not exist rather than admitting the difference.
