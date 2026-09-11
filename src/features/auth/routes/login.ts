@@ -1,39 +1,14 @@
+import { password } from "#platform/runtime.ts";
+import { authThrottle, usersDataService } from "#features/auth/services.ts";
+import { config } from "#platform/config.ts";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import { loginRequest } from "#shared/contracts/requests.ts";
-import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "#features/auth/user-data-service.ts";
-import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
-type Password = {
-  hash(password: string): Promise<string>;
-  verify(password: string, hash: string): Promise<boolean>;
-};
-
-export type LoginRouteDependencies = {
-  config: Pick<AppConfig, "TRUSTED_PROXY_HEADER">;
-  authThrottle: Pick<
-    AuthThrottle,
-    "blocked" | "clearFailures" | "recordFailure"
-  >;
-  password: Password;
-  secureCookies: boolean;
-  usersDataService: {
-    createSession(userId: number, userAgent?: null | string): Promise<string>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-  };
-};
-
-export function createLoginRoute({
-  config,
-  authThrottle,
-  password,
-  secureCookies,
-  usersDataService,
-}: LoginRouteDependencies) {
+export function createLoginRoute(secureCookies: boolean) {
   return new Elysia().post(
     "/api/login",
     { body: loginRequest },

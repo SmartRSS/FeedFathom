@@ -1,3 +1,7 @@
+import {
+  articlesDataService,
+  userSourcesDataService,
+} from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import type {
   articlesRequest,
@@ -7,29 +11,16 @@ import type {
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 
-export type ArticlesRouteDependencies = {
-  articlesDataService: Pick<
-    ArticlesDataService,
-    "getUserArticlesForSources" | "removeUserArticles" | "setUserArticlesRead"
-  >;
-  userSourcesDataService: Pick<UserSourcesDataService, "recomputeUnreadCounts">;
-};
-
-export async function postArticlesHandler(
-  {
-    body,
-    request,
-    user,
-  }: {
-    body: Static<typeof articlesRequest>;
-    request: Request;
-    user: AuthedUser;
-  },
-  { articlesDataService }: ArticlesRouteDependencies,
-) {
+export async function postArticlesHandler({
+  body,
+  request,
+  user,
+}: {
+  body: Static<typeof articlesRequest>;
+  request: Request;
+  user: AuthedUser;
+}) {
   if (!body.sources.length && body.view !== "today" && !body.query)
     return json([]);
   const articles = await articlesDataService.getUserArticlesForSources(
@@ -55,13 +46,13 @@ export async function postArticlesHandler(
   );
 }
 
-export async function deleteArticlesHandler(
-  {
-    body,
-    user,
-  }: { body: Static<typeof removeArticlesRequest>; user: AuthedUser },
-  { articlesDataService, userSourcesDataService }: ArticlesRouteDependencies,
-) {
+export async function deleteArticlesHandler({
+  body,
+  user,
+}: {
+  body: Static<typeof removeArticlesRequest>;
+  user: AuthedUser;
+}) {
   const { articleIds, sourceIds } =
     await articlesDataService.removeUserArticles(
       body.removedArticleIdList,
@@ -71,13 +62,13 @@ export async function deleteArticlesHandler(
   return json(articleIds);
 }
 
-export async function patchArticlesHandler(
-  {
-    body,
-    user,
-  }: { body: Static<typeof readArticlesRequest>; user: AuthedUser },
-  { articlesDataService, userSourcesDataService }: ArticlesRouteDependencies,
-) {
+export async function patchArticlesHandler({
+  body,
+  user,
+}: {
+  body: Static<typeof readArticlesRequest>;
+  user: AuthedUser;
+}) {
   const { articleIds, sourceIds } =
     await articlesDataService.setUserArticlesRead(
       body.articleIdList,

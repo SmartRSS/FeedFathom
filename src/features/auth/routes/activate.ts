@@ -1,21 +1,10 @@
+import { usersDataService } from "#features/auth/services.ts";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import { activationParams } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
-import type { UsersDataService } from "#features/auth/user-data-service.ts";
 
-export type ActivateRouteDependencies = {
-  usersDataService: {
-    activateUser(userId: number): Promise<unknown>;
-    findUserByActivationToken(
-      token: string,
-    ): ReturnType<UsersDataService["findUserByActivationToken"]>;
-  };
-};
-
-export function createActivateRoute({
-  usersDataService,
-}: ActivateRouteDependencies) {
+export function createActivateRoute() {
   return new Elysia().post(
     "/api/activate/:token",
     { params: activationParams },
