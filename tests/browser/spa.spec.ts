@@ -980,6 +980,43 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("FeedFathom");
 });
 
+// Each search box is one row of a pane with little height to spare, so each
+// can be hidden -- and hiding one must drop what it held, or a filter nobody
+// can see keeps narrowing the tree.
+test("hides the feed filter and article search boxes independently", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await page.getByLabel("Filter feeds").fill("nothing matches this");
+  await expect(page.getByText("No feeds match that.")).toBeVisible();
+
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "Reading" }).click();
+  await page
+    .getByRole("combobox", { name: "Feed filter box in the sidebar" })
+    .selectOption("off");
+  await page.getByRole("link", { name: "Home" }).click();
+
+  await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page.getByLabel("Search articles")).toBeVisible();
+
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "Reading" }).click();
+  await page
+    .getByRole("combobox", { name: "Article search box" })
+    .selectOption("off");
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page.getByLabel("Search articles")).toHaveCount(0);
+
+  // A reload re-reads both from localStorage.
+  await page.reload();
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
+  await expect(page.getByLabel("Search articles")).toHaveCount(0);
+});
+
 // The prefetch setting's Off used to read as on like every string-"off"
 // signal consumed bare (#765's root cause), so the requests it was
 // supposed to save went out anyway. These two pin both sides of the
