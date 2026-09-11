@@ -1,13 +1,48 @@
-import { expect, test } from "bun:test";
-import { DelayedError } from "bullmq";
+import type { AppConfig } from "#platform/config.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import type { HubPoster } from "#features/feeds/websub.ts";
+import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
+import { expect, mock, test } from "bun:test";
+import { DelayedError, type Queue } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import {
-  MainWorker,
-  type MainWorkerFactory,
-  type MainWorkerJob,
-  type MainWorkerQueue,
-} from "#features/jobs/main.ts";
+import type { MainWorkerJob } from "#features/jobs/main.ts";
+
+type QueueOptions = {
+  jobId?: string;
+  priority?: number;
+  removeOnComplete?: { count: number };
+  removeOnFail?: { count: number };
+};
+
+type QueueJob = {
+  data: unknown;
+  name: string;
+  opts?: QueueOptions;
+};
+
+type MainWorkerQueue = {
+  upsertJobScheduler?(
+    ...args: Parameters<Queue["upsertJobScheduler"]>
+  ): Promise<unknown>;
+  add(name: string, data: unknown, options?: QueueOptions): Promise<unknown>;
+  addBulk(jobs: QueueJob[]): Promise<unknown>;
+};
+
+type WorkerControls = {
+  close(): Promise<unknown>;
+  onFailed(
+    listener: (job: { id?: string } | undefined, error: unknown) => void,
+  ): void;
+};
+
+type MainWorkerFactory = (
+  processor: (job: MainWorkerJob) => Promise<void>,
+  options: { concurrency: number; lockDuration: number },
+) => WorkerControls;
 
 const source = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),
@@ -86,20 +121,135 @@ const parseJob = (data: unknown): MainWorkerJob => ({
   name: JobName.ParseSource,
 });
 
+type MainWorkerConfig = Pick<
+  AppConfig,
+  | "CLEANUP_INTERVAL"
+  | "FEED_FATHOM_DOMAIN"
+  | "GATHER_JOBS_INTERVAL"
+  | "LOCK_DURATION"
+  | "WORKER_CONCURRENCY"
+>;
+
+type MainWorkerSources = Pick<
+  SourcesDataService,
+  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
+>;
+
+type MainWorkerWebSubState = Pick<
+  WebSubStateService,
+  "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
+>;
+
+const actualBullmq = { ...(await import("bullmq")) };
+async function mockWorkerServices(
+  appConfig: MainWorkerConfig,
+  bullmqQueue: MainWorkerQueue,
+  feedParser: Pick<FeedParser, "parseSource">,
+  faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
+  sourcesDataService: MainWorkerSources,
+  websubStateService: MainWorkerWebSubState,
+  cleanupOrphanedData: () => Promise<void>,
+  jobFailuresDataService: Pick<JobFailuresDataService, "record">,
+  createWorker: MainWorkerFactory,
+  hubPoster: HubPoster,
+) {
+  await mock.module("#platform/config.ts", () => ({ config: appConfig }));
+  await mock.module("#platform/runtime.ts", () => ({
+    bullmqQueue: { async upsertJobScheduler() {}, ...bullmqQueue },
+    bullmqRedis: {},
+    drizzleConnection: {},
+    httpClient: hubPoster,
+  }));
+  await mock.module("#features/feeds/services.ts", () => ({
+    feedParser,
+    sourcesDataService,
+    websubStateService,
+  }));
+  await mock.module("#features/jobs/services.ts", () => ({
+    faviconRefresher,
+    jobFailuresDataService,
+  }));
+  await mock.module("#features/feeds/retention.ts", () => ({
+    cleanupOrphanedData,
+  }));
+  await mock.module("bullmq", () => ({
+    ...actualBullmq,
+    Worker: class {
+      private readonly controls: WorkerControls;
+      constructor(
+        _name: string,
+        processor: Parameters<MainWorkerFactory>[0],
+        options: Parameters<MainWorkerFactory>[1],
+      ) {
+        this.controls = createWorker(processor, {
+          concurrency: options.concurrency,
+          lockDuration: options.lockDuration,
+        });
+      }
+      close() {
+        return this.controls.close();
+      }
+      on(_event: string, listener: Parameters<WorkerControls["onFailed"]>[0]) {
+        this.controls.onFailed(listener);
+      }
+    },
+  }));
+}
+await mockWorkerServices(
+  config,
+  { async add() {}, async addBulk() {} },
+  idleParser,
+  idleFaviconRefresher,
+  idleSources,
+  idleSources,
+  idleCleanupOrphanedData,
+  idleJobFailures,
+  noopWorkerFactory,
+  idleHubPoster,
+);
+const { MainWorker } = await import("#features/jobs/main.ts");
+async function createMainWorker(
+  appConfig: MainWorkerConfig,
+  bullmqQueue: MainWorkerQueue,
+  feedParser: Pick<FeedParser, "parseSource">,
+  faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
+  sourcesDataService: MainWorkerSources,
+  websubStateService: MainWorkerWebSubState,
+  cleanupOrphanedData: () => Promise<void>,
+  jobFailuresDataService: Pick<JobFailuresDataService, "record">,
+  createWorker: MainWorkerFactory,
+  hubPoster: HubPoster,
+) {
+  await mockWorkerServices(
+    appConfig,
+    bullmqQueue,
+    feedParser,
+    faviconRefresher,
+    sourcesDataService,
+    websubStateService,
+    cleanupOrphanedData,
+    jobFailuresDataService,
+    createWorker,
+    hubPoster,
+  );
+  return new MainWorker();
+}
+
 test("initialize schedules configured intervals and starts the worker", async () => {
   const repeatIntervals = new Map<string, number>();
   let workerOptions: Parameters<MainWorkerFactory>[1] | undefined;
   const queue: MainWorkerQueue = {
-    async add(name, _data, options) {
-      if (options?.repeat) repeatIntervals.set(name, options.repeat.every);
-    },
+    async add() {},
     async addBulk() {},
+    async upsertJobScheduler(name, options) {
+      repeatIntervals.set(name, options.every!);
+    },
   };
   const createWorker: MainWorkerFactory = (_processor, options) => {
     workerOptions = options;
     return noopWorkerFactory(_processor, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     queue,
     idleParser,
@@ -116,6 +266,8 @@ test("initialize schedules configured intervals and starts the worker", async ()
 
   expect(repeatIntervals.get(JobName.Cleanup)).toBe(20_000);
   expect(repeatIntervals.get(JobName.GatherJobs)).toBe(30_000);
+  expect(repeatIntervals.get(JobName.GatherFaviconJobs)).toBe(86_400_000);
+  expect(repeatIntervals.get(JobName.WebSubRenewal)).toBe(86_400_000);
   expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
 });
 
@@ -130,7 +282,7 @@ test("captured processor parses the queued source", async () => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     queue,
     {
@@ -168,7 +320,7 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     {
@@ -207,7 +359,7 @@ test("refreshes favicons only for validated job data", async () => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
@@ -262,7 +414,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     queue,
     idleParser,
@@ -314,7 +466,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     {
       async add() {
@@ -407,7 +559,7 @@ test("cleanup delegates to the worker", async () => {
     },
     onFailed() {},
   });
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     queue,
     idleParser,
@@ -433,7 +585,7 @@ test("records a durable failure for non-ParseSource job errors", async () => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
@@ -469,7 +621,7 @@ test("a failure while recording a job failure doesn't itself fail the job", asyn
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
@@ -508,7 +660,7 @@ test("a poisoned error whose message getter throws doesn't fail the job either",
       throw new Error("message getter exploded");
     }
   }
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     idleParser,
@@ -548,7 +700,7 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
       },
     },
   }) as HttpDeferredError;
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     {
@@ -592,7 +744,7 @@ test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail 
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     {
@@ -637,7 +789,7 @@ test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job",
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const worker = new MainWorker(
+  const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
     {

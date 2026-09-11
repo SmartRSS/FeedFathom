@@ -1,19 +1,24 @@
+import { config as appConfig } from "#platform/config.ts";
+import {
+  bullmqQueue,
+  bullmqRedis,
+  drizzleConnection,
+  httpClient as hubPoster,
+} from "#platform/runtime.ts";
+import {
+  feedParser,
+  sourcesDataService,
+  websubStateService,
+} from "#features/feeds/services.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { faviconRefresher, jobFailuresDataService } from "./services.ts";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { DelayedError } from "bullmq";
+import { DelayedError, Worker } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
-import type { AppConfig } from "#platform/config.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import {
-  type HubPoster,
-  requestHubSubscription,
-} from "#features/feeds/websub.ts";
-import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
+import { requestHubSubscription } from "#features/feeds/websub.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
 const sourceUrl = Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]);
@@ -55,25 +60,6 @@ const mainWorkerJobData = Type.Union([
 ]);
 const mainWorkerJobCheck = Schema.Compile(mainWorkerJobData);
 
-type QueueOptions = {
-  jobId?: string;
-  priority?: number;
-  removeOnComplete?: { count: number };
-  removeOnFail?: { count: number };
-  repeat?: { every: number };
-};
-
-type QueueJob = {
-  data: unknown;
-  name: string;
-  opts?: QueueOptions;
-};
-
-export type MainWorkerQueue = {
-  add(name: string, data: unknown, options?: QueueOptions): Promise<unknown>;
-  addBulk(jobs: QueueJob[]): Promise<unknown>;
-};
-
 export type MainWorkerJob = {
   data: unknown;
   moveToDelayed(timestamp: number, token?: string): Promise<unknown>;
@@ -81,59 +67,12 @@ export type MainWorkerJob = {
   token?: string;
 };
 
-type WorkerControls = {
-  close(): Promise<unknown>;
-  onFailed(
-    listener: (job: { id?: string } | undefined, error: unknown) => void,
-  ): void;
-};
-
-export type MainWorkerFactory = (
-  processor: (job: MainWorkerJob) => Promise<void>,
-  options: { concurrency: number; lockDuration: number },
-) => WorkerControls;
-
-type MainWorkerConfig = Pick<
-  AppConfig,
-  | "CLEANUP_INTERVAL"
-  | "FEED_FATHOM_DOMAIN"
-  | "GATHER_JOBS_INTERVAL"
-  | "LOCK_DURATION"
-  | "WORKER_CONCURRENCY"
->;
-
-type MainWorkerSources = Pick<
-  SourcesDataService,
-  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
->;
-
-type MainWorkerWebSubState = Pick<
-  WebSubStateService,
-  "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
->;
-
 export class MainWorker {
-  private worker: WorkerControls | undefined;
-
-  constructor(
-    private readonly appConfig: MainWorkerConfig,
-    private readonly bullmqQueue: MainWorkerQueue,
-    private readonly feedParser: Pick<FeedParser, "parseSource">,
-    private readonly faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
-    private readonly sourcesDataService: MainWorkerSources,
-    private readonly websubStateService: MainWorkerWebSubState,
-    private readonly cleanupOrphanedData: () => Promise<void>,
-    private readonly jobFailuresDataService: Pick<
-      JobFailuresDataService,
-      "record"
-    >,
-    private readonly createWorker: MainWorkerFactory,
-    private readonly hubPoster: HubPoster,
-  ) {}
+  private worker: Worker | undefined;
 
   async initialize() {
     await this.setupScheduledTasks();
-    await this.bullmqQueue.addBulk(await this.gatherParseSourceJobs());
+    await bullmqQueue.addBulk(await this.gatherParseSourceJobs());
     this.startWorker();
   }
 
@@ -142,7 +81,7 @@ export class MainWorker {
   }
 
   private async gatherParseSourceJobs() {
-    const sources = await this.sourcesDataService.getSourcesToProcess();
+    const sources = await sourcesDataService.getSourcesToProcess();
 
     return sources.map((source) => ({
       data: source,
@@ -164,18 +103,23 @@ export class MainWorker {
 
       switch (input.name) {
         case JobName.Cleanup: {
-          await this.cleanupOrphanedData();
+          await cleanupOrphanedData(
+            drizzleConnection,
+            appConfig.USER_DORMANT_AFTER_DAYS,
+            appConfig.ARTICLE_STALE_AFTER_DAYS,
+            appConfig.USER_EXPIRY_DAYS,
+          );
           break;
         }
 
         case JobName.GatherFaviconJobs: {
           const successfulSources =
-            await this.sourcesDataService.getRecentlySuccessfulSources();
+            await sourcesDataService.getRecentlySuccessfulSources();
 
           await Promise.all(
             successfulSources.map((source) => {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
-              return this.bullmqQueue.add(JobName.RefreshFavicon, source, {
+              return bullmqQueue.add(JobName.RefreshFavicon, source, {
                 jobId,
                 // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
                 // GatherJobs) first, so a large favicon run can't crowd out
@@ -191,18 +135,16 @@ export class MainWorker {
         }
 
         case JobName.GatherJobs: {
-          await this.bullmqQueue.addBulk(await this.gatherParseSourceJobs());
+          await bullmqQueue.addBulk(await this.gatherParseSourceJobs());
           break;
         }
 
         case JobName.ParseSource: {
-          const source = await this.sourcesDataService.findSourceById(
-            input.data.id,
-          );
+          const source = await sourcesDataService.findSourceById(input.data.id);
           if (!source) {
             throw new Error(`Source with ID ${input.data.id} not found`);
           }
-          await this.feedParser.parseSource({
+          await feedParser.parseSource({
             ...source,
             ...(input.data.skipCache === undefined
               ? {}
@@ -213,15 +155,15 @@ export class MainWorker {
         }
 
         case JobName.RefreshFavicon: {
-          await this.faviconRefresher.refreshFavicon(input.data);
+          await faviconRefresher.refreshFavicon(input.data);
           break;
         }
 
         case JobName.WebSubRenewal: {
-          const domain = this.appConfig.FEED_FATHOM_DOMAIN;
+          const domain = appConfig.FEED_FATHOM_DOMAIN;
           if (!domain) break;
           const subscriptions =
-            await this.websubStateService.getWebSubSubscriptionsNeedingRenewal();
+            await websubStateService.getWebSubSubscriptionsNeedingRenewal();
           await Promise.all(
             subscriptions.map(async (subscription) => {
               // All four columns are nullable, but every row here is already
@@ -237,7 +179,7 @@ export class MainWorker {
                 return;
               const result = await requestHubSubscription({
                 callbackUrl: `https://${domain}/api/websub/callback/${subscription.callbackToken}`,
-                hubPoster: this.hubPoster,
+                hubPoster,
                 hubUrl: subscription.hubUrl,
                 mode: "subscribe",
                 secret: subscription.secret,
@@ -247,7 +189,7 @@ export class MainWorker {
                 console.error(
                   `WebSub renewal failed for source ${subscription.id}: ${result.error}`,
                 );
-                await this.websubStateService.markWebSubFailed(subscription.id);
+                await websubStateService.markWebSubFailed(subscription.id);
               }
             }),
           );
@@ -286,7 +228,7 @@ export class MainWorker {
         // which already needed three rounds of narrowing.
         console.error("Error processing job:", error);
         const message = error instanceof Error ? error.message : String(error);
-        await this.jobFailuresDataService.record(job.name, message);
+        await jobFailuresDataService.record(job.name, message);
       } catch {
         // Swallowed without logging: logging already failed once in this
         // block, so logging that failure risks the same unguarded throw.
@@ -297,26 +239,27 @@ export class MainWorker {
   private async setupScheduledTasks() {
     const daily = 86_400_000;
     const schedule: Array<[JobName, number]> = [
-      [JobName.Cleanup, this.appConfig.CLEANUP_INTERVAL * 1_000],
-      [JobName.GatherJobs, this.appConfig.GATHER_JOBS_INTERVAL * 1_000],
+      [JobName.Cleanup, appConfig.CLEANUP_INTERVAL * 1_000],
+      [JobName.GatherJobs, appConfig.GATHER_JOBS_INTERVAL * 1_000],
       [JobName.GatherFaviconJobs, daily],
       [JobName.WebSubRenewal, daily],
     ];
     for (const [name, every] of schedule) {
-      // eslint-disable-next-line no-await-in-loop -- BullMQ repeat registration is ordered.
-      await this.bullmqQueue.add(name, {}, { jobId: name, repeat: { every } });
+      // eslint-disable-next-line no-await-in-loop -- BullMQ scheduler registration is ordered.
+      await bullmqQueue.upsertJobScheduler(name, { every });
     }
   }
 
   private startWorker() {
-    const workerConcurrency = this.appConfig.WORKER_CONCURRENCY;
+    const workerConcurrency = appConfig.WORKER_CONCURRENCY;
     console.log(`Setting up worker with concurrency: ${workerConcurrency}`);
 
-    this.worker = this.createWorker(this.processJob, {
+    this.worker = new Worker("tasks", this.processJob, {
       concurrency: workerConcurrency,
-      lockDuration: this.appConfig.LOCK_DURATION * 1_000,
+      connection: bullmqRedis,
+      lockDuration: appConfig.LOCK_DURATION * 1_000,
     });
-    this.worker.onFailed((job, error) => {
+    this.worker.on("failed", (job, error) => {
       console.error(`Worker job failed: ${job?.id ?? "unknown"}`, error);
     });
 

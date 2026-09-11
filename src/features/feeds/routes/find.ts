@@ -1,26 +1,19 @@
+import { httpClient } from "#platform/runtime.ts";
+import { feedParser } from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { findQuery } from "#shared/contracts/requests.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
-import {
-  markWebSubAvailability,
-  type WebSubProbe,
-} from "#features/feeds/feed-discovery.ts";
+import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
 import { scanHtml } from "#shared/scanners/scanner.ts";
 
-export type FindRouteDependencies = {
-  feedParser: WebSubProbe;
-  httpClient: {
-    get(url: string): Promise<{ data: string }>;
-  };
-};
-
-export async function getFindHandler(
-  { query }: { query: Static<typeof findQuery> },
-  { feedParser, httpClient }: FindRouteDependencies,
-) {
+export async function getFindHandler({
+  query,
+}: {
+  query: Static<typeof findQuery>;
+}) {
   const decoded = Value.Decode(findQuery, query);
   try {
     const response = await httpClient.get(decoded.link);

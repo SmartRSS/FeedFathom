@@ -23,9 +23,15 @@ Four layers. Each may depend only **downward**.
 | `src/features/*` | One feature's routes, data services and domain logic, together | `platform`, `shared`, declared sibling features |
 | `src/spa/`, `src/extension/` | Client applications with their own build targets | `shared` |
 
-Entrypoints — `src/server.ts`, `src/worker.ts`, `src/migrator.ts`, plus
-`src/runtime.ts` and `src/server-app.ts` — sit at the `src/` root and may
-import anything. They are the composition roots.
+Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`) and
+`src/server-app.ts` sit at the `src/` root and may import any layer.
+
+`src/platform/runtime.ts` constructs the shared connections, queue and HTTP
+client once per process. Each feature's `services.ts` constructs its service
+instances from those resources. Routes and jobs import the instances they use
+directly. Importing those modules starts the runtime, so unit tests mock them
+before importing routes or jobs. Constructors marked `@__PURE__` only store
+their arguments; the marker lets the bundler remove unused service instances.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
 rule, which carries the DAG in its `.oxlintrc.json` options. Prose alone did
@@ -144,6 +150,11 @@ only genuinely cross-view concerns. A single shared module would become the new
 large file and would change for several unrelated reasons.
 
 ## Tests
+
+`test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with
+an isolated module registry per test file. Route and worker tests replace
+shared modules with `mock.module`; running the full suite without isolation
+lets those mocks leak into other files. Cases within one file run sequentially.
 
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).

@@ -1,3 +1,5 @@
+import { emailHandler } from "#features/mail-ingest/services.ts";
+import { config } from "#platform/config.ts";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
@@ -6,9 +8,7 @@ import {
   maxRawEmailBytes,
 } from "#shared/contracts/mail-relay.ts";
 import { incomingMailRequest } from "#shared/contracts/requests.ts";
-import type { AppConfig } from "#platform/config.ts";
 import { json } from "#platform/http/json.ts";
-import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 function matchesMailRelaySecret(
   expected: string | undefined,
@@ -24,15 +24,7 @@ function matchesMailRelaySecret(
   return Boolean(expected && provided) && matches;
 }
 
-export type MailRouteDependencies = {
-  config: AppConfig;
-  emailHandler: Pick<EmailHandler, "processEmail">;
-};
-
-export function createMailRoute({
-  config,
-  emailHandler,
-}: MailRouteDependencies) {
+export function createMailRoute() {
   return new Elysia().post(
     "/api/mail",
     { body: incomingMailRequest },

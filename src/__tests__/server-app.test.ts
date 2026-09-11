@@ -1,6 +1,26 @@
+import type { AppConfig } from "#platform/config.ts";
+import type { HttpClient } from "#platform/http/http-client.ts";
+import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
+import type { FaviconStore } from "#features/feeds/favicon-store.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
+import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import type { MailSender } from "#features/auth/mail-sender.ts";
+import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
+import type { OpmlParser } from "#features/feeds/opml-parser.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type {
+  SourcesDataService,
+  SourceUrlUpdateResult,
+} from "#features/feeds/source-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import type { UsersDataService } from "#features/auth/user-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -8,11 +28,165 @@ import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
 import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
-import {
-  createServerApp,
-  MAX_REQUEST_BODY_BYTES,
-  type ServerDependencies,
-} from "../server-app.ts";
+
+type PublicAuthRouteDependencies = {
+  config: AppConfig;
+  authThrottle: LoginRouteDependencies["authThrottle"];
+  fetcher: (
+    ...args: Parameters<typeof globalThis.fetch>
+  ) => ReturnType<typeof globalThis.fetch>;
+  mailSender: Pick<
+    MailSender,
+    "sendActivationEmail" | "sendPasswordResetEmail"
+  >;
+  password: Password;
+  secureCookies: boolean;
+  // Picked rather than restated, so a signature change on the service is a
+  // type error here instead of two descriptions of the same method drifting
+  // apart. The two exceptions are widened deliberately: their results are a
+  // driver-specific execute()/insert() value that no handler reads and no
+  // test double can plausibly produce.
+  usersDataService: Pick<
+    UsersDataService,
+    | "createSession"
+    | "deleteSession"
+    | "findUser"
+    | "findUserByActivationToken"
+    | "findUserByPasswordResetToken"
+    | "getUserBySid"
+    | "getUserCount"
+  > &
+    PasswordResetRouteDependencies["usersDataService"] & {
+      activateUser(userId: number): Promise<unknown>;
+      createUser(
+        payload: Parameters<UsersDataService["createUser"]>[0],
+      ): Promise<unknown>;
+    };
+};
+type LoginRouteDependencies = {
+  config: Pick<AppConfig, "TRUSTED_PROXY_HEADER">;
+  authThrottle: Pick<
+    AuthThrottle,
+    "blocked" | "clearFailures" | "recordFailure"
+  >;
+  password: Password;
+  secureCookies: boolean;
+  usersDataService: {
+    createSession(userId: number, userAgent?: null | string): Promise<string>;
+    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
+  };
+};
+type PasswordResetRouteDependencies = {
+  config: Pick<
+    AppConfig,
+    "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "TRUSTED_PROXY_HEADER"
+  >;
+  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
+  mailSender: Pick<MailSender, "sendPasswordResetEmail">;
+  password: { hash(password: string): Promise<string> };
+  usersDataService: {
+    completePasswordReset(userId: number, passwordHash: string): Promise<void>;
+    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
+    findUserByPasswordResetToken(
+      tokenHash: string,
+    ): ReturnType<UsersDataService["findUserByPasswordResetToken"]>;
+    startPasswordReset(
+      userId: number,
+      tokenHash: string,
+      expiresAt: Date,
+    ): Promise<void>;
+  };
+};
+type ReaderRouteDependencies = {
+  articlesDataService: Pick<
+    ArticlesDataService,
+    | "batchUpsertArticles"
+    | "getUserArticle"
+    | "getUserArticlesForSources"
+    | "removeUserArticles"
+    | "setUserArticlesRead"
+  >;
+  usersDataService: Pick<
+    UsersDataService,
+    "getUserBySid" | "refreshSession" | "touchLastSeen"
+  >;
+  feedParser: Pick<
+    FeedParser,
+    "discoverAndSubscribeWebSub" | "parseUrl" | "preview"
+  >;
+  feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
+  foldersDataService: Pick<
+    FoldersDataService,
+    "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
+  >;
+  httpClient: {
+    get(url: string): Promise<{ data: string }>;
+  };
+  mailEnabled: boolean;
+  faviconStore: Pick<FaviconStore, "getFavicon">;
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
+  sourcesDataService: Pick<SourcesDataService, "successSource">;
+  userSourcesDataService: Pick<
+    UserSourcesDataService,
+    | "addSourceToUser"
+    | "recomputeUnreadCounts"
+    | "getUserSources"
+    | "removeSourceFromUser"
+    | "setSourceSnooze"
+    | "updateUserSource"
+    | "withSubscriptionInitializationLease"
+  >;
+};
+type AdminOptionsRouteDependencies = {
+  foldersDataService: Pick<FoldersDataService, "getUserFolders">;
+  opmlImportService: Pick<OpmlImportService, "insertTree">;
+  opmlParser: Pick<OpmlParser, "parseOpml">;
+  password: Password;
+  redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;
+  sourcesDataService: Pick<
+    SourcesDataService,
+    "deleteSource" | "listAllSources"
+  > & {
+    updateSourceUrl(
+      oldUrl: string,
+      newUrl: string,
+    ): Promise<SourceUrlUpdateResult | void>;
+  };
+  userSourcesDataService: Pick<UserSourcesDataService, "getUserSources">;
+  usersDataService: Pick<
+    UsersDataService,
+    | "findUser"
+    | "getUserBySid"
+    | "listSessions"
+    | "deleteSessionById"
+    | "deleteOtherSessions"
+    | "refreshSession"
+    | "touchLastSeen"
+  > & {
+    updatePassword(userId: number, passwordHash: string): Promise<unknown>;
+  };
+};
+type WebSubRouteDependencies = {
+  httpClient: Pick<HttpClient, "seedCache">;
+  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
+  websubStateService: Pick<
+    WebSubStateService,
+    "findSourceByWebSubCallbackToken" | "markWebSubVerified"
+  >;
+};
+type MailRouteDependencies = {
+  config: AppConfig;
+  emailHandler: Pick<EmailHandler, "processEmail">;
+};
+type Password = {
+  hash(password: string): Promise<string>;
+  verify(password: string, hash: string): Promise<boolean>;
+};
+type ServerFakes = Omit<PublicAuthRouteDependencies, "secureCookies"> &
+  ReaderRouteDependencies &
+  AdminOptionsRouteDependencies &
+  WebSubRouteDependencies &
+  MailRouteDependencies;
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
@@ -22,7 +196,7 @@ const unexpected = (name: string): never => {
   throw new Error(`Unexpected dependency call: ${name}`);
 };
 
-const runLease: ServerDependencies["userSourcesDataService"]["withSubscriptionInitializationLease"] =
+const runLease: ServerFakes["userSourcesDataService"]["withSubscriptionInitializationLease"] =
   async (_subscriptionId, work) => ({
     outcome: "claimed",
     result: await work(),
@@ -52,8 +226,8 @@ const account = {
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
 
-function createDependencies(): ServerDependencies {
-  const appConfig: ServerDependencies["config"] = {
+function createDependencies(): ServerFakes {
+  const appConfig: ServerFakes["config"] = {
     ALLOWED_EMAILS: [],
     ARTICLE_STALE_AFTER_DAYS: 365,
     CLEANUP_INTERVAL: 1_000,
@@ -254,10 +428,25 @@ function createDependencies(): ServerDependencies {
   };
 }
 
-const appFor = (dependencies: ServerDependencies, production = false) =>
-  createServerApp(dependencies, { production, spaDirectory });
+async function mockServices(dependencies: ServerFakes) {
+  await mock.module("#features/feeds/services.ts", () => dependencies);
+  await mock.module("#features/auth/services.ts", () => dependencies);
+  await mock.module("#features/mail-ingest/services.ts", () => dependencies);
+  await mock.module("#platform/runtime.ts", () => dependencies);
+  await mock.module("#platform/config.ts", () => ({
+    config: dependencies.config,
+  }));
+}
+await mockServices(createDependencies());
+const { createServerApp, MAX_REQUEST_BODY_BYTES } =
+  await import("../server-app.ts");
 
-const authenticated = (dependencies: ServerDependencies) => {
+const appFor = async (dependencies: ServerFakes, production = false) => {
+  await mockServices(dependencies);
+  return createServerApp({ production, spaDirectory });
+};
+
+const authenticated = (dependencies: ServerFakes) => {
   dependencies.usersDataService.getUserBySid = async () => sessionUser;
 };
 
@@ -633,8 +822,7 @@ test("rejects invalid subscription policies before cache or database calls", asy
 test("returns sanitized transient preview articles and rejects parser failures", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const cached: Parameters<ServerDependencies["feedPreviewCache"]["save"]>[] =
-    [];
+  const cached: Parameters<ServerFakes["feedPreviewCache"]["save"]>[] = [];
   dependencies.feedPreviewCache.save = async (...parameters) => {
     cached.push(parameters);
   };
@@ -742,9 +930,7 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
 // The discovery fan-out reads only `websub` off a parse, but the real
 // parseUrl signature returns the whole parsed feed, so a double has to supply
 // it. That asymmetry is the case for giving discovery its own dependency.
-type ParsedFeed = Awaited<
-  ReturnType<ServerDependencies["feedParser"]["parseUrl"]>
->;
+type ParsedFeed = Awaited<ReturnType<ServerFakes["feedParser"]["parseUrl"]>>;
 
 function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
   return {
@@ -923,19 +1109,19 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   authenticated(dependencies);
   const subscriptionCreatedAt = new Date("2026-07-20T12:00:00.000Z");
   const additions: Parameters<
-    ServerDependencies["userSourcesDataService"]["addSourceToUser"]
+    ServerFakes["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const upserts: Parameters<
-    ServerDependencies["articlesDataService"]["batchUpsertArticles"]
+    ServerFakes["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   const recomputes: Parameters<
-    ServerDependencies["userSourcesDataService"]["recomputeUnreadCounts"]
+    ServerFakes["userSourcesDataService"]["recomputeUnreadCounts"]
   >[0][] = [];
   const successes: Parameters<
-    ServerDependencies["sourcesDataService"]["successSource"]
+    ServerFakes["sourcesDataService"]["successSource"]
   >[] = [];
   const enqueues: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
+    ServerFakes["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
   let parserCalls = 0;
 
@@ -1024,7 +1210,7 @@ test("falls back to queueing when inline persistence fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const enqueues: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
+    ServerFakes["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
   dependencies.feedPreviewCache.get = async () => cachedPreview;
@@ -1058,7 +1244,7 @@ test("queues URL cache misses but never email subscriptions", async () => {
   authenticated(dependencies);
   dependencies.config.MAIL_ENABLED = true;
   const additions: Parameters<
-    ServerDependencies["userSourcesDataService"]["addSourceToUser"]
+    ServerFakes["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const cacheLookups: [number, string][] = [];
   const enqueues: [number, string][] = [];
@@ -1325,47 +1511,47 @@ test("authenticates only active users without revealing account state", async ()
     { email: "inactive@example.com", password: "password" },
   ];
 
-  await Promise.all(
-    attempts.map(async (attempt) => {
-      const dependencies = createDependencies();
-      let sessionCalls = 0;
-      let dummyHashCalls = 0;
-      dependencies.usersDataService.findUser = async (email) => {
-        if (email === account.email) return account;
-        if (email === "inactive@example.com") {
-          return { ...account, email, status: "inactive" };
-        }
-        return undefined;
-      };
-      dependencies.password.verify = async (value, hash) =>
-        hash === account.password && value === "password";
-      dependencies.usersDataService.createSession = async () => {
-        sessionCalls++;
-        return "unexpected-session";
-      };
-      dependencies.password.hash = async () => {
-        dummyHashCalls++;
-        return "dummy-hash";
-      };
-      const app = await appFor(dependencies);
+  /* eslint-disable no-await-in-loop -- Module mocks are shared within this test file. */
+  for (const attempt of attempts) {
+    const dependencies = createDependencies();
+    let sessionCalls = 0;
+    let dummyHashCalls = 0;
+    dependencies.usersDataService.findUser = async (email) => {
+      if (email === account.email) return account;
+      if (email === "inactive@example.com") {
+        return { ...account, email, status: "inactive" };
+      }
+      return undefined;
+    };
+    dependencies.password.verify = async (value, hash) =>
+      hash === account.password && value === "password";
+    dependencies.usersDataService.createSession = async () => {
+      sessionCalls++;
+      return "unexpected-session";
+    };
+    dependencies.password.hash = async () => {
+      dummyHashCalls++;
+      return "dummy-hash";
+    };
+    const app = await appFor(dependencies);
 
-      const response = await app.handle(
-        new Request("http://localhost/api/login", {
-          body: JSON.stringify(attempt),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }),
-      );
+    const response = await app.handle(
+      new Request("http://localhost/api/login", {
+        body: JSON.stringify(attempt),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
 
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "Wrong login data" });
-      expect(response.headers.get("set-cookie")).toBeNull();
-      expect(sessionCalls).toBe(0);
-      expect(dummyHashCalls).toBe(
-        attempt.email === "missing@example.com" ? 1 : 0,
-      );
-    }),
-  );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Wrong login data" });
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(sessionCalls).toBe(0);
+    expect(dummyHashCalls).toBe(
+      attempt.email === "missing@example.com" ? 1 : 0,
+    );
+  }
+  /* eslint-enable no-await-in-loop */
 
   const dependencies = createDependencies();
   dependencies.usersDataService.findUser = async () => account;
@@ -1800,39 +1986,39 @@ test("fails closed when mail ingestion or relay authentication is unavailable", 
     },
   ];
 
-  await Promise.all(
-    cases.map(async (testCase) => {
-      const dependencies = createDependencies();
-      dependencies.config.MAIL_ENABLED = testCase.enabled;
-      if (testCase.configuredSecret) {
-        dependencies.config.MAIL_RELAY_SECRET = testCase.configuredSecret;
-      }
-      let handlerCalls = 0;
-      dependencies.emailHandler.processEmail = async () => {
-        handlerCalls++;
-      };
-      const app = await appFor(dependencies);
-      const headers = new Headers({ "content-type": "application/json" });
-      if (testCase.requestSecret) {
-        headers.set(mailRelaySecretHeader, testCase.requestSecret);
-      }
+  /* eslint-disable no-await-in-loop -- Module mocks are shared within this test file. */
+  for (const testCase of cases) {
+    const dependencies = createDependencies();
+    dependencies.config.MAIL_ENABLED = testCase.enabled;
+    if (testCase.configuredSecret) {
+      dependencies.config.MAIL_RELAY_SECRET = testCase.configuredSecret;
+    }
+    let handlerCalls = 0;
+    dependencies.emailHandler.processEmail = async () => {
+      handlerCalls++;
+    };
+    const app = await appFor(dependencies);
+    const headers = new Headers({ "content-type": "application/json" });
+    if (testCase.requestSecret) {
+      headers.set(mailRelaySecretHeader, testCase.requestSecret);
+    }
 
-      const response = await app.handle(
-        new Request("http://localhost/api/mail", {
-          body: JSON.stringify({
-            from: "sender@example.com",
-            raw: relayed("Subject: Test\r\n\r\nBody"),
-            to: "reader@example.com",
-          }),
-          headers,
-          method: "POST",
+    const response = await app.handle(
+      new Request("http://localhost/api/mail", {
+        body: JSON.stringify({
+          from: "sender@example.com",
+          raw: relayed("Subject: Test\r\n\r\nBody"),
+          to: "reader@example.com",
         }),
-      );
+        headers,
+        method: "POST",
+      }),
+    );
 
-      expect(response.status).toBe(testCase.expectedStatus);
-      expect(handlerCalls).toBe(0);
-    }),
-  );
+    expect(response.status).toBe(testCase.expectedStatus);
+    expect(handlerCalls).toBe(0);
+  }
+  /* eslint-enable no-await-in-loop */
 });
 
 test("authenticates incoming mail and passes the normalized trusted envelope", async () => {
@@ -2161,7 +2347,7 @@ test("exports the same bytes whatever order the services return rows in", async 
 test("creates active users without registration integrations", async () => {
   const dependencies = createDependencies();
   let created:
-    | Parameters<ServerDependencies["usersDataService"]["createUser"]>[0]
+    | Parameters<ServerFakes["usersDataService"]["createUser"]>[0]
     | undefined;
   let fetchCalls = 0;
   let mailCalls = 0;
@@ -2427,7 +2613,7 @@ test("creates inactive users and sends one activation email with Mailjet", async
   dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
   dependencies.password.hash = async () => "hashed-password";
   let created:
-    | Parameters<ServerDependencies["usersDataService"]["createUser"]>[0]
+    | Parameters<ServerFakes["usersDataService"]["createUser"]>[0]
     | undefined;
   const sent: [string, string][] = [];
   const events: string[] = [];
@@ -2850,9 +3036,8 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
 // cached copy holding the document the push replaced.
 test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
+  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
+    [];
   const seeded: Array<{
     body: string;
     contentType: null | string;
@@ -2913,9 +3098,8 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
 // to seed, so the parse has to go and get it.
 test("WebSub push with no body falls back to a fetch", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
+  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
+    [];
   let seedCalls = 0;
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
@@ -2946,9 +3130,8 @@ test("WebSub push with no body falls back to a fetch", async () => {
 // Losing the saved request is acceptable; losing the notification is not.
 test("WebSub push still re-parses when the cache seed fails", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
+  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
+    [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
@@ -2978,9 +3161,8 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
 
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerDependencies["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
+  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
+    [];
   const seeded: unknown[] = [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,

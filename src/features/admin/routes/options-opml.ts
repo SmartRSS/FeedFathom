@@ -1,3 +1,9 @@
+import {
+  foldersDataService,
+  opmlImportService,
+  opmlParser,
+  userSourcesDataService,
+} from "#features/feeds/services.ts";
 import { createHash } from "node:crypto";
 import { t } from "elysia";
 import { type Static, Type } from "typebox";
@@ -6,26 +12,19 @@ import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
-import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import type { OpmlParser } from "#features/feeds/opml-parser.ts";
-import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });
 
-export type OptionsOpmlRouteDependencies = {
-  foldersDataService: Pick<FoldersDataService, "getUserFolders">;
-  opmlImportService: Pick<OpmlImportService, "insertTree">;
-  opmlParser: Pick<OpmlParser, "parseOpml">;
-  userSourcesDataService: Pick<UserSourcesDataService, "getUserSources">;
-};
-
-export async function postOptionsOpmlHandler(
-  { body, user }: { body: Static<typeof opmlRequest>; user: AuthedUser },
-  { opmlImportService, opmlParser }: OptionsOpmlRouteDependencies,
-) {
+export async function postOptionsOpmlHandler({
+  body,
+  user,
+}: {
+  body: Static<typeof opmlRequest>;
+  user: AuthedUser;
+}) {
   if (body.opml.size > maximumOpmlBytes)
     return json({ error: "File is too large", success: false }, 413);
 
@@ -97,10 +96,7 @@ function subscriptionTree(
   ];
 }
 
-export async function getOptionsOpmlHandler(
-  { user }: { user: AuthedUser },
-  { foldersDataService, userSourcesDataService }: OptionsOpmlRouteDependencies,
-) {
+export async function getOptionsOpmlHandler({ user }: { user: AuthedUser }) {
   const [folders, sources] = await Promise.all([
     foldersDataService.getUserFolders(user.id),
     userSourcesDataService.getUserSources(user.id),

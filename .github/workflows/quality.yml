@@ -76,7 +76,7 @@ jobs:
             # Unit tests statically import what they test, so bun's --changed
             # (which walks that import graph) is safe here.
             git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
-            bun test --changed="origin/${{ github.event.pull_request.base.ref }}" \
+            bun test --parallel=2 --changed="origin/${{ github.event.pull_request.base.ref }}" \
               --path-ignore-patterns='tests/browser/**' \
               --path-ignore-patterns='**/*-integration.test.ts'
           else
