@@ -9,6 +9,8 @@ import { api } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
+  articleSearchBox,
+  feedFilterBox,
   isMarkReadPolicy,
   isReaderStep,
   isTheme,
@@ -18,6 +20,8 @@ import {
   readerWidth,
   rememberReadingPosition,
   setMarkReadPolicy,
+  setArticleSearchBox,
+  setFeedFilterBox,
   setMobileListAnchor,
   setReaderText,
   setReaderWidth,
@@ -442,6 +446,32 @@ export function Options(props: {
                 }}
               >
                 <option value="on">Show (unread from the last 24h)</option>
+                <option value="off">Hide</option>
+              </select>
+            </label>
+            <label>
+              Feed filter box in the sidebar
+              <select
+                value={feedFilterBox()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isOnOff(value)) setFeedFilterBox(value);
+                }}
+              >
+                <option value="on">Show</option>
+                <option value="off">Hide</option>
+              </select>
+            </label>
+            <label>
+              Article search box
+              <select
+                value={articleSearchBox()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isOnOff(value)) setArticleSearchBox(value);
+                }}
+              >
+                <option value="on">Show</option>
                 <option value="off">Hide</option>
               </select>
             </label>

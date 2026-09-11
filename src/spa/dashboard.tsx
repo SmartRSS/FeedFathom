@@ -63,6 +63,8 @@ import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { TreeItem } from "./tree-item.tsx";
 import {
+  articleSearchBox,
+  feedFilterBox,
   markReadPolicy,
   rememberReadingPosition,
   resolvedTheme,
@@ -160,6 +162,18 @@ export function Dashboard(props: {
   // what the server was last asked, and selecting a feed clears both.
   const [searchTerms, setSearchTerms] = createSignal("");
   const [activeSearch, setActiveSearch] = createSignal("");
+  // Hiding a box must not leave what it held in force: an invisible filter
+  // still narrowing the tree, or a list of search results with nothing on
+  // screen to explain or undo them.
+  createEffect(() => {
+    if (feedFilterBox() === "off" && treeFilter()) setTreeFilter("");
+  });
+  createEffect(() => {
+    if (articleSearchBox() === "off") {
+      setSearchTerms("");
+      void exitSearch();
+    }
+  });
   // Unread is what the list has always shown; the other two are new views
   // over the same store rather than a change to the default.
   const [articleFilter, setArticleFilter] = createSignal<
@@ -1569,14 +1583,16 @@ export function Dashboard(props: {
                 </div>
               }
             >
-              <input
-                aria-label="Filter feeds"
-                class="tree-filter"
-                placeholder="Filter feeds"
-                type="search"
-                value={treeFilter()}
-                onInput={(event) => setTreeFilter(event.currentTarget.value)}
-              />
+              <Show when={feedFilterBox() === "on"}>
+                <input
+                  aria-label="Filter feeds"
+                  class="tree-filter"
+                  placeholder="Filter feeds"
+                  type="search"
+                  value={treeFilter()}
+                  onInput={(event) => setTreeFilter(event.currentTarget.value)}
+                />
+              </Show>
               <Show when={treeFilter().trim() && !visibleTree().length}>
                 <p class="tree-empty" role="status">
                   No feeds match that.
@@ -1689,28 +1705,30 @@ export function Dashboard(props: {
               the box its own clear affordance; search runs on submit rather
               than per keystroke, because every query is a full-text scan on
               someone's home server (#697). */}
-          <form
-            class="article-search-field"
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runSearch(searchTerms());
-            }}
-          >
-            <input
-              aria-label="Search articles"
-              class="article-search"
-              placeholder="Search articles"
-              type="search"
-              value={searchTerms()}
-              onInput={(event) => {
-                setSearchTerms(event.currentTarget.value);
-                // Emptying the box -- typing back or the native clear button
-                // -- leaves search without needing a submit.
-                if (!event.currentTarget.value.trim()) void exitSearch();
+          <Show when={articleSearchBox() === "on"}>
+            <form
+              class="article-search-field"
+              role="search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void runSearch(searchTerms());
               }}
-            />
-          </form>
+            >
+              <input
+                aria-label="Search articles"
+                class="article-search"
+                placeholder="Search articles"
+                type="search"
+                value={searchTerms()}
+                onInput={(event) => {
+                  setSearchTerms(event.currentTarget.value);
+                  // Emptying the box -- typing back or the native clear
+                  // button -- leaves search without needing a submit.
+                  if (!event.currentTarget.value.trim()) void exitSearch();
+                }}
+              />
+            </form>
+          </Show>
           <div
             aria-busy={articlesLoading()}
             aria-label="Articles"
