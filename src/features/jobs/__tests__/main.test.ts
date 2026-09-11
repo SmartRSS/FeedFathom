@@ -6,7 +6,7 @@ import type { WebSubStateService } from "#features/feeds/websub-state-service.ts
 import type { HubPoster } from "#features/feeds/websub.ts";
 import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 import { expect, mock, test } from "bun:test";
-import { DelayedError } from "bullmq";
+import { DelayedError, type Queue } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { MainWorkerJob } from "#features/jobs/main.ts";
@@ -16,7 +16,6 @@ type QueueOptions = {
   priority?: number;
   removeOnComplete?: { count: number };
   removeOnFail?: { count: number };
-  repeat?: { every: number };
 };
 
 type QueueJob = {
@@ -26,6 +25,9 @@ type QueueJob = {
 };
 
 type MainWorkerQueue = {
+  upsertJobScheduler?(
+    ...args: Parameters<Queue["upsertJobScheduler"]>
+  ): Promise<unknown>;
   add(name: string, data: unknown, options?: QueueOptions): Promise<unknown>;
   addBulk(jobs: QueueJob[]): Promise<unknown>;
 };
@@ -153,7 +155,7 @@ async function mockWorkerServices(
 ) {
   await mock.module("#platform/config.ts", () => ({ config: appConfig }));
   await mock.module("#platform/runtime.ts", () => ({
-    bullmqQueue,
+    bullmqQueue: { async upsertJobScheduler() {}, ...bullmqQueue },
     bullmqRedis: {},
     drizzleConnection: {},
     httpClient: hubPoster,
@@ -237,10 +239,11 @@ test("initialize schedules configured intervals and starts the worker", async ()
   const repeatIntervals = new Map<string, number>();
   let workerOptions: Parameters<MainWorkerFactory>[1] | undefined;
   const queue: MainWorkerQueue = {
-    async add(name, _data, options) {
-      if (options?.repeat) repeatIntervals.set(name, options.repeat.every);
-    },
+    async add() {},
     async addBulk() {},
+    async upsertJobScheduler(name, options) {
+      repeatIntervals.set(name, options.every!);
+    },
   };
   const createWorker: MainWorkerFactory = (_processor, options) => {
     workerOptions = options;
@@ -263,6 +266,8 @@ test("initialize schedules configured intervals and starts the worker", async ()
 
   expect(repeatIntervals.get(JobName.Cleanup)).toBe(20_000);
   expect(repeatIntervals.get(JobName.GatherJobs)).toBe(30_000);
+  expect(repeatIntervals.get(JobName.GatherFaviconJobs)).toBe(86_400_000);
+  expect(repeatIntervals.get(JobName.WebSubRenewal)).toBe(86_400_000);
   expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
 });
 

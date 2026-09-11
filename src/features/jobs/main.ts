@@ -245,9 +245,8 @@ export class MainWorker {
       [JobName.WebSubRenewal, daily],
     ];
     for (const [name, every] of schedule) {
-      const options = { jobId: name, repeat: { every } };
-      // eslint-disable-next-line no-await-in-loop -- BullMQ repeat registration is ordered.
-      await bullmqQueue.add(name, {}, options);
+      // eslint-disable-next-line no-await-in-loop -- BullMQ scheduler registration is ordered.
+      await bullmqQueue.upsertJobScheduler(name, { every });
     }
   }
 
