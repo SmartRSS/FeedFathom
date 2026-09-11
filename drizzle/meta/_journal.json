@@ -36,6 +36,20 @@
       "when": 1788872661804,
       "tag": "0004_rich_silk_fever",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788949268530,
+      "tag": "0005_regular_firebrand",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789040558647,
+      "tag": "0006_absent_stardust",
+      "breakpoints": true
     }
   ]
 }

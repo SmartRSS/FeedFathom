@@ -5,6 +5,7 @@ import {
   folderOpenFromStored,
   folderOpenStorageKey,
   folderOpenToStored,
+  isSnoozedNode,
   treeNodeKey,
   unreadCount,
 } from "./dashboard-behavior.ts";
@@ -77,6 +78,10 @@ export function TreeItem(props: {
   const children = () =>
     props.node.type === "folder" ? props.node.children : [];
   const unread = () => unreadCount(props.node);
+  // A snoozed source (#725) keeps its place in the tree with no unread
+  // badge -- the server already zeroes the count -- so the row needs its
+  // own mark, or a muted feed is indistinguishable from a quiet one.
+  const snoozed = () => isSnoozedNode(props.node);
   const favicon = () =>
     props.node.type === "source" ? props.node.favicon : null;
   function toggle() {
@@ -179,6 +184,18 @@ export function TreeItem(props: {
           />
         </Show>
         <span>{props.node.name}</span>
+        <Show when={snoozed()}>
+          <span
+            class="snoozed-badge"
+            title={
+              props.node.type === "source" && props.node.pausedUntil
+                ? `Snoozed until ${new Date(props.node.pausedUntil).toLocaleString()}`
+                : "Snoozed"
+            }
+          >
+            Snoozed
+          </span>
+        </Show>
         <Show when={unread()}>
           {(count) => (
             <span aria-label={`${count()} unread`} class="unread-count">

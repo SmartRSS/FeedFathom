@@ -190,6 +190,9 @@ function createDependencies(): ServerDependencies {
       async removeSourceFromUser() {
         return unexpected("userSourcesDataService.removeSourceFromUser");
       },
+      async setSourceSnooze() {
+        return unexpected("userSourcesDataService.setSourceSnooze");
+      },
       async updateUserSource() {
         return unexpected("userSourcesDataService.updateUserSource");
       },
@@ -1553,6 +1556,107 @@ test("passes the article list filter through to the query", async () => {
   expect(rejected.status).toBe(422);
 });
 
+test("searches every subscription rather than the selected sources", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const calls: { options: unknown; sources: number[] }[] = [];
+  dependencies.articlesDataService.getUserArticlesForSources = async (
+    sources,
+    _userId,
+    _cursor,
+    _filter,
+    options,
+  ) => {
+    calls.push({ options, sources });
+    return [];
+  };
+  const app = await appFor(dependencies);
+  const list = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+
+  const searched = await list({ query: "  service mesh ", sources: [] });
+  const scoped = await list({ query: "mesh", sources: [3] });
+  const blank = await list({ query: "   ", sources: [] });
+  const tooLong = await list({ query: "x".repeat(201), sources: [] });
+  const noQuery = await list({ sources: [] });
+
+  expect(searched.status).toBe(200);
+  expect(scoped.status).toBe(200);
+  // Trimmed, and `sources` is ignored the way the Today view ignores it: the
+  // point of search is the article whose feed the reader has forgotten.
+  expect(calls).toEqual([
+    { options: { allSubscribed: true, query: "service mesh" }, sources: [] },
+    { options: { allSubscribed: true, query: "mesh" }, sources: [3] },
+  ]);
+  expect(blank.status).toBe(422);
+  expect(tooLong.status).toBe(422);
+  // No query and no sources is still the early return, not a search for
+  // everything.
+  expect(noQuery.status).toBe(200);
+  expect(await noQuery.json()).toEqual([]);
+});
+
+test("snoozes and unsnoozes one subscription without touching article state", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const snoozed: { pausedUntil: Date | null; sourceId: number }[] = [];
+  dependencies.userSourcesDataService.setSourceSnooze = async (
+    _userId,
+    sourceId,
+    pausedUntil,
+  ) => {
+    snoozed.push({ pausedUntil, sourceId });
+    if (sourceId === 9) return undefined;
+    return { id: sourceId, pausedUntil };
+  };
+  const app = await appFor(dependencies);
+  const snooze = (body: unknown, authed = true) =>
+    app.handle(
+      new Request("http://localhost/api/source/snooze", {
+        body: JSON.stringify(body),
+        headers: {
+          "content-type": "application/json",
+          ...(authed ? { cookie: "sid=test" } : {}),
+        },
+        method: "PATCH",
+      }),
+    );
+
+  const snoozeWeek = await snooze({
+    pausedUntil: "2026-09-16T12:00:00.000Z",
+    sourceId: 3,
+  });
+  const unsnooze = await snooze({ pausedUntil: null, sourceId: 3 });
+  const unknown = await snooze({
+    pausedUntil: "2026-09-16T12:00:00.000Z",
+    sourceId: 9,
+  });
+  const malformed = await snooze({ pausedUntil: "next week", sourceId: 3 });
+  const anonymous = await snooze({ pausedUntil: null, sourceId: 3 }, false);
+
+  expect(snoozeWeek.status).toBe(200);
+  expect(await snoozeWeek.json()).toEqual({
+    pausedUntil: "2026-09-16T12:00:00.000Z",
+    sourceId: 3,
+  });
+  expect(unsnooze.status).toBe(200);
+  expect(await unsnooze.json()).toEqual({ pausedUntil: null, sourceId: 3 });
+  expect(unknown.status).toBe(400);
+  expect(malformed.status).toBe(422);
+  expect(anonymous.status).toBe(401);
+  expect(snoozed).toEqual([
+    { pausedUntil: new Date("2026-09-16T12:00:00.000Z"), sourceId: 3 },
+    { pausedUntil: null, sourceId: 3 },
+    { pausedUntil: new Date("2026-09-16T12:00:00.000Z"), sourceId: 9 },
+  ]);
+});
+
 test("treats inactive sessions as unauthenticated everywhere", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async () => ({
@@ -1935,6 +2039,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       kind: "feed",
       name: "Daily",
       parentId: 4,
+      pausedUntil: null,
       unreadArticlesCount: 0,
       url: "https://news.test/feed",
     },
@@ -1944,6 +2049,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       kind: "email",
       name: "A newsletter",
       parentId: null,
+      pausedUntil: null,
       unreadArticlesCount: 0,
       url: "abc123@mail.example.com",
     },
@@ -2002,6 +2108,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       kind: "feed" as const,
       name: "Beta",
       parentId: 2,
+      pausedUntil: null,
       unreadArticlesCount: 0,
       url: "https://b.test/feed",
     },
@@ -2011,6 +2118,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       kind: "feed" as const,
       name: "Aardvark",
       parentId: 2,
+      pausedUntil: null,
       unreadArticlesCount: 0,
       url: "https://a.test/feed",
     },
@@ -2020,6 +2128,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       kind: "feed" as const,
       name: "Loose",
       parentId: null,
+      pausedUntil: null,
       unreadArticlesCount: 0,
       url: "https://c.test/feed",
     },

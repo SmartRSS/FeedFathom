@@ -247,6 +247,35 @@ export class UserSourcesDataService {
       );
   }
 
+  /**
+   * Snoozes (or un-snoozes, with null) one user's subscription to a source --
+   * a per-user, per-source timestamp and nothing else (#725). Parsing and
+   * saving continue unchanged during the pause; suppression happens at read
+   * time, so this write touches no article state and no unread count.
+   * Returns undefined for a source the user isn't subscribed to.
+   */
+  public async setSourceSnooze(
+    userId: number,
+    sourceId: number,
+    pausedUntil: Date | null,
+  ) {
+    return (
+      await this.drizzleConnection
+        .update(userSources)
+        .set({ pausedUntil })
+        .where(
+          and(
+            eq(userSources.userId, userId),
+            eq(userSources.sourceId, sourceId),
+          ),
+        )
+        .returning({
+          id: userSources.sourceId,
+          pausedUntil: userSources.pausedUntil,
+        })
+    ).at(0);
+  }
+
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
@@ -255,6 +284,7 @@ export class UserSourcesDataService {
         kind: sources.kind,
         name: userSources.name,
         parentId: userSources.parentId,
+        pausedUntil: userSources.pausedUntil,
         unreadArticlesCount: userSources.unreadCount,
         url: sources.url,
       })

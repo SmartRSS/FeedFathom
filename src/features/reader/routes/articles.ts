@@ -30,7 +30,8 @@ export async function postArticlesHandler(
   },
   { articlesDataService }: ArticlesRouteDependencies,
 ) {
-  if (!body.sources.length && body.view !== "today") return json([]);
+  if (!body.sources.length && body.view !== "today" && !body.query)
+    return json([]);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
     user.id,
@@ -38,7 +39,12 @@ export async function postArticlesHandler(
     body.filter,
     body.view === "today"
       ? { allSubscribed: true, publishedWithinHours: 24 }
-      : {},
+      : // Search (#697) spans every subscription -- what makes it worth
+        // having is finding the article whose feed you no longer remember --
+        // so subscription authorizes the rows, as it does for Today.
+        body.query
+        ? { allSubscribed: true, query: body.query }
+        : {},
   );
   return json(
     articles.map((article) =>

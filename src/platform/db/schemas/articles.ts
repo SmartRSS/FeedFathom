@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   check,
+  customType,
   index,
   integer,
   pgTable,
@@ -11,6 +12,13 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sources } from "#platform/db/schemas/sources.ts";
+
+// Search (#697) is Postgres-native, so the column type is too. drizzle has no
+// tsvector builder; nothing reads this column in TypeScript -- it exists for
+// the GIN index and the @@ match -- so the mapped type is only a placeholder.
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType: () => "tsvector",
+});
 
 export const articles = pgTable(
   "articles",
@@ -29,6 +37,17 @@ export const articles = pgTable(
     title: varchar("title").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
     url: varchar("url").notNull(),
+    // Article search (#697): title weighted above body, both stemmed with
+    // `english`, per the decision on that issue. The regconfig has to be
+    // spelled out or the expression is not immutable and Postgres refuses to
+    // store it. `content` is sanitised HTML; the default parser classifies
+    // tags as a token type the `english` configuration does not map, so they
+    // fall out of the vector rather than becoming search terms.
+    searchVector: tsvector("search_vector").generatedAlwaysAs(
+      // Unqualified column names: a generated expression may only read its
+      // own row, and the table it belongs to is still being defined here.
+      sql`setweight(to_tsvector('english', "title"), 'A') || setweight(to_tsvector('english', "content"), 'B')`,
+    ),
     lastSeenInFeedAt: timestamp("last_seen_in_feed_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -48,9 +67,9 @@ export const articles = pgTable(
       table.lastSeenInFeedAt,
     ),
     index("articles_updated_at_idx").on(table.updatedAt),
+    index("articles_search_idx").using("gin", table.searchVector),
     unique().on(table.sourceId, table.guid),
   ],
 );
 
-export type Article = typeof articles.$inferSelect;
 export type ArticleInsert = typeof articles.$inferInsert;

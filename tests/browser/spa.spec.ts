@@ -419,6 +419,35 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 });
 
+// Search spans every subscription: the article a reader half-remembers is
+// exactly the one whose feed they cannot name, so the results cannot be scoped
+// to the selected row -- and the unread default would answer for an article
+// they remember because they read it.
+test("searches across subscriptions and says when nothing matches", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const search = page.getByLabel("Search articles");
+  await search.fill("subscribed");
+  await search.press("Enter");
+
+  // "Subscribed article" belongs to a feed that was never selected.
+  await expect(
+    page.getByRole("option", { name: /Subscribed article/ }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Show")).toHaveValue("all");
+
+  await search.fill("nothing matches this");
+  await search.press("Enter");
+  await expect(page.getByText("No articles match that.")).toBeVisible();
+
+  // Emptying the box leaves search without a submit.
+  await search.fill("");
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+});
+
 // The article list is keyset-paged and the scroll position is what asks for
 // the next page, so a list too short to scroll can never ask. Deleting a whole
 // page is the way in: select all, delete, and the pane would sit empty with
@@ -949,6 +978,43 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   // A reload re-reads the persisted setting from localStorage.
   await page.reload();
   await expect(page).toHaveTitle("FeedFathom");
+});
+
+// Each search box is one row of a pane with little height to spare, so each
+// can be hidden -- and hiding one must drop what it held, or a filter nobody
+// can see keeps narrowing the tree.
+test("hides the feed filter and article search boxes independently", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await page.getByLabel("Filter feeds").fill("nothing matches this");
+  await expect(page.getByText("No feeds match that.")).toBeVisible();
+
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "Reading" }).click();
+  await page
+    .getByRole("combobox", { name: "Feed filter box in the sidebar" })
+    .selectOption("off");
+  await page.getByRole("link", { name: "Home" }).click();
+
+  await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page.getByLabel("Search articles")).toBeVisible();
+
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "Reading" }).click();
+  await page
+    .getByRole("combobox", { name: "Article search box" })
+    .selectOption("off");
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page.getByLabel("Search articles")).toHaveCount(0);
+
+  // A reload re-reads both from localStorage.
+  await page.reload();
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
+  await expect(page.getByLabel("Search articles")).toHaveCount(0);
 });
 
 // The prefetch setting's Off used to read as on like every string-"off"

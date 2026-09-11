@@ -4,6 +4,7 @@ import {
   maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
 import {
+  jsonDatePolicy,
   normalizedEmailAddress,
   normalizedNonblankString,
   normalizedSubscriptionTarget,
@@ -27,6 +28,13 @@ const normalizedMailEnvelopeValue = Type.Codec(mailEnvelopeValue)
 // address back capitalised would otherwise be reported as unknown.
 const normalizedMailRecipient = Type.Codec(mailEnvelopeValue)
   .Decode((value) => value.trim().toLowerCase())
+  .Encode((value) => value);
+// Article search terms (#697). plainto_tsquery parses whatever it is given,
+// so the cap here bounds the payload rather than the syntax.
+const searchTerms = Type.Codec(
+  Type.String({ maxLength: 200, minLength: 1, pattern: "\\S" }),
+)
+  .Decode((value) => value.trim())
   .Encode((value) => value);
 const idQueryTransform = Type.Codec(
   Type.Union([id, Type.String({ pattern: "^[1-9]\\d*$" })]),
@@ -53,6 +61,10 @@ export const articlesRequest = Type.Object(
         Type.Literal("all"),
       ]),
     ),
+    // Full-text search (#697): present means the list is search results
+    // across every subscription rather than the selected node, so `sources`
+    // is ignored and sent empty, exactly as the Today view does it.
+    query: Type.Optional(searchTerms),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,
@@ -90,6 +102,13 @@ export const updateFolderRequest = Type.Object({
   folderName: normalizedNonblankString,
 });
 export const removeSourceRequest = Type.Object({ removeSourceId: id });
+export const snoozeSourceRequest = Type.Object({
+  // Null clears the snooze early; any timestamp (past or future) is stored
+  // as-is and evaluated lazily at read time, so a past value reads as
+  // already expired rather than failing validation.
+  pausedUntil: Type.Union([jsonDatePolicy, Type.Null()]),
+  sourceId: id,
+});
 export const subscribeRequest = Type.Object({
   sourceFolder: Type.Union([id, Type.Null()]),
   sourceName: normalizedNonblankString,

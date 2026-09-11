@@ -242,7 +242,11 @@ main {
   padding: 1rem;
 }
 
-form,
+/* The login, register and password-reset card. Scoped to a class rather
+   than every form: a bare `form` selector reached the dialog, the options
+   cards, feed discovery and article search too, each of which had to undo
+   the card or, like the dialog, drew it inside its own box. */
+.account-form,
 .account-result {
   display: grid;
   gap: 1rem;
@@ -895,6 +899,18 @@ button.source {
   font-size: 0.8rem;
   font-style: italic;
 }
+/* A snoozed source (#725) shows no unread badge by design, so the row
+   carries a literal "Snoozed" word instead: text, not colour alone, so the
+   distinction survives forced-colors mode like .source.unread does. */
+.source .snoozed-badge {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.source.selected .snoozed-badge {
+  color: inherit;
+}
 .source.unread {
   font-weight: 700;
 }
@@ -965,6 +981,22 @@ button.source {
 .article-list {
   flex: 1;
   overflow: auto;
+}
+/* Article search (#697) sits in its own row above the list, styled as the
+   tree's filter box is: the two are the same kind of control, and a reader
+   who has met one should recognise the other. */
+.article-search-field {
+  display: flex;
+  flex-shrink: 0;
+}
+.article-search {
+  min-width: 0;
+  flex: 1;
+  margin: 0.4rem;
+  padding: 0.4rem;
+  border: var(--border);
+  border-radius: var(--radius);
+  font: inherit;
 }
 .article-filter-field {
   display: flex;
@@ -1068,14 +1100,12 @@ button.source {
 }
 
 .feed-discovery-form {
-  width: 100%;
+  display: grid;
+  gap: 1rem;
   height: 100%;
   align-content: start;
-  margin: 0;
   overflow: auto;
   padding: 1rem;
-  border: 0;
-  border-radius: 0;
 }
 .feed-discovery-form h2 {
   margin: 0;

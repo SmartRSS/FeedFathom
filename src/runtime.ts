@@ -3,22 +3,11 @@ import { RedisClient } from "bun";
 import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
-import { UsersDataService } from "#features/auth/user-data-service.ts";
-import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
-import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
-import { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import { FaviconStore } from "#features/feeds/favicon-store.ts";
-import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
-import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 
+// Only what varies per deployment -- connections, the queue and the outbound
+// HTTP client -- is built here. Services are built by the entrypoint that uses
+// them, so the server bundle carries no worker-only code and the reverse.
 export async function createFeedRuntime() {
   const redis = new RedisClient(config.REDIS_URL, {
     autoReconnect: true,
@@ -41,38 +30,10 @@ export async function createFeedRuntime() {
     config.DATABASE_URL,
     config.DB_POOL_MAX,
   );
-  const articlesDataService = new ArticlesDataService(drizzleConnection);
-  const foldersDataService = new FoldersDataService(drizzleConnection);
-  const sourcesDataService = new SourcesDataService(drizzleConnection);
-  const websubStateService = new WebSubStateService(drizzleConnection);
-  const faviconStore = new FaviconStore(drizzleConnection);
-  const sourceEnqueuer = new SourceEnqueuer(bullmqQueue);
-  const usersDataService = new UsersDataService(drizzleConnection);
-  const jobFailuresDataService = new JobFailuresDataService(drizzleConnection);
-  const userSourcesDataService = new UserSourcesDataService(
-    drizzleConnection,
-    foldersDataService,
-    sourcesDataService,
-  );
-  const opmlImportService = new OpmlImportService(
-    drizzleConnection,
-    sourceEnqueuer,
-  );
   const httpClient = new HttpClient(redis, {
     instance: config.FEED_FATHOM_DOMAIN,
     version: config.FEEDFATHOM_BUILD,
   });
-  const redirectMap = new RedirectMap(redis);
-  const feedParser = new FeedParser(
-    articlesDataService,
-    httpClient,
-    sourcesDataService,
-    websubStateService,
-    redirectMap,
-    userSourcesDataService,
-    config.FEED_FATHOM_DOMAIN,
-  );
-  const faviconRefresher = new FaviconRefresher(httpClient, faviconStore);
   let closePromise: Promise<void> | undefined;
   const close = () =>
     (closePromise ??= Promise.allSettled([
@@ -83,31 +44,11 @@ export async function createFeedRuntime() {
     ]).then(() => undefined));
 
   return {
-    articlesDataService,
     bullmqQueue,
     bullmqRedis,
-    cleanupOrphanedData: () =>
-      cleanupOrphanedData(
-        drizzleConnection,
-        config.USER_DORMANT_AFTER_DAYS,
-        config.ARTICLE_STALE_AFTER_DAYS,
-        config.USER_EXPIRY_DAYS,
-      ),
     close,
     drizzleConnection,
-    faviconRefresher,
-    faviconStore,
-    feedParser,
-    foldersDataService,
     httpClient,
-    jobFailuresDataService,
-    opmlImportService,
-    redirectMap,
     redis,
-    sourceEnqueuer,
-    sourcesDataService,
-    userSourcesDataService,
-    usersDataService,
-    websubStateService,
   };
 }

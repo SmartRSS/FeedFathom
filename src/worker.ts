@@ -2,11 +2,25 @@ import { Worker } from "bullmq";
 import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
+import { FaviconStore } from "#features/feeds/favicon-store.ts";
+import { FeedParser } from "#features/feeds/feed-parser.ts";
+import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 import { MainWorker, type MainWorkerFactory } from "#features/jobs/main.ts";
 import { createFeedRuntime } from "./runtime.ts";
 
 async function runWorker() {
   const runtime = await createFeedRuntime();
+  const { drizzleConnection, httpClient } = runtime;
+  const sourcesDataService = new SourcesDataService(drizzleConnection);
+  const websubStateService = new WebSubStateService(drizzleConnection);
   const createWorker: MainWorkerFactory = (processor, options) => {
     const worker = new Worker("tasks", processor, {
       ...options,
@@ -19,17 +33,36 @@ async function runWorker() {
       },
     };
   };
+  const foldersDataService = new FoldersDataService(drizzleConnection);
   const mainWorker = new MainWorker(
     config,
     runtime.bullmqQueue,
-    runtime.feedParser,
-    runtime.faviconRefresher,
-    runtime.sourcesDataService,
-    runtime.websubStateService,
-    runtime.cleanupOrphanedData,
-    runtime.jobFailuresDataService,
+    new FeedParser(
+      new ArticlesDataService(drizzleConnection),
+      httpClient,
+      sourcesDataService,
+      websubStateService,
+      new RedirectMap(runtime.redis),
+      new UserSourcesDataService(
+        drizzleConnection,
+        foldersDataService,
+        sourcesDataService,
+      ),
+      config.FEED_FATHOM_DOMAIN,
+    ),
+    new FaviconRefresher(httpClient, new FaviconStore(drizzleConnection)),
+    sourcesDataService,
+    websubStateService,
+    () =>
+      cleanupOrphanedData(
+        drizzleConnection,
+        config.USER_DORMANT_AFTER_DAYS,
+        config.ARTICLE_STALE_AFTER_DAYS,
+        config.USER_EXPIRY_DAYS,
+      ),
+    new JobFailuresDataService(drizzleConnection),
     createWorker,
-    runtime.httpClient,
+    httpClient,
   );
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () => {

@@ -146,22 +146,59 @@ function isOnOff(value: string): value is OnOff {
   return value === "off" || value === "on";
 }
 
-function readTodayView(): OnOff {
+// Every on/off preference is stored the same way: the string, defaulting to
+// "on" when it is absent or storage is unavailable.
+function readOnOff(key: string): OnOff {
   try {
-    const stored = localStorage.getItem(TODAY_VIEW_KEY);
+    const stored = localStorage.getItem(key);
     return stored && isOnOff(stored) ? stored : "on";
   } catch {
     return "on";
   }
 }
 
-const [todayView, setTodayViewSignal] = createSignal<OnOff>(readTodayView());
+const [todayView, setTodayViewSignal] = createSignal<OnOff>(
+  readOnOff(TODAY_VIEW_KEY),
+);
 export { todayView };
 
 export function setTodayView(value: OnOff) {
   setTodayViewSignal(value);
   try {
     localStorage.setItem(TODAY_VIEW_KEY, value);
+  } catch {}
+}
+
+// The two search boxes: the sidebar's feed filter and the article list's
+// search. Each is one row of a pane that has little vertical space to spare,
+// and a reader with a dozen feeds needs neither, so both are opt-out. They
+// are separate settings because they do different work -- the filter narrows
+// what is already loaded, search asks the server -- and wanting one without
+// the other is a reasonable position.
+const FEED_FILTER_KEY = "feedFilterBox";
+const ARTICLE_SEARCH_KEY = "articleSearchBox";
+
+const [feedFilterBox, setFeedFilterBoxSignal] = createSignal<OnOff>(
+  readOnOff(FEED_FILTER_KEY),
+);
+export { feedFilterBox };
+
+export function setFeedFilterBox(value: OnOff) {
+  setFeedFilterBoxSignal(value);
+  try {
+    localStorage.setItem(FEED_FILTER_KEY, value);
+  } catch {}
+}
+
+const [articleSearchBox, setArticleSearchBoxSignal] = createSignal<OnOff>(
+  readOnOff(ARTICLE_SEARCH_KEY),
+);
+export { articleSearchBox };
+
+export function setArticleSearchBox(value: OnOff) {
+  setArticleSearchBoxSignal(value);
+  try {
+    localStorage.setItem(ARTICLE_SEARCH_KEY, value);
   } catch {}
 }
 
