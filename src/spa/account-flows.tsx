@@ -50,7 +50,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
   }
   return (
     <main>
-      <form onSubmit={submit}>
+      <form class="account-form" onSubmit={submit}>
         <h1>FeedFathom</h1>
         <label>
           Email
@@ -227,7 +227,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
         </Match>
         <Match when={registration()}>
           {(info) => (
-            <form onSubmit={submit}>
+            <form class="account-form" onSubmit={submit}>
               <h1>
                 {info().registrationStatus === "FIRST_USER"
                   ? "Create administrator account"
@@ -380,7 +380,7 @@ export function PasswordReset(props: { navigate(to: string): void }) {
           </section>
         }
       >
-        <form onSubmit={submit}>
+        <form class="account-form" onSubmit={submit}>
           <h1>Reset your password</h1>
           <label>
             Email
@@ -451,7 +451,7 @@ export function PasswordResetConfirm(props: {
           </section>
         }
       >
-        <form onSubmit={submit}>
+        <form class="account-form" onSubmit={submit}>
           <h1>Choose a new password</h1>
           <PasswordInput
             autocomplete="new-password"
