@@ -19,7 +19,8 @@ permissions:
 jobs:
   source_branch:
     name: Merges into main come from staging
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Verify the head is this repository's staging branch
         # Passed through the environment rather than interpolated into the

@@ -16,7 +16,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # Capped well above the real runtime (seconds, not minutes). A runner that
     # hangs instead of failing used to sit at GitHub's 6-hour default, and
     # docker-build's await_turn holds every later staging run behind it, so a
@@ -34,7 +34,7 @@ jobs:
 
   compile:
     name: Compile every deployable target
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -48,7 +48,7 @@ jobs:
 
   unit:
     name: Unit and migration tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test
@@ -95,7 +95,7 @@ jobs:
 
   browser:
     name: Browser tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout repository
