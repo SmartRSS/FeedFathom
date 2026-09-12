@@ -791,9 +791,25 @@ export function Dashboard(props: {
   async function exitSearch() {
     if (!activeSearch()) return;
     setActiveSearch("");
+    // Leaving search asks a different question than the request already in
+    // flight, so it gets the same supersession treatment select() and
+    // runSearch() give theirs. Without it, a response that lands after the
+    // clear repopulates a list the user just emptied (#815) -- reachable
+    // whenever no feed is selected, since that is the one branch below that
+    // neither aborts nor starts a new guard token.
+    selectionGuard.start();
+    articleAbortController?.abort();
     const node = selectedNode();
     if (node) await select(node);
-    else setArticles([]);
+    else {
+      // No replacement fetch starts here, and the aborted one will not clear
+      // the loading signal its superseded token now hides, so the empty
+      // state behind the cleared list would never appear.
+      setArticlesLoading(false);
+      moreArticles = false;
+      articleCursor = undefined;
+      setArticles([]);
+    }
   }
   // Changing the filter is a different question about the same selection, so
   // it re-runs select() rather than filtering what is already loaded: only one
