@@ -448,6 +448,40 @@ test("searches across subscriptions and says when nothing matches", async ({
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
 });
 
+// A search response that lands after the field was cleared must not
+// repopulate the list (#815) -- with no source selected, clearing empties the
+// list rather than reloading a feed's articles.
+test("a late response to a cleared search leaves the list empty", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  // Registered after the fixture, so this handler runs first: search
+  // requests hold until released, everything else falls through.
+  let releaseSearch: () => void = () => {};
+  const searchReleased = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  await page.route("**/api/articles", async (route) => {
+    const query: string | undefined = route.request().postDataJSON().query;
+    if (!query) return route.fallback();
+    await searchReleased;
+    return route.fallback();
+  });
+  await page.goto("/");
+
+  const search = page.getByLabel("Search articles");
+  await search.fill("subscribed");
+  await search.press("Enter");
+  await search.fill("");
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+
+  releaseSearch();
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
+  ).toHaveCount(0);
+});
+
 // The article list is keyset-paged and the scroll position is what asks for
 // the next page, so a list too short to scroll can never ask. Deleting a whole
 // page is the way in: select all, delete, and the pane would sit empty with
