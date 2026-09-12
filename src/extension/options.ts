@@ -2,17 +2,19 @@ import { storedBadgeEnabled, storedInstance } from "#shared/extension-types.ts";
 import { pingInstance } from "./instance.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
+// Every listener is attached before the first await. Reading storage is a
+// round trip to the extension process, and `load` fires the moment this
+// script starts, not when that read lands -- so a change arriving in between
+// used to reach no listener at all and be dropped in silence. The stored
+// values are filled in afterwards.
 void (async () => {
-  const storedValue =
-    storedInstance(await chrome.storage.sync.get("instance")) ?? "";
   const instanceInput = document.querySelector("#instance");
   if (!(instanceInput instanceof HTMLInputElement)) {
     return;
   }
   const instanceError = document.querySelector("#instance-error");
 
-  let displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
-  instanceInput.value = displayedValue;
+  let displayedValue = "";
 
   // An inline message rather than alert(): a browser can offer to suppress
   // repeat dialogs, and once it does the field just silently reverts to the
@@ -91,11 +93,18 @@ void (async () => {
   // immediately -- the background clears live badges as the key flips off.
   const badgeToggle = document.querySelector("#show-badge");
   if (badgeToggle instanceof HTMLInputElement) {
-    badgeToggle.checked = storedBadgeEnabled(
-      await chrome.storage.sync.get("showBadge"),
-    );
     badgeToggle.addEventListener("change", () => {
       void chrome.storage.sync.set({ showBadge: badgeToggle.checked });
     });
+  }
+
+  const storedValue =
+    storedInstance(await chrome.storage.sync.get("instance")) ?? "";
+  displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
+  instanceInput.value = displayedValue;
+  if (badgeToggle instanceof HTMLInputElement) {
+    badgeToggle.checked = storedBadgeEnabled(
+      await chrome.storage.sync.get("showBadge"),
+    );
   }
 })();
