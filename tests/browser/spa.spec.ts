@@ -1685,6 +1685,27 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   ).toBe("0");
 });
 
+// `o` carries focus with the pane switch (#816): on a narrow screen the
+// switch display:none's the pane holding focus, which would otherwise drop
+// it to <body> and make the second `o` unreachable.
+test("o moves focus between the article list and the reader pane", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+  await selectSource(page);
+  await articleOptions(page).first().focus();
+
+  await page.keyboard.press("o");
+  const reader = page.getByRole("article", { name: "Reader" });
+  await expect(reader).toBeVisible();
+  await expect(reader).toBeFocused();
+
+  await page.keyboard.press("o");
+  await expect(articleOptions(page).first()).toBeFocused();
+});
+
 // Article rows keep the platform's own context menu, on every pointer. It is
 // where "open in a background tab" lives -- the only way to get one on a phone,
 // which has no middle click and where window.open always foregrounds -- along
