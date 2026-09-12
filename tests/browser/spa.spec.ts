@@ -293,6 +293,8 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // #817: the dialog's accessible name is its visible prompt.
+  await expect(dialog).toHaveAccessibleName("Folder name");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
   await dialog.getByRole("button", { name: "OK" }).click();
@@ -318,6 +320,8 @@ test("cancelling the delete confirmation keeps the source", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Delete "Tech News"?');
+  // #817: the accessible name identifies the item being deleted.
+  await expect(dialog).toHaveAccessibleName('Delete "Tech News"?');
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await expect(dialog).toHaveCount(0);
@@ -1747,6 +1751,8 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   await page.keyboard.press("?");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // #817: the dialog is named by its visible heading.
+  await expect(dialog).toHaveAccessibleName("Keyboard shortcuts");
   await expect(
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();
