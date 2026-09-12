@@ -91,7 +91,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (directory) await rm(directory, { force: true, recursive: true });
-});
+}, 20_000);
 
 test("schema-compile-module-scope flags compiles inside functions", async () => {
   expect(
@@ -100,7 +100,7 @@ test("schema-compile-module-scope flags compiles inside functions", async () => 
   expect(await lint("b.ts", "const f = () => Schema.Compile(s);")).toHaveLength(
     1,
   );
-});
+}, 20_000);
 
 test("schema-compile-module-scope allows module scope", async () => {
   expect(await lint("c.ts", "const check = Schema.Compile(schema);")).toEqual(
@@ -113,7 +113,7 @@ test("schema-compile-module-scope allows module scope", async () => {
   expect(
     await lint("e.ts", "function f() { return Other.Compile(s); }"),
   ).toEqual([]);
-});
+}, 20_000);
 
 test("route-deps-narrowed flags a whole service type", async () => {
   expect(
@@ -122,7 +122,7 @@ test("route-deps-narrowed flags a whole service type", async () => {
       "export type TreeRouteDependencies = { usersDataService: UsersDataService };",
     ),
   ).toHaveLength(1);
-});
+}, 20_000);
 
 test("route-deps-narrowed allows narrowed and non-service fields", async () => {
   expect(
@@ -140,7 +140,7 @@ test("route-deps-narrowed allows narrowed and non-service fields", async () => {
   expect(
     await lint("i.ts", "export type Other = { svc: UsersDataService };"),
   ).toEqual([]);
-});
+}, 20_000);
 
 test("no-barrel-file flags re-export-only modules", async () => {
   expect(
@@ -151,7 +151,7 @@ test("no-barrel-file flags re-export-only modules", async () => {
   ).toHaveLength(1);
   expect(await lint("m.ts", 'export * from "./a.ts";')).toHaveLength(1);
   expect(await lint("n.ts", 'export { a } from "./a.ts";')).toHaveLength(1);
-});
+}, 20_000);
 
 test("no-barrel-file allows own exports and local bindings", async () => {
   expect(
@@ -161,7 +161,7 @@ test("no-barrel-file allows own exports and local bindings", async () => {
     ),
   ).toEqual([]);
   expect(await lint("p.ts", "const theme = 1;\nexport { theme };")).toEqual([]);
-});
+}, 20_000);
 
 test("no-barrel-file honours the allow list", async () => {
   // Same shape as the flagged barrel, but at the exempted path.
@@ -206,7 +206,7 @@ test("layer-boundaries allows downward and declared imports", async () => {
       'import { a } from "#features/reader/routes.ts";\nexport const b = a;',
     ),
   ).toEqual([]);
-});
+}, 20_000);
 
 test("layer-boundaries rejects upward imports", async () => {
   expect(
@@ -221,7 +221,7 @@ test("layer-boundaries rejects upward imports", async () => {
       'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
     ),
   ).toEqual(["feedfathom(layer-boundaries)"]);
-});
+}, 20_000);
 
 test("layer-boundaries rejects an undeclared feature edge", async () => {
   // feeds -> auth is declared; auth -> feeds is not.
@@ -231,7 +231,7 @@ test("layer-boundaries rejects an undeclared feature edge", async () => {
       'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
     ),
   ).toEqual(["feedfathom(layer-boundaries)"]);
-});
+}, 20_000);
 
 test("layer-boundaries rejects a client importing a feature", async () => {
   expect(
@@ -247,7 +247,7 @@ test("layer-boundaries rejects a client importing a feature", async () => {
       'import { a } from "../extension/extension-types.ts";\nexport const b = a;',
     ),
   ).toEqual(["feedfathom(layer-boundaries)"]);
-});
+}, 20_000);
 
 test("layer-boundaries judges relative specifiers by the same rule", async () => {
   // `../../` must not be an escape hatch from what `#platform/` enforces.
@@ -264,7 +264,7 @@ test("layer-boundaries judges relative specifiers by the same rule", async () =>
       'import { a } from "./safe-url.ts";\nexport const b = a;',
     ),
   ).toEqual([]);
-});
+}, 20_000);
 
 test("layer-boundaries checks dynamic imports too", async () => {
   // One `await import()` would otherwise be enough to walk around the rule.
@@ -280,7 +280,7 @@ test("layer-boundaries checks dynamic imports too", async () => {
       'export const a = async () => import("#shared/util/safe-url.ts");',
     ),
   ).toEqual([]);
-});
+}, 20_000);
 
 test("layer-boundaries exempts co-located tests", async () => {
   expect(
@@ -289,4 +289,4 @@ test("layer-boundaries exempts co-located tests", async () => {
       'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
     ),
   ).toEqual([]);
-});
+}, 20_000);

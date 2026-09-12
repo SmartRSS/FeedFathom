@@ -7,6 +7,7 @@ import {
 } from "#platform/runtime.ts";
 import {
   feedParser,
+  sourceEnqueuer,
   sourcesDataService,
   userSourcesDataService,
   websubStateService,
@@ -81,6 +82,25 @@ export class MainWorker {
     await this.worker?.close();
   }
 
+  // Everything that arrived while this job held the source's id -- pushes
+  // the hub was already answered for, refresh clicks still spinning -- folds
+  // into exactly one follow-up refresh, so the content those requests were
+  // about never waits for the next poll (#813). The job's id is free by the
+  // time this runs: completion or a non-deferred failure has erased it, so
+  // the follow-up add cannot be deduped away.
+  private readonly runPendingRefresh = async (source: {
+    id: number;
+    url: string;
+  }) => {
+    const pending = await sourceEnqueuer.takePendingRefresh(source.id);
+    if (!pending) return;
+    await sourceEnqueuer.enqueueSource(
+      { id: source.id, url: source.url },
+      "manual",
+      pending.skipCache,
+    );
+  };
+
   private async gatherParseSourceJobs() {
     const sources = await sourcesDataService.getSourcesToProcess();
 
@@ -149,13 +169,25 @@ export class MainWorker {
           if (!source) {
             throw new Error(`Source with ID ${input.data.id} not found`);
           }
-          await feedParser.parseSource({
-            ...source,
-            ...(input.data.skipCache === undefined
-              ? {}
-              : { skipCache: input.data.skipCache }),
-            trigger: input.data.trigger ?? "poll",
-          });
+          try {
+            await feedParser.parseSource({
+              ...source,
+              ...(input.data.skipCache === undefined
+                ? {}
+                : { skipCache: input.data.skipCache }),
+              trigger: input.data.trigger ?? "poll",
+            });
+          } catch (cause) {
+            // A deferral keeps this job's id -- it runs again later, and a
+            // request that arrives meanwhile reaches it through the queued
+            // payload. Anything else ends the job for good, so it owes the
+            // same follow-up a success owes.
+            if (!isHttpDeferredError(cause)) {
+              await this.runPendingRefresh(source);
+            }
+            throw cause;
+          }
+          await this.runPendingRefresh(source);
           break;
         }
 
