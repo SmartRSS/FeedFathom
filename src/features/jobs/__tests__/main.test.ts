@@ -185,8 +185,8 @@ async function mockWorkerServices(
   }));
   await mock.module("#features/feeds/services.ts", () => ({
     feedParser,
-    sourcesDataService,
     sourceEnqueuer,
+    sourcesDataService,
     userSourcesDataService,
     websubStateService,
   }));
@@ -394,9 +394,7 @@ test("folds requests that arrived mid-run into one follow-up refresh", async () 
     processor = value;
     return noopWorkerFactory(value, options);
   };
-  const followedUp: Parameters<
-    SourceEnqueuer["enqueueSource"]
-  >[] = [];
+  const followedUp: Parameters<SourceEnqueuer["enqueueSource"]>[] = [];
   const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },

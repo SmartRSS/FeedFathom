@@ -88,7 +88,10 @@ export class MainWorker {
   // about never waits for the next poll (#813). The job's id is free by the
   // time this runs: completion or a non-deferred failure has erased it, so
   // the follow-up add cannot be deduped away.
-  private readonly runPendingRefresh = async (source: { id: number; url: string }) => {
+  private readonly runPendingRefresh = async (source: {
+    id: number;
+    url: string;
+  }) => {
     const pending = await sourceEnqueuer.takePendingRefresh(source.id);
     if (!pending) return;
     await sourceEnqueuer.enqueueSource(

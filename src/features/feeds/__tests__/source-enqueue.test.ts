@@ -24,35 +24,35 @@ describe("SourceEnqueuer", () => {
       async get(key) {
         return store.get(key) ?? null;
       },
-      async set(key, value, mode) {
-        sets.push([key, value, mode]);
-        if (mode === "NX" && store.has(key)) return null;
-        store.set(key, value);
-        return "OK";
-      },
       async getdel(key) {
         dels.push(key);
         const value = store.get(key) ?? null;
         store.delete(key);
         return value;
       },
+      async set(key, value, mode) {
+        sets.push([key, value, mode]);
+        if (mode === "NX" && store.has(key)) return null;
+        store.set(key, value);
+        return "OK";
+      },
     };
-    return { redis, sets, dels };
+    return { dels, redis, sets };
   };
 
   const fakeQueue = (holder: SourceParseJobHandle | null = null) => {
     const adds: unknown[] = [];
     const queue: SourceParseQueue = {
-      async getJob(id) {
-        expect(id).toBe(jobId);
-        return holder;
-      },
       async add(name, data, options) {
         adds.push([name, data, options]);
         return undefined;
       },
+      async getJob(id) {
+        expect(id).toBe(jobId);
+        return holder;
+      },
     };
-    return { queue, adds };
+    return { adds, queue };
   };
 
   const holderFor = (
