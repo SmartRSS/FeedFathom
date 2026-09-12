@@ -2266,10 +2266,6 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   expect(body).not.toContain("abc123@mail.example.com");
 });
 
-// insertTree creates a folder unconditionally; the only thing that makes
-// re-importing an export a no-op is opml_imports deduping on a hash of the
-// file's bytes. Two exports of an unchanged tree therefore have to be
-// byte-identical, whatever order the queries happened to return rows in.
 test("exports the same bytes whatever order the services return rows in", async () => {
   const folders = [
     {

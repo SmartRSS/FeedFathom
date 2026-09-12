@@ -80,12 +80,7 @@ function subscriptionTree(
       foldered.set(source.parentId, siblings);
     }
   }
-  // Sorted here rather than trusted from the query. Re-importing an export is
-  // a no-op only because opml_imports dedupes on a hash of the file's bytes --
-  // insertTree creates a folder unconditionally, so a file that hashes
-  // differently duplicates every folder in the tree. Two exports of an
-  // unchanged tree therefore have to be byte-identical, which an ORDER BY
-  // nobody has to remember is the way to get.
+  // Stable ordering keeps exports comparable even if query order changes.
   return [
     ...folders.toSorted(byName).map((folder) => ({
       children: (foldered.get(folder.id) ?? []).toSorted(byName),
