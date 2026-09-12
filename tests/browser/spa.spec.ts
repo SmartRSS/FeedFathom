@@ -452,6 +452,40 @@ test("searches across subscriptions and says when nothing matches", async ({
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
 });
 
+// A search response that lands after the field was cleared must not
+// repopulate the list (#815) -- with no source selected, clearing empties the
+// list rather than reloading a feed's articles.
+test("a late response to a cleared search leaves the list empty", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  // Registered after the fixture, so this handler runs first: search
+  // requests hold until released, everything else falls through.
+  let releaseSearch: () => void = () => {};
+  const searchReleased = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  await page.route("**/api/articles", async (route) => {
+    const query: string | undefined = route.request().postDataJSON().query;
+    if (!query) return route.fallback();
+    await searchReleased;
+    return route.fallback();
+  });
+  await page.goto("/");
+
+  const search = page.getByLabel("Search articles");
+  await search.fill("subscribed");
+  await search.press("Enter");
+  await search.fill("");
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+
+  releaseSearch();
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
+  ).toHaveCount(0);
+});
+
 // The article list is keyset-paged and the scroll position is what asks for
 // the next page, so a list too short to scroll can never ask. Deleting a whole
 // page is the way in: select all, delete, and the pane would sit empty with
@@ -1649,6 +1683,27 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
       document.activeElement?.getAttribute("data-index"),
     ),
   ).toBe("0");
+});
+
+// `o` carries focus with the pane switch (#816): on a narrow screen the
+// switch display:none's the pane holding focus, which would otherwise drop
+// it to <body> and make the second `o` unreachable.
+test("o moves focus between the article list and the reader pane", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+  await selectSource(page);
+  await articleOptions(page).first().focus();
+
+  await page.keyboard.press("o");
+  const reader = page.getByRole("article", { name: "Reader" });
+  await expect(reader).toBeVisible();
+  await expect(reader).toBeFocused();
+
+  await page.keyboard.press("o");
+  await expect(articleOptions(page).first()).toBeFocused();
 });
 
 // Article rows keep the platform's own context menu, on every pointer. It is

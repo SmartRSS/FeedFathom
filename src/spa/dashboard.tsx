@@ -368,6 +368,7 @@ export function Dashboard(props: {
   let articleAbortController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
+  let readerPaneRef: HTMLElement | undefined;
   const disableReader = (message: string) => {
     articleRequestGuard.start();
     setReaderAvailable(false);
@@ -790,9 +791,25 @@ export function Dashboard(props: {
   async function exitSearch() {
     if (!activeSearch()) return;
     setActiveSearch("");
+    // Leaving search asks a different question than the request already in
+    // flight, so it gets the same supersession treatment select() and
+    // runSearch() give theirs. Without it, a response that lands after the
+    // clear repopulates a list the user just emptied (#815) -- reachable
+    // whenever no feed is selected, since that is the one branch below that
+    // neither aborts nor starts a new guard token.
+    selectionGuard.start();
+    articleAbortController?.abort();
     const node = selectedNode();
     if (node) await select(node);
-    else setArticles([]);
+    else {
+      // No replacement fetch starts here, and the aborted one will not clear
+      // the loading signal its superseded token now hides, so the empty
+      // state behind the cleared list would never appear.
+      setArticlesLoading(false);
+      moreArticles = false;
+      articleCursor = undefined;
+      setArticles([]);
+    }
   }
   // Changing the filter is a different question about the same selection, so
   // it re-runs select() rather than filtering what is already loaded: only one
@@ -1434,12 +1451,16 @@ export function Dashboard(props: {
         // The reader pane has no separate close affordance -- it always
         // shows whatever the single selection opened -- so "toggle" is the
         // pane toggle: list -> reader, reader -> back to the list row, the
-        // same journey ArrowLeft's focus hand-off already takes.
+        // same journey ArrowLeft's focus hand-off already takes. Opening
+        // moves focus with the pane (#816): on a narrow screen the pane
+        // switch display:none's the list holding focus, which would drop it
+        // to <body> and strand the shortcut there.
         if (props.pane() === "reader") {
           props.focusPane("articles");
           focusArticleAt(focusedIndex());
         } else {
           props.focusPane("reader");
+          readerPaneRef?.focus({ preventScroll: true });
         }
       } else if (shortcut === "openOriginal") {
         event.preventDefault();
@@ -1453,6 +1474,18 @@ export function Dashboard(props: {
         void helpDialog();
       }
     }
+  }
+  // The reader pane's half of the `o` toggle (#816). Once opening has moved
+  // focus here -- necessarily, on a narrow screen, where the list is
+  // display:none -- this is the only place the key can be heard. Everything
+  // else keeps its browser meaning, so the pane scrolls from the keyboard.
+  function handleReaderKeys(event: KeyboardEvent) {
+    if (mapArticleShortcut(event) !== "open") return;
+    if (isTextEntry(event.target)) return;
+    if (document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    props.focusPane("articles");
+    focusArticleAt(focusedIndex());
   }
   return (
     <main class="dashboard">
@@ -1848,6 +1881,9 @@ export function Dashboard(props: {
           aria-label="Reader"
           class="dashboard-pane reader-pane"
           classList={{ "focused-pane": props.pane() === "reader" }}
+          onKeyDown={handleReaderKeys}
+          ref={readerPaneRef}
+          tabIndex={-1}
         >
           <div class="toolbar">
             <BackButton backPane={props.backPane} />
