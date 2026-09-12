@@ -65,6 +65,15 @@ describe("feed body encoding detection", () => {
     );
   });
 
+  test.each([
+    "application/rss+xml; charset=windows-1252",
+    'application/rss+xml; charset="windows-1252"',
+    'application/rss+xml; CHARSET="windows-1252" ; other=value',
+  ])("decodes the declared HTTP charset: %s", (contentType) => {
+    const bytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
+    expect(decodeFeedBody(bytes.buffer, contentType)).toBe("café");
+  });
+
   test("falls back to the XML prolog's declared encoding", () => {
     const buffer = new TextEncoder().encode(
       '<?xml version="1.0" encoding="ISO-8859-1"?><rss></rss>',
