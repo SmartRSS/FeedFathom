@@ -92,9 +92,10 @@ export class SourceEnqueuer {
     if (holder && state === "active") {
       // The worker is mid-run holding this id, so BullMQ dedupes the add
       // away -- and the caller (a hub, a user's refresh button) has already
-      // been answered. Record the request instead: when the run finishes,
-      // the worker takes everything that accumulated and enqueues one
-      // follow-up refresh for the source (#813).
+      // been answered. Record the request instead: the run takes everything
+      // that accumulated when it ends and parses the source once more itself
+      // (#813). It cannot come back through here to do that -- the id is
+      // still active until its processor returns.
       await this.mergePendingRefresh(source.id, skipCache);
       return;
     }

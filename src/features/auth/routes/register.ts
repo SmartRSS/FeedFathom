@@ -148,14 +148,19 @@ export function createRegisterRoute() {
                 const activationTokenExpiresAt = new Date(
                   Date.now() + activationLifetimeMs,
                 );
-                await mailSender.sendActivationEmail(
-                  existing.email,
-                  activationToken,
-                );
+                // Stored before it is sent, unlike a first registration
+                // where a failed write leaves nothing to be locked out of:
+                // here the mail would land on a token the row never took,
+                // putting the address back in the dead end it just asked to
+                // leave -- one throttle slot poorer.
                 await usersDataService.refreshActivationToken(
                   existing.id,
                   activationToken,
                   activationTokenExpiresAt,
+                );
+                await mailSender.sendActivationEmail(
+                  existing.email,
+                  activationToken,
                 );
               }
             } else {
