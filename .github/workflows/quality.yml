@@ -17,6 +17,11 @@ jobs:
   lint:
     name: Lint
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    # Capped well above the real runtime (seconds, not minutes). A runner that
+    # hangs instead of failing used to sit at GitHub's 6-hour default, and
+    # docker-build's await_turn holds every later staging run behind it, so a
+    # single stuck job stalled the whole release queue for the afternoon.
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -30,6 +35,7 @@ jobs:
   compile:
     name: Compile every deployable target
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -43,6 +49,7 @@ jobs:
   unit:
     name: Unit and migration tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test
       MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test
@@ -89,6 +96,7 @@ jobs:
   browser:
     name: Browser tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
