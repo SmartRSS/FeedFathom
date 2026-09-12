@@ -207,6 +207,11 @@ export function DialogHost() {
       {(current) => (
         <dialog
           class="app-dialog"
+          // The dialog's accessible name comes from what is already visible:
+          // the cheat sheet's heading, or the prompt/message text (#817).
+          aria-labelledby={
+            current().kind === "help" ? "app-dialog-title" : "app-dialog-prompt"
+          }
           // Esc fires cancel before close; resolving via cancel() keeps the
           // same false/null contract as the Cancel button.
           onCancel={(event) => {
@@ -237,7 +242,7 @@ export function DialogHost() {
               when={helpRequest()}
               fallback={
                 <label>
-                  {text()}
+                  <span id="app-dialog-prompt">{text()}</span>
                   <Show when={promptRequest()}>
                     {(prompt) => (
                       <input
@@ -251,7 +256,9 @@ export function DialogHost() {
                 </label>
               }
             >
-              <h2 class="app-dialog-title">Keyboard shortcuts</h2>
+              <h2 class="app-dialog-title" id="app-dialog-title">
+                Keyboard shortcuts
+              </h2>
               <Shortcuts />
             </Show>
             <div class="app-dialog-actions">
