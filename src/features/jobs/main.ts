@@ -9,6 +9,7 @@ import {
   feedParser,
   sourceEnqueuer,
   sourcesDataService,
+  userSourcesDataService,
   websubStateService,
 } from "#features/feeds/services.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
@@ -120,12 +121,16 @@ export class MainWorker {
 
       switch (input.name) {
         case JobName.Cleanup: {
-          await cleanupOrphanedData(
+          const prunedSourceIds = await cleanupOrphanedData(
             drizzleConnection,
             appConfig.USER_DORMANT_AFTER_DAYS,
             appConfig.ARTICLE_STALE_AFTER_DAYS,
             appConfig.USER_EXPIRY_DAYS,
           );
+          // The prune bypasses the data services, so the unread badge of a
+          // source it emptied would keep counting deleted articles until an
+          // unrelated event recounted it (#812).
+          await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
           break;
         }
 

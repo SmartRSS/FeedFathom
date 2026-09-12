@@ -3,6 +3,9 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
+import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "./disposable-database-url.ts";
 
@@ -111,6 +114,71 @@ test("only prunes articles the feed has really stopped listing", async () => {
     expect(rows.map((row) => row.id)).not.toContain(goneForGood);
     expect(rows.map((row) => row.id)).not.toContain(prunableNewsletter);
     expect(rows.map((row) => row.id)).not.toContain(hoardedNewsletter);
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
+
+// Cleanup deletes article rows straight through SQL, so the unread badge a
+// subscriber sees is stale the moment the prune commits (#812): an unread
+// newsletter aged past retention used to keep its count until some
+// unrelated event recounted the source. cleanupOrphanedData reports the
+// sources it shrank; the recompose of the counter -- the same call the
+// worker makes -- must bring the badge back in step with the list.
+test("reports pruned sources so their unread totals can be recounted", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const userSourcesDataService = new UserSourcesDataService(
+    drizzleConnection,
+    new FoldersDataService(drizzleConnection),
+    new SourcesDataService(drizzleConnection),
+  );
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+
+    const [user] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password)
+      VALUES ('reader@example.test', 'reader', 'x') RETURNING id`;
+    const [mailbox] = await client<{ id: number }[]>`
+      INSERT INTO sources (url, home_url, kind, last_success, not_before)
+      VALUES ('news@example.test', 'https://example.test', 'email', NOW(),
+              NOW() + INTERVAL '5 minutes')
+      RETURNING id`;
+    // Subscribed well before both deliveries, so both are visible to the
+    // subscription and both sit in the unread count before the prune.
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name, unread_count, created_at)
+      VALUES (${user!.id}, ${mailbox!.id}, 'sub', 2, NOW() - INTERVAL '100 days')`;
+    for (const guid of ["fresh", "stale"]) {
+      // eslint-disable-next-line no-await-in-loop -- two fixture rows.
+      await client`
+        INSERT INTO articles (source_id, guid, author, title, url, content, published_at, last_seen_in_feed_at)
+        VALUES (${mailbox!.id}, ${guid}, 'a', 't', '', 'body', NOW(),
+                NOW() - CAST(${guid === "fresh" ? "30 days" : "91 days"} AS interval))`;
+    }
+
+    const prunedSourceIds = await cleanupOrphanedData(
+      drizzleConnection,
+      365,
+      365,
+      730,
+    );
+    expect(prunedSourceIds).toEqual([mailbox!.id]);
+
+    const [stale] = await client<{ unread: number }[]>`
+      SELECT unread_count AS unread FROM user_sources WHERE source_id = ${mailbox!.id}`;
+    expect(stale!.unread).toBe(2);
+
+    await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
+    const [recounted] = await client<{ unread: number }[]>`
+      SELECT unread_count AS unread FROM user_sources WHERE source_id = ${mailbox!.id}`;
+    expect(recounted!.unread).toBe(1);
   } finally {
     await drizzleConnection.$client.close();
     await client.close();

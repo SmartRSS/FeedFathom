@@ -3,6 +3,7 @@ import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import type { HubPoster } from "#features/feeds/websub.ts";
 import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
@@ -99,7 +100,11 @@ const idleFaviconRefresher = {
   async refreshFavicon() {},
 };
 
-const idleCleanupOrphanedData = async () => {};
+const idleCleanupOrphanedData = async () => [];
+
+const idleUserSources = {
+  async recomputeUnreadCounts() {},
+};
 
 const idleSourceEnqueuer = {
   async enqueueSource() {},
@@ -148,6 +153,11 @@ type MainWorkerWebSubState = Pick<
   "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
 >;
 
+type MainWorkerUserSources = Pick<
+  UserSourcesDataService,
+  "recomputeUnreadCounts"
+>;
+
 const actualBullmq = { ...(await import("bullmq")) };
 async function mockWorkerServices(
   appConfig: MainWorkerConfig,
@@ -156,7 +166,8 @@ async function mockWorkerServices(
   faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
   sourcesDataService: MainWorkerSources,
   websubStateService: MainWorkerWebSubState,
-  cleanupOrphanedData: () => Promise<void>,
+  userSourcesDataService: MainWorkerUserSources,
+  cleanupOrphanedData: () => Promise<number[]>,
   jobFailuresDataService: Pick<JobFailuresDataService, "record">,
   createWorker: MainWorkerFactory,
   hubPoster: HubPoster,
@@ -176,6 +187,7 @@ async function mockWorkerServices(
     feedParser,
     sourcesDataService,
     sourceEnqueuer,
+    userSourcesDataService,
     websubStateService,
   }));
   await mock.module("#features/jobs/services.ts", () => ({
@@ -215,6 +227,7 @@ await mockWorkerServices(
   idleFaviconRefresher,
   idleSources,
   idleSources,
+  idleUserSources,
   idleCleanupOrphanedData,
   idleJobFailures,
   noopWorkerFactory,
@@ -228,7 +241,7 @@ async function createMainWorker(
   faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
   sourcesDataService: MainWorkerSources,
   websubStateService: MainWorkerWebSubState,
-  cleanupOrphanedData: () => Promise<void>,
+  cleanupOrphanedData: () => Promise<number[]>,
   jobFailuresDataService: Pick<JobFailuresDataService, "record">,
   createWorker: MainWorkerFactory,
   hubPoster: HubPoster,
@@ -236,6 +249,7 @@ async function createMainWorker(
     SourceEnqueuer,
     "enqueueSource" | "takePendingRefresh"
   > = idleSourceEnqueuer,
+  userSourcesDataService: MainWorkerUserSources = idleUserSources,
 ) {
   await mockWorkerServices(
     appConfig,
@@ -244,6 +258,7 @@ async function createMainWorker(
     faviconRefresher,
     sourcesDataService,
     websubStateService,
+    userSourcesDataService,
     cleanupOrphanedData,
     jobFailuresDataService,
     createWorker,
@@ -620,6 +635,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
     },
     async () => {
       downstreamCalls.push("cleanup");
+      return [];
     },
     idleJobFailures,
     createWorker,
@@ -722,6 +738,45 @@ test("records a durable failure for non-ParseSource job errors", async () => {
   });
 
   expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
+});
+
+// The prune bypasses the services that own the unread badge, so the worker
+// has to hand every source cleanup reports to the recompute itself (#812).
+test("cleanup recounts the unread totals of every pruned source", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recounted: number[][] = [];
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = await createMainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    idleParser,
+    idleFaviconRefresher,
+    idleSources,
+    idleSources,
+    async () => [7, 9],
+    idleJobFailures,
+    createWorker,
+    idleHubPoster,
+    idleSourceEnqueuer,
+    {
+      async recomputeUnreadCounts(sourceIds) {
+        recounted.push(sourceIds);
+      },
+    },
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await processor({
+    data: {},
+    async moveToDelayed() {},
+    name: JobName.Cleanup,
+  });
+
+  expect(recounted).toEqual([[7, 9]]);
 });
 
 test("a failure while recording a job failure doesn't itself fail the job", async () => {
