@@ -85,7 +85,11 @@ type PasswordResetRouteDependencies = {
   mailSender: Pick<MailSender, "sendPasswordResetEmail">;
   password: { hash(password: string): Promise<string> };
   usersDataService: {
-    completePasswordReset(userId: number, passwordHash: string): Promise<void>;
+    completePasswordReset(
+      userId: number,
+      tokenHash: string,
+      passwordHash: string,
+    ): Promise<boolean>;
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
     findUserByPasswordResetToken(
       tokenHash: string,
@@ -2753,7 +2757,11 @@ test("spends a reset token once and refuses an expired one", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "key";
   dependencies.config.MAILJET_API_SECRET = "secret";
-  const completed: { passwordHash: string; userId: number }[] = [];
+  const completed: {
+    passwordHash: string;
+    tokenHash: string;
+    userId: number;
+  }[] = [];
   dependencies.usersDataService.findUserByPasswordResetToken = async (
     tokenHash,
   ) => {
@@ -2769,9 +2777,11 @@ test("spends a reset token once and refuses an expired one", async () => {
   };
   dependencies.usersDataService.completePasswordReset = async (
     userId,
+    tokenHash,
     passwordHash,
   ) => {
-    completed.push({ passwordHash, userId });
+    completed.push({ passwordHash, tokenHash, userId });
+    return true;
   };
   dependencies.password.hash = async (value) => `hashed:${value}`;
   const app = await appFor(dependencies);
@@ -2792,8 +2802,41 @@ test("spends a reset token once and refuses an expired one", async () => {
   expect(expired.status).toBe(400);
   expect(mismatched.status).toBe(422);
   expect(completed).toEqual([
-    { passwordHash: "hashed:a-new-password", userId: account.id },
+    {
+      passwordHash: "hashed:a-new-password",
+      tokenHash: createHash("sha256").update("good").digest("hex"),
+      userId: account.id,
+    },
   ]);
+});
+
+// The spend must be part of the write itself (#809): a double that answers
+// false stands in for the transaction losing the race, and the route has to
+// answer the loser with the same refusal an unknown token gets.
+test("a confirmation that loses the race for its link is refused", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.findUserByPasswordResetToken = async (
+    tokenHash,
+  ) => ({
+    ...account,
+    passwordResetTokenExpiresAt: new Date(Date.now() + 60_000),
+    passwordResetTokenHash: tokenHash,
+  });
+  dependencies.usersDataService.completePasswordReset = async () => false;
+  dependencies.password.hash = async (value) => `hashed:${value}`;
+  const app = await appFor(dependencies);
+
+  const rejected = await app.handle(
+    new Request("http://localhost/api/password-reset/confirm", {
+      body: JSON.stringify({ password1: "one", password2: "one", token: "t" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toEqual({
+    error: "This reset link is no longer valid.",
+  });
 });
 
 test("has no reset flow at all when outgoing mail is not configured", async () => {
