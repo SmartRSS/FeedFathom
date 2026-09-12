@@ -37,7 +37,7 @@ type PublicAuthRouteDependencies = {
   ) => ReturnType<typeof globalThis.fetch>;
   mailSender: Pick<
     MailSender,
-    "sendActivationEmail" | "sendPasswordResetEmail"
+    "sendAccountExistsEmail" | "sendActivationEmail" | "sendPasswordResetEmail"
   >;
   password: Password;
   secureCookies: boolean;
@@ -94,6 +94,11 @@ type PasswordResetRouteDependencies = {
     findUserByPasswordResetToken(
       tokenHash: string,
     ): ReturnType<UsersDataService["findUserByPasswordResetToken"]>;
+    refreshActivationToken(
+      userId: number,
+      token: string,
+      expiresAt: Date,
+    ): Promise<void>;
     startPasswordReset(
       userId: number,
       tokenHash: string,
@@ -317,6 +322,7 @@ function createDependencies(): ServerFakes {
       return appConfig.MAIL_ENABLED;
     },
     mailSender: {
+      async sendAccountExistsEmail() {},
       async sendActivationEmail() {},
       async sendPasswordResetEmail() {},
     },
@@ -413,6 +419,9 @@ function createDependencies(): ServerFakes {
       },
       async listSessions() {
         return [];
+      },
+      async refreshActivationToken() {
+        return unexpected("usersDataService.refreshActivationToken");
       },
       async refreshSession() {},
       async startPasswordReset() {
@@ -2394,8 +2403,6 @@ test("creates active users without registration integrations", async () => {
 test.each([
   ["active", false],
   ["inactive", false],
-  ["active", true],
-  ["inactive", true],
 ] as const)(
   "returns generic success without mutating an existing %s account when Mailjet=%s",
   async (status, useMailjet) => {
@@ -2917,6 +2924,108 @@ test("activates valid tokens but rejects expired tokens", async () => {
   expect(blank.status).toBe(422);
   expect(activated).toEqual([1]);
   expect(tokenLookups).toEqual(["valid", "expired"]);
+});
+
+// Re-registering over a half-made account used to be a silent no-op, which
+// left an expired activation link with no way back in (#810). The route
+// still answers success either way -- the mailbox is what changes.
+test("registering an address with an expired link sends a fresh one", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  const refreshed: { expiresAt: Date; token: string; userId: number }[] = [];
+  const activationSends: string[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    activationToken: "old-token",
+    activationTokenExpiresAt: new Date(Date.now() - 60_000),
+    email,
+    status: "inactive" as const,
+  });
+  dependencies.usersDataService.refreshActivationToken = async (
+    userId,
+    token,
+    expiresAt,
+  ) => {
+    refreshed.push({ expiresAt, token, userId });
+  };
+  dependencies.mailSender.sendActivationEmail = async (email) => {
+    activationSends.push(email);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/register", {
+      body: JSON.stringify({
+        email: "pending@example.com",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Pending user",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true });
+  expect(activationSends).toEqual(["pending@example.com"]);
+  expect(refreshed).toHaveLength(1);
+  expect(refreshed[0]!.userId).toBe(account.id);
+  // A fresh link promises a day, like the first one did.
+  expect(refreshed[0]!.expiresAt.getTime()).toBeGreaterThan(
+    Date.now() + 23 * 60 * 60 * 1_000,
+  );
+});
+
+// An active account is not a half-made one, so no new activation -- the
+// notice carries a reset link instead, the way in that never assumes the
+// password still works.
+test("registering an active address sends the account-exists reset notice", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  const resets: { expiresAt: Date; tokenHash: string; userId: number }[] = [];
+  const notices: string[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    email,
+  });
+  dependencies.usersDataService.startPasswordReset = async (
+    userId,
+    tokenHash,
+    expiresAt,
+  ) => {
+    resets.push({ expiresAt, tokenHash, userId });
+  };
+  dependencies.mailSender.sendAccountExistsEmail = async (email) => {
+    notices.push(email);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/register", {
+      body: JSON.stringify({
+        email: "active@example.com",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Active user",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true });
+  expect(notices).toEqual(["active@example.com"]);
+  expect(resets).toHaveLength(1);
+  expect(resets[0]!.userId).toBe(account.id);
+  expect(resets[0]!.expiresAt.getTime()).toBeGreaterThan(
+    Date.now() + 55 * 60_000,
+  );
+  // Only the digest is stored, never the token itself.
+  expect(resets[0]!.tokenHash).toMatch(/^[0-9a-f]{64}$/);
 });
 
 // Every route in the admin group, not just the one that used to be checked

@@ -5,7 +5,7 @@ import {
   usersDataService,
 } from "#features/auth/services.ts";
 import { config } from "#platform/config.ts";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { Value } from "typebox/value";
 import {
@@ -14,14 +14,9 @@ import {
 } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
+import { digestToken } from "#shared/util/token-digest.ts";
 
 const tokenLifetimeMs = 60 * 60 * 1_000;
-
-// Only the digest is stored, so what arrives in a link has to be reduced the
-// same way to look it up. SHA-256 unsalted and unstretched: the token is 122
-// random bits from randomUUID, so there is no dictionary to defend against.
-const digest = (token: string) =>
-  createHash("sha256").update(token).digest("hex");
 
 export function createPasswordResetRoute() {
   // Gated on outgoing mail the same way public registration is: with no way
@@ -66,7 +61,7 @@ export function createPasswordResetRoute() {
         const token = randomUUID();
         await usersDataService.startPasswordReset(
           user.id,
-          digest(token),
+          digestToken(token),
           new Date(Date.now() + tokenLifetimeMs),
         );
         // Not awaited. Mailjet is a round trip to another host, and only an
@@ -96,7 +91,7 @@ export function createPasswordResetRoute() {
         if (!mailConfigured) return invalid;
 
         const user = await usersDataService.findUserByPasswordResetToken(
-          digest(parsed.token),
+          digestToken(parsed.token),
         );
         if (
           user?.status !== "active" ||
@@ -114,7 +109,7 @@ export function createPasswordResetRoute() {
         // (#809) -- never two passwords with the last write deciding.
         const spent = await usersDataService.completePasswordReset(
           user.id,
-          digest(parsed.token),
+          digestToken(parsed.token),
           await password.hash(parsed.password1),
         );
         if (!spent) return invalid;
