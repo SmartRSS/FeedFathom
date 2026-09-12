@@ -177,6 +177,13 @@ main:focus {
   outline: none;
 }
 
+/* The reader pane is a focus target for the `o` round trip (#816), not a
+   control -- the same location marker `main:focus` already is, so it stays
+   unoutlined and the reader content reads as the focused surface. */
+.reader-pane:focus {
+  outline: none;
+}
+
 .skip-link {
   position: absolute;
   top: -3rem;
