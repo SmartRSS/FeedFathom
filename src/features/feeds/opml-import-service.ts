@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "#shared/types/opml-types.ts";
 import type * as schema from "#platform/db/schema.ts";
@@ -31,14 +31,10 @@ export class OpmlImportService {
         await transaction.execute(
           sql`SELECT pg_advisory_xact_lock(hashtextextended(${`feedfathom:opml:${userId}`}, 0))`,
         );
-        const imported = (
-          await transaction
-            .insert(opmlImports)
-            .values({ contentHash, userId })
-            .onConflictDoNothing()
-            .returning({ contentHash: opmlImports.contentHash })
-        ).at(0);
-        if (!imported) return [];
+        await transaction
+          .insert(opmlImports)
+          .values({ contentHash, userId })
+          .onConflictDoNothing();
 
         const pending: PendingImportNode[] = tree
           .toReversed()
@@ -50,12 +46,26 @@ export class OpmlImportService {
           if (!current) break;
 
           if (current.node.type === "folder") {
-            const folder = (
-              await transaction
-                .insert(userFolders)
-                .values({ name: current.node.name, userId })
-                .returning({ id: userFolders.id })
-            ).at(0);
+            const folder =
+              (
+                await transaction
+                  .select({ id: userFolders.id })
+                  .from(userFolders)
+                  .where(
+                    and(
+                      eq(userFolders.userId, userId),
+                      eq(userFolders.name, current.node.name),
+                    ),
+                  )
+                  .orderBy(userFolders.id)
+                  .limit(1)
+              ).at(0) ??
+              (
+                await transaction
+                  .insert(userFolders)
+                  .values({ name: current.node.name, userId })
+                  .returning({ id: userFolders.id })
+              ).at(0);
             if (!folder) throw new Error("Failed to create OPML folder");
             for (const child of current.node.children.toReversed())
               pending.push({ node: child, parentId: folder.id });
