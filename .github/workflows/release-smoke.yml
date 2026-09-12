@@ -26,7 +26,7 @@ permissions:
 jobs:
   smoke:
     name: Smoke test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.build_locally && 45 || 15 }}
     env:
       FEEDFATHOM_TAG: ${{ inputs.feedfathom_tag }}
@@ -42,9 +42,9 @@ jobs:
         with:
           playwright: "true"
 
-      - name: Setup Blacksmith Builder
+      - name: Set up Docker Buildx
         if: inputs.build_locally
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@v3
 
       # Only the pull path touches GHCR; a local build reads its bases from
       # Docker Hub and tags the result under the same name compose expects.
