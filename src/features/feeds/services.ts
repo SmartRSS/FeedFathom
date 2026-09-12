@@ -4,6 +4,7 @@ import {
   httpClient,
   redis,
   bullmqQueue,
+  bullmqRedis,
 } from "#platform/runtime.ts";
 import { RedirectMap } from "#platform/http/redirect-map.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
@@ -36,7 +37,10 @@ export const userSourcesDataService =
     foldersDataService,
     sourcesDataService,
   );
-export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(bullmqQueue);
+export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(
+  bullmqQueue,
+  bullmqRedis,
+);
 export const redirectMap = /* @__PURE__ */ new RedirectMap(redis);
 export const faviconStore = /* @__PURE__ */ new FaviconStore(drizzleConnection);
 export const feedPreviewCache = /* @__PURE__ */ new FeedPreviewCache(redis);
