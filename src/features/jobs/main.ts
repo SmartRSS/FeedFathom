@@ -7,7 +7,9 @@ import {
 } from "#platform/runtime.ts";
 import {
   feedParser,
+  sourceEnqueuer,
   sourcesDataService,
+  userSourcesDataService,
   websubStateService,
 } from "#features/feeds/services.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
@@ -103,12 +105,16 @@ export class MainWorker {
 
       switch (input.name) {
         case JobName.Cleanup: {
-          await cleanupOrphanedData(
+          const prunedSourceIds = await cleanupOrphanedData(
             drizzleConnection,
             appConfig.USER_DORMANT_AFTER_DAYS,
             appConfig.ARTICLE_STALE_AFTER_DAYS,
             appConfig.USER_EXPIRY_DAYS,
           );
+          // The prune bypasses the data services, so the unread badge of a
+          // source it emptied would keep counting deleted articles until an
+          // unrelated event recounted it (#812).
+          await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
           break;
         }
 
@@ -144,13 +150,26 @@ export class MainWorker {
           if (!source) {
             throw new Error(`Source with ID ${input.data.id} not found`);
           }
-          await feedParser.parseSource({
-            ...source,
-            ...(input.data.skipCache === undefined
-              ? {}
-              : { skipCache: input.data.skipCache }),
-            trigger: input.data.trigger ?? "poll",
-          });
+          const parse = async (
+            skipCache: boolean | undefined,
+            trigger: "manual" | "poll" | "websub-push",
+          ) =>
+            await feedParser.parseSource({
+              ...source,
+              ...(skipCache === undefined ? {} : { skipCache }),
+              trigger,
+            });
+          await parse(input.data.skipCache, input.data.trigger ?? "poll");
+          // Requests that landed mid-run were recorded on a marker rather
+          // than queued, because BullMQ would have deduped their add against
+          // this job (#813). Handing them back to the enqueuer would hit that
+          // same dedupe -- the id stays active until this processor returns --
+          // so the run folds them in itself and parses once more, right here,
+          // the way the newest request asked. Anything arriving during that
+          // pass stays on the marker: a deferral, the next poll or the next
+          // request all reach it.
+          const pending = await sourceEnqueuer.takePendingRefresh(source.id);
+          if (pending) await parse(pending.skipCache, "manual");
           break;
         }
 

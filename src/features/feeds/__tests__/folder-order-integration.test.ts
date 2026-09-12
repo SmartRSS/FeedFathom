@@ -11,9 +11,8 @@ const migrationsFolder = fileURLToPath(
 );
 
 // The dashboard renders this list in the order it arrives, and an OPML export
-// is only a no-op on re-import if two exports of an unchanged tree are
-// byte-identical. Both need an order the database actually promises: renaming
-// a folder is an UPDATE, and Postgres writes the new row version at the end of
+// should be byte-identical for an unchanged tree. Both need a stable order:
+// renaming a folder is an UPDATE, and Postgres writes the new row version at the end of
 // the heap, so an unordered select returned the renamed folder last.
 test("folders come back by name, including after a rename", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();

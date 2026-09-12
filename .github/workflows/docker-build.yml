@@ -61,7 +61,8 @@ jobs:
       - quality
       - pr_smoke
     if: always() && github.event_name == 'pull_request'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Require the quality checks to have passed
         env:
@@ -104,7 +105,8 @@ jobs:
     if: >-
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.metadata.outputs.version }}
     steps:
@@ -133,8 +135,13 @@ jobs:
           SECOND_FIELD=$(( SECOND + 10 ))                 # 10-69, always 2 digits
           echo "version=$YEAR_FIELD.$DOY_FIELD.$MINUTE_OF_DAY_FIELD.$SECOND_FIELD" >> "$GITHUB_OUTPUT"
 
-  publish_images:
-    name: Publish ${{ matrix.target }} immutable image
+  # One runner per architecture rather than one emulating the other: arm64
+  # under QEMU takes the Bun build from a minute to the better part of an
+  # hour. Each leg pushes an untagged blob and reports its digest; the tag
+  # only ever appears on the manifest `publish_images` assembles from both,
+  # so a half-built pair can never be pulled.
+  build_platform_images:
+    name: Build ${{ matrix.target }} for ${{ matrix.platform.arch }}
     needs: [quality, build_metadata]
     if: >-
       github.event_name == 'push' &&
@@ -146,7 +153,13 @@ jobs:
           - feedfathom-server
           - feedfathom-worker
           - feedfathom-migrator
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+        platform:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 35
     permissions:
       contents: read
       packages: write
@@ -157,8 +170,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -167,18 +180,89 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish immutable ${{ matrix.target }} image
-        uses: useblacksmith/build-push-action@v2
+      - name: Build ${{ matrix.target }} for linux/${{ matrix.platform.arch }}
+        id: build
+        uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
           context: .
           target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: linux/${{ matrix.platform.arch }}
           build-args: |
             FEEDFATHOM_BUILD=${{ github.ref == 'refs/heads/main' && needs.build_metadata.outputs.version || github.sha }}
-          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.target }}:${{ github.sha }}
+          # Pushed by digest, unnamed: the tag is the manifest's to claim.
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.target }},push-by-digest=true,name-canonical=true,push=true
+          # Scoped per target and arch -- one shared scope and the three
+          # targets evict each other's layers on every run.
+          cache-from: type=gha,scope=${{ matrix.target }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}-${{ matrix.platform.arch }}
           provenance: false
+
+      - name: Hand the digest to the manifest job
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.target }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish_images:
+    name: Publish ${{ matrix.target }} immutable image
+    needs: build_platform_images
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - feedfathom-server
+          - feedfathom-worker
+          - feedfathom-migrator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.target }}-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble the multi-arch manifest
+        run: |
+          set -euo pipefail
+          # Both legs or nothing: a manifest with one arch silently strands
+          # whichever node runs the other, and `promote` would copy it on.
+          count=$(find /tmp/digests -type f | wc -l)
+          if ((count != 2)); then
+            printf 'expected 2 platform digests, found %s\n' "$count" >&2
+            exit 1
+          fi
+          docker buildx imagetools create \
+            --tag "${IMAGE_PREFIX}/${{ matrix.target }}:${GITHUB_SHA}" \
+            $(find /tmp/digests -type f -printf "${IMAGE_PREFIX}/${{ matrix.target }}@sha256:%f ")
 
   build_extension:
     name: Build and sign browser extension
@@ -186,7 +270,8 @@ jobs:
     if: >-
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       build_date: ${{ steps.metadata.outputs.build_date }}
       extension_version: ${{ needs.build_metadata.outputs.version }}
@@ -343,7 +428,8 @@ jobs:
     name: Validate existing deployment manifests
     needs: quality
     if: github.event_name == 'workflow_dispatch'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read
@@ -358,8 +444,8 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -424,7 +510,7 @@ jobs:
   await_turn:
     name: Wait for older merges to finish
     needs: release_smoke_push
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - name: Wait until no older run of this workflow is in flight
@@ -465,7 +551,8 @@ jobs:
           - feedfathom-server
           - feedfathom-worker
           - feedfathom-migrator
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -473,8 +560,8 @@ jobs:
       CHANNEL_TAG: ${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
 
     steps:
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -492,7 +579,8 @@ jobs:
   create_release:
     name: Create GitHub release
     needs: [build_extension, promote]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     env:
@@ -589,7 +677,7 @@ jobs:
 
   deploy:
     name: Deploy to production Swarm
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # Each path funnels through exactly one terminal job, and the two are
     # mutually exclusive by event, so this needs no per-event breakdown: the
     # transitive needs already require quality, the image publish/validation,
@@ -915,7 +1003,7 @@ jobs:
       needs.deploy.result == 'success' &&
       needs.deploy.outputs.skipped != 'true' &&
       vars.EMAIL_WORKER_SCRIPT != ''
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -1013,7 +1101,8 @@ jobs:
     # extension: the site is rendered from scratch each run, so gating this on
     # the extension meant a docs-only commit never reached the published site.
     if: github.ref == 'refs/heads/main'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: write

@@ -2,6 +2,8 @@ import type { AppConfig } from "#platform/config.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import type { HubPoster } from "#features/feeds/websub.ts";
 import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
@@ -98,7 +100,18 @@ const idleFaviconRefresher = {
   async refreshFavicon() {},
 };
 
-const idleCleanupOrphanedData = async () => {};
+const idleCleanupOrphanedData = async () => [];
+
+const idleUserSources = {
+  async recomputeUnreadCounts() {},
+};
+
+const idleSourceEnqueuer = {
+  async enqueueSource() {},
+  async takePendingRefresh() {
+    return null;
+  },
+};
 
 const idleHubPoster = {
   async post() {
@@ -140,6 +153,11 @@ type MainWorkerWebSubState = Pick<
   "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
 >;
 
+type MainWorkerUserSources = Pick<
+  UserSourcesDataService,
+  "recomputeUnreadCounts"
+>;
+
 const actualBullmq = { ...(await import("bullmq")) };
 async function mockWorkerServices(
   appConfig: MainWorkerConfig,
@@ -148,10 +166,15 @@ async function mockWorkerServices(
   faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
   sourcesDataService: MainWorkerSources,
   websubStateService: MainWorkerWebSubState,
-  cleanupOrphanedData: () => Promise<void>,
+  userSourcesDataService: MainWorkerUserSources,
+  cleanupOrphanedData: () => Promise<number[]>,
   jobFailuresDataService: Pick<JobFailuresDataService, "record">,
   createWorker: MainWorkerFactory,
   hubPoster: HubPoster,
+  sourceEnqueuer: Pick<
+    SourceEnqueuer,
+    "enqueueSource" | "takePendingRefresh"
+  > = idleSourceEnqueuer,
 ) {
   await mock.module("#platform/config.ts", () => ({ config: appConfig }));
   await mock.module("#platform/runtime.ts", () => ({
@@ -162,7 +185,9 @@ async function mockWorkerServices(
   }));
   await mock.module("#features/feeds/services.ts", () => ({
     feedParser,
+    sourceEnqueuer,
     sourcesDataService,
+    userSourcesDataService,
     websubStateService,
   }));
   await mock.module("#features/jobs/services.ts", () => ({
@@ -202,6 +227,7 @@ await mockWorkerServices(
   idleFaviconRefresher,
   idleSources,
   idleSources,
+  idleUserSources,
   idleCleanupOrphanedData,
   idleJobFailures,
   noopWorkerFactory,
@@ -215,10 +241,15 @@ async function createMainWorker(
   faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
   sourcesDataService: MainWorkerSources,
   websubStateService: MainWorkerWebSubState,
-  cleanupOrphanedData: () => Promise<void>,
+  cleanupOrphanedData: () => Promise<number[]>,
   jobFailuresDataService: Pick<JobFailuresDataService, "record">,
   createWorker: MainWorkerFactory,
   hubPoster: HubPoster,
+  sourceEnqueuer: Pick<
+    SourceEnqueuer,
+    "enqueueSource" | "takePendingRefresh"
+  > = idleSourceEnqueuer,
+  userSourcesDataService: MainWorkerUserSources = idleUserSources,
 ) {
   await mockWorkerServices(
     appConfig,
@@ -227,10 +258,12 @@ async function createMainWorker(
     faviconRefresher,
     sourcesDataService,
     websubStateService,
+    userSourcesDataService,
     cleanupOrphanedData,
     jobFailuresDataService,
     createWorker,
     hubPoster,
+    sourceEnqueuer,
   );
   return new MainWorker();
 }
@@ -350,6 +383,109 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
 
   await expect(processing).rejects.toBeInstanceOf(DelayedError);
   expect(delays).toEqual([[retryAt, "worker-token"]]);
+});
+
+// A request that arrived while the job held the source's id was recorded
+// rather than queued (the add would have been deduped away); the run folds it
+// in itself at the end. It cannot hand it back to the enqueuer -- the id is
+// still active until this processor returns, so that add would be deduped
+// against this very job and the refresh would wait for the next poll.
+test("folds requests that arrived mid-run into one more parse", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const parsed: Array<[boolean | undefined, string | undefined]> = [];
+  const followedUp: Parameters<SourceEnqueuer["enqueueSource"]>[] = [];
+  let pending: { skipCache: boolean } | null = { skipCache: true };
+  const worker = await createMainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource(input) {
+        parsed.push([input.skipCache, input.trigger]);
+      },
+    },
+    idleFaviconRefresher,
+    idleSources,
+    idleSources,
+    idleCleanupOrphanedData,
+    idleJobFailures,
+    createWorker,
+    idleHubPoster,
+    {
+      async enqueueSource(source, trigger, skipCache) {
+        followedUp.push([source, trigger, skipCache]);
+      },
+      // getdel: the take is the consume, so a second call sees nothing.
+      async takePendingRefresh(sourceId) {
+        if (sourceId !== source.id) return null;
+        const taken = pending;
+        pending = null;
+        return taken;
+      },
+    },
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await processor({
+    data: { id: source.id, url: source.url },
+    async moveToDelayed() {},
+    name: JobName.ParseSource,
+  });
+
+  expect(parsed).toEqual([
+    [undefined, "poll"],
+    [true, "manual"],
+  ]);
+  expect(followedUp).toEqual([]);
+});
+
+// A deferral keeps the job (and its id) alive for another run, so the
+// recorded requests stay on the marker for that run to act on -- consuming
+// them here would answer the add the retry itself will make.
+test("a deferred parse leaves pending refreshes to its retry", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  let taken = 0;
+  const worker = await createMainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource() {
+        throw new HttpDeferredError(Date.now() + 60_000);
+      },
+    },
+    idleFaviconRefresher,
+    idleSources,
+    idleSources,
+    idleCleanupOrphanedData,
+    idleJobFailures,
+    createWorker,
+    idleHubPoster,
+    {
+      async enqueueSource() {},
+      async takePendingRefresh() {
+        taken += 1;
+        return null;
+      },
+    },
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  const processing = processor({
+    data: { id: source.id, url: source.url },
+    async moveToDelayed() {},
+    name: JobName.ParseSource,
+  });
+  await expect(processing).rejects.toBeInstanceOf(DelayedError);
+  expect(taken).toBe(0);
 });
 
 test("refreshes favicons only for validated job data", async () => {
@@ -511,6 +647,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
     },
     async () => {
       downstreamCalls.push("cleanup");
+      return [];
     },
     idleJobFailures,
     createWorker,
@@ -613,6 +750,45 @@ test("records a durable failure for non-ParseSource job errors", async () => {
   });
 
   expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
+});
+
+// The prune bypasses the services that own the unread badge, so the worker
+// has to hand every source cleanup reports to the recompute itself (#812).
+test("cleanup recounts the unread totals of every pruned source", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const recounted: number[][] = [];
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const worker = await createMainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    idleParser,
+    idleFaviconRefresher,
+    idleSources,
+    idleSources,
+    async () => [7, 9],
+    idleJobFailures,
+    createWorker,
+    idleHubPoster,
+    idleSourceEnqueuer,
+    {
+      async recomputeUnreadCounts(sourceIds) {
+        recounted.push(sourceIds);
+      },
+    },
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  await processor({
+    data: {},
+    async moveToDelayed() {},
+    name: JobName.Cleanup,
+  });
+
+  expect(recounted).toEqual([[7, 9]]);
 });
 
 test("a failure while recording a job failure doesn't itself fail the job", async () => {

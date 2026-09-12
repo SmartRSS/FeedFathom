@@ -53,12 +53,26 @@ const emailRetentionDays = 90;
 
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
+/**
+ * Prunes what nothing can still reach: expired users and sessions,
+ * subscriberless sources, and articles past every reader's horizon.
+ *
+ * Returns the ids of the sources whose article rows shrank. The deletes here
+ * bypass the data services, so `user_sources.unread_count` still counts
+ * removed articles until the caller recomputes it for every returned source
+ * (#812) -- without that, a pruned unread newsletter keeps its badge until
+ * some unrelated event happens to recount the source.
+ */
 export async function cleanupOrphanedData(
   drizzleConnection: BunSQLDatabase<typeof schema>,
   userDormantAfterDays: number,
   articleStaleAfterDays: number,
   userExpiryDays: number,
-) {
+): Promise<number[]> {
+  const prunedSourceIds = new Set<number>();
+  const rememberPrunedFrom = (removed: { sourceId: number }[]) => {
+    for (const row of removed) prunedSourceIds.add(row.sourceId);
+  };
   // Runs first: the cascade on user_sources shrinks the "current subscriber"
   // set before every rule below evaluates it, so no rule needs to special-case
   // expired users.
@@ -118,9 +132,12 @@ export async function cleanupOrphanedData(
       ),
     );
 
-  await drizzleConnection
-    .delete(articles)
-    .where(inArray(articles.id, articlesBeforeSubscription));
+  rememberPrunedFrom(
+    await drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, articlesBeforeSubscription))
+      .returning({ sourceId: articles.sourceId }),
+  );
 
   // The complement of the rule above: articles current subscribers COULD see,
   // but which are gone for good -- absent past confirmedGoneFromFeedBuffer and
@@ -176,9 +193,12 @@ export async function cleanupOrphanedData(
       ),
     );
 
-  await drizzleConnection
-    .delete(articles)
-    .where(inArray(articles.id, articlesUnreachableByAnyone));
+  rememberPrunedFrom(
+    await drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, articlesUnreachableByAnyone))
+      .returning({ sourceId: articles.sourceId }),
+  );
 
   // Email sources prune separately: they have no feed to be absent from, and
   // each delivery stamps last_success, which would make every earlier
@@ -197,9 +217,12 @@ export async function cleanupOrphanedData(
       ),
     );
 
-  await drizzleConnection
-    .delete(articles)
-    .where(inArray(articles.id, emailArticlesPastRetention));
+  rememberPrunedFrom(
+    await drizzleConnection
+      .delete(articles)
+      .where(inArray(articles.id, emailArticlesPastRetention))
+      .returning({ sourceId: articles.sourceId }),
+  );
 
   // Neither rule above accounts for dormancy -- a subscriber who hasn't made a
   // request in months still counts as current. This catches articles old
@@ -229,8 +252,13 @@ export async function cleanupOrphanedData(
         ),
       );
 
-    await drizzleConnection
-      .delete(articles)
-      .where(inArray(articles.id, articlesOnlyDormantCouldSee));
+    rememberPrunedFrom(
+      await drizzleConnection
+        .delete(articles)
+        .where(inArray(articles.id, articlesOnlyDormantCouldSee))
+        .returning({ sourceId: articles.sourceId }),
+    );
   }
+
+  return [...prunedSourceIds];
 }

@@ -31,6 +31,19 @@ export class MailSender {
     );
   }
 
+  // Registering with an address that already holds an active account answers
+  // with the same success body as a fresh registration; only this message
+  // tells the person what actually happened, and hands them a way in (#810).
+  public async sendAccountExistsEmail(email: string, token: string) {
+    await this.send(
+      email,
+      "account already exists",
+      "This address already has a FeedFathom account",
+      "Someone just tried to register this address, but an account already exists here. If that was you, reset the password with this link to sign in. The link expires in an hour",
+      `/password-reset/${token}`,
+    );
+  }
+
   private async send(
     email: string,
     kind: string,

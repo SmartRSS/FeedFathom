@@ -91,7 +91,7 @@ export function detectFeedEncoding(
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
 
   const charset = /charset=([^;]+)/i.exec(contentType ?? "")?.[1]?.trim();
-  if (charset) return charset;
+  if (charset) return charset.replace(/^"(.*)"$/, "$1");
 
   const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
   return xmlEncodingPattern.exec(prolog)?.[1] ?? "utf-8";

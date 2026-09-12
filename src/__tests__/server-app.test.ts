@@ -37,7 +37,7 @@ type PublicAuthRouteDependencies = {
   ) => ReturnType<typeof globalThis.fetch>;
   mailSender: Pick<
     MailSender,
-    "sendActivationEmail" | "sendPasswordResetEmail"
+    "sendAccountExistsEmail" | "sendActivationEmail" | "sendPasswordResetEmail"
   >;
   password: Password;
   secureCookies: boolean;
@@ -85,11 +85,20 @@ type PasswordResetRouteDependencies = {
   mailSender: Pick<MailSender, "sendPasswordResetEmail">;
   password: { hash(password: string): Promise<string> };
   usersDataService: {
-    completePasswordReset(userId: number, passwordHash: string): Promise<void>;
+    completePasswordReset(
+      userId: number,
+      tokenHash: string,
+      passwordHash: string,
+    ): Promise<boolean>;
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
     findUserByPasswordResetToken(
       tokenHash: string,
     ): ReturnType<UsersDataService["findUserByPasswordResetToken"]>;
+    refreshActivationToken(
+      userId: number,
+      token: string,
+      expiresAt: Date,
+    ): Promise<void>;
     startPasswordReset(
       userId: number,
       tokenHash: string,
@@ -313,6 +322,7 @@ function createDependencies(): ServerFakes {
       return appConfig.MAIL_ENABLED;
     },
     mailSender: {
+      async sendAccountExistsEmail() {},
       async sendActivationEmail() {},
       async sendPasswordResetEmail() {},
     },
@@ -409,6 +419,9 @@ function createDependencies(): ServerFakes {
       },
       async listSessions() {
         return [];
+      },
+      async refreshActivationToken() {
+        return unexpected("usersDataService.refreshActivationToken");
       },
       async refreshSession() {},
       async startPasswordReset() {
@@ -2266,10 +2279,6 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   expect(body).not.toContain("abc123@mail.example.com");
 });
 
-// insertTree creates a folder unconditionally; the only thing that makes
-// re-importing an export a no-op is opml_imports deduping on a hash of the
-// file's bytes. Two exports of an unchanged tree therefore have to be
-// byte-identical, whatever order the queries happened to return rows in.
 test("exports the same bytes whatever order the services return rows in", async () => {
   const folders = [
     {
@@ -2394,8 +2403,6 @@ test("creates active users without registration integrations", async () => {
 test.each([
   ["active", false],
   ["inactive", false],
-  ["active", true],
-  ["inactive", true],
 ] as const)(
   "returns generic success without mutating an existing %s account when Mailjet=%s",
   async (status, useMailjet) => {
@@ -2757,7 +2764,11 @@ test("spends a reset token once and refuses an expired one", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "key";
   dependencies.config.MAILJET_API_SECRET = "secret";
-  const completed: { passwordHash: string; userId: number }[] = [];
+  const completed: {
+    passwordHash: string;
+    tokenHash: string;
+    userId: number;
+  }[] = [];
   dependencies.usersDataService.findUserByPasswordResetToken = async (
     tokenHash,
   ) => {
@@ -2773,9 +2784,11 @@ test("spends a reset token once and refuses an expired one", async () => {
   };
   dependencies.usersDataService.completePasswordReset = async (
     userId,
+    tokenHash,
     passwordHash,
   ) => {
-    completed.push({ passwordHash, userId });
+    completed.push({ passwordHash, tokenHash, userId });
+    return true;
   };
   dependencies.password.hash = async (value) => `hashed:${value}`;
   const app = await appFor(dependencies);
@@ -2796,8 +2809,41 @@ test("spends a reset token once and refuses an expired one", async () => {
   expect(expired.status).toBe(400);
   expect(mismatched.status).toBe(422);
   expect(completed).toEqual([
-    { passwordHash: "hashed:a-new-password", userId: account.id },
+    {
+      passwordHash: "hashed:a-new-password",
+      tokenHash: createHash("sha256").update("good").digest("hex"),
+      userId: account.id,
+    },
   ]);
+});
+
+// The spend must be part of the write itself (#809): a double that answers
+// false stands in for the transaction losing the race, and the route has to
+// answer the loser with the same refusal an unknown token gets.
+test("a confirmation that loses the race for its link is refused", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.findUserByPasswordResetToken = async (
+    tokenHash,
+  ) => ({
+    ...account,
+    passwordResetTokenExpiresAt: new Date(Date.now() + 60_000),
+    passwordResetTokenHash: tokenHash,
+  });
+  dependencies.usersDataService.completePasswordReset = async () => false;
+  dependencies.password.hash = async (value) => `hashed:${value}`;
+  const app = await appFor(dependencies);
+
+  const rejected = await app.handle(
+    new Request("http://localhost/api/password-reset/confirm", {
+      body: JSON.stringify({ password1: "one", password2: "one", token: "t" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toEqual({
+    error: "This reset link is no longer valid.",
+  });
 });
 
 test("has no reset flow at all when outgoing mail is not configured", async () => {
@@ -2878,6 +2924,108 @@ test("activates valid tokens but rejects expired tokens", async () => {
   expect(blank.status).toBe(422);
   expect(activated).toEqual([1]);
   expect(tokenLookups).toEqual(["valid", "expired"]);
+});
+
+// Re-registering over a half-made account used to be a silent no-op, which
+// left an expired activation link with no way back in (#810). The route
+// still answers success either way -- the mailbox is what changes.
+test("registering an address with an expired link sends a fresh one", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  const refreshed: { expiresAt: Date; token: string; userId: number }[] = [];
+  const activationSends: string[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    activationToken: "old-token",
+    activationTokenExpiresAt: new Date(Date.now() - 60_000),
+    email,
+    status: "inactive" as const,
+  });
+  dependencies.usersDataService.refreshActivationToken = async (
+    userId,
+    token,
+    expiresAt,
+  ) => {
+    refreshed.push({ expiresAt, token, userId });
+  };
+  dependencies.mailSender.sendActivationEmail = async (email) => {
+    activationSends.push(email);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/register", {
+      body: JSON.stringify({
+        email: "pending@example.com",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Pending user",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true });
+  expect(activationSends).toEqual(["pending@example.com"]);
+  expect(refreshed).toHaveLength(1);
+  expect(refreshed[0]!.userId).toBe(account.id);
+  // A fresh link promises a day, like the first one did.
+  expect(refreshed[0]!.expiresAt.getTime()).toBeGreaterThan(
+    Date.now() + 23 * 60 * 60 * 1_000,
+  );
+});
+
+// An active account is not a half-made one, so no new activation -- the
+// notice carries a reset link instead, the way in that never assumes the
+// password still works.
+test("registering an active address sends the account-exists reset notice", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  const resets: { expiresAt: Date; tokenHash: string; userId: number }[] = [];
+  const notices: string[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    email,
+  });
+  dependencies.usersDataService.startPasswordReset = async (
+    userId,
+    tokenHash,
+    expiresAt,
+  ) => {
+    resets.push({ expiresAt, tokenHash, userId });
+  };
+  dependencies.mailSender.sendAccountExistsEmail = async (email) => {
+    notices.push(email);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/register", {
+      body: JSON.stringify({
+        email: "active@example.com",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Active user",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true });
+  expect(notices).toEqual(["active@example.com"]);
+  expect(resets).toHaveLength(1);
+  expect(resets[0]!.userId).toBe(account.id);
+  expect(resets[0]!.expiresAt.getTime()).toBeGreaterThan(
+    Date.now() + 55 * 60_000,
+  );
+  // Only the digest is stored, never the token itself.
+  expect(resets[0]!.tokenHash).toMatch(/^[0-9a-f]{64}$/);
 });
 
 // Every route in the admin group, not just the one that used to be checked

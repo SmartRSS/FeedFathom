@@ -293,6 +293,8 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // #817: the dialog's accessible name is its visible prompt.
+  await expect(dialog).toHaveAccessibleName("Folder name");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
   await dialog.getByRole("button", { name: "OK" }).click();
@@ -318,6 +320,8 @@ test("cancelling the delete confirmation keeps the source", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Delete "Tech News"?');
+  // #817: the accessible name identifies the item being deleted.
+  await expect(dialog).toHaveAccessibleName('Delete "Tech News"?');
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await expect(dialog).toHaveCount(0);
@@ -446,6 +450,40 @@ test("searches across subscriptions and says when nothing matches", async ({
   // Emptying the box leaves search without a submit.
   await search.fill("");
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
+});
+
+// A search response that lands after the field was cleared must not
+// repopulate the list (#815) -- with no source selected, clearing empties the
+// list rather than reloading a feed's articles.
+test("a late response to a cleared search leaves the list empty", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  // Registered after the fixture, so this handler runs first: search
+  // requests hold until released, everything else falls through.
+  let releaseSearch: () => void = () => {};
+  const searchReleased = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  await page.route("**/api/articles", async (route) => {
+    const query: string | undefined = route.request().postDataJSON().query;
+    if (!query) return route.fallback();
+    await searchReleased;
+    return route.fallback();
+  });
+  await page.goto("/");
+
+  const search = page.getByLabel("Search articles");
+  await search.fill("subscribed");
+  await search.press("Enter");
+  await search.fill("");
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+
+  releaseSearch();
+  await expect(page.getByText("Select a feed to read.")).toBeVisible();
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
+  ).toHaveCount(0);
 });
 
 // The article list is keyset-paged and the scroll position is what asks for
@@ -941,6 +979,36 @@ test("offers a password reset link only where mail can deliver one", async ({
     page.getByRole("heading", { name: "Reset your password" }),
   ).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/password-reset");
+});
+
+// #810: the activation page is a confirmation, not an action. Anything that
+// opens the link -- a mail preview, a link scanner -- must find the token as
+// usable as the person following it; only the button may activate.
+test("opening the activation link activates nothing until the button says so", async ({
+  page,
+}) => {
+  await installApiFixture(page, { authenticated: false });
+  const activations: string[] = [];
+  await page.route("**/api/activate/**", async (route) => {
+    activations.push(route.request().method());
+    return route.fulfill({
+      body: JSON.stringify({ success: true }),
+      contentType: "application/json",
+      status: 200,
+    });
+  });
+
+  await page.goto("/activate/scan-magnet");
+  await expect(
+    page.getByRole("heading", { name: "Account activation" }),
+  ).toBeVisible();
+  expect(activations).toEqual([]);
+
+  await page.getByRole("button", { name: "Activate account" }).click();
+  await expect(
+    page.getByText("Your account has been activated."),
+  ).toBeVisible();
+  expect(activations).toEqual(["POST"]);
 });
 
 test("retitles the document on route changes", async ({ page }) => {
@@ -1647,6 +1715,27 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   ).toBe("0");
 });
 
+// `o` carries focus with the pane switch (#816): on a narrow screen the
+// switch display:none's the pane holding focus, which would otherwise drop
+// it to <body> and make the second `o` unreachable.
+test("o moves focus between the article list and the reader pane", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+  await selectSource(page);
+  await articleOptions(page).first().focus();
+
+  await page.keyboard.press("o");
+  const reader = page.getByRole("article", { name: "Reader" });
+  await expect(reader).toBeVisible();
+  await expect(reader).toBeFocused();
+
+  await page.keyboard.press("o");
+  await expect(articleOptions(page).first()).toBeFocused();
+});
+
 // Article rows keep the platform's own context menu, on every pointer. It is
 // where "open in a background tab" lives -- the only way to get one on a phone,
 // which has no middle click and where window.open always foregrounds -- along
@@ -1726,6 +1815,8 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   await page.keyboard.press("?");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // #817: the dialog is named by its visible heading.
+  await expect(dialog).toHaveAccessibleName("Keyboard shortcuts");
   await expect(
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();

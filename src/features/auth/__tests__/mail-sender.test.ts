@@ -67,13 +67,55 @@ describe("MailSender", () => {
     });
   });
 
+  // The account-exists notice (#810) rides the same reset link the ordinary
+  // reset email uses, so a scanner or preview opening the page it leads to
+  // finds a form, not a spent token.
+  test("posts the account-exists notice with a reset link", async () => {
+    let captured:
+      | { init: RequestInit | undefined; input: RequestInfo | URL }
+      | undefined;
+    const sender = new MailSender(
+      config({
+        FEED_FATHOM_DOMAIN: "example.test",
+        MAILJET_API_KEY: "mailjet-key",
+        MAILJET_API_SECRET: "mailjet-secret",
+      }),
+      async (input, init) => {
+        captured = { init, input };
+        return new Response(null, { status: 200 });
+      },
+    );
+
+    await sender.sendAccountExistsEmail("reader@example.com", "reset-token");
+
+    if (!captured) throw new Error("Mailjet request was not sent");
+    if (typeof captured.init?.body !== "string")
+      throw new Error("Mailjet request body was not JSON");
+    const payload: unknown = JSON.parse(captured.init.body);
+    expect(payload).toEqual({
+      Messages: [
+        {
+          From: {
+            Email: "welcome@example.test",
+            Name: "FeedFathom",
+          },
+          HTMLPart:
+            '<p>Someone just tried to register this address, but an account already exists here. If that was you, reset the password with this link to sign in. The link expires in an hour: <a href="https://example.test/password-reset/reset-token">https://example.test/password-reset/reset-token</a></p>',
+          Subject: "This address already has a FeedFathom account",
+          TextPart:
+            "Someone just tried to register this address, but an account already exists here. If that was you, reset the password with this link to sign in. The link expires in an hour: https://example.test/password-reset/reset-token",
+          To: [{ Email: "reader@example.com" }],
+        },
+      ],
+    });
+  });
+
   test("does nothing when Mailjet credentials are absent", async () => {
     let calls = 0;
     const sender = new MailSender(config(), async () => {
       calls++;
       return new Response(null, { status: 200 });
     });
-
     await expect(
       sender.sendActivationEmail("reader@example.com", "activation-token"),
     ).resolves.toBeUndefined();

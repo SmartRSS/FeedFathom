@@ -102,6 +102,21 @@ export class UsersDataService {
     ).at(0);
   }
 
+  // A pending registration whose link expired gets the same address back on
+  // the fresh token; the status predicate keeps an already-active account's
+  // row untouched -- that path belongs to the password reset, not to a
+  // re-registration (#810).
+  public async refreshActivationToken(
+    userId: number,
+    token: string,
+    expiresAt: Date,
+  ) {
+    await this.drizzleConnection
+      .update(users)
+      .set({ activationToken: token, activationTokenExpiresAt: expiresAt })
+      .where(and(eq(users.id, userId), eq(users.status, "inactive")));
+  }
+
   public async activateUser(userId: number) {
     return await this.drizzleConnection
       .update(users)
@@ -251,18 +266,35 @@ export class UsersDataService {
    * The new password, the spent token and every session, in one transaction.
    * Split across three statements a crash between them leaves either a token
    * that still works against the new password or sessions the old one opened.
+   * The token hash rides in the UPDATE's WHERE clause rather than only in the
+   * lookup before it: two confirmations racing on the same link then cannot
+   * both write -- the row lock serialises them and the second re-check
+   * matches nothing -- so the first commit wins and the caller of the loser
+   * is told the link is no longer valid (#809). False means that loser.
    */
-  public async completePasswordReset(userId: number, passwordHash: string) {
-    await this.drizzleConnection.transaction(async (transaction) => {
-      await transaction
+  public async completePasswordReset(
+    userId: number,
+    tokenHash: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      const spent = await transaction
         .update(users)
         .set({
           password: passwordHash,
           passwordResetTokenExpiresAt: null,
           passwordResetTokenHash: null,
         })
-        .where(eq(users.id, userId));
+        .where(
+          and(
+            eq(users.id, userId),
+            eq(users.passwordResetTokenHash, tokenHash),
+          ),
+        )
+        .returning({ id: users.id });
+      if (!spent.length) return false;
       await transaction.delete(sessions).where(eq(sessions.userId, userId));
+      return true;
     });
   }
 
