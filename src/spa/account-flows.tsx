@@ -297,12 +297,16 @@ function LoginLink(props: { navigate(to: string): void; next?: string }) {
 }
 
 export function Activate(props: { token: string; navigate(to: string): void }) {
-  const [result, setResult] = createSignal<"loading" | "success" | "error">(
-    "loading",
+  const [result, setResult] = createSignal<"idle" | "success" | "error">(
+    "idle",
   );
   const [message, setMessage] = createSignal("");
 
-  onMount(async () => {
+  // Activation is the button, never the visit (#810): a mail preview or link
+  // scanner that opens the URL -- anything that runs this page -- must find
+  // the token exactly as usable as a person following the link themselves.
+  async function activate(event: Event) {
+    event.preventDefault();
     try {
       await api(
         `/activate/${encodeURIComponent(props.token)}`,
@@ -318,23 +322,30 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
       );
       setResult("error");
     }
-  });
+  }
 
   return (
     <main>
       <section class="account-result">
         <h1>Account activation</h1>
-        <Switch>
-          <Match when={result() === "loading"}>
-            <p role="status">Activating your account…</p>
-          </Match>
-          <Match when={result() === "success"}>
-            <p role="status">Your account has been activated.</p>
-          </Match>
-          <Match when={result() === "error"}>
-            <p role="alert">{message()}</p>
-          </Match>
-        </Switch>
+        <Show
+          when={result() === "idle"}
+          fallback={
+            <Switch>
+              <Match when={result() === "success"}>
+                <p role="status">Your account has been activated.</p>
+              </Match>
+              <Match when={result() === "error"}>
+                <p role="alert">{message()}</p>
+              </Match>
+            </Switch>
+          }
+        >
+          <form class="account-form" onSubmit={activate}>
+            <p>Activate this FeedFathom account?</p>
+            <button>Activate account</button>
+          </form>
+        </Show>
         <LoginLink navigate={props.navigate} />
       </section>
     </main>

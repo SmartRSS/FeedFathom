@@ -102,6 +102,21 @@ export class UsersDataService {
     ).at(0);
   }
 
+  // A pending registration whose link expired gets the same address back on
+  // the fresh token; the status predicate keeps an already-active account's
+  // row untouched -- that path belongs to the password reset, not to a
+  // re-registration (#810).
+  public async refreshActivationToken(
+    userId: number,
+    token: string,
+    expiresAt: Date,
+  ) {
+    await this.drizzleConnection
+      .update(users)
+      .set({ activationToken: token, activationTokenExpiresAt: expiresAt })
+      .where(and(eq(users.id, userId), eq(users.status, "inactive")));
+  }
+
   public async activateUser(userId: number) {
     return await this.drizzleConnection
       .update(users)

@@ -981,6 +981,36 @@ test("offers a password reset link only where mail can deliver one", async ({
   expect(new URL(page.url()).pathname).toBe("/password-reset");
 });
 
+// #810: the activation page is a confirmation, not an action. Anything that
+// opens the link -- a mail preview, a link scanner -- must find the token as
+// usable as the person following it; only the button may activate.
+test("opening the activation link activates nothing until the button says so", async ({
+  page,
+}) => {
+  await installApiFixture(page, { authenticated: false });
+  const activations: string[] = [];
+  await page.route("**/api/activate/**", async (route) => {
+    activations.push(route.request().method());
+    return route.fulfill({
+      body: JSON.stringify({ success: true }),
+      contentType: "application/json",
+      status: 200,
+    });
+  });
+
+  await page.goto("/activate/scan-magnet");
+  await expect(
+    page.getByRole("heading", { name: "Account activation" }),
+  ).toBeVisible();
+  expect(activations).toEqual([]);
+
+  await page.getByRole("button", { name: "Activate account" }).click();
+  await expect(
+    page.getByText("Your account has been activated."),
+  ).toBeVisible();
+  expect(activations).toEqual(["POST"]);
+});
+
 test("retitles the document on route changes", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");

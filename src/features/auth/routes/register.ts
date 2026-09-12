@@ -14,12 +14,18 @@ import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
 import { registerRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
+import { digestToken } from "#shared/util/token-digest.ts";
 
 const turnstileResponse = Type.Object(
   { success: Type.Boolean() },
   { additionalProperties: true },
 );
 const turnstileResponseCheck = Schema.Compile(turnstileResponse);
+
+// The same windows the links themselves promise: a day for activation, an
+// hour for a reset.
+const activationLifetimeMs = 24 * 60 * 60 * 1_000;
+const resetLifetimeMs = 60 * 60 * 1_000;
 
 async function validateCaptcha(
   token: string | undefined,
@@ -97,17 +103,16 @@ export function createRegisterRoute() {
         if (Value.Check(disposableEmailPolicy, request.email))
           return json({ success: true });
 
-        const existing = await usersDataService.findUser(request.email);
-        if (existing) return json({ success: true });
-
         // The only thing worth abusing here is the send: who may hold an
-        // account is settled by the checks above, but the activation mail
-        // goes to an address the caller named, from this instance's domain.
-        // So the count sits on the branch that sends, ahead of the password
-        // hash an attempt would otherwise make us pay for. On an empty
-        // instance there is nobody to send to but the first operator, who
-        // has no second address to try and must not be locked out of their
-        // own install, so the count does not start until they exist.
+        // account is settled by the checks above, but every mail this route
+        // can produce -- a fresh activation, an account-exists notice with a
+        // reset link, a first activation -- goes to an address the caller
+        // named, from this instance's domain. So the count sits ahead of all
+        // of them, and ahead of the password hash an attempt would otherwise
+        // make us pay for. On an empty instance there is nobody to send to
+        // but the first operator, who has no second address to try and must
+        // not be locked out of their own install, so the count does not
+        // start until they exist.
         if (useEmailActivation && userCount > 0) {
           const address = clientAddress(
             httpRequest,
@@ -121,11 +126,59 @@ export function createRegisterRoute() {
           await authThrottle.recordFailure("register", address, request.email);
         }
 
+        const existing = await usersDataService.findUser(request.email);
+        if (existing) {
+          // Registering again answers success whatever the truth is, so the
+          // address's own state decides what the mailbox receives (#810): a
+          // still-pending registration whose link has expired gets a fresh
+          // one -- otherwise the person is stuck outside an account that is
+          // half-made and can never be activated -- and an active account
+          // gets a reset link, the only way in that does not assume the
+          // password still works. A pending registration whose link is still
+          // good needs nothing: the first mail already covers it. None of
+          // this exists on an install that cannot send mail, where account
+          // recovery never had a channel to begin with.
+          if (useEmailActivation) {
+            if (existing.status === "inactive") {
+              const expired =
+                !existing.activationTokenExpiresAt ||
+                existing.activationTokenExpiresAt < new Date();
+              if (expired) {
+                const activationToken = randomUUID();
+                const activationTokenExpiresAt = new Date(
+                  Date.now() + activationLifetimeMs,
+                );
+                await mailSender.sendActivationEmail(
+                  existing.email,
+                  activationToken,
+                );
+                await usersDataService.refreshActivationToken(
+                  existing.id,
+                  activationToken,
+                  activationTokenExpiresAt,
+                );
+              }
+            } else {
+              const resetToken = randomUUID();
+              await usersDataService.startPasswordReset(
+                existing.id,
+                digestToken(resetToken),
+                new Date(Date.now() + resetLifetimeMs),
+              );
+              await mailSender.sendAccountExistsEmail(
+                existing.email,
+                resetToken,
+              );
+            }
+          }
+          return json({ success: true });
+        }
+
         const passwordHash = await password.hash(request.password);
         if (useEmailActivation) {
           const activationToken = randomUUID();
           const activationTokenExpiresAt = new Date(
-            Date.now() + 24 * 60 * 60 * 1_000,
+            Date.now() + activationLifetimeMs,
           );
           await mailSender.sendActivationEmail(request.email, activationToken);
           await usersDataService.createUser({
