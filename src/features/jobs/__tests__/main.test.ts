@@ -386,19 +386,27 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
 });
 
 // A request that arrived while the job held the source's id was recorded
-// rather than queued (the add would have been deduped away); the end of the
-// run is where it is collected and answered with one follow-up refresh.
-test("folds requests that arrived mid-run into one follow-up refresh", async () => {
+// rather than queued (the add would have been deduped away); the run folds it
+// in itself at the end. It cannot hand it back to the enqueuer -- the id is
+// still active until this processor returns, so that add would be deduped
+// against this very job and the refresh would wait for the next poll.
+test("folds requests that arrived mid-run into one more parse", async () => {
   let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   const createWorker: MainWorkerFactory = (value, options) => {
     processor = value;
     return noopWorkerFactory(value, options);
   };
+  const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const followedUp: Parameters<SourceEnqueuer["enqueueSource"]>[] = [];
+  let pending: { skipCache: boolean } | null = { skipCache: true };
   const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },
-    idleParser,
+    {
+      async parseSource(input) {
+        parsed.push([input.skipCache, input.trigger]);
+      },
+    },
     idleFaviconRefresher,
     idleSources,
     idleSources,
@@ -410,8 +418,12 @@ test("folds requests that arrived mid-run into one follow-up refresh", async () 
       async enqueueSource(source, trigger, skipCache) {
         followedUp.push([source, trigger, skipCache]);
       },
+      // getdel: the take is the consume, so a second call sees nothing.
       async takePendingRefresh(sourceId) {
-        return sourceId === source.id ? { skipCache: true } : null;
+        if (sourceId !== source.id) return null;
+        const taken = pending;
+        pending = null;
+        return taken;
       },
     },
   );
@@ -424,9 +436,11 @@ test("folds requests that arrived mid-run into one follow-up refresh", async () 
     name: JobName.ParseSource,
   });
 
-  expect(followedUp).toEqual([
-    [{ id: source.id, url: source.url }, "manual", true],
+  expect(parsed).toEqual([
+    [undefined, "poll"],
+    [true, "manual"],
   ]);
+  expect(followedUp).toEqual([]);
 });
 
 // A deferral keeps the job (and its id) alive for another run, so the
