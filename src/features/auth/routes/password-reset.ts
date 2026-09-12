@@ -108,11 +108,16 @@ export function createPasswordResetRoute() {
 
         // Clearing the token and dropping every session happen with the write
         // itself, so the link is single-use and whoever knew the old password
-        // is logged out by the same commit.
-        await usersDataService.completePasswordReset(
+        // is logged out by the same commit. The spent token is part of the
+        // write's WHERE clause, so of two confirmations racing on one link
+        // the first commit wins and the second is told the link is gone
+        // (#809) -- never two passwords with the last write deciding.
+        const spent = await usersDataService.completePasswordReset(
           user.id,
+          digest(parsed.token),
           await password.hash(parsed.password1),
         );
+        if (!spent) return invalid;
         return json({ success: true });
       },
     );
