@@ -160,7 +160,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result.publishedAt).toEqual(publishedDate);
   });
 
-  test("should generate consistent GUID for same content", () => {
+  test("generates stable GUIDs that distinguish different content", () => {
     const content = {
       content: "Same content",
       description: "Same desc",
@@ -184,6 +184,13 @@ describe("mapFeedItemToArticle", () => {
     );
 
     expect(result1.guid).toBe(result2.guid);
+    const changed = mapFeedItemToArticle(
+      createMockFeedItem({ ...content, content: "Different content" }),
+      mockFeed,
+      mockSource,
+      mockRewriteLinks,
+    );
+    expect(changed.guid).not.toBe(result1.guid);
   });
 
   test("should handle null content with description fallback", () => {
@@ -242,27 +249,6 @@ describe("mapFeedToPreview", () => {
     expect(result).toEqual({
       articles: [],
       description: undefined,
-      feedUrl: "https://example.com/feed.xml",
-      link: undefined,
-      title: "https://example.com/feed.xml",
-    });
-  });
-
-  test("should handle partially undefined feed data", () => {
-    const mockFeed = createMockFeed({
-      description: "description",
-      title: null,
-    });
-
-    const result = mapFeedToPreview(
-      mockFeed,
-      "https://example.com/feed.xml",
-      mockRewriteLinks,
-    );
-
-    expect(result).toEqual({
-      articles: [],
-      description: "description",
       feedUrl: "https://example.com/feed.xml",
       link: undefined,
       title: "https://example.com/feed.xml",

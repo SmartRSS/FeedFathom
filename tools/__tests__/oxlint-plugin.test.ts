@@ -55,8 +55,8 @@ function diagnosticCodes(stdout: string, stderr: string): string[] {
 }
 
 /** Lint an already-written file, returning only this plugin's rule names. */
-function lintFile(relativePath: string): string[] {
-  const result = Bun.spawnSync({
+async function lintFile(relativePath: string): Promise<string[]> {
+  const child = Bun.spawn({
     cmd: [
       oxlintBin,
       "-c",
@@ -69,10 +69,15 @@ function lintFile(relativePath: string): string[] {
     stderr: "pipe",
     stdout: "pipe",
   });
-  return diagnosticCodes(
-    result.stdout.toString(),
-    result.stderr.toString(),
-  ).filter((name) => name.includes("feedfathom"));
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect([0, 1]).toContain(exitCode);
+  return diagnosticCodes(stdout, stderr).filter((name) =>
+    name.includes("feedfathom"),
+  );
 }
 
 /** Lint one source string and return the rule names that fired. */
@@ -174,7 +179,7 @@ test("no-barrel-file honours the allow list", async () => {
     join(directory, file),
     'import { a } from "../../../a.ts";\nexport { a };',
   );
-  expect(lintFile(file)).toEqual([]);
+  expect(await lintFile(file)).toEqual([]);
 });
 
 /** Write a fixture at a path the layer rule reads, and lint it there. */

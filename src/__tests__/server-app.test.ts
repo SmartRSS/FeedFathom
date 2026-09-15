@@ -955,19 +955,23 @@ function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
   };
 }
 
-// The fan-out below is about to move out of the route into a named service.
-// Its contract has never been asserted, only its auth and its failure modes.
-test("find marks each candidate with whether it advertises a WebSub hub", async () => {
+test("find marks push feeds and preserves plain or failed candidates", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.httpClient.get = async () => ({
     data: `<html><head>
       <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
       <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
+      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
     </head></html>`,
   });
-  dependencies.feedParser.parseUrl = async (url: string) =>
-    parsedFeed(url, url.includes("push") ? "https://hub.example/" : undefined);
+  dependencies.feedParser.parseUrl = async (url: string) => {
+    if (url.includes("dead")) throw new Error("404");
+    return parsedFeed(
+      url,
+      url.includes("push") ? "https://hub.example/" : undefined,
+    );
+  };
   const app = await appFor(dependencies);
 
   const response = await app.handle(
@@ -983,39 +987,7 @@ test("find marks each candidate with whether it advertises a WebSub hub", async 
   expect(await response.json()).toEqual([
     { title: "Push", url: "https://site.example/push.xml", websub: true },
     { title: "Plain", url: "https://site.example/plain.xml", websub: false },
-  ]);
-});
-
-// A dead candidate is worth showing: the user finds out when they preview it,
-// and dropping it silently would make the page look like the feed never
-// existed.
-test("find keeps a candidate whose parse throws, merely unmarked", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
-    data: `<html><head>
-      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
-      <link rel="alternate" type="application/rss+xml" title="Live" href="https://site.example/live.xml">
-    </head></html>`,
-  });
-  dependencies.feedParser.parseUrl = async (url: string) => {
-    if (url.includes("dead")) throw new Error("404");
-    return parsedFeed(url, "https://hub.example/");
-  };
-  const app = await appFor(dependencies);
-
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
-  );
-
-  expect(await response.json()).toEqual([
     { title: "Dead", url: "https://site.example/dead.xml", websub: false },
-    { title: "Live", url: "https://site.example/live.xml", websub: true },
   ]);
 });
 

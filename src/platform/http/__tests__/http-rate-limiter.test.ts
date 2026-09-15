@@ -100,8 +100,7 @@ describe("rateLimitBlockUntil", () => {
 });
 
 describe("rateLimitBlockUntil header spellings and reset units", () => {
-  // RFC 9331 standardised the un-prefixed names; the X- forms predate it.
-  test("reads the un-prefixed RFC 9331 names", () => {
+  test("reads an epoch reset with un-prefixed header names", () => {
     const reset = (now + 60_000) / 1_000;
     expect(
       rateLimitBlockUntil(
@@ -138,19 +137,6 @@ describe("rateLimitBlockUntil header spellings and reset units", () => {
         now,
       ),
     ).toBe(now + 60_000);
-  });
-
-  test("still reads a large reset as an epoch timestamp", () => {
-    const reset = (now + 60_000) / 1_000;
-    expect(
-      rateLimitBlockUntil(
-        headers({
-          "ratelimit-remaining": "0",
-          "ratelimit-reset": String(reset),
-        }),
-        now,
-      ),
-    ).toBe(reset * 1_000);
   });
 
   test("ignores a delta of zero and a negative reset", () => {

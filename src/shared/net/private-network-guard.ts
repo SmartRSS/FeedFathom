@@ -1,13 +1,7 @@
-// Shared by the extension's reader-fetch (src/extension/reader-fetch.ts) and
-// server-side outbound requests whose target URL comes from untrusted,
-// attacker-influenced content rather than something a user directly typed
-// (a WebSub hub URL discovered inside fetched feed content, for example).
-// Checks the hostname string itself, not a DNS-resolved address -- same
-// limitation as the extension's original version, so this does not defend
-// against DNS rebinding (a hostname that resolves to a private IP at
-// request time). Closing that gap would mean resolving DNS ourselves and
-// connecting to the resolved address directly, which neither call site
-// does today.
+// Hostname-only guard shared by extension reader fetching and WebSub URL
+// validation. It parses IP literals and applies our block rules without DNS
+// lookup. Server requests also validate and pin DNS results in
+// platform/http/http-native-transport.ts; the extension cannot do that.
 //
 // Because real HTTP clients accept non-canonical IP literal forms
 // (inet_aton-style "2130706433" or "127.1", hex "0x7f.1", octal "017.0.0.1",

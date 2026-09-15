@@ -4,18 +4,6 @@ import { HttpDeadlineError, RequestDeadline } from "../request-deadline.ts";
 const never = new Promise<never>(() => {});
 
 describe("RequestDeadline", () => {
-  test("passes a result through while the budget holds", async () => {
-    const deadline = new RequestDeadline(1_000);
-    expect(await deadline.run(Promise.resolve("ok"))).toBe("ok");
-    deadline.dispose();
-  });
-
-  test("rejects an operation that outlives the budget", async () => {
-    const deadline = new RequestDeadline(10);
-    await expect(deadline.run(never)).rejects.toBeInstanceOf(HttpDeadlineError);
-    deadline.dispose();
-  });
-
   // The transport is handed this signal, so expiry has to cancel an in-flight
   // read rather than wait for it to return on its own.
   test("aborts its controller when the budget runs out", async () => {
@@ -36,20 +24,12 @@ describe("RequestDeadline", () => {
     deadline.dispose();
   });
 
-  // A retry or redirect hop starting after expiry must not be dispatched at
-  // all, which is the whole point of a budget shared across steps.
-  test("refuses to start a new operation after expiry", async () => {
+  test("rejects an already-resolved operation after expiry", async () => {
     const deadline = new RequestDeadline(10);
     await expect(deadline.run(never)).rejects.toBeInstanceOf(HttpDeadlineError);
-    let started = false;
-    const operation = (async () => {
-      started = true;
-      return "late";
-    })();
-    await expect(deadline.run(operation)).rejects.toBeInstanceOf(
+    await expect(deadline.run(Promise.resolve("late"))).rejects.toBeInstanceOf(
       HttpDeadlineError,
     );
-    expect(started).toBe(true);
     deadline.dispose();
   });
 
@@ -72,10 +52,11 @@ describe("RequestDeadline", () => {
   });
 
   // Without this the timer keeps the process alive after a fast request.
-  test("dispose clears the pending timer", async () => {
+  test("passes a result through and disposal prevents later abort", async () => {
     const deadline = new RequestDeadline(50);
     expect(await deadline.run(Promise.resolve(1))).toBe(1);
     deadline.dispose();
+    await Bun.sleep(75);
     expect(deadline.controller.signal.aborted).toBe(false);
   });
 });
