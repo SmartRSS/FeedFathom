@@ -76,7 +76,7 @@ export function parseReadingSession(
   if (record["version"] !== SESSION_VERSION) return undefined;
   const reader = parseReaderScrolls(record["reader"]);
   const app = parseAppSnapshot(record["app"]);
-  if (!reader || !app) return undefined;
+  if (!reader || (record["app"] !== undefined && !app)) return undefined;
   return { app, reader };
 }
 

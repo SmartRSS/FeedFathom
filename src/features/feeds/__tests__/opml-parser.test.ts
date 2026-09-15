@@ -180,33 +180,15 @@ describe("OpmlParser", () => {
           path.join(process.cwd(), inputDirectory, `${testFile}.ts`)
         );
 
-        // Only import expected result for non-error test cases
-        let expected;
-        if (!testFile.includes("invalid")) {
-          const expectedModule = await import(
-            path.join(process.cwd(), expectedDirectory, `${testFile}.ts`)
-          );
-          expected = expectedModule.expected;
+        if (testFile === "invalid-xml") {
+          expect(() => parser.parseOpml(input)).toThrow(SyntaxError);
+          return;
         }
 
-        try {
-          const result = await parser.parseOpml(input);
-          // Only compare results for non-error test cases
-          if (testFile.includes("invalid")) {
-            // For invalid test cases, we expect the parser to succeed
-            // but we don't care about the exact result
-            expect(result).toBeTruthy();
-          } else {
-            expect(result).toEqual(expected);
-          }
-        } catch (error) {
-          // If this is an error test case, we expect an error
-          if (testFile.includes("invalid")) {
-            expect(error).toBeTruthy();
-          } else {
-            throw error;
-          }
-        }
+        const { expected } = await import(
+          path.join(process.cwd(), expectedDirectory, `${testFile}.ts`)
+        );
+        expect(parser.parseOpml(input)).toEqual(expected);
       });
     }
   });

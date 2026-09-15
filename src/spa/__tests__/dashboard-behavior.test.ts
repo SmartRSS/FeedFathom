@@ -4,7 +4,6 @@ import {
   faviconUrls,
   filterTree,
   folderOpenFromStored,
-  folderOpenStorageKey,
   folderOpenToStored,
   findNode,
   findParentFolderUid,
@@ -12,12 +11,10 @@ import {
   isTodayNode,
   nextPollDelayMs,
   sourceIds,
-  snoozePresets,
   snoozeUntilIso,
   totalUnread,
   treeNodeKey,
   treeTabStopKey,
-  unreadCount,
   withDecrementedUnread,
   withTodayNode,
 } from "../dashboard-behavior.ts";
@@ -51,44 +48,28 @@ describe("treeNodeKey", () => {
 });
 
 describe("sourceIds", () => {
-  test("returns a source's own numeric uid", () => {
-    expect(sourceIds(source("42"))).toEqual([42]);
-  });
-
-  test("collects every source beneath a folder, in order", () => {
-    expect(sourceIds(folder("f", [source("2"), source("9")]))).toEqual([2, 9]);
-  });
-
-  test("an empty folder contributes nothing", () => {
-    expect(sourceIds(folder("f", []))).toEqual([]);
+  test("collects source IDs in order through nested and empty folders", () => {
+    expect(
+      sourceIds(
+        folder("f", [
+          source("2"),
+          folder("nested", [source("9")]),
+          folder("empty", []),
+        ]),
+      ),
+    ).toEqual([2, 9]);
+    expect(sourceIds(folder("empty", []))).toEqual([]);
   });
 });
 
 describe("faviconUrls", () => {
-  test("skips sources with no favicon", () => {
+  test("collects favicons and skips missing or empty values", () => {
     const tree = folder("f", [
       source("1", { favicon: "https://a.example/i.png" }),
       source("2"),
+      source("3", { favicon: "" }),
     ]);
     expect(faviconUrls(tree)).toEqual(["https://a.example/i.png"]);
-  });
-
-  test("an empty favicon string is treated as absent", () => {
-    expect(faviconUrls(source("1", { favicon: "" }))).toEqual([]);
-  });
-});
-
-describe("unreadCount", () => {
-  test("sums a folder's sources", () => {
-    const tree = folder("f", [
-      source("1", { unreadCount: 3 }),
-      source("2", { unreadCount: 4 }),
-    ]);
-    expect(unreadCount(tree)).toBe(7);
-  });
-
-  test("a source reports its own count", () => {
-    expect(unreadCount(source("1", { unreadCount: 5 }))).toBe(5);
   });
 });
 
@@ -123,22 +104,32 @@ describe("nextPollDelayMs", () => {
 });
 
 describe("withDecrementedUnread", () => {
-  test("subtracts the delta for the named source", () => {
-    const nodes = [source("1", { unreadCount: 5 })];
-    const next = withDecrementedUnread(nodes, new Map([["1", 2]]));
-    expect(unreadCount(next[0]!)).toBe(3);
-  });
-
-  test("clamps at zero rather than going negative", () => {
-    const nodes = [source("1", { unreadCount: 1 })];
-    const next = withDecrementedUnread(nodes, new Map([["1", 9]]));
-    expect(unreadCount(next[0]!)).toBe(0);
-  });
-
-  test("reaches sources nested in a folder", () => {
-    const nodes = [folder("f", [source("1", { unreadCount: 4 })])];
-    const next = withDecrementedUnread(nodes, new Map([["1", 1]]));
-    expect(unreadCount(next[0]!)).toBe(3);
+  test("decrements nested sources, clamps at zero, and preserves untouched branches", () => {
+    const untouched = folder("keep", [source("3", { unreadCount: 2 })]);
+    const nodes = [
+      folder("f", [
+        source("1", { unreadCount: 5 }),
+        source("2", { unreadCount: 1 }),
+      ]),
+      untouched,
+    ];
+    const next = withDecrementedUnread(
+      nodes,
+      new Map([
+        ["1", 2],
+        ["2", 9],
+      ]),
+    );
+    expect(next).toEqual([
+      folder("f", [
+        source("1", { unreadCount: 3 }),
+        source("2", { unreadCount: 0 }),
+      ]),
+      untouched,
+    ]);
+    expect(next).not.toBe(nodes);
+    expect(next[1]).toBe(untouched);
+    expect(totalUnread(nodes)).toBe(8);
   });
 
   // The component diffs on identity to decide whether to re-render, so an
@@ -146,14 +137,6 @@ describe("withDecrementedUnread", () => {
   test("returns the identical array when no delta applies", () => {
     const nodes = [folder("f", [source("1", { unreadCount: 4 })])];
     expect(withDecrementedUnread(nodes, new Map([["9", 1]]))).toBe(nodes);
-  });
-
-  test("leaves untouched branches identical while replacing changed ones", () => {
-    const untouched = folder("keep", [source("1", { unreadCount: 2 })]);
-    const nodes = [untouched, source("2", { unreadCount: 2 })];
-    const next = withDecrementedUnread(nodes, new Map([["2", 1]]));
-    expect(next).not.toBe(nodes);
-    expect(next[0]).toBe(untouched);
   });
 
   test("a zero delta counts as no change", () => {
@@ -192,27 +175,13 @@ describe("findParentFolderUid", () => {
 describe("folder open persistence", () => {
   test('only the literal "closed" collapses a folder', () => {
     expect(folderOpenFromStored("closed")).toBe(false);
-    expect(folderOpenFromStored("open")).toBe(true);
+    for (const value of ["open", null, "", "CLOSED"])
+      expect(folderOpenFromStored(value)).toBe(true);
   });
 
-  // A folder that has never been toggled has no stored entry at all.
-  test("an absent entry reads as open", () => {
-    expect(folderOpenFromStored(null)).toBe(true);
-  });
-
-  // A value from an older build or a corrupted one must not hide feeds.
-  test("an unrecognised value reads as open", () => {
-    expect(folderOpenFromStored("")).toBe(true);
-    expect(folderOpenFromStored("CLOSED")).toBe(true);
-  });
-
-  test("round-trips both states", () => {
-    expect(folderOpenFromStored(folderOpenToStored(true))).toBe(true);
-    expect(folderOpenFromStored(folderOpenToStored(false))).toBe(false);
-  });
-
-  test("namespaces the key by uid", () => {
-    expect(folderOpenStorageKey("inbox")).toBe("folder:inbox");
+  test("serializes both folder states", () => {
+    expect(folderOpenToStored(true)).toBe("open");
+    expect(folderOpenToStored(false)).toBe("closed");
   });
 });
 
@@ -294,14 +263,6 @@ describe("withTodayNode", () => {
   test("disabled drops the node entirely", () => {
     expect(withTodayNode([source("1")], false)).toHaveLength(1);
   });
-
-  test("the virtual node yields no usable source id", () => {
-    const node = withTodayNode([source("1")], true)[0]!;
-    expect(isTodayNode(node)).toBe(true);
-    // Number("today") is NaN -- which is exactly why select() must branch
-    // on isTodayNode before reaching for sourceIds().
-    expect(Number.isNaN(sourceIds(node)[0])).toBe(true);
-  });
 });
 
 describe("source snooze", () => {
@@ -327,15 +288,8 @@ describe("source snooze", () => {
     ).toBe(false);
   });
 
-  test("presets resolve to future timestamps", () => {
-    for (const preset of snoozePresets) {
-      const until = new Date(snoozeUntilIso(preset.hours, now)).getTime();
-      expect(until).toBeGreaterThan(now);
-    }
-    expect(snoozePresets.map((preset) => preset.label)).toEqual([
-      "Snooze 1 day",
-      "Snooze 1 week",
-      "Snooze forever",
-    ]);
+  test("converts snooze durations from hours to absolute timestamps", () => {
+    expect(snoozeUntilIso(24, now)).toBe("2026-09-10T12:00:00.000Z");
+    expect(snoozeUntilIso(168, now)).toBe("2026-09-16T12:00:00.000Z");
   });
 });

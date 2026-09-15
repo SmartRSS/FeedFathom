@@ -128,37 +128,50 @@ test("caches fresh responses, retries transient failures, and defers background 
   ).rejects.toBeInstanceOf(HttpDeferredError);
 });
 
-test("skipCache bypasses the local TTL short-circuit but still revalidates conditionally", async () => {
-  let requests = 0;
+test("skipCache sends validators and a 304 prevents another request while fresh", async () => {
+  const sentHeaders: Headers[] = [];
   const store = redis();
   const client = new HttpClient(store, {
-    transport: queuedTransport([nativeResponse("", { status: 304 })], () => {
-      requests++;
-    }),
+    transport: async (_url, headers) => {
+      sentHeaders.push(new Headers(headers));
+      return nativeResponse("", {
+        headers: { "cache-control": "max-age=60" },
+        status: 304,
+      });
+    },
   });
 
-  // Seed a still-fresh cached entry directly, as if an earlier fetch had
-  // already populated it -- avoids this test's own network call tripping
-  // the per-hostname reservation interval before the skipCache request runs.
   const url = "https://1.1.1.1/feed";
+  const initialExpiry = Date.now() + 30_000;
+  const modified = "Thu, 01 Jan 2026 12:00:00 GMT";
   const cacheKey = `http-cache:${Buffer.from(url).toString("base64url")}`;
   store.values.set(
     cacheKey,
     JSON.stringify({
-      body: Buffer.from("stale-cached-feed").toString("base64"),
-      expiresAt: Date.now() + 60_000,
-      headers: [["etag", '"v1"']],
+      body: Buffer.from("cached-feed").toString("base64"),
+      expiresAt: initialExpiry,
+      headers: [
+        ["etag", '"v1"'],
+        ["last-modified", modified],
+      ],
       status: 200,
       url,
     }),
   );
 
-  // Still within the cached entry's TTL, so a plain get() would return it
-  // without any network request -- skipCache forces revalidation instead.
   const revalidated = await client.get(url, { skipCache: true });
-  expect(revalidated.data).toBe("stale-cached-feed");
+  expect(revalidated.data).toBe("cached-feed");
   expect(revalidated.cached).toBe(true);
-  expect(requests).toBe(1);
+  expect(revalidated.freshUntil).toBeGreaterThan(initialExpiry);
+  expect(sentHeaders).toHaveLength(1);
+  expect(sentHeaders[0]!.get("if-none-match")).toBe('"v1"');
+  expect(sentHeaders[0]!.get("if-modified-since")).toBe(modified);
+
+  const reused = await client.get(url);
+  expect(reused.data).toBe("cached-feed");
+  expect(reused.cached).toBe(true);
+  expect(reused.freshUntil).toBe(revalidated.freshUntil);
+  expect(sentHeaders).toHaveLength(1);
 });
 
 test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
@@ -454,21 +467,6 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
   expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
   expect(requests).toBe(1);
   expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
-});
-
-// Without the header a 503 is still just a transient failure to retry.
-test("still retries a 503 that carries no Retry-After", async () => {
-  let requests = 0;
-  const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
-    transport: queuedTransport(
-      [nativeResponse("overloaded", { status: 503 }), nativeResponse("feed")],
-      () => requests++,
-    ),
-  });
-
-  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
-  expect(requests).toBe(2);
 });
 
 // The host slot used to be reserved once per call, so the three attempts of

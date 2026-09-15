@@ -1169,7 +1169,10 @@ test("surfaces a malformed Options session without crashing", async ({
 test("loads articles and content from a selected source", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
+  const deleteButton = page.getByRole("button", { name: "delete articles" });
+  await expect(deleteButton).toBeDisabled();
   await selectSource(page);
+  await expect(deleteButton).toBeEnabled();
 
   const option = page.getByRole("option", { name: /First article/ });
   await expect(option).toHaveAttribute("aria-selected", "true");
@@ -1179,20 +1182,24 @@ test("loads articles and content from a selected source", async ({ page }) => {
   await expect(page.getByText("Feed article content")).toBeVisible();
 });
 
-test("select all moves focus into the list so Delete works immediately", async ({
+test("select all preserves scroll and moves focus so Delete works immediately", async ({
   page,
 }) => {
-  // Regression test: clicking the toolbar's "select all" button natively
-  // focuses the button itself, which sits outside .article-list -- the
-  // element handleArticleKeys (Delete/arrow-key handling) is attached to.
-  // Without moving focus back into the list, a Delete keypress right after
-  // clicking select-all was silently a no-op.
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
+  await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
 
+  const list = page.locator(".article-list");
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const scrolledTop = await list.evaluate((element) => element.scrollTop);
+  expect(scrolledTop).toBeGreaterThan(0);
+
   await page.getByRole("button", { name: "select all" }).click();
+  await expect(list).toHaveJSProperty("scrollTop", scrolledTop);
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toHaveAttribute("aria-selected", "true");
@@ -1211,27 +1218,6 @@ test("select all moves focus into the list so Delete works immediately", async (
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
-});
-
-test("select all does not scroll the article list", async ({ page }) => {
-  // Regression test: focusArticleAt(0) used to always scrollIntoView the
-  // first row, which yanked the list back to the top even when the user
-  // had scrolled down before clicking select-all.
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-  await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
-  await selectSource(page);
-  await expect(articleOptions(page)).toHaveCount(3);
-
-  const list = page.locator(".article-list");
-  await list.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  const scrolledTop = await list.evaluate((element) => element.scrollTop);
-  expect(scrolledTop).toBeGreaterThan(0);
-
-  await page.getByRole("button", { name: "select all" }).click();
-  await expect(list).toHaveJSProperty("scrollTop", scrolledTop);
 });
 
 test("select all then clicking Delete removes every article", async ({
@@ -1269,25 +1255,6 @@ test("selecting a single article then pressing Delete removes only it", async ({
     page.getByRole("option", { name: /Third article/ }),
   ).toBeVisible();
   expect(state.removedArticleIds).toEqual([12]);
-});
-
-test("disables the delete-articles button until something is selected", async ({
-  page,
-}) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-
-  const deleteButton = page.getByRole("button", { name: "delete articles" });
-  await expect(deleteButton).toBeDisabled();
-
-  // Selecting a source auto-selects its first article for immediate
-  // reading (see "loads articles and content from a selected source"), so
-  // the button already reflects a selection right after this.
-  await selectSource(page);
-  await expect(
-    page.getByRole("option", { name: /First article/ }),
-  ).toHaveAttribute("aria-selected", "true");
-  await expect(deleteButton).toBeEnabled();
 });
 
 test("source properties reuses the discovery panel with feed/website locked", async ({
@@ -1409,9 +1376,6 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
 });
 
 test("every toolbar icon renders and is clickable", async ({ page }) => {
-  // Regression test for the Icon component swap (inline currentColor SVG
-  // instead of <img src>) -- each button must still have a nonzero hit
-  // area and a visible icon, not just an empty/invisible span.
   await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
@@ -1424,16 +1388,11 @@ test("every toolbar icon renders and is clickable", async ({ page }) => {
     "select all",
     "delete articles",
   ];
-  await Promise.all(
-    toolbarButtons.map(async (name) => {
-      const button = page.getByRole("button", { exact: true, name }).first();
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      expect(box?.width).toBeGreaterThan(0);
-      expect(box?.height).toBeGreaterThan(0);
-      await expect(button.locator("svg")).toBeVisible();
-    }),
-  );
+  for (const name of toolbarButtons) {
+    const button = page.getByRole("button", { exact: true, name }).first();
+    await button.click({ trial: true });
+    await expect(button.locator("svg")).toBeVisible();
+  }
 });
 
 test("shows the generic RSS icon for a source with no favicon", async ({
@@ -1877,9 +1836,6 @@ test("typing j in the feed filter does not move the selection", async ({
   await expect(filter).toHaveValue("j");
 });
 
-// Session restoration (#718). Each spec scrolls with real scroll events and
-// waits out the 500ms write throttle once -- everything after that is the
-// app's own state machine, no timers.
 test.describe("session restoration", () => {
   test("a reload restores the selected article and the list scroll", async ({
     page,
@@ -1896,15 +1852,22 @@ test.describe("session restoration", () => {
     await list.evaluate((element) => {
       element.scrollTop = 900;
     });
-    await page.waitForTimeout(700);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+            )?.app?.listScrollTop,
+        ),
+      )
+      .toBe(900);
 
     await page.reload();
     // The restored selection re-opens the article in the reader pane and
     // puts the list back at the stored offset -- all from one boot fetch.
     await expect(page.locator(".reader h1")).toHaveText("Article 130");
-    await expect
-      .poll(() => list.evaluate((element) => element.scrollTop))
-      .toBeGreaterThan(500);
+    await expect(list).toHaveJSProperty("scrollTop", 900);
     await expect(articleOptions(page).nth(30)).toHaveAttribute(
       "aria-selected",
       "true",
@@ -1926,13 +1889,20 @@ test.describe("session restoration", () => {
       return element.scrollTop;
     });
     expect(halfScroll).toBeGreaterThan(200);
-    await page.waitForTimeout(700);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+            )?.reader?.[0]?.ratio,
+        ),
+      )
+      .toBeCloseTo(0.5, 2);
 
     await page.reload();
     await expect(page.locator(".reader h1")).toHaveText("First article");
-    await expect
-      .poll(() => reader.evaluate((element) => element.scrollTop))
-      .toBeGreaterThan(200);
+    await expect(reader).toHaveJSProperty("scrollTop", halfScroll);
   });
 
   test("with the preference off, no snapshot is written and nothing restores", async ({

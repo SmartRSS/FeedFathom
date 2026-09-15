@@ -268,7 +268,8 @@ async function createMainWorker(
   return new MainWorker();
 }
 
-test("initialize schedules configured intervals and starts the worker", async () => {
+test("initializes scheduled jobs and closes the worker on cleanup", async () => {
+  let closeCalls = 0;
   const repeatIntervals = new Map<string, number>();
   let workerOptions: Parameters<MainWorkerFactory>[1] | undefined;
   const queue: MainWorkerQueue = {
@@ -280,7 +281,12 @@ test("initialize schedules configured intervals and starts the worker", async ()
   };
   const createWorker: MainWorkerFactory = (_processor, options) => {
     workerOptions = options;
-    return noopWorkerFactory(_processor, options);
+    return {
+      ...noopWorkerFactory(_processor, options),
+      async close() {
+        closeCalls++;
+      },
+    };
   };
   const worker = await createMainWorker(
     config,
@@ -302,6 +308,9 @@ test("initialize schedules configured intervals and starts the worker", async ()
   expect(repeatIntervals.get(JobName.GatherFaviconJobs)).toBe(86_400_000);
   expect(repeatIntervals.get(JobName.WebSubRenewal)).toBe(86_400_000);
   expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
+  expect(closeCalls).toBe(0);
+  await worker.cleanup();
+  expect(closeCalls).toBe(1);
 });
 
 test("captured processor parses the queued source", async () => {
@@ -682,37 +691,6 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
   );
 
   expect(downstreamCalls).toEqual([]);
-});
-
-test("cleanup delegates to the worker", async () => {
-  let closeCalls = 0;
-  const queue: MainWorkerQueue = {
-    async add() {},
-    async addBulk() {},
-  };
-  const createWorker: MainWorkerFactory = () => ({
-    async close() {
-      closeCalls++;
-    },
-    onFailed() {},
-  });
-  const worker = await createMainWorker(
-    config,
-    queue,
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-
-  await worker.cleanup();
-
-  expect(closeCalls).toBe(1);
 });
 
 test("records a durable failure for non-ParseSource job errors", async () => {

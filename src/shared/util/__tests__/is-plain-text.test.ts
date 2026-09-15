@@ -1,38 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { isPlainText } from "#shared/util/is-plain-text.ts";
 
-describe("isPlainText", () => {
-  test("should return true for empty string", () => {
-    expect(isPlainText("")).toBe(true);
-  });
+test("accepts empty text", () => {
+  expect(isPlainText("")).toBe(true);
+});
 
-  test("should return true for plain text content", () => {
-    expect(isPlainText("This is a plain text.")).toBe(true);
-  });
+test("accepts markup, Unicode, and text whitespace", () => {
+  expect(isPlainText('<p>Café 世界 😀</p>\t\r\n{"key": "value"}')).toBe(true);
+});
 
-  test("should return true for HTML content", () => {
-    expect(isPlainText("<p>This is HTML content.</p>")).toBe(true);
-  });
-
-  test("should return true for JSON content", () => {
-    expect(isPlainText('{"key": "value"}')).toBe(true);
-  });
-
-  test("should return true for XML content", () => {
-    expect(isPlainText("<note><to>Tove</to></note>")).toBe(true);
-  });
-
-  test("should return true for Markdown content", () => {
-    expect(isPlainText("# This is a header")).toBe(true);
-  });
-
-  test("should return false for binary data", () => {
-    // Simulating binary data as a string
-    const binaryString = String.fromCodePoint(0, 1, 2, 3, 4, 5);
-    expect(isPlainText(binaryString)).toBe(false);
-  });
-
-  test("should return false for other binary-like strings", () => {
-    expect(isPlainText("This is a string with null byte \0")).toBe(false);
-  });
+test("rejects control characters embedded in text", () => {
+  for (const code of [0, 8, 11, 12, 14, 31, 127, 159]) {
+    expect(isPlainText(`before${String.fromCodePoint(code)}after`)).toBe(false);
+  }
 });

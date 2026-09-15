@@ -12,16 +12,6 @@ const probe = (
 });
 
 describe("markWebSubAvailability", () => {
-  test("marks a candidate that advertises a hub", async () => {
-    const result = await markWebSubAvailability(
-      [feed("Push", "https://a.example/feed")],
-      probe(() => ({ websub: { hubUrl: "https://hub.example/" } })),
-    );
-    expect(result).toEqual([
-      { title: "Push", url: "https://a.example/feed", websub: true },
-    ]);
-  });
-
   test("leaves a candidate without a hub unmarked", async () => {
     const result = await markWebSubAvailability(
       [feed("Plain", "https://a.example/feed")],
@@ -36,21 +26,6 @@ describe("markWebSubAvailability", () => {
       probe(() => ({})),
     );
     expect(result[0]?.websub).toBe(false);
-  });
-
-  // A dead candidate is still worth showing: the failure surfaces when the
-  // user previews it, and dropping it would make the page look like the feed
-  // never existed.
-  test("keeps a candidate whose parse throws, merely unmarked", async () => {
-    const result = await markWebSubAvailability(
-      [feed("Dead", "https://a.example/gone")],
-      probe(() => {
-        throw new Error("404");
-      }),
-    );
-    expect(result).toEqual([
-      { title: "Dead", url: "https://a.example/gone", websub: false },
-    ]);
   });
 
   // One bad candidate must not take the rest of the list with it, which is
@@ -72,40 +47,39 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  // The list is rendered in the order the scanner found the feeds, so a slow
-  // probe must not reorder it.
-  test("preserves candidate order regardless of probe latency", async () => {
-    const result = await markWebSubAvailability(
+  test("probes concurrently and preserves order when probes finish in reverse", async () => {
+    const slow = Promise.withResolvers<{ websub?: unknown }>();
+    const fast = Promise.withResolvers<{ websub?: unknown }>();
+    const started: string[] = [];
+    const result = markWebSubAvailability(
       [
         feed("Slow", "https://a.example/slow"),
         feed("Fast", "https://a.example/fast"),
       ],
       {
-        parseUrl: async (url: string) => {
-          if (url.includes("slow")) await Bun.sleep(20);
-          return { websub: undefined };
+        parseUrl: (url) => {
+          started.push(url);
+          return url.endsWith("slow") ? slow.promise : fast.promise;
         },
       },
     );
-    expect(result.map((entry) => entry.title)).toEqual(["Slow", "Fast"]);
-  });
-
-  test("probes candidates concurrently rather than one after another", async () => {
-    const started = Date.now();
-    await markWebSubAvailability(
-      [
-        feed("A", "https://a.example/1"),
-        feed("B", "https://a.example/2"),
-        feed("C", "https://a.example/3"),
-      ],
-      {
-        parseUrl: async () => {
-          await Bun.sleep(30);
-          return { websub: undefined };
-        },
-      },
-    );
-    expect(Date.now() - started).toBeLessThan(80);
+    try {
+      expect(started).toEqual([
+        "https://a.example/slow",
+        "https://a.example/fast",
+      ]);
+      fast.resolve({});
+      await fast.promise;
+      slow.resolve({ websub: { hubUrl: "https://hub.example/" } });
+      expect(await result).toEqual([
+        { title: "Slow", url: "https://a.example/slow", websub: true },
+        { title: "Fast", url: "https://a.example/fast", websub: false },
+      ]);
+    } finally {
+      slow.resolve({});
+      fast.resolve({});
+      await result;
+    }
   });
 
   test("an empty candidate list yields an empty result", async () => {
