@@ -9,11 +9,9 @@ export type ContextMenuItem =
     }
   | { kind: "separator" };
 
-// A custom context menu (#721): native menus can't be styled, aren't
-// keyboard-accessible, and don't exist at all on long-press. role="menu"
-// with roving focus between menuitems, Escape and outside-pointer
-// dismissal, and focus returned to the element that had it when the menu
-// opened.
+// App-specific actions need a custom context menu (#721). Roving focus
+// supports keyboard navigation. Escape dismisses and returns focus to the
+// invoker; an outside pointer press dismisses without restoring focus.
 export function ContextMenu(props: {
   x: number;
   y: number;

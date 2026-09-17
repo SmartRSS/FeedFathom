@@ -184,8 +184,8 @@ export function Dashboard(props: {
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
-  // The server caps a page at articlePageSize, so a full page means there is
-  // at least one more to fetch. Not signals: nothing renders them.
+  // A full page means more articles may be available, not that another page
+  // is guaranteed. Not signals: nothing renders them.
   //
   // The cursor is the last row of the last page received, not the last row
   // still on screen. Deleting rows must not move it: deleting the whole page
@@ -301,8 +301,7 @@ export function Dashboard(props: {
   let pollCycles = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
-    // The signal holds "on"/"off" strings and "off" is truthy, so !value
-    // never returned here and Off still polled. Compare explicitly.
+    // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (backgroundPollEnabled() !== "on") return;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
@@ -1163,8 +1162,7 @@ export function Dashboard(props: {
   // side to warm. The plain GET flows through the service worker's
   // networkFirst handler, so the prefetched copy also replays offline.
   function schedulePrefetch() {
-    // Same truthy-"off" trap as the background poll above: compare, don't
-    // negate.
+    // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
     const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1298,8 +1296,8 @@ export function Dashboard(props: {
     const restoreIndex = nextArticle ? nextIndex : 0;
     setSelectionAnchor(nextArticle ? nextIndex : undefined);
 
-    // The server only returns unread articles, so removing one always frees
-    // exactly one unread slot. Adjust the count now, reconcile in background.
+    // Optimistically decrement each source's unread count once per removed
+    // row, regardless of its read state. loadTree reconciles after deletion.
     const deltas = new Map<string, number>();
     for (const index of indexes) {
       const sourceUid = items[index]!.sourceId.toString();

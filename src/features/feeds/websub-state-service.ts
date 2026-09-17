@@ -17,14 +17,10 @@ export class WebSubStateService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // Generates a fresh per-subscription secret and callback token and moves to
-  // "pending"; the caller POSTs to the hub with the returned values, so the
-  // two always agree on which secret is current.
-  //
-  // Also an atomic claim (see the schema comment on
-  // websubSubscribeAttemptedAt): returns false when another attempt already
-  // claimed this source inside the cooldown, so the caller skips rather than
-  // racing a second hub request with a different callback token.
+  // Atomic claim (see the schema comment on websubSubscribeAttemptedAt):
+  // returns false when another attempt already claimed this source inside the
+  // cooldown, so the caller skips rather than racing a second hub request with
+  // a different callback token.
   public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
     const claimed = await this.drizzleConnection
       .update(sources)
@@ -103,9 +99,9 @@ export class WebSubStateService {
     ).at(0);
   }
 
-  // The renewal job runs daily (see MainWorker), so a one-day window
-  // guarantees every verified subscription gets an attempt before its lease
-  // lapses, even if one day's run is late or fails.
+  // The daily renewal job (see MainWorker) selects verified subscriptions
+  // with expired leases or leases expiring within a day. Late or missed runs
+  // can let a lease lapse before the next attempt.
   public async getWebSubSubscriptionsNeedingRenewal() {
     return await this.drizzleConnection
       .select({

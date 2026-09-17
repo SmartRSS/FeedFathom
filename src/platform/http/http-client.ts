@@ -338,11 +338,9 @@ export class HttpClient {
           deadline,
         );
         const retryAfter = result.response.headers.get("retry-after");
-        // Retry-After is not a 429 header (RFC 9110 10.2.3): a 503 carrying
-        // it is an origin saying when to come back, not a transient failure
-        // to try again. Redirects carry it too, but they never reach here --
-        // fetchFollowingRedirects consumes them -- so this is bounded to
-        // error statuses.
+        // Retry-After also applies to errors such as 503 (RFC 9110 10.2.3),
+        // so defer rather than retry immediately. This handles final error
+        // responses, not redirects.
         if (
           result.response.status === rateLimitedStatus ||
           (retryAfter !== null && result.response.status >= 400)
