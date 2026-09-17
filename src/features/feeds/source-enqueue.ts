@@ -1,19 +1,31 @@
 import { JobName } from "#shared/types/job-name-enum.ts";
 
-// The slice of a BullMQ job this enqueuer needs: enough to see how a job is
-// currently queued and to rewrite the payload of one still waiting to run.
+const mergeQueuedRefresh = `
+local stored = redis.call('HGET', KEYS[1], 'data')
+if not stored then return 0 end
+local incoming = cjson.decode(ARGV[2])
+if redis.call('LPOS', KEYS[3], ARGV[1]) or
+   redis.call('LPOS', KEYS[4], ARGV[1]) or
+   redis.call('ZSCORE', KEYS[5], ARGV[1]) then
+  local existing = cjson.decode(stored)
+  local pending = redis.call('GET', KEYS[2])
+  incoming.skipCache = incoming.skipCache == true or existing.skipCache == true or pending == '1'
+  redis.call('HSET', KEYS[1], 'data', cjson.encode(incoming))
+  redis.call('DEL', KEYS[2])
+elseif incoming.skipCache then
+  redis.call('SET', KEYS[2], '1')
+else
+  redis.call('SET', KEYS[2], '0', 'NX')
+end
+return 1
+`;
+
 export type SourceParseJobHandle = {
-  data: {
-    id: number;
-    skipCache?: boolean;
-    trigger?: "manual" | "websub-push";
-    url?: string;
-  };
   getState(): Promise<string>;
-  updateData(data: unknown): Promise<void>;
 };
 
 export type SourceParseQueue = {
+  toKey(name: string): string;
   // BullMQ's own getJob resolves undefined when the job record is gone.
   getJob(jobId: string): Promise<SourceParseJobHandle | null | undefined>;
   add(
@@ -33,10 +45,12 @@ export type SourceParseQueue = {
   ): Promise<unknown>;
 };
 
-// The marker and the take are single-command Redis operations, so any client
-// that can GET/SET NX/GETDEL works -- bullmq's own connection in production.
 export type SourceParseRedis = {
-  get(key: string): Promise<string | null>;
+  eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: string[]
+  ): Promise<unknown>;
   set(key: string, value: string, mode?: "NX"): Promise<unknown>;
   getdel(key: string): Promise<string | null>;
 };
@@ -75,18 +89,19 @@ export class SourceEnqueuer {
     const state = holder ? await holder.getState() : null;
 
     if (holder && (state === "waiting" || state === "delayed")) {
-      // A queued poll still carries its bare poll payload, so an add here
-      // would be deduped away and the refresh would run without the cache
-      // bypass it asked for. Instead the pending flags -- this request's plus
-      // anything that accumulated earlier -- are folded into the one queued
-      // job, so exactly one fetch runs and it fetches like the newest
-      // request asked.
-      const pending = await this.takePendingRefresh(source.id);
-      await holder.updateData({
-        ...payload,
-        skipCache: skipCache || (pending?.skipCache ?? false),
-      });
-      return;
+      const jobId = `${JobName.ParseSource}-${source.id}`;
+      const merged = await this.redis.eval(
+        mergeQueuedRefresh,
+        5,
+        this.bullmqQueue.toKey(jobId),
+        `${this.pendingKeyPrefix}${source.id}`,
+        this.bullmqQueue.toKey("wait"),
+        this.bullmqQueue.toKey("paused"),
+        this.bullmqQueue.toKey("delayed"),
+        jobId,
+        JSON.stringify(payload),
+      );
+      if (merged === 1) return;
     }
 
     if (holder && state === "active") {

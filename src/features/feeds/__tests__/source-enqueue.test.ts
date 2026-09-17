@@ -20,9 +20,11 @@ describe("SourceEnqueuer", () => {
     const store = new Map(Object.entries(initial));
     const sets: [string, string, string | undefined][] = [];
     const dels: string[] = [];
+    const evaluations: unknown[][] = [];
     const redis: SourceParseRedis = {
-      async get(key) {
-        return store.get(key) ?? null;
+      async eval(...args) {
+        evaluations.push(args);
+        return 1;
       },
       async getdel(key) {
         dels.push(key);
@@ -37,7 +39,7 @@ describe("SourceEnqueuer", () => {
         return "OK";
       },
     };
-    return { dels, redis, sets };
+    return { dels, evaluations, redis, sets };
   };
 
   const fakeQueue = (holder: SourceParseJobHandle | null = null) => {
@@ -51,26 +53,18 @@ describe("SourceEnqueuer", () => {
         expect(id).toBe(jobId);
         return holder;
       },
+      toKey(name) {
+        return `bull:tasks:${name}`;
+      },
     };
     return { adds, queue };
   };
 
-  const holderFor = (
-    data: SourceParseJobHandle["data"],
-    state: string,
-  ): SourceParseJobHandle & { updatesMade: unknown[] } => {
-    const updatesMade: unknown[] = [];
-    return {
-      data,
-      async getState() {
-        return state;
-      },
-      async updateData(next) {
-        updatesMade.push(next);
-      },
-      updatesMade,
-    };
-  };
+  const holderFor = (state: string): SourceParseJobHandle => ({
+    async getState() {
+      return state;
+    },
+  });
 
   test("adds directly when no job holds the source's id", async () => {
     const { queue, adds } = fakeQueue(null);
@@ -95,7 +89,7 @@ describe("SourceEnqueuer", () => {
   });
 
   test("records a request that lands on a running job instead of adding", async () => {
-    const { queue, adds } = fakeQueue(holderFor({ id: 3 }, "active"));
+    const { queue, adds } = fakeQueue(holderFor("active"));
     const { redis, sets } = fakeRedis();
     const enqueuer = new SourceEnqueuer(queue, redis);
 
@@ -106,7 +100,7 @@ describe("SourceEnqueuer", () => {
   });
 
   test("a cache bypass dominates whatever is already pending", async () => {
-    const { queue } = fakeQueue(holderFor({ id: 3 }, "active"));
+    const { queue } = fakeQueue(holderFor("active"));
     const { redis, sets } = fakeRedis({ [pendingKey]: "0" });
     const enqueuer = new SourceEnqueuer(queue, redis);
 
@@ -115,34 +109,45 @@ describe("SourceEnqueuer", () => {
     expect(sets).toEqual([[pendingKey, "1", undefined]]);
   });
 
-  test("folds the request into a queued poll's payload so one fetch runs", async () => {
-    const holder = holderFor({ id: 3, url: source.url }, "waiting");
-    const { queue, adds } = fakeQueue(holder);
-    const { redis, dels } = fakeRedis({ [pendingKey]: "0" });
-    const enqueuer = new SourceEnqueuer(queue, redis);
+  for (const state of ["waiting", "delayed"]) {
+    test(`merges a ${state} refresh atomically without adding another job`, async () => {
+      const { queue, adds } = fakeQueue(holderFor(state));
+      const { redis, dels, evaluations } = fakeRedis();
+      const enqueuer = new SourceEnqueuer(queue, redis);
 
-    // Manual refresh: bypass the cache even though the pending marker said
-    // the earlier request was happy to use it.
-    await enqueuer.enqueueSource(source, "manual", true);
+      await enqueuer.enqueueSource(source);
 
-    expect(adds).toEqual([]);
-    expect(dels).toEqual([pendingKey]);
-    expect(holder.updatesMade).toEqual([
-      { id: 3, skipCache: true, trigger: "manual", url: source.url },
-    ]);
-  });
+      expect(adds).toEqual([]);
+      expect(dels).toEqual([]);
+      expect(evaluations).toEqual([
+        [
+          expect.any(String),
+          5,
+          `bull:tasks:${jobId}`,
+          pendingKey,
+          "bull:tasks:wait",
+          "bull:tasks:paused",
+          "bull:tasks:delayed",
+          jobId,
+          JSON.stringify({
+            id: 3,
+            skipCache: true,
+            trigger: "manual",
+            url: source.url,
+          }),
+        ],
+      ]);
+    });
+  }
 
-  test("a delayed job (rate-limit retry) gets the fresh payload too", async () => {
-    const holder = holderFor({ id: 3, url: source.url }, "delayed");
-    const { queue } = fakeQueue(holder);
+  test("adds a refresh if the queued job disappeared before merging", async () => {
+    const { queue, adds } = fakeQueue(holderFor("waiting"));
     const { redis } = fakeRedis();
-    const enqueuer = new SourceEnqueuer(queue, redis);
+    redis.eval = async () => 0;
 
-    await enqueuer.enqueueSource(source);
+    await new SourceEnqueuer(queue, redis).enqueueSource(source);
 
-    expect(holder.updatesMade).toEqual([
-      { id: 3, skipCache: true, trigger: "manual", url: source.url },
-    ]);
+    expect(adds).toHaveLength(1);
   });
 
   test("takePendingRefresh coalesces to one request, or none", async () => {
