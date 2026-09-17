@@ -1,5 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
-import type { HttpClient } from "#platform/http/http-client.ts";
+import type { HttpClient, HttpResponse } from "#platform/http/http-client.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
@@ -129,7 +129,7 @@ type ReaderRouteDependencies = {
     "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
   >;
   httpClient: {
-    get(url: string): Promise<{ data: string }>;
+    get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
   };
   mailEnabled: boolean;
   faviconStore: Pick<FaviconStore, "getFavicon">;
@@ -313,8 +313,8 @@ function createDependencies(): ServerFakes {
       },
     },
     httpClient: {
-      async get() {
-        return { data: "" };
+      async get(url) {
+        return { data: "", url };
       },
       async seedCache() {},
     },
@@ -955,15 +955,98 @@ function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
   };
 }
 
+test.each([
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a path redirect",
+    requestedUrl: "https://site.example/old/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a host redirect",
+    requestedUrl: "https://old.example/news/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/feeds/feed.xml",
+    finalUrl: "https://site.example/news/latest/",
+    html: '<html><head><base href="../feeds/"><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a relative base after a redirect",
+    requestedUrl: "https://old.example/archive/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><base href="../assets/"></head><body><article class="h-entry">News</article></body></html>',
+    name: "a microformats page after a redirect",
+    requestedUrl: "https://old.example/archive/",
+    title: "This page (h-entry)",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/feed.xml",
+    html: '<rss version="2.0"><channel><title>News</title></channel></rss>',
+    name: "an XML feed after a redirect",
+    requestedUrl: "https://old.example/feed",
+    title: "This feed",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "no redirect",
+    requestedUrl: "https://site.example/news/",
+    title: "News",
+  },
+])(
+  "find resolves candidates using the response URL with $name",
+  async ({ requestedUrl, finalUrl, html, title, feedUrl }) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    const fetched: string[] = [];
+    const probed: string[] = [];
+    dependencies.httpClient.get = async (url) => {
+      fetched.push(url);
+      return { data: html, url: finalUrl };
+    };
+    dependencies.feedParser.parseUrl = async (url) => {
+      probed.push(url);
+      return parsedFeed(url, "https://hub.example/");
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/find?link=${encodeURIComponent(requestedUrl)}`,
+        { headers: { cookie: "sid=test" } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      { title, url: feedUrl, websub: true },
+    ]);
+    expect(fetched).toEqual([requestedUrl]);
+    expect(probed).toEqual([feedUrl]);
+  },
+);
+
 test("find marks push feeds and preserves plain or failed candidates", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
+  dependencies.httpClient.get = async (url) => ({
     data: `<html><head>
       <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
       <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
       <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
     </head></html>`,
+    url,
   });
   dependencies.feedParser.parseUrl = async (url: string) => {
     if (url.includes("dead")) throw new Error("404");
@@ -997,8 +1080,9 @@ test("find marks push feeds and preserves plain or failed candidates", async () 
 test("find falls back to an OpenRSS suggestion for a page with no feeds", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
+  dependencies.httpClient.get = async (url) => ({
     data: "<html><head></head><body>nothing here</body></html>",
+    url,
   });
   dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
   const app = await appFor(dependencies);
