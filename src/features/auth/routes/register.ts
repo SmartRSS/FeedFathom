@@ -103,16 +103,8 @@ export function createRegisterRoute() {
         if (Value.Check(disposableEmailPolicy, request.email))
           return json({ success: true });
 
-        // The only thing worth abusing here is the send: who may hold an
-        // account is settled by the checks above, but every mail this route
-        // can produce -- a fresh activation, an account-exists notice with a
-        // reset link, a first activation -- goes to an address the caller
-        // named, from this instance's domain. So the count sits ahead of all
-        // of them, and ahead of the password hash an attempt would otherwise
-        // make us pay for. On an empty instance there is nobody to send to
-        // but the first operator, who has no second address to try and must
-        // not be locked out of their own install, so the count does not
-        // start until they exist.
+        // With email activation enabled, throttle before any mail or password
+        // hashing. Exempt first-user setup to avoid locking out the operator.
         if (useEmailActivation && userCount > 0) {
           const address = clientAddress(
             httpRequest,
@@ -128,16 +120,10 @@ export function createRegisterRoute() {
 
         const existing = await usersDataService.findUser(request.email);
         if (existing) {
-          // Registering again answers success whatever the truth is, so the
-          // address's own state decides what the mailbox receives (#810): a
-          // still-pending registration whose link has expired gets a fresh
-          // one -- otherwise the person is stuck outside an account that is
-          // half-made and can never be activated -- and an active account
-          // gets a reset link, the only way in that does not assume the
-          // password still works. A pending registration whose link is still
-          // good needs nothing: the first mail already covers it. None of
-          // this exists on an install that cannot send mail, where account
-          // recovery never had a channel to begin with.
+          // Return generic success for existing accounts (#810). With mail
+          // enabled, renew missing or expired activation links for inactive
+          // accounts and send reset links for active accounts. Leave valid
+          // activation links unchanged.
           if (useEmailActivation) {
             if (existing.status === "inactive") {
               const expired =
@@ -148,11 +134,7 @@ export function createRegisterRoute() {
                 const activationTokenExpiresAt = new Date(
                   Date.now() + activationLifetimeMs,
                 );
-                // Stored before it is sent, unlike a first registration
-                // where a failed write leaves nothing to be locked out of:
-                // here the mail would land on a token the row never took,
-                // putting the address back in the dead end it just asked to
-                // leave -- one throttle slot poorer.
+                // Persist the replacement token before sending a link to it.
                 await usersDataService.refreshActivationToken(
                   existing.id,
                   activationToken,

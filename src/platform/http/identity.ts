@@ -20,8 +20,8 @@ function sanitizeIdentity(value: string | undefined): string | undefined {
   return cleaned;
 }
 
-// FEEDFATHOM_TAG is usually a full commit SHA; 7 characters identify the build
-// just as well. Anything shorter (a channel tag, a semver) passes through.
+// FEEDFATHOM_BUILD is usually a full commit SHA, abbreviated to 7 characters
+// for the header. Other sanitized version strings pass through.
 function normalizeVersion(value: string | undefined): string | undefined {
   const tag = sanitizeIdentity(value);
   if (tag === undefined) return undefined;

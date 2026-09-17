@@ -12,9 +12,7 @@
 
 export const READING_SESSION_STORAGE_KEY = "feedfathom:reading-session:v1";
 
-// The app snapshot keeps only the head of the article list (enough to
-// recognise a stale restore), and the per-article reader scroll map is LRU-
-// capped so a long-lived install cannot grow it without bound.
+// Cap the stored list prefix and reader scroll map to bound snapshot size.
 const MAX_SNAPSHOT_LIST_IDS = 20;
 const MAX_READER_SCROLL_ENTRIES = 200;
 const READER_SCROLL_THROTTLE_MS = 500;
@@ -26,7 +24,7 @@ export type AppSnapshot = {
   articleFilter: ArticleFilter;
   // The article open in the reader pane when the snapshot was written.
   articleId: number | undefined;
-  // Head of the list, in order, at snapshot time -- a staleness fingerprint.
+  // Stored list prefix; restoration does not compare these IDs.
   listIds: number[];
   listScrollTop: number;
   nodeType: "folder" | "source";

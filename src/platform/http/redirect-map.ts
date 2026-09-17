@@ -77,15 +77,10 @@ export class RedirectMap {
   /**
    * For the admin view.
    *
-   * SCAN rather than KEYS. KEYS walks the whole keyspace in one command and
-   * blocks the server for the duration, and this Redis also carries the job
-   * queue and the HTTP response cache -- so an admin opening this page stalled
-   * every feed fetch behind it for as long as the walk took. SCAN covers the
-   * same ground in pages Redis is free to interleave other work between.
-   *
-   * A cursor iteration can return a key twice, which the map absorbs. It can
-   * also miss a key added while it runs, which for an admin listing of a cache
-   * with a one-day TTL is not worth a snapshot to avoid.
+   * SCAN still walks the whole keyspace, but lets Redis serve the job queue
+   * and HTTP cache between pages. KEYS blocks them for the entire walk.
+   * The map absorbs duplicate keys. Concurrent additions can be missed,
+   * which is acceptable for an admin listing of a cache with a one-day TTL.
    */
   async getAllRedirects(): Promise<Record<string, string>> {
     try {

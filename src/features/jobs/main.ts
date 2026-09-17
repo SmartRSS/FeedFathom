@@ -243,14 +243,13 @@ export class MainWorker {
         // may become a job failure, or an adversarial thrown value (a poisoned
         // `message` getter, a poisoned custom-inspect symbol) puts the job into
         // BullMQ's failure state instead of always acknowledging and keeping
-        // outcomes in Postgres. One try/catch rather than per-statement guards,
-        // which already needed three rounds of narrowing.
+        // outcomes in Postgres.
         console.error("Error processing job:", error);
         const message = error instanceof Error ? error.message : String(error);
         await jobFailuresDataService.record(job.name, message);
       } catch {
-        // Swallowed without logging: logging already failed once in this
-        // block, so logging that failure risks the same unguarded throw.
+        // Swallowed without logging: any statement in the block above can
+        // throw, so logging the failure risks the same unguarded throw.
       }
     }
   };
