@@ -654,7 +654,6 @@ export function Dashboard(props: {
         recordAppSnapshot({
           articleFilter: articleFilter(),
           articleId: nextArticles[openIndex]?.id,
-          listIds: nextArticles.map((item) => item.id),
           listScrollTop: restoredIndex >= 0 ? restore.listScrollTop : 0,
         });
         if (restoredIndex >= 0) {
@@ -669,7 +668,6 @@ export function Dashboard(props: {
         recordAppSnapshot({
           articleFilter: articleFilter(),
           articleId: nextArticles[openIndex]?.id,
-          listIds: nextArticles.map((item) => item.id),
           listScrollTop: 0,
         });
       }

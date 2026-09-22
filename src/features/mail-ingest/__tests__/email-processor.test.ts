@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ParsedMail } from "mailparser";
-import { getEmailContent } from "#features/mail-ingest/email-processor.ts";
+import {
+  getEmailContent,
+  validateParsedMail,
+} from "#features/mail-ingest/email-processor.ts";
 
 const createMockEmail = (overrides: Partial<ParsedMail> = {}): ParsedMail => {
   return {
@@ -42,6 +45,12 @@ describe("email processor", () => {
       expect(() => getEmailContent(email)).toThrow(
         "Mail parser returned an invalid message projection",
       );
+    });
+
+    test("validateParsedMail rejects a malformed projection at the ingestion boundary", () => {
+      expect(() =>
+        validateParsedMail({ ...createMockEmail(), subject: 1 }),
+      ).toThrow("Mail parser returned an invalid message projection");
     });
 
     test("should return default message when no content is available", () => {

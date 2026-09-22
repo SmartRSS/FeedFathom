@@ -21,8 +21,12 @@ export function validateParsedMail(value: unknown) {
   return value;
 }
 
-export const getEmailContent = (email: unknown): string => {
-  const parsed = validateParsedMail(email);
+export type ValidatedMail = ReturnType<typeof validateParsedMail>;
+
+export const validatedMailContent = (parsed: ValidatedMail): string => {
   if (typeof parsed.html === "string") return parsed.html;
   return parsed.textAsHtml ?? "No content.";
 };
+
+export const getEmailContent = (email: unknown): string =>
+  validatedMailContent(validateParsedMail(email));
