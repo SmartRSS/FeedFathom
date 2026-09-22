@@ -132,6 +132,7 @@ const parseJob = (data: unknown): MainWorkerJob => ({
   data,
   async moveToDelayed() {},
   name: JobName.ParseSource,
+  async updateData() {},
 });
 
 type MainWorkerConfig = Pick<
@@ -388,6 +389,7 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
     },
     name: JobName.ParseSource,
     token: "worker-token",
+    async updateData() {},
   });
 
   await expect(processing).rejects.toBeInstanceOf(DelayedError);
@@ -443,6 +445,7 @@ test("folds requests that arrived mid-run into one more parse", async () => {
     data: { id: source.id, url: source.url },
     async moveToDelayed() {},
     name: JobName.ParseSource,
+    async updateData() {},
   });
 
   expect(parsed).toEqual([
@@ -492,9 +495,94 @@ test("a deferred parse leaves pending refreshes to its retry", async () => {
     data: { id: source.id, url: source.url },
     async moveToDelayed() {},
     name: JobName.ParseSource,
+    async updateData() {},
   });
   await expect(processing).rejects.toBeInstanceOf(DelayedError);
   expect(taken).toBe(0);
+});
+
+// The follow-up parse runs on intent already taken off the marker, and a
+// deferred job retries from job.data -- so a deferral there has to write that
+// intent into the job, or the retry parses the original request and a
+// requested cache bypass is lost (#847).
+test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", async () => {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const createWorker: MainWorkerFactory = (value, options) => {
+    processor = value;
+    return noopWorkerFactory(value, options);
+  };
+  const parsed: Array<[boolean | undefined, string | undefined]> = [];
+  const outcomes = ["ok", "defer", "defer", "ok"];
+  let pending: { skipCache: boolean } | null = { skipCache: true };
+  let taken = 0;
+  const worker = await createMainWorker(
+    config,
+    { async add() {}, async addBulk() {} },
+    {
+      async parseSource(input) {
+        parsed.push([input.skipCache, input.trigger]);
+        if (outcomes.shift() === "defer") {
+          throw new HttpDeferredError(Date.now() + 60_000);
+        }
+      },
+    },
+    idleFaviconRefresher,
+    idleSources,
+    idleSources,
+    idleCleanupOrphanedData,
+    idleJobFailures,
+    createWorker,
+    idleHubPoster,
+    {
+      async enqueueSource() {},
+      async takePendingRefresh() {
+        taken += 1;
+        const value = pending;
+        pending = null;
+        return value;
+      },
+    },
+  );
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+
+  const events: string[] = [];
+  const job: MainWorkerJob = {
+    data: { id: source.id, skipCache: false, url: source.url },
+    async moveToDelayed() {
+      events.push("delay");
+    },
+    name: JobName.ParseSource,
+    async updateData(data) {
+      events.push("update");
+      job.data = data;
+    },
+  };
+
+  // The original request parses, the follow-up for the bypass defers.
+  await expect(processor(job)).rejects.toBeInstanceOf(DelayedError);
+  expect(events).toEqual(["update", "delay"]);
+  expect(job.data).toEqual({
+    id: source.id,
+    skipCache: true,
+    trigger: "manual",
+    url: source.url,
+  });
+
+  // Deferred again before finishing: the persisted bypass stays as it is.
+  await expect(processor(job)).rejects.toBeInstanceOf(DelayedError);
+  expect(events).toEqual(["update", "delay", "delay"]);
+
+  // The retry fulfils the bypass once, with no further follow-up owed.
+  await processor(job);
+  expect(parsed).toEqual([
+    [false, "poll"],
+    [true, "manual"],
+    [true, "manual"],
+    [true, "manual"],
+  ]);
+  expect(taken).toBe(2);
+  expect(events).toEqual(["update", "delay", "delay"]);
 });
 
 test("refreshes favicons only for validated job data", async () => {
@@ -527,6 +615,7 @@ test("refreshes favicons only for validated job data", async () => {
     data: { homeUrl: source.homeUrl, id: source.id },
     async moveToDelayed() {},
     name: JobName.RefreshFavicon,
+    async updateData() {},
   });
 
   expect(refreshed).toEqual([{ homeUrl: source.homeUrl, id: source.id }]);
@@ -580,6 +669,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
     data: {},
     async moveToDelayed() {},
     name: JobName.GatherFaviconJobs,
+    async updateData() {},
   });
   await allStarted.promise;
   expect(started).toEqual([
@@ -686,6 +776,7 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
       await processJob({
         ...malformed,
         async moveToDelayed() {},
+        async updateData() {},
       });
     }),
   );
@@ -725,6 +816,7 @@ test("records a durable failure for non-ParseSource job errors", async () => {
     data: {},
     async moveToDelayed() {},
     name: JobName.Cleanup,
+    async updateData() {},
   });
 
   expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
@@ -764,6 +856,7 @@ test("cleanup recounts the unread totals of every pruned source", async () => {
     data: {},
     async moveToDelayed() {},
     name: JobName.Cleanup,
+    async updateData() {},
   });
 
   expect(recounted).toEqual([[7, 9]]);
@@ -799,7 +892,12 @@ test("a failure while recording a job failure doesn't itself fail the job", asyn
   // Must resolve, not reject -- BullMQ should always see the job as
   // acknowledged, even if persisting the failure record itself fails.
   await expect(
-    processor({ data: {}, async moveToDelayed() {}, name: JobName.Cleanup }),
+    processor({
+      data: {},
+      async moveToDelayed() {},
+      name: JobName.Cleanup,
+      async updateData() {},
+    }),
   ).resolves.toBeUndefined();
 });
 
@@ -832,7 +930,12 @@ test("a poisoned error whose message getter throws doesn't fail the job either",
   if (!processor) throw new Error("Worker processor was not captured");
 
   await expect(
-    processor({ data: {}, async moveToDelayed() {}, name: JobName.Cleanup }),
+    processor({
+      data: {},
+      async moveToDelayed() {},
+      name: JobName.Cleanup,
+      async updateData() {},
+    }),
   ).resolves.toBeUndefined();
 });
 
@@ -885,6 +988,7 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
       },
       name: JobName.ParseSource,
       token: "worker-token",
+      async updateData() {},
     }),
   ).resolves.toBeUndefined();
   expect(recorded).toEqual([[JobName.ParseSource, ""]]);
@@ -929,6 +1033,7 @@ test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail 
       },
       name: JobName.ParseSource,
       token: "worker-token",
+      async updateData() {},
     }),
   ).resolves.toBeUndefined();
   expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
@@ -983,6 +1088,7 @@ test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job",
       },
       name: JobName.ParseSource,
       token: "worker-token",
+      async updateData() {},
     }),
   ).resolves.toBeUndefined();
   expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
