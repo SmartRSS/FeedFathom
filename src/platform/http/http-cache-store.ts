@@ -9,12 +9,9 @@ import {
 import { parseHttpUrl } from "#platform/http/http-native-transport.ts";
 
 export type HttpRedis = {
-  decr(key: string): Promise<number>;
   del(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
   get(key: string): Promise<null | string>;
-  incr(key: string): Promise<number>;
-  send?(command: string, args: string[]): Promise<unknown>;
+  send(command: string, args: string[]): Promise<unknown>;
   set(
     key: string,
     value: string,
@@ -71,7 +68,6 @@ export class HttpCacheStore {
     url: string,
     deadline: RequestDeadline,
   ): Promise<{ key: string; token: string }> {
-    if (!this.redis.send) return { key: "", token: "" };
     const key = `${cacheLockPrefix}${this.cacheKey(url)}`;
     const token = Bun.randomUUIDv7();
     /* eslint-disable no-await-in-loop -- The lock must be acquired before the cache is read. */
@@ -96,7 +92,6 @@ export class HttpCacheStore {
     deadline: RequestDeadline,
   ): Promise<void> {
     try {
-      if (!lock.key || !this.redis.send) return;
       await deadline.run(
         this.redis.send("EVAL", [
           releaseCacheLockScript,

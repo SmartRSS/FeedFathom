@@ -1637,6 +1637,33 @@ test("surfaces tree failures without masquerading as logout", async ({
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
 });
 
+// #833: refreshing while the boot tree request is still in flight aborts it.
+// That cancellation is not a connectivity failure; both the boot and the
+// refresh settle on the replacement tree.
+test("a superseded tree request settles on its replacement", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const held: Array<() => void> = [];
+  await page.route("**/api/tree", async (route) => {
+    await new Promise<void>((release) => held.push(release));
+    // The aborted request can no longer be answered; that is the point.
+    await route.fallback().catch(() => undefined);
+  });
+  await page.goto("/");
+  await expect.poll(() => held.length).toBe(1);
+
+  await page.getByRole("button", { name: "refresh" }).click();
+  await expect.poll(() => held.length).toBe(2);
+  held[1]!();
+  held[0]!();
+
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 // The #709 keyboard vocabulary: j/k alias the arrow keys' selection movement,
 // which already opens the article in the reader pane; ? opens the cheat sheet
 // hosted in the shared DialogHost.

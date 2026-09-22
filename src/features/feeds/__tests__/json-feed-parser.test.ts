@@ -4,6 +4,9 @@ import {
   isJsonFeedText,
   parseJsonFeed,
 } from "#features/feeds/json-feed-parser.ts";
+import { extractArticle } from "#features/feeds/extract-article.ts";
+import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 const feedText = JSON.stringify({
   description: "About the feed",
@@ -73,5 +76,41 @@ describe("JSON Feed parsing", () => {
 
   test("rejects malformed JSON", () => {
     expect(() => parseJsonFeed("{not json")).toThrow();
+  });
+});
+
+describe("JSON Feed plain text", () => {
+  const text = 'a < b && c > d\n&amp; is not "&"\r\n<b>not bold</b>';
+  const html =
+    'a &lt; b &amp;&amp; c &gt; d<br />&amp;amp; is not "&amp;"<br />&lt;b&gt;not bold&lt;/b&gt;';
+
+  const previewContent = (item: Record<string, string>) => {
+    const parsed = parseJsonFeed(
+      JSON.stringify({ items: [{ id: "1", ...item }] }),
+    );
+    const preview = mapFeedToPreview(
+      parsed,
+      "https://example.com/feed.json",
+      rewriteLinks,
+    );
+    return extractArticle(preview.articles[0]?.content);
+  };
+
+  test("renders content_text literally with its line breaks", () => {
+    expect(previewContent({ content_text: text })).toBe(html);
+  });
+
+  test("renders a plain-text summary fallback literally", () => {
+    expect(previewContent({ summary: text })).toBe(html);
+  });
+
+  test("content_html keeps its formatting and wins over plain text", () => {
+    expect(
+      previewContent({
+        content_html: "<p><strong>bold</strong></p>",
+        content_text: text,
+        summary: text,
+      }),
+    ).toBe("<p><strong>bold</strong></p>");
   });
 });

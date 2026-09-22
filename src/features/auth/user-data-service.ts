@@ -30,14 +30,23 @@ export class UsersDataService {
     await this.drizzleConnection.delete(sessions).where(eq(sessions.sid, sid));
   }
 
-  public async createUser(payload: {
-    email: string;
-    name: string;
-    passwordHash: string;
-    status?: "active" | "inactive";
-    activationToken?: string;
-    activationTokenExpiresAt?: Date;
-  }) {
+  /**
+   * "closed" means the registration policy refused the account. The policy is
+   * rechecked here rather than trusted from the route's earlier count: two
+   * registrations on an empty instance with registration disabled both pass
+   * that count, and only the bootstrap lock below can admit exactly one.
+   */
+  public async createUser(
+    payload: {
+      email: string;
+      name: string;
+      passwordHash: string;
+      status?: "active" | "inactive";
+      activationToken?: string;
+      activationTokenExpiresAt?: Date;
+    },
+    registrationEnabled: boolean,
+  ): Promise<"closed" | "created"> {
     const values = (isAdmin: boolean) => ({
       activationToken: payload.activationToken,
       activationTokenExpiresAt: payload.activationTokenExpiresAt,
@@ -57,12 +66,9 @@ export class UsersDataService {
       await this.drizzleConnection.select({ id: users.id }).from(users).limit(1)
     ).at(0);
     if (usersExist) {
-      return (
-        await this.drizzleConnection
-          .insert(users)
-          .values(values(false))
-          .returning()
-      ).at(0);
+      if (!registrationEnabled) return "closed";
+      await this.drizzleConnection.insert(users).values(values(false));
+      return "created";
     }
 
     return await this.drizzleConnection.transaction(async (transaction) => {
@@ -72,13 +78,10 @@ export class UsersDataService {
       const existingUser = (
         await transaction.select({ id: users.id }).from(users).limit(1)
       ).at(0);
+      if (existingUser && !registrationEnabled) return "closed";
 
-      return (
-        await transaction
-          .insert(users)
-          .values(values(!existingUser))
-          .returning()
-      ).at(0);
+      await transaction.insert(users).values(values(!existingUser));
+      return "created";
     });
   }
 
@@ -115,6 +118,18 @@ export class UsersDataService {
       .update(users)
       .set({ activationToken: token, activationTokenExpiresAt: expiresAt })
       .where(and(eq(users.id, userId), eq(users.status, "inactive")));
+  }
+
+  // Compare-and-set on the token: a link whose mail never left is withdrawn so
+  // the next registration attempt sends a fresh one, while a newer token some
+  // other request already stored and delivered is left alone.
+  public async withdrawActivationToken(token: string) {
+    await this.drizzleConnection
+      .update(users)
+      .set({ activationToken: null, activationTokenExpiresAt: null })
+      .where(
+        and(eq(users.activationToken, token), eq(users.status, "inactive")),
+      );
   }
 
   public async activateUser(userId: number) {

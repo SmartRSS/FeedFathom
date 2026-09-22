@@ -5,7 +5,11 @@ import {
   retryAtFrom,
 } from "../http-rate-limiter.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { RequestDeadline } from "#platform/http/request-deadline.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import {
+  HttpDeadlineError,
+  RequestDeadline,
+} from "#platform/http/request-deadline.ts";
 
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;
@@ -164,56 +168,13 @@ describe("rateLimitBlockUntil header spellings and reset units", () => {
   });
 });
 
-// A stub with real PX expiry, because the whole point of these cases is when
-// a key stops existing.
-function expiringRedis() {
-  const values = new Map<string, { expiresAt: number; value: string }>();
-  const live = (key: string) => {
-    const entry = values.get(key);
-    if (!entry) return undefined;
-    if (entry.expiresAt <= Date.now()) {
-      values.delete(key);
-      return undefined;
-    }
-    return entry;
-  };
-  return {
-    async decr(key: string) {
-      const next = String(Number(live(key)?.value ?? "0") - 1);
-      values.set(key, { expiresAt: Date.now() + 60_000, value: next });
-      return Number(next);
-    },
-    async expire() {
-      return 1;
-    },
-    async get(key: string) {
-      return live(key)?.value ?? null;
-    },
-    async incr(key: string) {
-      const next = String(Number(live(key)?.value ?? "0") + 1);
-      values.set(key, { expiresAt: Date.now() + 60_000, value: next });
-      return Number(next);
-    },
-    seed(key: string, value: string, ttlMs: number) {
-      values.set(key, { expiresAt: Date.now() + ttlMs, value });
-    },
-    async set(key: string, value: string, ...options: Array<number | string>) {
-      if (options.includes("NX") && live(key)) return null;
-      const px = options.indexOf("PX");
-      const ttl = px === -1 ? 60_000 : Number(options[px + 1]);
-      values.set(key, { expiresAt: Date.now() + ttl, value });
-      return "OK";
-    },
-  };
-}
-
 describe("HttpRateLimiter.reserve for an interactive caller", () => {
   // The window used to be a flat 2.5s against a 10s interval, so waiting could
   // never succeed on its own -- only by luck, if the slot happened to free
   // early. 27.5s of a 30s deadline went unused and the SPA got a 429 it has no
   // retry for.
   test("waits out an interval longer than the old fixed 2.5s window", async () => {
-    const redis = expiringRedis();
+    const redis = createFakeHttpRedis();
     redis.seed("http-interval:feeds.example.com", "1", 2_800);
     const deadline = new RequestDeadline(20_000);
     const started = Date.now();
@@ -234,7 +195,7 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
   // A block that clears inside the deadline used to fail the request outright,
   // with no wait at all.
   test("sleeps out a block that clears inside the deadline", async () => {
-    const redis = expiringRedis();
+    const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
     const deadline = new RequestDeadline(20_000);
     const started = Date.now();
@@ -254,7 +215,7 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
 
   // Past the deadline it is a real deferral: the caller cannot afford the wait.
   test("still defers a block that outlasts the deadline", async () => {
-    const redis = expiringRedis();
+    const redis = createFakeHttpRedis();
     const retryAt = Date.now() + 60_000;
     redis.seed("http-blocked:feeds.example.com", String(retryAt), 60_000);
     const deadline = new RequestDeadline(1_000);
@@ -273,7 +234,7 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
 
   // Background work defers instead of holding a worker slot for the wait.
   test("still defers background work behind a block", async () => {
-    const redis = expiringRedis();
+    const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
     const deadline = new RequestDeadline(20_000);
 
@@ -288,5 +249,101 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     } finally {
       deadline.dispose();
     }
+  });
+});
+
+describe("HttpRateLimiter interactive waiter accounting", () => {
+  const host = "feeds.example.com";
+  const slotKey = `http-interval:${host}`;
+  const waitersKey = `http-interactive:${host}`;
+
+  // Starts an interactive reservation against a slot held for the whole
+  // default interval, and returns once it has registered as a waiter.
+  async function startWaiter(
+    redis: ReturnType<typeof createFakeHttpRedis>,
+    deadline = new RequestDeadline(20_000),
+  ) {
+    const reservation = new HttpRateLimiter(redis)
+      .reserve(host, "interactive", deadline)
+      .finally(() => {
+        deadline.dispose();
+      });
+    await Bun.sleep(20);
+    return { deadline, reservation };
+  }
+
+  // Frees the slot and lets the waiters' next poll take it.
+  function freeSlot(redis: ReturnType<typeof createFakeHttpRedis>) {
+    redis.values.delete(slotKey);
+  }
+
+  test("keeps the waiter visible for the whole default reservation window", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(slotKey, "1", 10_000);
+    const { reservation } = await startWaiter(redis);
+
+    // The wait can run the full 10s interval plus a poll, well past the six
+    // seconds the counter used to live for.
+    expect(redis.pttl(waitersKey)).toBeGreaterThan(9_900);
+    freeSlot(redis);
+    const background = new RequestDeadline(1_000);
+    try {
+      await expect(
+        new HttpRateLimiter(redis).reserve(host, "background", background),
+      ).rejects.toBeInstanceOf(HttpDeferredError);
+    } finally {
+      background.dispose();
+    }
+
+    await reservation;
+    expect(redis.pttl(waitersKey)).toBe(-2);
+  });
+
+  test("overlapping waiters count each other in and out", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(slotKey, "1", 10_000);
+    const first = await startWaiter(redis);
+    const second = await startWaiter(redis);
+    expect(redis.values.get(waitersKey)).toBe("2");
+
+    // One of them takes the freed slot; the other waits on and stays counted.
+    freeSlot(redis);
+    await Promise.race([first.reservation, second.reservation]);
+    expect(redis.values.get(waitersKey)).toBe("1");
+    expect(redis.pttl(waitersKey)).toBeGreaterThan(9_000);
+
+    freeSlot(redis);
+    await Promise.all([first.reservation, second.reservation]);
+    expect(redis.pttl(waitersKey)).toBe(-2);
+  });
+
+  test("a deadline running out mid-wait still takes the waiter out", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(slotKey, "1", 10_000);
+    const { reservation } = await startWaiter(redis, new RequestDeadline(200));
+
+    await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
+    expect(redis.pttl(waitersKey)).toBe(-2);
+  });
+
+  test("a cancelled wait takes the waiter out", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(slotKey, "1", 10_000);
+    const { deadline, reservation } = await startWaiter(redis);
+
+    deadline.controller.abort();
+    await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
+    expect(redis.pttl(waitersKey)).toBe(-2);
+  });
+
+  test("cleanup after the counter expired leaves no negative key behind", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(slotKey, "1", 10_000);
+    const { reservation } = await startWaiter(redis);
+
+    redis.values.delete(waitersKey);
+    freeSlot(redis);
+    await reservation;
+    expect(redis.pttl(waitersKey)).toBe(-2);
   });
 });
