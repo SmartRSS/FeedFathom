@@ -35,6 +35,8 @@ export class UsersDataService {
    * rechecked here rather than trusted from the route's earlier count: two
    * registrations on an empty instance with registration disabled both pass
    * that count, and only the bootstrap lock below can admit exactly one.
+   * "exists" means the address was taken, possibly by a registration that
+   * committed after the route's lookup; the existing row is left untouched.
    */
   public async createUser(
     payload: {
@@ -46,7 +48,7 @@ export class UsersDataService {
       activationTokenExpiresAt?: Date;
     },
     registrationEnabled: boolean,
-  ): Promise<"closed" | "created"> {
+  ): Promise<"closed" | "created" | "exists"> {
     const values = (isAdmin: boolean) => ({
       activationToken: payload.activationToken,
       activationTokenExpiresAt: payload.activationTokenExpiresAt,
@@ -67,8 +69,12 @@ export class UsersDataService {
     ).at(0);
     if (usersExist) {
       if (!registrationEnabled) return "closed";
-      await this.drizzleConnection.insert(users).values(values(false));
-      return "created";
+      const inserted = await this.drizzleConnection
+        .insert(users)
+        .values(values(false))
+        .onConflictDoNothing({ target: users.email })
+        .returning({ id: users.id });
+      return inserted.length ? "created" : "exists";
     }
 
     return await this.drizzleConnection.transaction(async (transaction) => {
@@ -80,8 +86,12 @@ export class UsersDataService {
       ).at(0);
       if (existingUser && !registrationEnabled) return "closed";
 
-      await transaction.insert(users).values(values(!existingUser));
-      return "created";
+      const inserted = await transaction
+        .insert(users)
+        .values(values(!existingUser))
+        .onConflictDoNothing({ target: users.email })
+        .returning({ id: users.id });
+      return inserted.length ? "created" : "exists";
     });
   }
 
