@@ -51,6 +51,9 @@ async function validateCaptcha(
   }
 }
 
+const registrationDisabled = () =>
+  json({ error: "Registration is currently disabled", success: false }, 403);
+
 export function createRegisterRoute() {
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
@@ -91,12 +94,8 @@ export function createRegisterRoute() {
           return json({ error: "Invalid CAPTCHA", success: false }, 400);
         }
         const userCount = await usersDataService.getUserCount();
-        if (userCount > 0 && !config.ENABLE_REGISTRATION) {
-          return json(
-            { error: "Registration is currently disabled", success: false },
-            403,
-          );
-        }
+        if (userCount > 0 && !config.ENABLE_REGISTRATION)
+          return registrationDisabled();
         if (!Value.Check(allowedEmailPolicy, request.email)) {
           return json({ error: "", success: false }, 403);
         }
@@ -162,27 +161,38 @@ export function createRegisterRoute() {
         }
 
         const passwordHash = await password.hash(request.password);
-        if (useEmailActivation) {
-          const activationToken = randomUUID();
-          const activationTokenExpiresAt = new Date(
-            Date.now() + activationLifetimeMs,
-          );
-          await mailSender.sendActivationEmail(request.email, activationToken);
-          await usersDataService.createUser({
-            activationToken,
-            activationTokenExpiresAt,
+        const activationToken = useEmailActivation ? randomUUID() : null;
+        const outcome = await usersDataService.createUser(
+          {
             email: request.email,
             name: request.username,
             passwordHash,
-            status: "inactive",
-          });
-        } else {
-          await usersDataService.createUser({
-            email: request.email,
-            name: request.username,
-            passwordHash,
-            status: "active",
-          });
+            ...(activationToken
+              ? {
+                  activationToken,
+                  activationTokenExpiresAt: new Date(
+                    Date.now() + activationLifetimeMs,
+                  ),
+                  status: "inactive",
+                }
+              : { status: "active" }),
+          },
+          config.ENABLE_REGISTRATION,
+        );
+        if (outcome === "closed") return registrationDisabled();
+        // Mail only once the row holding its token is committed. If delivery
+        // fails, withdraw the token so the next registration attempt for this
+        // address is treated as an expired link and sends a fresh one.
+        if (activationToken) {
+          try {
+            await mailSender.sendActivationEmail(
+              request.email,
+              activationToken,
+            );
+          } catch (error) {
+            await usersDataService.withdrawActivationToken(activationToken);
+            throw error;
+          }
         }
         return json({ success: true });
       },
