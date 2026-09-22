@@ -287,8 +287,13 @@ export function Dashboard(props: {
   createEffect(() => {
     setUnreadTotal(totalUnread(tree()));
   });
+  // Unmount is final for this instance: work still in flight when it happens
+  // must not reschedule the poll or write the global indicators it just reset.
+  let disposed = false;
   onCleanup(() => {
+    disposed = true;
     clearTimeout(pollTimer);
+    treeAbortController?.abort();
     setUnreadTotal(0);
     setNewArticlesCount(0);
   });
@@ -302,7 +307,7 @@ export function Dashboard(props: {
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (backgroundPollEnabled() !== "on") return;
+    if (disposed || backgroundPollEnabled() !== "on") return;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
         schedulePoll();
@@ -314,6 +319,7 @@ export function Dashboard(props: {
   const pollForNewArticles = async () => {
     try {
       const nextTree = await loadTree();
+      if (disposed) return;
       const total = totalUnread(nextTree);
       if (lastSeenUnread !== undefined && total > lastSeenUnread) {
         const arrived = total - lastSeenUnread;
@@ -441,7 +447,7 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (!treeRequestGuard.isCurrent(request)) return nextTree;
+    if (disposed || !treeRequestGuard.isCurrent(request)) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
@@ -489,12 +495,13 @@ export function Dashboard(props: {
     try {
       const nextTree = await loadTree();
       await preloadFavicons(nextTree);
+      if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
       if (restored) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
-      if (props.handleUnauthorized(cause)) return;
+      if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {

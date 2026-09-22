@@ -1637,6 +1637,33 @@ test("surfaces tree failures without masquerading as logout", async ({
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
 });
 
+// #833: refreshing while the boot tree request is still in flight aborts it.
+// That cancellation is not a connectivity failure; both the boot and the
+// refresh settle on the replacement tree.
+test("a superseded tree request settles on its replacement", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const held: Array<() => void> = [];
+  await page.route("**/api/tree", async (route) => {
+    await new Promise<void>((release) => held.push(release));
+    // The aborted request can no longer be answered; that is the point.
+    await route.fallback().catch(() => undefined);
+  });
+  await page.goto("/");
+  await expect.poll(() => held.length).toBe(1);
+
+  await page.getByRole("button", { name: "refresh" }).click();
+  await expect.poll(() => held.length).toBe(2);
+  held[1]!();
+  held[0]!();
+
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 // The #709 keyboard vocabulary: j/k alias the arrow keys' selection movement,
 // which already opens the article in the reader pane; ? opens the cheat sheet
 // hosted in the shared DialogHost.
@@ -2120,4 +2147,73 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   expect(state.removedSourceIds).toEqual([9]);
   await expectSelectedRow(page, /Tech News/);
   await expect(firstArticle).toBeVisible();
+});
+
+// #834: leaving the dashboard stops its background poll for good, even when
+// the unmount lands while boot or a poll is still waiting on the tree.
+const treeHolds = async (page: Page, hold: (request: number) => boolean) => {
+  const released: Array<() => void> = [];
+  let requests = 0;
+  await page.route("**/api/tree", async (route) => {
+    requests += 1;
+    if (hold(requests))
+      await new Promise<void>((release) => released.push(release));
+    // A request aborted by the unmount can no longer be answered.
+    await route.fallback().catch(() => undefined);
+  });
+  return { released, requests: () => requests };
+};
+const leaveDashboard = async (page: Page) => {
+  await page.getByRole("button", { name: "options" }).click();
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
+};
+
+test("unmounting during the boot tree load starts no poll", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 1);
+  await page.goto("/");
+  await expect.poll(() => tree.released.length).toBe(1);
+
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(1);
+});
+
+test("unmounting during a poll leaves one live loop after remounting", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 2);
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.released.length).toBe(1);
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(2);
+
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect.poll(() => tree.requests()).toBe(3);
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  // The remounted dashboard polls on its own backoff, 30s then 60s, once each.
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.requests()).toBe(4);
+  await page.clock.runFor(59_000);
+  expect(tree.requests()).toBe(4);
+  await page.clock.runFor(1_000);
+  await expect.poll(() => tree.requests()).toBe(5);
+  await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });

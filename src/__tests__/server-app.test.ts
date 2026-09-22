@@ -55,11 +55,12 @@ type PublicAuthRouteDependencies = {
     | "findUserByPasswordResetToken"
     | "getUserBySid"
     | "getUserCount"
+    | "withdrawActivationToken"
   > &
     PasswordResetRouteDependencies["usersDataService"] & {
       activateUser(userId: number): Promise<unknown>;
       createUser(
-        payload: Parameters<UsersDataService["createUser"]>[0],
+        ...args: Parameters<UsersDataService["createUser"]>
       ): Promise<unknown>;
     };
 };
@@ -430,6 +431,9 @@ function createDependencies(): ServerFakes {
       async touchLastSeen() {},
       async updatePassword() {
         return unexpected("usersDataService.updatePassword");
+      },
+      async withdrawActivationToken() {
+        return unexpected("usersDataService.withdrawActivationToken");
       },
     },
     websubStateService: {
@@ -2721,21 +2725,30 @@ test("creates inactive users and sends one activation email with Mailjet", async
     finishedAt + 24 * 60 * 60 * 1_000,
   );
   expect(sent).toEqual([["inactive@example.com", created.activationToken]]);
-  expect(events).toEqual(["send", "create"]);
+  expect(events).toEqual(["create", "send"]);
 });
 
-test("does not create an inactive user when activation email delivery fails", async () => {
+// Mail goes out only for a committed row, so a failed delivery cannot leave a
+// link to a token that was never stored. The row stays, and withdrawing its
+// token turns the next registration attempt into an expired-link resend.
+test("withdraws the stored activation token when delivery fails", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
   dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
-  let createCalls = 0;
-  dependencies.usersDataService.createUser = async () => {
-    createCalls++;
-    return undefined;
+  const events: string[] = [];
+  let stored: string | undefined;
+  dependencies.usersDataService.createUser = async (payload) => {
+    events.push("create");
+    stored = payload.activationToken;
+    return "created";
   };
   dependencies.mailSender.sendActivationEmail = async () => {
+    events.push("send");
     throw new Error("Mailjet unavailable");
+  };
+  dependencies.usersDataService.withdrawActivationToken = async (token) => {
+    events.push(token === stored ? "withdraw-stored" : "withdraw-other");
   };
   const app = await appFor(dependencies);
 
@@ -2753,8 +2766,100 @@ test("does not create an inactive user when activation email delivery fails", as
   );
 
   expect(response.status).toBe(500);
-  expect(createCalls).toBe(0);
+  expect(events).toEqual(["create", "send", "withdraw-stored"]);
 });
+
+// A same-address registration that lost the race to the insert gets the
+// answer an existing account gets, and a failed insert mails nothing: every
+// link sent points at a committed row (#848).
+const lostRace: ServerFakes["usersDataService"]["createUser"] = async () =>
+  "exists";
+const failedInsert: ServerFakes["usersDataService"]["createUser"] =
+  async () => {
+    throw new Error("insert failed");
+  };
+test.each([
+  ["lost the insert race", lostRace, 200],
+  ["failed to insert", failedInsert, 500],
+] as const)(
+  "sends no activation mail when the account %s",
+  async (_label, createUser, status) => {
+    const dependencies = createDependencies();
+    dependencies.config.ENABLE_REGISTRATION = true;
+    dependencies.config.MAILJET_API_KEY = "mailjet-key";
+    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    let mailCalls = 0;
+    dependencies.usersDataService.createUser = createUser;
+    dependencies.mailSender.sendActivationEmail = async () => {
+      mailCalls++;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "racer@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Racer",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(status);
+    if (status === 200)
+      expect(await response.json()).toEqual({ success: true });
+    expect(mailCalls).toBe(0);
+  },
+);
+
+// The store, not the route's earlier count, has the last word on whether
+// registration is open: a request that lost the bootstrap race is refused
+// like any other while registration is disabled, and nothing is mailed.
+test.each([false, true])(
+  "refuses a registration the store closed, with Mailjet=%s",
+  async (useMailjet) => {
+    const dependencies = createDependencies();
+    if (useMailjet) {
+      dependencies.config.MAILJET_API_KEY = "mailjet-key";
+      dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    }
+    let registrationEnabled: boolean | undefined;
+    let mailCalls = 0;
+    dependencies.usersDataService.getUserCount = async () => 0;
+    dependencies.usersDataService.createUser = async (_payload, enabled) => {
+      registrationEnabled = enabled;
+      return "closed";
+    };
+    dependencies.mailSender.sendActivationEmail = async () => {
+      mailCalls++;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "second@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Second",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Registration is currently disabled",
+      success: false,
+    });
+    expect(registrationEnabled).toBe(false);
+    expect(mailCalls).toBe(0);
+  },
+);
 
 // The recovery path a forgotten password needs, and every way it must refuse
 // to say more than it should.
