@@ -32,6 +32,15 @@ export function isJsonFeedText(text: string): boolean {
 const asString = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
+// content_text and summary are plain text, but articles carry HTML: escape
+// them so literal markup and entities survive, and keep their line breaks.
+const asHtmlText = (value: unknown): string | null => {
+  const text = asString(value);
+  return text === null
+    ? null
+    : Bun.escapeHTML(text).replaceAll(/\r\n?|\n/gu, "<br>");
+};
+
 const asDate = (value: unknown): Date | null => {
   if (typeof value !== "string") return null;
   const date = new Date(value);
@@ -71,8 +80,8 @@ export function parseJsonFeed(text: string) {
       const item = (rawItem ?? {}) as JsonFeedItem;
       return {
         authors: itemAuthors(item, feed.authors),
-        content: asString(item.content_html) ?? asString(item.content_text),
-        description: asString(item.summary),
+        content: asString(item.content_html) ?? asHtmlText(item.content_text),
+        description: asHtmlText(item.summary),
         id: asString(item.id),
         published: asDate(item.date_published),
         title: asString(item.title),
