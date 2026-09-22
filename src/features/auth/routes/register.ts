@@ -54,6 +54,18 @@ async function validateCaptcha(
 const registrationDisabled = () =>
   json({ error: "Registration is currently disabled", success: false }, 403);
 
+// If delivery fails, withdraw the stored token so the next registration
+// attempt for this address is treated as an expired link and sends a fresh
+// one, rather than waiting out a link nobody received.
+async function sendActivation(email: string, token: string) {
+  try {
+    await mailSender.sendActivationEmail(email, token);
+  } catch (error) {
+    await usersDataService.withdrawActivationToken(token);
+    throw error;
+  }
+}
+
 export function createRegisterRoute() {
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
@@ -134,15 +146,14 @@ export function createRegisterRoute() {
                   Date.now() + activationLifetimeMs,
                 );
                 // Persist the replacement token before sending a link to it.
-                await usersDataService.refreshActivationToken(
-                  existing.id,
-                  activationToken,
-                  activationTokenExpiresAt,
-                );
-                await mailSender.sendActivationEmail(
-                  existing.email,
-                  activationToken,
-                );
+                if (
+                  await usersDataService.refreshActivationToken(
+                    existing.id,
+                    activationToken,
+                    activationTokenExpiresAt,
+                  )
+                )
+                  await sendActivation(existing.email, activationToken);
               }
             } else {
               const resetToken = randomUUID();
@@ -182,20 +193,9 @@ export function createRegisterRoute() {
         if (outcome === "closed") return registrationDisabled();
         // Lost a same-address race: the same answer an existing account gets.
         if (outcome === "exists") return json({ success: true });
-        // Mail only once the row holding its token is committed. If delivery
-        // fails, withdraw the token so the next registration attempt for this
-        // address is treated as an expired link and sends a fresh one.
-        if (activationToken) {
-          try {
-            await mailSender.sendActivationEmail(
-              request.email,
-              activationToken,
-            );
-          } catch (error) {
-            await usersDataService.withdrawActivationToken(activationToken);
-            throw error;
-          }
-        }
+        // Mail only once the row holding its token is committed.
+        if (activationToken)
+          await sendActivation(request.email, activationToken);
         return json({ success: true });
       },
     );
