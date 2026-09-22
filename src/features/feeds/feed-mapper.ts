@@ -86,12 +86,16 @@ export const mapFeedItemToArticle = (
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
 ): ArticlePayload => {
+  // Content links resolve against the article, then the feed homepage, then
+  // the feed itself, so relative feed URLs still land on the publisher.
+  const homepage = safeHttpUrl(parsedFeed.url ?? "", source.url) || source.url;
+  const url = safeHttpUrl(item.url ?? "", homepage);
   return {
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     content: rewriteLinksFunction(
       item.content ?? item.description ?? "",
-      item.url ?? "",
+      url || homepage,
     ),
     guid: generateArticleGuid(item, parsedFeed, source.url),
     publishedAt: new Date(item.published ?? now),
@@ -101,7 +105,7 @@ export const mapFeedItemToArticle = (
       item.updated || item.published
         ? new Date(item.updated ?? item.published ?? now)
         : null,
-    url: safeHttpUrl(item.url ?? "", parsedFeed.url ?? source.url),
+    url,
   };
 };
 
@@ -128,7 +132,7 @@ export const mapFeedToPreview = (
         publishedAt: article.publishedAt,
         title: article.title,
         updatedAt: article.updatedAt,
-        url: safeHttpUrl(article.url, parsedFeed.url ?? sourceUrl),
+        url: article.url,
       };
     }),
     description: parsedFeed.description ?? undefined,
