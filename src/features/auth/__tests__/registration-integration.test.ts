@@ -91,3 +91,63 @@ test("withdrawing an activation token leaves a newer one alone", async () => {
     )[0]?.token,
   ).toBeNull();
 });
+
+// The route's lookup cannot see an account committed after it, so the insert
+// itself must settle a same-address race: one row, the winner's credentials
+// and token, and every loser told "exists" rather than failing on the unique
+// index (#848). Run on an empty instance and on a populated one, since the
+// two take different insert paths.
+test.each([false, true])(
+  "same-address registrations create one untouched account, populated=%s",
+  async (populated) => {
+    await resetDatabase();
+    if (populated) await service.createUser(account(99), true);
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        service.createUser(
+          {
+            ...account(0),
+            activationToken: `token-${index}`,
+            activationTokenExpiresAt: new Date(Date.now() + 60_000),
+            passwordHash: `hash-${index}`,
+            status: "inactive",
+          },
+          true,
+        ),
+      ),
+    );
+
+    const winner = outcomes.indexOf("created");
+    expect(winner).toBeGreaterThanOrEqual(0);
+    expect(outcomes.filter((outcome) => outcome === "exists")).toHaveLength(7);
+    const rows = await client<{ password: string; token: string }[]>`
+      SELECT password, activation_token AS token FROM users
+      WHERE email = ${account(0).email}`;
+    expect(rows).toEqual([
+      { password: `hash-${winner}`, token: `token-${winner}` },
+    ]);
+  },
+);
+
+// A delivery that failed after the row committed withdraws the token, which
+// leaves the account where the register route's expired-link recovery picks
+// it up: still inactive, with no live link to wait out.
+test("a withdrawn activation token leaves the account recoverable", async () => {
+  await resetDatabase();
+  await service.createUser(
+    {
+      ...account(0),
+      activationToken: "undelivered-token",
+      activationTokenExpiresAt: new Date(Date.now() + 60_000),
+      status: "inactive",
+    },
+    true,
+  );
+
+  await service.withdrawActivationToken("undelivered-token");
+
+  const user = await service.findUser(account(0).email);
+  expect(user?.status).toBe("inactive");
+  expect(user?.activationTokenExpiresAt).toBeNull();
+});

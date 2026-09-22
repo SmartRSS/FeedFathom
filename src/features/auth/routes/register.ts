@@ -180,6 +180,8 @@ export function createRegisterRoute() {
           config.ENABLE_REGISTRATION,
         );
         if (outcome === "closed") return registrationDisabled();
+        // Lost a same-address race: the same answer an existing account gets.
+        if (outcome === "exists") return json({ success: true });
         // Mail only once the row holding its token is committed. If delivery
         // fails, withdraw the token so the next registration attempt for this
         // address is treated as an expired link and sends a fresh one.
