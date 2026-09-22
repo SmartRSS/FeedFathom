@@ -2769,6 +2769,52 @@ test("withdraws the stored activation token when delivery fails", async () => {
   expect(events).toEqual(["create", "send", "withdraw-stored"]);
 });
 
+// A same-address registration that lost the race to the insert gets the
+// answer an existing account gets, and a failed insert mails nothing: every
+// link sent points at a committed row (#848).
+const lostRace: ServerFakes["usersDataService"]["createUser"] = async () =>
+  "exists";
+const failedInsert: ServerFakes["usersDataService"]["createUser"] =
+  async () => {
+    throw new Error("insert failed");
+  };
+test.each([
+  ["lost the insert race", lostRace, 200],
+  ["failed to insert", failedInsert, 500],
+] as const)(
+  "sends no activation mail when the account %s",
+  async (_label, createUser, status) => {
+    const dependencies = createDependencies();
+    dependencies.config.ENABLE_REGISTRATION = true;
+    dependencies.config.MAILJET_API_KEY = "mailjet-key";
+    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    let mailCalls = 0;
+    dependencies.usersDataService.createUser = createUser;
+    dependencies.mailSender.sendActivationEmail = async () => {
+      mailCalls++;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "racer@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Racer",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(status);
+    if (status === 200)
+      expect(await response.json()).toEqual({ success: true });
+    expect(mailCalls).toBe(0);
+  },
+);
+
 // The store, not the route's earlier count, has the last word on whether
 // registration is open: a request that lost the bootstrap race is refused
 // like any other while registration is disabled, and nothing is mailed.
