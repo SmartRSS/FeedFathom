@@ -37,13 +37,27 @@ const invalidResponse = (
     `Invalid response from /api${path}${status === undefined ? "" : ` (${status})`}: ${message}`,
   );
 
+// Aborting a request is the caller's own decision, not a failure to report:
+// the caller's AbortError has to reach it unwrapped so it can tell a
+// superseded request from a real one. Only while its signal is aborted, so a
+// genuine failure that merely coincides with a later abort still surfaces.
+const isCancellation = (
+  cause: unknown,
+  signal: AbortSignal | null | undefined,
+) =>
+  signal?.aborted === true &&
+  (cause === signal.reason ||
+    (cause instanceof DOMException && cause.name === "AbortError"));
+
 async function responseJson(
   path: string,
   response: Response,
+  signal: AbortSignal | null | undefined,
 ): Promise<unknown> {
   try {
     return await response.json();
-  } catch {
+  } catch (cause) {
+    if (isCancellation(cause, signal)) throw cause;
     throw invalidResponse(path, "expected JSON", response.status);
   }
 }
@@ -72,9 +86,10 @@ export async function api<T extends TSchema>(
   try {
     response = await fetch(`/api${path}`, init);
   } catch (cause) {
+    if (isCancellation(cause, init?.signal)) throw cause;
     throw unreachable(cause);
   }
-  const payload = await responseJson(path, response);
+  const payload = await responseJson(path, response, init?.signal);
 
   if (!response.ok) {
     if (Value.Check(errorResponse, payload))
