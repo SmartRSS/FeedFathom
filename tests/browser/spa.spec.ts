@@ -1995,3 +1995,72 @@ test.describe("session restoration", () => {
     ).toBeNull();
   });
 });
+
+// #834: leaving the dashboard stops its background poll for good, even when
+// the unmount lands while boot or a poll is still waiting on the tree.
+const treeHolds = async (page: Page, hold: (request: number) => boolean) => {
+  const released: Array<() => void> = [];
+  let requests = 0;
+  await page.route("**/api/tree", async (route) => {
+    requests += 1;
+    if (hold(requests))
+      await new Promise<void>((release) => released.push(release));
+    // A request aborted by the unmount can no longer be answered.
+    await route.fallback().catch(() => undefined);
+  });
+  return { released, requests: () => requests };
+};
+const leaveDashboard = async (page: Page) => {
+  await page.getByRole("button", { name: "options" }).click();
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
+};
+
+test("unmounting during the boot tree load starts no poll", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 1);
+  await page.goto("/");
+  await expect.poll(() => tree.released.length).toBe(1);
+
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(1);
+});
+
+test("unmounting during a poll leaves one live loop after remounting", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 2);
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.released.length).toBe(1);
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(2);
+
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect.poll(() => tree.requests()).toBe(3);
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  // The remounted dashboard polls on its own backoff, 30s then 60s, once each.
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.requests()).toBe(4);
+  await page.clock.runFor(59_000);
+  expect(tree.requests()).toBe(4);
+  await page.clock.runFor(1_000);
+  await expect.poll(() => tree.requests()).toBe(5);
+  await expect(page.getByText(/new articles?\./)).toHaveCount(0);
+});
