@@ -11,12 +11,30 @@ const interactivePrefix = "http-interactive:";
 const feedDelayMs = 10_000;
 const pollIntervalMs = 50;
 const fallbackBlockMs = 5 * 60_000;
+// How long the waiter counter outlives the reservation window of the waiter
+// that registered last: enough for its final poll and its cleanup to land.
+const waiterGraceMs = 1_000;
+
+// Counts one more interactive waiter and keeps the counter alive for at least
+// ARGV[1] ms. The expiry only ever grows, so it covers every waiter still
+// registered, and state a crashed waiter abandons still expires.
+const registerWaiterScript = `
+redis.call('INCR', KEYS[1])
+if redis.call('PTTL', KEYS[1]) < tonumber(ARGV[1]) then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end`;
+
+// Counts one waiter out. A counter that already expired stays absent instead
+// of going negative, and the last waiter out removes the key.
+const releaseWaiterScript = `
+local waiters = tonumber(redis.call('GET', KEYS[1]))
+if not waiters then return 0 end
+if waiters <= 1 then return redis.call('DEL', KEYS[1]) end
+return redis.call('DECR', KEYS[1])`;
 
 type RateLimitRedis = {
-  decr(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
   get(key: string): Promise<null | string>;
-  incr(key: string): Promise<number>;
+  send(command: "EVAL", args: string[]): Promise<unknown>;
   set(
     key: string,
     value: string,
@@ -127,27 +145,34 @@ export class HttpRateLimiter {
       Date.now() + delay + pollIntervalMs,
       deadline.endsAt,
     );
+    const waitersKey = `${interactivePrefix}${hostname}`;
     let waiting = false;
     try {
       /* eslint-disable no-await-in-loop -- Reservation and waiter state are updated between polls. */
       while (Date.now() < reservationDeadline) {
         if (await this.reserveSlot(hostname, delay, deadline)) return;
         if (!waiting) {
+          await deadline.run(
+            this.redis.send("EVAL", [
+              registerWaiterScript,
+              "1",
+              waitersKey,
+              (reservationDeadline - Date.now() + waiterGraceMs).toString(),
+            ]),
+          );
           waiting = true;
-          await deadline.run(
-            this.redis.incr(`${interactivePrefix}${hostname}`),
-          );
-          await deadline.run(
-            this.redis.expire(`${interactivePrefix}${hostname}`, 6),
-          );
         }
         await deadline.sleep(pollIntervalMs);
       }
       /* eslint-enable no-await-in-loop */
       throw new HttpDeferredError(Date.now() + delay);
     } finally {
+      // Outside the deadline: a request that ran out of time still takes its
+      // waiter back out, and nothing here waits on that or fails for it.
       if (waiting) {
-        await deadline.run(this.redis.decr(`${interactivePrefix}${hostname}`));
+        void this.redis
+          .send("EVAL", [releaseWaiterScript, "1", waitersKey])
+          .catch(() => undefined);
       }
     }
   }
