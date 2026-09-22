@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   createNativeHttpTransport,
@@ -11,56 +12,7 @@ import {
 
 const maximumBodyBytes = 24 * 1024 * 1024;
 
-// PX is honoured because the rate limiter's whole behaviour is about when a
-// key stops existing: a reservation that never expires makes every retry look
-// like a violation.
-const redis = () => {
-  const expiry = new Map<string, number>();
-  const values = new Map<string, string>();
-  const deleted: string[] = [];
-  const live = (key: string) => {
-    const expiresAt = expiry.get(key);
-    if (expiresAt !== undefined && expiresAt <= Date.now()) {
-      expiry.delete(key);
-      values.delete(key);
-    }
-    return values.get(key);
-  };
-  return {
-    async decr(key: string) {
-      const value = String(Number(live(key) ?? "0") - 1);
-      values.set(key, value);
-      return Number(value);
-    },
-    async del(key: string) {
-      deleted.push(key);
-      expiry.delete(key);
-      values.delete(key);
-      return 1;
-    },
-    deleted,
-    async expire() {
-      return 1;
-    },
-    async get(key: string) {
-      return live(key) ?? null;
-    },
-    async incr(key: string) {
-      const value = String(Number(live(key) ?? "0") + 1);
-      values.set(key, value);
-      return Number(value);
-    },
-    async set(key: string, value: string, ...options: Array<number | string>) {
-      if (options.includes("NX") && live(key) !== undefined) return null;
-      const px = options.indexOf("PX");
-      if (px === -1) expiry.delete(key);
-      else expiry.set(key, Date.now() + Number(options[px + 1]));
-      values.set(key, value);
-      return "OK";
-    },
-    values,
-  };
-};
+const redis = createFakeHttpRedis;
 
 // Tests that make more than one request to a host cannot sit out the real
 // 10 second interval; they still have to sit out an interval.
