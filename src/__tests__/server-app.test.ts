@@ -2635,6 +2635,35 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   expect(mailCalls).toBe(11);
 });
 
+test("answers a disposable address with generic success and no account", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.ENABLE_REGISTRATION = true;
+  let created = 0;
+  dependencies.usersDataService.getUserCount = async () => 1;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => {
+    created++;
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/register", {
+      body: JSON.stringify({
+        email: " reader@mailinator.com ",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Stranger",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true });
+  expect(created).toBe(0);
+});
+
 // A fresh install answers registration regardless of ENABLE_REGISTRATION, and
 // answers it identically whether or not it worked. Someone fumbling their way
 // into their own empty instance must not be able to lock themselves out of it
