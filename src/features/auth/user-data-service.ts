@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
@@ -115,19 +115,33 @@ export class UsersDataService {
     ).at(0);
   }
 
-  // A pending registration whose link expired gets the same address back on
-  // the fresh token; the status predicate keeps an already-active account's
-  // row untouched -- that path belongs to the password reset, not to a
-  // re-registration (#810).
+  // A pending registration whose link expired, or was withdrawn after a failed
+  // delivery, gets the same address back on the fresh token; the status
+  // predicate keeps an already-active account's row untouched -- that path
+  // belongs to the password reset, not to a re-registration (#810). The
+  // expiry predicate makes this a compare-and-set: of two concurrent
+  // recoveries only one stores a token, so the other cannot overwrite a link
+  // that was just mailed. False means nothing was stored and nothing to send.
   public async refreshActivationToken(
     userId: number,
     token: string,
     expiresAt: Date,
-  ) {
-    await this.drizzleConnection
+  ): Promise<boolean> {
+    const refreshed = await this.drizzleConnection
       .update(users)
       .set({ activationToken: token, activationTokenExpiresAt: expiresAt })
-      .where(and(eq(users.id, userId), eq(users.status, "inactive")));
+      .where(
+        and(
+          eq(users.id, userId),
+          eq(users.status, "inactive"),
+          or(
+            isNull(users.activationTokenExpiresAt),
+            lt(users.activationTokenExpiresAt, sql`now()`),
+          ),
+        ),
+      )
+      .returning({ id: users.id });
+    return refreshed.length > 0;
   }
 
   // Compare-and-set on the token: a link whose mail never left is withdrawn so
