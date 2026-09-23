@@ -99,7 +99,7 @@ type PasswordResetRouteDependencies = {
       userId: number,
       token: string,
       expiresAt: Date,
-    ): Promise<void>;
+    ): Promise<boolean>;
     startPasswordReset(
       userId: number,
       tokenHash: string,
@@ -3109,6 +3109,7 @@ test("registering an address with an expired link sends a fresh one", async () =
     expiresAt,
   ) => {
     refreshed.push({ expiresAt, token, userId });
+    return true;
   };
   dependencies.mailSender.sendActivationEmail = async (email) => {
     activationSends.push(email);
@@ -3137,6 +3138,70 @@ test("registering an address with an expired link sends a fresh one", async () =
   expect(refreshed[0]!.expiresAt.getTime()).toBeGreaterThan(
     Date.now() + 23 * 60 * 60 * 1_000,
   );
+});
+
+// A replacement link whose mail failed is withdrawn, so the next attempt
+// sends another at once instead of finding an unexpired token and staying
+// silent for a day (#849). A recovery that stored nothing sends nothing.
+test("a failed replacement activation mail is retried on the next attempt", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  // An object, so the closures' writes are not narrowed away at the reads.
+  const row: { token: null | string } = { token: null };
+  let mailUp = false;
+  const delivered: (null | string)[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    activationToken: row.token,
+    activationTokenExpiresAt: row.token ? new Date(Date.now() + 60_000) : null,
+    email,
+    status: "inactive" as const,
+  });
+  dependencies.usersDataService.refreshActivationToken = async (
+    _userId,
+    token,
+  ) => {
+    if (row.token) return false;
+    row.token = token;
+    return true;
+  };
+  dependencies.usersDataService.withdrawActivationToken = async (token) => {
+    if (row.token === token) row.token = null;
+  };
+  dependencies.mailSender.sendActivationEmail = async (_email, token) => {
+    if (!mailUp) throw new Error("Mailjet unavailable");
+    delivered.push(token);
+  };
+  const app = await appFor(dependencies);
+  const register = () =>
+    app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "pending@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Pending user",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  expect((await register()).status).toBe(500);
+  expect(row.token).toBeNull();
+
+  mailUp = true;
+  const retried = await register();
+  expect(retried.status).toBe(200);
+  expect(await retried.json()).toEqual({ success: true });
+  expect(delivered).toEqual([row.token]);
+
+  // The delivered link is live now, so a further attempt stores and sends
+  // nothing and still answers the generic success.
+  const again = await register();
+  expect(await again.json()).toEqual({ success: true });
+  expect(delivered).toHaveLength(1);
 });
 
 // An active account is not a half-made one, so no new activation -- the
