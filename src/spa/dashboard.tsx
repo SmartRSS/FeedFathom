@@ -287,8 +287,13 @@ export function Dashboard(props: {
   createEffect(() => {
     setUnreadTotal(totalUnread(tree()));
   });
+  // Unmount is final for this instance: work still in flight when it happens
+  // must not reschedule the poll or write the global indicators it just reset.
+  let disposed = false;
   onCleanup(() => {
+    disposed = true;
     clearTimeout(pollTimer);
+    treeAbortController?.abort();
     setUnreadTotal(0);
     setNewArticlesCount(0);
   });
@@ -302,7 +307,7 @@ export function Dashboard(props: {
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (backgroundPollEnabled() !== "on") return;
+    if (disposed || backgroundPollEnabled() !== "on") return;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
         schedulePoll();
@@ -314,6 +319,7 @@ export function Dashboard(props: {
   const pollForNewArticles = async () => {
     try {
       const nextTree = await loadTree();
+      if (disposed) return;
       const total = totalUnread(nextTree);
       if (lastSeenUnread !== undefined && total > lastSeenUnread) {
         const arrived = total - lastSeenUnread;
@@ -441,7 +447,7 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (!treeRequestGuard.isCurrent(request)) return nextTree;
+    if (disposed || !treeRequestGuard.isCurrent(request)) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
@@ -489,12 +495,13 @@ export function Dashboard(props: {
     try {
       const nextTree = await loadTree();
       await preloadFavicons(nextTree);
+      if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
       if (restored) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
-      if (props.handleUnauthorized(cause)) return;
+      if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {
@@ -976,8 +983,7 @@ export function Dashboard(props: {
       observer.disconnect();
     });
   });
-  async function showProperties() {
-    const node = selectedNode();
+  async function showProperties(node = selectedNode()) {
     if (!node) return;
     if (node.type === "source") {
       setEditingSource(node);
@@ -1035,16 +1041,16 @@ export function Dashboard(props: {
       );
     }
   }
-  // Right-click / long-press menus (#721). The tree menu selects the row
-  // first, so the existing rename/unsubscribe actions -- which operate on
-  // selectedNode() -- keep working unchanged, and no re-filing action
-  // exists here by design: manual ordering stays a non-feature.
+  // Right-click / long-press menus (#721). The menu acts on the clicked row
+  // without selecting it: the article list, its pagination cursor and the
+  // reading position all belong to the selection, which the menu leaves
+  // alone. No re-filing action exists here by design: manual ordering stays
+  // a non-feature.
   function openTreeContext(x: number, y: number, node: TreeNode) {
     // The virtual Today row is a view, not a feed: it has no feed URL to
     // copy, no properties to edit, and no subscription to remove, so it
     // opens no menu at all (the tree item still swallows the native menu).
     if (isTodayNode(node)) return;
-    setSelectedNode(node);
     const snoozeItems: ContextMenuItem[] =
       node.type === "source"
         ? [
@@ -1071,13 +1077,13 @@ export function Dashboard(props: {
             {
               kind: "action",
               label: "Rename folder",
-              onSelect: () => void showProperties(),
+              onSelect: () => void showProperties(node),
             },
             {
               disabled: Boolean(node.children?.length),
               kind: "action",
               label: "Delete folder",
-              onSelect: () => void removeSelectedNode(),
+              onSelect: () => void removeNode(node),
             },
           ]
         : [
@@ -1099,7 +1105,7 @@ export function Dashboard(props: {
             {
               kind: "action",
               label: "Edit feed",
-              onSelect: () => void showProperties(),
+              onSelect: () => void showProperties(node),
             },
             { kind: "separator" },
             ...snoozeItems,
@@ -1107,13 +1113,12 @@ export function Dashboard(props: {
             {
               kind: "action",
               label: "Unsubscribe",
-              onSelect: () => void removeSelectedNode(),
+              onSelect: () => void removeNode(node),
             },
           ];
     setContextMenu({ items, x, y });
   }
-  async function removeSelectedNode() {
-    const node = selectedNode();
+  async function removeNode(node = selectedNode()) {
     if (!node) return;
     if (node.type === "folder" && node.children?.length) {
       setError("Folder is not empty");
@@ -1136,6 +1141,22 @@ export function Dashboard(props: {
           method: "DELETE",
         },
       );
+      const current = selectedNode();
+      if (!current || treeNodeKey(current) !== treeNodeKey(node)) {
+        // A menu target other than the selection: reading stays where it
+        // is, unless the list shows rows of the feed that just went away.
+        await loadTree();
+        if (
+          node.type === "source" &&
+          articles().some((item) => item.sourceId === Number(node.uid))
+        ) {
+          const search = activeSearch();
+          const selection = selectedNode();
+          if (search) await runSearch(search);
+          else if (selection) await select(selection);
+        }
+        return;
+      }
       setSelectedNode(undefined);
       setArticles([]);
       // The source (and everything under a deleted folder) is gone: no
@@ -1549,7 +1570,7 @@ export function Dashboard(props: {
             <button
               aria-label="delete source"
               disabled={!selectedNode()}
-              onClick={() => void removeSelectedNode()}
+              onClick={() => void removeNode()}
             >
               <Icon raw={removeRaw} />
             </button>
