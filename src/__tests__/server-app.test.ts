@@ -73,7 +73,9 @@ type LoginRouteDependencies = {
   password: Password;
   secureCookies: boolean;
   usersDataService: {
-    createSession(userId: number, userAgent?: null | string): Promise<string>;
+    createSession(
+      ...args: Parameters<UsersDataService["createSession"]>
+    ): ReturnType<UsersDataService["createSession"]>;
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
   };
 };
@@ -1667,11 +1669,16 @@ test("login stores the request's user agent on the created session", async () =>
   dependencies.password.verify = async (value, hash) =>
     hash === account.password && value === "password";
   const createdSessions: Array<{
+    passwordHash: string;
     userId: number;
     userAgent: null | string | undefined;
   }> = [];
-  dependencies.usersDataService.createSession = async (userId, userAgent) => {
-    createdSessions.push({ userAgent, userId });
+  dependencies.usersDataService.createSession = async (
+    userId,
+    passwordHash,
+    userAgent,
+  ) => {
+    createdSessions.push({ passwordHash, userAgent, userId });
     return "test-session";
   };
   const app = await appFor(dependencies);
@@ -1690,9 +1697,54 @@ test("login stores the request's user agent on the created session", async () =>
   expect((await login("Mozilla/5.0 FeedFathom Test")).status).toBe(200);
   expect((await login()).status).toBe(200);
   expect(createdSessions).toEqual([
-    { userAgent: "Mozilla/5.0 FeedFathom Test", userId: account.id },
-    { userAgent: null, userId: account.id },
+    {
+      passwordHash: account.password,
+      userAgent: "Mozilla/5.0 FeedFathom Test",
+      userId: account.id,
+    },
+    { passwordHash: account.password, userAgent: null, userId: account.id },
   ]);
+});
+
+// The session is issued against the hash the route verified. When a reset
+// replaced it in between, the store issues nothing and the login is answered
+// like any wrong password: no cookie, and the failure still counts (#843).
+test("login refuses when the verified password was replaced before issuance", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.password.verify = async (value, hash) =>
+    hash === account.password && value === "password";
+  dependencies.usersDataService.createSession = async () => undefined;
+  const throttled: string[] = [];
+  dependencies.authThrottle = {
+    async blocked() {
+      return false;
+    },
+    async clearFailures() {
+      throttled.push("clear");
+    },
+    async recordFailure() {
+      throttled.push("failure");
+    },
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/login", {
+      body: JSON.stringify({ email: account.email, password: "password" }),
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.9",
+      },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ error: "Wrong login data" });
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(throttled).toEqual(["failure"]);
 });
 
 // Equal-time hashing on a miss closes the enumeration oracle but buys little

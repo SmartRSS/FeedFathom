@@ -13,17 +13,32 @@ export class UsersDataService {
   // Annotated rather than inferred: crypto.randomUUID() infers the
   // `${string}-${string}-...` template literal type, which promises callers
   // and test doubles a UUID shape nothing depends on.
+  //
+  // passwordHash is the stored hash the caller verified. The session is only
+  // issued while the row still holds it, checked under the row lock that
+  // completePasswordReset's UPDATE also takes: a login that locks first has
+  // its session deleted by the reset, and one that locks after the reset sees
+  // the new hash and gets undefined -- no session from a revoked password.
   public async createSession(
     userId: number,
+    passwordHash: string,
     userAgent?: null | string,
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     const uuid = crypto.randomUUID();
-    await this.drizzleConnection.insert(sessions).values({
-      sid: uuid,
-      userAgent: userAgent ?? "UNKNOWN",
-      userId,
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      const current = await transaction
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.password, passwordHash)))
+        .for("update");
+      if (!current.length) return undefined;
+      await transaction.insert(sessions).values({
+        sid: uuid,
+        userAgent: userAgent ?? "UNKNOWN",
+        userId,
+      });
+      return uuid;
     });
-    return uuid;
   }
 
   public async deleteSession(sid: string) {

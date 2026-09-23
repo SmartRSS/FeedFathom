@@ -34,13 +34,15 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     const userId = user!.id;
     const otherId = other!.id;
 
-    const browserSid = await usersDataService.createSession(
-      userId,
-      "This browser",
-    );
-    const phoneSid = await usersDataService.createSession(userId, "Phone");
-    const tabletSid = await usersDataService.createSession(userId, "Tablet");
-    const stolenSid = await usersDataService.createSession(otherId, "Stolen");
+    const issue = async (id: number, userAgent: string) => {
+      const sid = await usersDataService.createSession(id, "x", userAgent);
+      if (!sid) throw new Error("session was not issued");
+      return sid;
+    };
+    const browserSid = await issue(userId, "This browser");
+    const phoneSid = await issue(userId, "Phone");
+    const tabletSid = await issue(userId, "Tablet");
+    const stolenSid = await issue(otherId, "Stolen");
 
     // A fresh session resolves, and carries the same window the cookie
     // promises -- roughly a year, not forever and not zero.

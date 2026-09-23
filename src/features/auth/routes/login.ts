@@ -40,14 +40,20 @@ export function createLoginRoute(secureCookies: boolean) {
         return wrongLoginData;
       }
 
-      await authThrottle.clearFailures("login", address, parsed.email);
       // Store what the client says it is, so the options page's session list
       // can tell rows apart; createSession falls back to "UNKNOWN" when the
-      // header is absent.
+      // header is absent. No sid means a password reset replaced the hash
+      // verified above, which answers like any other wrong password.
       const sid = await usersDataService.createSession(
         user.id,
+        user.password,
         request.headers.get("user-agent"),
       );
+      if (!sid) {
+        await authThrottle.recordFailure("login", address, parsed.email);
+        return wrongLoginData;
+      }
+      await authThrottle.clearFailures("login", address, parsed.email);
       return json({ sid }, 200, {
         "set-cookie": sessionHeader(sid, secureCookies),
       });
