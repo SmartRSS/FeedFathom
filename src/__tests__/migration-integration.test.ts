@@ -1,5 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
+import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitForMigration } from "#platform/db/connection.ts";
 import journal from "../../drizzle/meta/_journal.json";
@@ -15,8 +18,10 @@ const expectedIndexNames = [
   "articles_source_last_seen_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
-  "user_sources_user_source_idx",
 ].toSorted();
+// The UNIQUE(user_id, source_id) constraint's own index covers the same
+// ordered columns, so this nonunique copy was dropped by 0007.
+const redundantIndexName = "user_sources_user_source_idx";
 
 async function resetDatabase(client: SQL) {
   await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
@@ -57,7 +62,7 @@ async function expectMigrationJournaledOnce(
 }
 
 // The migration history was squashed to a single baseline, so there is no
-// longer an in-repo upgrade path to exercise -- the only database that has
+// in-repo upgrade path from the pre-squash history -- the only database that has
 // ever run the old 31 migrations is production, and it is stamped as having
 // applied the baseline rather than running it. What remains testable is that
 // the baseline builds the schema the application expects, and that running
@@ -124,6 +129,73 @@ test("gates startup on this build's newest migration, tolerating a newer databas
     ).resolves.toBeUndefined();
   } finally {
     await client.close();
+  }
+});
+
+async function indexExists(client: SQL, name: string) {
+  const [row] = await client<
+    { exists: boolean }[]
+  >`SELECT to_regclass(${`public.${name}`}) IS NOT NULL AS "exists"`;
+  return row?.exists === true;
+}
+
+// A copy of the migrations folder whose journal stops before `tag`, standing
+// in for an installation that predates that migration.
+async function migrationsFolderBefore(tag: string) {
+  const folder = await mkdtemp(join(tmpdir(), "feedfathom-migrations-"));
+  await cp(currentMigrationsFolder, folder, { recursive: true });
+  const cutoff = journal.entries.findIndex((entry) => entry.tag === tag);
+  if (cutoff === -1) throw new Error(`Migration ${tag} is not journaled`);
+  await writeFile(
+    join(folder, "meta", "_journal.json"),
+    JSON.stringify({ ...journal, entries: journal.entries.slice(0, cutoff) }),
+  );
+  return folder;
+}
+
+test("upgrading drops the redundant user-sources index and keeps the unique constraint", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const olderMigrationsFolder = await migrationsFolderBefore("0007_salty_salo");
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, olderMigrationsFolder);
+    expect(await indexExists(client, redundantIndexName)).toBe(true);
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    expect(await indexExists(client, redundantIndexName)).toBe(false);
+    await expectIndexesValid(client);
+
+    const constraints = await client<
+      { definition: string }[]
+    >`SELECT pg_get_constraintdef(oid) AS "definition"
+      FROM pg_constraint
+      WHERE conname = 'user_sources_user_id_source_id_unique'`;
+    expect(constraints.map((row) => row.definition)).toEqual([
+      "UNIQUE (user_id, source_id)",
+    ]);
+
+    const [user] = await client<{ id: number }[]>`INSERT INTO "users"
+      ("email", "name", "password")
+      VALUES ('upgrade@example.com', 'upgrade', 'x') RETURNING "id"`;
+    const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
+      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      RETURNING "id"`;
+    await client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
+      VALUES ('feed', ${source?.id}, ${user?.id})`;
+    const found = await client`SELECT "id" FROM "user_sources"
+      WHERE "user_id" = ${user?.id} AND "source_id" = ${source?.id}`;
+    expect(found).toHaveLength(1);
+    // A Bun SQL query only runs once `then` is called, which `rejects` never
+    // does on its own.
+    await expect(
+      client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
+        VALUES ('again', ${source?.id}, ${user?.id})`.then(() => "inserted"),
+    ).rejects.toThrow(/user_sources_user_id_source_id_unique/u);
+  } finally {
+    await client.close();
+    await rm(olderMigrationsFolder, { force: true, recursive: true });
   }
 });
 

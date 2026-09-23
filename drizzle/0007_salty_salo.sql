@@ -1,0 +1,1 @@
+DROP INDEX "user_sources_user_source_idx";
