@@ -34,27 +34,36 @@ const QUEUEABLE_MUTATIONS = [
   },
 ];
 
+function shellAssetUrls(html) {
+  return [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(
+    (match) => match[1],
+  );
+}
+
+// Caches the shell's assets before the HTML that names them, so a cached "/"
+// never points at files the cache lacks. Returns the asset list.
+async function putShell(cache, response) {
+  const assetUrls = shellAssetUrls(await response.clone().text());
+  await Promise.all(
+    assetUrls.map(async (url) => {
+      if (await cache.match(url)) return; // hash-named, so never stale
+      try {
+        const assetResponse = await fetch(url);
+        if (assetResponse.ok) await cache.put(url, assetResponse);
+      } catch {
+        // best-effort precache; runtime cacheFirst() covers this on next visit
+      }
+    }),
+  );
+  await cache.put("/", response);
+  return assetUrls;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(SHELL_CACHE);
       const response = await fetch("/", SHELL_REQUEST_INIT);
-      if (!response.ok) return;
-      const html = await response.clone().text();
-      await cache.put("/", response);
-      const assetUrls = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(
-        (match) => match[1],
-      );
-      await Promise.all(
-        assetUrls.map(async (url) => {
-          try {
-            const assetResponse = await fetch(url);
-            if (assetResponse.ok) await cache.put(url, assetResponse);
-          } catch {
-            // best-effort precache; runtime cacheFirst() covers this on next visit
-          }
-        }),
-      );
+      if (response.ok) await putShell(await caches.open(SHELL_CACHE), response);
     })(),
   );
   self.skipWaiting();
@@ -404,19 +413,47 @@ async function staleWhileRevalidate(event, request, cacheName) {
 const TREE_PRELOAD_EXCLUDED_PATHS =
   /^\/(admin|login|options|password-reset|preview|register|activate\/)/;
 
+// The cached "/" is served only while every asset it names is cached too: a
+// past deploy's assets are gone from the server, so a partial copy would load
+// a blank page. Without a complete copy the navigation waits for the network.
+async function completeCachedShell(cache) {
+  const cached = await cache.match("/");
+  if (!cached) return undefined;
+  const assetUrls = shellAssetUrls(await cached.clone().text());
+  const assets = await Promise.all(assetUrls.map((url) => cache.match(url)));
+  return assets.every(Boolean) ? { assetUrls, response: cached } : undefined;
+}
+
+async function notifyShellUpdated() {
+  const clients = await self.clients.matchAll({ type: "window" });
+  for (const client of clients) client.postMessage({ type: "shell-updated" });
+}
+
+// Cache first, so a warm launch on a weak connection paints at once; the
+// network copy replaces the cache for the next launch. The worker's URL
+// hashes only sw.js, so a deploy that changes just the bundle never fires
+// controllerchange -- a changed asset list is what tells open pages instead.
 async function shell(event, path) {
   const cache = await caches.open(SHELL_CACHE);
+  const cached = await completeCachedShell(cache);
+  const network = fetch("/", SHELL_REQUEST_INIT);
+  const revalidated = network.then(async (response) => {
+    if (!response.ok) return;
+    const assetUrls = await putShell(cache, response.clone());
+    if (cached && assetUrls.join() !== cached.assetUrls.join())
+      await notifyShellUpdated();
+  });
+  event.waitUntil(revalidated.catch(() => {}));
+  if (!TREE_PRELOAD_EXCLUDED_PATHS.test(path)) {
+    treePreload = fetch("/api/tree", { credentials: "same-origin" });
+    event.waitUntil(treePreload.catch(() => {}));
+  }
+  if (cached) return cached.response;
   try {
-    const response = await fetch("/", SHELL_REQUEST_INIT);
-    if (response.ok) cache.put("/", response.clone());
-    if (!TREE_PRELOAD_EXCLUDED_PATHS.test(path)) {
-      treePreload = fetch("/api/tree", { credentials: "same-origin" });
-      event.waitUntil(treePreload.catch(() => {}));
-    }
-    return response;
+    return await network;
   } catch (error) {
-    const cached = await cache.match("/");
-    if (cached) return cached;
+    const partial = await cache.match("/");
+    if (partial) return partial;
     throw error;
   }
 }

@@ -284,6 +284,19 @@ if ("serviceWorker" in navigator) {
     if (!hadController) return;
     setUpdateAvailable(true);
   });
+  // The worker serves a cached shell first and reports when the server's
+  // shell names different assets, which a bundle-only deploy never signals
+  // through controllerchange.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data: unknown = event.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "type" in data &&
+      data.type === "shell-updated"
+    )
+      setUpdateAvailable(true);
+  });
   // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
   // VITE_SW_FILENAME for production builds, and Vite's dev server serves
   // public/ files at their literal path anyway.
