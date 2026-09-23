@@ -54,7 +54,6 @@ import { createSupersessionGuard } from "./supersession.ts";
 import { api } from "./api.ts";
 import {
   createExtensionReaderBridge,
-  extractReaderContent,
   ReaderExtensionError,
   type ReaderContent,
   type ReaderMode,
@@ -1241,6 +1240,10 @@ export function Dashboard(props: {
       if (mode !== "FEED") {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
         const fetched = await readerBridge.fetch(opened.url);
+        if (!isCurrent()) return;
+        // Loaded on first use so FEED-only sessions never download the
+        // extraction libraries; a failed load falls back to FEED below.
+        const { extractReaderContent } = await import("./reader-extraction.ts");
         if (!isCurrent()) return;
         const content = await extractReaderContent(
           fetched.html,
