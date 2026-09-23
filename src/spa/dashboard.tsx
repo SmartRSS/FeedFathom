@@ -61,7 +61,7 @@ import {
 } from "./extension-reader.ts";
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
-import { TreeItem } from "./tree-item.tsx";
+import { ForEachNode, TreeItem } from "./tree-item.tsx";
 import {
   articleSearchBox,
   feedFilterBox,
@@ -1654,19 +1654,19 @@ export function Dashboard(props: {
                 class="tree"
                 role="tree"
               >
-                <For each={visibleTree()}>
+                <ForEachNode each={visibleTree()}>
                   {(node) => (
                     <TreeItem
-                      focused={treeTabStop() === treeNodeKey(node)}
+                      focused={treeTabStop() === treeNodeKey(node())}
                       onContext={openTreeContext}
                       focusedKey={treeTabStop()}
-                      node={node}
+                      node={node()}
                       onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
                       select={(item) => void select(item)}
                       selected={selectedNode()}
                     />
                   )}
-                </For>
+                </ForEachNode>
               </ul>
             </Show>
           </Show>

@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
@@ -51,6 +51,24 @@ function moveTreeFocus(current: HTMLElement, offset: number) {
   next?.scrollIntoView({ block: "nearest" });
 }
 
+// <For> matches rows by reference, and every tree reload builds fresh node
+// objects, so a plain <For> over the tree remounts every row on each poll:
+// focus drops to <body> and every favicon replays its skeleton. Keying rows
+// on treeNodeKey keeps each row mounted and updates its node in place.
+export function ForEachNode(props: {
+  children: (node: () => TreeNode) => JSX.Element;
+  each: TreeNode[];
+}) {
+  const byKey = createMemo(
+    () => new Map(props.each.map((node) => [treeNodeKey(node), node])),
+  );
+  return (
+    <For each={[...byKey().keys()]}>
+      {(key) => props.children(() => byKey().get(key)!)}
+    </For>
+  );
+}
+
 export function TreeItem(props: {
   focused: boolean;
   focusedKey: string | undefined;
@@ -60,6 +78,11 @@ export function TreeItem(props: {
   select(node: TreeNode): void;
   selected: TreeNode | undefined;
 }) {
+  // By key, not reference: the selected node and this row's node can come
+  // from different tree loads, and the Today row is rebuilt on every read.
+  const isSelected = () =>
+    props.selected !== undefined &&
+    treeNodeKey(props.selected) === treeNodeKey(props.node);
   const longPress = longPressHandlers((x, y) =>
     props.onContext(x, y, props.node),
   );
@@ -119,11 +142,11 @@ export function TreeItem(props: {
       <button
         aria-expanded={isFolder() ? open() : undefined}
         aria-owns={isFolder() && open() ? groupId() : undefined}
-        aria-selected={props.selected === props.node}
+        aria-selected={isSelected()}
         class="source"
         classList={{
           folder: isFolder(),
-          selected: props.selected === props.node,
+          selected: isSelected(),
           unread: unread() > 0,
         }}
         data-tree-key={treeNodeKey(props.node)}
@@ -206,19 +229,19 @@ export function TreeItem(props: {
       </button>
       <Show when={isFolder() && open()}>
         <ul class="tree nested" id={groupId()} role="group">
-          <For each={children()}>
+          <ForEachNode each={children()}>
             {(child) => (
               <TreeItem
-                focused={props.focusedKey === treeNodeKey(child)}
+                focused={props.focusedKey === treeNodeKey(child())}
                 focusedKey={props.focusedKey}
-                node={child}
+                node={child()}
                 onContext={props.onContext}
                 onFocus={props.onFocus}
                 select={props.select}
                 selected={props.selected}
               />
             )}
-          </For>
+          </ForEachNode>
         </ul>
       </Show>
     </li>
