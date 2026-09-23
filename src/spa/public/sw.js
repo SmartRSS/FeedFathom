@@ -264,23 +264,56 @@ function withInlinedFavicon(node, dataUrlByPath) {
   };
 }
 
-async function responseToDataUrl(response) {
-  const contentType =
-    response.headers.get("Content-Type") ?? "application/octet-stream";
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return `data:${contentType};base64,${btoa(binary)}`;
+// Favicons in the cache carry the time they were fetched, so the tree can
+// tell a fresh copy from one due a revalidation even after the worker restarts.
+const FAVICON_FETCHED_AT = "X-SW-Fetched-At";
+const FAVICON_REVALIDATE_MS = 60 * 60 * 1000;
+
+function putFavicon(cache, request, response) {
+  const headers = new Headers(response.headers);
+  headers.set(FAVICON_FETCHED_AT, String(Date.now()));
+  return cache.put(
+    request,
+    new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }),
+  );
 }
 
-// Runs for every favicon, hit or miss. A miss needs fetching so the next load
-// can inline it; a hit needs revalidating because RefreshFavicon can change
-// one in place without changing its URL, and an inlined <img src> never fires
-// a request of its own.
+// Keyed by path; an entry is reused only while its fetch stamp still matches
+// the cached copy, so a revalidated icon gets encoded again.
+const faviconDataUrls = new Map();
+
+async function faviconDataUrl(path, cached) {
+  const fetchedAt = cached.headers.get(FAVICON_FETCHED_AT);
+  const memo = faviconDataUrls.get(path);
+  if (memo && fetchedAt && memo.fetchedAt === fetchedAt) return memo.dataUrl;
+  const contentType =
+    cached.headers.get("Content-Type") ?? "application/octet-stream";
+  const bytes = new Uint8Array(await cached.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
+  faviconDataUrls.set(path, { fetchedAt, dataUrl });
+  return dataUrl;
+}
+
+// A miss needs fetching so the next load can inline it; a hit needs
+// revalidating now and then because RefreshFavicon can change one in place
+// without changing its URL, and an inlined <img src> never fires a request of
+// its own. Revalidating on every tree load would cost one request per source
+// on each poll and mark-read.
+function faviconIsStale(cached) {
+  const fetchedAt = Number(cached?.headers.get(FAVICON_FETCHED_AT));
+  return !(Date.now() - fetchedAt < FAVICON_REVALIDATE_MS);
+}
+
 async function refreshFavicon(cache, path) {
   try {
     const response = await fetch(path);
-    if (response.ok) await cache.put(path, response);
+    if (response.ok) await putFavicon(cache, path, response);
   } catch {
     // best-effort; the page's own <img> will just fetch it normally
   }
@@ -289,7 +322,7 @@ async function refreshFavicon(cache, path) {
 // Inlines whichever favicons are already cached -- cache.match() only, no
 // network, so the tree never waits. Uncached ones stay plain
 // /api/favicon/:id URLs, covered by the per-icon skeleton in dashboard.tsx.
-// Both misses and hits are refreshed in the background for next load.
+// Misses and stale hits are refreshed in the background for next load.
 async function inlineTreeFavicons(event, response, cache) {
   let data;
   try {
@@ -299,15 +332,17 @@ async function inlineTreeFavicons(event, response, cache) {
   }
   const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
   const dataUrlByPath = new Map();
+  const stalePaths = [];
   await Promise.allSettled(
     urls.map(async (path) => {
       const cached = await cache.match(path);
-      if (cached) dataUrlByPath.set(path, await responseToDataUrl(cached));
+      if (faviconIsStale(cached)) stalePaths.push(path);
+      if (cached) dataUrlByPath.set(path, await faviconDataUrl(path, cached));
     }),
   );
-  if (urls.length)
+  if (stalePaths.length)
     event.waitUntil(
-      Promise.allSettled(urls.map((path) => refreshFavicon(cache, path))),
+      Promise.allSettled(stalePaths.map((path) => refreshFavicon(cache, path))),
     );
   if (dataUrlByPath.size === 0) return null;
   const patched = {
@@ -355,7 +390,7 @@ async function staleWhileRevalidate(event, request, cacheName) {
   const cached = await cache.match(request);
   const revalidated = fetch(request)
     .then((response) => {
-      if (response.ok) cache.put(request, response.clone());
+      if (response.ok) putFavicon(cache, request, response.clone());
       return response;
     })
     .catch(() => undefined);
