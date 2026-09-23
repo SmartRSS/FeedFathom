@@ -151,3 +151,75 @@ test("a withdrawn activation token leaves the account recoverable", async () => 
   expect(user?.status).toBe("inactive");
   expect(user?.activationTokenExpiresAt).toBeNull();
 });
+
+async function pendingAccount(expiresAt: Date) {
+  await resetDatabase();
+  await service.createUser(
+    {
+      ...account(0),
+      activationToken: "expired-token",
+      activationTokenExpiresAt: expiresAt,
+      status: "inactive",
+    },
+    true,
+  );
+  const user = await service.findUser(account(0).email);
+  if (!user) throw new Error("pending account was not created");
+  return user.id;
+}
+
+const storedToken = async () =>
+  (await service.findUser(account(0).email))?.activationToken;
+
+const tomorrow = () => new Date(Date.now() + 24 * 60 * 60 * 1_000);
+
+// A replacement whose delivery failed is withdrawn, and the very next
+// recovery stores and sends another rather than waiting out the day the
+// undelivered one promised (#849).
+test("a failed replacement delivery stays retryable", async () => {
+  const userId = await pendingAccount(new Date(Date.now() - 60_000));
+
+  expect(
+    await service.refreshActivationToken(userId, "undelivered", tomorrow()),
+  ).toBe(true);
+  // A second recovery while that link is live stores nothing.
+  expect(
+    await service.refreshActivationToken(userId, "early", tomorrow()),
+  ).toBe(false);
+  await service.withdrawActivationToken("undelivered");
+
+  expect(
+    await service.refreshActivationToken(userId, "retry", tomorrow()),
+  ).toBe(true);
+  expect(await storedToken()).toBe("retry");
+});
+
+// Two recoveries racing on one expired link: one stores its token, and the
+// loser's failure handling -- withdrawing a token that never took -- cannot
+// clear the winner's delivered link.
+test("concurrent recoveries keep the delivered link", async () => {
+  const userId = await pendingAccount(new Date(Date.now() - 60_000));
+
+  const [first, second] = await Promise.all([
+    service.refreshActivationToken(userId, "first", tomorrow()),
+    service.refreshActivationToken(userId, "second", tomorrow()),
+  ]);
+  expect([first, second].filter(Boolean)).toHaveLength(1);
+  const winner = first ? "first" : "second";
+  const loser = first ? "second" : "first";
+
+  await service.withdrawActivationToken(loser);
+  expect(await storedToken()).toBe(winner);
+});
+
+test("recovery leaves an active account untouched", async () => {
+  const userId = await pendingAccount(new Date(Date.now() - 60_000));
+  await service.activateUser(userId);
+
+  expect(
+    await service.refreshActivationToken(userId, "replacement", tomorrow()),
+  ).toBe(false);
+  const user = await service.findUser(account(0).email);
+  expect(user?.status).toBe("active");
+  expect(user?.activationToken).toBeNull();
+});
