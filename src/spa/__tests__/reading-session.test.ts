@@ -17,7 +17,6 @@ const aSession = (overrides: Partial<ReadingSession> = {}): ReadingSession => ({
   app: {
     articleFilter: "unread",
     articleId: 11,
-    listIds: [11, 12],
     listScrollTop: 240,
     nodeType: "source",
     nodeUid: "3",
@@ -31,6 +30,14 @@ describe("parse/serialize", () => {
     const parsed = parseReadingSession(serializeReadingSession(aSession()));
     expect(parsed).toEqual(aSession());
     expect(JSON.parse(serializeReadingSession(aSession())).version).toBe(1);
+  });
+
+  test("reads a stored v1 snapshot that still carries listIds", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(serializeReadingSession(aSession())),
+      app: { ...aSession().app, listIds: [11, 12] },
+    });
+    expect(parseReadingSession(raw)).toEqual(aSession());
   });
 
   test("drops a blob from a different version (the migration story)", () => {
@@ -199,7 +206,6 @@ describe("ReadingSessionStore", () => {
       app: {
         articleFilter: "unread",
         articleId: 12,
-        listIds: [],
         listScrollTop: 0,
         nodeType: "source",
         nodeUid: "9",

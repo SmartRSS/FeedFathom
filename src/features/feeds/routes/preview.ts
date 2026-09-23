@@ -18,15 +18,13 @@ export async function getPreviewHandler({
   if (!source) return json({ error: "Invalid feed url" }, 400);
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
   return json({
-    articles: await Promise.all(
-      source.articles.map(async (article) => ({
-        author: article.author,
-        content: extractArticle(article.content),
-        publishedAt: article.publishedAt,
-        title: article.title,
-        url: article.url,
-      })),
-    ),
+    articles: source.articles.map((article) => ({
+      author: article.author,
+      content: extractArticle(article.content),
+      publishedAt: article.publishedAt,
+      title: article.title,
+      url: article.url,
+    })),
     description: source.description,
     feedUrl: source.feedUrl,
     link: source.link,

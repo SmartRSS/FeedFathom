@@ -857,6 +857,14 @@ test("returns sanitized transient preview articles and rejects parser failures",
               title: "Article title",
               url: "https://site.example/article",
             },
+            {
+              author: "Author",
+              content: "<p>Second</p>",
+              guid: "preview-guid-2",
+              publishedAt: new Date("2024-03-05T12:00:00Z"),
+              title: "Second title",
+              url: "https://site.example/second",
+            },
           ],
           description: "Feed description",
           feedUrl: sourceUrl,
@@ -896,6 +904,11 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(valid.status).toBe(200);
   expect(body.title).toBe("Feed title");
   expect(article.title).toBe("Article title");
+  expect(body.articles).toHaveLength(2);
+  expect(body.articles[1]).toMatchObject({
+    content: "<p>Second</p>",
+    title: "Second title",
+  });
   expect(article.content).toContain("Visible");
   expect(article.content).not.toContain("script");
   expect(article.content).not.toContain("onclick");

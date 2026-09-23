@@ -7,8 +7,9 @@ import type { SourcesDataService } from "#features/feeds/source-data-service.ts"
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import {
-  getEmailContent,
   validateParsedMail,
+  validatedMailContent,
+  type ValidatedMail,
 } from "#features/mail-ingest/email-processor.ts";
 
 export type TrustedMailEnvelope = {
@@ -67,12 +68,12 @@ export class EmailHandler {
   ): Promise<void> {
     const raw = await readEmail(input);
     const email = await simpleParser(raw);
-    validateParsedMail(email);
+    const parsed = validateParsedMail(email);
     const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
     if (!source) throw new Error("No recipients known");
 
     const article = this.createArticleFromEmail(
-      email,
+      parsed,
       emailGuid(email, raw, source.id),
       source.id,
       envelope.from,
@@ -89,16 +90,15 @@ export class EmailHandler {
   }
 
   private createArticleFromEmail(
-    email: ParsedMail,
+    email: ValidatedMail,
     guid: string,
     sourceId: number,
     senderAddress: string,
   ) {
-    validateParsedMail(email);
     const date = email.date ?? new Date();
     return {
       author: senderAddress,
-      content: getEmailContent(email),
+      content: validatedMailContent(email),
       guid,
       lastSeenInFeedAt: new Date(),
       publishedAt: date,
