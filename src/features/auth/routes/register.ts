@@ -10,7 +10,7 @@ import { Elysia } from "elysia";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { Value } from "typebox/value";
-import { disposableEmailPolicy } from "#shared/validation/typebox-policy.ts";
+import { isDisposableEmail } from "disposable-email-domains-js";
 import { registerRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
@@ -111,8 +111,7 @@ export function createRegisterRoute() {
         if (!Value.Check(allowedEmailPolicy, request.email)) {
           return json({ error: "", success: false }, 403);
         }
-        if (Value.Check(disposableEmailPolicy, request.email))
-          return json({ success: true });
+        if (isDisposableEmail(request.email)) return json({ success: true });
 
         // With email activation enabled, throttle before any mail or password
         // hashing. Exempt first-user setup to avoid locking out the operator.
