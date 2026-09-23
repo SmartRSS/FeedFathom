@@ -103,6 +103,12 @@ function openQueueDb() {
   });
 }
 
+// Starts true so the worker's first flush looks at whatever an earlier
+// instance left queued. flushQueue skips the IndexedDB round trip while it is
+// false, which is nearly always: every successful GET would otherwise open the
+// database only to find it empty.
+let queueMayHaveEntries = true;
+
 // Every call closes its connection once the transaction settles. Logout
 // deletes this same database (see options.tsx), and IndexedDB blocks a
 // deletion indefinitely while any connection stays open.
@@ -113,7 +119,10 @@ async function queueAdd(entry) {
     await new Promise((resolve, reject) => {
       const tx = db.transaction(QUEUE_STORE, "readwrite");
       tx.objectStore(QUEUE_STORE).add(entry);
-      tx.oncomplete = resolve;
+      tx.oncomplete = () => {
+        queueMayHaveEntries = true;
+        resolve();
+      };
       tx.onerror = () => reject(tx.error);
     });
   } finally {
@@ -168,7 +177,16 @@ async function notifyMutationFailed(value, status) {
 }
 
 async function flushQueue() {
-  const entries = await queueAll();
+  if (!queueMayHaveEntries) return;
+  // Cleared before the read, so an entry queued mid-flush sets it again.
+  queueMayHaveEntries = false;
+  let entries;
+  try {
+    entries = await queueAll();
+  } catch (error) {
+    queueMayHaveEntries = true;
+    throw error;
+  }
   for (const { key, value } of entries) {
     try {
       // eslint-disable-next-line no-await-in-loop -- replay must preserve order
@@ -202,8 +220,11 @@ async function flushQueue() {
         } catch {
           // Best-effort: the entry is already dequeued either way.
         }
+      } else {
+        queueMayHaveEntries = true; // kept for the next flush
       }
     } catch {
+      queueMayHaveEntries = true;
       break; // still offline, stop and retry on the next successful request or sync event
     }
   }
@@ -370,6 +391,21 @@ async function inlineTreeFavicons(event, response, cache) {
 // The body carries no read state, and a feed update landing within the
 // window shows up on the next open after it.
 const ARTICLE_FRESH_MS = 60 * 1000;
+// Nothing else evicts an opened article before CACHE_VERSION changes.
+const ARTICLE_CACHE_LIMIT = 200;
+
+// cache.keys() lists entries in insertion order, and a put replaces an
+// entry at the end, so the oldest fetches come first.
+async function trimArticles(cache) {
+  const articles = (await cache.keys()).filter(
+    (request) => new URL(request.url).pathname === "/api/article",
+  );
+  await Promise.all(
+    articles
+      .slice(0, -ARTICLE_CACHE_LIMIT)
+      .map((request) => cache.delete(request)),
+  );
+}
 
 async function recentArticleFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
@@ -379,7 +415,9 @@ async function recentArticleFirst(request, cacheName) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      putWithFetchedAt(cache, request, response.clone());
+      putWithFetchedAt(cache, request, response.clone()).then(() =>
+        trimArticles(cache),
+      );
       void flushQueue();
     }
     return response;

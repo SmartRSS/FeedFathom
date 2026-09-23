@@ -10,13 +10,79 @@ type FetchEvent = {
   waitUntil: (promise: Promise<unknown>) => void;
 };
 
-// Runs public/sw.js against an in-memory Cache API and a counting fetch, and
-// hands back its fetch listener. indexedDB.open never settles, so the queue
-// flush that follows each API response stays idle.
+type Callback = (() => void) | undefined;
+
+// The slice of IndexedDB the mutation queue uses: one auto-increment store,
+// with every request settling on a later microtask as the real API does.
+const fakeIndexedDb = () => {
+  const rows = new Map<number, unknown>();
+  let nextKey = 1;
+  let opens = 0;
+  const transaction = () => {
+    const tx: { oncomplete: Callback } = { oncomplete: undefined };
+    const complete = () => queueMicrotask(() => tx.oncomplete?.());
+    const objectStore = () => ({
+      add: (value: unknown) => {
+        rows.set(nextKey++, value);
+        complete();
+      },
+      delete: (key: number) => {
+        rows.delete(key);
+        complete();
+      },
+      openCursor: () => {
+        const request: { onsuccess: Callback; result: unknown } = {
+          onsuccess: undefined,
+          result: null,
+        };
+        const keys = [...rows.keys()];
+        const step = (index: number) => {
+          const key = keys[index];
+          request.result =
+            key === undefined
+              ? null
+              : {
+                  continue: () => queueMicrotask(() => step(index + 1)),
+                  key,
+                  value: rows.get(key),
+                };
+          request.onsuccess?.();
+        };
+        queueMicrotask(() => step(0));
+        return request;
+      },
+    });
+    return Object.assign(tx, { objectStore });
+  };
+  return {
+    indexedDB: {
+      open: () => {
+        opens++;
+        const request: { onsuccess: Callback; result: unknown } = {
+          onsuccess: undefined,
+          result: { close: () => {}, transaction },
+        };
+        queueMicrotask(() => request.onsuccess?.());
+        return request;
+      },
+    },
+    opens: () => opens,
+    rows,
+  };
+};
+
+// Lets the fire-and-forget work a handler starts after responding, such as
+// the queue flush and the article cache trim, run to completion.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+// Runs public/sw.js against an in-memory Cache API, a counting fetch and an
+// in-memory IndexedDB, and hands back its fetch listener.
 const loadServiceWorker = (
-  network: (path: string) => Response | Promise<Response>,
+  network: (path: string, method: string) => Response | Promise<Response>,
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
+  // Map order stands in for the Cache API's insertion order; put deletes
+  // first so a replaced entry moves to the end, as it does there.
   const entries = new Map<string, Response>();
   const key = (request: Request | string) => {
     const url = new URL(
@@ -26,12 +92,17 @@ const loadServiceWorker = (
     return url.pathname + url.search;
   };
   const cache = {
+    delete: async (request: Request | string) => entries.delete(key(request)),
+    keys: async () =>
+      [...entries.keys()].map((path) => new Request(ORIGIN + path)),
     match: async (request: Request | string) =>
       entries.get(key(request))?.clone(),
     put: async (request: Request | string, response: Response) => {
+      entries.delete(key(request));
       entries.set(key(request), response);
     },
   };
+  const queue = fakeIndexedDb();
   const requests: string[] = [];
   const messages: unknown[] = [];
   runInNewContext(source, {
@@ -40,12 +111,14 @@ const loadServiceWorker = (
     URL,
     btoa,
     caches: { open: async () => cache },
-    fetch: async (input: Request | string) => {
+    fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
-      requests.push(path);
-      return network(path);
+      const method =
+        init?.method ?? (typeof input === "string" ? "GET" : input.method);
+      requests.push(method === "GET" ? path : `${method} ${path}`);
+      return network(path, method);
     },
-    indexedDB: { open: () => ({}) },
+    indexedDB: queue.indexedDB,
     self: {
       addEventListener: (
         type: string,
@@ -59,6 +132,7 @@ const loadServiceWorker = (
         ],
       },
       location: { origin: ORIGIN },
+      registration: {},
     },
   });
   // `background` settles once the response has and every promise the handler
@@ -97,7 +171,16 @@ const loadServiceWorker = (
     await background;
     return body;
   };
-  return { entries, loadArticle, loadTree, messages, navigate, requests };
+  return {
+    dispatch,
+    entries,
+    loadArticle,
+    loadTree,
+    messages,
+    navigate,
+    queue,
+    requests,
+  };
 };
 
 const tree = {
@@ -205,4 +288,57 @@ test("an article cached over a minute ago goes to the network first", async () =
     "/api/article?article=2",
     "/api/article?article=2",
   ]);
+});
+
+test("opening 300 articles keeps only the newest 200 cached", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  await sw.loadTree();
+  for (let id = 1; id <= 300; id++) {
+    // oxlint-disable-next-line no-await-in-loop -- articles open one by one
+    await sw.loadArticle(id);
+  }
+  await settle();
+  const articles = [...sw.entries.keys()].filter((path) =>
+    path.startsWith("/api/article?"),
+  );
+  expect(articles).toHaveLength(200);
+  expect(articles[0]).toBe("/api/article?article=101");
+  expect(sw.entries.has("/api/tree")).toBe(true);
+});
+
+test("an empty mutation queue is read once, not on every response", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  for (let id = 1; id <= 5; id++) {
+    // oxlint-disable-next-line no-await-in-loop -- articles open one by one
+    await sw.loadArticle(id);
+    // oxlint-disable-next-line no-await-in-loop -- let each flush finish
+    await settle();
+  }
+  expect(sw.queue.opens()).toBe(1);
+});
+
+test("a deletion queued offline replays on the next successful request", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    return method === "GET" ? articleNetwork(path) : new Response(null);
+  });
+  await sw.loadArticle(1);
+  await settle();
+  online = false;
+  const removal = sw.dispatch(
+    new Request(`${ORIGIN}/api/articles`, {
+      body: JSON.stringify({ removedArticleIdList: [7] }),
+      method: "DELETE",
+    }),
+  );
+  expect(await (await removal.response).json()).toEqual([7]);
+  online = true;
+  await sw.loadArticle(2);
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/articles",
+    "DELETE /api/articles",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
 });
