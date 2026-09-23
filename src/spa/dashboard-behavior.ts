@@ -66,6 +66,33 @@ export function faviconUrls(node: TreeNode): string[] {
     : (node.children ?? []).flatMap(faviconUrls);
 }
 
+/** How long the first tree render holds its skeleton for favicons. */
+const FAVICON_PRELOAD_DEADLINE_MS = 300;
+
+function decodeImage(url: string): Promise<void> {
+  const image = new Image();
+  image.src = url;
+  return image.decode();
+}
+
+// First tree render only (see onMount in dashboard.tsx): holds the skeleton
+// until every favicon settles, so the tree doesn't flash in icon by icon --
+// but never past the deadline, so one slow icon host can't hold the whole
+// sidebar. Icons still loading fall back to TreeItem's per-icon skeleton.
+export function preloadFavicons(
+  tree: TreeNode[],
+  decode: (url: string) => Promise<void> = decodeImage,
+): Promise<void> {
+  const urls = tree.flatMap(faviconUrls);
+  if (!urls.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(urls.map((url) => decode(url).catch(() => {}))).then(() => {}),
+    new Promise<void>((resolve) =>
+      setTimeout(resolve, FAVICON_PRELOAD_DEADLINE_MS),
+    ),
+  ]);
+}
+
 export function withDecrementedUnread(
   nodes: TreeNode[],
   deltas: Map<string, number>,
