@@ -273,14 +273,14 @@ function withInlinedFavicon(node, dataUrlByPath) {
   };
 }
 
-// Favicons in the cache carry the time they were fetched, so the tree can
-// tell a fresh copy from one due a revalidation even after the worker restarts.
-const FAVICON_FETCHED_AT = "X-SW-Fetched-At";
+// Favicons and articles in the cache carry the time they were fetched, so
+// their age is known even after the worker restarts.
+const FETCHED_AT = "X-SW-Fetched-At";
 const FAVICON_REVALIDATE_MS = 60 * 60 * 1000;
 
-function putFavicon(cache, request, response) {
+function putWithFetchedAt(cache, request, response) {
   const headers = new Headers(response.headers);
-  headers.set(FAVICON_FETCHED_AT, String(Date.now()));
+  headers.set(FETCHED_AT, String(Date.now()));
   return cache.put(
     request,
     new Response(response.body, {
@@ -296,7 +296,7 @@ function putFavicon(cache, request, response) {
 const faviconDataUrls = new Map();
 
 async function faviconDataUrl(path, cached) {
-  const fetchedAt = cached.headers.get(FAVICON_FETCHED_AT);
+  const fetchedAt = cached.headers.get(FETCHED_AT);
   const memo = faviconDataUrls.get(path);
   if (memo && fetchedAt && memo.fetchedAt === fetchedAt) return memo.dataUrl;
   const contentType =
@@ -315,14 +315,14 @@ async function faviconDataUrl(path, cached) {
 // its own. Revalidating on every tree load would cost one request per source
 // on each poll and mark-read.
 function faviconIsStale(cached) {
-  const fetchedAt = Number(cached?.headers.get(FAVICON_FETCHED_AT));
+  const fetchedAt = Number(cached?.headers.get(FETCHED_AT));
   return !(Date.now() - fetchedAt < FAVICON_REVALIDATE_MS);
 }
 
 async function refreshFavicon(cache, path) {
   try {
     const response = await fetch(path);
-    if (response.ok) await putFavicon(cache, path, response);
+    if (response.ok) await putWithFetchedAt(cache, path, response);
   } catch {
     // best-effort; the page's own <img> will just fetch it normally
   }
@@ -365,6 +365,30 @@ async function inlineTreeFavicons(event, response, cache) {
   });
 }
 
+// The dashboard prefetches the next article in idle time (#716); a copy this
+// young is served without a round trip, so opening it is instant online too.
+// The body carries no read state, and a feed update landing within the
+// window shows up on the next open after it.
+const ARTICLE_FRESH_MS = 60 * 1000;
+
+async function recentArticleFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const fetchedAt = Number(cached?.headers.get(FETCHED_AT));
+  if (cached && Date.now() - fetchedAt < ARTICLE_FRESH_MS) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      putWithFetchedAt(cache, request, response.clone());
+      void flushQueue();
+    }
+    return response;
+  } catch (error) {
+    if (cached) return cached;
+    throw error;
+  }
+}
+
 // Set by shell() on a dashboard-bound navigation, so the tree fetch starts
 // before the page's JS bundle loads; treeWithInlineFavicons reuses it instead
 // of firing a second round trip.
@@ -399,7 +423,7 @@ async function staleWhileRevalidate(event, request, cacheName) {
   const cached = await cache.match(request);
   const revalidated = fetch(request)
     .then((response) => {
-      if (response.ok) putFavicon(cache, request, response.clone());
+      if (response.ok) putWithFetchedAt(cache, request, response.clone());
       return response;
     })
     .catch(() => undefined);
@@ -484,6 +508,10 @@ self.addEventListener("fetch", (event) => {
   // user's whole subscription list in the Cache API and, on an offline click,
   // hand back a copy from whenever it was last exported without saying so.
   if (url.pathname === "/api/options/opml") return;
+  if (url.pathname === "/api/article") {
+    event.respondWith(recentArticleFirst(request, API_CACHE));
+    return;
+  }
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(networkFirst(request, API_CACHE));
     return;

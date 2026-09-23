@@ -18,9 +18,13 @@ const loadServiceWorker = (
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
   const entries = new Map<string, Response>();
-  const key = (request: Request | string) =>
-    new URL(typeof request === "string" ? request : request.url, ORIGIN)
-      .pathname;
+  const key = (request: Request | string) => {
+    const url = new URL(
+      typeof request === "string" ? request : request.url,
+      ORIGIN,
+    );
+    return url.pathname + url.search;
+  };
   const cache = {
     match: async (request: Request | string) =>
       entries.get(key(request))?.clone(),
@@ -85,7 +89,15 @@ const loadServiceWorker = (
   };
   const navigate = (path: string) =>
     dispatch(new Request(`${ORIGIN}${path}`, { mode: "navigate" }));
-  return { entries, loadTree, messages, navigate, requests };
+  const loadArticle = async (id: number) => {
+    const { background, response } = dispatch(
+      new Request(`${ORIGIN}/api/article?article=${id}`),
+    );
+    const body: unknown = await (await response).json();
+    await background;
+    return body;
+  };
+  return { entries, loadArticle, loadTree, messages, navigate, requests };
 };
 
 const tree = {
@@ -167,4 +179,30 @@ test("a cached shell missing one of its assets waits for the network", async () 
   sw.entries.set("/", new Response(shellHtml("index-gone")));
   const response = await sw.navigate("/").response;
   expect(await response.text()).toBe(shellHtml("index-new"));
+});
+
+const articleNetwork = (path: string) =>
+  Response.json({ path, servedAt: performance.now() });
+
+test("a just-prefetched article opens without a network round trip", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  const prefetched = await sw.loadArticle(2);
+  expect(await sw.loadArticle(2)).toEqual(prefetched);
+  expect(sw.requests).toEqual(["/api/article?article=2"]);
+});
+
+test("an article cached over a minute ago goes to the network first", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  const prefetched = await sw.loadArticle(2);
+  sw.entries.set(
+    "/api/article?article=2",
+    Response.json(prefetched, {
+      headers: { "X-SW-Fetched-At": String(Date.now() - 61_000) },
+    }),
+  );
+  expect(await sw.loadArticle(2)).not.toEqual(prefetched);
+  expect(sw.requests).toEqual([
+    "/api/article?article=2",
+    "/api/article?article=2",
+  ]);
 });

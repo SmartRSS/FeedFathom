@@ -1168,8 +1168,9 @@ export function Dashboard(props: {
   // Prefetch the article after the one just opened (#716), so keyboard
   // navigation into it feels instant. One article only, feed mode only --
   // Reader modes fetch through the extension, so there is nothing server-
-  // side to warm. The plain GET flows through the service worker's
-  // networkFirst handler, so the prefetched copy also replays offline.
+  // side to warm. The plain GET is a read with no side effects; the service
+  // worker caches it and serves it for a minute without a round trip (see
+  // recentArticleFirst in public/sw.js), and offline after that.
   function schedulePrefetch() {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
