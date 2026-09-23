@@ -990,6 +990,55 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
   await expect(tabStops).toHaveCount(1);
 });
 
+// Every row reads the tab stop, and working it out walks the whole tree. It
+// has to be worked out once per focus change and shared, not once per row:
+// that is O(N) walks of O(N) each. hasNodeKey walks with Array#some.
+test("moving tree focus works out the tab stop once, not per row", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const rowCount = 300;
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      json: {
+        tree: Array.from({ length: rowCount }, (_, index) => ({
+          favicon: null,
+          homeUrl: "https://news.example/",
+          kind: "feed",
+          name: `Feed ${index}`,
+          type: "source",
+          uid: String(index + 1),
+          unreadCount: 0,
+          xmlUrl: `https://news.example/${index}.xml`,
+        })),
+      },
+    }),
+  );
+  await page.goto("/");
+  const rows = page.locator('[role="treeitem"]');
+  // Today sits ahead of the user's own rows.
+  await expect(rows).toHaveCount(rowCount + 1);
+  // The focus event, and the bindings it sets off, run synchronously.
+  const calls = await rows.nth(1).evaluate((row) => {
+    const some = Array.prototype.some;
+    let count = 0;
+    // oxlint-disable-next-line no-extend-native -- counted, then restored
+    Array.prototype.some = function <T>(
+      this: T[],
+      predicate: (value: T, index: number, array: T[]) => unknown,
+    ) {
+      count += 1;
+      return some.call(this, predicate);
+    };
+    if (row instanceof HTMLElement) row.focus();
+    // oxlint-disable-next-line no-extend-native
+    Array.prototype.some = some;
+    return count;
+  });
+  await expect(rows.nth(1)).toBeFocused();
+  expect(calls).toBeLessThan(rowCount / 10);
+});
+
 // Every tree load returns fresh objects; rows must survive it rather than
 // remount, or focus drops to <body> and every favicon flashes its skeleton.
 test("a tree poll updates rows in place and keeps focus", async ({ page }) => {

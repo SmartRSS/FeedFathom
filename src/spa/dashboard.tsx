@@ -1,5 +1,6 @@
 import {
   createEffect,
+  createMemo,
   createSelector,
   createSignal,
   For,
@@ -163,8 +164,10 @@ export function Dashboard(props: {
   const [articleFilter, setArticleFilter] = createSignal<
     "all" | "read" | "unread"
   >("unread");
-  const visibleTree = () =>
-    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter());
+  // Memos, because every tree row reads these and each one walks the tree.
+  const visibleTree = createMemo(() =>
+    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter()),
+  );
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
@@ -200,7 +203,9 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
-  const treeTabStop = () => treeTabStopKey(visibleTree(), focusedTreeKey());
+  const treeTabStop = createMemo(() =>
+    treeTabStopKey(visibleTree(), focusedTreeKey()),
+  );
   // A screen reader can't be detected, so this always renders (see the
   // aria-live region below); it is visually hidden either way and only gets
   // real text when high contrast mode is off.
