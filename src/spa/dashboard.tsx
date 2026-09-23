@@ -1,5 +1,6 @@
 import {
   createEffect,
+  createSelector,
   createSignal,
   For,
   onCleanup,
@@ -195,6 +196,12 @@ export function Dashboard(props: {
   let articleCursor: number | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
+  // Selectors notify only the rows whose state flips, not every row in a
+  // list that infinite scroll grows without bound.
+  const isFocused = createSelector(focusedIndex);
+  const isSelected = createSelector(selectedIndexes, (index: number, indexes) =>
+    indexes.has(index),
+  );
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
   const [openedArticle, setOpenedArticle] = createSignal<Article>();
   const [readerContent, setReaderContent] = createSignal<ReaderContent>();
@@ -1832,9 +1839,9 @@ export function Dashboard(props: {
                     <a
                       class="article"
                       classList={{
-                        active: focusedIndex() === index(),
+                        active: isFocused(index()),
                         read: article.read,
-                        selected: selectedIndexes().has(index()),
+                        selected: isSelected(index()),
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
@@ -1852,8 +1859,8 @@ export function Dashboard(props: {
                       // An app menu is prettier and none of that is worth
                       // trading for it. Read state lives on the toolbar.
                       role="option"
-                      tabIndex={focusedIndex() === index() ? 0 : -1}
-                      aria-selected={selectedIndexes().has(index())}
+                      tabIndex={isFocused(index()) ? 0 : -1}
+                      aria-selected={isSelected(index())}
                     >
                       <span class="title">{article.title}</span>
                       <span class="details">
