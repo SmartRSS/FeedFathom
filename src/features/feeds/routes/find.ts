@@ -17,7 +17,7 @@ export async function getFindHandler({
   const decoded = Value.Decode(findQuery, query);
   try {
     const response = await httpClient.get(decoded.link);
-    const feeds = scanHtml(decoded.link, response.data);
+    const feeds = scanHtml(response.url, response.data);
     // Unreachable while scanHtml falls back to an OpenRSS suggestion for a
     // page that advertises nothing; live again if that fallback ever goes.
     if (!feeds.length) return json({ error: "Invalid feed url" }, 400);

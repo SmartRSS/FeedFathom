@@ -50,21 +50,17 @@ const handleElement = (
   }
 
   if (attributeName === "srcset") {
-    // Special handling for "srcset"
     const processedSrcset = processSrcset(attributeValue, articleUrl);
     element.setAttribute(attributeName, processedSrcset);
-    // Early return after processing srcset
     return;
   }
 
-  // General handling for src, href, etc.
   if (isAbsoluteUrl(attributeValue)) {
     if (tagName === "a") {
       element.setAttribute("target", "_blank");
       element.setAttribute("rel", "noopener noreferrer");
     }
 
-    // no need to change anything
     return;
   }
 

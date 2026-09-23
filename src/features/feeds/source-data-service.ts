@@ -26,14 +26,8 @@ export interface SourceWithSubscriberCount {
   websubStatus: "failed" | "none" | "pending" | "verified";
 }
 
-// Minimum spacing between successful "feed" polls, regardless of what the
-// origin's Cache-Control says -- see successSource's clamp.
-// Flat per-tick ceiling, replacing a "10% of whatever is due" throttle that
-// self-balanced into a permanent backlog: every source waited ~3.3 extra
-// minutes for a slot, stretching a 5-minute cadence to a 7.3-minute observed
-// median. Draining what's due is well within capacity and notBefore already
-// staggers arrivals, so the flat cap only bounds the pathological case (an
-// outage making every source due at once).
+// Bound each gathering pass when an outage makes many sources due at once.
+// notBefore staggers normal arrivals; the cap does not scale with backlog size.
 const gatherBatchLimit = 500;
 const exact = { additionalProperties: false } as const;
 type SourceSort = Static<typeof sourceSortSchema>;

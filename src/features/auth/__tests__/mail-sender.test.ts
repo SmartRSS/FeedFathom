@@ -32,7 +32,7 @@ describe("MailSender", () => {
       }),
       async (input, init) => {
         captured = { init, input };
-        return new Response(null, { status: 200 });
+        return new Response(null, { status: 202 });
       },
     );
 
@@ -120,20 +120,6 @@ describe("MailSender", () => {
       sender.sendActivationEmail("reader@example.com", "activation-token"),
     ).resolves.toBeUndefined();
     expect(calls).toBe(0);
-  });
-
-  test("resolves for successful Mailjet responses", async () => {
-    const sender = new MailSender(
-      config({
-        MAILJET_API_KEY: "mailjet-key",
-        MAILJET_API_SECRET: "mailjet-secret",
-      }),
-      async () => new Response("accepted", { status: 202 }),
-    );
-
-    await expect(
-      sender.sendActivationEmail("reader@example.com", "activation-token"),
-    ).resolves.toBeUndefined();
   });
 
   test("throws a bounded diagnostic for non-success responses", async () => {

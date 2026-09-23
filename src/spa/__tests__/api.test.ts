@@ -190,4 +190,66 @@ describe("schema-first SPA API", () => {
       "Invalid response from /api/message (400): malformed error payload",
     );
   });
+
+  describe("cancellation", () => {
+    const aborted = () => {
+      const controller = new AbortController();
+      controller.abort();
+      return controller.signal;
+    };
+
+    test("passes a fetch cancellation through unwrapped", async () => {
+      const signal = aborted();
+      setFetch(() => Promise.reject(signal.reason));
+      const failure = await api("/session", sessionResponse, { signal }).catch(
+        (cause: unknown) => cause,
+      );
+      expect(failure).toBe(signal.reason);
+      expect(failure).toBeInstanceOf(DOMException);
+    });
+
+    test("passes a cancellation during body reading through unwrapped", async () => {
+      const controller = new AbortController();
+      const body = new ReadableStream({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"user":'));
+          controller.signal.addEventListener("abort", () =>
+            stream.error(controller.signal.reason),
+          );
+        },
+      });
+      returnResponse(new Response(body));
+      const pending = api("/session", sessionResponse, {
+        signal: controller.signal,
+      }).catch((cause: unknown) => cause);
+      controller.abort();
+      const failure = await pending;
+      expect(failure).toBeInstanceOf(DOMException);
+      if (!(failure instanceof DOMException)) return;
+      expect(failure.name).toBe("AbortError");
+    });
+
+    test("still reports a network failure after the signal aborted", async () => {
+      setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+      await expect(
+        api("/session", sessionResponse, { signal: aborted() }),
+      ).rejects.toThrow(/Could not reach the server|You are offline/);
+    });
+
+    test("still reports invalid JSON after the signal aborted", async () => {
+      returnResponse(new Response("not json"));
+      await expect(
+        api("/message", exactMessage, { signal: aborted() }),
+      ).rejects.toThrow(
+        "Invalid response from /api/message (200): expected JSON",
+      );
+    });
+
+    test("still reports a schema mismatch after the signal aborted", async () => {
+      returnResponse(Response.json({}));
+      await expect(
+        api("/message", exactMessage, { signal: aborted() }),
+      ).rejects.toThrow("Invalid response from /api/message (200)");
+    });
+  });
 });

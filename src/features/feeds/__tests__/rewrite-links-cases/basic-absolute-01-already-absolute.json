@@ -1,5 +1,5 @@
 {
-  "description": "absolute URL should not be changed",
-  "content": "<a href=\"https://already.absolute.com\">Link</a>",
-  "expected": "<a href=\"https://already.absolute.com\" target=\"_blank\" rel=\"noopener noreferrer\">Link</a>"
+  "description": "preserves absolute HTTP and HTTPS links and adds safe link attributes",
+  "content": "<a href=\"https://already.absolute.com\">Link</a><a href=\"http://another.absolute.com\">Link</a><a href=\"https://absolute.com/path\">Link</a>",
+  "expected": "<a href=\"https://already.absolute.com\" target=\"_blank\" rel=\"noopener noreferrer\">Link</a><a href=\"http://another.absolute.com\" target=\"_blank\" rel=\"noopener noreferrer\">Link</a><a href=\"https://absolute.com/path\" target=\"_blank\" rel=\"noopener noreferrer\">Link</a>"
 }

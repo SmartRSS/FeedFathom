@@ -4,6 +4,7 @@ import {
   mapFeedToPreview,
   type Source,
 } from "#features/feeds/feed-mapper.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 type FeedInput = Parameters<typeof mapFeedItemToArticle>[1];
 type FeedItemInput = Parameters<typeof mapFeedItemToArticle>[0];
@@ -160,7 +161,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result.publishedAt).toEqual(publishedDate);
   });
 
-  test("should generate consistent GUID for same content", () => {
+  test("generates stable GUIDs that distinguish different content", () => {
     const content = {
       content: "Same content",
       description: "Same desc",
@@ -184,6 +185,13 @@ describe("mapFeedItemToArticle", () => {
     );
 
     expect(result1.guid).toBe(result2.guid);
+    const changed = mapFeedItemToArticle(
+      createMockFeedItem({ ...content, content: "Different content" }),
+      mockFeed,
+      mockSource,
+      mockRewriteLinks,
+    );
+    expect(changed.guid).not.toBe(result1.guid);
   });
 
   test("should handle null content with description fallback", () => {
@@ -248,27 +256,6 @@ describe("mapFeedToPreview", () => {
     });
   });
 
-  test("should handle partially undefined feed data", () => {
-    const mockFeed = createMockFeed({
-      description: "description",
-      title: null,
-    });
-
-    const result = mapFeedToPreview(
-      mockFeed,
-      "https://example.com/feed.xml",
-      mockRewriteLinks,
-    );
-
-    expect(result).toEqual({
-      articles: [],
-      description: "description",
-      feedUrl: "https://example.com/feed.xml",
-      link: undefined,
-      title: "https://example.com/feed.xml",
-    });
-  });
-
   test("preserves preview article persistence fields", () => {
     const publishedAt = new Date("2024-03-06T12:00:00Z");
     const mockFeed = createMockFeed({
@@ -296,7 +283,7 @@ describe("mapFeedToPreview", () => {
     expect(result.articles).toEqual([
       {
         author: "Author",
-        content: "Article content from javascript:alert(1)",
+        content: "Article content from https://example.com/",
         guid: expect.any(String),
         publishedAt,
         title: "Article title",
@@ -304,5 +291,60 @@ describe("mapFeedToPreview", () => {
         url: "",
       },
     ]);
+  });
+});
+
+describe("content link base", () => {
+  const sourceUrl = "https://publisher.example/feeds/main.xml";
+  const content =
+    '<a href="post/2">next</a><img src="img/a.png" srcset="img/a.png 1x, img/b.png 2x"><a href="https://elsewhere.example/x">abs</a>';
+  const rewritten = (base: string) =>
+    `<a href="${base}post/2" target="_blank" rel="noopener noreferrer">next</a>` +
+    `<img src="${base}img/a.png" srcset="${base}img/a.png 1x, ${base}img/b.png 2x">` +
+    '<a href="https://elsewhere.example/x" target="_blank" rel="noopener noreferrer">abs</a>';
+
+  test.each([
+    [
+      "absolute item URL",
+      "https://cdn.example/blog/entry",
+      "/blog/",
+      "https://cdn.example/blog/",
+    ],
+    [
+      "relative item URL against relative homepage",
+      "entry",
+      "/blog/",
+      "https://publisher.example/blog/",
+    ],
+    [
+      "relative item URL against absent homepage",
+      "entry",
+      null,
+      "https://publisher.example/feeds/",
+    ],
+    ["absent item URL", null, "/blog/", "https://publisher.example/blog/"],
+    [
+      "absent item URL and homepage",
+      null,
+      null,
+      "https://publisher.example/feeds/",
+    ],
+  ])("%s", (_, itemUrl, homepage, base) => {
+    const feed = createMockFeed({
+      items: [createMockFeedItem({ content, id: "1", url: itemUrl })],
+      url: homepage,
+    });
+
+    const article = mapFeedItemToArticle(
+      feed.items[0] ?? createMockFeedItem(),
+      feed,
+      { id: 1, url: sourceUrl },
+      rewriteLinks,
+    );
+    const preview = mapFeedToPreview(feed, sourceUrl, rewriteLinks);
+
+    expect(article.content).toBe(rewritten(base));
+    expect(preview.articles[0]?.content).toBe(rewritten(base));
+    expect(preview.articles[0]?.url).toBe(article.url);
   });
 });

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
@@ -13,31 +13,57 @@ export class UsersDataService {
   // Annotated rather than inferred: crypto.randomUUID() infers the
   // `${string}-${string}-...` template literal type, which promises callers
   // and test doubles a UUID shape nothing depends on.
+  //
+  // passwordHash is the stored hash the caller verified. The session is only
+  // issued while the row still holds it, checked under the row lock that
+  // completePasswordReset's UPDATE also takes: a login that locks first has
+  // its session deleted by the reset, and one that locks after the reset sees
+  // the new hash and gets undefined -- no session from a revoked password.
   public async createSession(
     userId: number,
+    passwordHash: string,
     userAgent?: null | string,
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     const uuid = crypto.randomUUID();
-    await this.drizzleConnection.insert(sessions).values({
-      sid: uuid,
-      userAgent: userAgent ?? "UNKNOWN",
-      userId,
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      const current = await transaction
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.password, passwordHash)))
+        .for("update");
+      if (!current.length) return undefined;
+      await transaction.insert(sessions).values({
+        sid: uuid,
+        userAgent: userAgent ?? "UNKNOWN",
+        userId,
+      });
+      return uuid;
     });
-    return uuid;
   }
 
   public async deleteSession(sid: string) {
     await this.drizzleConnection.delete(sessions).where(eq(sessions.sid, sid));
   }
 
-  public async createUser(payload: {
-    email: string;
-    name: string;
-    passwordHash: string;
-    status?: "active" | "inactive";
-    activationToken?: string;
-    activationTokenExpiresAt?: Date;
-  }) {
+  /**
+   * "closed" means the registration policy refused the account. The policy is
+   * rechecked here rather than trusted from the route's earlier count: two
+   * registrations on an empty instance with registration disabled both pass
+   * that count, and only the bootstrap lock below can admit exactly one.
+   * "exists" means the address was taken, possibly by a registration that
+   * committed after the route's lookup; the existing row is left untouched.
+   */
+  public async createUser(
+    payload: {
+      email: string;
+      name: string;
+      passwordHash: string;
+      status?: "active" | "inactive";
+      activationToken?: string;
+      activationTokenExpiresAt?: Date;
+    },
+    registrationEnabled: boolean,
+  ): Promise<"closed" | "created" | "exists"> {
     const values = (isAdmin: boolean) => ({
       activationToken: payload.activationToken,
       activationTokenExpiresAt: payload.activationTokenExpiresAt,
@@ -57,12 +83,13 @@ export class UsersDataService {
       await this.drizzleConnection.select({ id: users.id }).from(users).limit(1)
     ).at(0);
     if (usersExist) {
-      return (
-        await this.drizzleConnection
-          .insert(users)
-          .values(values(false))
-          .returning()
-      ).at(0);
+      if (!registrationEnabled) return "closed";
+      const inserted = await this.drizzleConnection
+        .insert(users)
+        .values(values(false))
+        .onConflictDoNothing({ target: users.email })
+        .returning({ id: users.id });
+      return inserted.length ? "created" : "exists";
     }
 
     return await this.drizzleConnection.transaction(async (transaction) => {
@@ -72,13 +99,14 @@ export class UsersDataService {
       const existingUser = (
         await transaction.select({ id: users.id }).from(users).limit(1)
       ).at(0);
+      if (existingUser && !registrationEnabled) return "closed";
 
-      return (
-        await transaction
-          .insert(users)
-          .values(values(!existingUser))
-          .returning()
-      ).at(0);
+      const inserted = await transaction
+        .insert(users)
+        .values(values(!existingUser))
+        .onConflictDoNothing({ target: users.email })
+        .returning({ id: users.id });
+      return inserted.length ? "created" : "exists";
     });
   }
 
@@ -102,19 +130,45 @@ export class UsersDataService {
     ).at(0);
   }
 
-  // A pending registration whose link expired gets the same address back on
-  // the fresh token; the status predicate keeps an already-active account's
-  // row untouched -- that path belongs to the password reset, not to a
-  // re-registration (#810).
+  // A pending registration whose link expired, or was withdrawn after a failed
+  // delivery, gets the same address back on the fresh token; the status
+  // predicate keeps an already-active account's row untouched -- that path
+  // belongs to the password reset, not to a re-registration (#810). The
+  // expiry predicate makes this a compare-and-set: of two concurrent
+  // recoveries only one stores a token, so the other cannot overwrite a link
+  // that was just mailed. False means nothing was stored and nothing to send.
   public async refreshActivationToken(
     userId: number,
     token: string,
     expiresAt: Date,
-  ) {
-    await this.drizzleConnection
+  ): Promise<boolean> {
+    const refreshed = await this.drizzleConnection
       .update(users)
       .set({ activationToken: token, activationTokenExpiresAt: expiresAt })
-      .where(and(eq(users.id, userId), eq(users.status, "inactive")));
+      .where(
+        and(
+          eq(users.id, userId),
+          eq(users.status, "inactive"),
+          or(
+            isNull(users.activationTokenExpiresAt),
+            lt(users.activationTokenExpiresAt, sql`now()`),
+          ),
+        ),
+      )
+      .returning({ id: users.id });
+    return refreshed.length > 0;
+  }
+
+  // Compare-and-set on the token: a link whose mail never left is withdrawn so
+  // the next registration attempt sends a fresh one, while a newer token some
+  // other request already stored and delivered is left alone.
+  public async withdrawActivationToken(token: string) {
+    await this.drizzleConnection
+      .update(users)
+      .set({ activationToken: null, activationTokenExpiresAt: null })
+      .where(
+        and(eq(users.activationToken, token), eq(users.status, "inactive")),
+      );
   }
 
   public async activateUser(userId: number) {

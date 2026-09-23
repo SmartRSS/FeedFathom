@@ -276,12 +276,9 @@ function Router(props: {
 }
 
 if ("serviceWorker" in navigator) {
-  // The new worker calls clients.claim() on activate, so an already-open tab
-  // can end up with its fetches controlled by a worker version its already-
-  // loaded JS bundle doesn't match. Surface it instead of forcing a reload
-  // mid-session -- but only when a controller is being *replaced*: a page's
-  // first-ever controllerchange (going from uncontrolled to controlled)
-  // fires too, and that one needs no prompt since nothing's changed yet.
+  // A replacement worker can differ from the loaded JS bundle. Offer a reload
+  // rather than interrupting the session. Notifications are enabled only if
+  // the page has a controller when this listener is registered.
   const hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController) return;

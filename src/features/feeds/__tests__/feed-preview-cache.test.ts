@@ -86,58 +86,31 @@ describe("FeedPreviewCache", () => {
     expect(await cache.get(7, `${feedUrl}#other`)).toBeUndefined();
   });
 
-  test("deletes malformed cached entries", async () => {
-    const redis = new FakeRedis();
-    const cache = new FeedPreviewCache(redis);
-    await cache.save(7, feedUrl, preview);
-    const key = redis.setCalls[0]?.[0];
-    if (!key) throw new Error("Preview was not cached");
-    redis.values.set(key, "not-json");
-
-    expect(await cache.get(7, feedUrl)).toBeUndefined();
-    expect(redis.deleted).toEqual([key]);
-  });
-
-  test("deletes entries with non-finite timestamps or extra fields", async () => {
-    const malformedEntries = [
-      {
+  test("deletes malformed or mismatched cached previews", async () => {
+    const entries = [
+      "not-json",
+      JSON.stringify({
         ...previewWire,
         articles: [{ ...previewWire.articles[0], publishedAt: null }],
-      },
-      { ...previewWire, extra: true },
+      }),
+      JSON.stringify({ ...previewWire, extra: true }),
+      JSON.stringify({
+        ...previewWire,
+        feedUrl: "https://example.com/other.xml",
+      }),
     ];
-
     await Promise.all(
-      malformedEntries.map(async (entry) => {
+      entries.map(async (entry) => {
         const redis = new FakeRedis();
         const cache = new FeedPreviewCache(redis);
         await cache.save(7, feedUrl, preview);
         const key = redis.setCalls[0]?.[0];
         if (!key) throw new Error("Preview was not cached");
-        redis.values.set(key, JSON.stringify(entry));
-
+        redis.values.set(key, entry);
         expect(await cache.get(7, feedUrl)).toBeUndefined();
         expect(redis.deleted).toEqual([key]);
       }),
     );
-  });
-
-  test("deletes entries with invalid fields or a different URL", async () => {
-    const redis = new FakeRedis();
-    const cache = new FeedPreviewCache(redis);
-    await cache.save(7, feedUrl, preview);
-    const key = redis.setCalls[0]?.[0];
-    if (!key) throw new Error("Preview was not cached");
-    redis.values.set(
-      key,
-      JSON.stringify({
-        ...previewWire,
-        feedUrl: "https://example.com/other.xml",
-      }),
-    );
-
-    expect(await cache.get(7, feedUrl)).toBeUndefined();
-    expect(redis.deleted).toEqual([key]);
   });
 
   test("treats Redis errors as cache misses", async () => {

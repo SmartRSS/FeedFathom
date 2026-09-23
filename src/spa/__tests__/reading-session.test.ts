@@ -17,7 +17,6 @@ const aSession = (overrides: Partial<ReadingSession> = {}): ReadingSession => ({
   app: {
     articleFilter: "unread",
     articleId: 11,
-    listIds: [11, 12],
     listScrollTop: 240,
     nodeType: "source",
     nodeUid: "3",
@@ -30,14 +29,15 @@ describe("parse/serialize", () => {
   test("round-trips a snapshot", () => {
     const parsed = parseReadingSession(serializeReadingSession(aSession()));
     expect(parsed).toEqual(aSession());
-    expect(serializeReadingSession(parsed!)).toBe(
-      serializeReadingSession(aSession()),
-    );
+    expect(JSON.parse(serializeReadingSession(aSession())).version).toBe(1);
   });
 
-  test("keeps the version out of the typed shape but in the blob", () => {
-    const blob = JSON.parse(serializeReadingSession(aSession()));
-    expect(blob.version).toBe(1);
+  test("reads a stored v1 snapshot that still carries listIds", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(serializeReadingSession(aSession())),
+      app: { ...aSession().app, listIds: [11, 12] },
+    });
+    expect(parseReadingSession(raw)).toEqual(aSession());
   });
 
   test("drops a blob from a different version (the migration story)", () => {
@@ -54,6 +54,11 @@ describe("parse/serialize", () => {
     expect(parseReadingSession("not json {")).toBeUndefined();
     expect(parseReadingSession("42")).toBeUndefined();
     expect(parseReadingSession(JSON.stringify({ version: 1 }))).toBeUndefined();
+    for (const app of [null, {}, { ...aSession().app, nodeType: "invalid" }]) {
+      expect(
+        parseReadingSession(JSON.stringify({ app, reader: [], version: 1 })),
+      ).toBeUndefined();
+    }
   });
 
   test("drops entries with out-of-range ratios", () => {
@@ -64,8 +69,10 @@ describe("parse/serialize", () => {
   });
 
   test("tolerates an absent app snapshot", () => {
-    const raw = serializeReadingSession(aSession({ app: undefined }));
-    expect(parseReadingSession(raw)?.app).toBeUndefined();
+    const session = aSession({ app: undefined });
+    expect(parseReadingSession(serializeReadingSession(session))).toEqual(
+      session,
+    );
   });
 });
 
@@ -131,7 +138,7 @@ describe("scroll ratio helpers", () => {
 
 describe("throttled recorder", () => {
   test("writes the first value immediately, then at most once per interval", () => {
-    let time = 1000;
+    let time = 0;
     const writes: number[] = [];
     const scheduled: Array<() => void> = [];
     const record = createThrottledRecorder(
@@ -139,7 +146,8 @@ describe("throttled recorder", () => {
       {
         intervalMs: 500,
         now: () => time,
-        schedule: (callback) => {
+        schedule: (callback, delayMs) => {
+          expect(delayMs).toBe(500);
           scheduled.push(callback);
           return scheduled.length;
         },
@@ -151,40 +159,16 @@ describe("throttled recorder", () => {
     record(2);
     record(3);
     expect(writes).toEqual([1]);
-    time = 1500;
+    expect(scheduled).toHaveLength(1);
+    time = 500;
     scheduled.shift()!();
     expect(writes).toEqual([1, 3]);
     // The interval now dates from the trailing write.
     record(4);
     expect(writes).toEqual([1, 3]);
-    time = 2000;
+    time = 1000;
     scheduled.shift()!();
     expect(writes).toEqual([1, 3, 4]);
-  });
-
-  test("a burst coalesces into one trailing write with the latest value", () => {
-    let time = 0;
-    const writes: number[] = [];
-    const scheduled: Array<() => void> = [];
-    const record = createThrottledRecorder(
-      (value: number) => writes.push(value),
-      {
-        intervalMs: 500,
-        now: () => time,
-        schedule: (callback) => {
-          scheduled.push(callback);
-          return scheduled.length;
-        },
-      },
-    );
-    record(1);
-    record(2);
-    record(3);
-    expect(writes).toEqual([1]);
-    expect(scheduled.length).toBe(1);
-    time = 400;
-    scheduled[0]!();
-    expect(writes).toEqual([1, 3]);
   });
 });
 
@@ -222,7 +206,6 @@ describe("ReadingSessionStore", () => {
       app: {
         articleFilter: "unread",
         articleId: 12,
-        listIds: [],
         listScrollTop: 0,
         nodeType: "source",
         nodeUid: "9",
@@ -236,14 +219,18 @@ describe("ReadingSessionStore", () => {
   });
 
   test("records and reads reader scroll ratios", () => {
-    const store = new ReadingSessionStore({
+    const options = {
       local: new FakeStorage(),
       now: () => 5,
       session: new FakeStorage(),
-    });
+    };
+    const store = new ReadingSessionStore(options);
     store.recordReaderScroll(11, 0.75);
     expect(store.readerScroll(11)).toBe(0.75);
     expect(store.readerScroll(12)).toBeUndefined();
+    const restored = new ReadingSessionStore(options);
+    restored.load();
+    expect(restored.readerScroll(11)).toBe(0.75);
   });
 
   test("a corrupt blob boots as no snapshot", () => {

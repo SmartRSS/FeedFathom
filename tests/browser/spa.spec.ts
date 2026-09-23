@@ -1169,7 +1169,10 @@ test("surfaces a malformed Options session without crashing", async ({
 test("loads articles and content from a selected source", async ({ page }) => {
   await installApiFixture(page);
   await page.goto("/");
+  const deleteButton = page.getByRole("button", { name: "delete articles" });
+  await expect(deleteButton).toBeDisabled();
   await selectSource(page);
+  await expect(deleteButton).toBeEnabled();
 
   const option = page.getByRole("option", { name: /First article/ });
   await expect(option).toHaveAttribute("aria-selected", "true");
@@ -1179,20 +1182,24 @@ test("loads articles and content from a selected source", async ({ page }) => {
   await expect(page.getByText("Feed article content")).toBeVisible();
 });
 
-test("select all moves focus into the list so Delete works immediately", async ({
+test("select all preserves scroll and moves focus so Delete works immediately", async ({
   page,
 }) => {
-  // Regression test: clicking the toolbar's "select all" button natively
-  // focuses the button itself, which sits outside .article-list -- the
-  // element handleArticleKeys (Delete/arrow-key handling) is attached to.
-  // Without moving focus back into the list, a Delete keypress right after
-  // clicking select-all was silently a no-op.
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
+  await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
 
+  const list = page.locator(".article-list");
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const scrolledTop = await list.evaluate((element) => element.scrollTop);
+  expect(scrolledTop).toBeGreaterThan(0);
+
   await page.getByRole("button", { name: "select all" }).click();
+  await expect(list).toHaveJSProperty("scrollTop", scrolledTop);
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toHaveAttribute("aria-selected", "true");
@@ -1211,27 +1218,6 @@ test("select all moves focus into the list so Delete works immediately", async (
   await expect
     .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
     .toEqual([11, 12, 13]);
-});
-
-test("select all does not scroll the article list", async ({ page }) => {
-  // Regression test: focusArticleAt(0) used to always scrollIntoView the
-  // first row, which yanked the list back to the top even when the user
-  // had scrolled down before clicking select-all.
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-  await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
-  await selectSource(page);
-  await expect(articleOptions(page)).toHaveCount(3);
-
-  const list = page.locator(".article-list");
-  await list.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  const scrolledTop = await list.evaluate((element) => element.scrollTop);
-  expect(scrolledTop).toBeGreaterThan(0);
-
-  await page.getByRole("button", { name: "select all" }).click();
-  await expect(list).toHaveJSProperty("scrollTop", scrolledTop);
 });
 
 test("select all then clicking Delete removes every article", async ({
@@ -1269,25 +1255,6 @@ test("selecting a single article then pressing Delete removes only it", async ({
     page.getByRole("option", { name: /Third article/ }),
   ).toBeVisible();
   expect(state.removedArticleIds).toEqual([12]);
-});
-
-test("disables the delete-articles button until something is selected", async ({
-  page,
-}) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-
-  const deleteButton = page.getByRole("button", { name: "delete articles" });
-  await expect(deleteButton).toBeDisabled();
-
-  // Selecting a source auto-selects its first article for immediate
-  // reading (see "loads articles and content from a selected source"), so
-  // the button already reflects a selection right after this.
-  await selectSource(page);
-  await expect(
-    page.getByRole("option", { name: /First article/ }),
-  ).toHaveAttribute("aria-selected", "true");
-  await expect(deleteButton).toBeEnabled();
 });
 
 test("source properties reuses the discovery panel with feed/website locked", async ({
@@ -1409,9 +1376,6 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
 });
 
 test("every toolbar icon renders and is clickable", async ({ page }) => {
-  // Regression test for the Icon component swap (inline currentColor SVG
-  // instead of <img src>) -- each button must still have a nonzero hit
-  // area and a visible icon, not just an empty/invisible span.
   await installApiFixture(page, { multipleArticles: true });
   await page.goto("/");
   await selectSource(page);
@@ -1424,16 +1388,11 @@ test("every toolbar icon renders and is clickable", async ({ page }) => {
     "select all",
     "delete articles",
   ];
-  await Promise.all(
-    toolbarButtons.map(async (name) => {
-      const button = page.getByRole("button", { exact: true, name }).first();
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      expect(box?.width).toBeGreaterThan(0);
-      expect(box?.height).toBeGreaterThan(0);
-      await expect(button.locator("svg")).toBeVisible();
-    }),
-  );
+  for (const name of toolbarButtons) {
+    const button = page.getByRole("button", { exact: true, name }).first();
+    await button.click({ trial: true });
+    await expect(button.locator("svg")).toBeVisible();
+  }
 });
 
 test("shows the generic RSS icon for a source with no favicon", async ({
@@ -1678,6 +1637,33 @@ test("surfaces tree failures without masquerading as logout", async ({
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
 });
 
+// #833: refreshing while the boot tree request is still in flight aborts it.
+// That cancellation is not a connectivity failure; both the boot and the
+// refresh settle on the replacement tree.
+test("a superseded tree request settles on its replacement", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const held: Array<() => void> = [];
+  await page.route("**/api/tree", async (route) => {
+    await new Promise<void>((release) => held.push(release));
+    // The aborted request can no longer be answered; that is the point.
+    await route.fallback().catch(() => undefined);
+  });
+  await page.goto("/");
+  await expect.poll(() => held.length).toBe(1);
+
+  await page.getByRole("button", { name: "refresh" }).click();
+  await expect.poll(() => held.length).toBe(2);
+  held[1]!();
+  held[0]!();
+
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 // The #709 keyboard vocabulary: j/k alias the arrow keys' selection movement,
 // which already opens the article in the reader pane; ? opens the cheat sheet
 // hosted in the shared DialogHost.
@@ -1877,9 +1863,6 @@ test("typing j in the feed filter does not move the selection", async ({
   await expect(filter).toHaveValue("j");
 });
 
-// Session restoration (#718). Each spec scrolls with real scroll events and
-// waits out the 500ms write throttle once -- everything after that is the
-// app's own state machine, no timers.
 test.describe("session restoration", () => {
   test("a reload restores the selected article and the list scroll", async ({
     page,
@@ -1896,15 +1879,22 @@ test.describe("session restoration", () => {
     await list.evaluate((element) => {
       element.scrollTop = 900;
     });
-    await page.waitForTimeout(700);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+            )?.app?.listScrollTop,
+        ),
+      )
+      .toBe(900);
 
     await page.reload();
     // The restored selection re-opens the article in the reader pane and
     // puts the list back at the stored offset -- all from one boot fetch.
     await expect(page.locator(".reader h1")).toHaveText("Article 130");
-    await expect
-      .poll(() => list.evaluate((element) => element.scrollTop))
-      .toBeGreaterThan(500);
+    await expect(list).toHaveJSProperty("scrollTop", 900);
     await expect(articleOptions(page).nth(30)).toHaveAttribute(
       "aria-selected",
       "true",
@@ -1926,13 +1916,20 @@ test.describe("session restoration", () => {
       return element.scrollTop;
     });
     expect(halfScroll).toBeGreaterThan(200);
-    await page.waitForTimeout(700);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+            )?.reader?.[0]?.ratio,
+        ),
+      )
+      .toBeCloseTo(0.5, 2);
 
     await page.reload();
     await expect(page.locator(".reader h1")).toHaveText("First article");
-    await expect
-      .poll(() => reader.evaluate((element) => element.scrollTop))
-      .toBeGreaterThan(200);
+    await expect(reader).toHaveJSProperty("scrollTop", halfScroll);
   });
 
   test("with the preference off, no snapshot is written and nothing restores", async ({
@@ -1997,4 +1994,226 @@ test.describe("session restoration", () => {
       ),
     ).toBeNull();
   });
+});
+
+// #835: the tree context menu acts on its row without selecting it, so the
+// article list, its pagination cursor and the reading position stay with the
+// selection the user actually made.
+const menuTreeSource = (uid: string, name: string) => ({
+  favicon: null,
+  homeUrl: `https://${uid}.example/`,
+  kind: "feed",
+  name,
+  type: "source",
+  uid,
+  unreadCount: 1,
+  xmlUrl: `https://${uid}.example/feed.xml`,
+});
+const routeTwoSourceTree = async (
+  page: Page,
+  state: Awaited<ReturnType<typeof installApiFixture>>,
+) => {
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      json: {
+        tree: [
+          {
+            children: [
+              menuTreeSource("3", "Tech News"),
+              menuTreeSource("9", "Tech Preview"),
+            ].filter(
+              (source) => !state.removedSourceIds.includes(Number(source.uid)),
+            ),
+            name: state.updatedFolder?.name ?? "Reading",
+            type: "folder",
+            uid: "7",
+          },
+        ],
+      },
+    }),
+  );
+};
+const openRowMenu = async (page: Page, name: string) => {
+  await page
+    .locator("button.source")
+    .filter({ hasText: name })
+    .first()
+    .click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+};
+const expectSelectedRow = async (page: Page, name: RegExp) => {
+  await expect(page.getByRole("treeitem", { name })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+};
+
+test("the tree context menu leaves the article paging scope alone", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await routeTwoSourceTree(page, state);
+  const pageSize = 200;
+  const bodies: { cursor?: number; sources: number[] }[] = [];
+  let releasePage: (() => void) | undefined;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    if (body.cursor !== undefined)
+      await new Promise<void>((release) => (releasePage = release));
+    const start = body.cursor === undefined ? 1 : pageSize + 1;
+    const size = body.cursor === undefined ? pageSize : 3;
+    await route.fulfill({
+      json: Array.from({ length: size }, (_, index) =>
+        pagedSummary(start + index),
+      ),
+    });
+  });
+  await page.route("**/api/article?*", async (route) => {
+    const id = Number(
+      new URL(route.request().url()).searchParams.get("article"),
+    );
+    await route.fulfill({
+      json: {
+        ...pagedSummary(id),
+        content: `<p>Body ${id}</p>`,
+        guid: `guid-${id}`,
+        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+        updatedAt: null,
+      },
+    });
+  });
+  await page.goto("/");
+  await selectSource(page);
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+
+  await openRowMenu(page, "Tech Preview");
+  await page.keyboard.press("Escape");
+  await expectSelectedRow(page, /Tech News/);
+
+  await page.locator(".article-list").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toMatchObject({ cursor: pageSize, sources: [3] });
+
+  // A menu opened on a folder while that page is in flight changes nothing
+  // about where its rows land.
+  await openRowMenu(page, "Reading");
+  await page.keyboard.press("Escape");
+  releasePage!();
+  await expect(rows).toHaveCount(pageSize + 3);
+  expect(bodies).toHaveLength(2);
+  await expectSelectedRow(page, /Tech News/);
+});
+
+test("tree context menu actions target the clicked row", async ({ page }) => {
+  const state = await installApiFixture(page);
+  await routeTwoSourceTree(page, state);
+  await page.goto("/");
+  await selectSource(page);
+  const firstArticle = page
+    .locator(".article-list .article")
+    .filter({ hasText: "First article" });
+  await expect(firstArticle).toBeVisible();
+
+  await openRowMenu(page, "Reading");
+  await page.getByRole("menuitem", { name: "Rename folder" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
+  await dialog.getByRole("textbox").fill("Archive");
+  await dialog.getByRole("button", { name: "OK" }).click();
+  await expect(
+    page.locator("button.source.folder").filter({ hasText: "Archive" }),
+  ).toBeVisible();
+  expect(state.updatedFolder).toEqual({ name: "Archive" });
+  await expectSelectedRow(page, /Tech News/);
+
+  await openRowMenu(page, "Tech Preview");
+  await page.getByRole("menuitem", { name: "Edit feed" }).click();
+  await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expectSelectedRow(page, /Tech News/);
+
+  await openRowMenu(page, "Tech Preview");
+  await page.getByRole("menuitem", { name: "Unsubscribe" }).click();
+  await expect(dialog).toContainText('Delete "Tech Preview"?');
+  await dialog.getByRole("button", { name: "OK" }).click();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech Preview" }),
+  ).toHaveCount(0);
+  expect(state.removedSourceIds).toEqual([9]);
+  await expectSelectedRow(page, /Tech News/);
+  await expect(firstArticle).toBeVisible();
+});
+
+// #834: leaving the dashboard stops its background poll for good, even when
+// the unmount lands while boot or a poll is still waiting on the tree.
+const treeHolds = async (page: Page, hold: (request: number) => boolean) => {
+  const released: Array<() => void> = [];
+  let requests = 0;
+  await page.route("**/api/tree", async (route) => {
+    requests += 1;
+    if (hold(requests))
+      await new Promise<void>((release) => released.push(release));
+    // A request aborted by the unmount can no longer be answered.
+    await route.fallback().catch(() => undefined);
+  });
+  return { released, requests: () => requests };
+};
+const leaveDashboard = async (page: Page) => {
+  await page.getByRole("button", { name: "options" }).click();
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
+};
+
+test("unmounting during the boot tree load starts no poll", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 1);
+  await page.goto("/");
+  await expect.poll(() => tree.released.length).toBe(1);
+
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(1);
+});
+
+test("unmounting during a poll leaves one live loop after remounting", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.setViewportSize({ height: 844, width: 390 });
+  await installApiFixture(page);
+  const tree = await treeHolds(page, (request) => request === 2);
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.released.length).toBe(1);
+  await leaveDashboard(page);
+  tree.released[0]!();
+  await page.clock.runFor(10 * 60_000);
+  expect(tree.requests()).toBe(2);
+
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect.poll(() => tree.requests()).toBe(3);
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  // The remounted dashboard polls on its own backoff, 30s then 60s, once each.
+  await page.clock.runFor(30_000);
+  await expect.poll(() => tree.requests()).toBe(4);
+  await page.clock.runFor(59_000);
+  expect(tree.requests()).toBe(4);
+  await page.clock.runFor(1_000);
+  await expect.poll(() => tree.requests()).toBe(5);
+  await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });

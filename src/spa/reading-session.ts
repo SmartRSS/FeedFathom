@@ -12,10 +12,7 @@
 
 export const READING_SESSION_STORAGE_KEY = "feedfathom:reading-session:v1";
 
-// The app snapshot keeps only the head of the article list (enough to
-// recognise a stale restore), and the per-article reader scroll map is LRU-
-// capped so a long-lived install cannot grow it without bound.
-const MAX_SNAPSHOT_LIST_IDS = 20;
+// Cap the reader scroll map to bound snapshot size.
 const MAX_READER_SCROLL_ENTRIES = 200;
 const READER_SCROLL_THROTTLE_MS = 500;
 const SESSION_VERSION = 1;
@@ -26,8 +23,6 @@ export type AppSnapshot = {
   articleFilter: ArticleFilter;
   // The article open in the reader pane when the snapshot was written.
   articleId: number | undefined;
-  // Head of the list, in order, at snapshot time -- a staleness fingerprint.
-  listIds: number[];
   listScrollTop: number;
   nodeType: "folder" | "source";
   nodeUid: string;
@@ -76,7 +71,7 @@ export function parseReadingSession(
   if (record["version"] !== SESSION_VERSION) return undefined;
   const reader = parseReaderScrolls(record["reader"]);
   const app = parseAppSnapshot(record["app"]);
-  if (!reader || !app) return undefined;
+  if (!reader || (record["app"] !== undefined && !app)) return undefined;
   return { app, reader };
 }
 
@@ -107,9 +102,7 @@ function parseAppSnapshot(value: unknown): AppSnapshot | undefined {
     (app["nodeType"] !== "source" && app["nodeType"] !== "folder") ||
     typeof app["nodeUid"] !== "string" ||
     !FILTERS.includes(app["articleFilter"] as ArticleFilter) ||
-    !isFiniteNumber(app["listScrollTop"]) ||
-    !Array.isArray(app["listIds"]) ||
-    !app["listIds"].every(isFiniteNumber)
+    !isFiniteNumber(app["listScrollTop"])
   )
     return undefined;
   const articleId = app["articleId"];
@@ -119,7 +112,6 @@ function parseAppSnapshot(value: unknown): AppSnapshot | undefined {
       articleId === undefined || isFiniteNumber(articleId)
         ? articleId
         : undefined,
-    listIds: app["listIds"],
     listScrollTop: app["listScrollTop"],
     nodeType: app["nodeType"],
     nodeUid: app["nodeUid"],
@@ -282,20 +274,11 @@ export class ReadingSessionStore {
     const base = this.#current.app ?? {
       articleFilter: "unread" as ArticleFilter,
       articleId: undefined,
-      listIds: [],
       listScrollTop: 0,
       nodeType: "source" as const,
       nodeUid: "",
     };
-    const listIds = patch.listIds ?? base.listIds;
-    this.#current = {
-      ...this.#current,
-      app: {
-        ...base,
-        ...patch,
-        listIds: listIds.slice(0, MAX_SNAPSHOT_LIST_IDS),
-      },
-    };
+    this.#current = { ...this.#current, app: { ...base, ...patch } };
     this.#persist();
   }
 

@@ -17,12 +17,7 @@ export type ReadStateColumns = {
  * It has to be one definition because two queries answer with it -- the
  * article list and `recomputeUnreadCounts`, which fills the badge beside every
  * source -- and a disagreement between them shows up as an unread count with
- * nothing behind it. They had already drifted: the list ANDed
- * `updated_at > read_at` onto the removal test, and in SQL `x > NULL` is NULL,
- * so a row with `deleted_at IS NULL` and `read_at IS NULL` made the whole
- * expression NULL and dropped the article out of the list while the count
- * still called it unread. Nothing wrote `read_at`, so nothing hit it; the
- * first commit that did would have.
+ * nothing behind it.
  *
  * Unread means: no state row at all, or a row that is not a removal and
  * either has never been read or has been edited by the publisher since it was.

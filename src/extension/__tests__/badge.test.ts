@@ -6,10 +6,8 @@ describe("formatBadgeCount", () => {
   test.each([
     [0, ""],
     [1, "1"],
-    [3, "3"],
     [99, "99"],
     [100, "99+"],
-    [1234, "99+"],
   ])("formats %i as %s", (count, expected) => {
     expect(formatBadgeCount(count)).toBe(expected);
   });

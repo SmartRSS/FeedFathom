@@ -64,7 +64,6 @@ describe("isBlockedHostname", () => {
     "0x7f.1", // hex 2-part -> 127.0.0.1
     "0177.0.0.1", // octal -> 127.0.0.1
     "0x7f.0.0.1", // hex dotted quad
-    "0177.0.0.1", // octal -> 127.0.0.1
     "0:0:0:0:0:0:0:1", // full-form loopback
     "0:0:0:0:0:0:0:0", // full-form unspecified
     "::ffff:127.0.0.1", // IPv4-mapped loopback, dotted tail

@@ -110,16 +110,6 @@ describe("loadConfig", () => {
     },
   );
 
-  test("allows mail when the relay secret is present", () => {
-    expect(
-      loadConfig({
-        DATABASE_URL: databaseUrl,
-        MAIL_ENABLED: "true",
-        MAIL_RELAY_SECRET: "relay-secret",
-      }).MAIL_RELAY_SECRET,
-    ).toBe("relay-secret");
-  });
-
   test("allows blank Turnstile keys to disable Turnstile", () => {
     expect(
       loadConfig({

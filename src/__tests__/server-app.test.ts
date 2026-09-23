@@ -1,5 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
-import type { HttpClient } from "#platform/http/http-client.ts";
+import type { HttpClient, HttpResponse } from "#platform/http/http-client.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
@@ -55,11 +55,12 @@ type PublicAuthRouteDependencies = {
     | "findUserByPasswordResetToken"
     | "getUserBySid"
     | "getUserCount"
+    | "withdrawActivationToken"
   > &
     PasswordResetRouteDependencies["usersDataService"] & {
       activateUser(userId: number): Promise<unknown>;
       createUser(
-        payload: Parameters<UsersDataService["createUser"]>[0],
+        ...args: Parameters<UsersDataService["createUser"]>
       ): Promise<unknown>;
     };
 };
@@ -72,7 +73,9 @@ type LoginRouteDependencies = {
   password: Password;
   secureCookies: boolean;
   usersDataService: {
-    createSession(userId: number, userAgent?: null | string): Promise<string>;
+    createSession(
+      ...args: Parameters<UsersDataService["createSession"]>
+    ): ReturnType<UsersDataService["createSession"]>;
     findUser(email: string): ReturnType<UsersDataService["findUser"]>;
   };
 };
@@ -98,7 +101,7 @@ type PasswordResetRouteDependencies = {
       userId: number,
       token: string,
       expiresAt: Date,
-    ): Promise<void>;
+    ): Promise<boolean>;
     startPasswordReset(
       userId: number,
       tokenHash: string,
@@ -129,7 +132,7 @@ type ReaderRouteDependencies = {
     "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
   >;
   httpClient: {
-    get(url: string): Promise<{ data: string }>;
+    get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
   };
   mailEnabled: boolean;
   faviconStore: Pick<FaviconStore, "getFavicon">;
@@ -313,8 +316,8 @@ function createDependencies(): ServerFakes {
       },
     },
     httpClient: {
-      async get() {
-        return { data: "" };
+      async get(url) {
+        return { data: "", url };
       },
       async seedCache() {},
     },
@@ -430,6 +433,9 @@ function createDependencies(): ServerFakes {
       async touchLastSeen() {},
       async updatePassword() {
         return unexpected("usersDataService.updatePassword");
+      },
+      async withdrawActivationToken() {
+        return unexpected("usersDataService.withdrawActivationToken");
       },
     },
     websubStateService: {
@@ -853,6 +859,14 @@ test("returns sanitized transient preview articles and rejects parser failures",
               title: "Article title",
               url: "https://site.example/article",
             },
+            {
+              author: "Author",
+              content: "<p>Second</p>",
+              guid: "preview-guid-2",
+              publishedAt: new Date("2024-03-05T12:00:00Z"),
+              title: "Second title",
+              url: "https://site.example/second",
+            },
           ],
           description: "Feed description",
           feedUrl: sourceUrl,
@@ -892,6 +906,11 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(valid.status).toBe(200);
   expect(body.title).toBe("Feed title");
   expect(article.title).toBe("Article title");
+  expect(body.articles).toHaveLength(2);
+  expect(body.articles[1]).toMatchObject({
+    content: "<p>Second</p>",
+    title: "Second title",
+  });
   expect(article.content).toContain("Visible");
   expect(article.content).not.toContain("script");
   expect(article.content).not.toContain("onclick");
@@ -955,19 +974,106 @@ function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
   };
 }
 
-// The fan-out below is about to move out of the route into a named service.
-// Its contract has never been asserted, only its auth and its failure modes.
-test("find marks each candidate with whether it advertises a WebSub hub", async () => {
+test.each([
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a path redirect",
+    requestedUrl: "https://site.example/old/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a host redirect",
+    requestedUrl: "https://old.example/news/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/feeds/feed.xml",
+    finalUrl: "https://site.example/news/latest/",
+    html: '<html><head><base href="../feeds/"><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "a relative base after a redirect",
+    requestedUrl: "https://old.example/archive/",
+    title: "News",
+  },
+  {
+    feedUrl: "https://site.example/news/",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><base href="../assets/"></head><body><article class="h-entry">News</article></body></html>',
+    name: "a microformats page after a redirect",
+    requestedUrl: "https://old.example/archive/",
+    title: "This page (h-entry)",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/feed.xml",
+    html: '<rss version="2.0"><channel><title>News</title></channel></rss>',
+    name: "an XML feed after a redirect",
+    requestedUrl: "https://old.example/feed",
+    title: "This feed",
+  },
+  {
+    feedUrl: "https://site.example/news/feed.xml",
+    finalUrl: "https://site.example/news/",
+    html: '<html><head><link type="application/rss+xml" title="News" href="feed.xml"></head></html>',
+    name: "no redirect",
+    requestedUrl: "https://site.example/news/",
+    title: "News",
+  },
+])(
+  "find resolves candidates using the response URL with $name",
+  async ({ requestedUrl, finalUrl, html, title, feedUrl }) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    const fetched: string[] = [];
+    const probed: string[] = [];
+    dependencies.httpClient.get = async (url) => {
+      fetched.push(url);
+      return { data: html, url: finalUrl };
+    };
+    dependencies.feedParser.parseUrl = async (url) => {
+      probed.push(url);
+      return parsedFeed(url, "https://hub.example/");
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/find?link=${encodeURIComponent(requestedUrl)}`,
+        { headers: { cookie: "sid=test" } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      { title, url: feedUrl, websub: true },
+    ]);
+    expect(fetched).toEqual([requestedUrl]);
+    expect(probed).toEqual([feedUrl]);
+  },
+);
+
+test("find marks push feeds and preserves plain or failed candidates", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
+  dependencies.httpClient.get = async (url) => ({
     data: `<html><head>
       <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
       <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
+      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
     </head></html>`,
+    url,
   });
-  dependencies.feedParser.parseUrl = async (url: string) =>
-    parsedFeed(url, url.includes("push") ? "https://hub.example/" : undefined);
+  dependencies.feedParser.parseUrl = async (url: string) => {
+    if (url.includes("dead")) throw new Error("404");
+    return parsedFeed(
+      url,
+      url.includes("push") ? "https://hub.example/" : undefined,
+    );
+  };
   const app = await appFor(dependencies);
 
   const response = await app.handle(
@@ -983,39 +1089,7 @@ test("find marks each candidate with whether it advertises a WebSub hub", async 
   expect(await response.json()).toEqual([
     { title: "Push", url: "https://site.example/push.xml", websub: true },
     { title: "Plain", url: "https://site.example/plain.xml", websub: false },
-  ]);
-});
-
-// A dead candidate is worth showing: the user finds out when they preview it,
-// and dropping it silently would make the page look like the feed never
-// existed.
-test("find keeps a candidate whose parse throws, merely unmarked", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
-    data: `<html><head>
-      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
-      <link rel="alternate" type="application/rss+xml" title="Live" href="https://site.example/live.xml">
-    </head></html>`,
-  });
-  dependencies.feedParser.parseUrl = async (url: string) => {
-    if (url.includes("dead")) throw new Error("404");
-    return parsedFeed(url, "https://hub.example/");
-  };
-  const app = await appFor(dependencies);
-
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
-  );
-
-  expect(await response.json()).toEqual([
     { title: "Dead", url: "https://site.example/dead.xml", websub: false },
-    { title: "Live", url: "https://site.example/live.xml", websub: true },
   ]);
 });
 
@@ -1025,8 +1099,9 @@ test("find keeps a candidate whose parse throws, merely unmarked", async () => {
 test("find falls back to an OpenRSS suggestion for a page with no feeds", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => ({
+  dependencies.httpClient.get = async (url) => ({
     data: "<html><head></head><body>nothing here</body></html>",
+    url,
   });
   dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
   const app = await appFor(dependencies);
@@ -1594,11 +1669,16 @@ test("login stores the request's user agent on the created session", async () =>
   dependencies.password.verify = async (value, hash) =>
     hash === account.password && value === "password";
   const createdSessions: Array<{
+    passwordHash: string;
     userId: number;
     userAgent: null | string | undefined;
   }> = [];
-  dependencies.usersDataService.createSession = async (userId, userAgent) => {
-    createdSessions.push({ userAgent, userId });
+  dependencies.usersDataService.createSession = async (
+    userId,
+    passwordHash,
+    userAgent,
+  ) => {
+    createdSessions.push({ passwordHash, userAgent, userId });
     return "test-session";
   };
   const app = await appFor(dependencies);
@@ -1617,9 +1697,54 @@ test("login stores the request's user agent on the created session", async () =>
   expect((await login("Mozilla/5.0 FeedFathom Test")).status).toBe(200);
   expect((await login()).status).toBe(200);
   expect(createdSessions).toEqual([
-    { userAgent: "Mozilla/5.0 FeedFathom Test", userId: account.id },
-    { userAgent: null, userId: account.id },
+    {
+      passwordHash: account.password,
+      userAgent: "Mozilla/5.0 FeedFathom Test",
+      userId: account.id,
+    },
+    { passwordHash: account.password, userAgent: null, userId: account.id },
   ]);
+});
+
+// The session is issued against the hash the route verified. When a reset
+// replaced it in between, the store issues nothing and the login is answered
+// like any wrong password: no cookie, and the failure still counts (#843).
+test("login refuses when the verified password was replaced before issuance", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.password.verify = async (value, hash) =>
+    hash === account.password && value === "password";
+  dependencies.usersDataService.createSession = async () => undefined;
+  const throttled: string[] = [];
+  dependencies.authThrottle = {
+    async blocked() {
+      return false;
+    },
+    async clearFailures() {
+      throttled.push("clear");
+    },
+    async recordFailure() {
+      throttled.push("failure");
+    },
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/login", {
+      body: JSON.stringify({ email: account.email, password: "password" }),
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.9",
+      },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ error: "Wrong login data" });
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(throttled).toEqual(["failure"]);
 });
 
 // Equal-time hashing on a miss closes the enumeration oracle but buys little
@@ -2665,21 +2790,30 @@ test("creates inactive users and sends one activation email with Mailjet", async
     finishedAt + 24 * 60 * 60 * 1_000,
   );
   expect(sent).toEqual([["inactive@example.com", created.activationToken]]);
-  expect(events).toEqual(["send", "create"]);
+  expect(events).toEqual(["create", "send"]);
 });
 
-test("does not create an inactive user when activation email delivery fails", async () => {
+// Mail goes out only for a committed row, so a failed delivery cannot leave a
+// link to a token that was never stored. The row stays, and withdrawing its
+// token turns the next registration attempt into an expired-link resend.
+test("withdraws the stored activation token when delivery fails", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
   dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
-  let createCalls = 0;
-  dependencies.usersDataService.createUser = async () => {
-    createCalls++;
-    return undefined;
+  const events: string[] = [];
+  let stored: string | undefined;
+  dependencies.usersDataService.createUser = async (payload) => {
+    events.push("create");
+    stored = payload.activationToken;
+    return "created";
   };
   dependencies.mailSender.sendActivationEmail = async () => {
+    events.push("send");
     throw new Error("Mailjet unavailable");
+  };
+  dependencies.usersDataService.withdrawActivationToken = async (token) => {
+    events.push(token === stored ? "withdraw-stored" : "withdraw-other");
   };
   const app = await appFor(dependencies);
 
@@ -2697,8 +2831,100 @@ test("does not create an inactive user when activation email delivery fails", as
   );
 
   expect(response.status).toBe(500);
-  expect(createCalls).toBe(0);
+  expect(events).toEqual(["create", "send", "withdraw-stored"]);
 });
+
+// A same-address registration that lost the race to the insert gets the
+// answer an existing account gets, and a failed insert mails nothing: every
+// link sent points at a committed row (#848).
+const lostRace: ServerFakes["usersDataService"]["createUser"] = async () =>
+  "exists";
+const failedInsert: ServerFakes["usersDataService"]["createUser"] =
+  async () => {
+    throw new Error("insert failed");
+  };
+test.each([
+  ["lost the insert race", lostRace, 200],
+  ["failed to insert", failedInsert, 500],
+] as const)(
+  "sends no activation mail when the account %s",
+  async (_label, createUser, status) => {
+    const dependencies = createDependencies();
+    dependencies.config.ENABLE_REGISTRATION = true;
+    dependencies.config.MAILJET_API_KEY = "mailjet-key";
+    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    let mailCalls = 0;
+    dependencies.usersDataService.createUser = createUser;
+    dependencies.mailSender.sendActivationEmail = async () => {
+      mailCalls++;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "racer@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Racer",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(status);
+    if (status === 200)
+      expect(await response.json()).toEqual({ success: true });
+    expect(mailCalls).toBe(0);
+  },
+);
+
+// The store, not the route's earlier count, has the last word on whether
+// registration is open: a request that lost the bootstrap race is refused
+// like any other while registration is disabled, and nothing is mailed.
+test.each([false, true])(
+  "refuses a registration the store closed, with Mailjet=%s",
+  async (useMailjet) => {
+    const dependencies = createDependencies();
+    if (useMailjet) {
+      dependencies.config.MAILJET_API_KEY = "mailjet-key";
+      dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    }
+    let registrationEnabled: boolean | undefined;
+    let mailCalls = 0;
+    dependencies.usersDataService.getUserCount = async () => 0;
+    dependencies.usersDataService.createUser = async (_payload, enabled) => {
+      registrationEnabled = enabled;
+      return "closed";
+    };
+    dependencies.mailSender.sendActivationEmail = async () => {
+      mailCalls++;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "second@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Second",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Registration is currently disabled",
+      success: false,
+    });
+    expect(registrationEnabled).toBe(false);
+    expect(mailCalls).toBe(0);
+  },
+);
 
 // The recovery path a forgotten password needs, and every way it must refuse
 // to say more than it should.
@@ -2948,6 +3174,7 @@ test("registering an address with an expired link sends a fresh one", async () =
     expiresAt,
   ) => {
     refreshed.push({ expiresAt, token, userId });
+    return true;
   };
   dependencies.mailSender.sendActivationEmail = async (email) => {
     activationSends.push(email);
@@ -2976,6 +3203,70 @@ test("registering an address with an expired link sends a fresh one", async () =
   expect(refreshed[0]!.expiresAt.getTime()).toBeGreaterThan(
     Date.now() + 23 * 60 * 60 * 1_000,
   );
+});
+
+// A replacement link whose mail failed is withdrawn, so the next attempt
+// sends another at once instead of finding an unexpired token and staying
+// silent for a day (#849). A recovery that stored nothing sends nothing.
+test("a failed replacement activation mail is retried on the next attempt", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  // An object, so the closures' writes are not narrowed away at the reads.
+  const row: { token: null | string } = { token: null };
+  let mailUp = false;
+  const delivered: (null | string)[] = [];
+  dependencies.usersDataService.findUser = async (email) => ({
+    ...account,
+    activationToken: row.token,
+    activationTokenExpiresAt: row.token ? new Date(Date.now() + 60_000) : null,
+    email,
+    status: "inactive" as const,
+  });
+  dependencies.usersDataService.refreshActivationToken = async (
+    _userId,
+    token,
+  ) => {
+    if (row.token) return false;
+    row.token = token;
+    return true;
+  };
+  dependencies.usersDataService.withdrawActivationToken = async (token) => {
+    if (row.token === token) row.token = null;
+  };
+  dependencies.mailSender.sendActivationEmail = async (_email, token) => {
+    if (!mailUp) throw new Error("Mailjet unavailable");
+    delivered.push(token);
+  };
+  const app = await appFor(dependencies);
+  const register = () =>
+    app.handle(
+      new Request("http://localhost/api/register", {
+        body: JSON.stringify({
+          email: "pending@example.com",
+          password: "password",
+          passwordConfirm: "password",
+          username: "Pending user",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+  expect((await register()).status).toBe(500);
+  expect(row.token).toBeNull();
+
+  mailUp = true;
+  const retried = await register();
+  expect(retried.status).toBe(200);
+  expect(await retried.json()).toEqual({ success: true });
+  expect(delivered).toEqual([row.token]);
+
+  // The delivered link is live now, so a further attempt stores and sends
+  // nothing and still answers the generic success.
+  const again = await register();
+  expect(await again.json()).toEqual({ success: true });
+  expect(delivered).toHaveLength(1);
 });
 
 // An active account is not a half-made one, so no new activation -- the

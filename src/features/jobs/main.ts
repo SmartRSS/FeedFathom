@@ -67,6 +67,7 @@ export type MainWorkerJob = {
   moveToDelayed(timestamp: number, token?: string): Promise<unknown>;
   name: string;
   token?: string;
+  updateData(data: unknown): Promise<unknown>;
 };
 
 export class MainWorker {
@@ -97,6 +98,10 @@ export class MainWorker {
   }
 
   private readonly processJob = async (job: MainWorkerJob) => {
+    // Set once a follow-up parse owns intent taken off the pending marker. A
+    // deferral from there on retries from job.data, so the intent has to be
+    // written into it or the retry would parse the original request (#847).
+    let retryData: unknown;
     try {
       const input = { data: job.data, name: job.name };
       if (!mainWorkerJobCheck.Check(input)) {
@@ -169,7 +174,14 @@ export class MainWorker {
           // pass stays on the marker: a deferral, the next poll or the next
           // request all reach it.
           const pending = await sourceEnqueuer.takePendingRefresh(source.id);
-          if (pending) await parse(pending.skipCache, "manual");
+          if (pending) {
+            retryData = {
+              ...input.data,
+              skipCache: pending.skipCache,
+              trigger: "manual",
+            };
+            await parse(pending.skipCache, "manual");
+          }
           break;
         }
 
@@ -218,6 +230,7 @@ export class MainWorker {
     } catch (error: unknown) {
       if (isHttpDeferredError(error)) {
         try {
+          if (retryData !== undefined) await job.updateData(retryData);
           await job.moveToDelayed(error.retryAt, job.token);
           throw new DelayedError();
         } catch (moveError) {
@@ -243,14 +256,13 @@ export class MainWorker {
         // may become a job failure, or an adversarial thrown value (a poisoned
         // `message` getter, a poisoned custom-inspect symbol) puts the job into
         // BullMQ's failure state instead of always acknowledging and keeping
-        // outcomes in Postgres. One try/catch rather than per-statement guards,
-        // which already needed three rounds of narrowing.
+        // outcomes in Postgres.
         console.error("Error processing job:", error);
         const message = error instanceof Error ? error.message : String(error);
         await jobFailuresDataService.record(job.name, message);
       } catch {
-        // Swallowed without logging: logging already failed once in this
-        // block, so logging that failure risks the same unguarded throw.
+        // Swallowed without logging: any statement in the block above can
+        // throw, so logging the failure risks the same unguarded throw.
       }
     }
   };

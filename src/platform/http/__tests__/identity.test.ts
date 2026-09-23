@@ -8,20 +8,14 @@ import {
 } from "#platform/http/http-native-transport.ts";
 
 const redis = () => ({
-  async decr() {
-    return 0;
-  },
   async del() {
-    return 1;
-  },
-  async expire() {
     return 1;
   },
   async get() {
     return null;
   },
-  async incr() {
-    return 0;
+  async send() {
+    return null;
   },
   async set() {
     return "OK";

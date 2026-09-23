@@ -21,11 +21,12 @@ test.each(["", "ISO", "unix", "system"])(
 
 test("locale mode renders an absolute localized string", () => {
   setDateFormat("locale");
-  const rendered = formatDate("2026-09-07T12:34:00Z");
-  expect(rendered).not.toBe("");
-  expect(rendered).toMatch(/\d/);
-  // Never a machine-style ISO date: that is the other mode's job.
-  expect(rendered).not.toMatch(/^2026-09-07/);
+  const date = new Date("2026-09-07T12:34:00Z");
+  const expected = new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+  expect(formatDate(date.toISOString())).toBe(expected);
 });
 
 test("iso mode renders fixed UTC YYYY-MM-DD HH:mm", () => {

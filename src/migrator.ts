@@ -11,9 +11,8 @@ const migrationJournal = Type.Object({
   entries: Type.Array(Type.Object({ tag: Type.String(), when: Type.Number() })),
 });
 
-// A plain `CREATE INDEX` runs inside the migration's transaction: instant on
-// an empty table, an ACCESS EXCLUSIVE lock for the whole build on a populated
-// one. Hand-editing the generated statement to `CREATE INDEX IF NOT EXISTS`
+// A plain `CREATE INDEX` takes a SHARE lock that blocks writes and is held
+// until the migration transaction ends. Writing `CREATE INDEX IF NOT EXISTS`
 // opts in here: this pass builds the index CONCURRENTLY first, so the
 // in-transaction statement finds it already there.
 //

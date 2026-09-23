@@ -51,6 +51,21 @@ async function validateCaptcha(
   }
 }
 
+const registrationDisabled = () =>
+  json({ error: "Registration is currently disabled", success: false }, 403);
+
+// If delivery fails, withdraw the stored token so the next registration
+// attempt for this address is treated as an expired link and sends a fresh
+// one, rather than waiting out a link nobody received.
+async function sendActivation(email: string, token: string) {
+  try {
+    await mailSender.sendActivationEmail(email, token);
+  } catch (error) {
+    await usersDataService.withdrawActivationToken(token);
+    throw error;
+  }
+}
+
 export function createRegisterRoute() {
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
@@ -91,28 +106,16 @@ export function createRegisterRoute() {
           return json({ error: "Invalid CAPTCHA", success: false }, 400);
         }
         const userCount = await usersDataService.getUserCount();
-        if (userCount > 0 && !config.ENABLE_REGISTRATION) {
-          return json(
-            { error: "Registration is currently disabled", success: false },
-            403,
-          );
-        }
+        if (userCount > 0 && !config.ENABLE_REGISTRATION)
+          return registrationDisabled();
         if (!Value.Check(allowedEmailPolicy, request.email)) {
           return json({ error: "", success: false }, 403);
         }
         if (Value.Check(disposableEmailPolicy, request.email))
           return json({ success: true });
 
-        // The only thing worth abusing here is the send: who may hold an
-        // account is settled by the checks above, but every mail this route
-        // can produce -- a fresh activation, an account-exists notice with a
-        // reset link, a first activation -- goes to an address the caller
-        // named, from this instance's domain. So the count sits ahead of all
-        // of them, and ahead of the password hash an attempt would otherwise
-        // make us pay for. On an empty instance there is nobody to send to
-        // but the first operator, who has no second address to try and must
-        // not be locked out of their own install, so the count does not
-        // start until they exist.
+        // With email activation enabled, throttle before any mail or password
+        // hashing. Exempt first-user setup to avoid locking out the operator.
         if (useEmailActivation && userCount > 0) {
           const address = clientAddress(
             httpRequest,
@@ -128,16 +131,10 @@ export function createRegisterRoute() {
 
         const existing = await usersDataService.findUser(request.email);
         if (existing) {
-          // Registering again answers success whatever the truth is, so the
-          // address's own state decides what the mailbox receives (#810): a
-          // still-pending registration whose link has expired gets a fresh
-          // one -- otherwise the person is stuck outside an account that is
-          // half-made and can never be activated -- and an active account
-          // gets a reset link, the only way in that does not assume the
-          // password still works. A pending registration whose link is still
-          // good needs nothing: the first mail already covers it. None of
-          // this exists on an install that cannot send mail, where account
-          // recovery never had a channel to begin with.
+          // Return generic success for existing accounts (#810). With mail
+          // enabled, renew missing or expired activation links for inactive
+          // accounts and send reset links for active accounts. Leave valid
+          // activation links unchanged.
           if (useEmailActivation) {
             if (existing.status === "inactive") {
               const expired =
@@ -148,20 +145,15 @@ export function createRegisterRoute() {
                 const activationTokenExpiresAt = new Date(
                   Date.now() + activationLifetimeMs,
                 );
-                // Stored before it is sent, unlike a first registration
-                // where a failed write leaves nothing to be locked out of:
-                // here the mail would land on a token the row never took,
-                // putting the address back in the dead end it just asked to
-                // leave -- one throttle slot poorer.
-                await usersDataService.refreshActivationToken(
-                  existing.id,
-                  activationToken,
-                  activationTokenExpiresAt,
-                );
-                await mailSender.sendActivationEmail(
-                  existing.email,
-                  activationToken,
-                );
+                // Persist the replacement token before sending a link to it.
+                if (
+                  await usersDataService.refreshActivationToken(
+                    existing.id,
+                    activationToken,
+                    activationTokenExpiresAt,
+                  )
+                )
+                  await sendActivation(existing.email, activationToken);
               }
             } else {
               const resetToken = randomUUID();
@@ -180,28 +172,30 @@ export function createRegisterRoute() {
         }
 
         const passwordHash = await password.hash(request.password);
-        if (useEmailActivation) {
-          const activationToken = randomUUID();
-          const activationTokenExpiresAt = new Date(
-            Date.now() + activationLifetimeMs,
-          );
-          await mailSender.sendActivationEmail(request.email, activationToken);
-          await usersDataService.createUser({
-            activationToken,
-            activationTokenExpiresAt,
+        const activationToken = useEmailActivation ? randomUUID() : null;
+        const outcome = await usersDataService.createUser(
+          {
             email: request.email,
             name: request.username,
             passwordHash,
-            status: "inactive",
-          });
-        } else {
-          await usersDataService.createUser({
-            email: request.email,
-            name: request.username,
-            passwordHash,
-            status: "active",
-          });
-        }
+            ...(activationToken
+              ? {
+                  activationToken,
+                  activationTokenExpiresAt: new Date(
+                    Date.now() + activationLifetimeMs,
+                  ),
+                  status: "inactive",
+                }
+              : { status: "active" }),
+          },
+          config.ENABLE_REGISTRATION,
+        );
+        if (outcome === "closed") return registrationDisabled();
+        // Lost a same-address race: the same answer an existing account gets.
+        if (outcome === "exists") return json({ success: true });
+        // Mail only once the row holding its token is committed.
+        if (activationToken)
+          await sendActivation(request.email, activationToken);
         return json({ success: true });
       },
     );

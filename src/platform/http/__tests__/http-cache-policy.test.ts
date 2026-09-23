@@ -289,10 +289,18 @@ describe("refresh", () => {
     url: "https://example.test/feed",
   };
 
-  test("keeps the stored body and status", () => {
+  test("refreshes freshness after a 304 while preserving the stored response", () => {
+    const before = Math.floor(Date.now() / second) * second;
     const next = refresh(stored, headers({ "cache-control": "max-age=60" }));
+    const nextHeaders = new Headers(next.headers);
+    const stamped = Date.parse(nextHeaders.get("date") ?? "");
+
     expect(next.body).toBe(stored.body);
-    expect(next.status).toBe(200);
+    expect(next.status).toBe(stored.status);
+    expect(nextHeaders.get("age")).toBeNull();
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(Date.now());
+    expect(next.expiresAt).toBe(stamped + 60 * second);
   });
 
   test("overwrites stored headers the 304 restates", () => {
@@ -300,28 +308,8 @@ describe("refresh", () => {
     expect(new Headers(next.headers).get("etag")).toBe('"v2"');
   });
 
-  // Otherwise the stored copy's original Age would keep counting against a
-  // response the origin has just confirmed is current.
-  test("drops a stored Age the 304 did not restate", () => {
-    const next = refresh(stored, headers({ "cache-control": "max-age=60" }));
-    expect(new Headers(next.headers).get("age")).toBeNull();
-  });
-
   test("keeps an Age the 304 did restate", () => {
     const next = refresh(stored, headers({ age: "5" }));
     expect(new Headers(next.headers).get("age")).toBe("5");
-  });
-
-  // Same reason: the stored Date would make the refreshed entry look as old as
-  // the response it replaced.
-  test("stamps Date to now when the 304 omitted it", () => {
-    const next = refresh(stored, headers({ "cache-control": "max-age=60" }));
-    const stamped = Date.parse(new Headers(next.headers).get("date") ?? "");
-    expect(Math.abs(stamped - Date.now())).toBeLessThan(5 * second);
-  });
-
-  test("recomputes expiry from the merged headers", () => {
-    const next = refresh(stored, headers({ "cache-control": "max-age=60" }));
-    expect(next.expiresAt).toBeGreaterThan(Date.now() + 55 * second);
   });
 });

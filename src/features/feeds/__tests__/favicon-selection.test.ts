@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  imageDimensions,
-  isBetterFavicon,
-  targetFaviconSize,
-} from "../favicon-selection.ts";
+import { imageDimensions, isBetterFavicon } from "../favicon-selection.ts";
 
 function png(width: number, height: number): Buffer {
   const buffer = Buffer.alloc(24);
@@ -68,8 +64,7 @@ describe("imageDimensions", () => {
     expect(imageDimensions(bmp(64, 64))).toEqual({ height: 64, width: 64 });
   });
 
-  // A bottom-up BMP stores a negative height.
-  test("reads a bottom-up BMP as a positive height", () => {
+  test("reads a negative BMP height as a positive dimension", () => {
     expect(imageDimensions(bmp(64, -64))).toEqual({ height: 64, width: 64 });
   });
 
@@ -140,11 +135,5 @@ describe("favicon size preference", () => {
   test("prefers the bigger of two candidates when neither clears the target", () => {
     expect(isBetterFavicon(32, 16, 64)).toBe(true);
     expect(isBetterFavicon(16, 32, 64)).toBe(false);
-  });
-});
-
-describe("targetFaviconSize", () => {
-  test("is the size providers are asked for and candidates judged against", () => {
-    expect(targetFaviconSize).toBe(64);
   });
 });

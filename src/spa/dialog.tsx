@@ -80,13 +80,8 @@ function Shortcuts() {
 
 const [request, setRequest] = createSignal<DialogRequest>();
 
-// Mirrors the native call shapes so the call sites barely change: cancel,
-// Esc and backdrop-click resolve exactly like the native cancel path
-// (false for confirm, null for prompt), so existing `if (!name?.trim())
-// return` guards keep working.
-// The value a dismissal (Cancel, Esc, backdrop click) resolves with, matching
-// the native dialogs' cancel results. Help resolves on every dismissal too;
-// its helper just ignores the value.
+// Cancel, Esc and backdrop clicks resolve with native cancellation values:
+// false for confirm, null for prompt. Help resolves too, ignoring the value.
 const cancelValue = (current: DialogRequest) =>
   current.kind === "prompt" ? null : false;
 

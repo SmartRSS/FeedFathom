@@ -37,14 +37,9 @@ export function mapArticleShortcut(
   }
 }
 
-// Focus sitting in a text field means keystrokes are content, not commands.
-// Same set the tree filter and dialog inputs need, so the shortcuts stay
-// quiet while someone is filtering feeds or typing a folder name. Structurally
-// typed rather than instanceof-checked, so unit tests can pass plain shapes
-// without a DOM; KeyboardEvent.target is only ever an Element here anyway.
+// Keystrokes in text fields are content, not commands. Structural checks
+// let unit tests pass plain shapes without a DOM.
 export function isTextEntry(target: unknown): boolean {
-  // Structural narrowing via `in`, no type assertion, so unit tests can pass
-  // plain shapes without a DOM.
   if (
     typeof target === "object" &&
     target !== null &&

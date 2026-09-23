@@ -326,10 +326,6 @@ export class FeedParser {
     }
   }
 
-  // The tree shows favicons at 1.5cap, and a warm one is base64-inlined into
-  // /api/tree (see sw.js), so every extra byte is paid on every tree load.
-  // 64px covers that with headroom: take the smallest candidate that clears
-  // it, or the biggest undersized one if none does.
   private async parseGenericFeed(
     fetchedUrl: string,
     originalUrl: string,

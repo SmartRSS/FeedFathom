@@ -2,15 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createSupersessionGuard } from "../supersession.ts";
 
 describe("supersession guard", () => {
-  test("a fresh token is current until a newer one starts", () => {
-    const guard = createSupersessionGuard();
-    const token = guard.start();
-    expect(guard.isCurrent(token)).toBe(true);
-  });
-
   test("starting a new token supersedes the previous one", () => {
     const guard = createSupersessionGuard();
     const first = guard.start();
+    expect(guard.isCurrent(first)).toBe(true);
     const second = guard.start();
     expect(guard.isCurrent(first)).toBe(false);
     expect(guard.isCurrent(second)).toBe(true);
