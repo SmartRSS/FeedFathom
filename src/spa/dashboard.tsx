@@ -23,7 +23,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
-  faviconUrls,
+  preloadFavicons,
   filterTree,
   findNode,
   findParentFolderUid,
@@ -107,22 +107,6 @@ function ReaderBody(props: { content: ReaderContent }) {
   ) : (
     <div class="reader-plain">{props.content.content}</div>
   );
-}
-
-// First tree render only (see onMount): holds the skeleton until every
-// favicon settles. A failure resolves via the .catch() below, so a broken
-// favicon can't hang it -- only one that never settles, which the browser's
-// network timeout bounds.
-function preloadFavicons(tree: TreeNode[]): Promise<void> {
-  const urls = tree.flatMap(faviconUrls);
-  if (!urls.length) return Promise.resolve();
-  return Promise.all(
-    urls.map((url) => {
-      const image = new Image();
-      image.src = url;
-      return image.decode().catch(() => {});
-    }),
-  ).then(() => {});
 }
 
 const READER_SKELETON_PARAGRAPHS = [
