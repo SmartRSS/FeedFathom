@@ -955,6 +955,54 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
   await expect(tabStops).toHaveCount(1);
 });
 
+// Every tree load returns fresh objects; rows must survive it rather than
+// remount, or focus drops to <body> and every favicon flashes its skeleton.
+test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
+  await page.clock.install();
+  await installApiFixture(page);
+  await page.goto("/");
+  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(row.locator(".unread-count")).toHaveText("2");
+  await row.focus();
+  const folder = await page
+    .locator("button.source.folder")
+    .elementHandle({ timeout: 1000 });
+  const source = await row.elementHandle({ timeout: 1000 });
+
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      json: {
+        tree: [
+          {
+            children: [
+              {
+                favicon: null,
+                homeUrl: "https://news.example/",
+                kind: "feed",
+                name: "Tech News",
+                type: "source",
+                uid: "3",
+                unreadCount: 5,
+                xmlUrl: "https://news.example/feed.xml",
+              },
+            ],
+            name: "Reading",
+            type: "folder",
+            uid: "7",
+          },
+        ],
+      },
+    }),
+  );
+  await page.clock.runFor(30_000);
+  await expect(row.locator(".unread-count")).toHaveText("5");
+
+  expect(await folder?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(
+    await source?.evaluate((node) => node === document.activeElement),
+  ).toBe(true);
+});
+
 // The route answers as it does for an unknown address when no mail is
 // configured, so offering the link there would only send people somewhere
 // that cannot help them.
