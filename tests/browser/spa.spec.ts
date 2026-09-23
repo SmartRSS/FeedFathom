@@ -4,6 +4,7 @@ import {
   type BrowserContext,
   type Page,
   type Request,
+  type Route,
 } from "@playwright/test";
 import { installApiFixture } from "./api-fixture.ts";
 
@@ -110,6 +111,26 @@ const pagedSummary = (id: number) => ({
   title: `Article ${id}`,
   url: `https://articles.example/${id}`,
 });
+
+// The full article behind a pagedSummary row, for the ids the fixture does
+// not know.
+const fulfillPagedArticle = async (route: Route) => {
+  const id = Number(new URL(route.request().url()).searchParams.get("article"));
+  await route.fulfill({
+    json: {
+      author: "Author",
+      content: `<p>Body ${id}</p>`,
+      guid: `guid-${id}`,
+      id,
+      lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+      publishedAt: "2026-07-20T10:00:00.000Z",
+      sourceId: 3,
+      title: `Article ${id}`,
+      updatedAt: null,
+      url: `https://articles.example/${id}`,
+    },
+  });
+};
 
 // The article rows are role="option" inside the list. So are the three
 // options of the filter <select> beside them, which is why this is scoped
@@ -512,25 +533,7 @@ test("fetches the next article page after a delete empties the list", async ({
   });
   // Selecting the list also opens its first row, and these ids are not ones
   // the fixture knows.
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
-    );
-    await route.fulfill({
-      json: {
-        author: "Author",
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        id,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        publishedAt: "2026-07-20T10:00:00.000Z",
-        sourceId: 3,
-        title: `Article ${id}`,
-        updatedAt: null,
-        url: `https://articles.example/${id}`,
-      },
-    });
-  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page);
 
@@ -545,6 +548,56 @@ test("fetches the next article page after a delete empties the list", async ({
   // to scroll, and it is asked for with the last row of the first page.
   await expect(rows).toHaveCount(3);
   expect(cursors).toEqual([undefined, pageSize]);
+});
+
+// Solid only writes the DOM when a binding's value changes, so a mutation
+// count cannot see this. The cost is every row re-running its bindings, and
+// each row's classList binding asks the selection Set whether it holds it.
+test("moving the focus re-evaluates only the rows it leaves and enters", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const pageSize = 500;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      json:
+        body.cursor === undefined
+          ? Array.from({ length: pageSize }, (_, index) =>
+              pagedSummary(index + 1),
+            )
+          : [],
+    });
+  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
+  await page.goto("/");
+  await selectSource(page);
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+  // Solid runs the bindings synchronously inside the keydown handler, so
+  // the count is complete by the time dispatchEvent returns.
+  const calls = await rows.first().evaluate((row) => {
+    const has = Set.prototype.has;
+    let count = 0;
+    // oxlint-disable-next-line no-extend-native -- counted, then restored
+    Set.prototype.has = function (this: Set<unknown>, value: unknown) {
+      count += 1;
+      return has.call(this, value);
+    };
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        ctrlKey: true,
+        key: "ArrowDown",
+      }),
+    );
+    // oxlint-disable-next-line no-extend-native
+    Set.prototype.has = has;
+    return count;
+  });
+  await expect(rows.nth(1)).toBeFocused();
+  expect(calls).toBeLessThan(pageSize / 10);
 });
 
 // Today is scoped by `view`, not by an id list, and its tree row's uid is the
@@ -569,25 +622,7 @@ test("pages the Today view with the view, not its node uid", async ({
       ),
     });
   });
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
-    );
-    await route.fulfill({
-      json: {
-        author: "Author",
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        id,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        publishedAt: "2026-07-20T10:00:00.000Z",
-        sourceId: 3,
-        title: `Article ${id}`,
-        updatedAt: null,
-        url: `https://articles.example/${id}`,
-      },
-    });
-  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page, "Today");
 
