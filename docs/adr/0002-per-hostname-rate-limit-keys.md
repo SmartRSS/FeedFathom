@@ -9,15 +9,17 @@ Outbound fetching is governed by three Redis keys, all in
 `src/platform/http/http-rate-limiter.ts`:
 
 ```
-http-interval:${hostname}      one request per host per interval
+http-last-request:${hostname}  when this host was last requested
 http-blocked:${hostname}       set when a host answers 429, or sends
                                Retry-After, or reports RateLimit-Remaining: 0
 http-interactive:${hostname}   how many interactive callers are waiting
 ```
 
 The requirement they answer is "never request the same domain more often than
-every 5 seconds". `feedDelayMs` is 10 seconds, so one hostname clears that
-floor with room to spare.
+every 5 seconds". Background polling waits 10 seconds per hostname, which
+clears that floor with room to spare. An interactive request needs only 1
+second; [0007](0007-one-per-host-clock-for-both-priorities.md) records why,
+and which bound is kept in its place.
 
 What "domain" means was never written down, and the two readings differ. A
 publisher spread across `a.example.com`, `b.example.com` and
