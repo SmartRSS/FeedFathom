@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 
-// Every package the SPA entry reaches statically through its own source
-// files. A package showing up here ships in the main chunk, parsed on every
-// load; one reached only through import() lands in a chunk of its own.
-async function spaPackages() {
-  const transpiler = new Bun.Transpiler({ loader: "tsx" });
+const spaDir = join(import.meta.dir, "..");
+const entry = join(spaDir, "main.tsx");
+const transpiler = new Bun.Transpiler({ loader: "tsx" });
+
+// Every package and source file the SPA entry reaches statically. Either
+// showing up here ships in the main chunk, parsed on every load; one reached
+// only through import() lands in a chunk of its own.
+async function spaGraph() {
   const packages = new Set<string>();
-  const pending = [join(import.meta.dir, "..", "main.tsx")];
+  const pending = [entry];
   const seen = new Set(pending);
   for (let file = pending.pop(); file; file = pending.pop()) {
     // eslint-disable-next-line no-await-in-loop -- A walk, one file at a time.
@@ -24,8 +27,9 @@ async function spaPackages() {
       }
     }
   }
-  return packages;
+  return { files: seen, packages };
 }
+const spaPackages = async () => (await spaGraph()).packages;
 
 test("keeps the disposable-email domain list out of the SPA", async () => {
   const packages = await spaPackages();
@@ -38,4 +42,17 @@ test("loads the Reader extraction libraries only on demand", async () => {
   expect(packages).not.toContain("@extractus/article-extractor");
   expect(packages).not.toContain("@mozilla/readability");
   expect(packages).not.toContain("dompurify");
+});
+
+test("loads every route but the dashboard only on demand", async () => {
+  const { files } = await spaGraph();
+  expect(files).toContain(join(spaDir, "dashboard.tsx"));
+  const dynamic = transpiler
+    .scanImports(await Bun.file(entry).text())
+    .filter(({ kind }) => kind === "dynamic-import")
+    .map(({ path }) => path);
+  for (const route of ["account-flows.tsx", "admin.tsx", "options.tsx"]) {
+    expect(files).not.toContain(join(spaDir, route));
+    expect(dynamic).toContain(`./${route}`);
+  }
 });
