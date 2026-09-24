@@ -3782,3 +3782,56 @@ test("never logs the healthcheck route, however slow", async () => {
     await app.stop();
   }
 });
+
+test("cache headers: /assets/* is immutable, index.html is no-cache", async () => {
+  const tmpDir =
+    "/tmp/feedfathom-test-" +
+    Math.random().toString(36).slice(2) +
+    "-" +
+    Date.now();
+  try {
+    // Create directory structure with files
+    await Bun.write(`${tmpDir}/index.html`, "<html>test</html>");
+    await Bun.write(`${tmpDir}/assets/x-abc123.js`, "console.log('test');");
+
+    const appWithSpa = await createServerApp({
+      production: true,
+      spaDirectory: tmpDir,
+    });
+
+    // Test /assets/* → immutable
+    const assetResponse = await appWithSpa.handle(
+      new Request("http://localhost/assets/x-abc123.js"),
+    );
+    expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get("Cache-Control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+
+    // Test / → no-cache
+    const indexResponse = await appWithSpa.handle(
+      new Request("http://localhost/"),
+    );
+    expect(indexResponse.status).toBe(200);
+    expect(indexResponse.headers.get("Cache-Control")).toBe("no-cache");
+
+    // Test /index.html → no-cache
+    const indexHtmlResponse = await appWithSpa.handle(
+      new Request("http://localhost/index.html"),
+    );
+    expect(indexHtmlResponse.status).toBe(200);
+    expect(indexHtmlResponse.headers.get("Cache-Control")).toBe("no-cache");
+
+    // Test SPA fallback (404 with Accept: text/html returns index.html) → no-cache
+    const spaFallbackResponse = await appWithSpa.handle(
+      new Request("http://localhost/some/spa/route", {
+        headers: { accept: "text/html" },
+      }),
+    );
+    expect(spaFallbackResponse.status).toBe(200);
+    expect(spaFallbackResponse.headers.get("Cache-Control")).toBe("no-cache");
+  } finally {
+    // Clean up temporary directory
+    await Bun.spawn(["rm", "-rf", tmpDir]).exited;
+  }
+});
