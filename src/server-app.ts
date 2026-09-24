@@ -82,11 +82,25 @@ export async function createServerApp(options: ServerAppOptions = {}) {
   const spaDirectory = options.spaDirectory ?? "spa";
   const spaRoutes = production
     ? new Elysia().get("/*", async ({ path }) => {
-        const file = Bun.file(`${spaDirectory}${path}`);
+        // Map / to /index.html for file lookup
+        const filePath = path === "/" ? "/index.html" : path;
+        const file = Bun.file(`${spaDirectory}${filePath}`);
         if (!(await file.exists())) throw new NotFound();
-        if (/^\/sw-[a-f0-9]+\.js$/.test(path)) {
+        if (/^\/sw-[a-f0-9]+\.js$/.test(filePath)) {
           return new Response(file, {
             headers: { "Cache-Control": "public, max-age=3600" },
+          });
+        }
+        // Hashed assets are immutable for 1 year (names change when code changes)
+        if (filePath.startsWith("/assets/")) {
+          return new Response(file, {
+            headers: { "Cache-Control": "public, max-age=31536000, immutable" },
+          });
+        }
+        // index.html is revalidated on every request
+        if (filePath === "/index.html") {
+          return new Response(file, {
+            headers: { "Cache-Control": "no-cache" },
           });
         }
         return file;
@@ -103,7 +117,9 @@ export async function createServerApp(options: ServerAppOptions = {}) {
       production &&
       wantsSpaShellFallback(request, path)
     ) {
-      return new Response(Bun.file(`${spaDirectory}/index.html`));
+      return new Response(Bun.file(`${spaDirectory}/index.html`), {
+        headers: { "Cache-Control": "no-cache" },
+      });
     }
     if (error instanceof NotFound) {
       return undefined;
