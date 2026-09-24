@@ -6,6 +6,16 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { isSnoozed } from "#features/feeds/source-snooze-policy.ts";
 
+// Omits the URL entirely rather than pointing at a favicon that 404s --
+// the SPA and service worker (faviconUrls / treeFaviconUrls) already treat
+// a null favicon as "show the fallback icon" instead of re-requesting it.
+export function faviconPath(source: {
+  hasFavicon: boolean;
+  id: number | null;
+}): string | null {
+  return source.hasFavicon ? `/api/favicon/${source.id}` : null;
+}
+
 export async function getTreeHandler({ user }: { user: AuthedUser }) {
   const [sources, folders] = await Promise.all([
     userSourcesDataService.getUserSources(user.id),
@@ -20,7 +30,7 @@ export async function getTreeHandler({ user }: { user: AuthedUser }) {
     // list gives, evaluated lazily here so expiry needs no job.
     const snoozed = isSnoozed(source.pausedUntil ?? null);
     const item = {
-      favicon: `/api/favicon/${source.id}`,
+      favicon: faviconPath(source),
       homeUrl: source.homeUrl ?? "",
       kind: source.kind ?? "feed",
       name: source.name,

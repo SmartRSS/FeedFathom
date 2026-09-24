@@ -279,6 +279,9 @@ export class UserSourcesDataService {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
+        // Boolean only -- never the stored data URL, so it can't leak into
+        // the tree response the SPA and service worker read on every load.
+        hasFavicon: sql<boolean>`${sources.favicon} IS NOT NULL`,
         homeUrl: sources.homeUrl,
         id: sources.id,
         kind: sources.kind,

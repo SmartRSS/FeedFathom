@@ -2361,6 +2361,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   ];
   dependencies.userSourcesDataService.getUserSources = async () => [
     {
+      hasFavicon: false,
       homeUrl: "https://news.test",
       id: 1,
       kind: "feed",
@@ -2371,6 +2372,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       url: "https://news.test/feed",
     },
     {
+      hasFavicon: false,
       homeUrl: null,
       id: 2,
       kind: "email",
@@ -2426,6 +2428,7 @@ test("exports the same bytes whatever order the services return rows in", async 
   ];
   const sources = [
     {
+      hasFavicon: false,
       homeUrl: "https://b.test",
       id: 1,
       kind: "feed" as const,
@@ -2436,6 +2439,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       url: "https://b.test/feed",
     },
     {
+      hasFavicon: false,
       homeUrl: "https://a.test",
       id: 2,
       kind: "feed" as const,
@@ -2446,6 +2450,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       url: "https://a.test/feed",
     },
     {
+      hasFavicon: false,
       homeUrl: "https://c.test",
       id: 3,
       kind: "feed" as const,
