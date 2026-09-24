@@ -3,6 +3,8 @@ import { feedParser } from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { findQuery } from "#shared/contracts/requests.ts";
+import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { outboundFetchBudget } from "#features/auth/services.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
@@ -11,10 +13,15 @@ import { scanHtml } from "#shared/scanners/scanner.ts";
 
 export async function getFindHandler({
   query,
+  user,
 }: {
   query: Static<typeof findQuery>;
+  user: AuthedUser;
 }) {
   const decoded = Value.Decode(findQuery, query);
+  // Counted before any outbound work, including a cache hit: the budget is
+  // about how often a user can ask us to reach out at all.
+  await outboundFetchBudget.consume(user.id);
   try {
     const response = await httpClient.get(decoded.link);
     const feeds = scanHtml(response.url, response.data);

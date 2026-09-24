@@ -10,6 +10,7 @@ import type { FoldersDataService } from "#features/feeds/folder-data-service.ts"
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import type { OpmlParser } from "#features/feeds/opml-parser.ts";
+import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type {
   SourcesDataService,
@@ -133,6 +134,7 @@ type ReaderRouteDependencies = {
   };
   mailEnabled: boolean;
   faviconStore: Pick<FaviconStore, "getFavicon">;
+  outboundFetchBudget: Pick<OutboundFetchBudget, "consume">;
   sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
   sourcesDataService: Pick<SourcesDataService, "successSource">;
   userSourcesDataService: Pick<
@@ -334,6 +336,9 @@ function createDependencies(): ServerFakes {
       parseOpml() {
         return [];
       },
+    },
+    outboundFetchBudget: {
+      async consume() {},
     },
     password: {
       async hash(value) {

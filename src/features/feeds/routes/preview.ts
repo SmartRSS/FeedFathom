@@ -3,6 +3,7 @@ import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { previewQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { outboundFetchBudget } from "#features/auth/services.ts";
 import { json } from "#platform/http/json.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 
@@ -14,6 +15,9 @@ export async function getPreviewHandler({
   user: AuthedUser;
 }) {
   const decoded = Value.Decode(previewQuery, query);
+  // Counted before any outbound work, including a cache hit: the budget is
+  // about how often a user can ask us to reach out at all.
+  await outboundFetchBudget.consume(user.id);
   const source = await feedParser.preview(decoded.feedUrl);
   if (!source) return json({ error: "Invalid feed url" }, 400);
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
