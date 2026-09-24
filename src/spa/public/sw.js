@@ -3,7 +3,7 @@
 // cached copy past what Cache-Control suggests. CACHE_VERSION is separate --
 // bump it only to force-purge every cached entry when the caching scheme
 // itself changes.
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 const SHELL_REQUEST_INIT = {
@@ -294,10 +294,9 @@ function withInlinedFavicon(node, dataUrlByPath) {
   };
 }
 
-// Favicons and articles in the cache carry the time they were fetched, so
-// their age is known even after the worker restarts.
+// Articles in the cache carry the time they were fetched, so their age is
+// known even after the worker restarts.
 const FETCHED_AT = "X-SW-Fetched-At";
-const FAVICON_REVALIDATE_MS = 60 * 60 * 1000;
 
 function putWithFetchedAt(cache, request, response) {
   const headers = new Headers(response.headers);
@@ -312,48 +311,29 @@ function putWithFetchedAt(cache, request, response) {
   );
 }
 
-// Keyed by path; an entry is reused only while its fetch stamp still matches
-// the cached copy, so a revalidated icon gets encoded again.
+// Keyed by path -- the path is content-addressed (tree.ts appends a
+// fingerprint of sources.favicon as ?v=), so the same path always decodes to
+// the same bytes and the memo never needs invalidating.
 const faviconDataUrls = new Map();
 
 async function faviconDataUrl(path, cached) {
-  const fetchedAt = cached.headers.get(FETCHED_AT);
   const memo = faviconDataUrls.get(path);
-  if (memo && fetchedAt && memo.fetchedAt === fetchedAt) return memo.dataUrl;
+  if (memo) return memo;
   const contentType =
     cached.headers.get("Content-Type") ?? "application/octet-stream";
   const bytes = new Uint8Array(await cached.arrayBuffer());
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
-  faviconDataUrls.set(path, { fetchedAt, dataUrl });
+  faviconDataUrls.set(path, dataUrl);
   return dataUrl;
-}
-
-// A miss needs fetching so the next load can inline it; a hit needs
-// revalidating now and then because RefreshFavicon can change one in place
-// without changing its URL, and an inlined <img src> never fires a request of
-// its own. Revalidating on every tree load would cost one request per source
-// on each poll and mark-read.
-function faviconIsStale(cached) {
-  const fetchedAt = Number(cached?.headers.get(FETCHED_AT));
-  return !(Date.now() - fetchedAt < FAVICON_REVALIDATE_MS);
-}
-
-async function refreshFavicon(cache, path) {
-  try {
-    const response = await fetch(path);
-    if (response.ok) await putWithFetchedAt(cache, path, response);
-  } catch {
-    // best-effort; the page's own <img> will just fetch it normally
-  }
 }
 
 // Inlines whichever favicons are already cached -- cache.match() only, no
 // network, so the tree never waits. Uncached ones stay plain
-// /api/favicon/:id URLs, covered by the per-icon skeleton in dashboard.tsx.
-// Misses and stale hits are refreshed in the background for next load.
-async function inlineTreeFavicons(event, response, cache) {
+// /api/favicon/:id?v=... URLs, covered by the per-icon skeleton in
+// dashboard.tsx and cached by the fetch handler's cacheFirst on first load.
+async function inlineTreeFavicons(response, cache) {
   let data;
   try {
     data = await response.json();
@@ -362,18 +342,12 @@ async function inlineTreeFavicons(event, response, cache) {
   }
   const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
   const dataUrlByPath = new Map();
-  const stalePaths = [];
   await Promise.allSettled(
     urls.map(async (path) => {
       const cached = await cache.match(path);
-      if (faviconIsStale(cached)) stalePaths.push(path);
       if (cached) dataUrlByPath.set(path, await faviconDataUrl(path, cached));
     }),
   );
-  if (stalePaths.length)
-    event.waitUntil(
-      Promise.allSettled(stalePaths.map((path) => refreshFavicon(cache, path))),
-    );
   if (dataUrlByPath.size === 0) return null;
   const patched = {
     ...data,
@@ -441,7 +415,7 @@ async function treeWithInlineFavicons(event, request, cacheName) {
     if (response.ok) {
       cache.put(request, response.clone());
       void flushQueue();
-      const patched = await inlineTreeFavicons(event, response.clone(), cache);
+      const patched = await inlineTreeFavicons(response.clone(), cache);
       if (patched) return patched;
     }
     return response;
@@ -450,25 +424,6 @@ async function treeWithInlineFavicons(event, request, cacheName) {
     if (cached) return cached;
     throw error;
   }
-}
-
-// Favicons rarely change and aren't hash-named, so a cached copy is worth
-// serving instantly -- unlike the rest of /api/*, where stale is wrong rather
-// than just slow. RefreshFavicon can still update one in place, so the cache
-// is refreshed in the background rather than kept forever.
-async function staleWhileRevalidate(event, request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const revalidated = fetch(request)
-    .then((response) => {
-      if (response.ok) putWithFetchedAt(cache, request, response.clone());
-      return response;
-    })
-    .catch(() => undefined);
-  // Without waitUntil the browser can idle the worker as soon as the response
-  // resolves, killing the background refetch before it reaches the network.
-  event.waitUntil(revalidated);
-  return cached ?? (await revalidated) ?? Response.error();
 }
 
 // Routes that never show the dashboard tree.
@@ -534,8 +489,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Content-addressed (tree.ts appends a fingerprint of sources.favicon as
+  // ?v=): the same icon always lives at the same URL, so a cached copy is
+  // never stale and needs no background revalidation.
   if (url.pathname.startsWith("/api/favicon/")) {
-    event.respondWith(staleWhileRevalidate(event, request, API_CACHE));
+    event.respondWith(cacheFirst(request, API_CACHE));
     return;
   }
   if (url.pathname === "/api/tree") {

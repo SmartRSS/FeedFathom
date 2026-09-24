@@ -279,6 +279,10 @@ export class UserSourcesDataService {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
+        // Content fingerprint, not the icon itself -- lets the favicon URL
+        // change exactly when RefreshFavicon changes the icon, so the SW and
+        // browser can cache the response forever instead of re-asking.
+        faviconFingerprint: sql<string | null>`md5(${sources.favicon})`,
         homeUrl: sources.homeUrl,
         id: sources.id,
         kind: sources.kind,

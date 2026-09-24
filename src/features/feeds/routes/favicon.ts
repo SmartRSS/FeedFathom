@@ -15,7 +15,10 @@ export async function getFaviconHandler({
   if (!match) return status(404);
   return new Response(Buffer.from(match[2] ?? "", "base64"), {
     headers: {
-      "Cache-Control": "public, max-age=86400",
+      // private, not public: this route sits behind the session cookie. The
+      // URL's ?v= fingerprint (tree.ts) changes whenever the icon does, so a
+      // response can be cached forever under its current URL.
+      "Cache-Control": "private, max-age=31536000, immutable",
       "Content-Type": match[1] ?? "application/octet-stream",
     },
   });
