@@ -1,10 +1,13 @@
 import {
   createEffect,
   createSignal,
+  ErrorBoundary,
+  lazy,
   Match,
   onCleanup,
   onMount,
   Show,
+  Suspense,
   Switch,
 } from "solid-js";
 import { render } from "solid-js/web";
@@ -16,17 +19,8 @@ import {
   type DashboardPane,
   type Route,
 } from "./behavior.ts";
-import {
-  Activate,
-  Login,
-  PasswordReset,
-  PasswordResetConfirm,
-  Register,
-} from "./account-flows.tsx";
 import { Dashboard } from "./dashboard.tsx";
-import { Admin } from "./admin.tsx";
 import { DialogHost } from "./dialog.tsx";
-import { Options } from "./options.tsx";
 import { isUnauthorizedError } from "./api.ts";
 import {
   mobileListAnchor,
@@ -36,6 +30,32 @@ import {
 } from "./preferences.ts";
 import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
 import "./style.css";
+
+// Every route but the dashboard loads its chunk on first visit, so a
+// dashboard launch never downloads or parses them (#880). The service worker
+// caches a chunk once fetched; a route never visited online cannot open
+// offline.
+const Activate = lazy(async () => ({
+  default: (await import("./account-flows.tsx")).Activate,
+}));
+const Login = lazy(async () => ({
+  default: (await import("./account-flows.tsx")).Login,
+}));
+const PasswordReset = lazy(async () => ({
+  default: (await import("./account-flows.tsx")).PasswordReset,
+}));
+const PasswordResetConfirm = lazy(async () => ({
+  default: (await import("./account-flows.tsx")).PasswordResetConfirm,
+}));
+const Register = lazy(async () => ({
+  default: (await import("./account-flows.tsx")).Register,
+}));
+const Admin = lazy(async () => ({
+  default: (await import("./admin.tsx")).Admin,
+}));
+const Options = lazy(async () => ({
+  default: (await import("./options.tsx")).Options,
+}));
 
 // A route swap replaces the whole page without the title change and focus
 // reset a real navigation would give you: the tab keeps reading "FeedFathom"
@@ -184,21 +204,36 @@ function App() {
           </button>
         </div>
       </Show>
-      <Show
-        when={loginRoute()}
+      {/* A lazy route's chunk fails to load offline before its first visit,
+          or after a deploy removed the old build's chunks. */}
+      <ErrorBoundary
         fallback={
-          <Router
-            route={route()}
-            navigate={navigate}
-            handleUnauthorized={handleUnauthorized}
-            pane={pane}
-            focusPane={focusPane}
-            backPane={backPane}
-          />
+          <main>
+            <p>This page could not load. Check your connection.</p>
+            <button type="button" onClick={() => location.reload()}>
+              Reload
+            </button>
+          </main>
         }
       >
-        {(login) => <Login navigate={navigate} next={login().next} />}
-      </Show>
+        <Suspense>
+          <Show
+            when={loginRoute()}
+            fallback={
+              <Router
+                route={route()}
+                navigate={navigate}
+                handleUnauthorized={handleUnauthorized}
+                pane={pane}
+                focusPane={focusPane}
+                backPane={backPane}
+              />
+            }
+          >
+            {(login) => <Login navigate={navigate} next={login().next} />}
+          </Show>
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }
