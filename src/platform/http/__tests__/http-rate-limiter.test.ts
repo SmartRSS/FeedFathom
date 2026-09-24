@@ -169,29 +169,6 @@ describe("rateLimitBlockUntil header spellings and reset units", () => {
 });
 
 describe("HttpRateLimiter.reserve for an interactive caller", () => {
-  // The window used to be a flat 2.5s against a 10s interval, so waiting could
-  // never succeed on its own -- only by luck, if the slot happened to free
-  // early. 27.5s of a 30s deadline went unused and the SPA got a 429 it has no
-  // retry for.
-  test("waits out an interval longer than the old fixed 2.5s window", async () => {
-    const redis = createFakeHttpRedis();
-    redis.seed("http-interval:feeds.example.com", "1", 2_800);
-    const deadline = new RequestDeadline(20_000);
-    const started = Date.now();
-
-    try {
-      await new HttpRateLimiter(redis).reserve(
-        "feeds.example.com",
-        "interactive",
-        deadline,
-      );
-    } finally {
-      deadline.dispose();
-    }
-
-    expect(Date.now() - started).toBeGreaterThan(2_500);
-  }, 20_000);
-
   // A block that clears inside the deadline used to fail the request outright,
   // with no wait at all.
   test("sleeps out a block that clears inside the deadline", async () => {
@@ -252,18 +229,110 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
   });
 });
 
+describe("HttpRateLimiter shared host clock", () => {
+  const host = "feeds.example.com";
+  const lastKey = `http-last-request:${host}`;
+
+  async function reserve(
+    limiter: HttpRateLimiter,
+    priority: "background" | "interactive",
+    deadline = new RequestDeadline(20_000),
+  ) {
+    try {
+      await limiter.reserve(host, priority, deadline);
+    } finally {
+      deadline.dispose();
+    }
+    return Date.now();
+  }
+
+  test("two interactive requests issued together go out one second apart", async () => {
+    const limiter = new HttpRateLimiter(createFakeHttpRedis());
+    const [first = 0, second = 0] = (
+      await Promise.all([
+        reserve(limiter, "interactive"),
+        reserve(limiter, "interactive"),
+      ])
+    ).toSorted((left, right) => left - right);
+
+    expect(second - first).toBeGreaterThanOrEqual(990);
+    expect(second - first).toBeLessThan(1_500);
+  });
+
+  test("background defers within ten seconds of an interactive request", async () => {
+    const redis = createFakeHttpRedis();
+    const limiter = new HttpRateLimiter(redis);
+    await reserve(limiter, "interactive");
+    redis.seed(lastKey, String(Date.now() - 9_000), 10_000);
+
+    const error = await reserve(limiter, "background").catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(HttpDeferredError);
+    if (!(error instanceof HttpDeferredError)) throw error;
+    expect(error.retryAt - Date.now()).toBeGreaterThan(900);
+    expect(error.retryAt - Date.now()).toBeLessThanOrEqual(1_000);
+  });
+
+  test("interactive proceeds one second after a background request", async () => {
+    const redis = createFakeHttpRedis();
+    const limiter = new HttpRateLimiter(redis);
+    await reserve(limiter, "background");
+    redis.seed(lastKey, String(Date.now() - 1_000), 10_000);
+    const started = Date.now();
+
+    await reserve(limiter, "interactive");
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  // The wait used to end after one interval, so the third of three queued
+  // requests deferred even with most of its deadline left.
+  test("queued interactive requests are served in turn within their deadline", async () => {
+    const limiter = new HttpRateLimiter(createFakeHttpRedis(), {
+      background: 10_000,
+      interactive: 200,
+    });
+    const times = (
+      await Promise.all(
+        [1, 2, 3].map(async () =>
+          reserve(limiter, "interactive", new RequestDeadline(2_000)),
+        ),
+      )
+    ).toSorted((left, right) => left - right);
+
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(190);
+    expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(190);
+  });
+
+  test("an interactive wait that outlasts the deadline defers up front", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(lastKey, String(Date.now()), 10_000);
+    const started = Date.now();
+
+    const error = await reserve(
+      new HttpRateLimiter(redis),
+      "interactive",
+      new RequestDeadline(500),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(HttpDeferredError);
+    expect(Date.now() - started).toBeLessThan(50);
+    expect(redis.pttl(`http-interactive:${host}`)).toBe(-2);
+  });
+});
+
 describe("HttpRateLimiter interactive waiter accounting", () => {
   const host = "feeds.example.com";
-  const slotKey = `http-interval:${host}`;
+  const lastKey = `http-last-request:${host}`;
   const waitersKey = `http-interactive:${host}`;
+  const intervals = { background: 10_000, interactive: 200 };
 
-  // Starts an interactive reservation against a slot held for the whole
-  // default interval, and returns once it has registered as a waiter.
+  // Starts an interactive reservation against a host that was just
+  // requested, and returns once it has registered as a waiter.
   async function startWaiter(
     redis: ReturnType<typeof createFakeHttpRedis>,
     deadline = new RequestDeadline(20_000),
   ) {
-    const reservation = new HttpRateLimiter(redis)
+    const reservation = new HttpRateLimiter(redis, intervals)
       .reserve(host, "interactive", deadline)
       .finally(() => {
         deadline.dispose();
@@ -272,24 +341,24 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     return { deadline, reservation };
   }
 
-  // Frees the slot and lets the waiters' next poll take it.
-  function freeSlot(redis: ReturnType<typeof createFakeHttpRedis>) {
-    redis.values.delete(slotKey);
+  function requestedJustNow(redis: ReturnType<typeof createFakeHttpRedis>) {
+    redis.seed(lastKey, String(Date.now()), intervals.background);
   }
 
-  test("keeps the waiter visible for the whole default reservation window", async () => {
+  test("keeps the waiter visible for the whole request deadline", async () => {
     const redis = createFakeHttpRedis();
-    redis.seed(slotKey, "1", 10_000);
+    requestedJustNow(redis);
     const { reservation } = await startWaiter(redis);
 
-    // The wait can run the full 10s interval plus a poll, well past the six
-    // seconds the counter used to live for.
-    expect(redis.pttl(waitersKey)).toBeGreaterThan(9_900);
-    freeSlot(redis);
+    expect(redis.pttl(waitersKey)).toBeGreaterThan(19_900);
     const background = new RequestDeadline(1_000);
     try {
       await expect(
-        new HttpRateLimiter(redis).reserve(host, "background", background),
+        new HttpRateLimiter(redis, intervals).reserve(
+          host,
+          "background",
+          background,
+        ),
       ).rejects.toBeInstanceOf(HttpDeferredError);
     } finally {
       background.dispose();
@@ -301,34 +370,35 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
 
   test("overlapping waiters count each other in and out", async () => {
     const redis = createFakeHttpRedis();
-    redis.seed(slotKey, "1", 10_000);
+    requestedJustNow(redis);
     const first = await startWaiter(redis);
     const second = await startWaiter(redis);
     expect(redis.values.get(waitersKey)).toBe("2");
 
-    // One of them takes the freed slot; the other waits on and stays counted.
-    freeSlot(redis);
+    // One of them takes the clock; the other waits its turn and stays counted.
     await Promise.race([first.reservation, second.reservation]);
     expect(redis.values.get(waitersKey)).toBe("1");
-    expect(redis.pttl(waitersKey)).toBeGreaterThan(9_000);
+    expect(redis.pttl(waitersKey)).toBeGreaterThan(19_000);
 
-    freeSlot(redis);
     await Promise.all([first.reservation, second.reservation]);
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 
-  test("a deadline running out mid-wait still takes the waiter out", async () => {
+  test("a turn lost too close to the deadline defers and takes the waiter out", async () => {
     const redis = createFakeHttpRedis();
-    redis.seed(slotKey, "1", 10_000);
-    const { reservation } = await startWaiter(redis, new RequestDeadline(200));
+    requestedJustNow(redis);
+    const { reservation } = await startWaiter(redis, new RequestDeadline(600));
 
-    await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
+    // Another instance takes the clock while this one sleeps, pushing its
+    // turn past the deadline.
+    redis.seed(lastKey, String(Date.now() + 1_000), intervals.background);
+    await expect(reservation).rejects.toBeInstanceOf(HttpDeferredError);
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 
   test("a cancelled wait takes the waiter out", async () => {
     const redis = createFakeHttpRedis();
-    redis.seed(slotKey, "1", 10_000);
+    requestedJustNow(redis);
     const { deadline, reservation } = await startWaiter(redis);
 
     deadline.controller.abort();
@@ -338,11 +408,10 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
 
   test("cleanup after the counter expired leaves no negative key behind", async () => {
     const redis = createFakeHttpRedis();
-    redis.seed(slotKey, "1", 10_000);
+    requestedJustNow(redis);
     const { reservation } = await startWaiter(redis);
 
     redis.values.delete(waitersKey);
-    freeSlot(redis);
     await reservation;
     expect(redis.pttl(waitersKey)).toBe(-2);
   });

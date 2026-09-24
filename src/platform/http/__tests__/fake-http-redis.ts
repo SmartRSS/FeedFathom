@@ -1,7 +1,7 @@
 // Enough of Redis for the HTTP client, with millisecond expiry applied on
 // every read: the rate limiter's whole behaviour is about when a key stops
 // existing, and a reservation that never expires makes every retry look like
-// a violation. EVAL runs the three scripts the client sends by what each one
+// a violation. EVAL runs the four scripts the client sends by what each one
 // does rather than by interpreting Lua.
 export function createFakeHttpRedis() {
   const expiry = new Map<string, number>();
@@ -26,7 +26,25 @@ export function createFakeHttpRedis() {
     values.set(key, String(next));
     return next;
   };
-  const evaluate = ([script = "", , key = "", arg = ""]: string[]) => {
+  const evaluate = ([
+    script = "",
+    ,
+    key = "",
+    arg = "",
+    ttl = "",
+  ]: string[]) => {
+    // The host clock: take it once ARGV[1] ms have passed since the last
+    // request, or report how long is left.
+    if (script.includes("TIME")) {
+      const now = Date.now();
+      const last = live(key);
+      if (last !== undefined && now - Number(last) < Number(arg)) {
+        return Number(last) + Number(arg) - now;
+      }
+      values.set(key, String(now));
+      expiry.set(key, now + Number(ttl));
+      return 0;
+    }
     if (script.includes("PEXPIRE")) {
       add(key, 1);
       if (pttl(key) < Number(arg)) expiry.set(key, Date.now() + Number(arg));

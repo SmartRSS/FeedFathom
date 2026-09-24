@@ -17,6 +17,10 @@ const redis = createFakeHttpRedis;
 // Tests that make more than one request to a host cannot sit out the real
 // 10 second interval; they still have to sit out an interval.
 const shortInterval = 200;
+const shortIntervals = {
+  background: shortInterval,
+  interactive: shortInterval,
+};
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -55,7 +59,7 @@ function queuedTransport(
 test("caches fresh responses, retries transient failures, and defers background work", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -323,7 +327,7 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
 test("destroys discarded retry bodies", async () => {
   let destroyed = 0;
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport([
       nativeResponse("unavailable", {
         onDestroy: () => destroyed++,
@@ -427,7 +431,7 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
 test("spaces retries by the host interval instead of a fixed backoff", async () => {
   const sentAt: number[] = [];
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -450,7 +454,7 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
 test("reserves the redirect target's slot, not just the original host's", async () => {
   const sentAt = new Map<string, number>();
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url) => {
       sentAt.set(url, Date.now());
       return url === "https://1.1.1.1/a"
@@ -502,7 +506,7 @@ test("checks the redirect target against its own block", async () => {
 test("blocks the host that answered, not the one the chain started at", async () => {
   const store = redis();
   const client = new HttpClient(store, {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url) =>
       url === "https://1.1.1.1/a"
         ? nativeResponse("redirect", {
@@ -531,7 +535,7 @@ test("post reserves the host, sends the body, and does not follow redirects", as
   const sent: Array<{ body: string | undefined; url: string }> = [];
   const sentAt: number[] = [];
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url, headers, _signal, body) => {
       sent.push({ body, url });
       sentAt.push(Date.now());
