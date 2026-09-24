@@ -238,6 +238,29 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
+// #881: the loading skeleton renders ~190 bars. Sliding each bar's
+// pseudo-element by transform stays on the compositor; animating the bar's
+// own background-position repainted every one of them on every frame.
+test("sweeps the skeleton by transform, and not at all under reduced motion", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.route("**/api/tree", () => {});
+  await page.goto("/");
+  const bar = page.locator(".tree.skeleton .skeleton-text").first();
+  await expect(bar).toBeVisible();
+
+  const sweep = () =>
+    bar.evaluate((element) => ({
+      bar: getComputedStyle(element).animationName,
+      overlay: getComputedStyle(element, "::after").animationName,
+    }));
+  expect(await sweep()).toEqual({ bar: "none", overlay: "skeleton-sweep" });
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await sweep()).toEqual({ bar: "none", overlay: "none" });
+});
+
 test("offers first-run guidance while the tree is empty", async ({ page }) => {
   await installApiFixture(page);
   // Registered after the fixture's own **/api/** handler, so it wins.
