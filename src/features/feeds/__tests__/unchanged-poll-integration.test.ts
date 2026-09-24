@@ -59,6 +59,10 @@ beforeEach(async () => {
   sourceId = source!.id;
 });
 
+// One date for every parse: pubDate is also the article's updated_at, so a
+// clock second ticking over between two parses would read as an edit.
+const pubDate = new Date().toUTCString();
+
 function rss(items: { content: string; guid: string }[]) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Feed</title><link>https://1.1.1.1/</link>
@@ -66,7 +70,7 @@ ${items
   .map(
     (item) => `<item><guid>${item.guid}</guid><title>${item.guid}</title>
 <link>https://1.1.1.1/${item.guid}</link><description>${item.content}</description>
-<pubDate>${new Date().toUTCString()}</pubDate></item>`,
+<pubDate>${pubDate}</pubDate></item>`,
   )
   .join("\n")}
 </channel></rss>`;

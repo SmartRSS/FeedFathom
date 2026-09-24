@@ -2,6 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-09-05
+- **Amended:** 2026-09-24, pacing rule and key names ([#909](https://github.com/SmartRSS/FeedFathom/issues/909))
 
 ## Context
 
@@ -9,15 +10,20 @@ Outbound fetching is governed by three Redis keys, all in
 `src/platform/http/http-rate-limiter.ts`:
 
 ```
-http-interval:${hostname}      one request per host per interval
+http-last-request:${hostname}  when this deployment last sent the host a
+                               request, of either priority
 http-blocked:${hostname}       set when a host answers 429, or sends
                                Retry-After, or reports RateLimit-Remaining: 0
 http-interactive:${hostname}   how many interactive callers are waiting
 ```
 
-The requirement they answer is "never request the same domain more often than
-every 5 seconds". `feedDelayMs` is 10 seconds, so one hostname clears that
-floor with room to spare.
+The requirement they answer is "never hammer a host". Every request is paced
+against the one shared `http-last-request` clock: background work needs 10
+seconds since the last request of any priority, and a person waiting on a
+response needs 1 second. So a host sees at most one request a second from this
+deployment, whatever the mix. An interactive request waits for its turn and
+never skips it. Otherwise one account could make the server crawl a host by
+pointing `/api/find` at page after page that is not in the cache.
 
 What "domain" means was never written down, and the two readings differ. A
 publisher spread across `a.example.com`, `b.example.com` and
@@ -49,7 +55,7 @@ most of the public suffix list's cost for a fraction of its effect.
 ## Consequences
 
 - A publisher on several hostnames can be contacted once per hostname per
-  interval. Per-hostname is also what most feed readers do, and the more common
+  second. Per-hostname is also what most feed readers do, and the more common
   shape by far is the opposite one — many unrelated publishers behind a single
   CDN hostname, which per-hostname keying already handles correctly.
 - A 429 from one subdomain does not hold back its siblings. The individual

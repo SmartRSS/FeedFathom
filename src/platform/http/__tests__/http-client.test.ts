@@ -17,6 +17,15 @@ const redis = createFakeHttpRedis;
 // Tests that make more than one request to a host cannot sit out the real
 // 10 second interval; they still have to sit out an interval.
 const shortInterval = 200;
+const shortIntervals = {
+  background: shortInterval,
+  interactive: shortInterval,
+};
+// The limiter spaces reservations; these tests time the transport calls that
+// follow them. A call can be stamped a millisecond after its reservation, so
+// the gap between two calls may read a few milliseconds under the interval
+// that separated the reservations.
+const minimumSendGap = shortInterval - 5;
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -55,7 +64,7 @@ function queuedTransport(
 test("caches fresh responses, retries transient failures, and defers background work", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -323,7 +332,7 @@ test("fails closed and destroys bodies for missing, malformed, and unsafe redire
 test("destroys discarded retry bodies", async () => {
   let destroyed = 0;
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport([
       nativeResponse("unavailable", {
         onDestroy: () => destroyed++,
@@ -427,7 +436,7 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
 test("spaces retries by the host interval instead of a fixed backoff", async () => {
   const sentAt: number[] = [];
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: queuedTransport(
       [
         nativeResponse("unavailable", { status: 503 }),
@@ -440,8 +449,8 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
 
   expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
   expect(sentAt).toHaveLength(3);
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
-  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
+  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 // Only the original hostname held a reservation, so every host reached
@@ -450,7 +459,7 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
 test("reserves the redirect target's slot, not just the original host's", async () => {
   const sentAt = new Map<string, number>();
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url) => {
       sentAt.set(url, Date.now());
       return url === "https://1.1.1.1/a"
@@ -468,7 +477,7 @@ test("reserves the redirect target's slot, not just the original host's", async 
 
   expect(
     sentAt.get("https://8.8.8.8/direct")! - sentAt.get("https://8.8.8.8/real")!,
-  ).toBeGreaterThanOrEqual(shortInterval);
+  ).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 // A host that just answered 429 could be hammered through a redirect from
@@ -502,7 +511,7 @@ test("checks the redirect target against its own block", async () => {
 test("blocks the host that answered, not the one the chain started at", async () => {
   const store = redis();
   const client = new HttpClient(store, {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url) =>
       url === "https://1.1.1.1/a"
         ? nativeResponse("redirect", {
@@ -531,7 +540,7 @@ test("post reserves the host, sends the body, and does not follow redirects", as
   const sent: Array<{ body: string | undefined; url: string }> = [];
   const sentAt: number[] = [];
   const client = new HttpClient(redis(), {
-    intervalMs: shortInterval,
+    intervalMs: shortIntervals,
     transport: async (url, headers, _signal, body) => {
       sent.push({ body, url });
       sentAt.push(Date.now());
@@ -559,7 +568,7 @@ test("post reserves the host, sends the body, and does not follow redirects", as
     "https://hub.example/",
   ]);
   expect(sent[0]?.body).toBe("hub.mode=subscribe");
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 test("post honours a hub's Retry-After instead of discarding it", async () => {

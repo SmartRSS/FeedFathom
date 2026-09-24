@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { Readable } from "node:stream";
 import { markWebSubAvailability, type WebSubProbe } from "../feed-discovery.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 
 const feed = (title: string, url: string) => ({ title, url });
 
@@ -47,9 +50,8 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  test("probes concurrently and preserves order when probes finish in reverse", async () => {
+  test("probes one candidate at a time and preserves order", async () => {
     const slow = Promise.withResolvers<{ websub?: unknown }>();
-    const fast = Promise.withResolvers<{ websub?: unknown }>();
     const started: string[] = [];
     const result = markWebSubAvailability(
       [
@@ -57,19 +59,15 @@ describe("markWebSubAvailability", () => {
         feed("Fast", "https://a.example/fast"),
       ],
       {
-        parseUrl: (url) => {
+        parseUrl: async (url) => {
           started.push(url);
-          return url.endsWith("slow") ? slow.promise : fast.promise;
+          return url.endsWith("slow") ? slow.promise : {};
         },
       },
     );
     try {
-      expect(started).toEqual([
-        "https://a.example/slow",
-        "https://a.example/fast",
-      ]);
-      fast.resolve({});
-      await fast.promise;
+      await Bun.sleep(10);
+      expect(started).toEqual(["https://a.example/slow"]);
       slow.resolve({ websub: { hubUrl: "https://hub.example/" } });
       expect(await result).toEqual([
         { title: "Slow", url: "https://a.example/slow", websub: true },
@@ -77,9 +75,44 @@ describe("markWebSubAvailability", () => {
       ]);
     } finally {
       slow.resolve({});
-      fast.resolve({});
       await result;
     }
+  });
+
+  // Probed together, candidates on one host raced for its rate limit, and
+  // the losers came back marked as having no hub.
+  test("every candidate on one host gets its true WebSub state", async () => {
+    const client = new HttpClient(createFakeHttpRedis(), {
+      deadlineMs: 2_000,
+      intervalMs: { background: 10_000, interactive: 100 },
+      transport: async (url) => {
+        const body = Readable.from([url.endsWith("plain") ? "plain" : "hub"]);
+        return {
+          body,
+          destroy: () => body.destroy(),
+          headers: new Headers(),
+          status: 200,
+          url,
+        };
+      },
+    });
+    const result = await markWebSubAvailability(
+      [
+        feed("One", "https://1.1.1.1/one"),
+        feed("Plain", "https://1.1.1.1/plain"),
+        feed("Three", "https://1.1.1.1/three"),
+      ],
+      {
+        parseUrl: async (url) => ({
+          websub: (await client.get(url)).data === "hub" ? {} : undefined,
+        }),
+      },
+    );
+    expect(result.map((candidate) => candidate.websub)).toEqual([
+      true,
+      false,
+      true,
+    ]);
   });
 
   test("an empty candidate list yields an empty result", async () => {

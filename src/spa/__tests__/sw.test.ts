@@ -183,10 +183,13 @@ const loadServiceWorker = (
   };
 };
 
+// The ?v= fingerprint (tree.ts) is what makes the URL content-addressed: the
+// same path always decodes to the same bytes, so the SW never needs to
+// re-ask once a path is cached.
 const tree = {
   tree: [
-    { favicon: "/api/favicon/1", type: "source" },
-    { favicon: "/api/favicon/2", type: "source" },
+    { favicon: "/api/favicon/1?v=abc", type: "source" },
+    { favicon: "/api/favicon/2?v=def", type: "source" },
   ],
 };
 
@@ -195,25 +198,39 @@ const network = (path: string) =>
     ? Response.json(tree)
     : new Response("icon", { headers: { "Content-Type": "image/png" } });
 
-test("ten tree loads fetch each favicon at most once", async () => {
-  const { loadTree, requests } = loadServiceWorker(network);
-  for (let load = 0; load < 10; load++) {
-    // oxlint-disable-next-line no-await-in-loop -- loads are sequential polls
-    await loadTree();
+test("a favicon is fetched once and then served from the cache", async () => {
+  const sw = loadServiceWorker(network);
+  const load = () =>
+    sw.dispatch(new Request(`${ORIGIN}/api/favicon/1?v=abc`)).response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // oxlint-disable-next-line no-await-in-loop -- repeated img loads of the same icon
+    await load();
   }
-  expect(requests.filter((path) => path === "/api/favicon/1")).toHaveLength(1);
-  expect(requests.filter((path) => path === "/api/favicon/2")).toHaveLength(1);
+  expect(
+    sw.requests.filter((path) => path === "/api/favicon/1?v=abc"),
+  ).toHaveLength(1);
 });
 
-test("a cached favicon is inlined as a data URL", async () => {
-  const { loadTree } = loadServiceWorker(network);
-  await loadTree();
-  expect(await loadTree()).toEqual({
+test("a cached favicon is inlined as a data URL, and a warm tree reload fetches none", async () => {
+  const sw = loadServiceWorker(network);
+  await Promise.all(
+    tree.tree.map(
+      (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
+    ),
+  );
+  expect(await sw.loadTree()).toEqual({
     tree: [
       { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
       { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
     ],
   });
+  const before = sw.requests.length;
+  await sw.loadTree();
+  expect(
+    sw.requests
+      .slice(before)
+      .filter((path) => path.startsWith("/api/favicon/")),
+  ).toHaveLength(0);
 });
 
 const shellHtml = (bundle: string) =>

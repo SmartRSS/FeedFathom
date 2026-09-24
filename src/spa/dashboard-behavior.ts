@@ -1,4 +1,4 @@
-import type { TreeNode } from "#shared/contracts/responses.ts";
+import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
 
 export function treeNodeKey(node: TreeNode): string {
   return `${node.type}:${node.uid}`;
@@ -111,6 +111,28 @@ export function withDecrementedUnread(
     return { ...node, unreadCount: Math.max(0, node.unreadCount - delta) };
   });
   return changed ? next : nodes;
+}
+
+/**
+ * Per-source unread deltas for a read/unread flip, in the shape
+ * `withDecrementedUnread` expects: positive shrinks the badge, negative
+ * grows it. Only rows whose `read` state actually changes count -- marking
+ * an already-read article read again must not touch its source's badge.
+ */
+export function readStateDeltas(
+  items: readonly Pick<ArticleSummary, "id" | "read" | "sourceId">[],
+  ids: readonly number[],
+  read: boolean,
+): Map<string, number> {
+  const affected = new Set(ids);
+  const deltas = new Map<string, number>();
+  const step = read ? 1 : -1;
+  for (const item of items) {
+    if (!affected.has(item.id) || item.read === read) continue;
+    const sourceUid = item.sourceId.toString();
+    deltas.set(sourceUid, (deltas.get(sourceUid) ?? 0) + step);
+  }
+  return deltas;
 }
 
 export function findNode(

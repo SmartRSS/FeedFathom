@@ -9,7 +9,10 @@ import {
   RequestDeadline,
 } from "#platform/http/request-deadline.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
+import {
+  type HostIntervals,
+  HttpRateLimiter,
+} from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
   type NativeHttpResponse,
@@ -62,9 +65,9 @@ type ArrayBufferRequestOptions = HttpRequestOptions & {
 
 type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
-  // The per-host politeness interval. Only set by tests, which cannot afford
-  // to sit out the real one; see HttpRateLimiter for the production value.
-  intervalMs?: number;
+  // The per-host politeness gaps. Only set by tests, which cannot afford to
+  // sit out the real ones; see HttpRateLimiter for the production values.
+  intervalMs?: HostIntervals;
   transport?: NativeHttpTransport;
 };
 
