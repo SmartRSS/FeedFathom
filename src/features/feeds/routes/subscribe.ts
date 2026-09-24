@@ -15,6 +15,7 @@ import {
 } from "#shared/validation/typebox-policy.ts";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
+import { outboundFetchBudget } from "#features/auth/services.ts";
 import { json } from "#platform/http/json.ts";
 import {
   deserializeFeedPreview,
@@ -44,6 +45,9 @@ export async function postSubscribeHandler({
   request: Request;
   user: AuthedUser;
 }) {
+  // Counted before any outbound work, including a cache hit: the budget is
+  // about how often a user can ask us to reach out at all.
+  await outboundFetchBudget.consume(user.id);
   const sourceUrl = decodedSubscriptionTarget(body.sourceUrl);
   const isEmail = sourceUrl.kind === "email";
   if (!config.MAIL_ENABLED && isEmail)
