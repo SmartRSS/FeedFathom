@@ -40,6 +40,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
     {
       async batchUpsertArticles(articles) {
         batches.push(articles);
+        return articles.length;
       },
     },
     {
