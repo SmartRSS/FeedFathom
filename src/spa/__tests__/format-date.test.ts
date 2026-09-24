@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import {
   dateFormat,
   formatDate,
@@ -27,6 +27,18 @@ test("locale mode renders an absolute localized string", () => {
     timeStyle: "short",
   }).format(date);
   expect(formatDate(date.toISOString())).toBe(expected);
+});
+
+test("locale mode reuses one formatter instead of building one per call", () => {
+  setDateFormat("locale");
+  const construct = spyOn(Intl, "DateTimeFormat");
+  try {
+    formatDate("2026-09-07T12:34:00Z");
+    formatDate("2026-01-05T03:07:00Z");
+    expect(construct).not.toHaveBeenCalled();
+  } finally {
+    construct.mockRestore();
+  }
 });
 
 test("iso mode renders fixed UTC YYYY-MM-DD HH:mm", () => {

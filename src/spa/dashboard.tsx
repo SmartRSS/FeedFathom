@@ -1,5 +1,7 @@
 import {
   createEffect,
+  createMemo,
+  createSelector,
   createSignal,
   For,
   onCleanup,
@@ -22,7 +24,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
-  faviconUrls,
+  preloadFavicons,
   filterTree,
   findNode,
   findParentFolderUid,
@@ -54,14 +56,13 @@ import { createSupersessionGuard } from "./supersession.ts";
 import { api } from "./api.ts";
 import {
   createExtensionReaderBridge,
-  extractReaderContent,
   ReaderExtensionError,
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader.ts";
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
-import { TreeItem } from "./tree-item.tsx";
+import { ForEachNode, TreeItem } from "./tree-item.tsx";
 import {
   articleSearchBox,
   feedFilterBox,
@@ -107,22 +108,6 @@ function ReaderBody(props: { content: ReaderContent }) {
   ) : (
     <div class="reader-plain">{props.content.content}</div>
   );
-}
-
-// First tree render only (see onMount): holds the skeleton until every
-// favicon settles. A failure resolves via the .catch() below, so a broken
-// favicon can't hang it -- only one that never settles, which the browser's
-// network timeout bounds.
-function preloadFavicons(tree: TreeNode[]): Promise<void> {
-  const urls = tree.flatMap(faviconUrls);
-  if (!urls.length) return Promise.resolve();
-  return Promise.all(
-    urls.map((url) => {
-      const image = new Image();
-      image.src = url;
-      return image.decode().catch(() => {});
-    }),
-  ).then(() => {});
 }
 
 const READER_SKELETON_PARAGRAPHS = [
@@ -179,8 +164,10 @@ export function Dashboard(props: {
   const [articleFilter, setArticleFilter] = createSignal<
     "all" | "read" | "unread"
   >("unread");
-  const visibleTree = () =>
-    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter());
+  // Memos, because every tree row reads these and each one walks the tree.
+  const visibleTree = createMemo(() =>
+    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter()),
+  );
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
@@ -196,6 +183,12 @@ export function Dashboard(props: {
   let articleCursor: number | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
+  // Selectors notify only the rows whose state flips, not every row in a
+  // list that infinite scroll grows without bound.
+  const isFocused = createSelector(focusedIndex);
+  const isSelected = createSelector(selectedIndexes, (index: number, indexes) =>
+    indexes.has(index),
+  );
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
   const [openedArticle, setOpenedArticle] = createSignal<Article>();
   const [readerContent, setReaderContent] = createSignal<ReaderContent>();
@@ -210,7 +203,9 @@ export function Dashboard(props: {
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
   // so Tab moves in and out of the whole tree instead of through every row.
   const [focusedTreeKey, setFocusedTreeKey] = createSignal<string>();
-  const treeTabStop = () => treeTabStopKey(visibleTree(), focusedTreeKey());
+  const treeTabStop = createMemo(() =>
+    treeTabStopKey(visibleTree(), focusedTreeKey()),
+  );
   // A screen reader can't be detected, so this always renders (see the
   // aria-live region below); it is visually hidden either way and only gets
   // real text when high contrast mode is off.
@@ -1178,8 +1173,9 @@ export function Dashboard(props: {
   // Prefetch the article after the one just opened (#716), so keyboard
   // navigation into it feels instant. One article only, feed mode only --
   // Reader modes fetch through the extension, so there is nothing server-
-  // side to warm. The plain GET flows through the service worker's
-  // networkFirst handler, so the prefetched copy also replays offline.
+  // side to warm. The plain GET is a read with no side effects; the service
+  // worker caches it and serves it for a minute without a round trip (see
+  // recentArticleFirst in public/sw.js), and offline after that.
   function schedulePrefetch() {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
@@ -1241,6 +1237,10 @@ export function Dashboard(props: {
       if (mode !== "FEED") {
         if (!readerAvailable()) throw new ReaderExtensionError("UNAVAILABLE");
         const fetched = await readerBridge.fetch(opened.url);
+        if (!isCurrent()) return;
+        // Loaded on first use so FEED-only sessions never download the
+        // extraction libraries; a failed load falls back to FEED below.
+        const { extractReaderContent } = await import("./reader-extraction.ts");
         if (!isCurrent()) return;
         const content = await extractReaderContent(
           fetched.html,
@@ -1654,19 +1654,19 @@ export function Dashboard(props: {
                 class="tree"
                 role="tree"
               >
-                <For each={visibleTree()}>
+                <ForEachNode each={visibleTree()}>
                   {(node) => (
                     <TreeItem
-                      focused={treeTabStop() === treeNodeKey(node)}
+                      focused={treeTabStop() === treeNodeKey(node())}
                       onContext={openTreeContext}
                       focusedKey={treeTabStop()}
-                      node={node}
+                      node={node()}
                       onFocus={(item) => setFocusedTreeKey(treeNodeKey(item))}
                       select={(item) => void select(item)}
                       selected={selectedNode()}
                     />
                   )}
-                </For>
+                </ForEachNode>
               </ul>
             </Show>
           </Show>
@@ -1795,7 +1795,7 @@ export function Dashboard(props: {
               when={!articlesLoading()}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
-                  <div class="date-group skeleton-text">Today</div>
+                  <div class="date-group" />
                   <For each={[...Array(30).keys()]}>
                     {(index) => (
                       <div class="article">
@@ -1829,9 +1829,9 @@ export function Dashboard(props: {
                     <a
                       class="article"
                       classList={{
-                        active: focusedIndex() === index(),
+                        active: isFocused(index()),
                         read: article.read,
-                        selected: selectedIndexes().has(index()),
+                        selected: isSelected(index()),
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
@@ -1849,8 +1849,8 @@ export function Dashboard(props: {
                       // An app menu is prettier and none of that is worth
                       // trading for it. Read state lives on the toolbar.
                       role="option"
-                      tabIndex={focusedIndex() === index() ? 0 : -1}
-                      aria-selected={selectedIndexes().has(index())}
+                      tabIndex={isFocused(index()) ? 0 : -1}
+                      aria-selected={isSelected(index())}
                     >
                       <span class="title">{article.title}</span>
                       <span class="details">

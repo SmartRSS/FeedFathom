@@ -813,39 +813,75 @@ button.source {
 }
 .skeleton-row,
 .skeleton-text {
-  border-radius: 0.2rem;
-  background-image: linear-gradient(
+  --skeleton-shimmer: linear-gradient(
     90deg,
     var(--grey-20) 25%,
     var(--grey-10) 37%,
     var(--grey-20) 63%
   );
-  background-repeat: no-repeat;
-  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: 0.2rem;
 }
 .skeleton-row {
   display: block;
   height: 0.7rem;
-  background-size: 400% 100%;
+}
+/* A loading favicon cannot host a pseudo-element, so it paints its own
+   sweep. There are only a few of them, and only until each icon loads. */
+img.skeleton-row {
+  background: var(--skeleton-shimmer) 0 0 / 400% 100% no-repeat;
+  animation: skeleton-shimmer 1.4s ease infinite;
 }
 /* Applied to the real text-bearing element itself (not a stand-in bar):
    the text stays, invisible, so the box keeps its exact real line-height,
-   font metrics, and truncation behavior -- the shimmer background shows
-   through in its place instead of approximating those dimensions by hand.
-   The gradient is drawn shorter than the line box and centered on it, so
-   it spans roughly ascender-top to baseline instead of the full
-   ascender-to-descender line height. */
+   font metrics, and truncation behavior -- the shimmer shows in its place
+   instead of approximating those dimensions by hand. */
 .skeleton-text {
   color: transparent;
-  background-size: 400% 0.75em;
   user-select: none;
+}
+/* The bar is a pseudo-element four times the element's width, slid across
+   it by transform. A transform animation runs on the compositor; animating
+   background-position repainted all ~190 loading-state bars on every frame
+   (#881). overflow: clip, not hidden, so a flex item keeps its min-content
+   minimum width: clip does not make the element a scroll container. */
+.skeleton-row:not(img),
+.skeleton-text {
+  position: relative;
+  overflow: clip;
+}
+.skeleton-row::after,
+.skeleton-text::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 400%;
+  background-image: var(--skeleton-shimmer);
+  animation: skeleton-sweep 1.4s ease infinite;
+}
+/* Shorter than the line box and centered on it, so the bar spans roughly
+   ascender-top to baseline instead of the full ascender-to-descender line
+   height. */
+.skeleton-text::after {
+  top: calc(50% - 0.375em);
+  bottom: auto;
+  height: 0.75em;
 }
 @keyframes skeleton-shimmer {
   0% {
-    background-position: 100% 50%;
+    background-position: 100% 0;
   }
   100% {
-    background-position: 0 50%;
+    background-position: 0 0;
+  }
+}
+@keyframes skeleton-sweep {
+  0% {
+    transform: translateX(-75%);
+  }
+  100% {
+    transform: none;
   }
 }
 .source {
@@ -1249,16 +1285,15 @@ button.source {
    motion that never resolves and that nobody asked to start. Neither carries
    information the page would lose by stopping. The skeleton is a placeholder
    whose shape already says "not loaded yet", so it keeps its bar and drops
-   the sweep -- pinned at the 50% vertical offset the keyframes hold it at,
-   since a stopped animation would otherwise fall back to the 0% top edge and
-   pull .skeleton-text's short gradient off its line box. The spinner sits
-   inside a role="status" next to the text that names what is loading, so with
-   the spin gone the ring is decoration and the label still answers. */
+   the sweep: at rest the bar shows only the solid left part of its gradient.
+   The spinner sits inside a role="status" next to the text that names what
+   is loading, so with the spin gone the ring is decoration and the label
+   still answers. */
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-row,
-  .skeleton-text {
+  img.skeleton-row,
+  .skeleton-row::after,
+  .skeleton-text::after {
     animation: none;
-    background-position: 0 50%;
   }
   .spinner {
     animation: none;

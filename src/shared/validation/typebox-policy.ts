@@ -1,6 +1,5 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { isDisposableEmail } from "disposable-email-domains-js";
 import { isPlainText } from "#shared/util/is-plain-text.ts";
 
 type SubscriptionTarget =
@@ -58,9 +57,6 @@ export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
 export const emailAddressPolicy = Type.Refine(Type.String(), isEmailAddress);
-export const disposableEmailPolicy = Type.Refine(Type.String(), (value) =>
-  isDisposableEmail(value.trim()),
-);
 export const plainTextPolicy = Type.Refine(Type.String(), isPlainText);
 export const jsonDatePolicy = Type.Refine(
   Type.String(),

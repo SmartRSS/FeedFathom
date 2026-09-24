@@ -4,6 +4,7 @@ import {
   type BrowserContext,
   type Page,
   type Request,
+  type Route,
 } from "@playwright/test";
 import { installApiFixture } from "./api-fixture.ts";
 
@@ -111,6 +112,26 @@ const pagedSummary = (id: number) => ({
   url: `https://articles.example/${id}`,
 });
 
+// The full article behind a pagedSummary row, for the ids the fixture does
+// not know.
+const fulfillPagedArticle = async (route: Route) => {
+  const id = Number(new URL(route.request().url()).searchParams.get("article"));
+  await route.fulfill({
+    json: {
+      author: "Author",
+      content: `<p>Body ${id}</p>`,
+      guid: `guid-${id}`,
+      id,
+      lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+      publishedAt: "2026-07-20T10:00:00.000Z",
+      sourceId: 3,
+      title: `Article ${id}`,
+      updatedAt: null,
+      url: `https://articles.example/${id}`,
+    },
+  });
+};
+
 // The article rows are role="option" inside the list. So are the three
 // options of the filter <select> beside them, which is why this is scoped
 // rather than asking the page for every option it has.
@@ -215,6 +236,29 @@ test("boots Solid and renders the authenticated nested tree", async ({
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();
+});
+
+// #881: the loading skeleton renders ~190 bars. Sliding each bar's
+// pseudo-element by transform stays on the compositor; animating the bar's
+// own background-position repainted every one of them on every frame.
+test("sweeps the skeleton by transform, and not at all under reduced motion", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.route("**/api/tree", () => {});
+  await page.goto("/");
+  const bar = page.locator(".tree.skeleton .skeleton-text").first();
+  await expect(bar).toBeVisible();
+
+  const sweep = () =>
+    bar.evaluate((element) => ({
+      bar: getComputedStyle(element).animationName,
+      overlay: getComputedStyle(element, "::after").animationName,
+    }));
+  expect(await sweep()).toEqual({ bar: "none", overlay: "skeleton-sweep" });
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await sweep()).toEqual({ bar: "none", overlay: "none" });
 });
 
 test("offers first-run guidance while the tree is empty", async ({ page }) => {
@@ -512,25 +556,7 @@ test("fetches the next article page after a delete empties the list", async ({
   });
   // Selecting the list also opens its first row, and these ids are not ones
   // the fixture knows.
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
-    );
-    await route.fulfill({
-      json: {
-        author: "Author",
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        id,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        publishedAt: "2026-07-20T10:00:00.000Z",
-        sourceId: 3,
-        title: `Article ${id}`,
-        updatedAt: null,
-        url: `https://articles.example/${id}`,
-      },
-    });
-  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page);
 
@@ -545,6 +571,56 @@ test("fetches the next article page after a delete empties the list", async ({
   // to scroll, and it is asked for with the last row of the first page.
   await expect(rows).toHaveCount(3);
   expect(cursors).toEqual([undefined, pageSize]);
+});
+
+// Solid only writes the DOM when a binding's value changes, so a mutation
+// count cannot see this. The cost is every row re-running its bindings, and
+// each row's classList binding asks the selection Set whether it holds it.
+test("moving the focus re-evaluates only the rows it leaves and enters", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const pageSize = 500;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      json:
+        body.cursor === undefined
+          ? Array.from({ length: pageSize }, (_, index) =>
+              pagedSummary(index + 1),
+            )
+          : [],
+    });
+  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
+  await page.goto("/");
+  await selectSource(page);
+  const rows = page.locator(".article-list .article");
+  await expect(rows).toHaveCount(pageSize);
+  // Solid runs the bindings synchronously inside the keydown handler, so
+  // the count is complete by the time dispatchEvent returns.
+  const calls = await rows.first().evaluate((row) => {
+    const has = Set.prototype.has;
+    let count = 0;
+    // oxlint-disable-next-line no-extend-native -- counted, then restored
+    Set.prototype.has = function (this: Set<unknown>, value: unknown) {
+      count += 1;
+      return has.call(this, value);
+    };
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        ctrlKey: true,
+        key: "ArrowDown",
+      }),
+    );
+    // oxlint-disable-next-line no-extend-native
+    Set.prototype.has = has;
+    return count;
+  });
+  await expect(rows.nth(1)).toBeFocused();
+  expect(calls).toBeLessThan(pageSize / 10);
 });
 
 // Today is scoped by `view`, not by an id list, and its tree row's uid is the
@@ -569,25 +645,7 @@ test("pages the Today view with the view, not its node uid", async ({
       ),
     });
   });
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
-    );
-    await route.fulfill({
-      json: {
-        author: "Author",
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        id,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        publishedAt: "2026-07-20T10:00:00.000Z",
-        sourceId: 3,
-        title: `Article ${id}`,
-        updatedAt: null,
-        url: `https://articles.example/${id}`,
-      },
-    });
-  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page, "Today");
 
@@ -953,6 +1011,103 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
 
   await page.getByLabel("Filter feeds").fill("");
   await expect(tabStops).toHaveCount(1);
+});
+
+// Every row reads the tab stop, and working it out walks the whole tree. It
+// has to be worked out once per focus change and shared, not once per row:
+// that is O(N) walks of O(N) each. hasNodeKey walks with Array#some.
+test("moving tree focus works out the tab stop once, not per row", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const rowCount = 300;
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      json: {
+        tree: Array.from({ length: rowCount }, (_, index) => ({
+          favicon: null,
+          homeUrl: "https://news.example/",
+          kind: "feed",
+          name: `Feed ${index}`,
+          type: "source",
+          uid: String(index + 1),
+          unreadCount: 0,
+          xmlUrl: `https://news.example/${index}.xml`,
+        })),
+      },
+    }),
+  );
+  await page.goto("/");
+  const rows = page.locator('[role="treeitem"]');
+  // Today sits ahead of the user's own rows.
+  await expect(rows).toHaveCount(rowCount + 1);
+  // The focus event, and the bindings it sets off, run synchronously.
+  const calls = await rows.nth(1).evaluate((row) => {
+    const some = Array.prototype.some;
+    let count = 0;
+    // oxlint-disable-next-line no-extend-native -- counted, then restored
+    Array.prototype.some = function <T>(
+      this: T[],
+      predicate: (value: T, index: number, array: T[]) => unknown,
+    ) {
+      count += 1;
+      return some.call(this, predicate);
+    };
+    if (row instanceof HTMLElement) row.focus();
+    // oxlint-disable-next-line no-extend-native
+    Array.prototype.some = some;
+    return count;
+  });
+  await expect(rows.nth(1)).toBeFocused();
+  expect(calls).toBeLessThan(rowCount / 10);
+});
+
+// Every tree load returns fresh objects; rows must survive it rather than
+// remount, or focus drops to <body> and every favicon flashes its skeleton.
+test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
+  await page.clock.install();
+  await installApiFixture(page);
+  await page.goto("/");
+  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(row.locator(".unread-count")).toHaveText("2");
+  await row.focus();
+  const folder = await page
+    .locator("button.source.folder")
+    .elementHandle({ timeout: 1000 });
+  const source = await row.elementHandle({ timeout: 1000 });
+
+  await page.route("**/api/tree", (route) =>
+    route.fulfill({
+      json: {
+        tree: [
+          {
+            children: [
+              {
+                favicon: null,
+                homeUrl: "https://news.example/",
+                kind: "feed",
+                name: "Tech News",
+                type: "source",
+                uid: "3",
+                unreadCount: 5,
+                xmlUrl: "https://news.example/feed.xml",
+              },
+            ],
+            name: "Reading",
+            type: "folder",
+            uid: "7",
+          },
+        ],
+      },
+    }),
+  );
+  await page.clock.runFor(30_000);
+  await expect(row.locator(".unread-count")).toHaveText("5");
+
+  expect(await folder?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(
+    await source?.evaluate((node) => node === document.activeElement),
+  ).toBe(true);
 });
 
 // The route answers as it does for an unknown address when no mail is

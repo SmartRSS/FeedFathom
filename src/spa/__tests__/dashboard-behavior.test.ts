@@ -9,6 +9,7 @@ import {
   findParentFolderUid,
   isSnoozedNode,
   isTodayNode,
+  preloadFavicons,
   nextPollDelayMs,
   sourceIds,
   snoozeUntilIso,
@@ -59,6 +60,15 @@ describe("sourceIds", () => {
       ),
     ).toEqual([2, 9]);
     expect(sourceIds(folder("empty", []))).toEqual([]);
+  });
+});
+
+describe("preloadFavicons", () => {
+  test("stops waiting for a favicon that never settles", async () => {
+    const tree = [source("1", { favicon: "https://hang.example/i.png" })];
+    const started = performance.now();
+    await preloadFavicons(tree, () => new Promise(() => {}));
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });
 

@@ -3,7 +3,6 @@ import Schema from "typebox/schema";
 import { Value } from "typebox/value";
 import { describe, expect, test } from "bun:test";
 import {
-  disposableEmailPolicy,
   emailAddressPolicy,
   jsonDatePolicy,
   normalizedSubscriptionTarget,
@@ -51,10 +50,6 @@ test("checks URL, email, plain-text, and internal-address policies", () => {
   expect(Value.Check(webUrlPolicy, "javascript:alert(1)")).toBe(false);
   expect(Value.Check(emailAddressPolicy, "reader@example.com")).toBe(true);
   expect(Value.Check(emailAddressPolicy, "reader@localhost")).toBe(false);
-  expect(Value.Check(disposableEmailPolicy, "reader@mailinator.com")).toBe(
-    true,
-  );
-  expect(Value.Check(disposableEmailPolicy, "reader@example.com")).toBe(false);
   expect(Value.Check(plainTextPolicy, "plain\ntext")).toBe(true);
   expect(Value.Check(plainTextPolicy, `bad${String.fromCharCode(0)}text`)).toBe(
     false,
