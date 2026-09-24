@@ -20,7 +20,11 @@ export async function getTreeHandler({ user }: { user: AuthedUser }) {
     // list gives, evaluated lazily here so expiry needs no job.
     const snoozed = isSnoozed(source.pausedUntil ?? null);
     const item = {
-      favicon: `/api/favicon/${source.id}`,
+      // No fingerprint means no favicon (#902): a bare id would still 404,
+      // but on every load, so a missing icon gets no URL at all instead.
+      favicon: source.faviconFingerprint
+        ? `/api/favicon/${source.id}?v=${source.faviconFingerprint}`
+        : null,
       homeUrl: source.homeUrl ?? "",
       kind: source.kind ?? "feed",
       name: source.name,
