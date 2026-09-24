@@ -1795,7 +1795,7 @@ export function Dashboard(props: {
               when={!articlesLoading()}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
-                  <div class="date-group skeleton-text">Today</div>
+                  <div class="date-group" />
                   <For each={[...Array(30).keys()]}>
                     {(index) => (
                       <div class="article">
