@@ -31,6 +31,7 @@ import {
   isSnoozedNode,
   isTodayNode,
   nextPollDelayMs,
+  readStateDeltas,
   sourceIds,
   snoozePresets,
   snoozeUntilIso,
@@ -824,9 +825,9 @@ export function Dashboard(props: {
     const node = selectedNode();
     if (node) void select(node);
   }
-  // Marking read is the same shape as removing: optimistic locally, the badge
-  // reconciled from the tree afterwards. Unlike a removal it is reversible,
-  // so a failure resyncs rather than trying to explain itself.
+  // Marking read is the same shape as removing: list and badge update
+  // optimistically, loadTree reconciles afterwards. Unlike a removal it is
+  // reversible, so a failure resyncs rather than trying to explain itself.
   // What the toolbar button offers: with everything selected already read,
   // the useful action is the reverse one.
   const allSelectedRead = () => {
@@ -847,6 +848,21 @@ export function Dashboard(props: {
   async function markArticlesRead(ids: number[], read: boolean) {
     const items = articles();
     const affected = new Set(ids);
+    // Only rows whose read state actually flips move a badge -- re-marking
+    // an already-read article read is a no-op the server would also skip.
+    // Reuse the computed tree: Solid 2.0 defers setter visibility to the
+    // microtask flush, so a synchronous tree() read sees the pre-delta one.
+    const deltas = readStateDeltas(items, ids, read);
+    const nextTree = withDecrementedUnread(tree(), deltas);
+    setTree(nextTree);
+    const current = selectedNode();
+    if (current) {
+      setSelectedNode(
+        isTodayNode(current)
+          ? current
+          : findNode(nextTree, current.type, current.uid),
+      );
+    }
     if (articleFilter() === "all") {
       setArticles(
         items.map((article) =>
