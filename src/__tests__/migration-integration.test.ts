@@ -18,6 +18,8 @@ const expectedIndexNames = [
   "articles_source_last_seen_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
+  "sessions_sid_unique",
+  "sessions_user_id_idx",
 ].toSorted();
 // The UNIQUE(user_id, source_id) constraint's own index covers the same
 // ordered columns, so this nonunique copy was dropped by 0007.
@@ -193,6 +195,39 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
       client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
         VALUES ('again', ${source?.id}, ${user?.id})`.then(() => "inserted"),
     ).rejects.toThrow(/user_sources_user_id_source_id_unique/u);
+  } finally {
+    await client.close();
+    await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
+// sid is a random UUID per login, so duplicates should never exist. If one
+// does, the unique index build must fail the whole migration transaction
+// rather than leave the user_id index applied without it.
+test("a duplicate sid fails the session index migration and applies none of it", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const olderMigrationsFolder = await migrationsFolderBefore(
+    "0008_optimal_vanisher",
+  );
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, olderMigrationsFolder);
+    const [user] = await client<{ id: number }[]>`INSERT INTO "users"
+      ("email", "name", "password")
+      VALUES ('duplicate@example.com', 'duplicate', 'x') RETURNING "id"`;
+    await client`INSERT INTO "sessions" ("sid", "user_agent", "user_id")
+      VALUES ('same', 'a', ${user?.id}), ('same', 'b', ${user?.id})`;
+
+    await expect(
+      migrateDatabase(databaseUrl, currentMigrationsFolder),
+    ).rejects.toThrow(/sessions_sid_unique/u);
+    expect(await indexExists(client, "sessions_sid_unique")).toBe(false);
+    expect(await indexExists(client, "sessions_user_id_idx")).toBe(false);
+    const [journaled] = await client<{ count: number }[]>`SELECT
+      count(*)::integer AS "count" FROM "drizzle"."__drizzle_migrations"`;
+    expect(journaled?.count).toBe(journal.entries.length - 1);
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });

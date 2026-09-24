@@ -1,6 +1,9 @@
 import { Elysia } from "elysia";
 import { usersDataService } from "#features/auth/services.ts";
 
+// The read-only lookup for GET /api/session, which answers "who is this?"
+// without counting as activity. Routes behind the plugin go through
+// authenticate instead, which resolves and stamps in one statement.
 export async function userFor(sid: unknown) {
   if (typeof sid !== "string" || !sid) return null;
   const user = await usersDataService.getUserBySid(sid);
@@ -19,16 +22,16 @@ export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
 function sessionPlugin(requireAdmin: boolean) {
   return new Elysia().derive("plugin", async ({ cookie, request, status }) => {
     const sid = cookie["sid"]?.value;
-    const user = await userFor(sid);
+    const user =
+      typeof sid === "string" && sid
+        ? await usersDataService.authenticate(
+            sid,
+            request.headers.get("user-agent"),
+          )
+        : undefined;
     if (!user) return status(401, { error: "Unauthorized" });
     if (requireAdmin && !user.isAdmin)
       return status(403, { error: "Unauthorized" });
-    await usersDataService.touchLastSeen(user.id);
-    if (typeof sid === "string")
-      await usersDataService.refreshSession(
-        sid,
-        request.headers.get("user-agent"),
-      );
     return { user };
   });
 }

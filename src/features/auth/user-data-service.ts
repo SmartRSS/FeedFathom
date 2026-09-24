@@ -1,9 +1,61 @@
 import crypto from "node:crypto";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
 import { users } from "#platform/db/schemas/users.ts";
+
+const authenticatedRowsCheck = Schema.Compile(
+  Type.Array(
+    Type.Object(
+      {
+        email: Type.String(),
+        id: Type.Integer(),
+        isAdmin: Type.Boolean(),
+        name: Type.String(),
+        status: Type.Literal("active"),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+);
+
+// Exported so an integration test can EXPLAIN the statement the auth plugin
+// actually runs rather than a copy of it.
+export function authenticateStatement(sid: string, userAgent: null | string) {
+  return sql`
+    WITH "resolved" AS (
+      SELECT "users"."id", "users"."email", "users"."name",
+             "users"."is_admin", "users"."status"
+      FROM "sessions"
+      INNER JOIN "users" ON "users"."id" = "sessions"."user_id"
+      WHERE "sessions"."sid" = ${sid}
+        AND "sessions"."expires_at" > NOW()
+        AND "users"."status" = 'active'
+    ),
+    "touch_session" AS (
+      UPDATE "sessions"
+      SET "last_used_at" = NOW(),
+          "user_agent" = COALESCE(${userAgent}, "user_agent")
+      WHERE "sid" = ${sid}
+        AND EXISTS (SELECT 1 FROM "resolved")
+        AND (
+          "last_used_at" < NOW() - INTERVAL '1 minute'
+          OR "user_agent" IS DISTINCT FROM COALESCE(${userAgent}, "user_agent")
+        )
+    ),
+    "touch_user" AS (
+      UPDATE "users"
+      SET "last_seen_at" = NOW()
+      WHERE "id" = (SELECT "id" FROM "resolved")
+        AND "last_seen_at" < NOW() - INTERVAL '1 day'
+    )
+    SELECT "id", "email", "name", "is_admin" AS "isAdmin", "status"
+    FROM "resolved"
+  `;
+}
 
 export class UsersDataService {
   constructor(
@@ -183,10 +235,10 @@ export class UsersDataService {
       .execute();
   }
 
-  // The expiry predicate lives here rather than in a caller-side check
-  // because this lookup is the one choke point every request's session
-  // flows through: an expired sid resolves to no user at all, which the
-  // auth plugin already answers with a 401.
+  // The expiry predicate lives here rather than in a caller-side check, so
+  // an expired sid resolves to no user at all. authenticate applies the same
+  // predicate for the routes behind the auth plugin; this read-only lookup
+  // serves GET /api/session, which must not count as activity.
   public async getUserBySid(sid: string) {
     return (
       await this.drizzleConnection
@@ -202,6 +254,28 @@ export class UsersDataService {
         .leftJoin(sessions, eq(sessions.userId, users.id))
         .limit(1)
     ).at(0);
+  }
+
+  /**
+   * The auth plugin's whole round-trip: resolves the sid the way getUserBySid
+   * does, and stamps activity in the same statement. PostgreSQL runs a
+   * data-modifying CTE even when the final SELECT never reads it, so both
+   * writes happen without a second round-trip.
+   *
+   * Each write guards itself, so most requests write nothing: the session row
+   * only when it is more than a minute stale or the User-Agent changed, the
+   * user row once a day. COALESCE keeps a missing header from overwriting a
+   * known agent with the UNKNOWN sentinel. An unknown, expired or inactive
+   * sid resolves to no user and writes nothing.
+   */
+  public async authenticate(sid: string, userAgent: null | string) {
+    const rows: unknown = await this.drizzleConnection.execute(
+      authenticateStatement(sid, userAgent),
+    );
+    if (!authenticatedRowsCheck.Check(rows)) {
+      throw new Error("Database returned an invalid authenticated user row");
+    }
+    return rows.at(0);
   }
 
   // One row per active session of the user's, most recently active first,
@@ -230,28 +304,6 @@ export class UsersDataService {
       .orderBy(desc(sessions.lastUsedAt), desc(sessions.id));
   }
 
-  // The session-level counterpart of touchLastSeen: stamps activity and
-  // the current User-Agent onto the row, so a session's device label
-  // follows the browser across updates instead of freezing at login-time.
-  // Self-guarding like touchLastSeen -- a no-op write on every request
-  // except when the header changed or the staleness window elapsed -- and
-  // COALESCE keeps a missing header from overwriting a known agent with
-  // the UNKNOWN sentinel.
-  public async refreshSession(sid: string, userAgent: null | string) {
-    await this.drizzleConnection
-      .update(sessions)
-      .set({
-        lastUsedAt: sql`NOW()`,
-        userAgent: sql`COALESCE(${userAgent}, ${sessions.userAgent})`,
-      })
-      .where(
-        and(
-          eq(sessions.sid, sid),
-          sql`(${sessions.lastUsedAt} < NOW() - INTERVAL '1 minute' OR ${sessions.userAgent} IS DISTINCT FROM COALESCE(${userAgent}, ${sessions.userAgent}))`,
-        ),
-      );
-  }
-
   // Both revocation paths scope by userId so a guessed or forged id can
   // only ever land on the caller's own rows.
   public async deleteSessionById(userId: number, sessionId: number) {
@@ -264,22 +316,6 @@ export class UsersDataService {
     await this.drizzleConnection
       .delete(sessions)
       .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
-  }
-
-  // Self-guarding: the WHERE clause makes this a no-op write on every
-  // request except roughly once per day per active user, so it's safe to
-  // call unconditionally from the auth plugin without checking staleness
-  // in application code first.
-  public async touchLastSeen(userId: number) {
-    await this.drizzleConnection
-      .update(users)
-      .set({ lastSeenAt: sql`NOW()` })
-      .where(
-        and(
-          eq(users.id, userId),
-          sql`${users.lastSeenAt} < NOW() - INTERVAL '1 day'`,
-        ),
-      );
   }
 
   public async getUserCount(): Promise<number> {

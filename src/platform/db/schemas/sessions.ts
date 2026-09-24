@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
 import {
+  index,
   integer,
   pgTable,
   serial,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 import { users } from "#platform/db/schemas/users.ts";
@@ -14,27 +16,39 @@ import { users } from "#platform/db/schemas/users.ts";
 // session-header.ts), which imports this constant rather than restating it.
 export const SESSION_TTL_DAYS = 365;
 
-export const sessions = pgTable("sessions", {
-  id: serial("id").primaryKey(),
-  sid: varchar("sid").notNull(),
-  userAgent: varchar("user_agent").notNull(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  // Last request this sid answered, refreshed by the auth plugin with a
-  // self-guarded write. Distinct from createdAt because the migration that
-  // introduced created_at backfilled every pre-existing row with one
-  // shared ALTER-time timestamp, so sign-in dates for old sessions are
-  // unrecoverable -- activity is the honest per-row clock.
-  lastUsedAt: timestamp("last_used_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  // The DDL default needs a plain SQL literal, so the interval cannot be
-  // built from SESSION_TTL_DAYS here -- keep the two in step.
-  expiresAt: timestamp("expires_at", { withTimezone: true })
-    .notNull()
-    .default(sql`NOW() + INTERVAL '365 days'`),
-});
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: serial("id").primaryKey(),
+    sid: varchar("sid").notNull(),
+    userAgent: varchar("user_agent").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Last request this sid answered, refreshed by the auth plugin with a
+    // self-guarded write. Distinct from createdAt because the migration that
+    // introduced created_at backfilled every pre-existing row with one
+    // shared ALTER-time timestamp, so sign-in dates for old sessions are
+    // unrecoverable -- activity is the honest per-row clock.
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // The DDL default needs a plain SQL literal, so the interval cannot be
+    // built from SESSION_TTL_DAYS here -- keep the two in step.
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`NOW() + INTERVAL '365 days'`),
+  },
+  // Every authenticated request resolves its cookie through sid, and the
+  // session list and both revocation paths filter by user_id. Built in the
+  // migration transaction rather than pre-built CONCURRENTLY: the table holds
+  // one row per login, so the lock is brief, and a duplicate sid then fails
+  // the whole migration instead of leaving an invalid index behind.
+  (table) => [
+    uniqueIndex("sessions_sid_unique").on(table.sid),
+    index("sessions_user_id_idx").on(table.userId),
+  ],
+);
