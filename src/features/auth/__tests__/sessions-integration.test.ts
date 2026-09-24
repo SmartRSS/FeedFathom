@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
+import { sql } from "drizzle-orm";
 import { fileURLToPath } from "node:url";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
-import { UsersDataService } from "#features/auth/user-data-service.ts";
+import {
+  authenticateStatement,
+  UsersDataService,
+} from "#features/auth/user-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "../../../features/feeds/__tests__/disposable-database-url.ts";
 
@@ -26,8 +30,8 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     await migrateDatabase(databaseUrl, migrationsFolder);
 
     const [user] = await client<{ id: number }[]>`
-      INSERT INTO users (email, name, password)
-      VALUES ('reader@example.test', 'reader', 'x') RETURNING id`;
+      INSERT INTO users (email, name, password, status)
+      VALUES ('reader@example.test', 'reader', 'x', 'active') RETURNING id`;
     const [other] = await client<{ id: number }[]>`
       INSERT INTO users (email, name, password)
       VALUES ('other@example.test', 'other', 'x') RETURNING id`;
@@ -96,7 +100,7 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
     // Each answered request refreshes the row's activity stamp and its
     // User-Agent, so the device label follows the browser across updates.
-    await usersDataService.refreshSession(browserSid, "This browser 2.0");
+    await usersDataService.authenticate(browserSid, "This browser 2.0");
     const [refreshed] = await client<
       {
         last_used_at: Date;
@@ -111,7 +115,7 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
     // A missing header never overwrites a known agent with the UNKNOWN
     // sentinel, and a stale row within its freshness window is left alone.
-    await usersDataService.refreshSession(browserSid, null);
+    await usersDataService.authenticate(browserSid, null);
     expect(
       (
         await client<{ user_agent: string }[]>`
@@ -131,6 +135,110 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     expect(
       await usersDataService.listSessions(userId, browserSid),
     ).toHaveLength(1);
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
+
+type Versions = { session: string; user: string };
+
+// The auth plugin's one statement writes only when a guard fires. A row's
+// xmin names the transaction that last wrote it, so an unchanged xmin proves
+// no write happened -- for an unknown, expired or inactive sid, and for a
+// second request inside both guard windows.
+test("authenticate stamps an active session at most once per guard window", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const usersDataService = new UsersDataService(drizzleConnection);
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+
+    const [user] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password, status, last_seen_at)
+      VALUES ('stamped@example.test', 'stamped', 'x', 'active',
+        NOW() - INTERVAL '2 days')
+      RETURNING id`;
+    const userId = user!.id;
+    const sid = await usersDataService.createSession(userId, "x", "Browser");
+    if (!sid) throw new Error("session was not issued");
+    await client`
+      UPDATE sessions SET last_used_at = NOW() - INTERVAL '2 minutes'
+      WHERE sid = ${sid}`;
+
+    const versions = async () => {
+      const [row] = await client<Versions[]>`
+        SELECT sessions.xmin::text AS session, users.xmin::text AS user
+        FROM sessions JOIN users ON users.id = sessions.user_id
+        WHERE sessions.sid = ${sid}`;
+      if (!row) throw new Error("session row is missing");
+      return row;
+    };
+    const expectNoWrite = async (resolveSid: string) => {
+      const before = await versions();
+      expect(
+        await usersDataService.authenticate(resolveSid, "Browser"),
+      ).toBeUndefined();
+      expect(await versions()).toEqual(before);
+    };
+
+    await expectNoWrite("no-such-sid");
+    await client`UPDATE users SET status = 'inactive' WHERE id = ${userId}`;
+    await expectNoWrite(sid);
+    await client`UPDATE users SET status = 'active' WHERE id = ${userId}`;
+    await client`
+      UPDATE sessions SET expires_at = NOW() - INTERVAL '1 second'
+      WHERE sid = ${sid}`;
+    await expectNoWrite(sid);
+    await client`
+      UPDATE sessions SET expires_at = NOW() + INTERVAL '1 day'
+      WHERE sid = ${sid}`;
+
+    // Past both windows, one request stamps both rows; the next writes
+    // nothing.
+    const stale = await versions();
+    expect(await usersDataService.authenticate(sid, "Browser")).toEqual({
+      email: "stamped@example.test",
+      id: userId,
+      isAdmin: false,
+      name: "stamped",
+      status: "active",
+    });
+    const stamped = await versions();
+    expect(stamped.session).not.toBe(stale.session);
+    expect(stamped.user).not.toBe(stale.user);
+    expect((await usersDataService.authenticate(sid, "Browser"))?.id).toBe(
+      userId,
+    );
+    expect(await versions()).toEqual(stamped);
+
+    // A changed User-Agent is the one reason to write the session row inside
+    // its minute; the user row keeps its daily window.
+    await usersDataService.authenticate(sid, "Browser 2");
+    const relabelled = await versions();
+    expect(relabelled.session).not.toBe(stamped.session);
+    expect(relabelled.user).toBe(stamped.user);
+
+    // Both sid probes in the statement use the unique index. Sequential scans
+    // are priced out so a one-row table cannot make one look cheaper; without
+    // the index the planner has no alternative and would still show one.
+    // EXPLAIN without ANALYZE plans the data-modifying CTEs but runs nothing.
+    const plan = await drizzleConnection.transaction(async (transaction) => {
+      await transaction.execute(sql`SET LOCAL enable_seqscan = off`);
+      const rows: unknown = await transaction.execute(
+        sql`EXPLAIN ${authenticateStatement(sid, "Browser")}`,
+      );
+      return JSON.stringify(rows);
+    });
+    expect(plan.match(/Index Scan using sessions_sid_unique/gu)).toHaveLength(
+      2,
+    );
+    expect(plan).not.toContain("Seq Scan");
   } finally {
     await drizzleConnection.$client.close();
     await client.close();

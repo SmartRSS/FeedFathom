@@ -118,10 +118,7 @@ type ReaderRouteDependencies = {
     | "removeUserArticles"
     | "setUserArticlesRead"
   >;
-  usersDataService: Pick<
-    UsersDataService,
-    "getUserBySid" | "refreshSession" | "touchLastSeen"
-  >;
+  usersDataService: Pick<UsersDataService, "authenticate" | "getUserBySid">;
   feedParser: Pick<
     FeedParser,
     "discoverAndSubscribeWebSub" | "parseUrl" | "preview"
@@ -167,13 +164,12 @@ type AdminOptionsRouteDependencies = {
   userSourcesDataService: Pick<UserSourcesDataService, "getUserSources">;
   usersDataService: Pick<
     UsersDataService,
+    | "authenticate"
     | "findUser"
     | "getUserBySid"
     | "listSessions"
     | "deleteSessionById"
     | "deleteOtherSessions"
-    | "refreshSession"
-    | "touchLastSeen"
   > & {
     updatePassword(userId: number, passwordHash: string): Promise<unknown>;
   };
@@ -393,6 +389,14 @@ function createDependencies(): ServerFakes {
       async activateUser() {
         return unexpected("usersDataService.activateUser");
       },
+      // Resolves through getUserBySid, so a test names the signed-in user
+      // once and both the read-only lookup and the auth plugin see it.
+      async authenticate(sid) {
+        const user = await this.getUserBySid(sid);
+        return user?.status === "active"
+          ? { ...user, status: "active" }
+          : undefined;
+      },
       async completePasswordReset() {
         return unexpected("usersDataService.completePasswordReset");
       },
@@ -426,11 +430,9 @@ function createDependencies(): ServerFakes {
       async refreshActivationToken() {
         return unexpected("usersDataService.refreshActivationToken");
       },
-      async refreshSession() {},
       async startPasswordReset() {
         return unexpected("usersDataService.startPasswordReset");
       },
-      async touchLastSeen() {},
       async updatePassword() {
         return unexpected("usersDataService.updatePassword");
       },
@@ -487,15 +489,15 @@ test("returns a session matching the browser contract", async () => {
 });
 
 // The session row's activity stamp and device label are refreshed by the
-// auth plugin on every request that resolves the cookie -- if that call
-// silently stops happening, the options list quietly reverts to
+// auth plugin on every request that resolves the cookie -- if the plugin
+// stops passing the User-Agent along, the options list quietly reverts to
 // login-time snapshots and nothing else in the app would notice.
 test("each authenticated request refreshes the session row", async () => {
   const dependencies = createDependencies();
-  authenticated(dependencies);
-  const refreshed: Array<[string, null | string]> = [];
-  dependencies.usersDataService.refreshSession = async (sid, userAgent) => {
-    refreshed.push([sid, userAgent]);
+  const authenticatedWith: Array<[string, null | string]> = [];
+  dependencies.usersDataService.authenticate = async (sid, userAgent) => {
+    authenticatedWith.push([sid, userAgent]);
+    return sessionUser;
   };
   const app = await appFor(dependencies);
 
@@ -504,18 +506,18 @@ test("each authenticated request refreshes the session row", async () => {
       headers: { cookie: "sid=test", "user-agent": "Mozilla/5.0 TestClient" },
     }),
   );
-  expect(refreshed).toEqual([["test", "Mozilla/5.0 TestClient"]]);
+  expect(authenticatedWith).toEqual([["test", "Mozilla/5.0 TestClient"]]);
 
-  // An unauthenticated request resolves no sid, so there is no row to
-  // refresh -- and the plugin answers 401 before touching anything.
-  refreshed.length = 0;
+  // A request without a cookie has no row to refresh -- the plugin answers
+  // 401 without reaching the database.
+  authenticatedWith.length = 0;
   const unauthorized = await app.handle(
     new Request("http://localhost/api/options", {
       headers: { "user-agent": "Mozilla/5.0 TestClient" },
     }),
   );
   expect(unauthorized.status).toBe(401);
-  expect(refreshed).toEqual([]);
+  expect(authenticatedWith).toEqual([]);
 });
 
 // MAIL_DOMAIN is where inbound mail is routed and FEED_FATHOM_DOMAIN is
