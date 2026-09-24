@@ -21,6 +21,11 @@ const shortIntervals = {
   background: shortInterval,
   interactive: shortInterval,
 };
+// The limiter spaces reservations; these tests time the transport calls that
+// follow them. A call can be stamped a millisecond after its reservation, so
+// the gap between two calls may read a few milliseconds under the interval
+// that separated the reservations.
+const minimumSendGap = shortInterval - 5;
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -444,8 +449,8 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
 
   expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
   expect(sentAt).toHaveLength(3);
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
-  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
+  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 // Only the original hostname held a reservation, so every host reached
@@ -472,7 +477,7 @@ test("reserves the redirect target's slot, not just the original host's", async 
 
   expect(
     sentAt.get("https://8.8.8.8/direct")! - sentAt.get("https://8.8.8.8/real")!,
-  ).toBeGreaterThanOrEqual(shortInterval);
+  ).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 // A host that just answered 429 could be hammered through a redirect from
@@ -563,7 +568,7 @@ test("post reserves the host, sends the body, and does not follow redirects", as
     "https://hub.example/",
   ]);
   expect(sent[0]?.body).toBe("hub.mode=subscribe");
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(shortInterval);
+  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
 });
 
 test("post honours a hub's Retry-After instead of discarding it", async () => {
