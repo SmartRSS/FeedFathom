@@ -23,6 +23,7 @@ describe("loadConfig", () => {
       LOCK_DURATION: 1000,
       MAIL_ENABLED: false,
       REDIS_URL: "redis://redis:6379",
+      SLOW_REQUEST_MS: 500,
       USER_DORMANT_AFTER_DAYS: 365,
       USER_EXPIRY_DAYS: 730,
       WORKER_CONCURRENCY: 1,
