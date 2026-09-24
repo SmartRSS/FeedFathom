@@ -32,15 +32,24 @@ import { users } from "#platform/db/schemas/users.ts";
 // the origin asked for (both written by the same successSource UPDATE), and
 // websub ignores that column, so it gets the flat daily fallback. Every
 // degenerate case lands on a LARGER buffer, erring towards keeping.
+export const goneFromFeedBufferFloorHours = 24;
 const confirmedGoneFromFeedBuffer = sql`
   GREATEST(
-    INTERVAL '1 day',
+    ${goneFromFeedBufferFloorHours} * INTERVAL '1 hour',
     10 * CASE ${sources.kind}
       WHEN 'websub' THEN INTERVAL '1 day'
       ELSE ${sources.notBefore} - ${sources.lastSuccess}
     END
   )
 `;
+
+// A parse re-stamps last_seen_in_feed_at on an unchanged article only once
+// its stamp is this old (#897): rewriting every row on every poll to move one
+// timestamp made nearly every article write a no-op. The buffer above must
+// absorb the staleness this allows: right after a parse, a present article
+// sits at most this far behind last_success. Raising it to the buffer's floor
+// would have the gone-from-feed rule delete articles still in the feed.
+export const lastSeenBumpThrottleHours = 1;
 
 // Email deliveries have no feed to go absent from, so the gone-from-feed
 // reading does not apply to them. Their retention is flat delivery age, the

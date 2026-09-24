@@ -14,6 +14,7 @@ import { userSources } from "#platform/db/schema.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type ArticleInsert, articles } from "#platform/db/schemas/articles.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
+import { lastSeenBumpThrottleHours } from "#features/feeds/retention.ts";
 
 // user_articles is keyed on the article's (source, guid) rather than its id,
 // so a removal survives the article row being pruned -- see the schema.
@@ -181,11 +182,15 @@ export class ArticlesDataService {
     );
   }
 
-  public async batchUpsertArticles(articlePayloads: ArticleInsert[]) {
-    if (articlePayloads.length === 0) {
-      return;
-    }
-
+  /**
+   * Returns how many rows a recount of the unread badge could now see
+   * differently: articles inserted, articles whose content or timestamps
+   * changed, and articles a newer subscription could not see until this
+   * write re-stamped them. Zero means nothing a badge counts has moved.
+   */
+  public async batchUpsertArticles(
+    articlePayloads: ArticleInsert[],
+  ): Promise<number> {
     // A feed can list the same (sourceId, guid) twice in one fetch (republishing,
     // pagination overlap, feed-generator bugs). Postgres rejects an ON CONFLICT
     // DO UPDATE batch that targets the same row twice, so dedupe first, keeping
@@ -199,7 +204,6 @@ export class ArticlesDataService {
       ).values(),
     ];
 
-    // Process articles in batches to avoid hitting database parameter limits
     const fieldChange = sql`
       excluded.author IS DISTINCT FROM ${articles.author}
       OR excluded.content IS DISTINCT FROM ${articles.content}
@@ -217,17 +221,64 @@ export class ArticlesDataService {
         OR excluded.updated_at > ${articles.updatedAt}
       )
     `;
-    const BATCH_SIZE = 10;
+    // At 10 columns a row this is about 1000 bind parameters, far under
+    // Postgres's 65535, and puts a typical feed in one round trip.
+    const BATCH_SIZE = 100;
+    // Split per source so the latest-subscription lookup below is an
+    // uncorrelated subquery, which Postgres evaluates once per statement.
     const batches = [];
-
-    for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
-      batches.push(deduped.slice(i, i + BATCH_SIZE));
+    for (const sourcePayloads of Map.groupBy(
+      deduped,
+      (payload) => payload.sourceId,
+    ).values()) {
+      for (let i = 0; i < sourcePayloads.length; i += BATCH_SIZE) {
+        batches.push(sourcePayloads.slice(i, i + BATCH_SIZE));
+      }
     }
 
+    let changed = 0;
     for (const [batchIndex, batch] of batches.entries()) {
+      const sourceId = batch[0]!.sourceId;
+      // A subscription sees an article once last_seen_in_feed_at reaches its
+      // created_at (userArticleAccessJoin), and OPML import creates
+      // subscriptions without writing any article. A stamp older than the
+      // newest subscription is therefore moved regardless of the throttle,
+      // or that subscriber would wait up to the throttle to see the feed.
+      const latestSubscription = sql`(
+        SELECT MAX(${userSources.createdAt})
+        FROM ${userSources}
+        WHERE ${userSources.sourceId} = ${sourceId}
+      )`;
+      // Compared as text: a JS Date drops the microseconds, and the
+      // content-change branch below can move updated_at by exactly one.
+      const updatedAtText = sql<null | string>`${articles.updatedAt}::text`;
       try {
+        // RETURNING sees only the new row, so what each row looked like
+        // before is read first. The SET moves updated_at exactly when
+        // fieldChange or timestampAdvance holds, which is what separates a
+        // content change from a bare re-stamp. A concurrent write in between
+        // can only make this over-report, which costs one recount.
         // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
-        await this.drizzleConnection
+        const before = await this.drizzleConnection
+          .select({
+            guid: articles.guid,
+            hidden: sql<boolean>`COALESCE(${articles.lastSeenInFeedAt} < ${latestSubscription}, false)`,
+            updatedAt: updatedAtText,
+          })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.sourceId, sourceId),
+              inArray(
+                articles.guid,
+                batch.map((payload) => payload.guid),
+              ),
+            ),
+          );
+        const beforeByGuid = new Map(before.map((row) => [row.guid, row]));
+
+        // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
+        const written = await this.drizzleConnection
           .insert(articles)
           .values(batch)
           .onConflictDoUpdate({
@@ -261,11 +312,37 @@ export class ArticlesDataService {
               `,
               url: sql`excluded.url`,
             },
+            // An unchanged row is left alone until its stamp is
+            // lastSeenBumpThrottleHours old (#897). Every write here copies
+            // the whole row, body included, into every index on the table,
+            // and a poll every few minutes made nearly all of them no-ops.
+            // retention.ts explains why the throttle must stay under the
+            // gone-from-feed buffer.
             setWhere: sql`
               excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
+              AND (
+                ${fieldChange}
+                OR ${timestampAdvance}
+                OR ${articles.lastSeenInFeedAt} < GREATEST(
+                  excluded.last_seen_in_feed_at - ${lastSeenBumpThrottleHours} * INTERVAL '1 hour',
+                  ${latestSubscription}
+                )
+              )
             `,
             target: [articles.sourceId, articles.guid],
-          });
+          })
+          .returning({ guid: articles.guid, updatedAt: updatedAtText });
+
+        for (const row of written) {
+          const previous = beforeByGuid.get(row.guid);
+          if (
+            previous === undefined ||
+            previous.hidden ||
+            previous.updatedAt !== row.updatedAt
+          ) {
+            changed++;
+          }
+        }
       } catch (error) {
         console.error(
           `Error upserting articles batch ${batchIndex + 1}/${batches.length}:`,
@@ -277,6 +354,7 @@ export class ArticlesDataService {
         throw error;
       }
     }
+    return changed;
   }
 
   /**

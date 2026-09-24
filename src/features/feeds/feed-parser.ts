@@ -185,14 +185,21 @@ export class FeedParser {
       );
       // batchUpsertArticles commits batch by batch, so a later failure leaves
       // earlier articles committed. Recompute either way, then re-raise.
+      // Otherwise recompute only when the upsert reports a row a badge could
+      // count differently: most polls change nothing, and the recount
+      // aggregates every retained article against every subscriber (#897).
       let upsertError: unknown;
+      let changed = 0;
       try {
-        await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
+        changed =
+          await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
       } catch (error) {
         upsertError = error;
       }
       try {
-        await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+        if (upsertError !== undefined || changed > 0) {
+          await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+        }
       } catch (recomputeError) {
         // The upsert failure is the root cause; don't let this replace it.
         if (upsertError === undefined) {

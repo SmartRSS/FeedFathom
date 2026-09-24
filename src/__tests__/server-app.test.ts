@@ -1234,6 +1234,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     runLease;
   dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
     upserts.push(articles);
+    return articles.length;
   };
   dependencies.userSourcesDataService.recomputeUnreadCounts = async (
     sourceIds,
