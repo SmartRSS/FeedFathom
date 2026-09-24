@@ -1074,14 +1074,12 @@ export function Dashboard(props: {
                   } as const,
                 ]
               : []),
-            ...snoozePresets.map(
-              (preset): ContextMenuItem => ({
-                kind: "action",
-                label: preset.label,
-                onSelect: () =>
-                  void snoozeNode(node, snoozeUntilIso(preset.hours)),
-              }),
-            ),
+            ...snoozePresets.map((preset): ContextMenuItem => ({
+              kind: "action",
+              label: preset.label,
+              onSelect: () =>
+                void snoozeNode(node, snoozeUntilIso(preset.hours)),
+            })),
           ]
         : [];
     const items: ContextMenuItem[] =
