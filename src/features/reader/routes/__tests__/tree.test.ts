@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { faviconPath } from "../tree.ts";
+import { faviconPath } from "../favicon-path.ts";
 
 describe("faviconPath", () => {
   test("a source with a stored favicon gets its URL", () => {
