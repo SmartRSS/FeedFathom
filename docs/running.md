@@ -86,6 +86,7 @@ Configure the deployment with a `.env` file next to `compose.yml`. Every variabl
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | unset | Cloudflare Turnstile on the registration form. Required together, and worth setting whenever `ENABLE_REGISTRATION` is `true`. |
 | `MAILJET_API_KEY`, `MAILJET_API_SECRET` | unset | Outbound mail for registration activation and password reset. Required together; without them there is no reset flow at all. |
 | `TRUSTED_PROXY_HEADER` | unset | Header carrying the real client address behind a reverse proxy, usually `X-Forwarded-For`. Failed logins are counted per address, so leaving it unset behind a proxy counts every user against one budget. Never set it without a proxy that overwrites the header. |
+| `SLOW_REQUEST_MS` | `500` | Threshold in milliseconds past which a request writes one `method routePattern status durationMs` log line. Lower it to see more of the tail; the healthcheck never logs regardless. |
 
 ### Behind a reverse proxy
 
