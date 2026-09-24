@@ -101,6 +101,10 @@ const configSchema = Type.Object(
       86_400,
     ),
     PORT: Type.Optional(integerString("PORT", undefined, 1, 65_535)),
+    // A request line is worth a log entry only past this many milliseconds --
+    // below it, every request would write one and the slow ones would be
+    // lost in the noise.
+    SLOW_REQUEST_MS: integerString("SLOW_REQUEST_MS", "500", 1, 600_000),
     MAIL_ENABLED: booleanString(),
     // The host newsletter addresses are minted at. Distinct from
     // FEED_FATHOM_DOMAIN, since Cloudflare Email Routing is rarely configured

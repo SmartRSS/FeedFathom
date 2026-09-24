@@ -10,6 +10,7 @@ import type { FoldersDataService } from "#features/feeds/folder-data-service.ts"
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import type { OpmlParser } from "#features/feeds/opml-parser.ts";
+import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type {
   SourcesDataService,
@@ -20,7 +21,7 @@ import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -133,6 +134,7 @@ type ReaderRouteDependencies = {
   };
   mailEnabled: boolean;
   faviconStore: Pick<FaviconStore, "getFavicon">;
+  outboundFetchBudget: Pick<OutboundFetchBudget, "consume">;
   sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
   sourcesDataService: Pick<SourcesDataService, "successSource">;
   userSourcesDataService: Pick<
@@ -246,6 +248,7 @@ function createDependencies(): ServerFakes {
     LOCK_DURATION: 1_000,
     MAIL_ENABLED: false,
     REDIS_URL: "redis://localhost:6379",
+    SLOW_REQUEST_MS: 500,
     USER_DORMANT_AFTER_DAYS: 365,
     USER_EXPIRY_DAYS: 730,
     WORKER_CONCURRENCY: 1,
@@ -334,6 +337,9 @@ function createDependencies(): ServerFakes {
       parseOpml() {
         return [];
       },
+    },
+    outboundFetchBudget: {
+      async consume() {},
     },
     password: {
       async hash(value) {
@@ -1427,6 +1433,34 @@ test("triggers WebSub discovery immediately at subscribe time, but not for email
   ]);
 });
 
+test("responds without waiting for WebSub discovery to settle", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedParser.discoverAndSubscribeWebSub = () =>
+    new Promise<void>(() => {
+      // Never resolves, simulating a hub that never answers -- the
+      // response must not wait on it.
+    });
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date(),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.sourceEnqueuer.enqueueSource = async () => {};
+  const app = await appFor(dependencies);
+
+  const response = await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ sourceId: subscriptionSource.id });
+});
+
 test("protects nonempty folders and deletes empty owned folders", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -2361,6 +2395,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   ];
   dependencies.userSourcesDataService.getUserSources = async () => [
     {
+      faviconFingerprint: null,
       homeUrl: "https://news.test",
       id: 1,
       kind: "feed",
@@ -2371,6 +2406,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       url: "https://news.test/feed",
     },
     {
+      faviconFingerprint: null,
       homeUrl: null,
       id: 2,
       kind: "email",
@@ -2426,6 +2462,7 @@ test("exports the same bytes whatever order the services return rows in", async 
   ];
   const sources = [
     {
+      faviconFingerprint: null,
       homeUrl: "https://b.test",
       id: 1,
       kind: "feed" as const,
@@ -2436,6 +2473,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       url: "https://b.test/feed",
     },
     {
+      faviconFingerprint: null,
       homeUrl: "https://a.test",
       id: 2,
       kind: "feed" as const,
@@ -2446,6 +2484,7 @@ test("exports the same bytes whatever order the services return rows in", async 
       url: "https://a.test/feed",
     },
     {
+      faviconFingerprint: null,
       homeUrl: "https://c.test",
       id: 3,
       kind: "feed" as const,
@@ -3669,4 +3708,130 @@ test("WebSub push over the body cap is rejected without buffering, whatever it c
   expect(response.status).toBe(413);
   expect(seeded).toEqual([]);
   expect(enqueued).toEqual([]);
+});
+
+test("logs a slow request with its route pattern, never the raw query string", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  // A tiny threshold stands in for an artificially slow handler: every
+  // request that completes at all is "slow" against it.
+  dependencies.config.SLOW_REQUEST_MS = 0;
+  dependencies.faviconStore.getFavicon = async () =>
+    "data:image/png;base64,AAAA";
+  const app = await appFor(dependencies);
+  const log = spyOn(console, "log").mockImplementation(() => {});
+
+  try {
+    const response = await app.handle(
+      new Request("http://localhost/api/favicon/7?v=abc123", {
+        headers: { cookie: "sid=test" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(log).toHaveBeenCalledTimes(1);
+    const line: unknown = log.mock.calls[0]?.[0];
+    if (typeof line !== "string") throw new Error("Expected a logged line");
+    expect(line).toMatch(/^GET \/api\/favicon\/:id 200 \d+$/);
+    expect(line).not.toContain("v=abc123");
+    expect(line).not.toContain("?");
+    expect(line).not.toContain("/7");
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("a request under the threshold logs nothing", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const app = await appFor(dependencies);
+  const log = spyOn(console, "log").mockImplementation(() => {});
+
+  try {
+    const response = await app.handle(
+      new Request("http://localhost/api/session", {
+        headers: { cookie: "sid=test" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(log).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+// The internal healthcheck runs constantly and carries no useful signal, so
+// it stays out of the slow-request log even when it is the slowest thing an
+// instance ever serves.
+test("never logs the healthcheck route, however slow", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.SLOW_REQUEST_MS = 0;
+  const app = await appFor(dependencies);
+  app.listen(0);
+  const log = spyOn(console, "log").mockImplementation(() => {});
+
+  try {
+    const origin = `http://127.0.0.1:${app.server?.port}`;
+    const response = await fetch(`${origin}/healthcheck`);
+
+    expect(response.status).toBe(200);
+    expect(log).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+    await app.stop();
+  }
+});
+
+test("cache headers: /assets/* is immutable, index.html is no-cache", async () => {
+  const tmpDir =
+    "/tmp/feedfathom-test-" +
+    Math.random().toString(36).slice(2) +
+    "-" +
+    Date.now();
+  try {
+    // Create directory structure with files
+    await Bun.write(`${tmpDir}/index.html`, "<html>test</html>");
+    await Bun.write(`${tmpDir}/assets/x-abc123.js`, "console.log('test');");
+
+    const appWithSpa = await createServerApp({
+      production: true,
+      spaDirectory: tmpDir,
+    });
+
+    // Test /assets/* → immutable
+    const assetResponse = await appWithSpa.handle(
+      new Request("http://localhost/assets/x-abc123.js"),
+    );
+    expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get("Cache-Control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+
+    // Test / → no-cache
+    const indexResponse = await appWithSpa.handle(
+      new Request("http://localhost/"),
+    );
+    expect(indexResponse.status).toBe(200);
+    expect(indexResponse.headers.get("Cache-Control")).toBe("no-cache");
+
+    // Test /index.html → no-cache
+    const indexHtmlResponse = await appWithSpa.handle(
+      new Request("http://localhost/index.html"),
+    );
+    expect(indexHtmlResponse.status).toBe(200);
+    expect(indexHtmlResponse.headers.get("Cache-Control")).toBe("no-cache");
+
+    // Test SPA fallback (404 with Accept: text/html returns index.html) → no-cache
+    const spaFallbackResponse = await appWithSpa.handle(
+      new Request("http://localhost/some/spa/route", {
+        headers: { accept: "text/html" },
+      }),
+    );
+    expect(spaFallbackResponse.status).toBe(200);
+    expect(spaFallbackResponse.headers.get("Cache-Control")).toBe("no-cache");
+  } finally {
+    // Clean up temporary directory
+    await Bun.spawn(["rm", "-rf", tmpDir]).exited;
+  }
 });

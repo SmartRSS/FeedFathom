@@ -11,6 +11,7 @@ import {
   isTodayNode,
   preloadFavicons,
   nextPollDelayMs,
+  readStateDeltas,
   sourceIds,
   snoozeUntilIso,
   totalUnread,
@@ -152,6 +153,37 @@ describe("withDecrementedUnread", () => {
   test("a zero delta counts as no change", () => {
     const nodes = [source("1", { unreadCount: 4 })];
     expect(withDecrementedUnread(nodes, new Map([["1", 0]]))).toBe(nodes);
+  });
+});
+
+describe("readStateDeltas", () => {
+  function article(id: number, sourceId: number, read: boolean) {
+    return { id, read, sourceId };
+  }
+
+  test("an already-read article marked read again is not counted", () => {
+    const items = [article(1, 10, true)];
+    expect(readStateDeltas(items, [1], true)).toEqual(new Map());
+  });
+
+  test("marking unread increments its source", () => {
+    const items = [article(1, 10, true)];
+    expect(readStateDeltas(items, [1], false)).toEqual(new Map([["10", -1]]));
+  });
+
+  test("a mixed batch only counts the rows that flip, grouped by source", () => {
+    const items = [
+      article(1, 10, false), // flips read: +1
+      article(2, 10, true), // already read: no change
+      article(3, 20, false), // flips read: +1
+      article(4, 30, true), // not selected: ignored
+    ];
+    expect(readStateDeltas(items, [1, 2, 3], true)).toEqual(
+      new Map([
+        ["10", 1],
+        ["20", 1],
+      ]),
+    );
   });
 });
 

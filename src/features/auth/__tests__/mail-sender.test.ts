@@ -13,6 +13,7 @@ const config = (overrides: Partial<AppConfig> = {}): AppConfig => ({
   LOCK_DURATION: 1_000,
   MAIL_ENABLED: false,
   REDIS_URL: "redis://localhost:6379",
+  SLOW_REQUEST_MS: 500,
   USER_DORMANT_AFTER_DAYS: 365,
   USER_EXPIRY_DAYS: 730,
   WORKER_CONCURRENCY: 1,
