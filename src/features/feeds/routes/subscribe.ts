@@ -80,21 +80,22 @@ export async function postSubscribeHandler({
     throw new Error("Stored subscription snapshot is invalid");
   }
 
-  // Runs alongside (not before) the article-fetch lease below rather than
-  // waiting on it -- both make their own network calls, so doing them
-  // concurrently keeps this from adding two round trips' worth of latency
-  // to what's otherwise a synchronous, user-facing subscribe request.
-  const websubDiscovery = isEmail
-    ? Promise.resolve()
-    : feedParser.discoverAndSubscribeWebSub(
-        subscription.source.id,
-        sourceUrl.value,
-        subscription.source.websubStatus,
-      );
+  // Left running rather than awaited: the response doesn't use its result,
+  // and its hub POST can take up to the request deadline.
+  // discoverAndSubscribeWebSub catches its own errors, so nothing here
+  // needs to observe how it settles. If the process exits before it
+  // finishes, the next parseSource poll re-discovers the hub, and
+  // claimWebSubSubscribeAttempt keeps that retry from double-subscribing.
+  if (!isEmail) {
+    void feedParser.discoverAndSubscribeWebSub(
+      subscription.source.id,
+      sourceUrl.value,
+      subscription.source.websubStatus,
+    );
+  }
 
-  const [, lease] = await Promise.all([
-    websubDiscovery,
-    userSourcesDataService.withSubscriptionInitializationLease(
+  const lease =
+    await userSourcesDataService.withSubscriptionInitializationLease(
       subscription.subscriptionId,
       async () => {
         // An email source has nothing to fetch -- its articles arrive by
@@ -156,8 +157,7 @@ export async function postSubscribeHandler({
           await sourceEnqueuer.enqueueSource(subscription.source);
         }
       },
-    ),
-  ]);
+    );
   if (lease.outcome === "in-progress")
     return json({ error: "Subscription initialization in progress" }, 409);
 

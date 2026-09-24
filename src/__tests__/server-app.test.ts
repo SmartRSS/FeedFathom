@@ -1427,6 +1427,34 @@ test("triggers WebSub discovery immediately at subscribe time, but not for email
   ]);
 });
 
+test("responds without waiting for WebSub discovery to settle", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedParser.discoverAndSubscribeWebSub = () =>
+    new Promise<void>(() => {
+      // Never resolves, simulating a hub that never answers -- the
+      // response must not wait on it.
+    });
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date(),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.sourceEnqueuer.enqueueSource = async () => {};
+  const app = await appFor(dependencies);
+
+  const response = await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ sourceId: subscriptionSource.id });
+});
+
 test("protects nonempty folders and deletes empty owned folders", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
