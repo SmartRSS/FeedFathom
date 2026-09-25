@@ -9,6 +9,7 @@ import {
   isBetterFavicon,
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
+import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
 
 /**
  * Fetches a site's favicon from the free providers and stores the best result.
@@ -107,10 +108,14 @@ export class FaviconRefresher {
     }
 
     if (result.best) {
-      await this.faviconStore.updateFavicon(
-        source.id,
+      const favicon = await normalizeFavicon(
         result.best.buffer,
         result.best.contentType,
+      );
+      await this.faviconStore.updateFavicon(
+        source.id,
+        favicon.buffer,
+        favicon.contentType,
       );
       return;
     }
