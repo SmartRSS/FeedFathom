@@ -61,6 +61,7 @@ export function FeedDiscovery(props: {
   const [folders, setFolders] = createSignal<Folder[]>([]);
   const [feeds, setFeeds] = createSignal<FoundFeed[]>([]);
   const [articles, setArticles] = createSignal<PreviewArticle[]>([]);
+  const [truncated, setTruncated] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal<number>();
   const [loading, setLoading] = createSignal(false);
   const [progress, setProgress] = createSignal("");
@@ -167,6 +168,7 @@ export function FeedDiscovery(props: {
     setLoading(true);
     setProgress("Loading preview…");
     setArticles([]);
+    setTruncated(false);
     setSelectedIndex(undefined);
     setTitle("");
     try {
@@ -179,6 +181,7 @@ export function FeedDiscovery(props: {
       setLink(result.link ?? "");
       setTitle(result.title);
       setArticles(result.articles);
+      setTruncated(result.truncated ?? false);
       setSelectedIndex(initialPreviewSelection(result.articles.length));
       setFeeds([]);
       setMessage("");
@@ -446,6 +449,12 @@ export function FeedDiscovery(props: {
                 </a>
               )}
             </For>
+            <Show when={truncated()}>
+              <p class="empty-pane">
+                This preview shows part of the feed. Subscribing imports all of
+                it.
+              </p>
+            </Show>
           </Show>
         </div>
       </section>

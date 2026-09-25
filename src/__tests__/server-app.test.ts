@@ -913,6 +913,7 @@ test("returns sanitized transient preview articles and rejects parser failures",
 
   expect(valid.status).toBe(200);
   expect(body.title).toBe("Feed title");
+  expect(Reflect.get(body, "truncated")).toBe(false);
   expect(article.title).toBe("Article title");
   expect(body.articles).toHaveLength(2);
   expect(body.articles[1]).toMatchObject({
@@ -1301,6 +1302,57 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(successes[0]?.slice(0, 2)).toEqual([91, true]);
   expect(successes[0]?.[2]).toBeInstanceOf(Date);
   expect(enqueues).toEqual([]);
+});
+
+test("queues a truncated cached preview so the worker imports the whole feed", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const additions: Parameters<
+    ServerFakes["userSourcesDataService"]["addSourceToUser"]
+  >[] = [];
+  const enqueues: Parameters<
+    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+  >[0][] = [];
+  let upserts = 0;
+
+  dependencies.feedPreviewCache.get = async () => ({
+    ...cachedPreview,
+    truncated: true,
+  });
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    ...parameters
+  ) => {
+    additions.push(parameters);
+    return {
+      source: subscriptionSource,
+      subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+      subscriptionId: 1,
+    };
+  };
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
+    upserts++;
+    return articles.length;
+  };
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+    enqueues.push(source);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  expect(await response.json()).toEqual({ sourceId: 91 });
+  expect(additions[0]?.[1]).toMatchObject({
+    homeUrl: subscriptionSource.homeUrl,
+    initializationSnapshot: null,
+  });
+  expect(upserts).toBe(0);
+  expect(enqueues).toEqual([subscriptionSource]);
 });
 
 test("falls back to queueing when inline persistence fails", async () => {

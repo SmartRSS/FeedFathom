@@ -134,6 +134,7 @@ export async function installApiFixture(
     manyArticles?: boolean;
     multipleArticles?: boolean;
     passwordResetEnabled?: boolean;
+    previewTruncated?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
     websubFeed?: boolean;
@@ -460,6 +461,7 @@ export async function installApiFixture(
         feedUrl,
         link: "https://preview.example/",
         title,
+        truncated: options.previewTruncated ?? false,
       });
     }
 

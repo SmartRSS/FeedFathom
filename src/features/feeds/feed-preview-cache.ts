@@ -37,6 +37,7 @@ const previewWireSchema = Type.Object(
     freshUntil: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     link: Type.Optional(Type.String()),
     title: Type.String(),
+    truncated: Type.Optional(Type.Boolean()),
   },
   exact,
 );
@@ -74,6 +75,7 @@ const decodePreview = (
       title: value.title,
     },
     value.freshUntil === undefined ? {} : { freshUntil: value.freshUntil },
+    value.truncated === undefined ? {} : { truncated: value.truncated },
   );
 };
 

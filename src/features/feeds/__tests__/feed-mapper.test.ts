@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   mapFeedItemToArticle,
   mapFeedToPreview,
+  previewArticleLimit,
+  previewContentBytesLimit,
   type Source,
 } from "#features/feeds/feed-mapper.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
@@ -231,6 +233,7 @@ describe("mapFeedToPreview", () => {
       feedUrl: "https://example.com/feed.xml",
       link: "https://example.com/",
       title: "Feed Title",
+      truncated: false,
     });
   });
 
@@ -253,6 +256,7 @@ describe("mapFeedToPreview", () => {
       feedUrl: "https://example.com/feed.xml",
       link: undefined,
       title: "https://example.com/feed.xml",
+      truncated: false,
     });
   });
 
@@ -346,5 +350,94 @@ describe("content link base", () => {
     expect(article.content).toBe(rewritten(base));
     expect(preview.articles[0]?.content).toBe(rewritten(base));
     expect(preview.articles[0]?.url).toBe(article.url);
+  });
+});
+
+const countingRewrite = () => {
+  const calls: string[] = [];
+  return {
+    calls,
+    rewrite: (content: string) => {
+      calls.push(content);
+      return content;
+    },
+  };
+};
+
+describe("mapFeedToPreview bounds", () => {
+  const sourceUrl = "https://example.com/feed.xml";
+  const itemsWith = (count: number, content: string) =>
+    Array.from({ length: count }, (_, index) =>
+      createMockFeedItem({ content, id: `item-${index}` }),
+    );
+
+  test("keeps only the article limit of a large feed and flags the rest", () => {
+    const { calls, rewrite } = countingRewrite();
+    const preview = mapFeedToPreview(
+      createMockFeed({ items: itemsWith(1_000, "<p>Body</p>") }),
+      sourceUrl,
+      rewrite,
+    );
+
+    expect(preview.articles).toHaveLength(previewArticleLimit);
+    expect(preview.articles[0]?.guid).toBe("item-0");
+    expect(preview.truncated).toBe(true);
+    expect(calls).toHaveLength(previewArticleLimit);
+  });
+
+  test("leaves a small feed untouched", () => {
+    const preview = mapFeedToPreview(
+      createMockFeed({ items: itemsWith(3, "<p>Body</p>") }),
+      sourceUrl,
+      mockRewriteLinks,
+    );
+
+    expect(preview.articles.map((article) => article.guid)).toEqual([
+      "item-0",
+      "item-1",
+      "item-2",
+    ]);
+    expect(preview.truncated).toBe(false);
+  });
+
+  test("stops before the content byte limit", () => {
+    const { calls, rewrite } = countingRewrite();
+    const body = "x".repeat(Math.floor(previewContentBytesLimit / 3) + 1);
+    const preview = mapFeedToPreview(
+      createMockFeed({ items: itemsWith(10, body) }),
+      sourceUrl,
+      rewrite,
+    );
+
+    expect(preview.articles).toHaveLength(2);
+    expect(preview.truncated).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("counts multi-byte content by its UTF-8 size", () => {
+    // Each "é" is two UTF-8 bytes, so two such items overflow the limit even
+    // though their combined string length stays under it.
+    const body = "é".repeat(previewContentBytesLimit / 4 + 1);
+    const preview = mapFeedToPreview(
+      createMockFeed({ items: itemsWith(3, body) }),
+      sourceUrl,
+      mockRewriteLinks,
+    );
+
+    expect(preview.articles).toHaveLength(1);
+    expect(preview.truncated).toBe(true);
+  });
+
+  test("still previews one oversized first article", () => {
+    const preview = mapFeedToPreview(
+      createMockFeed({
+        items: itemsWith(2, "x".repeat(previewContentBytesLimit + 1)),
+      }),
+      sourceUrl,
+      mockRewriteLinks,
+    );
+
+    expect(preview.articles).toHaveLength(1);
+    expect(preview.truncated).toBe(true);
   });
 });

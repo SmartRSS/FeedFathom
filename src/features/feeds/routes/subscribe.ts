@@ -57,10 +57,15 @@ export async function postSubscribeHandler({
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
   if (cachedPreview?.link) homeUrl = cachedPreview.link;
+  // A truncated preview holds only a sample of the feed, so the worker
+  // fetches and imports the complete feed instead.
+  const importablePreview = cachedPreview?.truncated
+    ? undefined
+    : cachedPreview;
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
     homeUrl,
-    initializationSnapshot: cachedPreview
-      ? serializeFeedPreview(cachedPreview)
+    initializationSnapshot: importablePreview
+      ? serializeFeedPreview(importablePreview)
       : null,
     kind: isEmail ? "email" : "feed",
     name: body.sourceName,
@@ -75,7 +80,7 @@ export async function postSubscribeHandler({
     subscription.initializationSnapshot === null
       ? undefined
       : subscription.initializationSnapshot === undefined
-        ? cachedPreview
+        ? importablePreview
         : deserializeFeedPreview(
             subscription.initializationSnapshot,
             sourceUrl.value,
