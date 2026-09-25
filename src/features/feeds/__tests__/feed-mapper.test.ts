@@ -373,16 +373,15 @@ describe("mapFeedToPreview bounds", () => {
 
   test("keeps only the article limit of a large feed and flags the rest", () => {
     const { calls, rewrite } = countingRewrite();
-    const preview = mapFeedToPreview(
-      createMockFeed({ items: itemsWith(1_000, "<p>Body</p>") }),
-      sourceUrl,
-      rewrite,
-    );
+    const feed = createMockFeed({ items: itemsWith(1_000, "<p>Body</p>") });
+    const preview = mapFeedToPreview(feed, sourceUrl, rewrite);
 
     expect(preview.articles).toHaveLength(previewArticleLimit);
     expect(preview.articles[0]?.guid).toBe("item-0");
     expect(preview.truncated).toBe(true);
     expect(calls).toHaveLength(previewArticleLimit);
+    // Kept unmapped, so subscribe can import the rest without a refetch.
+    expect(preview.feed).toBe(feed);
   });
 
   test("leaves a small feed untouched", () => {
@@ -398,6 +397,7 @@ describe("mapFeedToPreview bounds", () => {
       "item-2",
     ]);
     expect(preview.truncated).toBe(false);
+    expect(preview.feed).toBeUndefined();
   });
 
   test("stops before the content byte limit", () => {
