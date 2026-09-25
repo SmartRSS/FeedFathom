@@ -918,6 +918,7 @@ img.skeleton-row {
   width: 1.5cap;
   height: 1.5cap;
   flex: 0 0 auto;
+  object-fit: contain;
 }
 /* The folder chevron/node-icon (never a source row's real favicon --
    that stays a plain <img>) are inlined as raw SVG markup (see
