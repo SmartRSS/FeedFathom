@@ -374,12 +374,14 @@ export function Dashboard(props: {
   const capabilityProbeGuard = createSupersessionGuard();
   const treeRequestGuard = createSupersessionGuard();
   let articleAbortController: AbortController | undefined;
+  let articleBodyAbortController: AbortController | undefined;
   let pageAbortController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   let readerPaneRef: HTMLElement | undefined;
   const disableReader = (message: string) => {
     articleRequestGuard.start();
+    articleBodyAbortController?.abort();
     setReaderAvailable(false);
     setDisplayMode("FEED");
     setReaderContent(undefined);
@@ -412,6 +414,8 @@ export function Dashboard(props: {
   };
   onCleanup(() => {
     capabilityProbeGuard.start();
+    articleRequestGuard.start();
+    articleBodyAbortController?.abort();
     removeEventListener("focus", focusReaderProbe);
     navigator.serviceWorker?.removeEventListener(
       "message",
@@ -1227,6 +1231,9 @@ export function Dashboard(props: {
     selection = selectionGuard.current(),
   ) {
     const request = articleRequestGuard.start();
+    articleBodyAbortController?.abort();
+    const controller = new AbortController();
+    articleBodyAbortController = controller;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1248,6 +1255,7 @@ export function Dashboard(props: {
       const opened = await api(
         `/article?article=${article.id}`,
         articleResponse,
+        { signal: controller.signal },
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
@@ -1310,6 +1318,7 @@ export function Dashboard(props: {
     const article = index === undefined ? undefined : articles()[index];
     if (!article) {
       articleRequestGuard.start();
+      articleBodyAbortController?.abort();
       setLoadingArticle(false);
       return undefined;
     }

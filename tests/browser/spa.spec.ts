@@ -2434,3 +2434,65 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await expect.poll(() => tree.requests()).toBe(5);
   await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });
+
+// #927: arrowing through the list opens each row it passes. The page cancels
+// the body requests of the rows it leaves behind, rather than only ignoring
+// them when they land, and the cancellation raises no error.
+//
+// Only the page's own fetches are counted. A controlling service worker
+// forwards the request, signal included, but Chromium does not abort
+// FetchEvent.request.signal when the page cancels, so the worker's fetch to
+// the network runs on there.
+async function navigatePastHeldArticles(page: Page) {
+  const held: Array<() => void> = [];
+  const aborted = new Set<string>();
+  page.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/article" && request.serviceWorker() === null)
+      aborted.add(url.searchParams.get("article")!);
+  });
+  // Context-level, so a controlling service worker's fetch is held as well.
+  await page.context().route("**/api/article?*", async (route) => {
+    const id = new URL(route.request().url()).searchParams.get("article");
+    if (id !== "13") await new Promise<void>((release) => held.push(release));
+    // A cancelled request can no longer be answered; that is the point.
+    await route.fallback().catch(() => {});
+  });
+  await selectSource(page);
+  await expect.poll(() => held.length).toBe(1);
+  await articleOptions(page).first().focus();
+  await page.keyboard.press("j");
+  await expect.poll(() => held.length).toBe(2);
+  await page.keyboard.press("j");
+
+  await expect(
+    page.getByRole("heading", { name: "Third article" }),
+  ).toBeVisible();
+  await expect.poll(() => [...aborted].toSorted()).toEqual(["11", "12"]);
+  for (const release of held) release();
+  await expect(
+    page.getByRole("heading", { name: "Third article" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+}
+
+test("rapid navigation cancels the bodies of the articles it passes", async ({
+  page,
+}) => {
+  await installApiFixture(page.context(), { multipleArticles: true });
+  await page.goto("/");
+  await navigatePastHeldArticles(page);
+});
+
+test.describe("under a controlling service worker", () => {
+  test.use({ serviceWorkers: "allow" });
+
+  test("rapid navigation cancels the bodies of the articles it passes", async ({
+    page,
+  }) => {
+    await installApiFixture(page.context(), { multipleArticles: true });
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    await navigatePastHeldArticles(page);
+  });
+});
