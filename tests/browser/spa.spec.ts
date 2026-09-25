@@ -2264,6 +2264,68 @@ test("the tree context menu leaves the article paging scope alone", async ({
   await expectSelectedRow(page, /Tech News/);
 });
 
+// #926: a next page still in flight for the feed the user left must neither
+// hold back the next page of the feed they switched to nor, when it settles
+// late, reset that page's loading state and let a second copy start.
+test("switching feeds does not wait on the old feed's next page", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await routeTwoSourceTree(page, state);
+  const pageSize = 200;
+  const pageRequests: number[][] = [];
+  const held = new Map<number, () => void>();
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    const source: number = body.sources[0];
+    const offset = body.cursor === undefined ? 1 : pageSize + 1;
+    if (body.cursor !== undefined) {
+      pageRequests.push(body.sources);
+      await new Promise<void>((release) => held.set(source, release));
+    }
+    const size = body.cursor === undefined ? pageSize : 3;
+    // The app aborts the abandoned page, so its route may be gone by now.
+    await route
+      .fulfill({
+        json: Array.from({ length: size }, (_, index) =>
+          pagedSummary(source * 1000 + offset + index),
+        ),
+      })
+      .catch(() => {});
+  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
+  const list = page.locator(".article-list");
+  const rows = list.locator(".article");
+  const scrollToEnd = () =>
+    list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+  await page.goto("/");
+
+  await selectSource(page);
+  await expect(rows).toHaveCount(pageSize);
+  await scrollToEnd();
+  await expect.poll(() => pageRequests).toEqual([[3]]);
+
+  await selectSource(page, "Tech Preview");
+  await expect(rows.first()).toContainText("Article 9001");
+  await expect(rows).toHaveCount(pageSize);
+  await scrollToEnd();
+  await expect.poll(() => pageRequests).toEqual([[3], [9]]);
+
+  // The old page settling while the new one is held cannot free the new
+  // list to ask for the same page twice.
+  held.get(3)!();
+  await list.evaluate((element) => {
+    element.scrollTop -= 10;
+  });
+  await scrollToEnd();
+  held.get(9)!();
+  await expect(rows).toHaveCount(pageSize + 3);
+  expect(pageRequests).toEqual([[3], [9]]);
+});
+
 test("tree context menu actions target the clicked row", async ({ page }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
