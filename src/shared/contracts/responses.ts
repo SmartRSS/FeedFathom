@@ -186,6 +186,7 @@ export const previewResponse = Type.Object(
     feedUrl: Type.String(),
     link: Type.Optional(Type.String()),
     title: Type.String(),
+    truncated: Type.Optional(Type.Boolean()),
   },
   exact,
 );

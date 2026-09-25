@@ -53,7 +53,10 @@ import {
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import { createSupersessionGuard } from "./supersession.ts";
+import {
+  createSupersessionGuard,
+  type SupersessionToken,
+} from "./supersession.ts";
 import { api } from "./api.ts";
 import {
   createExtensionReaderBridge,
@@ -180,7 +183,11 @@ export function Dashboard(props: {
   // would leave no row to take a cursor from at all, which is exactly when
   // the next page is most wanted.
   let moreArticles = false;
-  let loadingMoreArticles = false;
+  // The selection whose next page is in flight. Tied to the selection rather
+  // than a plain flag, so a page abandoned by a feed, filter or search change
+  // neither blocks the new list's next page nor, when it settles late, clears
+  // that page's loading state.
+  let loadingMoreSelection: SupersessionToken | undefined;
   let articleCursor: number | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
@@ -367,11 +374,14 @@ export function Dashboard(props: {
   const capabilityProbeGuard = createSupersessionGuard();
   const treeRequestGuard = createSupersessionGuard();
   let articleAbortController: AbortController | undefined;
+  let articleBodyAbortController: AbortController | undefined;
+  let pageAbortController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   let readerPaneRef: HTMLElement | undefined;
   const disableReader = (message: string) => {
     articleRequestGuard.start();
+    articleBodyAbortController?.abort();
     setReaderAvailable(false);
     setDisplayMode("FEED");
     setReaderContent(undefined);
@@ -404,6 +414,8 @@ export function Dashboard(props: {
   };
   onCleanup(() => {
     capabilityProbeGuard.start();
+    articleRequestGuard.start();
+    articleBodyAbortController?.abort();
     removeEventListener("focus", focusReaderProbe);
     navigator.serviceWorker?.removeEventListener(
       "message",
@@ -591,6 +603,9 @@ export function Dashboard(props: {
     });
     const selection = selectionGuard.start();
     articleAbortController?.abort();
+    pageAbortController?.abort();
+    moreArticles = false;
+    articleCursor = undefined;
     if (isTodayNode(node)) {
       await fetchArticlesForBody(
         { sources: [], view: "today" },
@@ -600,8 +615,6 @@ export function Dashboard(props: {
       return;
     }
     const ids = sourceIds(node);
-    moreArticles = false;
-    articleCursor = undefined;
     if (!ids.length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
@@ -721,7 +734,7 @@ export function Dashboard(props: {
     // -- searching before ever picking a feed is a normal way in.
     if (
       !moreArticles ||
-      loadingMoreArticles ||
+      loadingMoreSelection === selectionGuard.current() ||
       cursor === undefined ||
       (!node && !search)
     )
@@ -735,7 +748,9 @@ export function Dashboard(props: {
     const ids = search || today || !node ? [] : sourceIds(node);
     if (!search && !today && !ids.length) return;
     const selection = selectionGuard.current();
-    loadingMoreArticles = true;
+    loadingMoreSelection = selection;
+    const controller = new AbortController();
+    pageAbortController = controller;
     try {
       const nextArticles = await api("/articles", articlesResponse, {
         body: JSON.stringify({
@@ -747,6 +762,7 @@ export function Dashboard(props: {
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
+        signal: controller.signal,
       });
       if (!selectionGuard.isCurrent(selection)) return;
       moreArticles = nextArticles.length === articlePageSize;
@@ -761,7 +777,7 @@ export function Dashboard(props: {
       if (selectionGuard.isCurrent(selection))
         reportError(cause, "Could not load more articles");
     } finally {
-      loadingMoreArticles = false;
+      if (loadingMoreSelection === selection) loadingMoreSelection = undefined;
     }
   }
   // Article search (#697) is a mode over the list rather than a filter of what
@@ -784,6 +800,7 @@ export function Dashboard(props: {
     setError("");
     const selection = selectionGuard.start();
     articleAbortController?.abort();
+    pageAbortController?.abort();
     moreArticles = false;
     articleCursor = undefined;
     await fetchArticlesForBody({ query, sources: [] }, selection);
@@ -799,6 +816,7 @@ export function Dashboard(props: {
     // neither aborts nor starts a new guard token.
     selectionGuard.start();
     articleAbortController?.abort();
+    pageAbortController?.abort();
     const node = selectedNode();
     if (node) await select(node);
     else {
@@ -1213,6 +1231,9 @@ export function Dashboard(props: {
     selection = selectionGuard.current(),
   ) {
     const request = articleRequestGuard.start();
+    articleBodyAbortController?.abort();
+    const controller = new AbortController();
+    articleBodyAbortController = controller;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1234,6 +1255,7 @@ export function Dashboard(props: {
       const opened = await api(
         `/article?article=${article.id}`,
         articleResponse,
+        { signal: controller.signal },
       );
       if (!isCurrent()) return;
       setOpenedArticle(opened);
@@ -1296,6 +1318,7 @@ export function Dashboard(props: {
     const article = index === undefined ? undefined : articles()[index];
     if (!article) {
       articleRequestGuard.start();
+      articleBodyAbortController?.abort();
       setLoadingArticle(false);
       return undefined;
     }
@@ -1879,36 +1902,40 @@ export function Dashboard(props: {
                   </>
                 )}
               </For>
-              <Show when={!articlesLoading() && !articles().length}>
-                {/* Search answers for every subscription, so an empty result
-                    is "no such article", not "all caught up" -- and the
-                    prompt to pick a feed would be wrong advice besides. */}
+            </Show>
+          </div>
+          {/* Sibling of the listbox, not a child (#933): a listbox may only
+              own option/group children, so the empty-state role="status"
+              lives here instead. See .article-list-empty in style.css for
+              how it keeps the listbox's old flex slot. */}
+          <Show when={!articlesLoading() && !articles().length}>
+            {/* Search answers for every subscription, so an empty result
+                is "no such article", not "all caught up" -- and the
+                prompt to pick a feed would be wrong advice besides. */}
+            <Show
+              when={activeSearch()}
+              fallback={
                 <Show
-                  when={activeSearch()}
+                  when={selectedNode()}
                   fallback={
-                    <Show
-                      when={selectedNode()}
-                      fallback={
-                        <Show when={authenticated()}>
-                          <div class="article-list-empty" role="status">
-                            <p>Select a feed to read.</p>
-                          </div>
-                        </Show>
-                      }
-                    >
+                    <Show when={authenticated()}>
                       <div class="article-list-empty" role="status">
-                        <p>All caught up.</p>
+                        <p>Select a feed to read.</p>
                       </div>
                     </Show>
                   }
                 >
                   <div class="article-list-empty" role="status">
-                    <p>No articles match that.</p>
+                    <p>All caught up.</p>
                   </div>
                 </Show>
-              </Show>
+              }
+            >
+              <div class="article-list-empty" role="status">
+                <p>No articles match that.</p>
+              </div>
             </Show>
-          </div>
+          </Show>
         </section>
         <article
           aria-label="Reader"

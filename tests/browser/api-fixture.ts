@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 const user = {
   email: "reader@example.com",
@@ -123,7 +123,8 @@ type ApiFixtureState = {
 };
 
 export async function installApiFixture(
-  page: Page,
+  // A context also routes what a controlling service worker fetches.
+  page: BrowserContext | Page,
   options: {
     authenticated?: boolean;
     discoveryRace?: boolean;
@@ -133,6 +134,7 @@ export async function installApiFixture(
     manyArticles?: boolean;
     multipleArticles?: boolean;
     passwordResetEnabled?: boolean;
+    previewTruncated?: boolean;
     sessionFailure?: boolean;
     treeFailure?: boolean;
     websubFeed?: boolean;
@@ -459,6 +461,7 @@ export async function installApiFixture(
         feedUrl,
         link: "https://preview.example/",
         title,
+        truncated: options.previewTruncated ?? false,
       });
     }
 

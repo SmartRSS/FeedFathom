@@ -42,62 +42,70 @@ function guardBrowser(page: Page) {
 async function installReaderResponder(
   context: BrowserContext,
   available: boolean,
+  elementHeavy = false,
 ) {
-  await context.addInitScript((isAvailable) => {
-    window.addEventListener("message", (event) => {
-      const request = event.data;
-      if (
-        event.source !== window ||
-        request?.channel !== "feedfathom-reader" ||
-        request?.type !== "request" ||
-        request?.version !== 1
-      )
-        return;
+  await context.addInitScript(
+    ([isAvailable, isElementHeavy]) => {
+      window.addEventListener("message", (event) => {
+        const request = event.data;
+        if (
+          event.source !== window ||
+          request?.channel !== "feedfathom-reader" ||
+          request?.type !== "request" ||
+          request?.version !== 1
+        )
+          return;
 
-      if (request.action === "capabilities") {
-        window.postMessage(
-          isAvailable
-            ? {
-                action: "capabilities",
-                available: true,
-                channel: "feedfathom-reader",
-                id: request.id,
-                ok: true,
-                type: "response",
-                version: 1,
-              }
-            : {
-                action: "capabilities",
-                channel: "feedfathom-reader",
-                error: "UNAVAILABLE",
-                id: request.id,
-                ok: false,
-                type: "response",
-                version: 1,
-              },
-          location.origin,
-        );
-      } else if (isAvailable && request.action === "fetch") {
-        window.postMessage(
-          {
-            action: "fetch",
-            channel: "feedfathom-reader",
-            finalUrl: "https://articles.example/first",
-            // The <img> carries no loading hint, so whatever the sanitize
-            // step gives it is the app's own default. A data: URL keeps it
-            // off the network: a failed request would land in the console
-            // error guard rather than in the assertion.
-            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
-            id: request.id,
-            ok: true,
-            type: "response",
-            version: 1,
-          },
-          location.origin,
-        );
-      }
-    });
-  }, available);
+        if (request.action === "capabilities") {
+          window.postMessage(
+            isAvailable
+              ? {
+                  action: "capabilities",
+                  available: true,
+                  channel: "feedfathom-reader",
+                  id: request.id,
+                  ok: true,
+                  type: "response",
+                  version: 1,
+                }
+              : {
+                  action: "capabilities",
+                  channel: "feedfathom-reader",
+                  error: "UNAVAILABLE",
+                  id: request.id,
+                  ok: false,
+                  type: "response",
+                  version: 1,
+                },
+            location.origin,
+          );
+        } else if (isAvailable && request.action === "fetch") {
+          window.postMessage(
+            {
+              action: "fetch",
+              channel: "feedfathom-reader",
+              finalUrl: "https://articles.example/first",
+              // The page from #929 when element-heavy: 24,000 paragraphs, one
+              // link each.
+              // The <img> carries no loading hint, so whatever the sanitize
+              // step gives it is the app's own default. A data: URL keeps it
+              // off the network: a failed request would land in the console
+              // error guard rather than in the assertion.
+              html: isElementHeavy
+                ? `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`
+                : `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image" onerror="alert(1)"></p></article></body></html>`,
+              id: request.id,
+              ok: true,
+              type: "response",
+              version: 1,
+            },
+            location.origin,
+          );
+        }
+      });
+    },
+    [available, elementHeavy],
+  );
 }
 
 // One row of a stubbed article page, in the shape articlesResponse wants.
@@ -165,6 +173,12 @@ test("shows an all-caught-up empty state for a feed with no unread", async ({
   // list renders, remove the single article and the fallback appears.
   await page.getByRole("button", { name: "delete articles" }).click();
   await expect(page.getByText("All caught up.")).toBeVisible();
+
+  // #933: the empty-state text is a role=status, and a listbox may only own
+  // option/group children -- it must sit outside the listbox, not inside it.
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
+  ).toHaveCount(0);
 });
 
 test("opens a keyboard-dismissable context menu on tree rows", async ({
@@ -236,6 +250,87 @@ test("boots Solid and renders the authenticated nested tree", async ({
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeVisible();
+});
+
+// #938: the first render waits on favicons only up to a short deadline. A
+// cold load of a large tree must not hold the sidebar until the last icon
+// settles; icons still loading show their own placeholder, then swap in.
+test("renders the tree while its favicons are still loading", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const rowCount = 50;
+  let treeServedAt = 0;
+  await page.route("**/api/tree", async (route) => {
+    await route.fulfill({
+      json: {
+        tree: Array.from({ length: rowCount }, (_, index) => ({
+          favicon: `/api/favicon/${index + 1}?v=1`,
+          homeUrl: "https://news.example/",
+          kind: "feed",
+          name: `Feed ${index}`,
+          type: "source",
+          uid: String(index + 1),
+          unreadCount: 0,
+          xmlUrl: `https://news.example/${index}.xml`,
+        })),
+      },
+    });
+    treeServedAt = Date.now();
+  });
+  const held: Route[] = [];
+  await page.route("**/api/favicon/**", (route) => {
+    held.push(route);
+  });
+  await page.goto("/");
+
+  // The icons never answer, so only the deadline can drop the skeleton.
+  // Generous next to the 300 ms deadline; waiting for the icons would never
+  // finish.
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
+    timeout: 3000,
+  });
+  expect(Date.now() - treeServedAt).toBeLessThan(3000);
+  const icons = page.locator("button.source img.node-icon");
+  await expect(icons).toHaveCount(rowCount);
+  await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(
+    rowCount,
+  );
+
+  const pixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  await Promise.all(
+    held.map((route) =>
+      route.fulfill({ body: pixel, contentType: "image/png" }),
+    ),
+  );
+  await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(0);
+});
+
+// #938: index.html starts /api/tree before the bundles run, and the
+// dashboard's own fetch reuses that response rather than asking again.
+test("fetches the tree once on a dashboard load, and not on sign-in routes", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const treeRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/tree")
+      treeRequests.push(request.url());
+  });
+
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  expect(treeRequests).toHaveLength(1);
+
+  treeRequests.length = 0;
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(treeRequests).toEqual([]);
 });
 
 // #881: the loading skeleton renders ~190 bars. Sliding each bar's
@@ -527,6 +622,12 @@ test("a late response to a cleared search leaves the list empty", async ({
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
   await expect(
     page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
+  ).toHaveCount(0);
+
+  // #933: the empty-state text is a role=status, and a listbox may only own
+  // option/group children -- it must sit outside the listbox, not inside it.
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
   ).toHaveCount(0);
 });
 
@@ -1677,6 +1778,9 @@ test("previews and subscribes with the exact payload", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Preview article" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("This preview shows part of the feed."),
+  ).toHaveCount(0);
 
   await page.getByLabel("Folder").selectOption("7");
   await page.getByRole("button", { name: "Subscribe" }).click();
@@ -1692,6 +1796,22 @@ test("previews and subscribes with the exact payload", async ({ page }) => {
     },
   ]);
   expect(state.treeRequests).toBe(2);
+});
+
+test("notes when a preview shows only part of the feed", async ({ page }) => {
+  await installApiFixture(page, { previewTruncated: true });
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+
+  await expect(
+    page.getByRole("heading", { name: "Preview article" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Preview articles" })
+      .getByText(
+        "This preview shows part of the feed. Subscribing imports all of it.",
+      ),
+  ).toBeVisible();
 });
 
 test("exposes Reader modes only when the bridge is available", async ({
@@ -1729,6 +1849,7 @@ test("gives extracted images the app's own loading defaults", async ({
   const image = page.locator(".reader img");
   await expect(image).toHaveAttribute("loading", "lazy");
   await expect(image).toHaveAttribute("decoding", "async");
+  await expect(image).not.toHaveAttribute("onerror");
 });
 
 test("extracts article content with the alternate extractor", async ({
@@ -1747,6 +1868,28 @@ test("extracts article content with the alternate extractor", async ({
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
 });
+
+for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
+  test(`falls back to Feed mode on an element-heavy page in ${mode}`, async ({
+    context,
+    page,
+  }) => {
+    await installReaderResponder(context, true, true);
+    await installApiFixture(page);
+    await page.goto("/");
+    await selectSource(page);
+
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await modes.selectOption(mode);
+    await expect(
+      page.getByText(
+        "This article is too large for Reader mode. Showing Feed mode.",
+      ),
+    ).toBeVisible();
+    await expect(modes).toHaveValue("FEED");
+    await expect(page.getByText("Feed article content")).toBeVisible();
+  });
+}
 
 test("keeps Feed mode when the Reader bridge is unavailable", async ({
   page,
@@ -2264,6 +2407,68 @@ test("the tree context menu leaves the article paging scope alone", async ({
   await expectSelectedRow(page, /Tech News/);
 });
 
+// #926: a next page still in flight for the feed the user left must neither
+// hold back the next page of the feed they switched to nor, when it settles
+// late, reset that page's loading state and let a second copy start.
+test("switching feeds does not wait on the old feed's next page", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await routeTwoSourceTree(page, state);
+  const pageSize = 200;
+  const pageRequests: number[][] = [];
+  const held = new Map<number, () => void>();
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return await route.fallback();
+    const body = route.request().postDataJSON();
+    const source: number = body.sources[0];
+    const offset = body.cursor === undefined ? 1 : pageSize + 1;
+    if (body.cursor !== undefined) {
+      pageRequests.push(body.sources);
+      await new Promise<void>((release) => held.set(source, release));
+    }
+    const size = body.cursor === undefined ? pageSize : 3;
+    // The app aborts the abandoned page, so its route may be gone by now.
+    await route
+      .fulfill({
+        json: Array.from({ length: size }, (_, index) =>
+          pagedSummary(source * 1000 + offset + index),
+        ),
+      })
+      .catch(() => {});
+  });
+  await page.route("**/api/article?*", fulfillPagedArticle);
+  const list = page.locator(".article-list");
+  const rows = list.locator(".article");
+  const scrollToEnd = () =>
+    list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+  await page.goto("/");
+
+  await selectSource(page);
+  await expect(rows).toHaveCount(pageSize);
+  await scrollToEnd();
+  await expect.poll(() => pageRequests).toEqual([[3]]);
+
+  await selectSource(page, "Tech Preview");
+  await expect(rows.first()).toContainText("Article 9001");
+  await expect(rows).toHaveCount(pageSize);
+  await scrollToEnd();
+  await expect.poll(() => pageRequests).toEqual([[3], [9]]);
+
+  // The old page settling while the new one is held cannot free the new
+  // list to ask for the same page twice.
+  held.get(3)!();
+  await list.evaluate((element) => {
+    element.scrollTop -= 10;
+  });
+  await scrollToEnd();
+  held.get(9)!();
+  await expect(rows).toHaveCount(pageSize + 3);
+  expect(pageRequests).toEqual([[3], [9]]);
+});
+
 test("tree context menu actions target the clicked row", async ({ page }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
@@ -2371,4 +2576,90 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await page.clock.runFor(1_000);
   await expect.poll(() => tree.requests()).toBe(5);
   await expect(page.getByText(/new articles?\./)).toHaveCount(0);
+});
+
+// #927: arrowing through the list opens each row it passes. The page cancels
+// the body requests of the rows it leaves behind, rather than only ignoring
+// them when they land, and the cancellation raises no error.
+//
+// Only the page's own fetches are counted. A controlling service worker
+// forwards the request, signal included, but Chromium does not abort
+// FetchEvent.request.signal when the page cancels, so the worker's fetch to
+// the network runs on there.
+async function navigatePastHeldArticles(page: Page) {
+  const held: Array<() => void> = [];
+  const aborted = new Set<string>();
+  page.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/article" && request.serviceWorker() === null)
+      aborted.add(url.searchParams.get("article")!);
+  });
+  // Context-level, so a controlling service worker's fetch is held as well.
+  await page.context().route("**/api/article?*", async (route) => {
+    const id = new URL(route.request().url()).searchParams.get("article");
+    if (id !== "13") await new Promise<void>((release) => held.push(release));
+    // A cancelled request can no longer be answered; that is the point.
+    await route.fallback().catch(() => {});
+  });
+  await selectSource(page);
+  await expect.poll(() => held.length).toBe(1);
+  await articleOptions(page).first().focus();
+  await page.keyboard.press("j");
+  await expect.poll(() => held.length).toBe(2);
+  await page.keyboard.press("j");
+
+  await expect(
+    page.getByRole("heading", { name: "Third article" }),
+  ).toBeVisible();
+  await expect.poll(() => [...aborted].toSorted()).toEqual(["11", "12"]);
+  for (const release of held) release();
+  await expect(
+    page.getByRole("heading", { name: "Third article" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+}
+
+test("rapid navigation cancels the bodies of the articles it passes", async ({
+  page,
+}) => {
+  await installApiFixture(page.context(), { multipleArticles: true });
+  await page.goto("/");
+  await navigatePastHeldArticles(page);
+});
+
+test.describe("under a controlling service worker", () => {
+  test.use({ serviceWorkers: "allow" });
+
+  test("rapid navigation cancels the bodies of the articles it passes", async ({
+    page,
+  }) => {
+    await installApiFixture(page.context(), { multipleArticles: true });
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    await navigatePastHeldArticles(page);
+  });
+
+  // #938: the worker's navigation-time tree fetch, index.html's preload and
+  // the dashboard's fetch are one request, not two or three.
+  test("a controlled load fetches the tree once", async ({ page }) => {
+    const context = page.context();
+    await installApiFixture(context);
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+
+    const fromPage: string[] = [];
+    const fromWorker: string[] = [];
+    context.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/tree")
+        (request.serviceWorker() ? fromWorker : fromPage).push(request.url());
+    });
+    await page.reload();
+    await expect(
+      page.locator("button.source").filter({ hasText: "Tech News" }),
+    ).toBeVisible();
+    expect({ fromPage, fromWorker }).toEqual({
+      fromPage: [expect.any(String)],
+      fromWorker: [expect.any(String)],
+    });
+  });
 });

@@ -33,5 +33,6 @@ export async function getPreviewHandler({
     feedUrl: source.feedUrl,
     link: source.link,
     title: source.title,
+    truncated: source.truncated ?? false,
   });
 }
