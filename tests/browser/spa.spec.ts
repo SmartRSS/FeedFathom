@@ -42,8 +42,11 @@ function guardBrowser(page: Page) {
 async function installReaderResponder(
   context: BrowserContext,
   available: boolean,
+  // Non-zero swaps the article for one of this many linked paragraphs.
+  paragraphs = 0,
 ) {
-  await context.addInitScript((isAvailable) => {
+  const settings = { isAvailable: available, paragraphs };
+  await context.addInitScript(({ isAvailable, paragraphs: count }) => {
     window.addEventListener("message", (event) => {
       const request = event.data;
       if (
@@ -87,7 +90,9 @@ async function installReaderResponder(
             // step gives it is the app's own default. A data: URL keeps it
             // off the network: a failed request would land in the console
             // error guard rather than in the assertion.
-            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
+            html: count
+              ? `<html><body><article>${'<p>Reader bridge content. <a href="/next">Next</a></p>'.repeat(count)}</article></body></html>`
+              : `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
             id: request.id,
             ok: true,
             type: "response",
@@ -97,7 +102,7 @@ async function installReaderResponder(
         );
       }
     });
-  }, available);
+  }, settings);
 }
 
 // One row of a stubbed article page, in the shape articlesResponse wants.
@@ -1765,6 +1770,69 @@ test("extracts article content with the alternate extractor", async ({
   await expect(
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
+});
+
+for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"])
+  test(`${mode} falls back to Feed mode on an element-heavy page`, async ({
+    context,
+    page,
+  }) => {
+    await installReaderResponder(context, true, 24_000);
+    await installApiFixture(page);
+    await page.goto("/");
+    await selectSource(page);
+
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await modes.selectOption(mode);
+    await expect(page.getByRole("alert")).toContainText(
+      "This article is too large for Reader mode. Showing Feed mode.",
+    );
+    await expect(modes).toHaveValue("FEED");
+    await expect(page.getByText("Feed article content")).toBeVisible();
+  });
+
+// Straight against the module, to time the main-thread pause the limits bound
+// and to check an ordinary article still comes through sanitized.
+test("bounds Reader extraction and still sanitizes ordinary articles", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  await expect(page.getByText("Reading", { exact: true })).toBeVisible();
+
+  const results = await page.evaluate(async () => {
+    const modulePath = "/reader-extraction.ts";
+    const { extractReaderContent } = await import(modulePath);
+    const url = "https://articles.example/first";
+    // The shape from #929: a paragraph and a link, many times over, under
+    // the byte budget so the element limit is what stops it.
+    const heavy = `<html><body><article>${'<p>Reader bridge content. <a href="/next">Next</a></p>'.repeat(24_000)}</article></body></html>`;
+    const ordinary = `<html><head><title>Ordinary</title></head><body><article><h1>Ordinary</h1>${`<p>${"Ordinary article text. ".repeat(20)}<a href="/more">more</a></p>`.repeat(300)}<img src="/x.png" onerror="alert(1)"><script>alert(1)</script></article></body></html>`;
+    const output = [];
+    for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
+      // One extraction at a time, so each timing is that extraction alone.
+      const started = performance.now();
+      // eslint-disable-next-line no-await-in-loop -- See above.
+      const code = await extractReaderContent(heavy, url, mode).then(
+        () => "extracted",
+        (error: { code?: string }) => error.code,
+      );
+      const heavyMs = performance.now() - started;
+      // eslint-disable-next-line no-await-in-loop -- See above.
+      const { content } = await extractReaderContent(ordinary, url, mode);
+      output.push({ code, content, heavyMs });
+    }
+    return output;
+  });
+
+  for (const { code, content, heavyMs } of results) {
+    expect(code).toBe("TOO_LARGE");
+    expect(heavyMs).toBeLessThan(150);
+    expect(content).toContain("Ordinary article text.");
+    expect(content).toContain('href="https://articles.example/more"');
+    expect(content).not.toContain("onerror");
+    expect(content).not.toContain("<script");
+  }
 });
 
 test("keeps Feed mode when the Reader bridge is unavailable", async ({

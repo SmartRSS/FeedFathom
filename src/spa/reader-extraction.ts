@@ -10,6 +10,15 @@ import {
   type ReaderMode,
 } from "./extension-reader.ts";
 
+// Extraction runs synchronously on the main thread, so a large page blocks
+// every click until it finishes. These bound that pause well below the
+// extension's 5 MiB fetch limit; a long article with its page chrome sits far
+// under both. A page over either falls back to Feed mode as TOO_LARGE.
+// ponytail: main-thread budget; extraction in a separate execution context
+// would lift it.
+const maximumInteractiveBytes = 2 * 1024 * 1024;
+const maximumElements = 20_000;
+
 const rewriteUrl = (value: string, base: URL): string => {
   try {
     return new URL(value, base).href;
@@ -95,7 +104,15 @@ const extractWithReadability = (
   trustedBase.href = baseUrl.href;
   document_.head.append(trustedBase);
 
-  const article = new Readability(document_).parse();
+  let article: ReturnType<Readability["parse"]>;
+  try {
+    article = new Readability(document_, {
+      maxElemsToParse: maximumElements,
+    }).parse();
+  } catch {
+    // parse()'s only runtime throw is the maxElemsToParse abort.
+    throw new ReaderExtensionError("TOO_LARGE");
+  }
   if (!article) throw new Error("Reader could not extract this article.");
   return mode === "READABILITY_PLAIN"
     ? { content: article.textContent ?? "", kind: "text" }
@@ -131,11 +148,15 @@ export const extractReaderContent = async (
   mode: ReaderMode,
 ): Promise<ReaderContent> => {
   const baseUrl = validatedBaseUrl(finalUrl);
-  if (mode === "ARTICLE_EXTRACTOR")
+  if (new Blob([html]).size > maximumInteractiveBytes)
+    throw new ReaderExtensionError("TOO_LARGE");
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  if (mode === "ARTICLE_EXTRACTOR") {
+    // article-extractor reparses the page several times and takes no element
+    // limit of its own, so the one Readability gets is checked here instead.
+    if (parsed.getElementsByTagName("*").length > maximumElements)
+      throw new ReaderExtensionError("TOO_LARGE");
     return extractWithArticleExtractor(html, finalUrl, baseUrl);
-  return extractWithReadability(
-    new DOMParser().parseFromString(html, "text/html"),
-    baseUrl,
-    mode,
-  );
+  }
+  return extractWithReadability(parsed, baseUrl, mode);
 };
