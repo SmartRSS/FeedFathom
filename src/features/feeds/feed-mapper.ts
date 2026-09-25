@@ -46,6 +46,8 @@ export type FeedPreview = {
   freshUntil?: number | null;
   link: string | undefined;
   title: string;
+  // True when the feed held more articles than the preview bounds kept.
+  truncated?: boolean;
 };
 
 export type Source = {
@@ -109,6 +111,28 @@ export const mapFeedItemToArticle = (
   };
 };
 
+// A preview is a sample for deciding whether to subscribe, and it runs on the
+// API server's event loop. Bounding the items before rewriting keeps that work
+// from scaling with the feed. Subscribing imports the whole feed through the
+// worker, so these limits never drop stored articles.
+export const previewArticleLimit = 50;
+export const previewContentBytesLimit = 512 * 1024;
+
+const previewItems = (
+  items: readonly FeedMapperItem[],
+): readonly FeedMapperItem[] => {
+  let bytes = 0;
+  let count = 0;
+  for (const item of items) {
+    if (count === previewArticleLimit) break;
+    bytes += Buffer.byteLength(item.content ?? item.description ?? "");
+    // The first article always fits, so one oversized item still previews.
+    if (count > 0 && bytes > previewContentBytesLimit) break;
+    count++;
+  }
+  return items.slice(0, count);
+};
+
 export const mapFeedToPreview = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
@@ -116,8 +140,9 @@ export const mapFeedToPreview = (
   now = Date.now(),
 ): FeedPreview => {
   const source = { id: 0, url: sourceUrl };
+  const items = previewItems(parsedFeed.items);
   return {
-    articles: parsedFeed.items.map((item) => {
+    articles: items.map((item) => {
       const article = mapFeedItemToArticle(
         item,
         parsedFeed,
@@ -139,5 +164,6 @@ export const mapFeedToPreview = (
     feedUrl: sourceUrl,
     link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
     title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
+    truncated: items.length < parsedFeed.items.length,
   };
 };

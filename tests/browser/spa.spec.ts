@@ -1677,6 +1677,9 @@ test("previews and subscribes with the exact payload", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Preview article" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("This preview shows part of the feed."),
+  ).toHaveCount(0);
 
   await page.getByLabel("Folder").selectOption("7");
   await page.getByRole("button", { name: "Subscribe" }).click();
@@ -1692,6 +1695,22 @@ test("previews and subscribes with the exact payload", async ({ page }) => {
     },
   ]);
   expect(state.treeRequests).toBe(2);
+});
+
+test("notes when a preview shows only part of the feed", async ({ page }) => {
+  await installApiFixture(page, { previewTruncated: true });
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+
+  await expect(
+    page.getByRole("heading", { name: "Preview article" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Preview articles" })
+      .getByText(
+        "This preview shows part of the feed. Subscribing imports all of it.",
+      ),
+  ).toBeVisible();
 });
 
 test("exposes Reader modes only when the bridge is available", async ({

@@ -77,6 +77,14 @@ describe("FeedPreviewCache", () => {
     ).toBeInstanceOf(Date);
   });
 
+  test("keeps the truncated flag of a bounded preview", async () => {
+    const cache = new FeedPreviewCache(new FakeRedis());
+
+    await cache.save(7, feedUrl, { ...preview, truncated: true });
+
+    expect((await cache.get(7, feedUrl))?.truncated).toBe(true);
+  });
+
   test("isolates previews by user and exact URL", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);
