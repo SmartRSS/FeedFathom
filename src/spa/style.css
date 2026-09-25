@@ -510,8 +510,11 @@ a {
   background: var(--blue-60);
   color: var(--white);
 }
-/* Empty-list fallbacks (#710): quiet, centered, never read as an error. */
+/* Empty-list fallbacks (#710): quiet, centered, never read as an error.
+   flex: 1 so it (not the now-empty .article-list sibling above it, see
+   #933) fills the listbox's old space. */
 .article-list-empty {
+  flex: 1;
   padding: 2rem 1rem;
   color: var(--grey-60);
   text-align: center;
@@ -1024,6 +1027,14 @@ img.skeleton-row {
 .article-list {
   flex: 1;
   overflow: auto;
+}
+/* #933: the empty-state message is a sibling, not a child, of the listbox
+   (a listbox may only own option/group children). When it is showing, the
+   now-childless listbox stops claiming the flex space so the message's
+   sibling flex:1 below takes over the same slot the message used to sit
+   in as the listbox's only child. */
+.article-list:has(+ .article-list-empty) {
+  flex: 0;
 }
 /* Article search (#697) sits in its own row above the list, styled as the
    tree's filter box is: the two are the same kind of control, and a reader

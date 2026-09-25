@@ -1902,36 +1902,40 @@ export function Dashboard(props: {
                   </>
                 )}
               </For>
-              <Show when={!articlesLoading() && !articles().length}>
-                {/* Search answers for every subscription, so an empty result
-                    is "no such article", not "all caught up" -- and the
-                    prompt to pick a feed would be wrong advice besides. */}
+            </Show>
+          </div>
+          {/* Sibling of the listbox, not a child (#933): a listbox may only
+              own option/group children, so the empty-state role="status"
+              lives here instead. See .article-list-empty in style.css for
+              how it keeps the listbox's old flex slot. */}
+          <Show when={!articlesLoading() && !articles().length}>
+            {/* Search answers for every subscription, so an empty result
+                is "no such article", not "all caught up" -- and the
+                prompt to pick a feed would be wrong advice besides. */}
+            <Show
+              when={activeSearch()}
+              fallback={
                 <Show
-                  when={activeSearch()}
+                  when={selectedNode()}
                   fallback={
-                    <Show
-                      when={selectedNode()}
-                      fallback={
-                        <Show when={authenticated()}>
-                          <div class="article-list-empty" role="status">
-                            <p>Select a feed to read.</p>
-                          </div>
-                        </Show>
-                      }
-                    >
+                    <Show when={authenticated()}>
                       <div class="article-list-empty" role="status">
-                        <p>All caught up.</p>
+                        <p>Select a feed to read.</p>
                       </div>
                     </Show>
                   }
                 >
                   <div class="article-list-empty" role="status">
-                    <p>No articles match that.</p>
+                    <p>All caught up.</p>
                   </div>
                 </Show>
-              </Show>
+              }
+            >
+              <div class="article-list-empty" role="status">
+                <p>No articles match that.</p>
+              </div>
             </Show>
-          </div>
+          </Show>
         </section>
         <article
           aria-label="Reader"
