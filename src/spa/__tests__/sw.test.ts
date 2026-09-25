@@ -359,3 +359,13 @@ test("a deletion queued offline replays on the next successful request", async (
   ]);
   expect(sw.queue.rows.size).toBe(0);
 });
+
+// index.html gates its /api/tree preload on the same route list, so the page
+// and the worker agree on which navigations fetch the tree early (#938).
+test("index.html and sw.js exclude the same routes from the tree preload", async () => {
+  const html = await Bun.file(`${import.meta.dir}/../index.html`).text();
+  const swList = /TREE_PRELOAD_EXCLUDED_PATHS =\s*(\/.+\/);/.exec(source)?.[1];
+  const htmlList = /!(\/.+\/)\.test\(/.exec(html)?.[1];
+  expect(swList).toBeDefined();
+  expect(htmlList).toBe(swList);
+});
