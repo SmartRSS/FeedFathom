@@ -10,6 +10,32 @@ import {
   type ReaderMode,
 } from "./extension-reader.ts";
 
+// Extraction runs on the main thread, so it must stay short enough that a
+// click to switch away is still answered. The extension already refuses
+// documents over 5 MiB; these tighter budgets send larger pages to Feed mode
+// before any parsing starts. The largest Wikipedia articles (about 2.8 MB and
+// 23,000 elements) still fit; a 3.8 MB page of 24,000 linked paragraphs,
+// which held the thread for about 465 ms, does not.
+// UTF-16 code units, which is the byte size for the ASCII markup that
+// dominates a page.
+const maximumHtmlLength = 3 * 1024 * 1024;
+const maximumElements = 30_000;
+
+// Counts start tags in the source, so the element budget is enforced without
+// building a DOM. Tags inside scripts and comments count too, which only errs
+// towards the fallback.
+const exceedsElementBudget = (html: string): boolean => {
+  const startTag = /<[a-z]/gi;
+  let elements = 0;
+  while (startTag.test(html)) if (++elements > maximumElements) return true;
+  return false;
+};
+
+const assertWithinBudget = (html: string): void => {
+  if (html.length > maximumHtmlLength || exceedsElementBudget(html))
+    throw new ReaderExtensionError("TOO_LARGE");
+};
+
 const rewriteUrl = (value: string, base: URL): string => {
   try {
     return new URL(value, base).href;
@@ -95,7 +121,21 @@ const extractWithReadability = (
   trustedBase.href = baseUrl.href;
   document_.head.append(trustedBase);
 
-  const article = new Readability(document_).parse();
+  let article: ReturnType<Readability["parse"]>;
+  try {
+    // Backstop for elements the source count cannot see, such as the ones
+    // the parser adds itself.
+    article = new Readability(document_, {
+      maxElemsToParse: maximumElements,
+    }).parse();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith("Aborting parsing document")
+    )
+      throw new ReaderExtensionError("TOO_LARGE");
+    throw error;
+  }
   if (!article) throw new Error("Reader could not extract this article.");
   return mode === "READABILITY_PLAIN"
     ? { content: article.textContent ?? "", kind: "text" }
@@ -131,6 +171,7 @@ export const extractReaderContent = async (
   mode: ReaderMode,
 ): Promise<ReaderContent> => {
   const baseUrl = validatedBaseUrl(finalUrl);
+  assertWithinBudget(html);
   if (mode === "ARTICLE_EXTRACTOR")
     return extractWithArticleExtractor(html, finalUrl, baseUrl);
   return extractWithReadability(

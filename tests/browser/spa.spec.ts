@@ -42,62 +42,70 @@ function guardBrowser(page: Page) {
 async function installReaderResponder(
   context: BrowserContext,
   available: boolean,
+  elementHeavy = false,
 ) {
-  await context.addInitScript((isAvailable) => {
-    window.addEventListener("message", (event) => {
-      const request = event.data;
-      if (
-        event.source !== window ||
-        request?.channel !== "feedfathom-reader" ||
-        request?.type !== "request" ||
-        request?.version !== 1
-      )
-        return;
+  await context.addInitScript(
+    ([isAvailable, isElementHeavy]) => {
+      window.addEventListener("message", (event) => {
+        const request = event.data;
+        if (
+          event.source !== window ||
+          request?.channel !== "feedfathom-reader" ||
+          request?.type !== "request" ||
+          request?.version !== 1
+        )
+          return;
 
-      if (request.action === "capabilities") {
-        window.postMessage(
-          isAvailable
-            ? {
-                action: "capabilities",
-                available: true,
-                channel: "feedfathom-reader",
-                id: request.id,
-                ok: true,
-                type: "response",
-                version: 1,
-              }
-            : {
-                action: "capabilities",
-                channel: "feedfathom-reader",
-                error: "UNAVAILABLE",
-                id: request.id,
-                ok: false,
-                type: "response",
-                version: 1,
-              },
-          location.origin,
-        );
-      } else if (isAvailable && request.action === "fetch") {
-        window.postMessage(
-          {
-            action: "fetch",
-            channel: "feedfathom-reader",
-            finalUrl: "https://articles.example/first",
-            // The <img> carries no loading hint, so whatever the sanitize
-            // step gives it is the app's own default. A data: URL keeps it
-            // off the network: a failed request would land in the console
-            // error guard rather than in the assertion.
-            html: `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image"></p></article></body></html>`,
-            id: request.id,
-            ok: true,
-            type: "response",
-            version: 1,
-          },
-          location.origin,
-        );
-      }
-    });
-  }, available);
+        if (request.action === "capabilities") {
+          window.postMessage(
+            isAvailable
+              ? {
+                  action: "capabilities",
+                  available: true,
+                  channel: "feedfathom-reader",
+                  id: request.id,
+                  ok: true,
+                  type: "response",
+                  version: 1,
+                }
+              : {
+                  action: "capabilities",
+                  channel: "feedfathom-reader",
+                  error: "UNAVAILABLE",
+                  id: request.id,
+                  ok: false,
+                  type: "response",
+                  version: 1,
+                },
+            location.origin,
+          );
+        } else if (isAvailable && request.action === "fetch") {
+          window.postMessage(
+            {
+              action: "fetch",
+              channel: "feedfathom-reader",
+              finalUrl: "https://articles.example/first",
+              // The page from #929 when element-heavy: 24,000 paragraphs, one
+              // link each.
+              // The <img> carries no loading hint, so whatever the sanitize
+              // step gives it is the app's own default. A data: URL keeps it
+              // off the network: a failed request would land in the console
+              // error guard rather than in the assertion.
+              html: isElementHeavy
+                ? `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`
+                : `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image" onerror="alert(1)"></p></article></body></html>`,
+              id: request.id,
+              ok: true,
+              type: "response",
+              version: 1,
+            },
+            location.origin,
+          );
+        }
+      });
+    },
+    [available, elementHeavy],
+  );
 }
 
 // One row of a stubbed article page, in the shape articlesResponse wants.
@@ -1748,6 +1756,7 @@ test("gives extracted images the app's own loading defaults", async ({
   const image = page.locator(".reader img");
   await expect(image).toHaveAttribute("loading", "lazy");
   await expect(image).toHaveAttribute("decoding", "async");
+  await expect(image).not.toHaveAttribute("onerror");
 });
 
 test("extracts article content with the alternate extractor", async ({
@@ -1766,6 +1775,28 @@ test("extracts article content with the alternate extractor", async ({
     page.getByText("Reader bridge content.", { exact: false }),
   ).toBeVisible();
 });
+
+for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
+  test(`falls back to Feed mode on an element-heavy page in ${mode}`, async ({
+    context,
+    page,
+  }) => {
+    await installReaderResponder(context, true, true);
+    await installApiFixture(page);
+    await page.goto("/");
+    await selectSource(page);
+
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await modes.selectOption(mode);
+    await expect(
+      page.getByText(
+        "This article is too large for Reader mode. Showing Feed mode.",
+      ),
+    ).toBeVisible();
+    await expect(modes).toHaveValue("FEED");
+    await expect(page.getByText("Feed article content")).toBeVisible();
+  });
+}
 
 test("keeps Feed mode when the Reader bridge is unavailable", async ({
   page,
