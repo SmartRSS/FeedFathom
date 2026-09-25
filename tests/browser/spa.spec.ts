@@ -252,6 +252,87 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
+// #938: the first render waits on favicons only up to a short deadline. A
+// cold load of a large tree must not hold the sidebar until the last icon
+// settles; icons still loading show their own placeholder, then swap in.
+test("renders the tree while its favicons are still loading", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const rowCount = 50;
+  let treeServedAt = 0;
+  await page.route("**/api/tree", async (route) => {
+    await route.fulfill({
+      json: {
+        tree: Array.from({ length: rowCount }, (_, index) => ({
+          favicon: `/api/favicon/${index + 1}?v=1`,
+          homeUrl: "https://news.example/",
+          kind: "feed",
+          name: `Feed ${index}`,
+          type: "source",
+          uid: String(index + 1),
+          unreadCount: 0,
+          xmlUrl: `https://news.example/${index}.xml`,
+        })),
+      },
+    });
+    treeServedAt = Date.now();
+  });
+  const held: Route[] = [];
+  await page.route("**/api/favicon/**", (route) => {
+    held.push(route);
+  });
+  await page.goto("/");
+
+  // The icons never answer, so only the deadline can drop the skeleton.
+  // Generous next to the 300 ms deadline; waiting for the icons would never
+  // finish.
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
+    timeout: 3000,
+  });
+  expect(Date.now() - treeServedAt).toBeLessThan(3000);
+  const icons = page.locator("button.source img.node-icon");
+  await expect(icons).toHaveCount(rowCount);
+  await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(
+    rowCount,
+  );
+
+  const pixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  await Promise.all(
+    held.map((route) =>
+      route.fulfill({ body: pixel, contentType: "image/png" }),
+    ),
+  );
+  await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(0);
+});
+
+// #938: index.html starts /api/tree before the bundles run, and the
+// dashboard's own fetch reuses that response rather than asking again.
+test("fetches the tree once on a dashboard load, and not on sign-in routes", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  const treeRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/tree")
+      treeRequests.push(request.url());
+  });
+
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  expect(treeRequests).toHaveLength(1);
+
+  treeRequests.length = 0;
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(treeRequests).toEqual([]);
+});
+
 // #881: the loading skeleton renders ~190 bars. Sliding each bar's
 // pseudo-element by transform stays on the compositor; animating the bar's
 // own background-position repainted every one of them on every frame.
@@ -2556,5 +2637,29 @@ test.describe("under a controlling service worker", () => {
     await page.goto("/");
     await page.waitForFunction(() => navigator.serviceWorker.controller);
     await navigatePastHeldArticles(page);
+  });
+
+  // #938: the worker's navigation-time tree fetch, index.html's preload and
+  // the dashboard's fetch are one request, not two or three.
+  test("a controlled load fetches the tree once", async ({ page }) => {
+    const context = page.context();
+    await installApiFixture(context);
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+
+    const fromPage: string[] = [];
+    const fromWorker: string[] = [];
+    context.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/tree")
+        (request.serviceWorker() ? fromWorker : fromPage).push(request.url());
+    });
+    await page.reload();
+    await expect(
+      page.locator("button.source").filter({ hasText: "Tech News" }),
+    ).toBeVisible();
+    expect({ fromPage, fromWorker }).toEqual({
+      fromPage: [expect.any(String)],
+      fromWorker: [expect.any(String)],
+    });
   });
 });

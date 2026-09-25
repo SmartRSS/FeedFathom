@@ -10,6 +10,28 @@
       name="description"
       content="FeedFathom: a self-hosted RSS and newsletter reader."
     />
+    <!-- Starts /api/tree next to the bundles instead of after them (#938).
+         A script, not a static <link>: this one shell serves every route,
+         and the sign-in routes must not spend a request on a 401. The path
+         list mirrors TREE_PRELOAD_EXCLUDED_PATHS in sw.js (sw.test.ts pins
+         the two together). crossorigin="anonymous" matches the credentials
+         mode of the dashboard's plain fetch("/api/tree"), so the fetch reuses
+         this response instead of issuing a second one. -->
+    <script>
+      if (
+        !/^\/(admin|login|options|password-reset|preview|register|activate\/)/.test(
+          location.pathname,
+        )
+      )
+        document.head.append(
+          Object.assign(document.createElement("link"), {
+            as: "fetch",
+            crossOrigin: "anonymous",
+            href: "/api/tree",
+            rel: "preload",
+          }),
+        );
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/128-inverted-round.png" />
     <!-- ponytail: single generic splash instead of the full per-device
