@@ -173,6 +173,12 @@ test("shows an all-caught-up empty state for a feed with no unread", async ({
   // list renders, remove the single article and the fallback appears.
   await page.getByRole("button", { name: "delete articles" }).click();
   await expect(page.getByText("All caught up.")).toBeVisible();
+
+  // #933: the empty-state text is a role=status, and a listbox may only own
+  // option/group children -- it must sit outside the listbox, not inside it.
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
+  ).toHaveCount(0);
 });
 
 test("opens a keyboard-dismissable context menu on tree rows", async ({
@@ -535,6 +541,12 @@ test("a late response to a cleared search leaves the list empty", async ({
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
   await expect(
     page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
+  ).toHaveCount(0);
+
+  // #933: the empty-state text is a role=status, and a listbox may only own
+  // option/group children -- it must sit outside the listbox, not inside it.
+  await expect(
+    page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
   ).toHaveCount(0);
 });
 
