@@ -11,7 +11,7 @@ type FeedMapperItem = {
   url: string | null;
 };
 
-type FeedMapperInput = {
+export type FeedMapperInput = {
   description: string | null;
   items: readonly FeedMapperItem[];
   title: string | null;
@@ -48,6 +48,9 @@ export type FeedPreview = {
   title: string;
   // True when the feed held more articles than the preview bounds kept.
   truncated?: boolean;
+  // The complete parsed feed behind a truncated preview. The preview cache
+  // keeps it so subscribing imports every article without a refetch.
+  feed?: FeedMapperInput;
 };
 
 export type Source = {
@@ -113,8 +116,8 @@ export const mapFeedItemToArticle = (
 
 // A preview is a sample for deciding whether to subscribe, and it runs on the
 // API server's event loop. Bounding the items before rewriting keeps that work
-// from scaling with the feed. Subscribing imports the whole feed through the
-// worker, so these limits never drop stored articles.
+// from scaling with the feed. Subscribing maps and imports the whole
+// cached parsed feed, so these limits never drop stored articles.
 export const previewArticleLimit = 50;
 export const previewContentBytesLimit = 512 * 1024;
 
@@ -133,37 +136,57 @@ const previewItems = (
   return items.slice(0, count);
 };
 
+export const mapFeedToPreviewArticles = (
+  parsedFeed: FeedMapperInput,
+  sourceUrl: string,
+  rewriteLinksFunction: (content: string, baseUrl: string) => string,
+  now = Date.now(),
+  items = parsedFeed.items,
+): FeedPreviewArticle[] => {
+  const source = { id: 0, url: sourceUrl };
+  return items.map((item) => {
+    const article = mapFeedItemToArticle(
+      item,
+      parsedFeed,
+      source,
+      rewriteLinksFunction,
+      now,
+    );
+    return {
+      author: article.author,
+      content: article.content,
+      guid: article.guid,
+      publishedAt: article.publishedAt,
+      title: article.title,
+      updatedAt: article.updatedAt,
+      url: article.url,
+    };
+  });
+};
+
 export const mapFeedToPreview = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
 ): FeedPreview => {
-  const source = { id: 0, url: sourceUrl };
   const items = previewItems(parsedFeed.items);
-  return {
-    articles: items.map((item) => {
-      const article = mapFeedItemToArticle(
-        item,
+  const truncated = items.length < parsedFeed.items.length;
+  return Object.assign(
+    {
+      articles: mapFeedToPreviewArticles(
         parsedFeed,
-        source,
+        sourceUrl,
         rewriteLinksFunction,
         now,
-      );
-      return {
-        author: article.author,
-        content: article.content,
-        guid: article.guid,
-        publishedAt: article.publishedAt,
-        title: article.title,
-        updatedAt: article.updatedAt,
-        url: article.url,
-      };
-    }),
-    description: parsedFeed.description ?? undefined,
-    feedUrl: sourceUrl,
-    link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
-    title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
-    truncated: items.length < parsedFeed.items.length,
-  };
+        items,
+      ),
+      description: parsedFeed.description ?? undefined,
+      feedUrl: sourceUrl,
+      link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
+      title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
+      truncated,
+    },
+    truncated ? { feed: parsedFeed } : {},
+  );
 };

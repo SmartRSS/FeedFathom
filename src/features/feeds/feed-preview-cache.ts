@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
-import { Type } from "typebox";
+import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
-import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
+import type {
+  FeedMapperInput,
+  FeedPreview,
+} from "#features/feeds/feed-mapper.ts";
 
 type PreviewCacheRedis = {
   del(key: string): Promise<number>;
@@ -29,10 +32,38 @@ const previewArticleWireSchema = Type.Object(
   },
   exact,
 );
+const nullableString = Type.Union([Type.String(), Type.Null()]);
+const nullableTime = Type.Union([Type.Number(), Type.Null()]);
+// Only the fields mapFeedItemToArticle reads, so subscribe can map the full
+// feed later. The feed parser caps a body at 24 MiB, which bounds this too.
+const feedWireSchema = Type.Object(
+  {
+    description: nullableString,
+    items: Type.Array(
+      Type.Object(
+        {
+          authors: Type.Array(Type.Object({ name: nullableString }, exact)),
+          content: nullableString,
+          description: nullableString,
+          id: nullableString,
+          published: nullableTime,
+          title: nullableString,
+          updated: nullableTime,
+          url: nullableString,
+        },
+        exact,
+      ),
+    ),
+    title: nullableString,
+    url: nullableString,
+  },
+  exact,
+);
 const previewWireSchema = Type.Object(
   {
     articles: Type.Array(previewArticleWireSchema),
     description: Type.Optional(Type.String()),
+    feed: Type.Optional(feedWireSchema),
     feedUrl: Type.String(),
     freshUntil: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     link: Type.Optional(Type.String()),
@@ -42,6 +73,36 @@ const previewWireSchema = Type.Object(
   exact,
 );
 const previewWireCheck = Schema.Compile(previewWireSchema);
+
+const dateOrNull = (time: null | number) =>
+  time === null ? null : new Date(time);
+
+const decodeFeed = (value: Static<typeof feedWireSchema>): FeedMapperInput => ({
+  ...value,
+  items: value.items.map((item) => ({
+    ...item,
+    published: dateOrNull(item.published),
+    updated: dateOrNull(item.updated),
+  })),
+});
+
+// Projects the parsed feed field by field: the feed parser's items expose
+// their fields through prototype getters, which JSON.stringify skips.
+const encodeFeed = (feed: FeedMapperInput): Static<typeof feedWireSchema> => ({
+  description: feed.description,
+  items: feed.items.map((item) => ({
+    authors: item.authors.map((author) => ({ name: author.name })),
+    content: item.content,
+    description: item.description,
+    id: item.id,
+    published: item.published?.getTime() ?? null,
+    title: item.title,
+    updated: item.updated?.getTime() ?? null,
+    url: item.url,
+  })),
+  title: feed.title,
+  url: feed.url,
+});
 
 const decodePreview = (
   value: unknown,
@@ -76,12 +137,17 @@ const decodePreview = (
     },
     value.freshUntil === undefined ? {} : { freshUntil: value.freshUntil },
     value.truncated === undefined ? {} : { truncated: value.truncated },
+    value.feed === undefined ? {} : { feed: decodeFeed(value.feed) },
   );
 };
 
-export const serializeFeedPreview = (preview: FeedPreview): string =>
+export const serializeFeedPreview = ({
+  feed,
+  ...preview
+}: FeedPreview): string =>
   JSON.stringify({
     ...preview,
+    ...(feed === undefined ? {} : { feed: encodeFeed(feed) }),
     articles: preview.articles.map((article) =>
       Object.assign(
         {},

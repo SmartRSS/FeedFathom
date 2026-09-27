@@ -21,6 +21,11 @@ import {
   deserializeFeedPreview,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
+import {
+  type FeedPreview,
+  mapFeedToPreviewArticles,
+} from "#features/feeds/feed-mapper.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 // Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
 // string -> {kind,value} transform) in some environments but not others, so
@@ -32,6 +37,22 @@ function decodedSubscriptionTarget(
   return typeof value === "string"
     ? Value.Decode(normalizedSubscriptionTarget, value)
     : value;
+}
+
+// A truncated preview holds only a sample of the feed. Its cached parsed feed
+// is mapped in full here, once, so subscribe imports every article without a
+// refetch. Without that feed, the caller queues the source for the worker.
+function completePreview({
+  feed,
+  ...preview
+}: FeedPreview): FeedPreview | undefined {
+  if (!preview.truncated) return preview;
+  if (!feed) return undefined;
+  return {
+    ...preview,
+    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, rewriteLinks),
+    truncated: false,
+  };
 }
 
 export async function postSubscribeHandler({
@@ -57,11 +78,7 @@ export async function postSubscribeHandler({
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
   if (cachedPreview?.link) homeUrl = cachedPreview.link;
-  // A truncated preview holds only a sample of the feed, so the worker
-  // fetches and imports the complete feed instead.
-  const importablePreview = cachedPreview?.truncated
-    ? undefined
-    : cachedPreview;
+  const importablePreview = cachedPreview && completePreview(cachedPreview);
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
     homeUrl,
     initializationSnapshot: importablePreview

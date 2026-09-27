@@ -26,7 +26,14 @@ import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
-import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
+import {
+  deserializeFeedPreview,
+  serializeFeedPreview,
+} from "#features/feeds/feed-preview-cache.ts";
+import {
+  mapFeedToPreview,
+  previewArticleLimit,
+} from "#features/feeds/feed-mapper.ts";
 import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
 
@@ -1353,6 +1360,88 @@ test("queues a truncated cached preview so the worker imports the whole feed", a
   });
   expect(upserts).toBe(0);
   expect(enqueues).toEqual([subscriptionSource]);
+});
+
+test("imports every article of a truncated preview on subscribe without a refetch", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const itemCount = previewArticleLimit + 10;
+  const largeFeed = {
+    description: null,
+    items: Array.from({ length: itemCount }, (_, index) => ({
+      authors: [{ name: "Author" }],
+      content: `<p>Body ${index}</p>`,
+      description: null,
+      id: `item-${index}`,
+      published: new Date("2026-07-19T12:00:00.000Z"),
+      title: `Article ${index}`,
+      updated: null,
+      url: `https://site.example/${index}`,
+    })),
+    title: "Big feed",
+    url: subscriptionSource.homeUrl,
+  };
+  // Stands in for Redis: the preview goes through the real wire format.
+  let stored: string | undefined;
+  let previews = 0;
+  const upserts: Parameters<
+    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+  >[0][] = [];
+  const enqueues: Parameters<
+    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+  >[0][] = [];
+
+  dependencies.feedParser.preview = async (sourceUrl) => {
+    previews++;
+    return mapFeedToPreview(largeFeed, sourceUrl, (content) => content);
+  };
+  dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
+    stored = serializeFeedPreview(preview);
+  };
+  dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
+    stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
+    upserts.push(articles);
+    return articles.length;
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async () => {};
+  dependencies.sourcesDataService.successSource = async () => {};
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+    enqueues.push(source);
+  };
+  const app = await appFor(dependencies);
+
+  const preview = await app.handle(
+    new Request(
+      `http://localhost/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+  const previewBody = await preview.json();
+  const response = await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  expect(Reflect.get(previewBody, "articles")).toHaveLength(
+    previewArticleLimit,
+  );
+  expect(Reflect.get(previewBody, "truncated")).toBe(true);
+  expect("feed" in previewBody).toBe(false);
+  expect(await response.json()).toEqual({ sourceId: 91 });
+  expect(previews).toBe(1);
+  expect(upserts[0]?.map((article) => article.guid)).toEqual(
+    largeFeed.items.map((item) => item.id),
+  );
+  expect(enqueues).toEqual([]);
 });
 
 test("falls back to queueing when inline persistence fails", async () => {

@@ -85,6 +85,31 @@ describe("FeedPreviewCache", () => {
     expect((await cache.get(7, feedUrl))?.truncated).toBe(true);
   });
 
+  test("keeps the full parsed feed behind a truncated preview", async () => {
+    const cache = new FeedPreviewCache(new FakeRedis());
+    const feed = {
+      description: null,
+      items: [
+        {
+          authors: [{ name: "Author" }, { name: null }],
+          content: "<p>Body</p>",
+          description: null,
+          id: "item-1",
+          published: publishedAt,
+          title: "Article",
+          updated: null,
+          url: "https://example.com/article",
+        },
+      ],
+      title: "Feed",
+      url: "https://example.com",
+    };
+
+    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
+
+    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
+  });
+
   test("isolates previews by user and exact URL", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);

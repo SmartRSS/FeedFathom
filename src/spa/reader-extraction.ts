@@ -16,10 +16,12 @@ import {
 // before any parsing starts. The largest Wikipedia articles (about 2.8 MB and
 // 23,000 elements) still fit; a 3.8 MB page of 24,000 linked paragraphs,
 // which held the thread for about 465 ms, does not.
-// UTF-16 code units, which is the byte size for the ASCII markup that
-// dominates a page.
-const maximumHtmlLength = 3 * 1024 * 1024;
+// UTF-8 bytes, measured with TextEncoder rather than html.length, so a
+// non-Latin-script page (Polish, Cyrillic, CJK) is budgeted by its real
+// transfer size instead of its UTF-16 code-unit count.
+const maximumHtmlBytes = 3 * 1024 * 1024;
 const maximumElements = 30_000;
+const textEncoder = new TextEncoder();
 
 // Counts start tags in the source, so the element budget is enforced without
 // building a DOM. Tags inside scripts and comments count too, which only errs
@@ -32,7 +34,10 @@ const exceedsElementBudget = (html: string): boolean => {
 };
 
 const assertWithinBudget = (html: string): void => {
-  if (html.length > maximumHtmlLength || exceedsElementBudget(html))
+  if (
+    textEncoder.encode(html).byteLength > maximumHtmlBytes ||
+    exceedsElementBudget(html)
+  )
     throw new ReaderExtensionError("TOO_LARGE");
 };
 
