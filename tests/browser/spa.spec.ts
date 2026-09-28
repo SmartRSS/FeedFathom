@@ -1646,7 +1646,11 @@ test("every toolbar icon renders and is clickable", async ({ page }) => {
   ];
   for (const name of toolbarButtons) {
     const button = page.getByRole("button", { exact: true, name }).first();
+    // Trial clicks and visibility checks are UI-ordered assertions; a
+    // parallel batch would interleave Playwright's actionability waits.
+    // oxlint-disable-next-line eslint/no-await-in-loop
     await button.click({ trial: true });
+    // oxlint-disable-next-line eslint/no-await-in-loop
     await expect(button.locator("svg")).toBeVisible();
   }
 });
