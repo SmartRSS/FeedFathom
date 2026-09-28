@@ -2,11 +2,14 @@ import { expect, test } from "bun:test";
 import { shareArticle } from "../share-article.ts";
 
 const clipboardWrites: string[] = [];
-const clipboard = {
+const clipboardObject = {
   writeText: async (text: string) => {
     clipboardWrites.push(text);
   },
-} as unknown as Clipboard;
+};
+// Partial mock: shareArticle only calls `writeText`.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+const clipboard = clipboardObject as unknown as Clipboard;
 
 // Each test reads the clipboard in isolation.
 function freshClipboard() {
@@ -17,6 +20,8 @@ function freshClipboard() {
 function navigatorWithShare(
   behavior: (data: { title?: string; url?: string }) => Promise<void>,
 ): Navigator {
+  // Partial mock: shareArticle only calls `share`.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return { share: behavior } as unknown as Navigator;
 }
 
@@ -39,6 +44,8 @@ test("uses the Web Share sheet when the platform has one", async () => {
 test("falls back to the clipboard where share is missing", async () => {
   const outcome = await shareArticle(
     { title: "First article", url: "https://articles.example/first" },
+    // Partial mock: a navigator without `share` selects the clipboard path.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     {} as Navigator,
     freshClipboard(),
   );

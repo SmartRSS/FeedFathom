@@ -23,10 +23,12 @@ test("Save Data suppresses the prefetch; absent connection does not", () => {
 });
 
 test("navigatorConnection reads the real connection object when present", () => {
-  expect(
-    navigatorConnection({
-      connection: { saveData: true },
-    } as unknown as Navigator),
-  ).toEqual({ saveData: true });
+  const withConnection = { connection: { saveData: true } };
+  // Partial mock: the function only reads `connection`.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  expect(navigatorConnection(withConnection as unknown as Navigator)).toEqual({
+    saveData: true,
+  });
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   expect(navigatorConnection({} as Navigator)).toBeUndefined();
 });
