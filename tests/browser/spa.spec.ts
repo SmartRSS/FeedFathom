@@ -593,6 +593,16 @@ test("searches across subscriptions and says when nothing matches", async ({
 
 // A search response that lands after the field was cleared must not
 // repopulate the list (#815) -- with no source selected, clearing empties the
+// An externally-resolvable promise: hand the resolver to the code under
+// test, await the promise where the release matters.
+const deferred = () => {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { released, release };
+};
+
 // list rather than reloading a feed's articles.
 test("a late response to a cleared search leaves the list empty", async ({
   page,
@@ -600,10 +610,7 @@ test("a late response to a cleared search leaves the list empty", async ({
   await installApiFixture(page);
   // Registered after the fixture, so this handler runs first: search
   // requests hold until released, everything else falls through.
-  let releaseSearch: () => void = () => {};
-  const searchReleased = new Promise<void>((resolve) => {
-    releaseSearch = resolve;
-  });
+  const { released: searchReleased, release: releaseSearch } = deferred();
   await page.route("**/api/articles", async (route) => {
     const query: string | undefined = route.request().postDataJSON().query;
     if (!query) return route.fallback();

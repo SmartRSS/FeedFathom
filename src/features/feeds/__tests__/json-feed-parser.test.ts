@@ -79,22 +79,22 @@ describe("JSON Feed parsing", () => {
   });
 });
 
+const previewContent = (item: Record<string, string>) => {
+  const parsed = parseJsonFeed(
+    JSON.stringify({ items: [{ id: "1", ...item }] }),
+  );
+  const preview = mapFeedToPreview(
+    parsed,
+    "https://example.com/feed.json",
+    rewriteLinks,
+  );
+  return extractArticle(preview.articles[0]?.content);
+};
+
 describe("JSON Feed plain text", () => {
   const text = 'a < b && c > d\n&amp; is not "&"\r\n<b>not bold</b>';
   const html =
     'a &lt; b &amp;&amp; c &gt; d<br />&amp;amp; is not "&amp;"<br />&lt;b&gt;not bold&lt;/b&gt;';
-
-  const previewContent = (item: Record<string, string>) => {
-    const parsed = parseJsonFeed(
-      JSON.stringify({ items: [{ id: "1", ...item }] }),
-    );
-    const preview = mapFeedToPreview(
-      parsed,
-      "https://example.com/feed.json",
-      rewriteLinks,
-    );
-    return extractArticle(preview.articles[0]?.content);
-  };
 
   test("renders content_text literally with its line breaks", () => {
     expect(previewContent({ content_text: text })).toBe(html);
