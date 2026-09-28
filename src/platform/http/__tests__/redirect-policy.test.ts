@@ -27,14 +27,12 @@ const nativeResponse = (
 
 const limiter = () => {
   const reserved: string[] = [];
-  const fake = {
+  const fake: Pick<HttpRateLimiter, "reserve"> = {
     reserve: async (hostname: string) => {
       reserved.push(hostname);
     },
   };
-  // Partial fake: the policy only calls `reserve`.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return { fake: fake as unknown as HttpRateLimiter, reserved };
+  return { fake, reserved };
 };
 
 const policy = (responses: NativeHttpResponse[]) => {
@@ -152,7 +150,7 @@ describe("RedirectPolicy", () => {
     };
     const { policy: subject } = policy([bare]);
 
-    expect(
+    await expect(
       subject.follow(
         "https://a.test/start",
         new Headers(),
@@ -166,7 +164,7 @@ describe("RedirectPolicy", () => {
   test("a malformed Location is a policy error", async () => {
     const { policy: subject } = policy([nativeResponse(301, "http://[::1")]);
 
-    expect(
+    await expect(
       subject.follow(
         "https://a.test/start",
         new Headers(),
@@ -186,7 +184,7 @@ describe("RedirectPolicy", () => {
       nativeResponse(301, "https://a.test/r7"),
     ]);
 
-    expect(
+    await expect(
       subject.follow(
         "https://a.test/start",
         new Headers(),
