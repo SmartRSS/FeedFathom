@@ -30,11 +30,11 @@ const resetLifetimeMs = 60 * 60 * 1_000;
 async function validateCaptcha(
   token: string | undefined,
   secret: string,
-  fetcher: typeof globalThis.fetch,
+  fetchFn: typeof globalThis.fetch,
 ) {
   if (!token) return false;
   try {
-    const response = await fetcher(
+    const response = await fetchFn(
       "https://challenges.cloudflare.com/turnstile/v0/siteverify",
       {
         body: JSON.stringify({ response: token, secret }),

@@ -426,8 +426,8 @@ test("folds requests that arrived mid-run into one more parse", async () => {
     createWorker,
     idleHubPoster,
     {
-      async enqueueSource(source, trigger, skipCache) {
-        followedUp.push([source, trigger, skipCache]);
+      async enqueueSource(enqueued, trigger, skipCache) {
+        followedUp.push([enqueued, trigger, skipCache]);
       },
       // getdel: the take is the consume, so a second call sees nothing.
       async takePendingRefresh(sourceId) {
@@ -949,14 +949,15 @@ test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job",
   // Deliberately malformed: a real HttpDeferredError with a throwing getter,
   // to prove the code under test survives a poisoned retryAt read. There's
   // no type-safe way to construct that.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  const evilDeferredError = Object.create(HttpDeferredError.prototype, {
+  const poisoned = Object.create(HttpDeferredError.prototype, {
     retryAt: {
       get() {
         throw new Error("poisoned retryAt getter");
       },
     },
-  }) as HttpDeferredError;
+  });
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const evilDeferredError = poisoned as HttpDeferredError;
   const worker = await createMainWorker(
     config,
     { async add() {}, async addBulk() {} },

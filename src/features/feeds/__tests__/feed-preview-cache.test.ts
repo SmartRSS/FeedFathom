@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 
@@ -152,8 +152,22 @@ describe("FeedPreviewCache", () => {
     redis.failGet = true;
 
     expect(await cache.get(7, feedUrl)).toBeUndefined();
+  });
 
+  test("a failed save still resolves, but leaves a trace", async () => {
+    const redis = new FakeRedis();
+    const cache = new FeedPreviewCache(redis);
     redis.failSet = true;
-    await expect(cache.save(7, feedUrl, preview)).resolves.toBeUndefined();
+    const errors = spyOn(console, "error");
+
+    try {
+      await expect(cache.save(7, feedUrl, preview)).resolves.toBeUndefined();
+      expect(errors).toHaveBeenCalledWith(
+        `Failed to store feed preview for ${feedUrl}:`,
+        expect.anything(),
+      );
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

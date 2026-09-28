@@ -17,7 +17,7 @@ export type FetchResult = {
 // the host it targets, and a chain is permanent only if every hop is.
 export class RedirectPolicy {
   constructor(
-    private readonly rateLimiter: HttpRateLimiter,
+    private readonly rateLimiter: Pick<HttpRateLimiter, "reserve">,
     private readonly transport: NativeHttpTransport,
   ) {}
 

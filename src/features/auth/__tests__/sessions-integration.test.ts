@@ -8,7 +8,7 @@ import {
   UsersDataService,
 } from "#features/auth/user-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
-import { requireDisposableDatabaseUrl } from "../../../features/feeds/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
