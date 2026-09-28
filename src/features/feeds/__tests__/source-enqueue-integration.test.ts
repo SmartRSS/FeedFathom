@@ -3,7 +3,7 @@ import { Job, Queue } from "bullmq";
 import Redis from "ioredis";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import { requireDisposableRedisUrl } from "./disposable-redis-url.ts";
+import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 describe("queued refresh merging with BullMQ", () => {
   const connection = new Redis(requireDisposableRedisUrl(), {

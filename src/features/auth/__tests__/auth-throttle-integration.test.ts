@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import { AuthThrottle } from "#features/auth/auth-throttle.ts";
-import { requireDisposableRedisUrl } from "../../../features/feeds/__tests__/disposable-redis-url.ts";
+import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 const redis = new RedisClient(requireDisposableRedisUrl());
 const throttle = new AuthThrottle(redis);

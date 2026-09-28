@@ -3,7 +3,7 @@ import { RedisClient } from "bun";
 import { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { RequestDeadline } from "#platform/http/request-deadline.ts";
-import { requireDisposableRedisUrl } from "../../../features/feeds/__tests__/disposable-redis-url.ts";
+import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 // The Lua scripts against a real server; http-rate-limiter.test.ts covers the
 // same behaviour through the fake that stands in for them.
