@@ -32,6 +32,8 @@ const limiter = () => {
       reserved.push(hostname);
     },
   };
+  // Partial fake: the policy only calls `reserve`.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return { fake: fake as unknown as HttpRateLimiter, reserved };
 };
 

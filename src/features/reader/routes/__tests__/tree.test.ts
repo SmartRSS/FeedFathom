@@ -36,9 +36,13 @@ await mock.module("#features/feeds/services.ts", () => ({
 const { getTreeHandler } = await import("#features/reader/routes/tree.ts");
 
 test("a source's favicon URL carries its fingerprint, and a source with no icon gets none", async () => {
-  const response = await getTreeHandler({
-    user: { id: 1 },
-  } as Parameters<typeof getTreeHandler>[0]);
+  const args = { user: { id: 1 } };
+  // Partial fixture: the handler destructures only `user`.
+  const response = await getTreeHandler(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    args as Parameters<typeof getTreeHandler>[0],
+  );
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const body = (await response.json()) as { tree: unknown[] };
   expect(body.tree).toEqual([
     {

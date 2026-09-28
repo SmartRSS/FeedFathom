@@ -44,5 +44,8 @@ export function shouldPrefetch(
 export function navigatorConnection(
   navigatorLike: Navigator = navigator,
 ): { saveData?: boolean } | undefined {
+  // The assertion is the seam: the member exists in browsers but not in the
+  // type library, and the function exists to read it defensively.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return (navigatorLike as { connection?: { saveData?: boolean } }).connection;
 }

@@ -57,9 +57,10 @@ export class ScrollPastQueue {
     this.#schedule = options.schedule ?? ((cb, ms) => setTimeout(cb, ms));
     // `unknown` handles keep the injectable seam honest (the queue never
     // inspects what schedule returned); the default hands it straight back
-    // to the platform's clearTimeout.
+    // to the platform's clearTimeout, whose parameter type wants a number.
     this.#cancelScheduled =
       options.cancelScheduled ??
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       ((handle) => clearTimeout(handle as number | undefined));
   }
 
