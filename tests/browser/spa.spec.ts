@@ -600,7 +600,7 @@ const deferred = () => {
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  return { released, release };
+  return { release, released };
 };
 
 // list rather than reloading a feed's articles.
