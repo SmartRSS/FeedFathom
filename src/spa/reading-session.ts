@@ -45,10 +45,14 @@ type StorageLike = {
   setItem(key: string, value: string): void;
 };
 
-const FILTERS: readonly ArticleFilter[] = ["all", "read", "unread"];
-
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isArticleFilter = (value: unknown): value is ArticleFilter =>
+  value === "all" || value === "read" || value === "unread";
 
 // No schema library here on purpose: the blob is written and read by this one
 // module, and a hand check keeps a foreign or truncated value a silent
@@ -63,15 +67,14 @@ export function parseReadingSession(
   } catch {
     return undefined;
   }
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
+  if (!isRecord(value)) return undefined;
   // Version mismatch is the migration story: an older or newer blob is
   // dropped and the app boots normally. When a v2 arrives it reads v1 here
   // and reshapes it instead.
-  if (record["version"] !== SESSION_VERSION) return undefined;
-  const reader = parseReaderScrolls(record["reader"]);
-  const app = parseAppSnapshot(record["app"]);
-  if (!reader || (record["app"] !== undefined && !app)) return undefined;
+  if (value["version"] !== SESSION_VERSION) return undefined;
+  const reader = parseReaderScrolls(value["reader"]);
+  const app = parseAppSnapshot(value["app"]);
+  if (!reader || (value["app"] !== undefined && !app)) return undefined;
   return { app, reader };
 }
 
@@ -79,42 +82,40 @@ function parseReaderScrolls(value: unknown): ReaderScrollEntry[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const entries: ReaderScrollEntry[] = [];
   for (const item of value) {
-    if (typeof item !== "object" || item === null) return undefined;
-    const entry = item as Record<string, unknown>;
-    if (!isFiniteNumber(entry["at"]) || !isFiniteNumber(entry["id"]))
+    if (!isRecord(item)) return undefined;
+    if (!isFiniteNumber(item["at"]) || !isFiniteNumber(item["id"]))
       return undefined;
     if (
-      !isFiniteNumber(entry["ratio"]) ||
-      entry["ratio"] < 0 ||
-      entry["ratio"] > 1
+      !isFiniteNumber(item["ratio"]) ||
+      item["ratio"] < 0 ||
+      item["ratio"] > 1
     )
       return undefined;
-    entries.push({ at: entry["at"], id: entry["id"], ratio: entry["ratio"] });
+    entries.push({ at: item["at"], id: item["id"], ratio: item["ratio"] });
   }
   return entries;
 }
 
 function parseAppSnapshot(value: unknown): AppSnapshot | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null) return undefined;
-  const app = value as Record<string, unknown>;
+  if (!isRecord(value)) return undefined;
   if (
-    (app["nodeType"] !== "source" && app["nodeType"] !== "folder") ||
-    typeof app["nodeUid"] !== "string" ||
-    !FILTERS.includes(app["articleFilter"] as ArticleFilter) ||
-    !isFiniteNumber(app["listScrollTop"])
+    (value["nodeType"] !== "source" && value["nodeType"] !== "folder") ||
+    typeof value["nodeUid"] !== "string" ||
+    !isArticleFilter(value["articleFilter"]) ||
+    !isFiniteNumber(value["listScrollTop"])
   )
     return undefined;
-  const articleId = app["articleId"];
+  const articleId = value["articleId"];
   return {
-    articleFilter: app["articleFilter"] as ArticleFilter,
+    articleFilter: value["articleFilter"],
     articleId:
       articleId === undefined || isFiniteNumber(articleId)
         ? articleId
         : undefined,
-    listScrollTop: app["listScrollTop"],
-    nodeType: app["nodeType"],
-    nodeUid: app["nodeUid"],
+    listScrollTop: value["listScrollTop"],
+    nodeType: value["nodeType"],
+    nodeUid: value["nodeUid"],
   };
 }
 
