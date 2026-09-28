@@ -201,7 +201,12 @@ export class FeedPreviewCache {
         "PX",
         ttlMs,
       );
-    } catch {}
+    } catch (error_: unknown) {
+      // Discovery still answered, but the subscribe that follows it will
+      // find nothing and has no way to say why. Leave a trace pointing at
+      // the storage side rather than letting this look like a lost preview.
+      console.error(`Failed to store feed preview for ${feedUrl}:`, error_);
+    }
   }
 
   private key(userId: number, feedUrl: string): string {
