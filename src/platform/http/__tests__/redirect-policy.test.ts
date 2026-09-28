@@ -82,12 +82,15 @@ describe("RedirectPolicy", () => {
 
   test("one temporary hop makes the whole chain temporary", async () => {
     for (const temporary of [302, 303, 307]) {
+      // Each status gets a fresh chain, asserted sequentially so a failure
+      // is attributable to one status.
       const { policy: subject } = policy([
         nativeResponse(301, "https://a.test/wobble"),
         nativeResponse(temporary, "https://a.test/final"),
         nativeResponse(200),
       ]);
 
+      // oxlint-disable-next-line eslint/no-await-in-loop
       const result = await subject.follow(
         "https://a.test/start",
         new Headers(),

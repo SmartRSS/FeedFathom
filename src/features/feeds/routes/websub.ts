@@ -41,10 +41,13 @@ const readCappedPushBody = async (
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
+    // Stream chunks arrive in order; each read must wait for the last.
+    // oxlint-disable-next-line eslint/no-await-in-loop
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
     if (total > pushBodyLimitBytes) {
+      // oxlint-disable-next-line eslint/no-await-in-loop
       await reader.cancel();
       return undefined;
     }
