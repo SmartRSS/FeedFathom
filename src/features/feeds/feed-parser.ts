@@ -225,11 +225,10 @@ export class FeedParser {
       if (isHttpDeferredError(error_)) {
         throw error_;
       }
-      console.error("parseSource", error_);
+      console.error(`parseSource failed for ${source.url}`, error_);
 
       const message = error_ instanceof Error ? error_.message : String(error_);
       await this.sourcesDataService.failSource(source.id, message);
-      console.error(`${source.url} failed`);
     }
   }
 
@@ -384,7 +383,6 @@ export class FeedParser {
   private validateFeedResponse(response: unknown, fetchedUrl: string): void {
     if (successfulFeedResponseCheck.Check(response)) return;
 
-    console.error(`failed to load data for ${fetchedUrl}`);
     if (
       feedResponseStatusProjectionCheck.Check(response) &&
       response.status !== 200
