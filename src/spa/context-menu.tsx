@@ -61,7 +61,8 @@ export function ContextMenu(props: {
   };
 
   const onOutsidePointerDown = (event: PointerEvent) => {
-    if (!list?.contains(event.target as Node)) props.onClose();
+    if (!(event.target instanceof Node && list?.contains(event.target)))
+      props.onClose();
   };
 
   const focusItemAt = (offset: number) => {
@@ -71,7 +72,7 @@ export function ContextMenu(props: {
       ) ?? []),
     ];
     if (!items.length) return;
-    const current = items.indexOf(document.activeElement as HTMLElement);
+    const current = items.findIndex((item) => item === document.activeElement);
     const next = items[(current + offset + items.length) % items.length];
     next?.focus();
   };
