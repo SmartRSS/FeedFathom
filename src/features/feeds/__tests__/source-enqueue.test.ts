@@ -11,36 +11,42 @@ import {
 // source whose job already exists is the whole feature (#813): a request that
 // lands on a running job must be answered with a follow-up, and one that
 // lands on a queued poll must still refresh like it asked.
+const fakeRedis = (initial: Record<string, string> = {}) => {
+  const store = new Map(Object.entries(initial));
+  const sets: [string, string, string | undefined][] = [];
+  const dels: string[] = [];
+  const evaluations: unknown[][] = [];
+  const redis: SourceParseRedis = {
+    async eval(...args) {
+      evaluations.push(args);
+      return 1;
+    },
+    async getdel(key) {
+      dels.push(key);
+      const value = store.get(key) ?? null;
+      store.delete(key);
+      return value;
+    },
+    async set(key, value, mode) {
+      sets.push([key, value, mode]);
+      if (mode === "NX" && store.has(key)) return null;
+      store.set(key, value);
+      return "OK";
+    },
+  };
+  return { dels, evaluations, redis, sets };
+};
+
+const holderFor = (state: string): SourceParseJobHandle => ({
+  async getState() {
+    return state;
+  },
+});
+
 describe("SourceEnqueuer", () => {
   const source = { id: 3, url: "https://example.test/feed" };
   const jobId = `${JobName.ParseSource}-${source.id}`;
   const pendingKey = `pending_parse_refresh:${source.id}`;
-
-  const fakeRedis = (initial: Record<string, string> = {}) => {
-    const store = new Map(Object.entries(initial));
-    const sets: [string, string, string | undefined][] = [];
-    const dels: string[] = [];
-    const evaluations: unknown[][] = [];
-    const redis: SourceParseRedis = {
-      async eval(...args) {
-        evaluations.push(args);
-        return 1;
-      },
-      async getdel(key) {
-        dels.push(key);
-        const value = store.get(key) ?? null;
-        store.delete(key);
-        return value;
-      },
-      async set(key, value, mode) {
-        sets.push([key, value, mode]);
-        if (mode === "NX" && store.has(key)) return null;
-        store.set(key, value);
-        return "OK";
-      },
-    };
-    return { dels, evaluations, redis, sets };
-  };
 
   const fakeQueue = (holder: SourceParseJobHandle | null = null) => {
     const adds: unknown[] = [];
@@ -59,12 +65,6 @@ describe("SourceEnqueuer", () => {
     };
     return { adds, queue };
   };
-
-  const holderFor = (state: string): SourceParseJobHandle => ({
-    async getState() {
-      return state;
-    },
-  });
 
   test("adds directly when no job holds the source's id", async () => {
     const { queue, adds } = fakeQueue(null);

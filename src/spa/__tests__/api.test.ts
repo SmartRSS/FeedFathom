@@ -26,6 +26,19 @@ const setFetch = (implementation: FetchImplementation) => {
   });
 };
 
+const rejectedApiCall = async (): Promise<unknown> => {
+  setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+  return await api("/session", sessionResponse).catch(
+    (cause: unknown) => cause,
+  );
+};
+
+const aborted = () => {
+  const controller = new AbortController();
+  controller.abort();
+  return controller.signal;
+};
+
 // navigator.onLine is a getter on the prototype; the property has to be
 // redefined on the instance to fake it, and removed again so the online case
 // reads the real one.
@@ -46,13 +59,6 @@ const returnResponse = (response: Response) => {
 };
 
 describe("schema-first SPA API", () => {
-  const rejectedApiCall = async (): Promise<unknown> => {
-    setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
-    return await api("/session", sessionResponse).catch(
-      (cause: unknown) => cause,
-    );
-  };
-
   test("names the offline case when the request never reaches the server", async () => {
     await withOnLine(false, async () => {
       const failure = await rejectedApiCall();
@@ -192,12 +198,6 @@ describe("schema-first SPA API", () => {
   });
 
   describe("cancellation", () => {
-    const aborted = () => {
-      const controller = new AbortController();
-      controller.abort();
-      return controller.signal;
-    };
-
     test("passes a fetch cancellation through unwrapped", async () => {
       const signal = aborted();
       setFetch(() => Promise.reject(signal.reason));

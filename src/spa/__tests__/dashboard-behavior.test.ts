@@ -156,11 +156,13 @@ describe("withDecrementedUnread", () => {
   });
 });
 
-describe("readStateDeltas", () => {
-  function article(id: number, sourceId: number, read: boolean) {
-    return { id, read, sourceId };
-  }
+const article = (id: number, sourceId: number, read: boolean) => ({
+  id,
+  read,
+  sourceId,
+});
 
+describe("readStateDeltas", () => {
   test("an already-read article marked read again is not counted", () => {
     const items = [article(1, 10, true)];
     expect(readStateDeltas(items, [1], true)).toEqual(new Map());

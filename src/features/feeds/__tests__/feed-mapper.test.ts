@@ -298,15 +298,15 @@ describe("mapFeedToPreview", () => {
   });
 });
 
+const rewritten = (base: string) =>
+  `<a href="${base}post/2" target="_blank" rel="noopener noreferrer">next</a>` +
+  `<img src="${base}img/a.png" srcset="${base}img/a.png 1x, ${base}img/b.png 2x">` +
+  '<a href="https://elsewhere.example/x" target="_blank" rel="noopener noreferrer">abs</a>';
+
 describe("content link base", () => {
   const sourceUrl = "https://publisher.example/feeds/main.xml";
   const content =
     '<a href="post/2">next</a><img src="img/a.png" srcset="img/a.png 1x, img/b.png 2x"><a href="https://elsewhere.example/x">abs</a>';
-  const rewritten = (base: string) =>
-    `<a href="${base}post/2" target="_blank" rel="noopener noreferrer">next</a>` +
-    `<img src="${base}img/a.png" srcset="${base}img/a.png 1x, ${base}img/b.png 2x">` +
-    '<a href="https://elsewhere.example/x" target="_blank" rel="noopener noreferrer">abs</a>';
-
   test.each([
     [
       "absolute item URL",
@@ -364,13 +364,13 @@ const countingRewrite = () => {
   };
 };
 
+const itemsWith = (count: number, content: string) =>
+  Array.from({ length: count }, (_, index) =>
+    createMockFeedItem({ content, id: `item-${index}` }),
+  );
+
 describe("mapFeedToPreview bounds", () => {
   const sourceUrl = "https://example.com/feed.xml";
-  const itemsWith = (count: number, content: string) =>
-    Array.from({ length: count }, (_, index) =>
-      createMockFeedItem({ content, id: `item-${index}` }),
-    );
-
   test("keeps only the article limit of a large feed and flags the rest", () => {
     const { calls, rewrite } = countingRewrite();
     const feed = createMockFeed({ items: itemsWith(1_000, "<p>Body</p>") });
