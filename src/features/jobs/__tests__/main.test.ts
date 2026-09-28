@@ -426,8 +426,8 @@ test("folds requests that arrived mid-run into one more parse", async () => {
     createWorker,
     idleHubPoster,
     {
-      async enqueueSource(source, trigger, skipCache) {
-        followedUp.push([source, trigger, skipCache]);
+      async enqueueSource(enqueued, trigger, skipCache) {
+        followedUp.push([enqueued, trigger, skipCache]);
       },
       // getdel: the take is the consume, so a second call sees nothing.
       async takePendingRefresh(sourceId) {

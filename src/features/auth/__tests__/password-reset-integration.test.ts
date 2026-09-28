@@ -34,7 +34,9 @@ async function setUp() {
   const userId = user!.id;
   const signIn = async (passwordHash = "old-password-hash") =>
     await usersDataService.createSession(userId, passwordHash, "This browser");
-  return { client, signIn, userId, usersDataService };
+  // client and usersDataService are the module-level singletons; the tests
+  // use them directly, so setUp hands back only what it created.
+  return { signIn, userId };
 }
 
 // The spend rides in the UPDATE's WHERE clause, so "first writer wins" holds
@@ -42,7 +44,7 @@ async function setUp() {
 // a second confirmation -- even one already past its token lookup -- matches
 // no row and must leave the winner's password standing (#809).
 test("only the first completion of a reset link spends it", async () => {
-  const { client, signIn, userId, usersDataService } = await setUp();
+  const { signIn, userId } = await setUp();
   const sid = (await signIn()) ?? "";
 
   expect(
@@ -76,7 +78,7 @@ test("only the first completion of a reset link spends it", async () => {
 // Two confirmations submitted together, the issue's own repro: exactly one
 // wins, and the surviving password is the winner's, never the later write.
 test("simultaneous completions of one link let exactly one through", async () => {
-  const { client, signIn, userId, usersDataService } = await setUp();
+  const { signIn, userId } = await setUp();
   const sid = (await signIn()) ?? "";
 
   const [first, second] = await Promise.all([
@@ -97,7 +99,7 @@ test("simultaneous completions of one link let exactly one through", async () =>
 // the hash under the row lock the reset's UPDATE takes, so a login that
 // loses the race is refused and one that wins is revoked by the reset.
 test("a login using the replaced password gets no session", async () => {
-  const { client, signIn, userId, usersDataService } = await setUp();
+  const { signIn, userId } = await setUp();
 
   await usersDataService.completePasswordReset(
     userId,
@@ -114,7 +116,7 @@ test("a login using the replaced password gets no session", async () => {
 });
 
 test("no session from the old password survives a racing reset", async () => {
-  const { client, signIn, userId, usersDataService } = await setUp();
+  const { signIn, userId } = await setUp();
   for (let round = 0; round < 20; round++) {
     // eslint-disable-next-line no-await-in-loop -- Each round is its own race.
     await client`
