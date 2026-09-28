@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { requireDisposableRedisUrl } from "../../feeds/__tests__/disposable-redis-url.ts";
+import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 const redis = new RedisClient(requireDisposableRedisUrl());
 const budget = new OutboundFetchBudget(redis);

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { requireDisposableDatabaseUrl } from "#features/feeds/__tests__/disposable-database-url.ts";
+import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
