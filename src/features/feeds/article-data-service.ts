@@ -78,6 +78,10 @@ export class ArticlesDataService {
       // id list -- the userSources join is what authorizes the rows, so
       // this is safe with sources left empty.
       allSubscribed?: boolean;
+      // Scope to the user's subscriptions filed in this folder (#976). As
+      // with allSubscribed, the userSources join authorizes the rows, so a
+      // folder id that is not the user's matches nothing.
+      folderId?: number;
       // Only articles published within this many hours of now.
       publishedWithinHours?: number;
       // Full-text search (#697): matched against the stored tsvector over
@@ -87,7 +91,11 @@ export class ArticlesDataService {
       query?: string;
     } = {},
   ) {
-    if (!options.allSubscribed && sourceIds.length === 0) {
+    if (
+      !options.allSubscribed &&
+      options.folderId === undefined &&
+      sourceIds.length === 0
+    ) {
       return [];
     }
 
@@ -119,7 +127,9 @@ export class ArticlesDataService {
           // plain range scan.
           ...(options.allSubscribed
             ? []
-            : [inArray(articles.sourceId, sourceIds)]),
+            : options.folderId === undefined
+              ? [inArray(articles.sourceId, sourceIds)]
+              : [eq(userSources.parentId, options.folderId)]),
           ...(options.publishedWithinHours
             ? [
                 sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,

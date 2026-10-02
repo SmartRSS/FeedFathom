@@ -10,6 +10,17 @@ export function sourceIds(node: TreeNode): number[] {
     : (node.children ?? []).flatMap(sourceIds);
 }
 
+// A folder is asked for by id and the server resolves its sources (#976):
+// its source ids would run into the request's 500-id cap.
+export function articleScope(node: TreeNode): {
+  folder?: number;
+  sources: number[];
+} {
+  return node.type === "folder"
+    ? { folder: Number(node.uid), sources: [] }
+    : { sources: sourceIds(node) };
+}
+
 /**
  * The tree narrowed to what matches, case-insensitively.
  *
