@@ -204,7 +204,8 @@ async function flushQueue() {
       // A 4xx is a definitive rejection that retrying can't fix, so drop it
       // and tell the page -- the optimistic response already claimed success.
       // 401 is excluded (a session that expired offline succeeds once the user
-      // re-authenticates) and 5xx is presumed transient; both retry forever.
+      // re-authenticates) and 5xx is presumed transient; both retry forever,
+      // and hold back every later entry, which may depend on this one (#975).
       if (
         response.status >= 400 &&
         response.status < 500 &&
@@ -222,6 +223,7 @@ async function flushQueue() {
         }
       } else {
         queueMayHaveEntries = true; // kept for the next flush
+        break;
       }
     } catch {
       queueMayHaveEntries = true;
