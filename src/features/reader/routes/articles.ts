@@ -21,7 +21,12 @@ export async function postArticlesHandler({
   request: Request;
   user: AuthedUser;
 }) {
-  if (!body.sources.length && body.view !== "today" && !body.query)
+  if (
+    !body.sources.length &&
+    body.view !== "today" &&
+    !body.query &&
+    body.folder === undefined
+  )
     return json([]);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
@@ -35,7 +40,9 @@ export async function postArticlesHandler({
         // so subscription authorizes the rows, as it does for Today.
         body.query
         ? { allSubscribed: true, query: body.query }
-        : {},
+        : body.folder === undefined
+          ? {}
+          : { folderId: body.folder },
   );
   return json(
     articles.map((article) =>

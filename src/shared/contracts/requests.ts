@@ -61,6 +61,10 @@ export const articlesRequest = Type.Object(
         Type.Literal("all"),
       ]),
     ),
+    // A folder by id (#976): the server scopes to the user's subscriptions
+    // filed in it, so a folder is not bounded by the id cap on `sources`,
+    // which is then ignored (sent empty).
+    folder: Type.Optional(id),
     // Full-text search (#697): present means the list is search results
     // across every subscription rather than the selected node, so `sources`
     // is ignored and sent empty, exactly as the Today view does it.

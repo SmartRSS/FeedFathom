@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { Value } from "typebox/value";
+import { articlesRequest } from "#shared/contracts/requests.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
+  articleScope,
   faviconUrls,
   filterTree,
   folderOpenFromStored,
@@ -61,6 +64,22 @@ describe("sourceIds", () => {
       ),
     ).toEqual([2, 9]);
     expect(sourceIds(folder("empty", []))).toEqual([]);
+  });
+});
+
+describe("articleScope", () => {
+  // #976: a folder used to be sent as its source ids, and the request schema
+  // caps id lists at 500, so a folder of 501 feeds could not be browsed.
+  test("names a folder by id however many sources it holds", () => {
+    const big = folder(
+      "3",
+      Array.from({ length: 501 }, (_, index) => source(String(index + 1))),
+    );
+    expect(articleScope(big)).toEqual({ folder: 3, sources: [] });
+    expect(Value.Check(articlesRequest, articleScope(big))).toBe(true);
+  });
+  test("sends a source as its own id", () => {
+    expect(articleScope(source("7"))).toEqual({ sources: [7] });
   });
 });
 

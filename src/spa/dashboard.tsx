@@ -32,6 +32,7 @@ import {
   isTodayNode,
   nextPollDelayMs,
   readStateDeltas,
+  articleScope,
   sourceIds,
   snoozePresets,
   snoozeUntilIso,
@@ -626,11 +627,12 @@ export function Dashboard(props: {
       }
       return;
     }
-    await fetchArticlesForBody({ sources: ids }, selection, restore);
+    await fetchArticlesForBody(articleScope(node), selection, restore);
   }
   async function fetchArticlesForBody(
     body: {
       sources: number[];
+      folder?: number;
       view?: "today";
       cursor?: number;
       query?: string;
@@ -745,8 +747,8 @@ export function Dashboard(props: {
     // serialises to [null] and the request is refused. The next page has to
     // be asked the same way the first one was.
     const today = !search && node !== undefined && isTodayNode(node);
-    const ids = search || today || !node ? [] : sourceIds(node);
-    if (!search && !today && !ids.length) return;
+    const scope =
+      search || today || !node ? { sources: [] } : articleScope(node);
     const selection = selectionGuard.current();
     loadingMoreSelection = selection;
     const controller = new AbortController();
@@ -756,7 +758,7 @@ export function Dashboard(props: {
         body: JSON.stringify({
           cursor,
           filter: articleFilter(),
-          sources: ids,
+          ...scope,
           ...(today ? { view: "today" } : {}),
           ...(search ? { query: search } : {}),
         }),
