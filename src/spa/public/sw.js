@@ -176,6 +176,40 @@ async function notifyMutationFailed(value, status) {
   }
 }
 
+// Each queued removal records the account that made it, so a replay under
+// another account's session drops it instead of sending it (#982). Even with
+// every endpoint scoped by user, two accounts can share a source: account B
+// replaying A's removals would unsubscribe B from it or hide its articles.
+// The record is a copy of GET /api/session kept in the API cache, which holds
+// one account's data and is emptied on sign-in and logout. The worker reads
+// it offline, at queue time, and refreshes it before each replay.
+const SESSION_PATH = "/api/session";
+
+async function cachedAccount() {
+  try {
+    const cached = await (await caches.open(API_CACHE)).match(SESSION_PATH);
+    return (await cached?.json())?.user?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+// Undefined when offline, failing, or signed out: the queue then waits, as it
+// does for a 401, so a session that expired offline still replays its own
+// removals once the same account signs back in.
+async function sessionAccount() {
+  try {
+    const response = await fetch(SESSION_PATH, { credentials: "same-origin" });
+    if (!response.ok) return undefined;
+    const id = (await response.clone().json())?.user?.id;
+    if (id !== undefined)
+      await (await caches.open(API_CACHE)).put(SESSION_PATH, response);
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
 async function flushQueue() {
   if (!queueMayHaveEntries) return;
   // Cleared before the read, so an entry queued mid-flush sets it again.
@@ -187,8 +221,24 @@ async function flushQueue() {
     queueMayHaveEntries = true;
     throw error;
   }
+  // With nothing to replay, the session is fetched only to fill a missing
+  // record (after a sign-in, or on first run), so offline removals have an
+  // account to carry.
+  if (entries.length === 0 && (await cachedAccount()) !== undefined) return;
+  const account = await sessionAccount();
+  if (account === undefined) {
+    if (entries.length > 0) queueMayHaveEntries = true;
+    return;
+  }
   for (const { key, value } of entries) {
     try {
+      // An entry with no account was queued before one was known; its owner
+      // can't be told apart from the current session, so it is dropped too.
+      if (value.account !== account) {
+        // eslint-disable-next-line no-await-in-loop -- replay must preserve order
+        await queueDelete(key);
+        continue;
+      }
       // eslint-disable-next-line no-await-in-loop -- replay must preserve order
       const response = await fetch(value.url, {
         body: value.body,
@@ -237,7 +287,12 @@ async function queueableMutation(request, route) {
     return await fetch(request.clone());
   } catch {
     const bodyText = await request.text();
-    await queueAdd({ body: bodyText, method: request.method, url: request.url });
+    await queueAdd({
+      account: await cachedAccount(),
+      body: bodyText,
+      method: request.method,
+      url: request.url,
+    });
     if ("sync" in self.registration) {
       try {
         await self.registration.sync.register("replay-mutations");
@@ -263,10 +318,14 @@ async function cacheFirst(request, cacheName) {
 // so a sign-in empties it before the page sees the response. Logout clears it
 // too (options.tsx), but a session that expired or was revoked reaches the
 // login form without logging out, and the next sign-in may be another
-// account (#974).
+// account (#974). That also drops the cached session; the next flush fetches
+// the new one.
 async function signIn(request) {
   const response = await fetch(request);
-  if (response.ok) await caches.delete(API_CACHE);
+  if (response.ok) {
+    await caches.delete(API_CACHE);
+    queueMayHaveEntries = true;
+  }
   return response;
 }
 

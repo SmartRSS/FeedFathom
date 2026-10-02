@@ -298,7 +298,9 @@ test("a just-prefetched article opens without a network round trip", async () =>
   const sw = loadServiceWorker(articleNetwork);
   const prefetched = await sw.loadArticle(2);
   expect(await sw.loadArticle(2)).toEqual(prefetched);
-  expect(sw.requests).toEqual(["/api/article?article=2"]);
+  expect(sw.requests.filter((path) => path.startsWith("/api/article"))).toEqual(
+    ["/api/article?article=2"],
+  );
 });
 
 test("an article cached over a minute ago goes to the network first", async () => {
@@ -311,10 +313,9 @@ test("an article cached over a minute ago goes to the network first", async () =
     }),
   );
   expect(await sw.loadArticle(2)).not.toEqual(prefetched);
-  expect(sw.requests).toEqual([
-    "/api/article?article=2",
-    "/api/article?article=2",
-  ]);
+  expect(sw.requests.filter((path) => path.startsWith("/api/article"))).toEqual(
+    ["/api/article?article=2", "/api/article?article=2"],
+  );
 });
 
 test("signing in drops articles cached under the previous account", async () => {
@@ -359,10 +360,15 @@ test("an empty mutation queue is read once, not on every response", async () => 
   expect(sw.queue.opens()).toBe(1);
 });
 
+// GET /api/session as the given account, or signed out with null.
+const session = (id: number | null) =>
+  Response.json({ user: id === null ? null : { id } });
+
 test("a deletion queued offline replays on the next successful request", async () => {
   let online = true;
   const sw = loadServiceWorker((path, method) => {
     if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(1);
     return method === "GET" ? articleNetwork(path) : new Response(null);
   });
   await sw.loadArticle(1);
@@ -394,6 +400,7 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
   let sourceExists = true;
   const sw = loadServiceWorker((path, method) => {
     if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(1);
     if (method === "GET") return Response.json({ tree: [] });
     if (path === "/api/source") {
       if (sourceRemovalFails) return new Response(null, { status: 503 });
@@ -409,6 +416,7 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
         method: "DELETE",
       }),
     ).response;
+  sw.entries.set("/api/session", session(1));
   await remove("/api/source", { removeSourceId: 1 });
   await remove("/api/folders", { removeFolderId: 2 });
   online = true;
@@ -428,6 +436,64 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
   ]);
   expect(sw.queue.rows.size).toBe(0);
   expect(sw.messages).toEqual([]);
+});
+
+// Account 1 removes a source offline and its session lapses. Whoever signs in
+// next decides whether the removal replays (#982).
+const removeOfflineThenSignIn = async (nextAccount: number) => {
+  let online = true;
+  let account: number | null = 1;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(account);
+    if (path === "/api/login") {
+      account = nextAccount;
+      return Response.json({ sid: "s" });
+    }
+    if (method === "GET") return Response.json({ tree: [] });
+    return new Response(null, { status: account === null ? 401 : 200 });
+  });
+  const deletes = () => sw.requests.filter((path) => path.startsWith("DELETE"));
+  await sw.loadTree();
+  await settle();
+  online = false;
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
+  online = true;
+  account = null;
+  await sw.loadTree();
+  await settle();
+  expect(sw.queue.rows.size).toBe(1);
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  await sw.loadTree();
+  await settle();
+  return {
+    deletes: deletes(),
+    messages: sw.messages,
+    queued: sw.queue.rows.size,
+  };
+};
+
+test("a removal queued by one account is dropped, not sent, when another signs in", async () => {
+  expect(await removeOfflineThenSignIn(2)).toEqual({
+    deletes: ["DELETE /api/source"],
+    messages: [],
+    queued: 0,
+  });
+});
+
+test("a removal queued before the session expired replays when the same account signs back in", async () => {
+  expect(await removeOfflineThenSignIn(1)).toEqual({
+    deletes: ["DELETE /api/source", "DELETE /api/source"],
+    messages: [],
+    queued: 0,
+  });
 });
 
 // index.html gates its /api/tree preload on the same route list, so the page
