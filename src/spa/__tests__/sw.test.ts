@@ -349,8 +349,14 @@ test("opening 300 articles keeps only the newest 200 cached", async () => {
   expect(sw.entries.has("/api/tree")).toBe(true);
 });
 
+// GET /api/session as the given account, or signed out with null.
+const session = (id: number | null) =>
+  Response.json({ user: id === null ? null : { id } });
+
 test("an empty mutation queue is read once, not on every response", async () => {
-  const sw = loadServiceWorker(articleNetwork);
+  const sw = loadServiceWorker((path) =>
+    path === "/api/session" ? session(1) : articleNetwork(path),
+  );
   for (let id = 1; id <= 5; id++) {
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
@@ -360,9 +366,68 @@ test("an empty mutation queue is read once, not on every response", async () => 
   expect(sw.queue.opens()).toBe(1);
 });
 
-// GET /api/session as the given account, or signed out with null.
-const session = (id: number | null) =>
-  Response.json({ user: id === null ? null : { id } });
+test("a failed account lookup is retried, so a later offline removal still replays", async () => {
+  let online = true;
+  let sessionUp = false;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session")
+      return sessionUp ? session(1) : new Response(null, { status: 503 });
+    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
+  });
+  await sw.loadTree();
+  await settle();
+  sessionUp = true;
+  await sw.loadTree();
+  await settle();
+  online = false;
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
+  online = true;
+  await sw.loadTree();
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+    "DELETE /api/source",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
+});
+
+// Account 1's session lookup is still in flight when account 2 signs in.
+test("a session lookup overtaken by a sign-in doesn't record the previous account", async () => {
+  let account = 1;
+  let answerFirstLookup: (() => void) | undefined;
+  const sw = loadServiceWorker((path) => {
+    if (path === "/api/session") {
+      const response = session(account);
+      if (answerFirstLookup) return response;
+      return new Promise<Response>((resolve) => {
+        answerFirstLookup = () => resolve(response);
+      });
+    }
+    if (path === "/api/login") {
+      account = 2;
+      return Response.json({ sid: "s" });
+    }
+    return Response.json({ tree: [] });
+  });
+  await sw.loadTree();
+  await settle();
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  await sw.loadTree();
+  await settle();
+  answerFirstLookup?.();
+  await settle();
+  expect(await sw.entries.get("/api/session")?.json()).toEqual({
+    user: { id: 2 },
+  });
+});
 
 test("a deletion queued offline replays on the next successful request", async () => {
   let online = true;

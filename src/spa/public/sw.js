@@ -194,16 +194,22 @@ async function cachedAccount() {
   }
 }
 
-// Undefined when offline, failing, or signed out: the queue then waits, as it
-// does for a 401, so a session that expired offline still replays its own
-// removals once the same account signs back in.
-async function sessionAccount() {
+// Bumped when a sign-in starts and when it succeeds. A session lookup or a
+// replay that began under an earlier count may be answered for the previous
+// account, so it neither records that answer nor sends anything more.
+let signIns = 0;
+
+// Undefined when offline, failing, signed out, or overtaken by a sign-in: the
+// queue then waits, as it does for a 401, so a session that expired offline
+// still replays its own removals once the same account signs back in.
+async function sessionAccount(generation) {
   try {
     const response = await fetch(SESSION_PATH, { credentials: "same-origin" });
     if (!response.ok) return undefined;
     const id = (await response.clone().json())?.user?.id;
-    if (id !== undefined)
-      await (await caches.open(API_CACHE)).put(SESSION_PATH, response);
+    const cache = await caches.open(API_CACHE);
+    if (generation !== signIns) return undefined;
+    if (id !== undefined) await cache.put(SESSION_PATH, response);
     return id;
   } catch {
     return undefined;
@@ -214,6 +220,7 @@ async function flushQueue() {
   if (!queueMayHaveEntries) return;
   // Cleared before the read, so an entry queued mid-flush sets it again.
   queueMayHaveEntries = false;
+  const generation = signIns;
   let entries;
   try {
     entries = await queueAll();
@@ -225,12 +232,17 @@ async function flushQueue() {
   // record (after a sign-in, or on first run), so offline removals have an
   // account to carry.
   if (entries.length === 0 && (await cachedAccount()) !== undefined) return;
-  const account = await sessionAccount();
+  const account = await sessionAccount(generation);
   if (account === undefined) {
-    if (entries.length > 0) queueMayHaveEntries = true;
+    // Retried on the next successful request until an account is recorded.
+    queueMayHaveEntries = true;
     return;
   }
   for (const { key, value } of entries) {
+    if (generation !== signIns) {
+      queueMayHaveEntries = true;
+      break;
+    }
     try {
       // An entry with no account was queued before one was known; its owner
       // can't be told apart from the current session, so it is dropped too.
@@ -321,8 +333,10 @@ async function cacheFirst(request, cacheName) {
 // account (#974). That also drops the cached session; the next flush fetches
 // the new one.
 async function signIn(request) {
+  signIns++;
   const response = await fetch(request);
   if (response.ok) {
+    signIns++;
     await caches.delete(API_CACHE);
     queueMayHaveEntries = true;
   }
