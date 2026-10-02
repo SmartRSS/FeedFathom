@@ -385,6 +385,51 @@ test("a deletion queued offline replays on the next successful request", async (
   expect(sw.queue.rows.size).toBe(0);
 });
 
+// The server refuses to remove a folder that still holds a source, so a
+// folder removal replayed past a failed source removal would be rejected and
+// dropped (#975).
+test("a removal queued behind a temporarily failing one waits for it", async () => {
+  let online = false;
+  let sourceRemovalFails = true;
+  let sourceExists = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (method === "GET") return Response.json({ tree: [] });
+    if (path === "/api/source") {
+      if (sourceRemovalFails) return new Response(null, { status: 503 });
+      sourceExists = false;
+      return new Response(null);
+    }
+    return new Response(null, { status: sourceExists ? 400 : 200 });
+  });
+  const remove = (path: string, body: object) =>
+    sw.dispatch(
+      new Request(`${ORIGIN}${path}`, {
+        body: JSON.stringify(body),
+        method: "DELETE",
+      }),
+    ).response;
+  await remove("/api/source", { removeSourceId: 1 });
+  await remove("/api/folders", { removeFolderId: 2 });
+  online = true;
+  await sw.loadTree();
+  await settle();
+  expect(sw.queue.rows.size).toBe(2);
+  expect(sw.messages).toEqual([]);
+  sourceRemovalFails = false;
+  await sw.loadTree();
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+    "DELETE /api/folders",
+    "DELETE /api/source",
+    "DELETE /api/source",
+    "DELETE /api/folders",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
+  expect(sw.messages).toEqual([]);
+});
+
 // index.html gates its /api/tree preload on the same route list, so the page
 // and the worker agree on which navigations fetch the tree early (#938).
 test("index.html and sw.js exclude the same routes from the tree preload", async () => {
