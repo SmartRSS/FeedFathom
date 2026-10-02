@@ -110,7 +110,15 @@ const loadServiceWorker = (
     Response,
     URL,
     btoa,
-    caches: { open: async () => cache },
+    // One store stands in for every named cache, so deleting any of them
+    // empties it.
+    caches: {
+      delete: async () => {
+        entries.clear();
+        return true;
+      },
+      open: async () => cache,
+    },
     fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
       const method =
@@ -149,7 +157,9 @@ const loadServiceWorker = (
         pending.push(promise);
       },
     });
-    const response = handled ?? Promise.reject(new Error("not handled"));
+    // An unhandled request goes to the network untouched, as in a browser.
+    const response =
+      handled ?? Promise.resolve(network(key(request), request.method));
     const background = response.then(() => Promise.all(pending));
     return { background, response };
   };
@@ -305,6 +315,21 @@ test("an article cached over a minute ago goes to the network first", async () =
     "/api/article?article=2",
     "/api/article?article=2",
   ]);
+});
+
+test("signing in drops articles cached under the previous account", async () => {
+  let account = "a";
+  const sw = loadServiceWorker((path, method) =>
+    method === "POST"
+      ? Response.json({ sid: account })
+      : Response.json({ account, path }),
+  );
+  expect(await sw.loadArticle(2)).toMatchObject({ account: "a" });
+  account = "b";
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  expect(await sw.loadArticle(2)).toMatchObject({ account: "b" });
 });
 
 test("opening 300 articles keeps only the newest 200 cached", async () => {

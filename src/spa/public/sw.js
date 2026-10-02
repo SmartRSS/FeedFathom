@@ -257,6 +257,17 @@ async function cacheFirst(request, cacheName) {
   return response;
 }
 
+// The API cache holds one account's private data and isn't keyed by account,
+// so a sign-in empties it before the page sees the response. Logout clears it
+// too (options.tsx), but a session that expired or was revoked reaches the
+// login form without logging out, and the next sign-in may be another
+// account (#974).
+async function signIn(request) {
+  const response = await fetch(request);
+  if (response.ok) await caches.delete(API_CACHE);
+  return response;
+}
+
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
@@ -481,6 +492,10 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.method !== "GET") {
+    if (url.pathname === "/api/login") {
+      event.respondWith(signIn(request));
+      return;
+    }
     const route = QUEUEABLE_MUTATIONS.find(
       (candidate) =>
         candidate.method === request.method && url.pathname === candidate.path,
