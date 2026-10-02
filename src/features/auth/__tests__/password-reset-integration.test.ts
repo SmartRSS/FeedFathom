@@ -140,3 +140,39 @@ test("no session from the old password survives a racing reset", async () => {
     expect(rows).toHaveLength(0);
   }
 });
+
+// A password change verifies the current password, hashes the replacement,
+// then writes. A reset that commits in between must stay authoritative: the
+// write carries the hash it verified and matches no row once it is gone
+// (#977).
+test("a password change authorised by the replaced password writes nothing", async () => {
+  const { userId } = await setUp();
+
+  await usersDataService.completePasswordReset(
+    userId,
+    TOKEN_HASH,
+    "reset-password-hash",
+  );
+
+  expect(
+    await usersDataService.updatePassword(
+      userId,
+      "old-password-hash",
+      "stale-change-hash",
+    ),
+  ).toBe(false);
+  const [row] = await client<{ password: string }[]>`
+    SELECT password FROM users WHERE id = ${userId}`;
+  expect(row!.password).toBe("reset-password-hash");
+
+  expect(
+    await usersDataService.updatePassword(
+      userId,
+      "reset-password-hash",
+      "changed-password-hash",
+    ),
+  ).toBe(true);
+  const [after] = await client<{ password: string }[]>`
+    SELECT password FROM users WHERE id = ${userId}`;
+  expect(after!.password).toBe("changed-password-hash");
+});
