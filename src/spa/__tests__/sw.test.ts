@@ -397,6 +397,64 @@ test("a failed account lookup is retried, so a later offline removal still repla
   expect(sw.queue.rows.size).toBe(0);
 });
 
+// The connection drops after the tree loads but before the first session
+// lookup answers.
+test("a removal made while the first account lookup is in flight waits for it", async () => {
+  let online = true;
+  let answerLookup: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (path === "/api/session" && !answerLookup)
+      return new Promise<Response>((resolve) => {
+        answerLookup = () => resolve(session(1));
+      });
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(1);
+    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
+  });
+  await sw.loadTree();
+  await settle();
+  online = false;
+  const removal = sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
+  await settle();
+  answerLookup?.();
+  expect(await (await removal).json()).toBe(3);
+  online = true;
+  await sw.loadTree();
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+    "DELETE /api/source",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
+});
+
+test("a removal with no known account fails offline instead of being queued", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return new Response(null, { status: 503 });
+    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
+  });
+  await sw.loadTree();
+  await settle();
+  online = false;
+  const removal = sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  );
+  removal.background.catch(() => {});
+  await expect(removal.response).rejects.toThrow("Failed to fetch");
+  await settle();
+  expect(sw.queue.rows.size).toBe(0);
+});
+
 // Account 1's session lookup is still in flight when the account changes;
 // returns the account recorded once that lookup finally answers.
 const recordAfterOvertakenLookup = async (

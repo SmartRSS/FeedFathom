@@ -204,6 +204,9 @@ async function cachedAccount() {
 // more.
 let accountChanges = 0;
 
+// The latest flush's session lookup and the count it started under.
+let pendingLookup;
+
 // Undefined when offline, failing, signed out, or overtaken by an account
 // change: the queue then waits, as it does for a 401, so a session that
 // expired offline still replays its own removals once the same account signs
@@ -238,7 +241,9 @@ async function flushQueue() {
   // record (after a sign-in, or on first run), so offline removals have an
   // account to carry.
   if (entries.length === 0 && (await cachedAccount()) !== undefined) return;
-  const account = await sessionAccount(generation);
+  const lookup = sessionAccount(generation);
+  pendingLookup = { generation, lookup };
+  const account = await lookup;
   if (account === undefined) {
     // Retried on the next successful request until an account is recorded.
     queueMayHaveEntries = true;
@@ -250,8 +255,9 @@ async function flushQueue() {
       break;
     }
     try {
-      // An entry with no account was queued before one was known; its owner
-      // can't be told apart from the current session, so it is dropped too.
+      // An entry with no account was queued before entries carried one; its
+      // owner can't be told apart from the current session, so it is
+      // dropped too.
       if (value.account !== account) {
         // eslint-disable-next-line no-await-in-loop -- replay must preserve order
         await queueDelete(key);
@@ -300,16 +306,31 @@ async function flushQueue() {
   }
 }
 
+// Right after a sign-in, or on first run, the record stays empty until the
+// first flush's session lookup answers, so a removal made meanwhile waits for
+// that answer -- unless the account changed since the lookup started.
+async function ownerAccount() {
+  const generation = accountChanges;
+  const pending = pendingLookup;
+  const cached = await cachedAccount();
+  if (cached !== undefined) return cached;
+  return pending?.generation === generation ? await pending.lookup : undefined;
+}
+
 async function queueableMutation(request, route) {
   // Read before the request goes out, so a sign-in in another tab while it is
   // in flight doesn't become the owner of a removal it didn't make.
-  const account = cachedAccount();
+  const owner = ownerAccount();
   try {
     return await fetch(request.clone());
-  } catch {
+  } catch (error) {
+    const account = await owner;
+    // The replay would drop a removal with no owner, so fail it now rather
+    // than answer with a success that never lands.
+    if (account === undefined) throw error;
     const bodyText = await request.text();
     await queueAdd({
-      account: await account,
+      account,
       body: bodyText,
       method: request.method,
       url: request.url,
