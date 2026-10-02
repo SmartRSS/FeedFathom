@@ -397,9 +397,13 @@ test("a failed account lookup is retried, so a later offline removal still repla
   expect(sw.queue.rows.size).toBe(0);
 });
 
-// Account 1's session lookup is still in flight when account 2 signs in.
-test("a session lookup overtaken by a sign-in doesn't record the previous account", async () => {
-  let account = 1;
+// Account 1's session lookup is still in flight when the account changes;
+// returns the account recorded once that lookup finally answers.
+const recordAfterOvertakenLookup = async (
+  change: "/api/login" | "/api/logout",
+  nextAccount: number | null,
+) => {
+  let account: number | null = 1;
   let answerFirstLookup: (() => void) | undefined;
   const sw = loadServiceWorker((path) => {
     if (path === "/api/session") {
@@ -409,24 +413,109 @@ test("a session lookup overtaken by a sign-in doesn't record the previous accoun
         answerFirstLookup = () => resolve(response);
       });
     }
-    if (path === "/api/login") {
-      account = 2;
-      return Response.json({ sid: "s" });
+    if (path === change) {
+      account = nextAccount;
+      return Response.json({ success: true });
     }
     return Response.json({ tree: [] });
   });
   await sw.loadTree();
+  await settle();
+  await sw.dispatch(new Request(`${ORIGIN}${change}`, { method: "POST" }))
+    .response;
+  await sw.loadTree();
+  await settle();
+  answerFirstLookup?.();
+  await settle();
+  const record: unknown = await sw.entries.get("/sw-queue-account")?.json();
+  return record;
+};
+
+test("a session lookup overtaken by a sign-in doesn't record the previous account", async () => {
+  expect(await recordAfterOvertakenLookup("/api/login", 2)).toEqual({ id: 2 });
+});
+
+test("a session lookup overtaken by a logout doesn't record the previous account", async () => {
+  expect(await recordAfterOvertakenLookup("/api/logout", null)).toBeUndefined();
+});
+
+// The removal is in flight when account 2 signs in from another tab, and
+// fails after that sign-in completes.
+test("a removal that fails after another account signs in stays account 1's", async () => {
+  let account = 1;
+  let failRemoval: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (path === "/api/session") return session(account);
+    if (path === "/api/login") {
+      account = 2;
+      return Response.json({ sid: "s" });
+    }
+    if (method === "DELETE" && !failRemoval)
+      return new Promise<Response>((_resolve, reject) => {
+        failRemoval = () => reject(new TypeError("Failed to fetch"));
+      });
+    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
+  });
+  await sw.loadTree();
+  await settle();
+  const removal = sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
   await settle();
   await sw.dispatch(
     new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
   ).response;
   await sw.loadTree();
   await settle();
-  answerFirstLookup?.();
+  failRemoval?.();
+  await removal;
+  await sw.loadTree();
   await settle();
-  expect(await sw.entries.get("/api/session")?.json()).toEqual({
-    user: { id: 2 },
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
+});
+
+// The page's own /api/session request is cached like any other, and answers
+// signed out once the session has expired.
+test("a signed-out session answer doesn't erase the owner of later offline removals", async () => {
+  let online = true;
+  let account: number | null = 1;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(account);
+    if (path === "/api/login") {
+      account = 1;
+      return Response.json({ sid: "s" });
+    }
+    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
+  await sw.loadTree();
+  await settle();
+  account = null;
+  await sw.dispatch(new Request(`${ORIGIN}/api/session`)).response;
+  online = false;
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
+  online = true;
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  await sw.loadTree();
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+    "DELETE /api/source",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
 });
 
 test("a deletion queued offline replays on the next successful request", async () => {
@@ -481,7 +570,7 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
         method: "DELETE",
       }),
     ).response;
-  sw.entries.set("/api/session", session(1));
+  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
   await remove("/api/source", { removeSourceId: 1 });
   await remove("/api/folders", { removeFolderId: 2 });
   online = true;
