@@ -180,7 +180,11 @@ type AdminOptionsRouteDependencies = {
     | "deleteSessionById"
     | "deleteOtherSessions"
   > & {
-    updatePassword(userId: number, passwordHash: string): Promise<unknown>;
+    updatePassword(
+      userId: number,
+      currentHash: string,
+      passwordHash: string,
+    ): Promise<boolean>;
   };
 };
 type WebSubRouteDependencies = {
@@ -2241,6 +2245,49 @@ test("rejects mismatched password changes before account checks", async () => {
   expect(accountChecks).toBe(0);
 });
 
+// The write is conditional on the hash the handler verified, so a reset that
+// committed while the replacement was hashing wins and the change is refused
+// rather than reported as done (#977).
+test("refuses a password change whose verified password was replaced", async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.getUserBySid = async () => sessionUser;
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.password.verify = async (value, hash) =>
+    hash === account.password && value === "old-password";
+  dependencies.password.hash = async () => "replacement-hash";
+  const updates: [number, string, string][] = [];
+  dependencies.usersDataService.updatePassword = async (
+    userId,
+    currentHash,
+    passwordHash,
+  ) => {
+    updates.push([userId, currentHash, passwordHash]);
+    return false;
+  };
+  const app = await appFor(dependencies);
+
+  const response = await app.handle(
+    new Request("http://localhost/api/options/password", {
+      body: JSON.stringify({
+        oldPassword: "old-password",
+        password1: "new-password",
+        password2: "new-password",
+      }),
+      headers: {
+        "content-type": "application/json",
+        cookie: "sid=test",
+      },
+      method: "POST",
+    }),
+  );
+
+  expect(updates).toEqual([[account.id, account.password, "replacement-hash"]]);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: "Current password is incorrect.",
+  });
+});
+
 test("validates admin sort and URL policies before service calls", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async () => ({
@@ -2733,6 +2780,7 @@ test.each([
     };
     dependencies.usersDataService.updatePassword = async () => {
       calls.push("update-password");
+      return true;
     };
     dependencies.usersDataService.activateUser = async () => {
       calls.push("activate");
@@ -2912,6 +2960,7 @@ test("rejects missing or malformed Turnstile responses before database mutation"
   };
   dependencies.usersDataService.updatePassword = async () => {
     databaseCalls++;
+    return true;
   };
   dependencies.usersDataService.activateUser = async () => {
     databaseCalls++;

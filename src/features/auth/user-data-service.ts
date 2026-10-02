@@ -388,11 +388,23 @@ export class UsersDataService {
     });
   }
 
-  public async updatePassword(userId: number, passwordHash: string) {
-    return await this.drizzleConnection
+  /**
+   * currentHash is the stored hash the caller verified. The write matches
+   * only while the row still holds it, so a reset that commits between the
+   * verification and this UPDATE stays authoritative instead of being
+   * overwritten by a password its holder may no longer control (#977).
+   * False means the password changed underneath the caller.
+   */
+  public async updatePassword(
+    userId: number,
+    currentHash: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    const updated = await this.drizzleConnection
       .update(users)
       .set({ password: passwordHash })
-      .where(eq(users.id, userId))
-      .execute();
+      .where(and(eq(users.id, userId), eq(users.password, currentHash)))
+      .returning({ id: users.id });
+    return updated.length > 0;
   }
 }
