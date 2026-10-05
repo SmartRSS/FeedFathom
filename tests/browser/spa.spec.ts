@@ -2867,6 +2867,48 @@ const reloadWithHeldTree = async (
   return release;
 };
 
+// The article bodies the worker holds for offline reading (#992).
+const downloaded = (page: Page) =>
+  page.evaluate(async () => {
+    const name = (await caches.keys()).find((key) => key.startsWith("api-"));
+    if (!name) return [];
+    const keys = await (await caches.open(name)).keys();
+    return keys
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === "/sw-offline-article")
+      .map((url) => url.search);
+  });
+
+// The fixture's articles date from July, past the 14-day bound, so the
+// unread list is answered with the same three dated now.
+const downloadUnread = async (page: Page) => {
+  const context = page.context();
+  await context.addInitScript(() =>
+    localStorage.setItem("offlineUnread", "on"),
+  );
+  await installApiFixture(context, { multipleArticles: true });
+  await context.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const publishedAt = new Date().toJSON();
+    return route.fulfill({
+      json: ["First", "Second", "Third"].map((title, index) => ({
+        author: "News Author",
+        group: "Today",
+        id: 11 + index,
+        publishedAt,
+        read: false,
+        sourceId: 3,
+        title: `${title} article`,
+        url: `https://articles.example/${index}`,
+      })),
+    });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => navigator.serviceWorker.controller);
+  await page.reload();
+  await expect.poll(() => downloaded(page)).toHaveLength(3);
+};
+
 test.describe("under a controlling service worker", () => {
   test.use({ serviceWorkers: "allow" });
 
@@ -2958,6 +3000,47 @@ test.describe("under a controlling service worker", () => {
     );
     await expectSelectedRow(page, /^Tech News/);
     expect(await snapshotNode()).toBe("3");
+  });
+
+  test("a downloaded unread article opens offline without a request", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    await selectSource(page);
+    await expect(articleOptions(page)).toHaveCount(3);
+    const fromWorker: string[] = [];
+    page.context().on("request", (request) => {
+      if (request.serviceWorker()) fromWorker.push(request.url());
+    });
+    await page.context().setOffline(true);
+    await articleOptions(page).filter({ hasText: "Third article" }).click();
+    await expect(
+      page.locator(".reader").getByRole("heading", { name: "Third article" }),
+    ).toBeVisible();
+    expect(fromWorker).toEqual([]);
+    await page.context().setOffline(false);
+  });
+
+  test("switching the download off, and logging out, drop stored bodies", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    await page.goto("/options");
+    await page
+      .getByRole("combobox", {
+        name: "Download unread articles for offline reading",
+      })
+      .selectOption("off");
+    await expect.poll(() => downloaded(page)).toEqual([]);
+
+    // The init script switches it back on.
+    await page.goto("/");
+    await expect.poll(() => downloaded(page)).toHaveLength(3);
+    await page.goto("/options");
+    await page.getByRole("link", { name: "Account & security" }).click();
+    await page.getByRole("button", { name: "Logout" }).click();
+    await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+    expect(await downloaded(page)).toEqual([]);
   });
 
   test("a 401 behind the cached tree still routes to sign-in", async ({

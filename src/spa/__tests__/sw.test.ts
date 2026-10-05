@@ -10,6 +10,11 @@ type FetchEvent = {
   waitUntil: (promise: Promise<unknown>) => void;
 };
 
+type MessageEvent = {
+  data: unknown;
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 type Callback = (() => void) | undefined;
 
 // The slice of IndexedDB the mutation queue uses: one auto-increment store,
@@ -81,6 +86,7 @@ const loadServiceWorker = (
   network: (path: string, method: string) => Response | Promise<Response>,
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
+  let onMessage: ((event: MessageEvent) => void) | undefined;
   // Map order stands in for the Cache API's insertion order; put deletes
   // first so a replaced entry moves to the end, as it does there.
   const entries = new Map<string, Response>();
@@ -130,13 +136,18 @@ const loadServiceWorker = (
     self: {
       addEventListener: (
         type: string,
-        listener: (event: FetchEvent) => void,
+        listener: ((event: FetchEvent) => void) &
+          ((event: MessageEvent) => void),
       ) => {
         if (type === "fetch") onFetch = listener;
+        if (type === "message") onMessage = listener;
       },
       clients: {
         matchAll: async () => [
-          { postMessage: (message: unknown) => messages.push(message) },
+          {
+            postMessage: (message: unknown) => messages.push(message),
+            visibilityState: "visible",
+          },
         ],
       },
       location: { origin: ORIGIN },
@@ -181,9 +192,20 @@ const loadServiceWorker = (
     await background;
     return body;
   };
+  // What the dashboard posts each offline-reading sync; settles once the
+  // worker's downloads have.
+  const keepOffline = async (ids: number[]) => {
+    const pending: Promise<unknown>[] = [];
+    onMessage?.({
+      data: { ids, type: "offline-articles" },
+      waitUntil: (promise) => pending.push(promise),
+    });
+    await Promise.all(pending);
+  };
   return {
     dispatch,
     entries,
+    keepOffline,
     loadArticle,
     loadTree,
     messages,
@@ -366,6 +388,69 @@ test("opening 300 articles keeps only the newest 200 cached", async () => {
   expect(articles).toHaveLength(200);
   expect(articles[0]).toBe("/api/article?article=101");
   expect(sw.entries.has("/api/tree")).toBe(true);
+});
+
+const articleRequests = (requests: string[]) =>
+  requests.filter((path) => path.startsWith("/api/article"));
+
+test("a downloaded article opens offline with no network request, past the trim", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    return articleNetwork(path);
+  });
+  await sw.keepOffline([2]);
+  for (let id = 100; id < 400; id++) {
+    // oxlint-disable-next-line no-await-in-loop -- articles open one by one
+    await sw.loadArticle(id);
+  }
+  await settle();
+  online = false;
+  sw.requests.length = 0;
+  expect(await sw.loadArticle(2)).toMatchObject({
+    path: "/api/article?article=2",
+  });
+  expect(sw.requests).toEqual([]);
+});
+
+test("a sync downloads only what is missing and drops what is no longer listed", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  await sw.keepOffline([1, 2]);
+  await sw.keepOffline([2, 3]);
+  expect(articleRequests(sw.requests)).toEqual([
+    "/api/article?article=1",
+    "/api/article?article=2",
+    "/api/article?article=3",
+  ]);
+  const stored = [...sw.entries.keys()].filter((path) =>
+    path.startsWith("/sw-offline-article"),
+  );
+  expect(stored.toSorted()).toEqual([
+    "/sw-offline-article?article=2",
+    "/sw-offline-article?article=3",
+  ]);
+  // Switching the option off posts an empty list.
+  await sw.keepOffline([]);
+  expect([...sw.entries.keys()]).toEqual([]);
+});
+
+test("a download answered after a sign-in is not stored", async () => {
+  let answer: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (method === "POST") return Response.json({ sid: "s" });
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(articleNetwork(path));
+    });
+  });
+  const sync = sw.keepOffline([2]);
+  await settle();
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  answer?.();
+  await sync;
+  expect([...sw.entries.keys()]).toEqual([]);
+  expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
 });
 
 // GET /api/session as the given account, or signed out with null.

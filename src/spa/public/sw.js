@@ -500,6 +500,10 @@ async function trimArticles(cache) {
 
 async function recentArticleFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+  const downloaded = await cache.match(
+    offlineArticleKey(new URL(request.url).searchParams.get("article")),
+  );
+  if (downloaded) return downloaded;
   const cached = await cache.match(request);
   const fetchedAt = Number(cached?.headers.get(FETCHED_AT));
   if (cached && Date.now() - fetchedAt < ARTICLE_FRESH_MS) return cached;
@@ -517,6 +521,67 @@ async function recentArticleFirst(request, cacheName) {
     throw error;
   }
 }
+
+// Unread bodies downloaded for offline reading (#992). Their keys sit apart
+// from /api/article, so trimArticles leaves them alone and recentArticleFirst
+// serves them without a round trip. They live in the API cache, so a sign-in
+// or logout empties them with the rest of the account's data. The page owns
+// the setting and the selection: each sync posts every id it wants kept, and
+// an empty list when the option is switched off.
+const OFFLINE_ARTICLE_PATH = "/sw-offline-article";
+const offlineArticleKey = (id) => `${OFFLINE_ARTICLE_PATH}?article=${id}`;
+
+// Bumped per sync, so a newer list -- or the option going off -- stops the
+// downloads of an older one.
+let offlineSyncs = 0;
+
+async function anyVisibleClient() {
+  const clients = await self.clients.matchAll({ type: "window" });
+  return clients.some((client) => client.visibilityState === "visible");
+}
+
+async function syncOfflineArticles(ids) {
+  const sync = ++offlineSyncs;
+  const generation = accountChanges;
+  const cache = await caches.open(API_CACHE);
+  const wanted = new Set(ids.map(String));
+  const stored = (await cache.keys())
+    .map((request) => new URL(request.url))
+    .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH);
+  // Read, removed and aged-out articles are simply missing from the list.
+  await Promise.all(
+    stored
+      .filter((url) => !wanted.has(url.searchParams.get("article")))
+      .map((url) => cache.delete(url.pathname + url.search)),
+  );
+  const have = new Set(stored.map((url) => url.searchParams.get("article")));
+  const missing = [...wanted].filter((id) => !have.has(id));
+  const current = () => sync === offlineSyncs && generation === accountChanges;
+  // A hidden tab, a failed request or going offline ends the run; the page's
+  // next sync picks up whatever is still missing.
+  const download = async () => {
+    while (current() && (await anyVisibleClient())) {
+      const id = missing.shift();
+      if (id === undefined) return;
+      // eslint-disable-next-line no-await-in-loop -- throttled on purpose
+      const response = await fetch(`/api/article?article=${id}`, {
+        credentials: "same-origin",
+      });
+      if (!response.ok) return;
+      // eslint-disable-next-line no-await-in-loop -- throttled on purpose
+      if (current()) await cache.put(offlineArticleKey(id), response);
+    }
+  };
+  // ponytail: two downloads at a time, so a sync never crowds out the
+  // article the reader opens meanwhile; tune if a large backlog drags.
+  await Promise.allSettled([download(), download()]);
+}
+
+self.addEventListener("message", (event) => {
+  const { data } = event;
+  if (data?.type !== "offline-articles" || !Array.isArray(data.ids)) return;
+  event.waitUntil(syncOfflineArticles(data.ids.filter(Number.isSafeInteger)));
+});
 
 // Set by shell() on a dashboard-bound navigation, so the tree fetch starts
 // before the page's JS bundle loads; treeWithInlineFavicons reuses it instead

@@ -14,7 +14,7 @@ import {
 } from "#shared/validation/typebox-policy.ts";
 
 const id = Type.Integer({ minimum: 1 });
-const maximumRequestIds = 500;
+export const maximumRequestIds = 500;
 const mailEnvelopeValue = Type.String({
   maxLength: 320,
   minLength: 1,

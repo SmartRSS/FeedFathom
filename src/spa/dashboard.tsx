@@ -84,8 +84,12 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
   neighbours,
+  offlineArticleIds,
+  offlineUnreadEnabled,
+  postOfflineArticles,
   prefetchNextEnabled,
   shouldPrefetch,
+  unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
   backgroundPollEnabled,
@@ -417,6 +421,63 @@ export function Dashboard(props: {
       }
     }
   };
+  // Offline reading (#992): tells the service worker which unread bodies to
+  // keep. Paced by tree loads -- the stream and the poll reload the tree when
+  // articles arrive, and marking read or removing reloads it too -- at most
+  // once a minute, in idle time, and never on Save Data or in a hidden or
+  // offline tab.
+  let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
+  let offlineSyncedAt = 0;
+  createEffect(() => {
+    const nodes = tree();
+    clearTimeout(offlineSyncTimer);
+    if (!authenticated() || offlineUnreadEnabled() !== "on") return;
+    const run = () => void syncOfflineArticles(nodes);
+    offlineSyncTimer = setTimeout(
+      () => {
+        if (typeof requestIdleCallback === "function") requestIdleCallback(run);
+        else run();
+      },
+      Math.max(0, offlineSyncedAt + 60_000 - Date.now()),
+    );
+  });
+  onCleanup(() => clearTimeout(offlineSyncTimer));
+  async function syncOfflineArticles(nodes: TreeNode[]) {
+    if (
+      disposed ||
+      document.hidden ||
+      !navigator.onLine ||
+      !navigator.serviceWorker?.controller ||
+      !shouldPrefetch(navigatorConnection())
+    )
+      return;
+    offlineSyncedAt = Date.now();
+    const sources = unreadSourceIds(nodes);
+    const rows: ArticleSummary[] = [];
+    let selection = offlineArticleIds(rows, Date.now());
+    try {
+      while (sources.length > 0) {
+        // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
+        const page = await api("/articles", articlesResponse, {
+          body: JSON.stringify({
+            cursor: rows.at(-1)?.id,
+            filter: "unread",
+            sources,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        rows.push(...page);
+        selection = offlineArticleIds(rows, Date.now());
+        if (selection.complete || page.length < articlePageSize) break;
+      }
+    } catch {
+      // Best-effort: the next tree load tries again.
+      return;
+    }
+    if (!disposed && offlineUnreadEnabled() === "on")
+      postOfflineArticles(selection.ids);
+  }
   async function shareSelected() {
     const article = selected();
     if (!article) return;
