@@ -4105,6 +4105,35 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
   expect(unlistened).toBe(2);
 });
 
+test("a client gone during the source lookup leaves no listener behind", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const controller = new AbortController();
+  dependencies.userSourcesDataService.getUserSourceIds = async () => {
+    controller.abort();
+    return [3];
+  };
+  let listening = 0;
+  dependencies.articleEventHub = {
+    close: () => {},
+    listen: () => {
+      listening++;
+      return () => {
+        listening--;
+      };
+    },
+  };
+  const app = await appFor(dependencies);
+  await app.handle(
+    new Request("http://localhost/api/events", {
+      headers: { cookie: "sid=test" },
+      signal: controller.signal,
+    }),
+  );
+
+  expect(listening).toBe(0);
+});
+
 test("closing the hub ends open event streams", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);

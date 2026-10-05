@@ -327,22 +327,22 @@ export function Dashboard(props: {
   // when the user refreshes, and hidden tabs skip cycles entirely.
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let pollCycles = 0;
+  let pollDueAt = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
     // A stream signal can run a poll while the timer is pending; one timer.
     clearTimeout(pollTimer);
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (disposed || backgroundPollEnabled() !== "on") return;
-    pollTimer = setTimeout(
-      () => {
-        if (document.hidden) {
-          schedulePoll();
-          return;
-        }
-        void pollForNewArticles();
-      },
-      nextPollDelayMs(pollCycles, streamOpen),
-    );
+    const delay = nextPollDelayMs(pollCycles, streamOpen);
+    pollDueAt = Date.now() + delay;
+    pollTimer = setTimeout(() => {
+      if (document.hidden) {
+        schedulePoll();
+        return;
+      }
+      void pollForNewArticles();
+    }, delay);
   };
   // Push signal (#991): the server announces article writes for this user's
   // sources, and the answer is the same poll, so the toast and unread logic
@@ -379,7 +379,9 @@ export function Dashboard(props: {
       if (!streamOpen) return;
       streamOpen = false;
       pollCycles = 0;
-      schedulePoll();
+      // Only ever pulls the poll closer: a proxy that accepts the stream and
+      // drops it every reconnect must not keep pushing the poll back.
+      if (Date.now() + nextPollDelayMs(0) < pollDueAt) schedulePoll();
     });
     stream.addEventListener("message", onStreamSignal);
     onCleanup(() => {

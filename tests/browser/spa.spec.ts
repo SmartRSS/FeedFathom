@@ -2753,6 +2753,39 @@ test("an article event refreshes the tree ahead of the poll", async ({
   await expect(page.getByText("3 new articles.")).toBeVisible();
 });
 
+// A proxy that accepts the stream and drops it on every reconnect must not
+// keep pushing the fallback poll back: it still lands at 30s.
+test("a stream that keeps dropping leaves the fallback poll on time", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const state = await installApiFixture(page);
+  let streams = 0;
+  await page.route("**/api/events", (route) => {
+    streams++;
+    return route.fulfill({
+      body: "retry: 100\n: connected\n\n",
+      contentType: "text/event-stream",
+    });
+  });
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  expect(state.treeRequests).toBe(1);
+
+  // EventSource reconnects on real time, the poll on the installed clock.
+  const streamCount = () => streams;
+  for (let step = 0; step < 10; step++) {
+    const before = streams;
+    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
+    await expect.poll(streamCount).toBeGreaterThan(before);
+    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
+    await page.clock.runFor(3_000);
+  }
+  await expect.poll(() => state.treeRequests).toBe(2);
+});
+
 // #927: arrowing through the list opens each row it passes. The page cancels
 // the body requests of the rows it leaves behind, rather than only ignoring
 // them when they land, and the cancellation raises no error.

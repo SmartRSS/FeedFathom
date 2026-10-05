@@ -79,6 +79,11 @@ export async function getEventsHandler({
         clearInterval(heartbeat);
         clearInterval(refresh);
       };
+      // An abort during the source lookup above fired before this listener.
+      if (request.signal.aborted) {
+        end();
+        return;
+      }
       request.signal.addEventListener("abort", () => stop?.(), {
         once: true,
       });
