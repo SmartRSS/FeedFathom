@@ -276,6 +276,14 @@ export class UserSourcesDataService {
     ).at(0);
   }
 
+  public async getUserSourceIds(userId: number): Promise<number[]> {
+    const rows = await this.drizzleConnection
+      .select({ id: userSources.sourceId })
+      .from(userSources)
+      .where(eq(userSources.userId, userId));
+    return rows.map((row) => row.id);
+  }
+
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({

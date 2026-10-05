@@ -329,16 +329,54 @@ export function Dashboard(props: {
   let pollCycles = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
+    // A stream signal can run a poll while the timer is pending; one timer.
+    clearTimeout(pollTimer);
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (disposed || backgroundPollEnabled() !== "on") return;
-    pollTimer = setTimeout(() => {
-      if (document.hidden) {
-        schedulePoll();
-        return;
-      }
-      void pollForNewArticles();
-    }, nextPollDelayMs(pollCycles));
+    pollTimer = setTimeout(
+      () => {
+        if (document.hidden) {
+          schedulePoll();
+          return;
+        }
+        void pollForNewArticles();
+      },
+      nextPollDelayMs(pollCycles, streamOpen),
+    );
   };
+  // Push signal (#991): the server announces article writes for this user's
+  // sources, and the answer is the same poll, so the toast and unread logic
+  // stay in one place. Signals within two seconds share one tree load, and a
+  // hidden tab leaves them to the timer, as it does every other cycle.
+  // EventSource reconnects on its own; a stream that drops or never opens
+  // (a buffering proxy, a 401) leaves the timer on its 30s backoff.
+  let streamOpen = false;
+  let streamSignalTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    if (!authenticated() || backgroundPollEnabled() !== "on") return;
+    const stream = new EventSource("/api/events");
+    stream.addEventListener("open", () => {
+      streamOpen = true;
+    });
+    stream.addEventListener("error", () => {
+      if (!streamOpen) return;
+      streamOpen = false;
+      pollCycles = 0;
+      schedulePoll();
+    });
+    stream.addEventListener("message", () => {
+      streamSignalTimer ??= setTimeout(() => {
+        streamSignalTimer = undefined;
+        if (!disposed && !document.hidden) void pollForNewArticles();
+      }, 2000);
+    });
+    onCleanup(() => {
+      stream.close();
+      streamOpen = false;
+      clearTimeout(streamSignalTimer);
+      streamSignalTimer = undefined;
+    });
+  });
   const pollForNewArticles = async () => {
     try {
       const nextTree = await loadTree();

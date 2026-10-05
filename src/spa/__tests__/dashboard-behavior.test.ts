@@ -109,6 +109,11 @@ describe("nextPollDelayMs", () => {
   test("negative attempt counts read as the first interval", () => {
     expect(nextPollDelayMs(-1)).toBe(30_000);
   });
+
+  test("an open event stream holds the poll at the ceiling", () => {
+    expect(nextPollDelayMs(0, true)).toBe(300_000);
+    expect(nextPollDelayMs(0, false)).toBe(30_000);
+  });
 });
 
 describe("withDecrementedUnread", () => {

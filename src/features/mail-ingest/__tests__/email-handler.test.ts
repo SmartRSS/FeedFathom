@@ -29,6 +29,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
   const lookups: string[] = [];
   const batches: Parameters<ArticlesDataService["batchUpsertArticles"]>[0][] =
     [];
+  const published: [number, number][] = [];
   const handler = new EmailHandler(
     {
       async findSourceByUrl(address) {
@@ -45,6 +46,11 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
     },
     {
       async recomputeUnreadCounts() {},
+    },
+    {
+      async publish(sourceId, count) {
+        published.push([sourceId, count]);
+      },
     },
   );
   const raw = Buffer.from(
@@ -83,4 +89,5 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
     sourceId: source.id,
     title: "Trusted routing",
   });
+  expect(published).toEqual([[source.id, 1]]);
 });

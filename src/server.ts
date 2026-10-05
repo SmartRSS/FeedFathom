@@ -1,6 +1,7 @@
 import { close, drizzleConnection } from "#platform/runtime.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import { articleEventHub } from "#features/reader/services.ts";
 import { createServerApp } from "./server-app.ts";
 
 const production = Bun.env.NODE_ENV === "production";
@@ -14,7 +15,10 @@ app.listen(config.PORT ?? 3000);
 
 let shutdownPromise: Promise<void> | undefined;
 const shutdown = () =>
-  (shutdownPromise ??= Promise.resolve(app.stop())
+  (shutdownPromise ??= articleEventHub
+    .close()
+    .catch(() => undefined)
+    .then(() => app.stop())
     .then(() => close())
     .then(() => undefined));
 process.on("SIGTERM", () => void shutdown());

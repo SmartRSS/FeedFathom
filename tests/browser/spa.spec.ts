@@ -2695,6 +2695,64 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });
 
+// #991: an article event from /api/events runs the poll within seconds rather
+// than waiting out the 30s timer, and raises the same toast.
+test("an article event refreshes the tree ahead of the poll", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await installApiFixture(page);
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  await page.route("**/api/events", async (route) => {
+    await released;
+    await route.fulfill({
+      body: 'retry: 600000\ndata: {"count":3,"sourceId":3}\n\n',
+      contentType: "text/event-stream",
+    });
+  });
+  await page.goto("/");
+  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(row.locator(".unread-count")).toHaveText("2");
+
+  let treeRequests = 0;
+  await page.route("**/api/tree", (route) => {
+    treeRequests++;
+    return route.fulfill({
+      json: {
+        tree: [
+          {
+            children: [
+              {
+                favicon: null,
+                homeUrl: "https://news.example/",
+                kind: "feed",
+                name: "Tech News",
+                type: "source",
+                uid: "3",
+                unreadCount: 5,
+                xmlUrl: "https://news.example/feed.xml",
+              },
+            ],
+            name: "Reading",
+            type: "folder",
+            uid: "7",
+          },
+        ],
+      },
+    });
+  });
+  release();
+  // Half-second steps, so the signal lands well inside the 30s first poll.
+  await expect
+    .poll(async () => {
+      await page.clock.runFor(500);
+      return treeRequests;
+    })
+    .toBe(1);
+  await expect(row.locator(".unread-count")).toHaveText("5");
+  await expect(page.getByText("3 new articles.")).toBeVisible();
+});
+
 // #927: arrowing through the list opens each row it passes. The page cancels
 // the body requests of the rows it leaves behind, rather than only ignoring
 // them when they land, and the cancellation raises no error.

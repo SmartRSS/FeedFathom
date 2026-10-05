@@ -36,12 +36,14 @@ import {
   patchSourceHandler,
   snoozeSourceHandler,
 } from "#features/reader/routes/source.ts";
+import { getEventsHandler } from "#features/reader/routes/events.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 
 export const createReaderRoutes = () =>
   new Elysia()
     .use(createAuthPlugin())
     .get("/api/tree", (ctx) => getTreeHandler(ctx))
+    .get("/api/events", (ctx) => getEventsHandler(ctx))
     .get("/api/favicon/:id", (ctx) => getFaviconHandler(ctx))
     .post("/api/articles", { body: articlesRequest }, (ctx) =>
       postArticlesHandler(ctx),

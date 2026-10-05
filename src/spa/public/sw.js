@@ -641,6 +641,9 @@ self.addEventListener("fetch", (event) => {
   // user's whole subscription list in the Cache API and, on an offline click,
   // hand back a copy from whenever it was last exported without saying so.
   if (url.pathname === "/api/options/opml") return;
+  // An endless event stream: networkFirst would tee it into a Cache API write
+  // that never completes, and an offline fallback would replay old signals.
+  if (url.pathname === "/api/events") return;
   if (url.pathname === "/api/article") {
     event.respondWith(recentArticleFirst(request, API_CACHE));
     return;

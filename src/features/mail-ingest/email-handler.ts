@@ -6,6 +6,7 @@ import { simpleParser } from "mailparser";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import {
   validateParsedMail,
   validatedMailContent,
@@ -60,6 +61,10 @@ export class EmailHandler {
       UserSourcesDataService,
       "recomputeUnreadCounts"
     >,
+    private readonly articleEventPublisher: Pick<
+      ArticleEventPublisher,
+      "publish"
+    >,
   ) {}
 
   public async processEmail(
@@ -78,8 +83,12 @@ export class EmailHandler {
       source.id,
       envelope.from,
     );
-    await this.articlesDataService.batchUpsertArticles([article]);
+    const changed = await this.articlesDataService.batchUpsertArticles([
+      article,
+    ]);
     await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
+    if (changed > 0)
+      await this.articleEventPublisher.publish(source.id, changed);
     await this.sourcesDataService.successSource(
       source.id,
       false,
