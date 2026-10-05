@@ -115,7 +115,7 @@ async function parse(body: string) {
       },
     },
     {
-      publish: async (id, count) => {
+      publish: (id, count) => {
         published.push([id, count]);
       },
     },

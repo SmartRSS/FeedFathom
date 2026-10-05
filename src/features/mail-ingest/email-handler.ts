@@ -87,8 +87,7 @@ export class EmailHandler {
       article,
     ]);
     await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
-    if (changed > 0)
-      await this.articleEventPublisher.publish(source.id, changed);
+    if (changed > 0) this.articleEventPublisher.publish(source.id, changed);
     await this.sourcesDataService.successSource(
       source.id,
       false,

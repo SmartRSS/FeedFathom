@@ -14,12 +14,13 @@ await waitForMigration(drizzleConnection.$client);
 app.listen(config.PORT ?? 3000);
 
 let shutdownPromise: Promise<void> | undefined;
-const shutdown = () =>
-  (shutdownPromise ??= articleEventHub
-    .close()
-    .catch(() => undefined)
-    .then(() => app.stop())
+const shutdown = () => {
+  // First: graceful stop waits for open responses, and event streams never
+  // finish on their own.
+  articleEventHub.close();
+  return (shutdownPromise ??= Promise.resolve(app.stop())
     .then(() => close())
     .then(() => undefined));
+};
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());

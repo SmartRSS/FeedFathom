@@ -11,7 +11,7 @@ export type ArticleEventSubscriber = {
     event: "message",
     listener: (channel: string, message: string) => void,
   ): unknown;
-  quit(): Promise<unknown>;
+  disconnect(): void;
   subscribe(channel: string): Promise<unknown>;
 };
 
@@ -26,12 +26,20 @@ type Listener = { onClose: () => void; onEvent: (event: ArticleEvent) => void };
  * responses, and a stream left open would hold shutdown until the kill.
  */
 export class ArticleEventHub {
+  private closed = false;
   private readonly listeners = new Set<Listener>();
   private subscriber: ArticleEventSubscriber | undefined;
 
   constructor(private readonly connect: () => ArticleEventSubscriber) {}
 
   public listen(listener: Listener): () => void {
+    if (this.closed) {
+      // A stream that opened after shutdown began would be missed by the
+      // close() sweep and hold the graceful stop open. A microtask, so the
+      // caller has finished wiring up before it is told to end.
+      queueMicrotask(listener.onClose);
+      return () => {};
+    }
     this.listeners.add(listener);
     this.subscriber ??= this.start();
     return () => {
@@ -39,12 +47,15 @@ export class ArticleEventHub {
     };
   }
 
-  public async close(): Promise<void> {
+  /** Terminal: ends every stream, now and later, and drops the connection. */
+  public close(): void {
+    this.closed = true;
     for (const listener of this.listeners) listener.onClose();
     this.listeners.clear();
-    const subscriber = this.subscriber;
+    // disconnect, not quit: QUIT would queue behind a SUBSCRIBE still
+    // waiting out a Redis outage, and a subscriber has nothing to flush.
+    this.subscriber?.disconnect();
     this.subscriber = undefined;
-    await subscriber?.quit();
   }
 
   private start(): ArticleEventSubscriber {

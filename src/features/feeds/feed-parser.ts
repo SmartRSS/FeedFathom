@@ -219,7 +219,7 @@ export class FeedParser {
         throw upsertError;
       }
       if (changed > 0) {
-        await this.articleEventPublisher.publish(source.id, changed);
+        this.articleEventPublisher.publish(source.id, changed);
       }
 
       await this.sourcesDataService.successSource(

@@ -48,7 +48,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
       async recomputeUnreadCounts() {},
     },
     {
-      async publish(sourceId, count) {
+      publish(sourceId, count) {
         published.push([sourceId, count]);
       },
     },

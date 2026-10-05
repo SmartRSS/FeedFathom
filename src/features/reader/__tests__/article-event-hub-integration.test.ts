@@ -14,8 +14,8 @@ const redisUrl = requireDisposableRedisUrl();
 const publisherRedis = new RedisClient(redisUrl);
 const hub = new ArticleEventHub(() => new Redis(redisUrl));
 
-afterAll(async () => {
-  await hub.close();
+afterAll(() => {
+  hub.close();
   publisherRedis.close();
 });
 
@@ -31,8 +31,7 @@ test("a published article event reaches every hub listener", async () => {
 
   // SUBSCRIBE is sent asynchronously; publish until the first one lands.
   for (let attempt = 0; received[1]!.length === 0 && attempt < 100; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- Polls until delivery.
-    await publisher.publish(7, 2);
+    publisher.publish(7, 2);
     // eslint-disable-next-line no-await-in-loop -- Polls until delivery.
     await Bun.sleep(50);
   }
@@ -40,6 +39,6 @@ test("a published article event reaches every hub listener", async () => {
   expect(received[1]).toEqual(received[0]);
   expect(received[0]![0]).toEqual({ count: 2, sourceId: 7 });
 
-  await hub.close();
+  hub.close();
   expect(closes).toEqual([0, 1]);
 });

@@ -31,17 +31,18 @@ export class ArticleEventPublisher {
   /**
    * Announces that `count` articles a subscriber's unread badge could see
    * changed for a source. Call it after the unread recount, so a client that
-   * reloads on the signal reads the new counts. Never throws: the signal is
-   * a latency optimisation and must not fail the write it announces.
+   * reloads on the signal reads the new counts. Not awaited, and never
+   * throws: during a Redis outage the command waits in the offline queue,
+   * and the signal must not hold up or fail the write it announces.
    */
-  public async publish(sourceId: number, count: number): Promise<void> {
-    try {
-      await this.redis.publish(
+  public publish(sourceId: number, count: number): void {
+    this.redis
+      .publish(
         articleEventsChannel,
         JSON.stringify({ count, sourceId } satisfies ArticleEvent),
-      );
-    } catch (error) {
-      console.error("Publishing an article event failed:", error);
-    }
+      )
+      .catch((error: unknown) => {
+        console.error("Publishing an article event failed:", error);
+      });
   }
 }

@@ -352,6 +352,23 @@ export function Dashboard(props: {
   // (a buffering proxy, a 401) leaves the timer on its 30s backoff.
   let streamOpen = false;
   let streamSignalTimer: ReturnType<typeof setTimeout> | undefined;
+  // One poll at a time: loadTree() aborts the request before it, so signals
+  // arriving faster than the tree loads would never let one finish. A signal
+  // during a poll waits for it, then gets one follow-up.
+  let polling = false;
+  let signalDuringPoll = false;
+  const onStreamSignal = () => {
+    if (polling) {
+      signalDuringPoll = true;
+      return;
+    }
+    streamSignalTimer ??= setTimeout(() => {
+      streamSignalTimer = undefined;
+      if (disposed || document.hidden) return;
+      if (polling) signalDuringPoll = true;
+      else void pollForNewArticles();
+    }, 2000);
+  };
   createEffect(() => {
     if (!authenticated() || backgroundPollEnabled() !== "on") return;
     const stream = new EventSource("/api/events");
@@ -364,12 +381,7 @@ export function Dashboard(props: {
       pollCycles = 0;
       schedulePoll();
     });
-    stream.addEventListener("message", () => {
-      streamSignalTimer ??= setTimeout(() => {
-        streamSignalTimer = undefined;
-        if (!disposed && !document.hidden) void pollForNewArticles();
-      }, 2000);
-    });
+    stream.addEventListener("message", onStreamSignal);
     onCleanup(() => {
       stream.close();
       streamOpen = false;
@@ -378,6 +390,9 @@ export function Dashboard(props: {
     });
   });
   const pollForNewArticles = async () => {
+    // A timer firing mid-poll yields; the running poll reschedules it.
+    if (polling) return;
+    polling = true;
     try {
       const nextTree = await loadTree();
       if (disposed) return;
@@ -391,8 +406,13 @@ export function Dashboard(props: {
       // Background polling stays silent: the next cycle retries, and the
       // ordinary error surfaces already cover the user-visible paths.
     } finally {
+      polling = false;
       pollCycles += 1;
       schedulePoll();
+      if (signalDuringPoll) {
+        signalDuringPoll = false;
+        onStreamSignal();
+      }
     }
   };
   async function shareSelected() {

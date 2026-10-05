@@ -274,7 +274,7 @@ function createDependencies(): ServerFakes {
 
   return {
     articleEventHub: {
-      close: async () => {},
+      close: () => {},
       listen: () => unexpected("articleEventHub.listen"),
     },
     articlesDataService: {
@@ -4050,10 +4050,10 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
   let deliver: ((channel: string, message: string) => void) | undefined;
   let connections = 0;
   const subscriber: ArticleEventSubscriber = {
+    disconnect: () => {},
     on: (_event, listener) => {
       deliver = listener;
     },
-    quit: async () => "OK",
     subscribe: async () => 1,
   };
   const hub = new ArticleEventHub(() => {
@@ -4109,8 +4109,8 @@ test("closing the hub ends open event streams", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const hub = new ArticleEventHub(() => ({
+    disconnect: () => {},
     on: () => {},
-    quit: async () => "OK",
     subscribe: async () => 1,
   }));
   dependencies.articleEventHub = hub;
@@ -4123,6 +4123,16 @@ test("closing the hub ends open event streams", async () => {
   const reader = response.body!.getReader();
   await reader.read();
 
-  await hub.close();
+  hub.close();
   expect((await reader.read()).done).toBe(true);
+
+  // A stream that registers after shutdown began ends rather than resubscribe.
+  const late = await app.handle(
+    new Request("http://localhost/api/events", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+  const lateReader = late.body!.getReader();
+  await lateReader.read();
+  expect((await lateReader.read()).done).toBe(true);
 });
