@@ -24,7 +24,6 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
-  preloadFavicons,
   filterTree,
   findNode,
   findParentFolderUid,
@@ -136,6 +135,17 @@ const ARTICLE_SKELETON_TITLES = [
   "A Somewhat Longer Article Title About Something",
   "Another Example Headline",
 ];
+
+// Only a page the service worker controls asks: without one, the query
+// would reach the server as a second full tree request.
+async function cachedTree(): Promise<TreeNode[] | undefined> {
+  if (!navigator.serviceWorker?.controller) return undefined;
+  try {
+    return (await api("/tree?cached", treeResponse)).tree;
+  } catch {
+    return undefined;
+  }
+}
 
 export function Dashboard(props: {
   backPane(): void;
@@ -471,6 +481,14 @@ export function Dashboard(props: {
     }
     return nextTree;
   }
+  const revealTree = () => {
+    if (!treeLoading()) return;
+    setTreeLoading(false);
+    // Focus the tree without select(), which would also load articles.
+    queueMicrotask(() =>
+      document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
+    );
+  };
   async function addNewFolder() {
     const name = await promptDialog("Folder name");
     if (!name?.trim()) return;
@@ -503,23 +521,39 @@ export function Dashboard(props: {
       skipObserverFirstPass = true;
     }
     try {
-      const nextTree = await loadTree();
-      await preloadFavicons(nextTree);
+      const fresh = loadTree();
+      // Stale-while-revalidate (#989): the cached tree paints only if it
+      // beats the network, and the fresh one replaces it through loadTree.
+      // Everything that trusts the tree -- sign-in state, the poll's unread
+      // baseline, session restore -- still waits for the fresh answer, so a
+      // 401 routes to sign-in and the swap never reads as new articles.
+      const early = await Promise.race([
+        fresh.then(
+          () => undefined,
+          () => undefined,
+        ),
+        cachedTree(),
+      ]);
+      if (early && !disposed && treeLoading()) {
+        setTree(early);
+        revealTree();
+      }
+      const nextTree = await fresh;
       if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
-      if (restored) await restoreFromSnapshot(restored);
+      // A feed picked from the cached tree meanwhile outranks the snapshot.
+      if (restored && selectedNode()) {
+        skipObserverFirstPass = false;
+        setRestoringSession(false);
+      } else if (restored) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {
-      setTreeLoading(false);
-      // Focus the tree without select(), which would also load articles.
-      queueMicrotask(() =>
-        document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
-      );
+      revealTree();
     }
     // Delayed and set rather than present at mount, so a screen reader treats
     // it as a live-region change instead of part of the first read-through.

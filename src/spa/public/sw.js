@@ -543,6 +543,18 @@ async function treeWithInlineFavicons(event, request, cacheName) {
   }
 }
 
+// Boot paints from this while its real /api/tree request is in flight
+// (#989), so a cached tree shows at once on a slow connection. It never goes
+// to the network -- the real request already has -- so a miss is a bare 504
+// the page reads as "nothing cached". The cache holds the current account's
+// data only (see changeAccount).
+async function cachedTree(cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match("/api/tree");
+  if (!cached) return new Response(null, { status: 504 });
+  return (await inlineTreeFavicons(cached.clone(), cache)) ?? cached;
+}
+
 // Routes that never show the dashboard tree.
 const TREE_PRELOAD_EXCLUDED_PATHS =
   /^\/(admin|login|options|password-reset|preview|register|activate\/)/;
@@ -618,7 +630,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname === "/api/tree") {
-    event.respondWith(treeWithInlineFavicons(event, request, API_CACHE));
+    event.respondWith(
+      url.searchParams.has("cached")
+        ? cachedTree(API_CACHE)
+        : treeWithInlineFavicons(event, request, API_CACHE),
+    );
     return;
   }
   // A file download rather than application state. networkFirst would put the

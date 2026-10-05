@@ -252,9 +252,9 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
-// #938: the first render waits on favicons only up to a short deadline. A
-// cold load of a large tree must not hold the sidebar until the last icon
-// settles; icons still loading show their own placeholder, then swap in.
+// #989: the first render never waits on favicons. A cold load of a large
+// tree must not hold the sidebar until the last icon settles; icons still
+// loading show their own placeholder, then swap in.
 test("renders the tree while its favicons are still loading", async ({
   page,
 }) => {
@@ -284,9 +284,7 @@ test("renders the tree while its favicons are still loading", async ({
   });
   await page.goto("/");
 
-  // The icons never answer, so only the deadline can drop the skeleton.
-  // Generous next to the 300 ms deadline; waiting for the icons would never
-  // finish.
+  // The icons never answer, so waiting for them would never finish.
   await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
     timeout: 3000,
   });
@@ -2638,6 +2636,31 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
   await navigatePastHeldArticles(page);
 });
 
+// #989: a slow network doesn't hold a tree the worker already has.
+const reloadWithHeldTree = async (page: Page) => {
+  const context = page.context();
+  await installApiFixture(context);
+  await page.goto("/");
+  await page.waitForFunction(() => navigator.serviceWorker.controller);
+  await page.reload();
+  await page.waitForFunction(async () =>
+    Boolean(await caches.match("/api/tree")),
+  );
+  let release!: (response: { json: object; status?: number }) => void;
+  const held = new Promise<{ json: object; status?: number }>((resolve) => {
+    release = resolve;
+  });
+  await context.route("**/api/tree", async (route) =>
+    route.fulfill(await held),
+  );
+  await page.reload();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0);
+  return release;
+};
+
 test.describe("under a controlling service worker", () => {
   test.use({ serviceWorkers: "allow" });
 
@@ -2661,16 +2684,59 @@ test.describe("under a controlling service worker", () => {
     const fromPage: string[] = [];
     const fromWorker: string[] = [];
     context.on("request", (request) => {
-      if (new URL(request.url()).pathname === "/api/tree")
-        (request.serviceWorker() ? fromWorker : fromPage).push(request.url());
+      const url = new URL(request.url());
+      if (url.pathname === "/api/tree")
+        (request.serviceWorker() ? fromWorker : fromPage).push(
+          url.pathname + url.search,
+        );
     });
     await page.reload();
     await expect(
       page.locator("button.source").filter({ hasText: "Tech News" }),
     ).toBeVisible();
-    expect({ fromPage, fromWorker }).toEqual({
-      fromPage: [expect.any(String)],
-      fromWorker: [expect.any(String)],
+    // The cache-only request (#989) is answered by the worker alone.
+    expect({ fromPage: fromPage.toSorted(), fromWorker }).toEqual({
+      fromPage: ["/api/tree", "/api/tree?cached"],
+      fromWorker: ["/api/tree"],
     });
+  });
+
+  test("a controlled reload paints the cached tree, then the fresh one", async ({
+    page,
+  }) => {
+    const release = await reloadWithHeldTree(page);
+    await expect(
+      page.getByRole("treeitem", { name: "Tech News 2 unread" }),
+    ).toBeVisible();
+
+    release({
+      json: {
+        tree: [
+          {
+            favicon: null,
+            homeUrl: "https://news.example/",
+            kind: "feed",
+            name: "Tech News",
+            type: "source",
+            uid: "3",
+            unreadCount: 5,
+            xmlUrl: "https://news.example/feed.xml",
+          },
+        ],
+      },
+    });
+    await expect(
+      page.getByRole("treeitem", { name: "Tech News 5 unread" }),
+    ).toBeVisible();
+    await expect(page.getByText(/new articles?\./)).toHaveCount(0);
+  });
+
+  test("a 401 behind the cached tree still routes to sign-in", async ({
+    page,
+  }) => {
+    const release = await reloadWithHeldTree(page);
+    release({ json: { error: "Unauthorized" }, status: 401 });
+    await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+    (browserFailures.get(page) ?? []).length = 0;
   });
 });

@@ -4,7 +4,6 @@ import { articlesRequest } from "#shared/contracts/requests.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
   articleScope,
-  faviconUrls,
   filterTree,
   folderOpenFromStored,
   folderOpenToStored,
@@ -12,7 +11,6 @@ import {
   findParentFolderUid,
   isSnoozedNode,
   isTodayNode,
-  preloadFavicons,
   nextPollDelayMs,
   readStateDeltas,
   sourceIds,
@@ -80,26 +78,6 @@ describe("articleScope", () => {
   });
   test("sends a source as its own id", () => {
     expect(articleScope(source("7"))).toEqual({ sources: [7] });
-  });
-});
-
-describe("preloadFavicons", () => {
-  test("stops waiting for a favicon that never settles", async () => {
-    const tree = [source("1", { favicon: "https://hang.example/i.png" })];
-    const started = performance.now();
-    await preloadFavicons(tree, () => new Promise(() => {}));
-    expect(performance.now() - started).toBeLessThan(1000);
-  });
-});
-
-describe("faviconUrls", () => {
-  test("collects favicons and skips missing or empty values", () => {
-    const tree = folder("f", [
-      source("1", { favicon: "https://a.example/i.png" }),
-      source("2"),
-      source("3", { favicon: "" }),
-    ]);
-    expect(faviconUrls(tree)).toEqual(["https://a.example/i.png"]);
   });
 });
 
