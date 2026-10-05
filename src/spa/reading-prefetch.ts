@@ -49,3 +49,15 @@ export function navigatorConnection(
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return (navigatorLike as { connection?: { saveData?: boolean } }).connection;
 }
+
+// The articles either side of the open one, next first: reading moves
+// forward far more often than back, so that request should go out first.
+export function neighbours<T>(
+  items: readonly T[],
+  index: number | undefined,
+): T[] {
+  if (index === undefined) return [];
+  return [items[index + 1], items[index - 1]].filter(
+    (item) => item !== undefined,
+  );
+}

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   navigatorConnection,
+  neighbours,
   prefetchNextEnabled,
   setPrefetchNext,
   shouldPrefetch,
@@ -31,4 +32,13 @@ test("navigatorConnection reads the real connection object when present", () => 
   });
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   expect(navigatorConnection({} as Navigator)).toBeUndefined();
+});
+
+test("neighbours returns the next then the previous article", () => {
+  const items = ["a", "b", "c"];
+  expect(neighbours(items, 1)).toEqual(["c", "a"]);
+  expect(neighbours(items, 0)).toEqual(["b"]);
+  expect(neighbours(items, 2)).toEqual(["b"]);
+  expect(neighbours(["a"], 0)).toEqual([]);
+  expect(neighbours(items, undefined)).toEqual([]);
 });
