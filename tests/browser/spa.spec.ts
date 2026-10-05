@@ -1766,6 +1766,14 @@ for (const theme of ["smart", "high-contrast"]) {
     await page.goto("/");
     await selectSource(page);
     await expect(articleOptions(page)).toHaveCount(60);
+    // A blank title and byline (an empty mail subject) must not collapse a
+    // row below the placeholder either.
+    await articleOptions(page)
+      .nth(1)
+      .evaluate((row) => {
+        for (const text of row.querySelectorAll(".title, .details > *"))
+          text.textContent = "";
+      });
 
     const rows = await page
       .locator(".article-list .article")

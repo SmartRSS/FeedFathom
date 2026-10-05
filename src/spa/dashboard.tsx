@@ -619,15 +619,18 @@ export function Dashboard(props: {
     if (!rememberReadingPosition()) return;
     const ratio = readingSession.readerScroll(id);
     if (ratio === undefined) return;
-    queueMicrotask(() => {
-      const reader = document.querySelector<HTMLElement>(".reader");
-      if (!reader) return;
-      reader.scrollTop = ratioToScrollTop(
-        ratio,
-        reader.scrollHeight,
-        reader.clientHeight,
-      );
-    });
+    // A hidden reader measures zero, which would resolve any ratio to the top.
+    queueMicrotask(() =>
+      props.whenPaneShown(() => {
+        const reader = document.querySelector<HTMLElement>(".reader");
+        if (!reader) return;
+        reader.scrollTop = ratioToScrollTop(
+          ratio,
+          reader.scrollHeight,
+          reader.clientHeight,
+        );
+      }),
+    );
   });
   async function select(
     node: TreeNode,

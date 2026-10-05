@@ -1032,10 +1032,11 @@ img.skeleton-row {
   white-space: normal;
   /* A page holds 200 rows and keeps appending, so off-screen rows skip
      layout and paint (#990). The placeholder is exact, not a guess: both
-     lines are nowrap at a fixed line-height, so the content box is always
-     two 1rem lines and the gap, with padding and border added around it as
-     for any box. A wrong value would shift a restored scrollTop, and the
-     scrollHeight that paging reads, by the error times every row above. */
+     lines are a fixed 1rem high (.article .title, below) and nowrap, so the
+     content box is always two lines and the gap, with padding and border
+     added around it as for any box. A wrong value would shift a restored
+     scrollTop, and the scrollHeight that paging reads, by the error times
+     every row above. */
   content-visibility: auto;
   contain-intrinsic-block-size: auto 2.2rem;
 }
@@ -1088,6 +1089,12 @@ img.skeleton-row {
 }
 .title {
   font-size: 0.8rem;
+}
+/* A fixed line each, so a blank title or byline cannot collapse a row below
+   the placeholder size content-visibility reserves for it. */
+.article .title,
+.article .details {
+  height: 1rem;
 }
 .details {
   display: flex;
