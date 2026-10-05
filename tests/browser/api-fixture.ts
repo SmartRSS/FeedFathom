@@ -249,6 +249,12 @@ export async function installApiFixture(
       return respond({ success: true });
     }
 
+    // 204 is the one answer EventSource never retries, so by default the
+    // dashboard runs on its timer poll, as behind a proxy that eats streams.
+    if (method === "GET" && url.pathname === "/api/events") {
+      return route.fulfill({ status: 204 });
+    }
+
     if (method === "GET" && url.pathname === "/api/tree") {
       state.treeRequests++;
       if (options.treeFailure) return respond({ tree: "malformed" });

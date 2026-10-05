@@ -220,11 +220,16 @@ export function isSnoozedNode(
 }
 
 // Background poll spacing, backing off so a long-idle tab asks less often:
-// 30s doubling to a 5-minute ceiling.
+// 30s doubling to a 5-minute ceiling. While the /api/events stream is open
+// (#991) it carries the signal, so the poll only backs it up at the ceiling.
 const firstPollDelayMs = 30_000;
 const maxPollDelayMs = 5 * 60_000;
 
-export function nextPollDelayMs(completedCycles: number): number {
+export function nextPollDelayMs(
+  completedCycles: number,
+  streamOpen = false,
+): number {
+  if (streamOpen) return maxPollDelayMs;
   return Math.min(
     maxPollDelayMs,
     firstPollDelayMs * 2 ** Math.max(0, completedCycles),

@@ -39,6 +39,7 @@ const userSourcesDataService = new UserSourcesDataService(
 );
 
 let recounts = 0;
+let published: [number, number][] = [];
 let sourceId = 0;
 
 afterAll(async () => {
@@ -48,6 +49,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   recounts = 0;
+  published = [];
   await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
   await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
   await client`CREATE SCHEMA "public"`;
@@ -112,6 +114,11 @@ async function parse(body: string) {
         await userSourcesDataService.recomputeUnreadCounts(sourceIds, userId);
       },
     },
+    {
+      publish: (id, count) => {
+        published.push([id, count]);
+      },
+    },
   );
   await parser.parseSource({ id: sourceId, url: feedUrl });
 }
@@ -159,6 +166,8 @@ test("a second parse of an unchanged feed writes no article row and skips the re
   expect(await rowVersions()).toEqual(before);
   expect(recounts).toBe(1);
   expect(await unreadCount(userId)).toBe(3);
+  // The /api/events signal follows the recount: once, not per poll.
+  expect(published).toEqual([[sourceId, 3]]);
 });
 
 test("an edited article is still rewritten and the badge recounted", async () => {

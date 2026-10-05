@@ -736,3 +736,16 @@ test("index.html and sw.js exclude the same routes from the tree preload", async
   expect(swList).toBeDefined();
   expect(htmlList).toBe(swList);
 });
+
+test("the event stream passes through the worker untouched", async () => {
+  const sw = loadServiceWorker(
+    () =>
+      new Response(": connected\n\n", {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+  );
+  await sw.dispatch(new Request(`${ORIGIN}/api/events`)).response;
+  await settle();
+  expect(sw.requests).toEqual([]);
+  expect([...sw.entries.keys()]).toEqual([]);
+});
