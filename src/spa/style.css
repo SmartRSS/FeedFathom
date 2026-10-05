@@ -269,6 +269,12 @@ main {
 .account-result > * {
   margin: 0;
 }
+/* An input is not stretched by the grid: it keeps its size="20" width, which
+   at the 150% mobile root font is wider than the form on a narrow phone. */
+.account-form input {
+  width: 100%;
+  min-width: 0;
+}
 
 .options-page {
   display: grid;
