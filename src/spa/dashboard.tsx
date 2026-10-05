@@ -156,12 +156,13 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
 
 export function Dashboard(props: {
   backPane(): void;
-  focusPane(next: DashboardPane, afterShow?: () => void): void;
+  focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialDiscovery?: boolean;
   initialFeedUrl?: string | undefined;
   navigate(to: string): void;
   pane(): DashboardPane;
+  whenPaneShown(run: () => void): void;
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
@@ -1488,11 +1489,16 @@ export function Dashboard(props: {
   // announces the focused row itself -- no aria-activedescendant plumbing.
   function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
-    const element = document.querySelector<HTMLElement>(
-      `[data-index="${index}"]`,
-    );
-    element?.focus({ preventScroll: true });
-    if (options?.scroll ?? true) element?.scrollIntoView({ block: "nearest" });
+    // A load that lands while the articles pane is still fading in must not
+    // focus a row that is display:none.
+    props.whenPaneShown(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-index="${index}"]`,
+      );
+      element?.focus({ preventScroll: true });
+      if (options?.scroll ?? true)
+        element?.scrollIntoView({ block: "nearest" });
+    });
   }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
@@ -1570,7 +1576,8 @@ export function Dashboard(props: {
       const node = selectedNode();
       if (!node) return;
       event.preventDefault();
-      props.focusPane("sources", () =>
+      props.focusPane("sources");
+      props.whenPaneShown(() =>
         document
           .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
           ?.focus(),
@@ -1598,9 +1605,11 @@ export function Dashboard(props: {
         // switch display:none's the list holding focus, which would drop it
         // to <body> and strand the shortcut there.
         if (props.pane() === "reader") {
-          props.focusPane("articles", () => focusArticleAt(focusedIndex()));
+          props.focusPane("articles");
+          focusArticleAt(focusedIndex());
         } else {
-          props.focusPane("reader", () =>
+          props.focusPane("reader");
+          props.whenPaneShown(() =>
             readerPaneRef?.focus({ preventScroll: true }),
           );
         }
@@ -1626,7 +1635,8 @@ export function Dashboard(props: {
     if (isTextEntry(event.target)) return;
     if (document.querySelector("dialog[open]")) return;
     event.preventDefault();
-    props.focusPane("articles", () => focusArticleAt(focusedIndex()));
+    props.focusPane("articles");
+    focusArticleAt(focusedIndex());
   }
   return (
     <main class="dashboard">

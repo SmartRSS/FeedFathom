@@ -2090,7 +2090,9 @@ test("o moves focus between the article list and the reader pane", async ({
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
   await selectSource(page);
-  await articleOptions(page).first().focus();
+  // The load focuses the first row even when it lands before the pane's
+  // cross-fade has shown the list (#990).
+  await expect(articleOptions(page).first()).toBeFocused();
 
   await page.keyboard.press("o");
   const reader = page.getByRole("article", { name: "Reader" });

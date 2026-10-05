@@ -1080,7 +1080,8 @@ img.skeleton-row {
   font: inherit;
 }
 .title,
-.details > span {
+.details > span,
+.details > time {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

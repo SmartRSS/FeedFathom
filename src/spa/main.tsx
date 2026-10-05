@@ -126,29 +126,31 @@ function App() {
     navigate(loginPath(currentPath()));
     return true;
   };
-  // `afterShow` runs once the pane is on screen. Under a view transition
-  // that is a frame later, and focusing into a pane still display:none would
-  // drop focus to <body>.
-  const focusPane = (next: DashboardPane, afterShow?: () => void) => {
-    if (next === pane()) {
-      afterShow?.();
-      return;
-    }
+  // Under a view transition the switch lands a frame later, and until then
+  // the new pane is still display:none: a focus() into it would drop to
+  // <body>. Anything that focuses inside a pane waits for this.
+  let paneShown: Promise<void> | undefined;
+  const showPane = (update: () => void, browserAnimated?: boolean) => {
+    const shown = switchPane(update, paneSwitchHost, browserAnimated);
+    paneShown = shown;
+    void shown?.then(() => {
+      if (paneShown === shown) paneShown = undefined;
+    });
+  };
+  const whenPaneShown = (run: () => void) => {
+    if (paneShown) void paneShown.then(run);
+    else run();
+  };
+  const focusPane = (next: DashboardPane) => {
+    if (next === pane()) return;
     history.pushState(withDashboardPane(history.state, next), "");
-    switchPane(() => {
-      setPane(next);
-      afterShow?.();
-    }, paneSwitchHost);
+    showPane(() => setPane(next));
   };
   const popstate = (event: PopStateEvent) => {
-    switchPane(
-      () => {
-        setPath(currentPath());
-        setPane(parseDashboardPane(event.state) ?? "sources");
-      },
-      paneSwitchHost,
-      event.hasUAVisualTransition,
-    );
+    showPane(() => {
+      setPath(currentPath());
+      setPane(parseDashboardPane(event.state) ?? "sources");
+    }, event.hasUAVisualTransition);
   };
   const route = () => resolveRoute(path());
   const loginRoute = () => {
@@ -251,6 +253,7 @@ function App() {
                 pane={pane}
                 focusPane={focusPane}
                 backPane={backPane}
+                whenPaneShown={whenPaneShown}
               />
             }
           >
@@ -264,11 +267,12 @@ function App() {
 
 function Router(props: {
   backPane(): void;
-  focusPane(next: DashboardPane, afterShow?: () => void): void;
+  focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
   pane(): DashboardPane;
   route: Route;
+  whenPaneShown(run: () => void): void;
 }) {
   return (
     <Show
@@ -325,6 +329,7 @@ function Router(props: {
         pane={props.pane}
         focusPane={props.focusPane}
         backPane={props.backPane}
+        whenPaneShown={props.whenPaneShown}
         initialDiscovery={props.route.name === "preview"}
         initialFeedUrl={
           props.route.name === "preview" ? props.route.feedUrl : undefined

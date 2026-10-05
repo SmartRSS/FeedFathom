@@ -49,7 +49,7 @@ const switchOnce = (
 ) => {
   let ran = "never";
   let inTransition = false;
-  switchPane(
+  void switchPane(
     () => {
       ran = inTransition ? "animated" : "instant";
     },
@@ -62,6 +62,7 @@ const switchOnce = (
               inTransition = true;
               update();
               inTransition = false;
+              return { updateCallbackDone: Promise.resolve() };
             },
     },
     options.browserAnimated,

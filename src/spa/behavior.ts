@@ -97,18 +97,22 @@ export function withDashboardPane(
 
 export type PaneSwitchHost = {
   matches(query: string): boolean;
-  startViewTransition: ((update: () => void) => unknown) | undefined;
+  startViewTransition:
+    | ((update: () => void) => { updateCallbackDone: Promise<void> })
+    | undefined;
 };
 
 // Applies a pane switch, cross-faded where it reads as one (#990). Only the
 // phone layout shows one pane at a time; on a wider screen every pane stays
 // put and a fade would only dim the whole page. A browser that already
 // animated the navigation itself (a swipe back) gets no second animation.
+// Returns when an animated switch has been applied; an instant one already
+// has, and returns undefined.
 export function switchPane(
   update: () => void,
   host: PaneSwitchHost,
   browserAnimated = false,
-) {
+): Promise<void> | undefined {
   if (
     !host.startViewTransition ||
     browserAnimated ||
@@ -116,9 +120,9 @@ export function switchPane(
     host.matches("(prefers-reduced-motion: reduce)")
   ) {
     update();
-    return;
+    return undefined;
   }
-  host.startViewTransition(update);
+  return host.startViewTransition(update).updateCallbackDone;
 }
 
 export function safeNextPath(value: string | null | undefined): string {
