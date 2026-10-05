@@ -136,12 +136,19 @@ const ARTICLE_SKELETON_TITLES = [
   "Another Example Headline",
 ];
 
-// Only a page the service worker controls asks: without one, the query
-// would reach the server as a second full tree request.
+// Only a page the service worker controls asks, since only the worker
+// answers ?cached. only-if-cached keeps the request off the network when
+// something else does answer it, such as a worker from before #989 that
+// forwards it as is: the fetch then reads the HTTP cache or fails.
 async function cachedTree(): Promise<TreeNode[] | undefined> {
   if (!navigator.serviceWorker?.controller) return undefined;
   try {
-    return (await api("/tree?cached", treeResponse)).tree;
+    return (
+      await api("/tree?cached", treeResponse, {
+        cache: "only-if-cached",
+        mode: "same-origin",
+      })
+    ).tree;
   } catch {
     return undefined;
   }
