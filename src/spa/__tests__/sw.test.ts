@@ -243,6 +243,25 @@ test("a cached favicon is inlined as a data URL, and a warm tree reload fetches 
   ).toHaveLength(0);
 });
 
+test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
+  const sw = loadServiceWorker(network);
+  const cachedTree = () =>
+    sw.dispatch(new Request(`${ORIGIN}/api/tree?cached`)).response;
+  expect((await cachedTree()).status).toBe(504);
+  expect(sw.requests).toEqual([]);
+
+  await sw.dispatch(new Request(`${ORIGIN}${tree.tree[0]?.favicon}`)).response;
+  await sw.loadTree();
+  const before = sw.requests.length;
+  expect(await (await cachedTree()).json()).toEqual({
+    tree: [
+      { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
+      { favicon: "/api/favicon/2?v=def", type: "source" },
+    ],
+  });
+  expect(sw.requests.slice(before)).toEqual([]);
+});
+
 const shellHtml = (bundle: string) =>
   `<script type="module" src="/assets/${bundle}.js"></script>`;
 

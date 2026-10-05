@@ -24,7 +24,6 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
-  preloadFavicons,
   filterTree,
   findNode,
   findParentFolderUid,
@@ -136,6 +135,24 @@ const ARTICLE_SKELETON_TITLES = [
   "A Somewhat Longer Article Title About Something",
   "Another Example Headline",
 ];
+
+// Only a page the service worker controls asks, since only the worker
+// answers ?cached. only-if-cached keeps the request off the network when
+// something else does answer it, such as a worker from before #989 that
+// forwards it as is: the fetch then reads the HTTP cache or fails.
+async function cachedTree(): Promise<TreeNode[] | undefined> {
+  if (!navigator.serviceWorker?.controller) return undefined;
+  try {
+    return (
+      await api("/tree?cached", treeResponse, {
+        cache: "only-if-cached",
+        mode: "same-origin",
+      })
+    ).tree;
+  } catch {
+    return undefined;
+  }
+}
 
 export function Dashboard(props: {
   backPane(): void;
@@ -471,6 +488,14 @@ export function Dashboard(props: {
     }
     return nextTree;
   }
+  const revealTree = () => {
+    if (!treeLoading()) return;
+    setTreeLoading(false);
+    // Focus the tree without select(), which would also load articles.
+    queueMicrotask(() =>
+      document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
+    );
+  };
   async function addNewFolder() {
     const name = await promptDialog("Folder name");
     if (!name?.trim()) return;
@@ -503,23 +528,39 @@ export function Dashboard(props: {
       skipObserverFirstPass = true;
     }
     try {
-      const nextTree = await loadTree();
-      await preloadFavicons(nextTree);
+      // loadTree replaces this array as it applies the fresh tree, so its
+      // identity tells whether the fresh one already landed.
+      const unloaded = tree();
+      const fresh = loadTree();
+      // Stale-while-revalidate (#989): the cached tree paints only if it
+      // beats the network, and the fresh one replaces it through loadTree.
+      // Everything that trusts the tree -- sign-in state, the poll's unread
+      // baseline, session restore -- still waits for the fresh answer, so a
+      // 401 routes to sign-in and the swap never reads as new articles.
+      const early = await Promise.race([
+        fresh.then(
+          () => undefined,
+          () => undefined,
+        ),
+        cachedTree(),
+      ]);
+      if (early && !disposed && tree() === unloaded) {
+        setTree(early);
+        revealTree();
+      }
+      const nextTree = await fresh;
       if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
-      if (restored) await restoreFromSnapshot(restored);
+      // Cleared by select() if a feed was picked from the cached tree.
+      if (restored && restoringSession()) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {
-      setTreeLoading(false);
-      // Focus the tree without select(), which would also load articles.
-      queueMicrotask(() =>
-        document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
-      );
+      revealTree();
     }
     // Delayed and set rather than present at mount, so a screen reader treats
     // it as a live-region change instead of part of the first read-through.
@@ -591,6 +632,12 @@ export function Dashboard(props: {
     node: TreeNode,
     restore?: { articleId: number; listScrollTop: number },
   ) {
+    // A feed picked from the cached tree while boot still waits to restore
+    // the session (#989) supersedes the snapshot, and is recorded in its place.
+    if (!restore && restoringSession()) {
+      skipObserverFirstPass = false;
+      setRestoringSession(false);
+    }
     props.focusPane("articles");
     // Picking a feed answers a different question than the search did, so the
     // box empties with the list rather than describing rows that are gone.
