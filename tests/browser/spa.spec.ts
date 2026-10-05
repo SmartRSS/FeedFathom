@@ -1751,6 +1751,32 @@ test("cross-fades mobile pane switches unless motion is reduced", async ({
   expect(await transitions()).toBe(1);
 });
 
+// A second tap lands before the cross-fade has applied the first switch. It
+// must not push a second history entry, or Back would stay on the list.
+test("a double tap on a feed leaves one history entry to go back", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+
+  // Both clicks in one task, so the second certainly beats the transition.
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .evaluate((button) => {
+      if (!(button instanceof HTMLElement)) return;
+      button.click();
+      button.click();
+    });
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  await page
+    .locator(".articles-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+});
+
 // #990: rows off screen skip rendering, and their placeholder height has to
 // match a rendered row exactly, or a restored scrollTop and the paging
 // threshold drift by the error times every row above.

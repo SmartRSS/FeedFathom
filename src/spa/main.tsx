@@ -142,7 +142,10 @@ function App() {
     else run();
   };
   const focusPane = (next: DashboardPane) => {
-    if (next === pane()) return;
+    // history.state, not pane(): a pushed switch still waiting on its
+    // transition has not set the signal yet, and a second tap in that frame
+    // would push a duplicate entry that Back then has to step through.
+    if (next === (parseDashboardPane(history.state) ?? pane())) return;
     history.pushState(withDashboardPane(history.state, next), "");
     showPane(() => setPane(next));
   };
