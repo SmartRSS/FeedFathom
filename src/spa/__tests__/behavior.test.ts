@@ -7,6 +7,7 @@ import {
   resolveRoute,
   safeNextPath,
   soleSelectedIndex,
+  switchPane,
   transitionArticleSelection,
   withDashboardPane,
 } from "../behavior.ts";
@@ -37,6 +38,49 @@ describe("dashboard pane history state", () => {
       unrelated: { value: 1 },
     });
     expect(state.feedFathomPane).toBe("sources");
+  });
+});
+
+// Runs one switch against a host matching `queries`, reporting whether the
+// update ran inside a view transition, outside one, or not at all.
+const switchOnce = (
+  queries: string[],
+  options: { supported?: boolean; browserAnimated?: boolean } = {},
+) => {
+  let ran = "never";
+  let inTransition = false;
+  switchPane(
+    () => {
+      ran = inTransition ? "animated" : "instant";
+    },
+    {
+      matches: (query) => queries.includes(query),
+      startViewTransition:
+        options.supported === false
+          ? undefined
+          : (update) => {
+              inTransition = true;
+              update();
+              inTransition = false;
+            },
+    },
+    options.browserAnimated,
+  );
+  return ran;
+};
+const narrow = "(max-width: 768px)";
+const reduce = "(prefers-reduced-motion: reduce)";
+
+describe("switchPane", () => {
+  test("animates on the one-pane phone layout", () => {
+    expect(switchOnce([narrow])).toBe("animated");
+  });
+
+  test("stays instant wherever the animation is unwanted or unavailable", () => {
+    expect(switchOnce([])).toBe("instant");
+    expect(switchOnce([narrow, reduce])).toBe("instant");
+    expect(switchOnce([narrow], { supported: false })).toBe("instant");
+    expect(switchOnce([narrow], { browserAnimated: true })).toBe("instant");
   });
 });
 

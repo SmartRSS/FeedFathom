@@ -1712,6 +1712,78 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
+// #990: the switch cross-fades only on the phone layout, and never under
+// reduced motion. Counting calls rather than watching pixels keeps it cheap.
+test("cross-fades mobile pane switches unless motion is reduced", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const start = document.startViewTransition.bind(document);
+    Object.assign(window, { viewTransitions: 0 });
+    document.startViewTransition = (update) => {
+      Object.assign(window, {
+        viewTransitions: Number(Reflect.get(window, "viewTransitions")) + 1,
+      });
+      return start(update);
+    };
+  });
+  const transitions = () =>
+    page.evaluate(() => Number(Reflect.get(window, "viewTransitions")));
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await selectSource(page);
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(0);
+
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.getByRole("option", { name: /First article/ }).click();
+  await expect(page.locator(".reader-pane")).toBeVisible();
+  await expect(page.locator(".articles-pane")).toBeHidden();
+  expect(await transitions()).toBe(1);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page
+    .locator(".reader-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(1);
+});
+
+// #990: rows off screen skip rendering, and their placeholder height has to
+// match a rendered row exactly, or a restored scrollTop and the paging
+// threshold drift by the error times every row above.
+for (const theme of ["smart", "high-contrast"]) {
+  test(`off-screen article rows keep a rendered row's height (${theme})`, async ({
+    page,
+  }) => {
+    await page.addInitScript((value) => {
+      localStorage.setItem("theme", value);
+    }, theme);
+    await installApiFixture(page, { manyArticles: true });
+    await page.setViewportSize({ height: 600, width: 1280 });
+    await page.goto("/");
+    await selectSource(page);
+    await expect(articleOptions(page)).toHaveCount(60);
+
+    const rows = await page
+      .locator(".article-list .article")
+      .evaluateAll((elements) =>
+        elements.map((row) => ({
+          height: row.getBoundingClientRect().height,
+          rendered:
+            row.firstElementChild?.checkVisibility({
+              contentVisibilityAuto: true,
+            }) ?? false,
+        })),
+      );
+    expect(rows[0]?.rendered).toBe(true);
+    expect(rows.at(-1)?.rendered).toBe(false);
+    expect(new Set(rows.map((row) => row.height)).size).toBe(1);
+  });
+}
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/preview");

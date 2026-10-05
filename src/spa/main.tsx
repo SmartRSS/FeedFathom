@@ -15,8 +15,10 @@ import {
   loginPath,
   parseDashboardPane,
   resolveRoute,
+  switchPane,
   withDashboardPane,
   type DashboardPane,
+  type PaneSwitchHost,
   type Route,
 } from "./behavior.ts";
 import { Dashboard } from "./dashboard.tsx";
@@ -74,6 +76,13 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
 
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
+const paneSwitchHost: PaneSwitchHost = {
+  matches: (query) => matchMedia(query).matches,
+  startViewTransition:
+    "startViewTransition" in document
+      ? (update) => document.startViewTransition(update)
+      : undefined,
+};
 const [updateAvailable, setUpdateAvailable] = createSignal(false);
 
 function App() {
@@ -117,14 +126,29 @@ function App() {
     navigate(loginPath(currentPath()));
     return true;
   };
-  const focusPane = (next: DashboardPane) => {
-    if (next === pane()) return;
+  // `afterShow` runs once the pane is on screen. Under a view transition
+  // that is a frame later, and focusing into a pane still display:none would
+  // drop focus to <body>.
+  const focusPane = (next: DashboardPane, afterShow?: () => void) => {
+    if (next === pane()) {
+      afterShow?.();
+      return;
+    }
     history.pushState(withDashboardPane(history.state, next), "");
-    setPane(next);
+    switchPane(() => {
+      setPane(next);
+      afterShow?.();
+    }, paneSwitchHost);
   };
   const popstate = (event: PopStateEvent) => {
-    setPath(currentPath());
-    setPane(parseDashboardPane(event.state) ?? "sources");
+    switchPane(
+      () => {
+        setPath(currentPath());
+        setPane(parseDashboardPane(event.state) ?? "sources");
+      },
+      paneSwitchHost,
+      event.hasUAVisualTransition,
+    );
   };
   const route = () => resolveRoute(path());
   const loginRoute = () => {
@@ -240,7 +264,7 @@ function App() {
 
 function Router(props: {
   backPane(): void;
-  focusPane(next: DashboardPane): void;
+  focusPane(next: DashboardPane, afterShow?: () => void): void;
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
   pane(): DashboardPane;

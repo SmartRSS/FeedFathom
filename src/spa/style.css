@@ -1030,6 +1030,14 @@ img.skeleton-row {
   line-height: 1rem;
   text-decoration: none;
   white-space: normal;
+  /* A page holds 200 rows and keeps appending, so off-screen rows skip
+     layout and paint (#990). The placeholder is exact, not a guess: both
+     lines are nowrap at a fixed line-height, so the content box is always
+     two 1rem lines and the gap, with padding and border added around it as
+     for any box. A wrong value would shift a restored scrollTop, and the
+     scrollHeight that paging reads, by the error times every row above. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 2.2rem;
 }
 .article-list {
   flex: 1;

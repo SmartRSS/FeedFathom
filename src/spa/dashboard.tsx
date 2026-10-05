@@ -156,7 +156,7 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
 
 export function Dashboard(props: {
   backPane(): void;
-  focusPane(next: DashboardPane): void;
+  focusPane(next: DashboardPane, afterShow?: () => void): void;
   handleUnauthorized(cause: unknown): boolean;
   initialDiscovery?: boolean;
   initialFeedUrl?: string | undefined;
@@ -1570,10 +1570,11 @@ export function Dashboard(props: {
       const node = selectedNode();
       if (!node) return;
       event.preventDefault();
-      props.focusPane("sources");
-      document
-        .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
-        ?.focus();
+      props.focusPane("sources", () =>
+        document
+          .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
+          ?.focus(),
+      );
     } else if (
       mapArticleShortcut(event) &&
       !isTextEntry(event.target) &&
@@ -1597,11 +1598,11 @@ export function Dashboard(props: {
         // switch display:none's the list holding focus, which would drop it
         // to <body> and strand the shortcut there.
         if (props.pane() === "reader") {
-          props.focusPane("articles");
-          focusArticleAt(focusedIndex());
+          props.focusPane("articles", () => focusArticleAt(focusedIndex()));
         } else {
-          props.focusPane("reader");
-          readerPaneRef?.focus({ preventScroll: true });
+          props.focusPane("reader", () =>
+            readerPaneRef?.focus({ preventScroll: true }),
+          );
         }
       } else if (shortcut === "openOriginal") {
         event.preventDefault();
@@ -1625,8 +1626,7 @@ export function Dashboard(props: {
     if (isTextEntry(event.target)) return;
     if (document.querySelector("dialog[open]")) return;
     event.preventDefault();
-    props.focusPane("articles");
-    focusArticleAt(focusedIndex());
+    props.focusPane("articles", () => focusArticleAt(focusedIndex()));
   }
   return (
     <main class="dashboard">
