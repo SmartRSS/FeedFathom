@@ -2637,7 +2637,12 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
 });
 
 // #989: a slow network doesn't hold a tree the worker already has.
-const reloadWithHeldTree = async (page: Page) => {
+// Releasing with no response lets the fixture answer as usual.
+type HeldTree = { json: object; status?: number } | undefined;
+const reloadWithHeldTree = async (
+  page: Page,
+  beforeReload?: () => Promise<void>,
+) => {
   const context = page.context();
   await installApiFixture(context);
   await page.goto("/");
@@ -2646,13 +2651,15 @@ const reloadWithHeldTree = async (page: Page) => {
   await page.waitForFunction(async () =>
     Boolean(await caches.match("/api/tree")),
   );
-  let release!: (response: { json: object; status?: number }) => void;
-  const held = new Promise<{ json: object; status?: number }>((resolve) => {
+  await beforeReload?.();
+  let release!: (response?: HeldTree) => void;
+  const held = new Promise<HeldTree>((resolve) => {
     release = resolve;
   });
-  await context.route("**/api/tree", async (route) =>
-    route.fulfill(await held),
-  );
+  await context.route("**/api/tree", async (route) => {
+    const response = await held;
+    await (response ? route.fulfill(response) : route.fallback());
+  });
   await page.reload();
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
@@ -2729,6 +2736,29 @@ test.describe("under a controlling service worker", () => {
       page.getByRole("treeitem", { name: "Tech News 5 unread" }),
     ).toBeVisible();
     await expect(page.getByText(/new articles?\./)).toHaveCount(0);
+  });
+
+  test("a feed picked from the cached tree replaces the session restore", async ({
+    page,
+  }) => {
+    const snapshotNode = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(
+            sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+          )?.app?.nodeUid,
+      );
+    const release = await reloadWithHeldTree(page, async () => {
+      await selectSource(page, "Reading");
+      await expect.poll(snapshotNode).toBe("7");
+    });
+    await selectSource(page);
+    release();
+    await page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/tree",
+    );
+    await expectSelectedRow(page, /^Tech News/);
+    expect(await snapshotNode()).toBe("3");
   });
 
   test("a 401 behind the cached tree still routes to sign-in", async ({

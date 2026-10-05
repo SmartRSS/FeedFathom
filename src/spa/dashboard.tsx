@@ -521,6 +521,9 @@ export function Dashboard(props: {
       skipObserverFirstPass = true;
     }
     try {
+      // loadTree replaces this array as it applies the fresh tree, so its
+      // identity tells whether the fresh one already landed.
+      const unloaded = tree();
       const fresh = loadTree();
       // Stale-while-revalidate (#989): the cached tree paints only if it
       // beats the network, and the fresh one replaces it through loadTree.
@@ -534,7 +537,7 @@ export function Dashboard(props: {
         ),
         cachedTree(),
       ]);
-      if (early && !disposed && treeLoading()) {
+      if (early && !disposed && tree() === unloaded) {
         setTree(early);
         revealTree();
       }
@@ -542,11 +545,8 @@ export function Dashboard(props: {
       if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
-      // A feed picked from the cached tree meanwhile outranks the snapshot.
-      if (restored && selectedNode()) {
-        skipObserverFirstPass = false;
-        setRestoringSession(false);
-      } else if (restored) await restoreFromSnapshot(restored);
+      // Cleared by select() if a feed was picked from the cached tree.
+      if (restored && restoringSession()) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
@@ -625,6 +625,12 @@ export function Dashboard(props: {
     node: TreeNode,
     restore?: { articleId: number; listScrollTop: number },
   ) {
+    // A feed picked from the cached tree while boot still waits to restore
+    // the session (#989) supersedes the snapshot, and is recorded in its place.
+    if (!restore && restoringSession()) {
+      skipObserverFirstPass = false;
+      setRestoringSession(false);
+    }
     props.focusPane("articles");
     // Picking a feed answers a different question than the search did, so the
     // box empties with the list rather than describing rows that are gone.
