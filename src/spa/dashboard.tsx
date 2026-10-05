@@ -1207,11 +1207,31 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
-  // In-flight article GETs by id. A press, a hover and the click that
-  // follows share one request: the service worker caches a response only
-  // once it lands, so a second GET started before then would hit the
-  // network too.
-  const articlePrefetches = new Map<number, Promise<Article>>();
+  // In-flight article GETs by id, prefetches and opens alike. A press, a
+  // hover and the click that follows share one request: the service worker
+  // caches a response only once it lands, so a second GET started before
+  // then would hit the network too. Each carries its own controller so
+  // open() can adopt it and still cancel the body when the reader moves on.
+  const articleFetches = new Map<
+    number,
+    { controller: AbortController; request: Promise<Article> }
+  >();
+  function fetchArticle(id: number) {
+    const existing = articleFetches.get(id);
+    if (existing && !existing.controller.signal.aborted) return existing;
+    const controller = new AbortController();
+    const request = api(`/article?article=${id}`, articleResponse, {
+      signal: controller.signal,
+    });
+    const entry = { controller, request };
+    articleFetches.set(id, entry);
+    void request
+      .catch(() => {})
+      .finally(() => {
+        if (articleFetches.get(id) === entry) articleFetches.delete(id);
+      });
+    return entry;
+  }
   // The plain GET is a read with no side effects; the service worker caches
   // it and serves it for a minute without a round trip (see
   // recentArticleFirst in public/sw.js), and offline after that.
@@ -1219,11 +1239,9 @@ export function Dashboard(props: {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
-    if (articlePrefetches.has(id) || openedArticle()?.id === id) return;
-    const request = api(`/article?article=${id}`, articleResponse);
-    articlePrefetches.set(id, request);
+    if (openedArticle()?.id === id) return;
     // Best-effort: opening the article reports its own failure.
-    void request.catch(() => {}).finally(() => articlePrefetches.delete(id));
+    fetchArticle(id);
   }
   // Prefetch the articles either side of the one just opened (#716, #988),
   // so keyboard navigation into them feels instant. Feed mode only --
@@ -1256,8 +1274,8 @@ export function Dashboard(props: {
   ) {
     const request = articleRequestGuard.start();
     articleBodyAbortController?.abort();
-    const controller = new AbortController();
-    articleBodyAbortController = controller;
+    const body = fetchArticle(article.id);
+    articleBodyAbortController = body.controller;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1276,10 +1294,7 @@ export function Dashboard(props: {
     // Whatever restore was waiting to apply belongs to the previous article.
     pendingReaderScrollId = undefined;
     try {
-      const opened = await (articlePrefetches.get(article.id) ??
-        api(`/article?article=${article.id}`, articleResponse, {
-          signal: controller.signal,
-        }));
+      const opened = await body.request;
       if (!isCurrent()) return;
       setOpenedArticle(opened);
       recordAppSnapshot({ articleId: opened.id });
