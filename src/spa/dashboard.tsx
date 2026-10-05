@@ -84,6 +84,7 @@ import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
 import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
+  neighbours,
   prefetchNextEnabled,
   shouldPrefetch,
 } from "./reading-prefetch.ts";
@@ -1206,27 +1207,66 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
-  // Prefetch the article after the one just opened (#716), so keyboard
-  // navigation into it feels instant. One article only, feed mode only --
-  // Reader modes fetch through the extension, so there is nothing server-
-  // side to warm. The plain GET is a read with no side effects; the service
-  // worker caches it and serves it for a minute without a round trip (see
+  // In-flight article GETs by id, prefetches and opens alike. A press, a
+  // hover and the click that follows share one request: the service worker
+  // caches a response only once it lands, so a second GET started before
+  // then would hit the network too. Each carries its own controller so
+  // open() can adopt it and still cancel the body when the reader moves on.
+  const articleFetches = new Map<
+    number,
+    { controller: AbortController; request: Promise<Article> }
+  >();
+  function fetchArticle(id: number) {
+    const existing = articleFetches.get(id);
+    if (existing && !existing.controller.signal.aborted) return existing;
+    const controller = new AbortController();
+    const request = api(`/article?article=${id}`, articleResponse, {
+      signal: controller.signal,
+    });
+    const entry = { controller, request };
+    articleFetches.set(id, entry);
+    void request
+      .catch(() => {})
+      .finally(() => {
+        if (articleFetches.get(id) === entry) articleFetches.delete(id);
+      });
+    return entry;
+  }
+  // The plain GET is a read with no side effects; the service worker caches
+  // it and serves it for a minute without a round trip (see
   // recentArticleFirst in public/sw.js), and offline after that.
-  function schedulePrefetch() {
+  function prefetchArticle(id: number) {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
-    const selectedIndex = soleSelectedIndex(selectedIndexes());
-    const next =
-      selectedIndex === undefined ? undefined : articles()[selectedIndex + 1];
-    if (!next) return;
+    if (openedArticle()?.id === id) return;
+    // Best-effort: opening the article reports its own failure.
+    fetchArticle(id);
+  }
+  // Prefetch the articles either side of the one just opened (#716, #988),
+  // so keyboard navigation into them feels instant. Feed mode only --
+  // Reader modes fetch through the extension, so there is nothing server-
+  // side to warm.
+  function schedulePrefetch() {
+    const targets = neighbours(
+      articles(),
+      soleSelectedIndex(selectedIndexes()),
+    );
+    if (!targets.length) return;
     const run = () => {
-      void api(`/article?article=${next.id}`, articleResponse).catch(() => {
-        // Best-effort: opening the article fetches it properly anyway.
-      });
+      for (const target of targets) prefetchArticle(target.id);
     };
     if (typeof requestIdleCallback === "function") requestIdleCallback(run);
     else setTimeout(run, 200);
+  }
+  let hoverPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
+  // A mouse resting on a row for a moment usually means a click is coming.
+  // Touch has no hover; its pointerenter arrives with the press, which
+  // prefetches on its own.
+  function scheduleHoverPrefetch(id: number) {
+    clearTimeout(hoverPrefetchTimer);
+    if (!matchMedia("(pointer: fine)").matches) return;
+    hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
   async function open(
     article: ArticleSummary,
@@ -1234,8 +1274,8 @@ export function Dashboard(props: {
   ) {
     const request = articleRequestGuard.start();
     articleBodyAbortController?.abort();
-    const controller = new AbortController();
-    articleBodyAbortController = controller;
+    const body = fetchArticle(article.id);
+    articleBodyAbortController = body.controller;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1254,11 +1294,7 @@ export function Dashboard(props: {
     // Whatever restore was waiting to apply belongs to the previous article.
     pendingReaderScrollId = undefined;
     try {
-      const opened = await api(
-        `/article?article=${article.id}`,
-        articleResponse,
-        { signal: controller.signal },
-      );
+      const opened = await body.request;
       if (!isCurrent()) return;
       setOpenedArticle(opened);
       recordAppSnapshot({ articleId: opened.id });
@@ -1876,6 +1912,11 @@ export function Dashboard(props: {
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
+                      // Starts the GET before the click lands; open() then
+                      // awaits the same request.
+                      onPointerDown={() => prefetchArticle(article.id)}
+                      onPointerEnter={() => scheduleHoverPrefetch(article.id)}
+                      onPointerLeave={() => clearTimeout(hoverPrefetchTimer)}
                       onClick={(event) => {
                         event.preventDefault();
                         selectArticle(index(), event);
