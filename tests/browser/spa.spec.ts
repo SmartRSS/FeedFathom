@@ -1712,6 +1712,112 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
+// #990: the switch cross-fades only on the phone layout, and never under
+// reduced motion. Counting calls rather than watching pixels keeps it cheap.
+test("cross-fades mobile pane switches unless motion is reduced", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const start = document.startViewTransition.bind(document);
+    Object.assign(window, { viewTransitions: 0 });
+    document.startViewTransition = (update) => {
+      Object.assign(window, {
+        viewTransitions: Number(Reflect.get(window, "viewTransitions")) + 1,
+      });
+      return start(update);
+    };
+  });
+  const transitions = () =>
+    page.evaluate(() => Number(Reflect.get(window, "viewTransitions")));
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await selectSource(page);
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(0);
+
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.getByRole("option", { name: /First article/ }).click();
+  await expect(page.locator(".reader-pane")).toBeVisible();
+  await expect(page.locator(".articles-pane")).toBeHidden();
+  expect(await transitions()).toBe(1);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page
+    .locator(".reader-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(1);
+});
+
+// A second tap lands before the cross-fade has applied the first switch. It
+// must not push a second history entry, or Back would stay on the list.
+test("a double tap on a feed leaves one history entry to go back", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+
+  // Both clicks in one task, so the second certainly beats the transition.
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .evaluate((button) => {
+      if (!(button instanceof HTMLElement)) return;
+      button.click();
+      button.click();
+    });
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  await page
+    .locator(".articles-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+});
+
+// #990: rows off screen skip rendering, and their placeholder height has to
+// match a rendered row exactly, or a restored scrollTop and the paging
+// threshold drift by the error times every row above.
+for (const theme of ["smart", "high-contrast"]) {
+  test(`off-screen article rows keep a rendered row's height (${theme})`, async ({
+    page,
+  }) => {
+    await page.addInitScript((value) => {
+      localStorage.setItem("theme", value);
+    }, theme);
+    await installApiFixture(page, { manyArticles: true });
+    await page.setViewportSize({ height: 600, width: 1280 });
+    await page.goto("/");
+    await selectSource(page);
+    await expect(articleOptions(page)).toHaveCount(60);
+    // A blank title and byline (an empty mail subject) must not collapse a
+    // row below the placeholder either.
+    await articleOptions(page)
+      .nth(1)
+      .evaluate((row) => {
+        for (const text of row.querySelectorAll(".title, .details > *"))
+          text.textContent = "";
+      });
+
+    const rows = await page
+      .locator(".article-list .article")
+      .evaluateAll((elements) =>
+        elements.map((row) => ({
+          height: row.getBoundingClientRect().height,
+          rendered:
+            row.firstElementChild?.checkVisibility({
+              contentVisibilityAuto: true,
+            }) ?? false,
+        })),
+      );
+    expect(rows[0]?.rendered).toBe(true);
+    expect(rows.at(-1)?.rendered).toBe(false);
+    expect(new Set(rows.map((row) => row.height)).size).toBe(1);
+  });
+}
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/preview");
@@ -2018,7 +2124,9 @@ test("o moves focus between the article list and the reader pane", async ({
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
   await selectSource(page);
-  await articleOptions(page).first().focus();
+  // The load focuses the first row even when it lands before the pane's
+  // cross-fade has shown the list (#990).
+  await expect(articleOptions(page).first()).toBeFocused();
 
   await page.keyboard.press("o");
   const reader = page.getByRole("article", { name: "Reader" });

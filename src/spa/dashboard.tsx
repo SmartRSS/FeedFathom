@@ -162,6 +162,7 @@ export function Dashboard(props: {
   initialFeedUrl?: string | undefined;
   navigate(to: string): void;
   pane(): DashboardPane;
+  whenPaneShown(run: () => void): void;
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
@@ -618,15 +619,18 @@ export function Dashboard(props: {
     if (!rememberReadingPosition()) return;
     const ratio = readingSession.readerScroll(id);
     if (ratio === undefined) return;
-    queueMicrotask(() => {
-      const reader = document.querySelector<HTMLElement>(".reader");
-      if (!reader) return;
-      reader.scrollTop = ratioToScrollTop(
-        ratio,
-        reader.scrollHeight,
-        reader.clientHeight,
-      );
-    });
+    // A hidden reader measures zero, which would resolve any ratio to the top.
+    queueMicrotask(() =>
+      props.whenPaneShown(() => {
+        const reader = document.querySelector<HTMLElement>(".reader");
+        if (!reader) return;
+        reader.scrollTop = ratioToScrollTop(
+          ratio,
+          reader.scrollHeight,
+          reader.clientHeight,
+        );
+      }),
+    );
   });
   async function select(
     node: TreeNode,
@@ -1488,11 +1492,16 @@ export function Dashboard(props: {
   // announces the focused row itself -- no aria-activedescendant plumbing.
   function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
-    const element = document.querySelector<HTMLElement>(
-      `[data-index="${index}"]`,
-    );
-    element?.focus({ preventScroll: true });
-    if (options?.scroll ?? true) element?.scrollIntoView({ block: "nearest" });
+    // A load that lands while the articles pane is still fading in must not
+    // focus a row that is display:none.
+    props.whenPaneShown(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-index="${index}"]`,
+      );
+      element?.focus({ preventScroll: true });
+      if (options?.scroll ?? true)
+        element?.scrollIntoView({ block: "nearest" });
+    });
   }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
@@ -1571,9 +1580,11 @@ export function Dashboard(props: {
       if (!node) return;
       event.preventDefault();
       props.focusPane("sources");
-      document
-        .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
-        ?.focus();
+      props.whenPaneShown(() =>
+        document
+          .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
+          ?.focus(),
+      );
     } else if (
       mapArticleShortcut(event) &&
       !isTextEntry(event.target) &&
@@ -1601,7 +1612,9 @@ export function Dashboard(props: {
           focusArticleAt(focusedIndex());
         } else {
           props.focusPane("reader");
-          readerPaneRef?.focus({ preventScroll: true });
+          props.whenPaneShown(() =>
+            readerPaneRef?.focus({ preventScroll: true }),
+          );
         }
       } else if (shortcut === "openOriginal") {
         event.preventDefault();
