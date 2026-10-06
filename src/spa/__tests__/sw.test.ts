@@ -548,6 +548,29 @@ test("a sync interleaved with another account's keeps its own account", async ()
   expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
 });
 
+test("rows from before a sign-in don't stop the current account's downloads", async () => {
+  let answer: (() => void) | undefined;
+  let held = false;
+  const sw = loadServiceWorker((path, method) => {
+    if (method === "POST") return Response.json([]);
+    if (held) return articleNetwork(path);
+    held = true;
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(articleNetwork(path));
+    });
+  });
+  const before = await sw.listOffline();
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  const current = sw.keepOffline([5]);
+  await settle();
+  await sw.keepOffline([2], before);
+  answer?.();
+  await current;
+  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
+});
+
 test("an older sync can't prune what a newer one keeps", async () => {
   const sw = loadServiceWorker(articleNetwork);
   void sw.keepOffline([1]);

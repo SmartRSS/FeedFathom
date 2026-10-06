@@ -2078,6 +2078,43 @@ test("passes the article list filter through to the query", async () => {
   expect(rejected.status).toBe(422);
 });
 
+// A bundle from before #992 rejects the extra field, so only a request that
+// asks gets it.
+test("lists article revisions only when asked", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.articlesDataService.getUserArticlesForSources = async () => [
+    {
+      author: "A",
+      group: "Today",
+      id: 11,
+      publishedAt: new Date("2026-10-06T10:00:00.000Z"),
+      read: false,
+      revision: "2026-10-06 10:00:00.000001+00",
+      sourceId: 3,
+      title: "T",
+      url: "https://articles.example/1",
+    },
+  ];
+  const app = await appFor(dependencies);
+  const list = async (body: unknown) => {
+    const response = await app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+    const rows: { revision?: string }[] = await response.json();
+    return rows.map((row) => row.revision);
+  };
+
+  expect(await list({ sources: [3] })).toEqual([undefined]);
+  expect(await list({ revision: true, sources: [3] })).toEqual([
+    "2026-10-06 10:00:00.000001+00",
+  ]);
+});
+
 test("searches every subscription rather than the selected sources", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);

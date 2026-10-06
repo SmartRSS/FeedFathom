@@ -124,8 +124,9 @@ const articleSummaryResponse = Type.Object(
     read: Type.Boolean(),
     // The article's updated_at as Postgres prints it, microseconds and all:
     // a rewrite can move it by one microsecond, which a JSON date would
-    // lose. Null until a feed first rewrites the article.
-    revision: Type.Union([Type.String(), Type.Null()]),
+    // lose. Null until a feed first rewrites the article; sent only when the
+    // request asks for it.
+    revision: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     sourceId: id,
     title: Type.String(),
     url: Type.String(),

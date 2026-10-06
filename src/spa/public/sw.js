@@ -561,8 +561,10 @@ const OFFLINE_LISTINGS_LIMIT = 16;
 // `generation` is that count for the posted rows.
 async function syncOfflineArticles(sync, generation, articles) {
   const current = () => sync === offlineSyncs && generation === accountChanges;
-  if (!current()) return;
   const cache = await caches.open(API_CACHE);
+  // Checked after the open: one that resolves after a sign-in hands back the
+  // next account's cache.
+  if (!current()) return;
   await (articles.length > 0
     ? cache.put(OFFLINE_LIST_KEY, Response.json(articles))
     : cache.delete(OFFLINE_LIST_KEY));
@@ -621,8 +623,10 @@ self.addEventListener("message", (event) => {
   if (data.token !== undefined) {
     generation = offlineListings.get(data.token);
     offlineListings.delete(data.token);
-    if (generation === undefined) return;
   }
+  // Rejected before the count moves, so stale rows can't stop the current
+  // account's downloads.
+  if (generation !== accountChanges) return;
   const sync = ++offlineSyncs;
   offlineQueue = offlineQueue
     .then(() => syncOfflineArticles(sync, generation, articles))
@@ -704,7 +708,9 @@ async function offlineArticleList(request) {
       .slice(start)
       .filter(
         (row) => inScope(row) && bodies.has(row.id) && !removed.has(row.id),
-      ),
+      )
+      // The list never asks for revisions (see articlesRequest).
+      .map(({ revision: _revision, ...row }) => row),
   );
 }
 

@@ -472,6 +472,7 @@ export function Dashboard(props: {
           body: JSON.stringify({
             cursor: rows.at(-1)?.id,
             filter: "unread",
+            revision: true,
             sources,
           }),
           headers: {

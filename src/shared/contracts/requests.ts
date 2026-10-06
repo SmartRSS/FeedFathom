@@ -69,6 +69,9 @@ export const articlesRequest = Type.Object(
     // across every subscription rather than the selected node, so `sources`
     // is ignored and sent empty, exactly as the Today view does it.
     query: Type.Optional(searchTerms),
+    // Offline reading (#992) asks for each row's revision. Opt-in, because
+    // the summary schema of a bundle from before it rejects the extra field.
+    revision: Type.Optional(Type.Literal(true)),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,
