@@ -1419,8 +1419,16 @@ test("a press starts the article fetch even with prefetch Off", async ({
   await page.waitForTimeout(1_000);
   const before = ids.length;
   // pointerdown alone, no click: the fetch must not wait for the release.
-  await articleOptions(page).last().dispatchEvent("pointerdown");
+  await articleOptions(page)
+    .last()
+    .dispatchEvent("pointerdown", { button: 0, pointerType: "mouse" });
   await expect.poll(() => ids.length).toBe(before + 1);
+  // A right press never opens the article, so it fetches nothing.
+  await articleOptions(page)
+    .nth(1)
+    .dispatchEvent("pointerdown", { button: 2, pointerType: "mouse" });
+  await page.waitForTimeout(500);
+  expect(ids.length).toBe(before + 1);
 });
 
 test("shows the current account and logs out", async ({ page }) => {
