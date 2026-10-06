@@ -592,6 +592,18 @@ test("rows another tab listed earlier don't replace newer ones", async () => {
   ]);
 });
 
+// The dashboard names its token on the first page only, so a token the
+// worker forgot can't be registered afresh, under a newer account, by a
+// later page.
+test("a sync's later pages register no token", async () => {
+  const sw = loadServiceWorker((path, method) =>
+    method === "POST" ? Response.json([]) : articleNetwork(path),
+  );
+  await sw.listOffline("next");
+  await sw.keepOffline([2], "next");
+  expect([...sw.entries.keys()]).toEqual([]);
+});
+
 test("a listing in flight when the option goes off can't undo it", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const inFlight = await sw.listOffline();

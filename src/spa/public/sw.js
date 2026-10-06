@@ -744,7 +744,8 @@ async function offlineArticleList(request) {
 
 async function articleList(request) {
   const token = request.headers.get(OFFLINE_SYNC_HEADER);
-  if (token && !offlineListings.has(token)) {
+  // "next" marks a sync's later pages, which register nothing.
+  if (token && token !== "next" && !offlineListings.has(token)) {
     offlineListings.set(token, {
       generation: accountChanges,
       order: ++offlineListingOrder,

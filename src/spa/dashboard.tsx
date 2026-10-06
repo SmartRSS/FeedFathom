@@ -430,33 +430,56 @@ export function Dashboard(props: {
   // offline tab.
   let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
   let offlineSyncedAt = 0;
-  createEffect(() => {
-    const nodes = tree();
+  const runOfflineSync = () => void syncOfflineArticles(tree());
+  const syncOfflineInIdleTime = () => {
     clearTimeout(offlineSyncTimer);
-    if (!authenticated() || offlineUnreadEnabled() !== "on") return;
-    const run = () => void syncOfflineArticles(nodes);
+    if (disposed || !authenticated() || offlineUnreadEnabled() !== "on") return;
     offlineSyncTimer = setTimeout(
       () => {
-        if (typeof requestIdleCallback === "function") requestIdleCallback(run);
-        else run();
+        if (typeof requestIdleCallback === "function")
+          requestIdleCallback(runOfflineSync);
+        else runOfflineSync();
       },
       Math.max(0, offlineSyncedAt + 60_000 - Date.now()),
     );
+  };
+  createEffect(() => {
+    tree();
+    syncOfflineInIdleTime();
   });
-  onCleanup(() => clearTimeout(offlineSyncTimer));
+  // A sync skipped for a hidden or offline tab, or one the worker doesn't
+  // control yet, runs once that changes rather than at the next tree load,
+  // which with background checks off may never come.
+  let offlineSyncSkipped = false;
+  const retrySkippedOfflineSync = () => {
+    if (offlineSyncSkipped && !document.hidden) syncOfflineInIdleTime();
+  };
+  document.addEventListener("visibilitychange", retrySkippedOfflineSync);
+  addEventListener("online", retrySkippedOfflineSync);
+  navigator.serviceWorker?.addEventListener(
+    "controllerchange",
+    retrySkippedOfflineSync,
+  );
+  onCleanup(() => {
+    clearTimeout(offlineSyncTimer);
+    document.removeEventListener("visibilitychange", retrySkippedOfflineSync);
+    removeEventListener("online", retrySkippedOfflineSync);
+    navigator.serviceWorker?.removeEventListener(
+      "controllerchange",
+      retrySkippedOfflineSync,
+    );
+  });
   // One sync at a time, so a slow one can't post its older list after a
   // newer one; a tree load during it is picked up by the next.
   let offlineSyncing = false;
   async function syncOfflineArticles(nodes: TreeNode[]) {
-    if (
-      disposed ||
-      offlineSyncing ||
+    if (disposed || offlineSyncing || !shouldPrefetch(navigatorConnection()))
+      return;
+    offlineSyncSkipped =
       document.hidden ||
       !navigator.onLine ||
-      !navigator.serviceWorker?.controller ||
-      !shouldPrefetch(navigatorConnection())
-    )
-      return;
+      !navigator.serviceWorker?.controller;
+    if (offlineSyncSkipped) return;
     offlineSyncing = true;
     offlineSyncedAt = Date.now();
     const sources = unreadSourceIds(nodes);
@@ -479,7 +502,9 @@ export function Dashboard(props: {
           }),
           headers: {
             "Content-Type": "application/json",
-            "X-Offline-Sync": token,
+            // Only the first page names the token: a later one naming it could
+            // register it afresh, under a newer account, once it was forgotten.
+            "X-Offline-Sync": rows.length === 0 ? token : "next",
           },
           method: "POST",
         });

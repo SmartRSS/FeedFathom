@@ -2907,7 +2907,8 @@ const downloadUnread = async (page: Page) => {
   });
   await page.goto("/");
   await page.waitForFunction(() => navigator.serviceWorker.controller);
-  await page.reload();
+  // No reload: the first sync is skipped until the worker takes control,
+  // and controllerchange retries it.
   await expect.poll(() => downloaded(page)).toHaveLength(3);
 };
 
@@ -3029,6 +3030,9 @@ test.describe("under a controlling service worker", () => {
     page,
   }) => {
     await downloadUnread(page);
+    // A controlled load, so the worker holds the tree a folder resolves by.
+    await page.reload();
+    await expect(page.locator("button.source").first()).toBeVisible();
     // Routes still answer the worker under setOffline, so the API is cut
     // off by a route that wins over the fixture's.
     await page
