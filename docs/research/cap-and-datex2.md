@@ -47,7 +47,7 @@ Source: [CAP v1.2, OASIS Standard](https://docs.oasis-open.org/emergency/cap/v1.
 | FEMA IPAWS | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/feed` | Atom, title is a 3-letter EAS event code only, link → CAP | 1.2 KB / 3 entries | none |
 | Environment Agency (England) | `https://environment.data.gov.uk/cap/flood-alerts.atom` | Atom, title is an area code (`054WATBT2`), no summary, link → CAP | 1.3 KB / 2 entries | none; CC BY 4.0 |
 | NOAA tsunami | `https://www.tsunami.gov/events/xml/PAAQAtom.xml` | Atom, rich XHTML summary, `geo:lat/long` (redirects from the non-www host) | 2 KB | none |
-| AirNow / EPA | `https://feeds.enviroflash.info/cap/aggregate.xml` | RSS with `cap:*` | 63 KB / 23 items | none |
+| AirNow / EPA | `https://feeds.enviroflash.info/cap/aggregate.xml` | Atom with `cap:*` | 63 KB / 23 entries | none |
 | ECCC Datamart | `https://dd.weather.gc.ca/today/alerts/cap/` | Directory listing of raw CAP files by office. **Not a feed** | — | none |
 | IMGW (PL) | no native CAP feed found. Its CAP reaches users through MeteoAlarm (`sender` = `https://www.imgw.pl`). Its own [JSON/XML API](https://danepubliczne.imgw.pl/api/data/warningsmeteo) is not CAP | — | none |
 | RCB (PL) | `rcb.gov.pl/feed/` redirects to an HTML page. No CAP or RSS found (**unverified** whether one exists) | — | — |
@@ -57,7 +57,7 @@ Related observations:
 - NWS caching: `cache-control: max-age=5`, weak ETag. FeedFathom's 5-minute floor (`pollFloorMs` in `src/features/feeds/source-schedule-policy.ts`) applies, so the 30 s polling limit in the [NWS alerts docs](https://www.weather.gov/documentation/services-web-alerts) is never at risk.
 - MeteoAlarm advertises a WebSub hub (`pubsubhubbub.appspot.com`). FeedFathom subscribes to WebSub hubs.
 - MeteoAlarm retired its legacy RSS feeds on 2026-01-14 and points users to the Atom feeds ([feeds.meteoalarm.org](https://feeds.meteoalarm.org/), verified live).
-- Area filters on the publisher side: NWS supports `area`, `zone`, `point` and `region` ([NWS alerts docs](https://www.weather.gov/documentation/services-web-alerts)). `alerts.atom?point=…&active=1` worked on 2026-10-06. MeteoAlarm and DWD publish one feed per country, so a user who wants alerts for a smaller area needs filtering inside the reader.
+- Area filters on the publisher side: NWS supports `area`, `zone`, `point` and `region` ([NWS alerts docs](https://www.weather.gov/documentation/services-web-alerts)). With FeedFathom's Accept header, `alerts.atom?area=…&active=1` and `alerts.atom?point=…&active=1` return Atom on 2026-10-06, but `alerts.atom?zone=…&active=1` redirects to `/alerts/active/zone/…` and returns GeoJSON; `/alerts/active.atom?zone=…` returns 400 and `/alerts/active/zone/….atom` returns 404. No zone form that returns Atom was found. MeteoAlarm and DWD publish one feed per country, so a user who wants alerts for a smaller area needs filtering inside the reader.
 
 ### How FeedFathom handles these feeds today (tested 2026-10-06)
 
@@ -68,8 +68,8 @@ The test ran `@rowanmanning/feed-parser` (the parser `src/features/feeds/feed-pa
 - **NWS article link** is the raw `.cap` XML. A click opens XML, not a web page.
 - **MeteoAlarm, EA and FEMA bodies are empty**, because the feeds have no summary. All the meaning is in `cap:*`, which the parser drops. The parser keeps its XML element private (`#element`), so FeedFathom cannot reach `cap:*` through it.
 - **NAAD bilingual collision.** Each alert appears once per language under the **same `<id>`** (en-CA, then fr-CA). `batchUpsertArticles` dedupes on `(sourceId, guid)` and keeps the last copy (`src/features/feeds/article-data-service.ts`), so only the French copy is stored. NAAD entries also have no `<published>`, so `publishedAt` falls back to fetch time (`feed-mapper.ts`).
-- **Expiry is ignored.** An expired entry stays in the list as long as the publisher keeps it in the feed. MeteoAlarm keeps expired entries (405 of 406 on 2026-10-06). After an entry leaves the feed, gone-from-feed retention removes it after ≥24 h (`src/features/feeds/retention.ts`).
-- **Update and Cancel need no special handling for the main publishers.** Each Update is a new entry with a new id, and the superseded entry drops out of the feed. NWS, for example, lists the superseded ids in `cap:parameter expiredReferences`, and the old entry is no longer in the active feed. In FeedFathom, an Update becomes a new unread article. The old article remains until retention removes it. CAP Feeds §2.6 prescribes this append model. It is acceptable for a reader.
+- **Expiry is ignored.** An expired entry stays in the list as long as the publisher keeps it in the feed. MeteoAlarm keeps expired entries (405 of 406 on 2026-10-06). After an entry leaves the feed, gone-from-feed retention removes it only once it has been absent ≥24 h **and** every subscriber who could have seen it has deleted it; reading does not count (`src/features/feeds/retention.ts`). Otherwise only the dormant-subscriber rule removes it.
+- **Superseded and cancelled alerts stay.** Each Update is a new entry with a new id, and the superseded entry drops out of the feed. NWS, for example, lists the superseded ids in `cap:parameter expiredReferences`, and the old entry is no longer in the active feed. In FeedFathom, an Update becomes a new unread article. The old article stays until every subscriber who could have seen it deletes it (or all of them go dormant), so an active reader who keeps it keeps it indefinitely. CAP Feeds §2.6 prescribes this append model for publishers; for a reader it means stale alerts linger unless the user deletes them.
 
 ### Mapping one alert to one article
 
@@ -84,7 +84,7 @@ The mapping works for NWS, DWD and tsunami. It fails in three places:
 ### What it models and how it moves
 
 - DATEX II is the CEN EN 16157 series. It models road situations (`SituationPublication` → `situation` → `situationRecord`, with typed records such as Accident, RoadOrCarriagewayOrLaneManagement and AbnormalTraffic), traffic measurements, travel times, VMS, parking and more ([DATEX II docs: Situation](https://docs.datex2.eu/levels/mastering/situation/)).
-- Version 3 split the content model from the exchange layer, introduced per-topic namespaces, and renamed `D2LogicalModel` to `D2Payload` ([Introducing DATEX II v3](https://repo.datex2.eu/news/introducing-datex-ii-version-3); [v2.3 → v3 conversion](https://docs.datex2.eu/user-guide/Conversionv2_v3/)). The current release is 3.6 ([datex2.eu, 2025-06-11](https://datex2.eu/2025/06/11/now-available-datex-ii-version-3-6/)). DGT already serves a 3.7 profile (below).
+- Version 3 split the content model from the exchange layer, and introduced per-topic namespaces ([v2.3 → v3 conversion](https://docs.datex2.eu/user-guide/Conversionv2_v3/)). The rename of `D2LogicalModel` to `D2Payload` is **unverified** (the former source, repo.datex2.eu, no longer resolves). The current release is 3.7 ([DATEX II docs, Version 3.7](https://docs.datex2.eu/downloads/modelv37/), verified live on 2026-10-06); 3.6 was announced 2025-06-11 ([datex2.eu](https://datex2.eu/2025/06/11/now-available-datex-ii-version-3-6/)). DGT already serves 3.7 (below).
 - Exchange: v2.3 used HTTP GET pull or snapshot pull. "Exchange 2020" defines SOAP web services for snapshot pull, snapshot push, simple push and stateful push ([DATEX II docs, Exchange 2020](https://docs.datex2.eu/v3.3/exchange/2020/information-delivery/index.html)). In practice most open data is a gzipped XML file over plain HTTP.
 - Regulation: Delegated Regulation (EU) [2022/670](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R0670) replaces [2015/962](https://eur-lex.europa.eu/eli/reg_del/2015/962/oj). It requires real-time traffic data on National Access Points in DATEX II, and widens the scope from TEN-T to the whole network in phases ([EC RTTI page](https://transport.ec.europa.eu/transport-themes/smart-mobility/road/its-directive-and-action-plan/safety-related-traffic-information-srti-real-time-traffic-information-rtti_en)). EUR-Lex blocked direct fetching, so the exact article wording is **unverified**.
 
@@ -97,7 +97,7 @@ The mapping works for NWS, DWD and tsunami. It fails in three places:
 | Fintraffic Digitraffic (FI) | `https://tie.digitraffic.fi/api/traffic-message/v1/messages.datex2`, verified live | Open, no key ([Digitraffic road](https://www.digitraffic.fi/en/road-traffic/)). Small (about 4 KB gz for active announcements). Also offers a GeoJSON "Simple JSON" variant. DATEX II 3.7 / 3.5 / 2.2.3. |
 | GDDKiA (PL) | [KPD DATEX profile](https://kpd.gddkia.gov.pl/index.php/en/profile-datex/) | DATEX II 3.4 via the KPD interface. The page links to registration, so registration looks required (**unverified**). Separately, `https://www.archiwum.gddkia.gov.pl/dane/zima_html/utrdane.xml` (verified live) is an open **custom-schema** XML file of 498 obstructions, 530 KB ([GDDKiA dane xml](https://www.gov.pl/web/gddkia/dane-xml)). It is not DATEX. |
 | Trafikverket (SE) | [Trafiklab](https://www.trafiklab.se/api/other-apis/trafikverket/) | API key required. Uses a POST query API (`Situation` object). A separate DATEX II service exists at data.trafikverket.se (**unverified**, search result only). |
-| National Highways (UK) | [NTIS publish services PDF](https://www.trafficengland.com/resources/cms-docs/overview.pdf) | Free but **registration required**. DATEX II is **pushed** to the subscriber's server (search-result summary). The subscribers page now returns 404. **Unverified.** |
+| National Highways (UK) | NTIS publish services (the former overview PDF at trafficengland.com now redirects to a 404) | Free but **registration required**. DATEX II is **pushed** to the subscriber's server (search-result summary). The subscribers page now returns 404. **Unverified.** |
 | BASt / Mobilithek (DE) | not fetched | Commonly described as subscription-based. **Unverified.** |
 
 **RSS/Atom of DATEX II: none found.** No checked publisher offers DATEX II as RSS or Atom, and the standard defines no syndication binding. The human-facing traffic feeds checked do not cover incidents either. Traffic Scotland's `https://www.traffic.gov.scot/rss.xml` (verified live) carries 4 news items, and the legacy incidents RSS returns 404.
@@ -110,14 +110,14 @@ DATEX II does not fit:
 - **No text:** records are coded enums plus location references (ALERT-C, linear references, GML), with human text only sometimes present (114 `generalPublicComment` in 1506 NDW records).
 - **Location:** making the data useful needs geometry and road-network filtering.
 - **Access:** several national publishers need registration, keys or push endpoints.
-- **Volume:** the gzip sizes alone exceed FeedFathom's feed budget. Google's CAP guidance caps a feed at 900 KB, for comparison.
+- **Volume is not the barrier.** The 4.4 MB NDW and 8.1 MB DGT snapshots fit under FeedFathom's 24 MiB response limit (`maximumBodyBytes` in `src/platform/http/http-cache-store.ts`). The barriers are the snapshot-replace semantics and the coded, text-poor content above.
 
 ## 3. Fit with FeedFathom
 
 What a user would realistically subscribe to:
 
 - their national weather-warning Atom (DWD, MeteoAlarm for their country);
-- NWS for their state or zone;
+- NWS for their state or a point (`alerts.atom?area=` or `?point=`);
 - NAAD;
 - perhaps EA flood alerts.
 
@@ -127,8 +127,8 @@ Required behaviour, from most to least important:
 
 1. **Hide expired and Test entries.** Without this, MeteoAlarm is unusable (405 of 406 entries already expired).
 2. **Show severity, area and validity in the body** for feeds without a summary (MeteoAlarm, EA, FEMA).
-3. **Area filter.** Use the publisher's own URL filters first (NWS `point`, `zone`, `area`). An in-app filter only matters for per-country feeds (MeteoAlarm, DWD).
-4. **Update and Cancel** need no edit/retire logic. Publishers already emit new entries and drop old ones, and retention removes what leaves the feed. Retiring an article in place would need a CAP-identifier ↔ guid mapping. That mapping differs per publisher (NWS guid = URL that contains the identifier; MeteoAlarm guid = per-area index URL), so it is not worth building.
+3. **Area filter.** Use the publisher's own URL filters first (NWS `point`, `area`; the `zone` filter returns GeoJSON with FeedFathom's Accept header). An in-app filter only matters for per-country feeds (MeteoAlarm, DWD).
+4. **Update and Cancel.** Publishers already emit new entries and drop old ones, but retention does not remove what leaves the feed while any subscriber who could have seen it keeps it, so superseded alerts stay until the user deletes them. Retiring an article in place would need a CAP-identifier ↔ guid mapping. That mapping differs per publisher (NWS guid = URL that contains the identifier; MeteoAlarm guid = per-area index URL), so it is not worth building.
 
 ## 4. Recommendation, cheapest first
 
@@ -148,7 +148,7 @@ Add a short user-facing list of the feed URLs that work. The most important item
    - `src/features/feeds/feed-parser.ts` (`parseGenericFeed` attaches the extracted fields);
    - `src/features/feeds/feed-mapper.ts` (`mapFeedItemToArticle` renders the fields and filters expired entries; preview uses the same path).
 
-   Ceiling: an article stored before it expired stays until gone-from-feed retention removes it. Hiding it at read time would need an `expires_at` column (`src/platform/db/schemas/articles.ts` plus a migration plus `article-data-service.ts`), about 4 h more.
+   Ceiling: an article stored before it expired stays until every subscriber who could have seen it deletes it (see §1). Hiding it at read time would need an `expires_at` column (`src/platform/db/schemas/articles.ts` plus a migration plus `article-data-service.ts`), about 4 h more.
 2. **Dereference the linked CAP XML** for link-only feeds such as EA and FEMA (+6–10 h). One extra GET per **new, unexpired** guid through `HttpClient`. The per-host rate limiter makes fetching hundreds of entries per poll slow, so only new ones may be fetched, which needs an existing-guid lookup in `article-data-service.ts`. Only worth it if users ask for EA or IPAWS.
 3. Cancel/Update retirement: **skip** (reasons in §3).
 
