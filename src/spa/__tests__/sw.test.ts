@@ -471,6 +471,36 @@ test("a body is fetched again once the feed rewrites its article", async () => {
   ]);
 });
 
+test("an outdated body stays readable when its replacement fails", async () => {
+  let failing = false;
+  const sw = loadServiceWorker((path) =>
+    failing ? new Response(null, { status: 503 }) : articleNetwork(path),
+  );
+  await sw.keepOffline([2]);
+  failing = true;
+  await sw.keepOffline([offlineRow(2, { updatedAt: new Date().toJSON() })]);
+  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=2"]);
+});
+
+test("rows posted before a sign-in are dropped, even queued behind a download", async () => {
+  let answer: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (method === "POST") return Response.json({ sid: "s" });
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(articleNetwork(path));
+    });
+  });
+  const first = sw.keepOffline([2]);
+  await settle();
+  const queued = sw.keepOffline([3]);
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  answer?.();
+  await Promise.all([first, queued]);
+  expect([...sw.entries.keys()]).toEqual([]);
+});
+
 test("an older sync can't prune what a newer one keeps", async () => {
   const sw = loadServiceWorker(articleNetwork);
   void sw.keepOffline([1]);
@@ -497,16 +527,28 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
           { type: "source", uid: "3" },
         ],
       });
+    if (path === "/api/article?article=4")
+      return new Response(null, { status: 404 });
     return method === "POST" ? Response.json([]) : articleNetwork(path);
   });
   await sw.loadTree();
   const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toJSON();
+  // 4's body never arrives, and 5 is removed offline: neither is listed.
   await sw.keepOffline([
     offlineRow(1),
     offlineRow(2, { publishedAt: old }),
     offlineRow(3, { sourceId: 4 }),
+    offlineRow(5),
+    offlineRow(4),
   ]);
   online = false;
+  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/articles`, {
+      body: JSON.stringify({ removedArticleIdList: [5] }),
+      method: "DELETE",
+    }),
+  ).response;
   const list = async (body: object) => {
     const { background, response } = sw.dispatch(
       new Request(`${ORIGIN}/api/articles`, {

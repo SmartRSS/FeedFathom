@@ -548,8 +548,10 @@ async function anyVisibleClient() {
   return clients.some((client) => client.visibilityState === "visible");
 }
 
-async function syncOfflineArticles(sync, articles) {
-  const generation = accountChanges;
+// `generation` is the account count when the page posted the rows, so rows
+// queued behind a sign-in or logout are dropped rather than written into the
+// next account's cache.
+async function syncOfflineArticles(sync, generation, articles) {
   const current = () => sync === offlineSyncs && generation === accountChanges;
   if (!current()) return;
   const cache = await caches.open(API_CACHE);
@@ -563,13 +565,14 @@ async function syncOfflineArticles(sync, articles) {
     .map((request) => new URL(request.url))
     .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH);
   const have = new Set();
-  // Read, removed and aged-out articles are simply missing from the list.
+  // Read, removed and aged-out articles are simply missing from the list. An
+  // outdated body stays readable until its replacement lands.
   await Promise.all(
     stored.map(async (url) => {
       const id = url.searchParams.get("article");
+      if (!versions.has(id)) return cache.delete(offlineArticleKey(id));
       const body = await cache.match(offlineArticleKey(id));
       if (versions.get(id) === body?.headers.get(OFFLINE_VERSION)) have.add(id);
-      else await cache.delete(offlineArticleKey(id));
     }),
   );
   const missing = [...versions.keys()].filter((id) => !have.has(id));
@@ -604,9 +607,10 @@ self.addEventListener("message", (event) => {
   if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
     return;
   const sync = ++offlineSyncs;
+  const generation = accountChanges;
   const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
   offlineQueue = offlineQueue
-    .then(() => syncOfflineArticles(sync, articles))
+    .then(() => syncOfflineArticles(sync, generation, articles))
     .catch(() => {});
   event.waitUntil(offlineQueue);
 });
@@ -627,8 +631,23 @@ function findFolder(nodes, uid) {
   return undefined;
 }
 
+// Articles this account removed offline, still waiting to replay.
+async function queuedRemovals() {
+  const account = await cachedAccount();
+  const removals = (await queueAll()).filter(
+    ({ value }) =>
+      value.account === account &&
+      value.method === "DELETE" &&
+      new URL(value.url).pathname === "/api/articles",
+  );
+  return new Set(
+    removals.flatMap(({ value }) => JSON.parse(value.body).removedArticleIdList),
+  );
+}
+
 // The unread list offline, answered from the rows the last sync kept, scoped
-// the way the server scopes it. Undefined, and so a network error, for what
+// the way the server scopes it, and only those whose body is stored and that
+// weren't removed offline since. Undefined, and so a network error, for what
 // those rows can't answer: other filters, and search.
 async function offlineArticleList(request) {
   const cache = await caches.open(API_CACHE);
@@ -651,7 +670,18 @@ async function offlineArticleList(request) {
     const sources = new Set(folder ? treeSourceIds(folder) : body.sources);
     inScope = (row) => sources.has(row.sourceId);
   }
-  return Response.json((await stored.json()).filter(inScope));
+  const bodies = new Set(
+    (await cache.keys())
+      .map((key) => new URL(key.url))
+      .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH)
+      .map((url) => Number(url.searchParams.get("article"))),
+  );
+  const removed = await queuedRemovals().catch(() => new Set());
+  return Response.json(
+    (await stored.json()).filter(
+      (row) => inScope(row) && bodies.has(row.id) && !removed.has(row.id),
+    ),
+  );
 }
 
 async function articleList(request) {
