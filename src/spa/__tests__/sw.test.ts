@@ -592,6 +592,14 @@ test("rows another tab listed earlier don't replace newer ones", async () => {
   ]);
 });
 
+test("a listing in flight when the option goes off can't undo it", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  const inFlight = await sw.listOffline();
+  await sw.keepOffline([]);
+  await sw.keepOffline([2], inFlight);
+  expect([...sw.entries.keys()]).toEqual([]);
+});
+
 test("switching off clears at once, even behind a stalled download", async () => {
   let stall = false;
   const sw = loadServiceWorker((path, method) => {
@@ -654,10 +662,11 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
       method: "DELETE",
     }),
   ).response;
-  const list = async (body: object) => {
+  const list = async (body: object, headers: Record<string, string> = {}) => {
     const { background, response } = sw.dispatch(
       new Request(`${ORIGIN}/api/articles`, {
         body: JSON.stringify(body),
+        headers,
         method: "POST",
       }),
     );
@@ -671,6 +680,14 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   // A page loaded online continues after its cursor.
   expect(await list({ cursor: 1, sources: [3] })).toEqual([2]);
   expect(await list({ cursor: 99, sources: [3] })).toEqual([]);
+  // A cursor that has left the kept rows is placed by its publishedAt.
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toJSON();
+  expect(
+    await list(
+      { cursor: 99, sources: [3] },
+      { "X-Cursor-Published-At": dayAgo },
+    ),
+  ).toEqual([2]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 

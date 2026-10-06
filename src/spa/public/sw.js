@@ -635,6 +635,9 @@ self.addEventListener("message", (event) => {
     if (listing?.generation !== generation || listing.order < offlineApplied)
       return;
     order = listing.order;
+  } else {
+    // No listing in flight may undo "off".
+    offlineListings.clear();
   }
   offlineApplied = order;
   const sync = ++offlineSyncs;
@@ -688,15 +691,23 @@ async function offlineArticleList(request) {
   if (!stored) return undefined;
   const body = await request.json();
   if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
-  // Kept rows are in the server's order, so a page continues after its
-  // cursor -- whether the page before came from here or from the network --
-  // and a cursor outside them has nothing after it here.
+  // A page continues with the rows after its cursor in the server's order,
+  // newest first -- whether the page before came from here or the network.
+  // The page sends the cursor's publishedAt, which places it even once it
+  // has left the kept rows, read or removed since.
   const rows = await stored.json();
-  const start =
-    body.cursor === undefined
-      ? 0
-      : rows.findIndex((row) => row.id === body.cursor) + 1;
-  if (body.cursor !== undefined && start === 0) return Response.json([]);
+  let after = () => true;
+  if (body.cursor !== undefined) {
+    const at = Date.parse(
+      rows.find((row) => row.id === body.cursor)?.publishedAt ??
+        request.headers.get("X-Cursor-Published-At"),
+    );
+    if (Number.isNaN(at)) return Response.json([]);
+    after = (row) => {
+      const published = Date.parse(row.publishedAt);
+      return published < at || (published === at && row.id < body.cursor);
+    };
+  }
   let inScope;
   if (body.view === "today") {
     const since = Date.now() - 24 * 60 * 60 * 1000;
@@ -719,9 +730,12 @@ async function offlineArticleList(request) {
   const removed = await queuedRemovals().catch(() => new Set());
   return Response.json(
     rows
-      .slice(start)
       .filter(
-        (row) => inScope(row) && bodies.has(row.id) && !removed.has(row.id),
+        (row) =>
+          after(row) &&
+          inScope(row) &&
+          bodies.has(row.id) &&
+          !removed.has(row.id),
       )
       // The list never asks for revisions (see articlesRequest).
       .map(({ revision: _revision, ...row }) => row),

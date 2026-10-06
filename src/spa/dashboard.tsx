@@ -212,7 +212,9 @@ export function Dashboard(props: {
   // neither blocks the new list's next page nor, when it settles late, clears
   // that page's loading state.
   let loadingMoreSelection: SupersessionToken | undefined;
-  let articleCursor: number | undefined;
+  // The last row loaded; its publishedAt places it in the offline list (#992)
+  // once it has left the kept rows.
+  let articleCursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   // Selectors notify only the rows whose state flips, not every row in a
@@ -846,7 +848,7 @@ export function Dashboard(props: {
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id;
+      articleCursor = nextArticles.at(-1);
       // A stale snapshot (article gone, list refilled) degrades to row 0 --
       // the normal boot path -- without any error surface.
       const restoredIndex = restore
@@ -945,19 +947,24 @@ export function Dashboard(props: {
     try {
       const nextArticles = await api("/articles", articlesResponse, {
         body: JSON.stringify({
-          cursor,
+          cursor: cursor.id,
           filter: articleFilter(),
           ...scope,
           ...(today ? { view: "today" } : {}),
           ...(search ? { query: search } : {}),
         }),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(offlineUnreadEnabled() === "on"
+            ? { "X-Cursor-Published-At": cursor.publishedAt }
+            : {}),
+        },
         method: "POST",
         signal: controller.signal,
       });
       if (!selectionGuard.isCurrent(selection)) return;
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id ?? articleCursor;
+      articleCursor = nextArticles.at(-1) ?? articleCursor;
       if (!nextArticles.length) return;
       setArticles((current) => [...current, ...nextArticles]);
       topUpArticles();
