@@ -144,14 +144,13 @@ export const capAlerts = (text: string): (CapAlert | undefined)[] => {
   // Bun.XML groups siblings by tag, so entries spelled two ways (item and
   // rss:item) lose their relative order.
   if (new Set(entries.map((entry) => entry.name)).size > 1) return [];
-  // A feed whose entries are in no CAP namespace scope merely mentions it.
-  if (
-    !entries.some(({ scope }) =>
-      Object.values(scope).some((uri) => capNamespaces.has(uri)),
-    )
-  )
-    return [];
-  return entries.map(readAlert);
+  // An entry outside CAP namespace scope merely mentions it, as
+  // parseXmlFeed also judges per entry.
+  return entries.map((entry) =>
+    Object.values(entry.scope).some((uri) => capNamespaces.has(uri))
+      ? readAlert(entry)
+      : undefined,
+  );
 };
 
 /** Gives each parsed item whose entry carries CAP fields a `cap` property. */
