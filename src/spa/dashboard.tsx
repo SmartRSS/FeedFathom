@@ -1463,6 +1463,11 @@ export function Dashboard(props: {
     // Best-effort: opening the article reports its own failure.
     fetchArticle(id);
   }
+  // A press is the click's own request started early, not an extra one, so
+  // neither the opt-in setting nor Save Data applies.
+  function fetchOnPress(id: number) {
+    if (openedArticle()?.id !== id) fetchArticle(id);
+  }
   // Prefetch the articles either side of the one just opened (#716, #988),
   // so keyboard navigation into them feels instant. Feed mode only --
   // Reader modes fetch through the extension, so there is nothing server-
@@ -2143,7 +2148,7 @@ export function Dashboard(props: {
                       href={safeArticleUrl(article.url, window.location.href)}
                       // Starts the GET before the click lands; open() then
                       // awaits the same request.
-                      onPointerDown={() => prefetchArticle(article.id)}
+                      onPointerDown={() => fetchOnPress(article.id)}
                       onPointerEnter={() => scheduleHoverPrefetch(article.id)}
                       onPointerLeave={() => clearTimeout(hoverPrefetchTimer)}
                       onClick={(event) => {
