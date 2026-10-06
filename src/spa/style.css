@@ -488,8 +488,13 @@ a {
   position: relative;
   display: grid;
   grid-template-columns: 25% 25% 50%;
+  /* viewport-fit=cover lets an installed PWA draw under the status and
+     navigation bars, which swallowed the toolbars; the insets keep them in
+     the visible area, and dvh tracks it rather than the largest viewport. */
   height: 100vh;
-  padding: 0;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
   overflow: hidden;
 }
 
