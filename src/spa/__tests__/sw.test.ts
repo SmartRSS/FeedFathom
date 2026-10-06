@@ -127,6 +127,7 @@ const loadServiceWorker = (
   const requests: string[] = [];
   const messages: unknown[] = [];
   runInNewContext(source, {
+    AbortController,
     Headers,
     Response,
     URL,
@@ -145,7 +146,15 @@ const loadServiceWorker = (
       const method =
         init?.method ?? (typeof input === "string" ? "GET" : input.method);
       requests.push(method === "GET" ? path : `${method} ${path}`);
-      return network(path, method);
+      const { signal } = init ?? {};
+      if (!signal) return network(path, method);
+      // An aborted request rejects even while the network holds it.
+      const aborted = new Promise<never>((_resolve, reject) =>
+        signal.addEventListener("abort", () =>
+          reject(new DOMException("Aborted", "AbortError")),
+        ),
+      );
+      return Promise.race([network(path, method), aborted]);
     },
     indexedDB: queue.indexedDB,
     self: {
@@ -569,6 +578,32 @@ test("rows from before a sign-in don't stop the current account's downloads", as
   answer?.();
   await current;
   expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
+});
+
+test("rows another tab listed earlier don't replace newer ones", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  const earlier = await sw.listOffline();
+  const later = await sw.listOffline();
+  await sw.keepOffline([1, 2], later);
+  await sw.keepOffline([1], earlier);
+  expect(storedBodies(sw.entries)).toEqual([
+    "/sw-offline-article?article=1",
+    "/sw-offline-article?article=2",
+  ]);
+});
+
+test("switching off clears at once, even behind a stalled download", async () => {
+  let stall = false;
+  const sw = loadServiceWorker((path, method) => {
+    if (stall && method === "GET") return new Promise<Response>(() => {});
+    return method === "POST" ? Response.json([]) : articleNetwork(path);
+  });
+  await sw.keepOffline([1]);
+  stall = true;
+  void sw.keepOffline([1, 3]);
+  await settle();
+  await sw.keepOffline([]);
+  expect([...sw.entries.keys()]).toEqual([]);
 });
 
 test("an older sync can't prune what a newer one keeps", async () => {

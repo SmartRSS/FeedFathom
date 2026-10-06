@@ -551,15 +551,20 @@ async function anyVisibleClient() {
 // The page's sync tags its list requests with a token; this records the
 // account count when each token's first request passed through, so rows
 // listed before a sign-in or logout -- even one in another tab -- are
-// dropped rather than written into the next account's cache.
+// dropped rather than written into the next account's cache. It records the
+// listing's order too: rows listed before the last applied ones, by another
+// tab, are older news and dropped.
 const OFFLINE_SYNC_HEADER = "X-Offline-Sync";
 const offlineListings = new Map();
+let offlineListingOrder = 0;
+let offlineApplied = 0;
+let offlineDownloads = new AbortController();
 // ponytail: a few tabs' syncs at once; the oldest token is forgotten past
 // this, and its rows dropped like any unknown token's.
 const OFFLINE_LISTINGS_LIMIT = 16;
 
 // `generation` is that count for the posted rows.
-async function syncOfflineArticles(sync, generation, articles) {
+async function syncOfflineArticles(sync, generation, articles, signal) {
   const current = () => sync === offlineSyncs && generation === accountChanges;
   const cache = await caches.open(API_CACHE);
   // Checked after the open: one that resolves after a sign-in hands back the
@@ -595,6 +600,7 @@ async function syncOfflineArticles(sync, generation, articles) {
       // eslint-disable-next-line no-await-in-loop -- throttled on purpose
       const response = await fetch(`/api/article?article=${id}`, {
         credentials: "same-origin",
+        signal,
       });
       if (!response.ok) return;
       const headers = new Headers(response.headers);
@@ -617,19 +623,27 @@ self.addEventListener("message", (event) => {
   if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
     return;
   const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
-  // Rows count from when the page started listing them. Switching the option
-  // off posts no token: the device-wide setting clears whoever is signed in.
-  let generation = accountChanges;
+  // Rows count from when the page started listing them, and are rejected
+  // before the count moves, so stale rows can't stop the current account's
+  // downloads. Switching the option off posts no token: the device-wide
+  // setting clears whoever is signed in, and outranks every listing so far.
+  const generation = accountChanges;
+  let order = offlineListingOrder;
   if (data.token !== undefined) {
-    generation = offlineListings.get(data.token);
+    const listing = offlineListings.get(data.token);
     offlineListings.delete(data.token);
+    if (listing?.generation !== generation || listing.order < offlineApplied)
+      return;
+    order = listing.order;
   }
-  // Rejected before the count moves, so stale rows can't stop the current
-  // account's downloads.
-  if (generation !== accountChanges) return;
+  offlineApplied = order;
   const sync = ++offlineSyncs;
+  // A stalled download would otherwise hold the queue, and a clear behind it.
+  offlineDownloads.abort();
+  offlineDownloads = new AbortController();
+  const { signal } = offlineDownloads;
   offlineQueue = offlineQueue
-    .then(() => syncOfflineArticles(sync, generation, articles))
+    .then(() => syncOfflineArticles(sync, generation, articles, signal))
     .catch(() => {});
   event.waitUntil(offlineQueue);
 });
@@ -717,7 +731,10 @@ async function offlineArticleList(request) {
 async function articleList(request) {
   const token = request.headers.get(OFFLINE_SYNC_HEADER);
   if (token && !offlineListings.has(token)) {
-    offlineListings.set(token, accountChanges);
+    offlineListings.set(token, {
+      generation: accountChanges,
+      order: ++offlineListingOrder,
+    });
     if (offlineListings.size > OFFLINE_LISTINGS_LIMIT)
       offlineListings.delete(offlineListings.keys().next().value);
   }
