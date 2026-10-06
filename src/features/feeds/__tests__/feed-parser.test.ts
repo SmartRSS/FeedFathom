@@ -174,6 +174,23 @@ describe("entries sharing an id", () => {
     ).toEqual(["x", "x", "y"]);
   });
 
+  test("treats a feed that only mentions the CAP namespace as ordinary", () => {
+    const [article] = articlesOf(`<feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>post</id><title>CAP</title>
+        <content type="html">&lt;cap:alert xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"&gt;</content>
+      </entry>
+    </feed>`);
+    expect(article?.guid).toBe("post");
+  });
+
+  test("treats a CAP namespace declared on an RSS item as CAP", () => {
+    expect(
+      guidsOf(`<rss><channel>
+        <item xmlns:c="urn:oasis:names:tc:emergency:cap:1.1"><guid>x</guid><c:event>E</c:event></item>
+      </channel></rss>`),
+    ).not.toEqual(["x"]);
+  });
+
   test("tells CAP entries apart by xml:lang before the language category", () => {
     expect(capFeedGuids("de")).not.toEqual(capFeedGuids("fr"));
   });

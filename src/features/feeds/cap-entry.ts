@@ -25,12 +25,27 @@ export const capAlertSchema = Type.Object(
 export type CapAlert = Static<typeof capAlertSchema>;
 
 const capNamespace = /urn:oasis:names:tc:emergency:cap:1\.[12]/u;
-/** True for a feed that declares the CAP namespace. */
-export const isCapFeed = (text: string): boolean => capNamespace.test(text);
+/**
+ * A cheap pre-filter: false means the feed cannot be a CAP feed. True only
+ * means the URI appears somewhere, which article content can also do.
+ */
+export const mentionsCapNamespace = (text: string): boolean =>
+  capNamespace.test(text);
 const capNamespaces = new Set([
   "urn:oasis:names:tc:emergency:cap:1.1",
   "urn:oasis:names:tc:emergency:cap:1.2",
 ]);
+const isNamespaceDeclaration = (name: string) =>
+  name === "xmlns" || name.startsWith("xmlns:");
+
+/** True when the attributes declare the CAP namespace under some prefix. */
+export const declaresCapNamespace = (
+  attributes: Readonly<Record<string, string>>,
+): boolean =>
+  Object.entries(attributes).some(
+    ([name, value]) =>
+      isNamespaceDeclaration(name) && capNamespaces.has(value.trim()),
+  );
 
 /** Namespace URI per prefix in scope; "" is the default namespace. */
 type Scope = Readonly<Record<string, string>>;
@@ -105,7 +120,7 @@ const readAlert = (entry: Node): CapAlert | undefined => {
  * parsing, for a non-CAP feed.
  */
 export const capAlerts = (text: string): (CapAlert | undefined)[] => {
-  if (!isCapFeed(text)) return [];
+  if (!mentionsCapNamespace(text)) return [];
   let document: Node;
   try {
     document = { name: "", node: parseXml(text), scope: {} };
@@ -129,6 +144,13 @@ export const capAlerts = (text: string): (CapAlert | undefined)[] => {
   // Bun.XML groups siblings by tag, so entries spelled two ways (item and
   // rss:item) lose their relative order.
   if (new Set(entries.map((entry) => entry.name)).size > 1) return [];
+  // A feed whose entries are in no CAP namespace scope merely mentions it.
+  if (
+    !entries.some(({ scope }) =>
+      Object.values(scope).some((uri) => capNamespaces.has(uri)),
+    )
+  )
+    return [];
   return entries.map(readAlert);
 };
 

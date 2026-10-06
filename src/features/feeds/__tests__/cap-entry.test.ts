@@ -49,6 +49,13 @@ describe("capAlerts", () => {
     ]);
   });
 
+  test("reads nothing from a feed that only mentions the namespace", () => {
+    const atom = `<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+      <content type="html">&lt;cap:event xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"&gt;</content>
+    </entry></feed>`;
+    expect(capAlerts(atom)).toEqual([]);
+  });
+
   test("reads RSS items, in order, under any namespace prefix", () => {
     const rss = `<rss xmlns:c="urn:oasis:names:tc:emergency:cap:1.1"><channel>
       <item><title>Plain</title></item>
