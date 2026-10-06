@@ -500,6 +500,10 @@ async function trimArticles(cache) {
 
 async function recentArticleFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+  const downloaded = await cache.match(
+    offlineArticleKey(new URL(request.url).searchParams.get("article")),
+  );
+  if (downloaded) return downloaded;
   const cached = await cache.match(request);
   const fetchedAt = Number(cached?.headers.get(FETCHED_AT));
   if (cached && Date.now() - fetchedAt < ARTICLE_FRESH_MS) return cached;
@@ -514,6 +518,248 @@ async function recentArticleFirst(request, cacheName) {
     return response;
   } catch (error) {
     if (cached) return cached;
+    throw error;
+  }
+}
+
+// Unread bodies downloaded for offline reading (#992). Their keys sit apart
+// from /api/article, so trimArticles leaves them alone and recentArticleFirst
+// serves them without a round trip. They live in the API cache, so a sign-in
+// or logout empties them with the rest of the account's data. The page owns
+// the setting and the selection: each sync posts the unread rows it wants
+// kept, and an empty list when the option is switched off. The rows are kept
+// too, as the article list offline (offlineArticleList).
+const OFFLINE_ARTICLE_PATH = "/sw-offline-article";
+const OFFLINE_LIST_KEY = "/sw-offline-articles";
+const offlineArticleKey = (id) => `${OFFLINE_ARTICLE_PATH}?article=${id}`;
+// The row's revision when the body was fetched: a feed that rewrites the
+// article bumps it, and the next sync fetches the body again.
+const OFFLINE_VERSION = "X-SW-Version";
+
+// Bumped per sync, so a newer list -- or the option going off -- stops the
+// downloads of an older one.
+let offlineSyncs = 0;
+// Syncs run one after another, so an older one can't prune what a newer one
+// keeps.
+let offlineQueue = Promise.resolve();
+
+async function anyVisibleClient() {
+  const clients = await self.clients.matchAll({ type: "window" });
+  return clients.some((client) => client.visibilityState === "visible");
+}
+
+// The page's sync tags its list requests with a token; this records the
+// account count when each token's first request passed through, so rows
+// listed before a sign-in or logout -- even one in another tab -- are
+// dropped rather than written into the next account's cache. It records the
+// listing's order too: rows listed before the last applied ones, by another
+// tab, are older news and dropped.
+const OFFLINE_SYNC_HEADER = "X-Offline-Sync";
+const offlineListings = new Map();
+let offlineListingOrder = 0;
+let offlineApplied = 0;
+let offlineDownloads = new AbortController();
+// ponytail: a few tabs' syncs at once; the oldest token is forgotten past
+// this, and its rows dropped like any unknown token's.
+const OFFLINE_LISTINGS_LIMIT = 16;
+
+// `generation` is that count for the posted rows.
+async function syncOfflineArticles(sync, generation, articles, signal) {
+  const current = () => sync === offlineSyncs && generation === accountChanges;
+  const cache = await caches.open(API_CACHE);
+  // Checked after the open: one that resolves after a sign-in hands back the
+  // next account's cache.
+  if (!current()) return;
+  await (articles.length > 0
+    ? cache.put(OFFLINE_LIST_KEY, Response.json(articles))
+    : cache.delete(OFFLINE_LIST_KEY));
+  const versions = new Map(
+    articles.map((row) => [String(row.id), String(row.revision)]),
+  );
+  const stored = (await cache.keys())
+    .map((request) => new URL(request.url))
+    .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH);
+  const have = new Set();
+  // Read, removed and aged-out articles are simply missing from the list. An
+  // outdated body stays readable until its replacement lands.
+  await Promise.all(
+    stored.map(async (url) => {
+      const id = url.searchParams.get("article");
+      if (!versions.has(id)) return cache.delete(offlineArticleKey(id));
+      const body = await cache.match(offlineArticleKey(id));
+      if (versions.get(id) === body?.headers.get(OFFLINE_VERSION)) have.add(id);
+    }),
+  );
+  const missing = [...versions.keys()].filter((id) => !have.has(id));
+  // A hidden tab, a failed request or going offline ends the run; the page's
+  // next sync picks up whatever is still missing.
+  const download = async () => {
+    while (current() && (await anyVisibleClient())) {
+      const id = missing.shift();
+      if (id === undefined) return;
+      // eslint-disable-next-line no-await-in-loop -- throttled on purpose
+      const response = await fetch(`/api/article?article=${id}`, {
+        credentials: "same-origin",
+        signal,
+      });
+      if (!response.ok) return;
+      const headers = new Headers(response.headers);
+      headers.set(OFFLINE_VERSION, versions.get(id));
+      const versioned = new Response(response.body, {
+        headers,
+        status: response.status,
+      });
+      // eslint-disable-next-line no-await-in-loop -- throttled on purpose
+      if (current()) await cache.put(offlineArticleKey(id), versioned);
+    }
+  };
+  // ponytail: two downloads at a time, so a sync never crowds out the
+  // article the reader opens meanwhile; tune if a large backlog drags.
+  await Promise.allSettled([download(), download()]);
+}
+
+self.addEventListener("message", (event) => {
+  const { data } = event;
+  if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
+    return;
+  const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
+  // Rows count from when the page started listing them, and are rejected
+  // before the count moves, so stale rows can't stop the current account's
+  // downloads. Switching the option off posts no token: the device-wide
+  // setting clears whoever is signed in, and outranks every listing so far.
+  const generation = accountChanges;
+  let order = offlineListingOrder;
+  if (data.token !== undefined) {
+    const listing = offlineListings.get(data.token);
+    offlineListings.delete(data.token);
+    if (listing?.generation !== generation || listing.order < offlineApplied)
+      return;
+    order = listing.order;
+  } else {
+    // No listing in flight may undo "off".
+    offlineListings.clear();
+  }
+  offlineApplied = order;
+  const sync = ++offlineSyncs;
+  // A stalled download would otherwise hold the queue, and a clear behind it.
+  offlineDownloads.abort();
+  offlineDownloads = new AbortController();
+  const { signal } = offlineDownloads;
+  offlineQueue = offlineQueue
+    .then(() => syncOfflineArticles(sync, generation, articles, signal))
+    .catch(() => {});
+  event.waitUntil(offlineQueue);
+});
+
+function treeSourceIds(node) {
+  return node.type === "source"
+    ? [Number(node.uid)]
+    : (node.children ?? []).flatMap(treeSourceIds);
+}
+
+function findFolder(nodes, uid) {
+  for (const node of nodes) {
+    if (node.type !== "folder") continue;
+    if (node.uid === uid) return node;
+    const nested = findFolder(node.children ?? [], uid);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+// Articles this account removed offline, still waiting to replay.
+async function queuedRemovals() {
+  const account = await cachedAccount();
+  const removals = (await queueAll()).filter(
+    ({ value }) =>
+      value.account === account &&
+      value.method === "DELETE" &&
+      new URL(value.url).pathname === "/api/articles",
+  );
+  return new Set(
+    removals.flatMap(({ value }) => JSON.parse(value.body).removedArticleIdList),
+  );
+}
+
+// The unread list offline, answered from the rows the last sync kept, scoped
+// the way the server scopes it, and only those whose body is stored and that
+// weren't removed offline since. Undefined, and so a network error, for what
+// those rows can't answer: other filters, and search.
+async function offlineArticleList(request) {
+  const cache = await caches.open(API_CACHE);
+  const stored = await cache.match(OFFLINE_LIST_KEY);
+  if (!stored) return undefined;
+  const body = await request.json();
+  if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
+  // A page continues with the rows after its cursor in the server's order,
+  // newest first -- whether the page before came from here or the network.
+  // The page sends the cursor's publishedAt, which places it even once it
+  // has left the kept rows, read or removed since.
+  const rows = await stored.json();
+  let after = () => true;
+  if (body.cursor !== undefined) {
+    const at = Date.parse(
+      rows.find((row) => row.id === body.cursor)?.publishedAt ??
+        request.headers.get("X-Cursor-Published-At"),
+    );
+    if (Number.isNaN(at)) return Response.json([]);
+    after = (row) => {
+      const published = Date.parse(row.publishedAt);
+      return published < at || (published === at && row.id < body.cursor);
+    };
+  }
+  let inScope;
+  if (body.view === "today") {
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    inScope = (row) => Date.parse(row.publishedAt) >= since;
+  } else {
+    const tree = await (await cache.match("/api/tree"))?.json();
+    const folder =
+      body.folder === undefined
+        ? undefined
+        : findFolder(tree?.tree ?? [], String(body.folder));
+    const sources = new Set(folder ? treeSourceIds(folder) : body.sources);
+    inScope = (row) => sources.has(row.sourceId);
+  }
+  const bodies = new Set(
+    (await cache.keys())
+      .map((key) => new URL(key.url))
+      .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH)
+      .map((url) => Number(url.searchParams.get("article"))),
+  );
+  const removed = await queuedRemovals().catch(() => new Set());
+  return Response.json(
+    rows
+      .filter(
+        (row) =>
+          after(row) &&
+          inScope(row) &&
+          bodies.has(row.id) &&
+          !removed.has(row.id),
+      )
+      // The list never asks for revisions (see articlesRequest).
+      .map(({ revision: _revision, ...row }) => row),
+  );
+}
+
+async function articleList(request) {
+  const token = request.headers.get(OFFLINE_SYNC_HEADER);
+  // "next" marks a sync's later pages, which register nothing.
+  if (token && token !== "next" && !offlineListings.has(token)) {
+    offlineListings.set(token, {
+      generation: accountChanges,
+      order: ++offlineListingOrder,
+    });
+    if (offlineListings.size > OFFLINE_LISTINGS_LIMIT)
+      offlineListings.delete(offlineListings.keys().next().value);
+  }
+  try {
+    return await fetch(request.clone());
+  } catch (error) {
+    // A sync answered from its own kept rows would only shrink them.
+    if (token) throw error;
+    const offline = await offlineArticleList(request);
+    if (offline) return offline;
     throw error;
   }
 }
@@ -612,6 +858,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") {
     if (url.pathname === "/api/login" || url.pathname === "/api/logout") {
       event.respondWith(changeAccount(request));
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/articles") {
+      event.respondWith(articleList(request));
       return;
     }
     const route = QUEUEABLE_MUTATIONS.find(

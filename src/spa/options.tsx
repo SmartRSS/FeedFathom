@@ -45,7 +45,12 @@ import {
   unreadBadgeEnabled,
   backgroundPollEnabled,
 } from "./news-signal.ts";
-import { prefetchNextEnabled, setPrefetchNext } from "./reading-prefetch.ts";
+import {
+  offlineUnreadEnabled,
+  prefetchNextEnabled,
+  setOfflineUnread,
+  setPrefetchNext,
+} from "./reading-prefetch.ts";
 import { helpDialog } from "./dialog.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
@@ -433,6 +438,21 @@ export function Options(props: {
                 <option value="off">Off</option>
                 <option value="on">
                   On (fetches the next article after you open one)
+                </option>
+              </select>
+            </label>
+            <label>
+              Download unread articles for offline reading
+              <select
+                value={offlineUnreadEnabled()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isOnOff(value)) setOfflineUnread(value);
+                }}
+              >
+                <option value="off">Off</option>
+                <option value="on">
+                  On (keeps up to 500 unread from the last 14 days)
                 </option>
               </select>
             </label>

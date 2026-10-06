@@ -84,8 +84,12 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
   neighbours,
+  offlineArticles,
+  offlineUnreadEnabled,
+  postOfflineArticles,
   prefetchNextEnabled,
   shouldPrefetch,
+  unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
   backgroundPollEnabled,
@@ -208,7 +212,9 @@ export function Dashboard(props: {
   // neither blocks the new list's next page nor, when it settles late, clears
   // that page's loading state.
   let loadingMoreSelection: SupersessionToken | undefined;
-  let articleCursor: number | undefined;
+  // The last row loaded; its publishedAt places it in the offline list (#992)
+  // once it has left the kept rows.
+  let articleCursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   // Selectors notify only the rows whose state flips, not every row in a
@@ -417,6 +423,104 @@ export function Dashboard(props: {
       }
     }
   };
+  // Offline reading (#992): tells the service worker which unread bodies to
+  // keep. Paced by tree loads -- the stream and the poll reload the tree when
+  // articles arrive, and marking read or removing reloads it too -- at most
+  // once a minute, in idle time, and never on Save Data or in a hidden or
+  // offline tab.
+  let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
+  let offlineSyncedAt = 0;
+  const runOfflineSync = () => void syncOfflineArticles(tree());
+  const syncOfflineInIdleTime = () => {
+    clearTimeout(offlineSyncTimer);
+    if (disposed || !authenticated() || offlineUnreadEnabled() !== "on") return;
+    offlineSyncTimer = setTimeout(
+      () => {
+        if (typeof requestIdleCallback === "function")
+          requestIdleCallback(runOfflineSync);
+        else runOfflineSync();
+      },
+      Math.max(0, offlineSyncedAt + 60_000 - Date.now()),
+    );
+  };
+  createEffect(() => {
+    tree();
+    syncOfflineInIdleTime();
+  });
+  // A sync skipped for a hidden or offline tab, or one the worker doesn't
+  // control yet, runs once that changes rather than at the next tree load,
+  // which with background checks off may never come.
+  let offlineSyncSkipped = false;
+  const retrySkippedOfflineSync = () => {
+    if (offlineSyncSkipped && !document.hidden) syncOfflineInIdleTime();
+  };
+  document.addEventListener("visibilitychange", retrySkippedOfflineSync);
+  addEventListener("online", retrySkippedOfflineSync);
+  navigator.serviceWorker?.addEventListener(
+    "controllerchange",
+    retrySkippedOfflineSync,
+  );
+  onCleanup(() => {
+    clearTimeout(offlineSyncTimer);
+    document.removeEventListener("visibilitychange", retrySkippedOfflineSync);
+    removeEventListener("online", retrySkippedOfflineSync);
+    navigator.serviceWorker?.removeEventListener(
+      "controllerchange",
+      retrySkippedOfflineSync,
+    );
+  });
+  // One sync at a time, so a slow one can't post its older list after a
+  // newer one; a tree load during it is picked up by the next.
+  let offlineSyncing = false;
+  async function syncOfflineArticles(nodes: TreeNode[]) {
+    if (disposed || offlineSyncing || !shouldPrefetch(navigatorConnection()))
+      return;
+    offlineSyncSkipped =
+      document.hidden ||
+      !navigator.onLine ||
+      !navigator.serviceWorker?.controller;
+    if (offlineSyncSkipped) return;
+    offlineSyncing = true;
+    offlineSyncedAt = Date.now();
+    const sources = unreadSourceIds(nodes);
+    const rows: ArticleSummary[] = [];
+    let selection = offlineArticles(rows, Date.now());
+    // Lets the worker tell which account these rows were listed under. With
+    // no source unread the one request still goes out -- the server answers
+    // an empty source list without a query -- so even an empty list carries
+    // a token the worker knows.
+    const token = crypto.randomUUID();
+    try {
+      for (;;) {
+        // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
+        const page = await api("/articles", articlesResponse, {
+          body: JSON.stringify({
+            cursor: rows.at(-1)?.id,
+            filter: "unread",
+            revision: true,
+            sources,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            // Only the first page names the token: a later one naming it could
+            // register it afresh, under a newer account, once it was forgotten.
+            "X-Offline-Sync": rows.length === 0 ? token : "next",
+          },
+          method: "POST",
+        });
+        rows.push(...page);
+        selection = offlineArticles(rows, Date.now());
+        if (selection.complete || page.length < articlePageSize) break;
+      }
+    } catch {
+      // Best-effort: the next tree load tries again.
+      return;
+    } finally {
+      offlineSyncing = false;
+    }
+    if (!disposed && offlineUnreadEnabled() === "on")
+      postOfflineArticles(selection.articles, token);
+  }
   async function shareSelected() {
     const article = selected();
     if (!article) return;
@@ -769,7 +873,7 @@ export function Dashboard(props: {
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id;
+      articleCursor = nextArticles.at(-1);
       // A stale snapshot (article gone, list refilled) degrades to row 0 --
       // the normal boot path -- without any error surface.
       const restoredIndex = restore
@@ -868,19 +972,24 @@ export function Dashboard(props: {
     try {
       const nextArticles = await api("/articles", articlesResponse, {
         body: JSON.stringify({
-          cursor,
+          cursor: cursor.id,
           filter: articleFilter(),
           ...scope,
           ...(today ? { view: "today" } : {}),
           ...(search ? { query: search } : {}),
         }),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(offlineUnreadEnabled() === "on"
+            ? { "X-Cursor-Published-At": cursor.publishedAt }
+            : {}),
+        },
         method: "POST",
         signal: controller.signal,
       });
       if (!selectionGuard.isCurrent(selection)) return;
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id ?? articleCursor;
+      articleCursor = nextArticles.at(-1) ?? articleCursor;
       if (!nextArticles.length) return;
       setArticles((current) => [...current, ...nextArticles]);
       topUpArticles();

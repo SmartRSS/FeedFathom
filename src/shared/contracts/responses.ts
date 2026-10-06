@@ -122,6 +122,11 @@ const articleSummaryResponse = Type.Object(
     // Decided by the server, with the same expression the read filter uses,
     // so a row can never render as read that the read view would not list.
     read: Type.Boolean(),
+    // The article's updated_at as Postgres prints it, microseconds and all:
+    // a rewrite can move it by one microsecond, which a JSON date would
+    // lose. Null until a feed first rewrites the article; sent only when the
+    // request asks for it.
+    revision: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     sourceId: id,
     title: Type.String(),
     url: Type.String(),

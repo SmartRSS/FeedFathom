@@ -45,8 +45,8 @@ export async function postArticlesHandler({
           : { folderId: body.folder },
   );
   return json(
-    articles.map((article) =>
-      Object.assign(article, {
+    articles.map(({ revision, ...article }) =>
+      Object.assign(article, body.revision ? { revision } : {}, {
         url: safeArticleUrl(article.url, request.url),
       }),
     ),
