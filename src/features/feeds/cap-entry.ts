@@ -25,6 +25,8 @@ export const capAlertSchema = Type.Object(
 export type CapAlert = Static<typeof capAlertSchema>;
 
 const capNamespace = /urn:oasis:names:tc:emergency:cap:1\.[12]/u;
+/** True for a feed that declares the CAP namespace. */
+export const isCapFeed = (text: string): boolean => capNamespace.test(text);
 const capNamespaces = new Set([
   "urn:oasis:names:tc:emergency:cap:1.1",
   "urn:oasis:names:tc:emergency:cap:1.2",
@@ -103,7 +105,7 @@ const readAlert = (entry: Node): CapAlert | undefined => {
  * parsing, for a non-CAP feed.
  */
 export const capAlerts = (text: string): (CapAlert | undefined)[] => {
-  if (!capNamespace.test(text)) return [];
+  if (!isCapFeed(text)) return [];
   let document: Node;
   try {
     document = { name: "", node: parseXml(text), scope: {} };

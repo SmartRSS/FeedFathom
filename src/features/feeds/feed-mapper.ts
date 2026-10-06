@@ -11,6 +11,7 @@ type FeedMapperItem = {
   content: string | null;
   description: string | null;
   id: string | null;
+  // Set, possibly empty, on every entry of a CAP feed, and only there.
   language?: string;
   published: Date | null;
   title: string | null;
@@ -67,7 +68,7 @@ export type Source = {
   url: string;
 };
 
-const generateArticleGuid = (
+const baseArticleGuid = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
@@ -91,6 +92,22 @@ const generateArticleGuid = (
     .filter(Boolean)
     .join("_");
   return Bun.hash(hashInput).toString(36);
+};
+
+// NAAD lists each alert once per language and per CAP info block, all under
+// one id, and the store keeps one article per guid. A CAP entry's guid
+// therefore also hashes what tells those copies apart. It depends on the
+// entry alone, so it survives its neighbours changing, and identical copies
+// still collapse. Other feeds keep their guids unchanged.
+const generateArticleGuid = (
+  item: FeedMapperItem,
+  parsedFeed: FeedMapperInput,
+  sourceUrl: string,
+): string => {
+  const guid = baseArticleGuid(item, parsedFeed, sourceUrl);
+  if (item.language === undefined) return guid;
+  const entry = Bun.hash([item.language, item.url, item.title].join("\n"));
+  return `${guid}#${entry.toString(36)}`;
 };
 
 // The HTML an article body starts from, before its links are rewritten.
@@ -123,45 +140,6 @@ export const mapFeedItemToArticle = (
         : null,
     url,
   };
-};
-
-// NAAD lists each alert once per language, and once per CAP info block, under
-// one id. The store keeps one article per guid, so entries that share a guid
-// within one fetch get their language appended and, where that still repeats,
-// their occurrence number in feed order. A guid no other entry shares stays
-// as it was, so already-stored articles keep matching.
-export const mapFeedItemsToArticles = (
-  items: readonly FeedMapperItem[],
-  parsedFeed: FeedMapperInput,
-  source: Source,
-  rewriteLinksFunction: (content: string, baseUrl: string) => string,
-  now = Date.now(),
-): ArticlePayload[] => {
-  const mapped = items.map((item) => ({
-    article: mapFeedItemToArticle(
-      item,
-      parsedFeed,
-      source,
-      rewriteLinksFunction,
-      now,
-    ),
-    language: item.language,
-  }));
-  const seen = new Set<string>();
-  const shared = new Set<string>();
-  for (const { article } of mapped) {
-    (seen.has(article.guid) ? shared : seen).add(article.guid);
-  }
-  const occurrences = new Map<string, number>();
-  return mapped.map(({ article, language }) => {
-    if (!shared.has(article.guid)) return article;
-    const base = language ? `${article.guid}#${language}` : article.guid;
-    const occurrence = (occurrences.get(base) ?? 0) + 1;
-    occurrences.set(base, occurrence);
-    return Object.assign(article, {
-      guid: occurrence === 1 ? base : `${base}#${occurrence}`,
-    });
-  });
 };
 
 // CAP feeds keep listing alerts that have expired, and may carry test ones.
@@ -202,16 +180,16 @@ export const mapFeedToPreviewArticles = (
   now = Date.now(),
   items = parsedFeed.items,
 ): FeedPreviewArticle[] => {
-  const current = currentFeedItems(items, now);
-  const articles = mapFeedItemsToArticles(
-    current,
-    parsedFeed,
-    { id: 0, url: sourceUrl },
-    rewriteLinksFunction,
-    now,
-  );
-  return articles.map((article, index) => {
-    const expiresAt = Date.parse(current[index]?.cap?.expires ?? "");
+  const source = { id: 0, url: sourceUrl };
+  return currentFeedItems(items, now).map((item) => {
+    const article = mapFeedItemToArticle(
+      item,
+      parsedFeed,
+      source,
+      rewriteLinksFunction,
+      now,
+    );
+    const expiresAt = Date.parse(item.cap?.expires ?? "");
     return Object.assign(
       {
         author: article.author,

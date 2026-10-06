@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { parseFeed } from "@rowanmanning/feed-parser";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
+  parseXmlFeed,
   validateParsedFeed,
-  withItemLanguages,
 } from "#features/feeds/feed-parser.ts";
 
 const item = {
@@ -105,52 +104,77 @@ describe("feed body encoding detection", () => {
   });
 });
 
+const naadId =
+  "tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026";
+const naad = () =>
+  Bun.file(
+    "src/features/feeds/__tests__/feed-parser-cases/naad-bilingual.xml",
+  ).text();
+const entriesOf = (text: string) => text.match(/<entry>.*?<\/entry>/gsu) ?? [];
+// The feed with its entries replaced by the given ones.
+const withEntries = (text: string, entries: string[]) =>
+  text.replace(/<entry>.*<\/entry>/su, entries.join("\n"));
+const articlesOf = (text: string) =>
+  mapFeedToPreview(
+    parseXmlFeed(text),
+    "https://rss.naad-adna.pelmorex.com/",
+    (content) => content,
+    Date.parse("2026-10-06T08:06:42Z"),
+  ).articles;
+const guidsOf = (text: string) => articlesOf(text).map(({ guid }) => guid);
+const capFeedGuids = (lang: string) =>
+  guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+    <entry xml:lang="${lang}"><id>x</id><category term="language=en"/></entry>
+  </feed>`);
+
 describe("entries sharing an id", () => {
-  test("keeps every language of a NAAD alert as its own article", async () => {
-    const text = await Bun.file(
-      "src/features/feeds/__tests__/feed-parser-cases/naad-bilingual.xml",
-    ).text();
-    const preview = mapFeedToPreview(
-      withItemLanguages(parseFeed(text)),
-      "https://rss.naad-adna.pelmorex.com/",
-      (content) => content,
-      Date.parse("2026-10-06T08:06:42Z"),
+  test("keeps every entry of a NAAD alert as its own article", async () => {
+    const articles = articlesOf(await naad());
+    expect(new Set(articles.map(({ guid }) => guid)).size).toBe(4);
+    expect(articles.every(({ guid }) => guid.startsWith(`${naadId}#`))).toBe(
+      true,
     );
-    const id =
-      "tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026";
-    expect(
-      preview.articles.map(({ guid, publishedAt, title }) => ({
-        guid,
-        publishedAt,
-        title,
-      })),
-    ).toEqual(
-      [
-        { guid: `${id}#en-CA`, title: "squall watch in effect" },
-        {
-          guid: `${id}#fr-CA`,
-          title: "veille de grains en vigueur en vigueur",
-        },
-        { guid: `${id}#en-CA#2`, title: "squall watch ended" },
-        { guid: `${id}#fr-CA#2`, title: "veille de grains terminée" },
-      ].map((article) =>
-        Object.assign(article, {
-          publishedAt: new Date("2026-10-05T10:01:11Z"),
-        }),
-      ),
+    // NAAD entries carry no <published>.
+    expect(articles.map(({ publishedAt }) => publishedAt)).toEqual(
+      Array.from({ length: 4 }, () => new Date("2026-10-05T10:01:11Z")),
     );
   });
 
-  test("reads an entry's xml:lang before its language category", () => {
-    const parsed = withItemLanguages(
-      parseFeed(`<feed xmlns="http://www.w3.org/2005/Atom">
-        <entry xml:lang="de"><id>x</id><category term="language=en"/></entry>
-        <entry><id>x</id></entry>
-      </feed>`),
+  test("keeps each entry's guid when its neighbours change", async () => {
+    const text = await naad();
+    const guids = guidsOf(text);
+    const entries = entriesOf(text);
+    expect(guidsOf(withEntries(text, entries.slice(2)))).toEqual(
+      guids.slice(2),
     );
-    expect(parsed.items.map((entry) => entry.language)).toEqual([
-      "de",
-      undefined,
+    expect(guidsOf(withEntries(text, entries.slice(2, 3)))).toEqual(
+      guids.slice(2, 3),
+    );
+    expect(
+      guidsOf(withEntries(text, [...entries.slice(2), ...entries.slice(0, 2)])),
+    ).toEqual([...guids.slice(2), ...guids.slice(0, 2)]);
+  });
+
+  test("gives identical copies one guid, so they still collapse", async () => {
+    const text = await naad();
+    const first = entriesOf(text).slice(0, 1);
+    expect(guidsOf(withEntries(text, [...first, ...first]))).toEqual([
+      ...guidsOf(text).slice(0, 1),
+      ...guidsOf(text).slice(0, 1),
     ]);
+  });
+
+  test("leaves the guids of a feed without the CAP namespace alone", () => {
+    expect(
+      guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom">
+        <entry xml:lang="en"><id>x</id><title>A</title></entry>
+        <entry xml:lang="fr"><id>x</id><title>B</title></entry>
+        <entry><id>y</id><category term="language=en"/></entry>
+      </feed>`),
+    ).toEqual(["x", "x", "y"]);
+  });
+
+  test("tells CAP entries apart by xml:lang before the language category", () => {
+    expect(capFeedGuids("de")).not.toEqual(capFeedGuids("fr"));
   });
 });

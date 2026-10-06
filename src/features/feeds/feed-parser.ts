@@ -6,10 +6,10 @@ import { type HttpClient } from "#platform/http/http-client.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
-import { attachCapAlerts } from "#features/feeds/cap-entry.ts";
+import { attachCapAlerts, isCapFeed } from "#features/feeds/cap-entry.ts";
 import {
   currentFeedItems,
-  mapFeedItemsToArticles,
+  mapFeedItemToArticle,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
 import {
@@ -120,25 +120,22 @@ export function validateParsedFeed(value: unknown): void {
   }
 }
 
-type XmlFeed = ReturnType<typeof parseFeed>;
-type XmlFeedItem = XmlFeed["items"][number];
-
 /**
- * Gives each entry its `xml:lang`, or else the `language=en-CA` category
- * NAAD uses, as `language`: entries sharing an id are told apart by it.
+ * Parses an RSS or Atom feed. Each entry of a CAP feed also gets its
+ * `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
+ * `language`; see generateArticleGuid.
  */
-export const withItemLanguages = (
-  feed: XmlFeed,
-): Omit<XmlFeed, "items"> & {
-  items: (XmlFeedItem & { language?: string })[];
-} => {
+export const parseXmlFeed = (text: string) => {
+  const feed = parseFeed(text);
+  if (!isCapFeed(text)) return feed;
   for (const item of feed.items) {
     const language =
       item.element.getAttribute("xml:lang") ??
       item.categories
         .find(({ term }) => term.startsWith("language="))
-        ?.term.slice("language=".length);
-    if (language) Object.assign(item, { language });
+        ?.term.slice("language=".length) ??
+      "";
+    Object.assign(item, { language });
   }
   return feed;
 };
@@ -201,14 +198,20 @@ export class FeedParser {
       }
 
       const observedAt = new Date();
-      const articlesToUpsert = mapFeedItemsToArticles(
-        currentFeedItems(parsedFeed.items, observedAt.getTime()),
-        parsedFeed,
-        { id: source.id, url: source.url },
-        rewriteLinks,
+      const articlesToUpsert = currentFeedItems(
+        parsedFeed.items,
         observedAt.getTime(),
-      ).map((article) =>
-        Object.assign(article, { lastSeenInFeedAt: observedAt }),
+      ).map((item) =>
+        Object.assign(
+          mapFeedItemToArticle(
+            item,
+            parsedFeed,
+            { id: source.id, url: source.url },
+            rewriteLinks,
+            observedAt.getTime(),
+          ),
+          { lastSeenInFeedAt: observedAt },
+        ),
       );
       // batchUpsertArticles commits batch by batch, so a later failure leaves
       // earlier articles committed. Recompute either way, then re-raise.
@@ -399,7 +402,7 @@ export class FeedParser {
       ? parseJsonFeed(text)
       : isMicroformatHtml(text, contentType)
         ? parseMicroformatFeed(text, finalUrl)
-        : withItemLanguages(parseFeed(text));
+        : parseXmlFeed(text);
     validateParsedFeed(parsedFeed);
     attachCapAlerts(text, parsedFeed.items);
     return {
