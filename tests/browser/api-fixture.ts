@@ -97,9 +97,9 @@ const summary = (item: typeof article, read = false) => ({
   id: item.id,
   publishedAt: item.publishedAt,
   read,
+  revision: null,
   sourceId: item.sourceId,
   title: item.title,
-  updatedAt: item.updatedAt,
   url: item.url,
 });
 

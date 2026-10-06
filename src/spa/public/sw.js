@@ -532,7 +532,7 @@ async function recentArticleFirst(request, cacheName) {
 const OFFLINE_ARTICLE_PATH = "/sw-offline-article";
 const OFFLINE_LIST_KEY = "/sw-offline-articles";
 const offlineArticleKey = (id) => `${OFFLINE_ARTICLE_PATH}?article=${id}`;
-// The row's updatedAt when the body was fetched: a feed that rewrites the
+// The row's revision when the body was fetched: a feed that rewrites the
 // article bumps it, and the next sync fetches the body again.
 const OFFLINE_VERSION = "X-SW-Version";
 
@@ -549,11 +549,14 @@ async function anyVisibleClient() {
 }
 
 // The page's sync tags its list requests with a token; this records the
-// account count when the latest token's first request passed through, so
-// rows listed before a sign-in or logout -- even one in another tab -- are
+// account count when each token's first request passed through, so rows
+// listed before a sign-in or logout -- even one in another tab -- are
 // dropped rather than written into the next account's cache.
 const OFFLINE_SYNC_HEADER = "X-Offline-Sync";
-let offlineListing;
+const offlineListings = new Map();
+// ponytail: a few tabs' syncs at once; the oldest token is forgotten past
+// this, and its rows dropped like any unknown token's.
+const OFFLINE_LISTINGS_LIMIT = 16;
 
 // `generation` is that count for the posted rows.
 async function syncOfflineArticles(sync, generation, articles) {
@@ -564,7 +567,7 @@ async function syncOfflineArticles(sync, generation, articles) {
     ? cache.put(OFFLINE_LIST_KEY, Response.json(articles))
     : cache.delete(OFFLINE_LIST_KEY));
   const versions = new Map(
-    articles.map((row) => [String(row.id), String(row.updatedAt)]),
+    articles.map((row) => [String(row.id), String(row.revision)]),
   );
   const stored = (await cache.keys())
     .map((request) => new URL(request.url))
@@ -612,15 +615,14 @@ self.addEventListener("message", (event) => {
   if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
     return;
   const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
-  // Rows count from when the page started listing them; an empty list only
-  // deletes, so it needs no account.
-  const generation =
-    articles.length === 0
-      ? accountChanges
-      : offlineListing?.token === data.token
-        ? offlineListing.generation
-        : undefined;
-  if (generation === undefined) return;
+  // Rows count from when the page started listing them. Switching the option
+  // off posts no token: the device-wide setting clears whoever is signed in.
+  let generation = accountChanges;
+  if (data.token !== undefined) {
+    generation = offlineListings.get(data.token);
+    offlineListings.delete(data.token);
+    if (generation === undefined) return;
+  }
   const sync = ++offlineSyncs;
   offlineQueue = offlineQueue
     .then(() => syncOfflineArticles(sync, generation, articles))
@@ -708,11 +710,16 @@ async function offlineArticleList(request) {
 
 async function articleList(request) {
   const token = request.headers.get(OFFLINE_SYNC_HEADER);
-  if (token && offlineListing?.token !== token)
-    offlineListing = { generation: accountChanges, token };
+  if (token && !offlineListings.has(token)) {
+    offlineListings.set(token, accountChanges);
+    if (offlineListings.size > OFFLINE_LISTINGS_LIMIT)
+      offlineListings.delete(offlineListings.keys().next().value);
+  }
   try {
     return await fetch(request.clone());
   } catch (error) {
+    // A sync answered from its own kept rows would only shrink them.
+    if (token) throw error;
     const offline = await offlineArticleList(request);
     if (offline) return offline;
     throw error;

@@ -113,11 +113,11 @@ export class ArticlesDataService {
         // Answered by the same expression that filters, so the "all" view
         // cannot mark a row read that the "read" view would not have listed.
         read: sql<boolean>`${readCondition(readStateColumns)}`,
-        sourceId: articles.sourceId,
-        title: articles.title,
         // Bumped when a feed rewrites the article, so a body downloaded for
         // offline reading (#992) can tell it is out of date.
-        updatedAt: articles.updatedAt,
+        revision: sql<null | string>`${articles.updatedAt}::text`,
+        sourceId: articles.sourceId,
+        title: articles.title,
         url: articles.url,
       })
       .from(articles)

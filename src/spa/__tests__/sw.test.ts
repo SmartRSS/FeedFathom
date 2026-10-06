@@ -21,14 +21,14 @@ type OfflineRow = {
   id: number;
   publishedAt: string;
   sourceId: number;
-  updatedAt: string | null;
+  revision: string | null;
 };
 
 const offlineRow = (id: number, overrides: Partial<OfflineRow> = {}) => ({
   id,
   publishedAt: new Date().toJSON(),
+  revision: null,
   sourceId: 3,
-  updatedAt: null,
   ...overrides,
 });
 
@@ -212,8 +212,7 @@ const loadServiceWorker = (
   // have.
   // The dashboard lists the rows first, tagging the requests with a token.
   let tokens = 0;
-  const listOffline = async () => {
-    const token = String(++tokens);
+  const listOffline = async (token = String(++tokens)) => {
     await dispatch(
       new Request(`${ORIGIN}/api/articles`, {
         body: "{}",
@@ -480,7 +479,7 @@ test("a body is fetched again once the feed rewrites its article", async () => {
   await sw.keepOffline([2, 3]);
   await sw.keepOffline([
     2,
-    offlineRow(3, { updatedAt: "2026-10-06T10:00:00.000Z" }),
+    offlineRow(3, { revision: "2026-10-06T10:00:00.000Z" }),
   ]);
   expect(articleRequests(sw.requests)).toEqual([
     "/api/article?article=2",
@@ -496,7 +495,7 @@ test("an outdated body stays readable when its replacement fails", async () => {
   );
   await sw.keepOffline([2]);
   failing = true;
-  await sw.keepOffline([offlineRow(2, { updatedAt: new Date().toJSON() })]);
+  await sw.keepOffline([offlineRow(2, { revision: new Date().toJSON() })]);
   expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=2"]);
 });
 
@@ -531,6 +530,22 @@ test("rows listed before a sign-in in another tab are dropped when posted after 
   await sw.keepOffline([3], "never-listed");
   expect([...sw.entries.keys()]).toEqual([]);
   expect(articleRequests(sw.requests)).toEqual([]);
+});
+
+test("a sync interleaved with another account's keeps its own account", async () => {
+  const sw = loadServiceWorker((path, method) =>
+    method === "POST" ? Response.json([]) : articleNetwork(path),
+  );
+  const before = await sw.listOffline();
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  await sw.keepOffline([5]);
+  // The earlier sync's next page, and then its rows, empty or not.
+  await sw.listOffline(before);
+  await sw.keepOffline([2], before);
+  await sw.keepOffline([], before);
+  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
 });
 
 test("an older sync can't prune what a newer one keeps", async () => {

@@ -115,9 +115,9 @@ const pagedSummary = (id: number) => ({
   id,
   publishedAt: "2026-07-20T10:00:00.000Z",
   read: false,
+  revision: null,
   sourceId: 3,
   title: `Article ${id}`,
-  updatedAt: null,
   url: `https://articles.example/${id}`,
 });
 
@@ -2898,9 +2898,9 @@ const downloadUnread = async (page: Page) => {
         id: 11 + index,
         publishedAt,
         read: false,
+        revision: null,
         sourceId: 3,
         title: `${title} article`,
-        updatedAt: null,
         url: `https://articles.example/${index}`,
       })),
     });

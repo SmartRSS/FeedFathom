@@ -460,10 +460,13 @@ export function Dashboard(props: {
     const sources = unreadSourceIds(nodes);
     const rows: ArticleSummary[] = [];
     let selection = offlineArticles(rows, Date.now());
-    // Lets the worker tell which account these rows were listed under.
+    // Lets the worker tell which account these rows were listed under. With
+    // no source unread the one request still goes out -- the server answers
+    // an empty source list without a query -- so even an empty list carries
+    // a token the worker knows.
     const token = crypto.randomUUID();
     try {
-      while (sources.length > 0) {
+      for (;;) {
         // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
         const page = await api("/articles", articlesResponse, {
           body: JSON.stringify({
