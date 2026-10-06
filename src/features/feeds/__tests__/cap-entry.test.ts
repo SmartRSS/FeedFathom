@@ -154,4 +154,80 @@ describe("CAP feeds through the mapper", () => {
     ).articles;
     expect(article?.content).toStartWith("Es tritt gebietsweise Nebel");
   });
+
+  test("a small CAP preview keeps its parsed feed so subscribe can drop alerts expired since", async () => {
+    const feed = await parseCapFeed("nws-kansas.xml");
+    const preview = mapFeedToPreview(
+      feed,
+      "https://api.weather.gov/alerts.atom?area=KS&active=1",
+      noRewrite,
+      fetchedAt,
+    );
+    expect(preview.truncated).toBe(false);
+    expect(preview.feed?.items).toHaveLength(1);
+  });
+
+  test("CAP text counts toward the preview byte budget", () => {
+    const areaDesc = "x".repeat(300 * 1024);
+    const entries = ["a", "b", "c"]
+      .map(
+        (id) =>
+          `<entry><id>${id}</id><title>${id}</title><cap:areaDesc>${areaDesc}</cap:areaDesc></entry>`,
+      )
+      .join("");
+    expect(
+      titlesOf(
+        `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="${capNs}"><title>Alerts</title>${entries}</feed>`,
+      ),
+    ).toEqual(["a"]);
+  });
+});
+
+const capNs = "urn:oasis:names:tc:emergency:cap:1.2";
+const titlesOf = (xml: string) => {
+  const feed = parseFeed(xml);
+  attachCapAlerts(xml, feed.items);
+  return mapFeedToPreview(
+    feed,
+    "https://example.com/feed",
+    noRewrite,
+    fetchedAt,
+  ).articles.map((article) => article.title);
+};
+
+describe("CAP entries the feed parser reads its own way", () => {
+  test("a prefixed Atom feed", () => {
+    expect(
+      titlesOf(`<atom:feed xmlns:atom="http://www.w3.org/2005/Atom" xmlns:cap="${capNs}">
+        <atom:title>Alerts</atom:title>
+        <atom:entry><atom:id>a</atom:id><atom:title>Actual</atom:title><cap:status>Actual</cap:status></atom:entry>
+        <atom:entry><atom:id>b</atom:id><atom:title>Drill</atom:title><cap:status>Test</cap:status></atom:entry>
+      </atom:feed>`),
+    ).toEqual(["Actual"]);
+  });
+
+  test("entries that declare the CAP namespace under different prefixes", () => {
+    expect(
+      titlesOf(`<feed xmlns="http://www.w3.org/2005/Atom"><title>Alerts</title>
+        <entry xmlns:c="${capNs}"><id>a</id><title>Actual</title><c:status>Actual</c:status></entry>
+        <entry xmlns:cap="${capNs}"><id>b</id><title>Drill</title><cap:status>Test</cap:status></entry>
+      </feed>`),
+    ).toEqual(["Actual"]);
+  });
+
+  test("a cap prefix rebound to another namespace is not CAP", () => {
+    expect(
+      titlesOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="${capNs}"><title>Alerts</title>
+        <entry xmlns:cap="https://example.com/other"><id>a</id><title>Other</title><cap:status>Test</cap:status></entry>
+      </feed>`),
+    ).toEqual(["Other"]);
+  });
+
+  test("an id the parser HTML-decodes", () => {
+    expect(
+      titlesOf(`<rss version="2.0" xmlns:cap="${capNs}"><channel><title>Alerts</title>
+        <item><guid>https://example.com/?region=1&amp;copy=2</guid><title>Drill</title><cap:status>Test</cap:status></item>
+      </channel></rss>`),
+    ).toEqual([]);
+  });
 });

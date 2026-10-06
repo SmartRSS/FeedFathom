@@ -90,6 +90,11 @@ const generateArticleGuid = (
   return Bun.hash(hashInput).toString(36);
 };
 
+// The HTML an article body starts from, before its links are rewritten.
+const itemBody = (item: FeedMapperItem): string =>
+  (item.cap ? renderCapAlert(item.cap) : "") +
+  (item.content ?? item.description ?? "");
+
 export const mapFeedItemToArticle = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
@@ -104,11 +109,7 @@ export const mapFeedItemToArticle = (
   return {
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-    content: rewriteLinksFunction(
-      (item.cap ? renderCapAlert(item.cap) : "") +
-        (item.content ?? item.description ?? ""),
-      url || homepage,
-    ),
+    content: rewriteLinksFunction(itemBody(item), url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),
     publishedAt: new Date(item.published ?? now),
     sourceId: source.id,
@@ -144,7 +145,7 @@ const previewItems = (
   let count = 0;
   for (const item of items) {
     if (count === previewArticleLimit) break;
-    bytes += Buffer.byteLength(item.content ?? item.description ?? "");
+    bytes += Buffer.byteLength(itemBody(item));
     // The first article always fits, so one oversized item still previews.
     if (count > 0 && bytes > previewContentBytesLimit) break;
     count++;
@@ -189,6 +190,10 @@ export const mapFeedToPreview = (
   const current = currentFeedItems(parsedFeed.items, now);
   const items = previewItems(current);
   const truncated = items.length < current.length;
+  // Subscribing maps the feed again, so it can drop an alert that expired
+  // while the preview sat in the cache.
+  const remapOnSubscribe =
+    truncated || current.some((item) => item.cap !== undefined);
   return Object.assign(
     {
       articles: mapFeedToPreviewArticles(
@@ -204,6 +209,6 @@ export const mapFeedToPreview = (
       title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
       truncated,
     },
-    truncated ? { feed: parsedFeed } : {},
+    remapOnSubscribe ? { feed: parsedFeed } : {},
   );
 };

@@ -42,12 +42,13 @@ function decodedSubscriptionTarget(
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
 // refetch. Without that feed, the caller queues the source for the worker.
+// A CAP feed's preview keeps its feed too, so mapping it again here drops
+// alerts that expired while the preview was cached.
 function completePreview({
   feed,
   ...preview
 }: FeedPreview): FeedPreview | undefined {
-  if (!preview.truncated) return preview;
-  if (!feed) return undefined;
+  if (!feed) return preview.truncated ? undefined : preview;
   return {
     ...preview,
     articles: mapFeedToPreviewArticles(feed, preview.feedUrl, rewriteLinks),
