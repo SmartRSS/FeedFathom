@@ -20,10 +20,11 @@ aux_links_new_tab: true
 # Footer content
 footer_content: "Copyright &copy; 2024 FeedFathom. Distributed under an MIT license."
 
-# Internal engineering docs: agent skill notes, ADRs, and upgrade research.
+# Internal engineering docs: agent skill notes, ADRs, and research notes.
 # They live in the repo for contributors and agents, and are read as files, so
 # Jekyll must not render them into the public site or its navigation.
 exclude:
   - adr/
   - agents/
+  - research/
   - upcoming-upgrades.md
