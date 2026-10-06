@@ -117,6 +117,7 @@ const pagedSummary = (id: number) => ({
   read: false,
   sourceId: 3,
   title: `Article ${id}`,
+  updatedAt: null,
   url: `https://articles.example/${id}`,
 });
 
@@ -2899,6 +2900,7 @@ const downloadUnread = async (page: Page) => {
         read: false,
         sourceId: 3,
         title: `${title} article`,
+        updatedAt: null,
         url: `https://articles.example/${index}`,
       })),
     });
@@ -3019,6 +3021,28 @@ test.describe("under a controlling service worker", () => {
     ).toBeVisible();
     expect(fromWorker).toEqual([]);
     await page.context().setOffline(false);
+  });
+
+  // A reload offline needs a built shell, which the dev server doesn't
+  // serve, so the list is first asked for once offline.
+  test("offline, the downloaded articles are listed and open", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    // Routes still answer the worker under setOffline, so the API is cut
+    // off by a route that wins over the fixture's.
+    await page
+      .context()
+      .route("**/api/**", (route) => route.abort("internetdisconnected"));
+    await page.context().setOffline(true);
+    await selectSource(page, "Reading");
+    await expect(articleOptions(page)).toHaveCount(3);
+    await articleOptions(page).filter({ hasText: "Third article" }).click();
+    await expect(
+      page.locator(".reader").getByRole("heading", { name: "Third article" }),
+    ).toBeVisible();
+    await page.context().setOffline(false);
+    (browserFailures.get(page) ?? []).length = 0;
   });
 
   test("switching the download off, and logging out, drop stored bodies", async ({

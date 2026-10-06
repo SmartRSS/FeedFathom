@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import {
   navigatorConnection,
   neighbours,
-  offlineArticleIds,
+  offlineArticles,
   offlineUnreadEnabled,
   prefetchNextEnabled,
   setPrefetchNext,
@@ -57,22 +57,23 @@ const row = (id: number, ageDays: number) => ({
   publishedAt: new Date(NOW - ageDays * DAY).toJSON(),
 });
 
+const ids = (rows: { id: number }[]) => rows.map((item) => item.id);
+
 test("offline selection stops at the first row older than 14 days", () => {
-  expect(
-    offlineArticleIds([row(3, 0), row(2, 13.9), row(1, 14.1)], NOW),
-  ).toEqual({ complete: true, ids: [3, 2] });
-  expect(offlineArticleIds([row(3, 0)], NOW)).toEqual({
-    complete: false,
-    ids: [3],
-  });
+  const stale = offlineArticles([row(3, 0), row(2, 13.9), row(1, 14.1)], NOW);
+  expect(stale.complete).toBe(true);
+  expect(ids(stale.articles)).toEqual([3, 2]);
+  const fresh = offlineArticles([row(3, 0)], NOW);
+  expect(fresh.complete).toBe(false);
+  expect(ids(fresh.articles)).toEqual([3]);
 });
 
 test("offline selection keeps at most 500 articles", () => {
   const rows = Array.from({ length: 600 }, (_, index) => row(600 - index, 0));
-  const { complete, ids } = offlineArticleIds(rows, NOW);
+  const { articles, complete } = offlineArticles(rows, NOW);
   expect(complete).toBe(true);
-  expect(ids).toHaveLength(500);
-  expect(ids[0]).toBe(600);
+  expect(articles).toHaveLength(500);
+  expect(articles[0]?.id).toBe(600);
 });
 
 const source = (uid: string, unreadCount: number) => ({

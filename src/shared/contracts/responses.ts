@@ -124,6 +124,7 @@ const articleSummaryResponse = Type.Object(
     read: Type.Boolean(),
     sourceId: id,
     title: Type.String(),
+    updatedAt: Type.Union([jsonDate, Type.Null()]),
     url: Type.String(),
   },
   exact,

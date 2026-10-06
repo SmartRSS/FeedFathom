@@ -36,8 +36,8 @@ export function setPrefetchNext(next: OnOff) {
 
 // Offline reading (#992) downloads every recent unread body, a far larger
 // bill than one prefetch, so it is off until switched on too. The service
-// worker can't read localStorage: the dashboard tells it which bodies to
-// keep, and switching off tells it to keep none.
+// worker can't read localStorage: the dashboard sends it the unread rows to
+// keep, which also list the articles offline, and switching off sends none.
 const OFFLINE_UNREAD_KEY = "offlineUnread";
 
 const [offlineUnreadEnabled, setOfflineUnreadEnabled] = createSignal<OnOff>(
@@ -45,9 +45,9 @@ const [offlineUnreadEnabled, setOfflineUnreadEnabled] = createSignal<OnOff>(
 );
 export { offlineUnreadEnabled };
 
-export function postOfflineArticles(ids: number[]) {
+export function postOfflineArticles(articles: ArticleSummary[]) {
   navigator.serviceWorker?.controller?.postMessage({
-    ids,
+    articles,
     type: "offline-articles",
   });
 }
@@ -66,21 +66,21 @@ export function setOfflineUnread(next: OnOff) {
 const OFFLINE_ARTICLE_LIMIT = 500;
 const OFFLINE_ARTICLE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-// The ids worth keeping from unread rows that arrive newest first, and
+// The rows worth keeping from unread rows that arrive newest first, and
 // whether the next page could add any.
-export function offlineArticleIds(
-  rows: readonly Pick<ArticleSummary, "id" | "publishedAt">[],
+export function offlineArticles<T extends Pick<ArticleSummary, "publishedAt">>(
+  rows: readonly T[],
   now: number,
-): { ids: number[]; complete: boolean } {
+): { articles: T[]; complete: boolean } {
   const cutoff = now - OFFLINE_ARTICLE_MAX_AGE_MS;
-  const ids: number[] = [];
-  for (const row of rows) {
-    if (ids.length === OFFLINE_ARTICLE_LIMIT) return { complete: true, ids };
-    if (new Date(row.publishedAt).getTime() < cutoff)
-      return { complete: true, ids };
-    ids.push(row.id);
-  }
-  return { complete: ids.length === OFFLINE_ARTICLE_LIMIT, ids };
+  const stale = rows.findIndex(
+    (row) => new Date(row.publishedAt).getTime() < cutoff,
+  );
+  const fresh = stale === -1 ? rows : rows.slice(0, stale);
+  return {
+    articles: fresh.slice(0, OFFLINE_ARTICLE_LIMIT),
+    complete: stale !== -1 || fresh.length >= OFFLINE_ARTICLE_LIMIT,
+  };
 }
 
 function unreadSources(node: TreeNode): number[] {

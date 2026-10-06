@@ -526,37 +526,53 @@ async function recentArticleFirst(request, cacheName) {
 // from /api/article, so trimArticles leaves them alone and recentArticleFirst
 // serves them without a round trip. They live in the API cache, so a sign-in
 // or logout empties them with the rest of the account's data. The page owns
-// the setting and the selection: each sync posts every id it wants kept, and
-// an empty list when the option is switched off.
+// the setting and the selection: each sync posts the unread rows it wants
+// kept, and an empty list when the option is switched off. The rows are kept
+// too, as the article list offline (offlineArticleList).
 const OFFLINE_ARTICLE_PATH = "/sw-offline-article";
+const OFFLINE_LIST_KEY = "/sw-offline-articles";
 const offlineArticleKey = (id) => `${OFFLINE_ARTICLE_PATH}?article=${id}`;
+// The row's updatedAt when the body was fetched: a feed that rewrites the
+// article bumps it, and the next sync fetches the body again.
+const OFFLINE_VERSION = "X-SW-Version";
 
 // Bumped per sync, so a newer list -- or the option going off -- stops the
 // downloads of an older one.
 let offlineSyncs = 0;
+// Syncs run one after another, so an older one can't prune what a newer one
+// keeps.
+let offlineQueue = Promise.resolve();
 
 async function anyVisibleClient() {
   const clients = await self.clients.matchAll({ type: "window" });
   return clients.some((client) => client.visibilityState === "visible");
 }
 
-async function syncOfflineArticles(ids) {
-  const sync = ++offlineSyncs;
+async function syncOfflineArticles(sync, articles) {
   const generation = accountChanges;
+  const current = () => sync === offlineSyncs && generation === accountChanges;
+  if (!current()) return;
   const cache = await caches.open(API_CACHE);
-  const wanted = new Set(ids.map(String));
+  await (articles.length > 0
+    ? cache.put(OFFLINE_LIST_KEY, Response.json(articles))
+    : cache.delete(OFFLINE_LIST_KEY));
+  const versions = new Map(
+    articles.map((row) => [String(row.id), String(row.updatedAt)]),
+  );
   const stored = (await cache.keys())
     .map((request) => new URL(request.url))
     .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH);
+  const have = new Set();
   // Read, removed and aged-out articles are simply missing from the list.
   await Promise.all(
-    stored
-      .filter((url) => !wanted.has(url.searchParams.get("article")))
-      .map((url) => cache.delete(url.pathname + url.search)),
+    stored.map(async (url) => {
+      const id = url.searchParams.get("article");
+      const body = await cache.match(offlineArticleKey(id));
+      if (versions.get(id) === body?.headers.get(OFFLINE_VERSION)) have.add(id);
+      else await cache.delete(offlineArticleKey(id));
+    }),
   );
-  const have = new Set(stored.map((url) => url.searchParams.get("article")));
-  const missing = [...wanted].filter((id) => !have.has(id));
-  const current = () => sync === offlineSyncs && generation === accountChanges;
+  const missing = [...versions.keys()].filter((id) => !have.has(id));
   // A hidden tab, a failed request or going offline ends the run; the page's
   // next sync picks up whatever is still missing.
   const download = async () => {
@@ -568,8 +584,14 @@ async function syncOfflineArticles(ids) {
         credentials: "same-origin",
       });
       if (!response.ok) return;
+      const headers = new Headers(response.headers);
+      headers.set(OFFLINE_VERSION, versions.get(id));
+      const versioned = new Response(response.body, {
+        headers,
+        status: response.status,
+      });
       // eslint-disable-next-line no-await-in-loop -- throttled on purpose
-      if (current()) await cache.put(offlineArticleKey(id), response);
+      if (current()) await cache.put(offlineArticleKey(id), versioned);
     }
   };
   // ponytail: two downloads at a time, so a sync never crowds out the
@@ -579,9 +601,68 @@ async function syncOfflineArticles(ids) {
 
 self.addEventListener("message", (event) => {
   const { data } = event;
-  if (data?.type !== "offline-articles" || !Array.isArray(data.ids)) return;
-  event.waitUntil(syncOfflineArticles(data.ids.filter(Number.isSafeInteger)));
+  if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
+    return;
+  const sync = ++offlineSyncs;
+  const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
+  offlineQueue = offlineQueue
+    .then(() => syncOfflineArticles(sync, articles))
+    .catch(() => {});
+  event.waitUntil(offlineQueue);
 });
+
+function treeSourceIds(node) {
+  return node.type === "source"
+    ? [Number(node.uid)]
+    : (node.children ?? []).flatMap(treeSourceIds);
+}
+
+function findFolder(nodes, uid) {
+  for (const node of nodes) {
+    if (node.type !== "folder") continue;
+    if (node.uid === uid) return node;
+    const nested = findFolder(node.children ?? [], uid);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+// The unread list offline, answered from the rows the last sync kept, scoped
+// the way the server scopes it. Undefined, and so a network error, for what
+// those rows can't answer: other filters, and search.
+async function offlineArticleList(request) {
+  const cache = await caches.open(API_CACHE);
+  const stored = await cache.match(OFFLINE_LIST_KEY);
+  if (!stored) return undefined;
+  const body = await request.json();
+  if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
+  // Every kept row comes in the first page.
+  if (body.cursor) return Response.json([]);
+  let inScope;
+  if (body.view === "today") {
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    inScope = (row) => Date.parse(row.publishedAt) >= since;
+  } else {
+    const tree = await (await cache.match("/api/tree"))?.json();
+    const folder =
+      body.folder === undefined
+        ? undefined
+        : findFolder(tree?.tree ?? [], String(body.folder));
+    const sources = new Set(folder ? treeSourceIds(folder) : body.sources);
+    inScope = (row) => sources.has(row.sourceId);
+  }
+  return Response.json((await stored.json()).filter(inScope));
+}
+
+async function articleList(request) {
+  try {
+    return await fetch(request.clone());
+  } catch (error) {
+    const offline = await offlineArticleList(request);
+    if (offline) return offline;
+    throw error;
+  }
+}
 
 // Set by shell() on a dashboard-bound navigation, so the tree fetch starts
 // before the page's JS bundle loads; treeWithInlineFavicons reuses it instead
@@ -677,6 +758,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") {
     if (url.pathname === "/api/login" || url.pathname === "/api/logout") {
       event.respondWith(changeAccount(request));
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/articles") {
+      event.respondWith(articleList(request));
       return;
     }
     const route = QUEUEABLE_MUTATIONS.find(

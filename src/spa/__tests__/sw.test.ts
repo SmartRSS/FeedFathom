@@ -17,6 +17,21 @@ type MessageEvent = {
 
 type Callback = (() => void) | undefined;
 
+type OfflineRow = {
+  id: number;
+  publishedAt: string;
+  sourceId: number;
+  updatedAt: string | null;
+};
+
+const offlineRow = (id: number, overrides: Partial<OfflineRow> = {}) => ({
+  id,
+  publishedAt: new Date().toJSON(),
+  sourceId: 3,
+  updatedAt: null,
+  ...overrides,
+});
+
 // The slice of IndexedDB the mutation queue uses: one auto-increment store,
 // with every request settling on a later microtask as the real API does.
 const fakeIndexedDb = () => {
@@ -192,12 +207,18 @@ const loadServiceWorker = (
     await background;
     return body;
   };
-  // What the dashboard posts each offline-reading sync; settles once the
-  // worker's downloads have.
-  const keepOffline = async (ids: number[]) => {
+  // What the dashboard posts each offline-reading sync: unread rows, or bare
+  // ids standing for rows never updated. Settles once the worker's downloads
+  // have.
+  const keepOffline = async (articles: (number | OfflineRow)[]) => {
     const pending: Promise<unknown>[] = [];
     onMessage?.({
-      data: { ids, type: "offline-articles" },
+      data: {
+        articles: articles.map((row) =>
+          typeof row === "number" ? offlineRow(row) : row,
+        ),
+        type: "offline-articles",
+      },
       waitUntil: (promise) => pending.push(promise),
     });
     await Promise.all(pending);
@@ -391,7 +412,12 @@ test("opening 300 articles keeps only the newest 200 cached", async () => {
 });
 
 const articleRequests = (requests: string[]) =>
-  requests.filter((path) => path.startsWith("/api/article"));
+  requests.filter((path) => path.startsWith("/api/article?"));
+
+const storedBodies = (entries: Map<string, Response>) =>
+  [...entries.keys()]
+    .filter((path) => path.startsWith("/sw-offline-article?"))
+    .toSorted();
 
 test("a downloaded article opens offline with no network request, past the trim", async () => {
   let online = true;
@@ -422,16 +448,81 @@ test("a sync downloads only what is missing and drops what is no longer listed",
     "/api/article?article=2",
     "/api/article?article=3",
   ]);
-  const stored = [...sw.entries.keys()].filter((path) =>
-    path.startsWith("/sw-offline-article"),
-  );
-  expect(stored.toSorted()).toEqual([
+  expect(storedBodies(sw.entries)).toEqual([
     "/sw-offline-article?article=2",
     "/sw-offline-article?article=3",
   ]);
   // Switching the option off posts an empty list.
   await sw.keepOffline([]);
   expect([...sw.entries.keys()]).toEqual([]);
+});
+
+test("a body is fetched again once the feed rewrites its article", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  await sw.keepOffline([2, 3]);
+  await sw.keepOffline([
+    2,
+    offlineRow(3, { updatedAt: "2026-10-06T10:00:00.000Z" }),
+  ]);
+  expect(articleRequests(sw.requests)).toEqual([
+    "/api/article?article=2",
+    "/api/article?article=3",
+    "/api/article?article=3",
+  ]);
+});
+
+test("an older sync can't prune what a newer one keeps", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  void sw.keepOffline([1]);
+  await sw.keepOffline([1, 2]);
+  await settle();
+  expect(storedBodies(sw.entries)).toEqual([
+    "/sw-offline-article?article=1",
+    "/sw-offline-article?article=2",
+  ]);
+});
+
+test("offline, the unread list comes from the kept rows, scoped like the server", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/tree")
+      return Response.json({
+        tree: [
+          {
+            children: [{ type: "source", uid: "4" }],
+            type: "folder",
+            uid: "7",
+          },
+          { type: "source", uid: "3" },
+        ],
+      });
+    return method === "POST" ? Response.json([]) : articleNetwork(path);
+  });
+  await sw.loadTree();
+  const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toJSON();
+  await sw.keepOffline([
+    offlineRow(1),
+    offlineRow(2, { publishedAt: old }),
+    offlineRow(3, { sourceId: 4 }),
+  ]);
+  online = false;
+  const list = async (body: object) => {
+    const { background, response } = sw.dispatch(
+      new Request(`${ORIGIN}/api/articles`, {
+        body: JSON.stringify(body),
+        method: "POST",
+      }),
+    );
+    background.catch(() => {});
+    const rows: { id: number }[] = await (await response).json();
+    return rows.map((row) => row.id);
+  };
+  expect(await list({ filter: "unread", sources: [3] })).toEqual([1, 2]);
+  expect(await list({ folder: 7, sources: [] })).toEqual([3]);
+  expect(await list({ sources: [], view: "today" })).toEqual([1, 3]);
+  expect(await list({ cursor: 1, sources: [3] })).toEqual([]);
+  await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 
 test("a download answered after a sign-in is not stored", async () => {

@@ -115,6 +115,9 @@ export class ArticlesDataService {
         read: sql<boolean>`${readCondition(readStateColumns)}`,
         sourceId: articles.sourceId,
         title: articles.title,
+        // Bumped when a feed rewrites the article, so a body downloaded for
+        // offline reading (#992) can tell it is out of date.
+        updatedAt: articles.updatedAt,
         url: articles.url,
       })
       .from(articles)

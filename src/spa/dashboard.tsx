@@ -84,7 +84,7 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
   neighbours,
-  offlineArticleIds,
+  offlineArticles,
   offlineUnreadEnabled,
   postOfflineArticles,
   prefetchNextEnabled,
@@ -442,19 +442,24 @@ export function Dashboard(props: {
     );
   });
   onCleanup(() => clearTimeout(offlineSyncTimer));
+  // One sync at a time, so a slow one can't post its older list after a
+  // newer one; a tree load during it is picked up by the next.
+  let offlineSyncing = false;
   async function syncOfflineArticles(nodes: TreeNode[]) {
     if (
       disposed ||
+      offlineSyncing ||
       document.hidden ||
       !navigator.onLine ||
       !navigator.serviceWorker?.controller ||
       !shouldPrefetch(navigatorConnection())
     )
       return;
+    offlineSyncing = true;
     offlineSyncedAt = Date.now();
     const sources = unreadSourceIds(nodes);
     const rows: ArticleSummary[] = [];
-    let selection = offlineArticleIds(rows, Date.now());
+    let selection = offlineArticles(rows, Date.now());
     try {
       while (sources.length > 0) {
         // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
@@ -468,15 +473,17 @@ export function Dashboard(props: {
           method: "POST",
         });
         rows.push(...page);
-        selection = offlineArticleIds(rows, Date.now());
+        selection = offlineArticles(rows, Date.now());
         if (selection.complete || page.length < articlePageSize) break;
       }
     } catch {
       // Best-effort: the next tree load tries again.
       return;
+    } finally {
+      offlineSyncing = false;
     }
     if (!disposed && offlineUnreadEnabled() === "on")
-      postOfflineArticles(selection.ids);
+      postOfflineArticles(selection.articles);
   }
   async function shareSelected() {
     const article = selected();
