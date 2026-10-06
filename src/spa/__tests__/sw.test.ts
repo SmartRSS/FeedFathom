@@ -210,13 +210,30 @@ const loadServiceWorker = (
   // What the dashboard posts each offline-reading sync: unread rows, or bare
   // ids standing for rows never updated. Settles once the worker's downloads
   // have.
-  const keepOffline = async (articles: (number | OfflineRow)[]) => {
+  // The dashboard lists the rows first, tagging the requests with a token.
+  let tokens = 0;
+  const listOffline = async () => {
+    const token = String(++tokens);
+    await dispatch(
+      new Request(`${ORIGIN}/api/articles`, {
+        body: "{}",
+        headers: { "X-Offline-Sync": token },
+        method: "POST",
+      }),
+    ).response;
+    return token;
+  };
+  const keepOffline = async (
+    articles: (number | OfflineRow)[],
+    token?: string,
+  ) => {
     const pending: Promise<unknown>[] = [];
     onMessage?.({
       data: {
         articles: articles.map((row) =>
           typeof row === "number" ? offlineRow(row) : row,
         ),
+        token: token ?? (articles.length > 0 ? await listOffline() : undefined),
         type: "offline-articles",
       },
       waitUntil: (promise) => pending.push(promise),
@@ -227,6 +244,7 @@ const loadServiceWorker = (
     dispatch,
     entries,
     keepOffline,
+    listOffline,
     loadArticle,
     loadTree,
     messages,
@@ -501,6 +519,20 @@ test("rows posted before a sign-in are dropped, even queued behind a download", 
   expect([...sw.entries.keys()]).toEqual([]);
 });
 
+test("rows listed before a sign-in in another tab are dropped when posted after it", async () => {
+  const sw = loadServiceWorker((path, method) =>
+    method === "POST" ? Response.json([]) : articleNetwork(path),
+  );
+  const token = await sw.listOffline();
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  await sw.keepOffline([2], token);
+  await sw.keepOffline([3], "never-listed");
+  expect([...sw.entries.keys()]).toEqual([]);
+  expect(articleRequests(sw.requests)).toEqual([]);
+});
+
 test("an older sync can't prune what a newer one keeps", async () => {
   const sw = loadServiceWorker(articleNetwork);
   void sw.keepOffline([1]);
@@ -563,7 +595,9 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   expect(await list({ filter: "unread", sources: [3] })).toEqual([1, 2]);
   expect(await list({ folder: 7, sources: [] })).toEqual([3]);
   expect(await list({ sources: [], view: "today" })).toEqual([1, 3]);
-  expect(await list({ cursor: 1, sources: [3] })).toEqual([]);
+  // A page loaded online continues after its cursor.
+  expect(await list({ cursor: 1, sources: [3] })).toEqual([2]);
+  expect(await list({ cursor: 99, sources: [3] })).toEqual([]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 

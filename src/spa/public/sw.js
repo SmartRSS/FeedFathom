@@ -548,9 +548,14 @@ async function anyVisibleClient() {
   return clients.some((client) => client.visibilityState === "visible");
 }
 
-// `generation` is the account count when the page posted the rows, so rows
-// queued behind a sign-in or logout are dropped rather than written into the
-// next account's cache.
+// The page's sync tags its list requests with a token; this records the
+// account count when the latest token's first request passed through, so
+// rows listed before a sign-in or logout -- even one in another tab -- are
+// dropped rather than written into the next account's cache.
+const OFFLINE_SYNC_HEADER = "X-Offline-Sync";
+let offlineListing;
+
+// `generation` is that count for the posted rows.
 async function syncOfflineArticles(sync, generation, articles) {
   const current = () => sync === offlineSyncs && generation === accountChanges;
   if (!current()) return;
@@ -606,9 +611,17 @@ self.addEventListener("message", (event) => {
   const { data } = event;
   if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
     return;
-  const sync = ++offlineSyncs;
-  const generation = accountChanges;
   const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
+  // Rows count from when the page started listing them; an empty list only
+  // deletes, so it needs no account.
+  const generation =
+    articles.length === 0
+      ? accountChanges
+      : offlineListing?.token === data.token
+        ? offlineListing.generation
+        : undefined;
+  if (generation === undefined) return;
+  const sync = ++offlineSyncs;
   offlineQueue = offlineQueue
     .then(() => syncOfflineArticles(sync, generation, articles))
     .catch(() => {});
@@ -655,8 +668,15 @@ async function offlineArticleList(request) {
   if (!stored) return undefined;
   const body = await request.json();
   if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
-  // Every kept row comes in the first page.
-  if (body.cursor) return Response.json([]);
+  // Kept rows are in the server's order, so a page continues after its
+  // cursor -- whether the page before came from here or from the network --
+  // and a cursor outside them has nothing after it here.
+  const rows = await stored.json();
+  const start =
+    body.cursor === undefined
+      ? 0
+      : rows.findIndex((row) => row.id === body.cursor) + 1;
+  if (body.cursor !== undefined && start === 0) return Response.json([]);
   let inScope;
   if (body.view === "today") {
     const since = Date.now() - 24 * 60 * 60 * 1000;
@@ -678,13 +698,18 @@ async function offlineArticleList(request) {
   );
   const removed = await queuedRemovals().catch(() => new Set());
   return Response.json(
-    (await stored.json()).filter(
-      (row) => inScope(row) && bodies.has(row.id) && !removed.has(row.id),
-    ),
+    rows
+      .slice(start)
+      .filter(
+        (row) => inScope(row) && bodies.has(row.id) && !removed.has(row.id),
+      ),
   );
 }
 
 async function articleList(request) {
+  const token = request.headers.get(OFFLINE_SYNC_HEADER);
+  if (token && offlineListing?.token !== token)
+    offlineListing = { generation: accountChanges, token };
   try {
     return await fetch(request.clone());
   } catch (error) {

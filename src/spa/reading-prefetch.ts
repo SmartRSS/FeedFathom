@@ -44,10 +44,23 @@ const [offlineUnreadEnabled, setOfflineUnreadEnabled] = createSignal<OnOff>(
   read(OFFLINE_UNREAD_KEY),
 );
 export { offlineUnreadEnabled };
+// Another tab switching it off must stop this one's syncs too, or its next
+// one would download everything again.
+if (typeof window !== "undefined")
+  window.addEventListener("storage", (event) => {
+    if (event.key === OFFLINE_UNREAD_KEY)
+      setOfflineUnreadEnabled(read(OFFLINE_UNREAD_KEY));
+  });
 
-export function postOfflineArticles(articles: ArticleSummary[]) {
+// `token` tags the list requests the rows came from; an empty list carries
+// none.
+export function postOfflineArticles(
+  articles: ArticleSummary[],
+  token?: string,
+) {
   navigator.serviceWorker?.controller?.postMessage({
     articles,
+    token,
     type: "offline-articles",
   });
 }

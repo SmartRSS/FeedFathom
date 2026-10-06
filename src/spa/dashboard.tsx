@@ -460,6 +460,8 @@ export function Dashboard(props: {
     const sources = unreadSourceIds(nodes);
     const rows: ArticleSummary[] = [];
     let selection = offlineArticles(rows, Date.now());
+    // Lets the worker tell which account these rows were listed under.
+    const token = crypto.randomUUID();
     try {
       while (sources.length > 0) {
         // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
@@ -469,7 +471,10 @@ export function Dashboard(props: {
             filter: "unread",
             sources,
           }),
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Offline-Sync": token,
+          },
           method: "POST",
         });
         rows.push(...page);
@@ -483,7 +488,7 @@ export function Dashboard(props: {
       offlineSyncing = false;
     }
     if (!disposed && offlineUnreadEnabled() === "on")
-      postOfflineArticles(selection.articles);
+      postOfflineArticles(selection.articles, token);
   }
   async function shareSelected() {
     const article = selected();
