@@ -15,8 +15,10 @@ import {
   loginPath,
   parseDashboardPane,
   resolveRoute,
+  switchPane,
   withDashboardPane,
   type DashboardPane,
+  type PaneSwitchHost,
   type Route,
 } from "./behavior.ts";
 import { Dashboard } from "./dashboard.tsx";
@@ -74,6 +76,13 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
 
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
+const paneSwitchHost: PaneSwitchHost = {
+  matches: (query) => matchMedia(query).matches,
+  startViewTransition:
+    "startViewTransition" in document
+      ? (update) => document.startViewTransition(update)
+      : undefined,
+};
 const [updateAvailable, setUpdateAvailable] = createSignal(false);
 
 function App() {
@@ -117,14 +126,34 @@ function App() {
     navigate(loginPath(currentPath()));
     return true;
   };
+  // Under a view transition the switch lands a frame later, and until then
+  // the new pane is still display:none: a focus() into it would drop to
+  // <body>. Anything that focuses inside a pane waits for this.
+  let paneShown: Promise<void> | undefined;
+  const showPane = (update: () => void, browserAnimated?: boolean) => {
+    const shown = switchPane(update, paneSwitchHost, browserAnimated);
+    paneShown = shown;
+    void shown?.then(() => {
+      if (paneShown === shown) paneShown = undefined;
+    });
+  };
+  const whenPaneShown = (run: () => void) => {
+    if (paneShown) void paneShown.then(run);
+    else run();
+  };
   const focusPane = (next: DashboardPane) => {
-    if (next === pane()) return;
+    // history.state, not pane(): a pushed switch still waiting on its
+    // transition has not set the signal yet, and a second tap in that frame
+    // would push a duplicate entry that Back then has to step through.
+    if (next === (parseDashboardPane(history.state) ?? pane())) return;
     history.pushState(withDashboardPane(history.state, next), "");
-    setPane(next);
+    showPane(() => setPane(next));
   };
   const popstate = (event: PopStateEvent) => {
-    setPath(currentPath());
-    setPane(parseDashboardPane(event.state) ?? "sources");
+    showPane(() => {
+      setPath(currentPath());
+      setPane(parseDashboardPane(event.state) ?? "sources");
+    }, event.hasUAVisualTransition);
   };
   const route = () => resolveRoute(path());
   const loginRoute = () => {
@@ -227,6 +256,7 @@ function App() {
                 pane={pane}
                 focusPane={focusPane}
                 backPane={backPane}
+                whenPaneShown={whenPaneShown}
               />
             }
           >
@@ -245,6 +275,7 @@ function Router(props: {
   navigate(to: string): void;
   pane(): DashboardPane;
   route: Route;
+  whenPaneShown(run: () => void): void;
 }) {
   return (
     <Show
@@ -301,6 +332,7 @@ function Router(props: {
         pane={props.pane}
         focusPane={props.focusPane}
         backPane={props.backPane}
+        whenPaneShown={props.whenPaneShown}
         initialDiscovery={props.route.name === "preview"}
         initialFeedUrl={
           props.route.name === "preview" ? props.route.feedUrl : undefined

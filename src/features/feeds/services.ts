@@ -7,6 +7,7 @@ import {
   bullmqRedis,
 } from "#platform/runtime.ts";
 import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FaviconStore } from "#features/feeds/favicon-store.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
@@ -49,6 +50,9 @@ export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,
   sourceEnqueuer,
 );
+export const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(
+  redis,
+);
 export const feedParser = /* @__PURE__ */ new FeedParser(
   articlesDataService,
   httpClient,
@@ -56,5 +60,6 @@ export const feedParser = /* @__PURE__ */ new FeedParser(
   websubStateService,
   redirectMap,
   userSourcesDataService,
+  articleEventPublisher,
   config.FEED_FATHOM_DOMAIN,
 );

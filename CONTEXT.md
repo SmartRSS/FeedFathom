@@ -4,7 +4,8 @@ FeedFathom is a self-hosted RSS and newsletter reader. A **server** serves the
 SPA and the JSON API, a **worker** fetches and parses feeds on a schedule, a
 **migrator** brings the schema up to date and exits, and optional browser
 extensions add feed discovery and reader views. PostgreSQL stores accounts,
-subscriptions and articles. Redis holds the job queue and the HTTP cache.
+subscriptions and articles. Redis holds the job queue and the HTTP cache, and
+carries the worker's new-article signals to the server (ADR 0007).
 
 ## Where a new file goes
 
@@ -77,7 +78,8 @@ up in the diff, instead of arriving as a quiet new import.
   subscription, WebSub, favicons, article extraction and link rewriting, and
   the sources, articles, user-sources and folders data services.
 - **`reader`** — the reading surface over that store: the articles, article,
-  folders, tree and source routes.
+  folders, tree and source routes, and the `/api/events` stream that tells an
+  open dashboard to reload the tree.
 - **`admin`** — the admin and options routes and the job-failures data service.
   Two route groups rather than one, because `/api/options` is per-user and
   `/api/admin` is not: the admin group carries `createAdminPlugin`, so the

@@ -24,7 +24,6 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import {
-  preloadFavicons,
   filterTree,
   findNode,
   findParentFolderUid,
@@ -84,8 +83,13 @@ import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
 import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   navigatorConnection,
+  neighbours,
+  offlineArticles,
+  offlineUnreadEnabled,
+  postOfflineArticles,
   prefetchNextEnabled,
   shouldPrefetch,
+  unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
   backgroundPollEnabled,
@@ -136,6 +140,24 @@ const ARTICLE_SKELETON_TITLES = [
   "Another Example Headline",
 ];
 
+// Only a page the service worker controls asks, since only the worker
+// answers ?cached. only-if-cached keeps the request off the network when
+// something else does answer it, such as a worker from before #989 that
+// forwards it as is: the fetch then reads the HTTP cache or fails.
+async function cachedTree(): Promise<TreeNode[] | undefined> {
+  if (!navigator.serviceWorker?.controller) return undefined;
+  try {
+    return (
+      await api("/tree?cached", treeResponse, {
+        cache: "only-if-cached",
+        mode: "same-origin",
+      })
+    ).tree;
+  } catch {
+    return undefined;
+  }
+}
+
 export function Dashboard(props: {
   backPane(): void;
   focusPane(next: DashboardPane): void;
@@ -144,6 +166,7 @@ export function Dashboard(props: {
   initialFeedUrl?: string | undefined;
   navigate(to: string): void;
   pane(): DashboardPane;
+  whenPaneShown(run: () => void): void;
 }) {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
@@ -189,7 +212,9 @@ export function Dashboard(props: {
   // neither blocks the new list's next page nor, when it settles late, clears
   // that page's loading state.
   let loadingMoreSelection: SupersessionToken | undefined;
-  let articleCursor: number | undefined;
+  // The last row loaded; its publishedAt places it in the offline list (#992)
+  // once it has left the kept rows.
+  let articleCursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined;
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   // Selectors notify only the rows whose state flips, not every row in a
@@ -308,19 +333,74 @@ export function Dashboard(props: {
   // when the user refreshes, and hidden tabs skip cycles entirely.
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let pollCycles = 0;
+  let pollDueAt = 0;
   let lastSeenUnread: number | undefined;
   const schedulePoll = () => {
+    // A stream signal can run a poll while the timer is pending; one timer.
+    clearTimeout(pollTimer);
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (disposed || backgroundPollEnabled() !== "on") return;
+    const delay = nextPollDelayMs(pollCycles, streamOpen);
+    pollDueAt = Date.now() + delay;
     pollTimer = setTimeout(() => {
       if (document.hidden) {
         schedulePoll();
         return;
       }
       void pollForNewArticles();
-    }, nextPollDelayMs(pollCycles));
+    }, delay);
   };
+  // Push signal (#991): the server announces article writes for this user's
+  // sources, and the answer is the same poll, so the toast and unread logic
+  // stay in one place. Signals within two seconds share one tree load, and a
+  // hidden tab leaves them to the timer, as it does every other cycle.
+  // EventSource reconnects on its own; a stream that drops or never opens
+  // (a buffering proxy, a 401) leaves the timer on its 30s backoff.
+  let streamOpen = false;
+  let streamSignalTimer: ReturnType<typeof setTimeout> | undefined;
+  // One poll at a time: loadTree() aborts the request before it, so signals
+  // arriving faster than the tree loads would never let one finish. A signal
+  // during a poll waits for it, then gets one follow-up.
+  let polling = false;
+  let signalDuringPoll = false;
+  const onStreamSignal = () => {
+    if (polling) {
+      signalDuringPoll = true;
+      return;
+    }
+    streamSignalTimer ??= setTimeout(() => {
+      streamSignalTimer = undefined;
+      if (disposed || document.hidden) return;
+      if (polling) signalDuringPoll = true;
+      else void pollForNewArticles();
+    }, 2000);
+  };
+  createEffect(() => {
+    if (!authenticated() || backgroundPollEnabled() !== "on") return;
+    const stream = new EventSource("/api/events");
+    stream.addEventListener("open", () => {
+      streamOpen = true;
+    });
+    stream.addEventListener("error", () => {
+      if (!streamOpen) return;
+      streamOpen = false;
+      pollCycles = 0;
+      // Only ever pulls the poll closer: a proxy that accepts the stream and
+      // drops it every reconnect must not keep pushing the poll back.
+      if (Date.now() + nextPollDelayMs(0) < pollDueAt) schedulePoll();
+    });
+    stream.addEventListener("message", onStreamSignal);
+    onCleanup(() => {
+      stream.close();
+      streamOpen = false;
+      clearTimeout(streamSignalTimer);
+      streamSignalTimer = undefined;
+    });
+  });
   const pollForNewArticles = async () => {
+    // A timer firing mid-poll yields; the running poll reschedules it.
+    if (polling) return;
+    polling = true;
     try {
       const nextTree = await loadTree();
       if (disposed) return;
@@ -334,10 +414,113 @@ export function Dashboard(props: {
       // Background polling stays silent: the next cycle retries, and the
       // ordinary error surfaces already cover the user-visible paths.
     } finally {
+      polling = false;
       pollCycles += 1;
       schedulePoll();
+      if (signalDuringPoll) {
+        signalDuringPoll = false;
+        onStreamSignal();
+      }
     }
   };
+  // Offline reading (#992): tells the service worker which unread bodies to
+  // keep. Paced by tree loads -- the stream and the poll reload the tree when
+  // articles arrive, and marking read or removing reloads it too -- at most
+  // once a minute, in idle time, and never on Save Data or in a hidden or
+  // offline tab.
+  let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
+  let offlineSyncedAt = 0;
+  const runOfflineSync = () => void syncOfflineArticles(tree());
+  const syncOfflineInIdleTime = () => {
+    clearTimeout(offlineSyncTimer);
+    if (disposed || !authenticated() || offlineUnreadEnabled() !== "on") return;
+    offlineSyncTimer = setTimeout(
+      () => {
+        if (typeof requestIdleCallback === "function")
+          requestIdleCallback(runOfflineSync);
+        else runOfflineSync();
+      },
+      Math.max(0, offlineSyncedAt + 60_000 - Date.now()),
+    );
+  };
+  createEffect(() => {
+    tree();
+    syncOfflineInIdleTime();
+  });
+  // A sync skipped for a hidden or offline tab, or one the worker doesn't
+  // control yet, runs once that changes rather than at the next tree load,
+  // which with background checks off may never come.
+  let offlineSyncSkipped = false;
+  const retrySkippedOfflineSync = () => {
+    if (offlineSyncSkipped && !document.hidden) syncOfflineInIdleTime();
+  };
+  document.addEventListener("visibilitychange", retrySkippedOfflineSync);
+  addEventListener("online", retrySkippedOfflineSync);
+  navigator.serviceWorker?.addEventListener(
+    "controllerchange",
+    retrySkippedOfflineSync,
+  );
+  onCleanup(() => {
+    clearTimeout(offlineSyncTimer);
+    document.removeEventListener("visibilitychange", retrySkippedOfflineSync);
+    removeEventListener("online", retrySkippedOfflineSync);
+    navigator.serviceWorker?.removeEventListener(
+      "controllerchange",
+      retrySkippedOfflineSync,
+    );
+  });
+  // One sync at a time, so a slow one can't post its older list after a
+  // newer one; a tree load during it is picked up by the next.
+  let offlineSyncing = false;
+  async function syncOfflineArticles(nodes: TreeNode[]) {
+    if (disposed || offlineSyncing || !shouldPrefetch(navigatorConnection()))
+      return;
+    offlineSyncSkipped =
+      document.hidden ||
+      !navigator.onLine ||
+      !navigator.serviceWorker?.controller;
+    if (offlineSyncSkipped) return;
+    offlineSyncing = true;
+    offlineSyncedAt = Date.now();
+    const sources = unreadSourceIds(nodes);
+    const rows: ArticleSummary[] = [];
+    let selection = offlineArticles(rows, Date.now());
+    // Lets the worker tell which account these rows were listed under. With
+    // no source unread the one request still goes out -- the server answers
+    // an empty source list without a query -- so even an empty list carries
+    // a token the worker knows.
+    const token = crypto.randomUUID();
+    try {
+      for (;;) {
+        // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
+        const page = await api("/articles", articlesResponse, {
+          body: JSON.stringify({
+            cursor: rows.at(-1)?.id,
+            filter: "unread",
+            revision: true,
+            sources,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            // Only the first page names the token: a later one naming it could
+            // register it afresh, under a newer account, once it was forgotten.
+            "X-Offline-Sync": rows.length === 0 ? token : "next",
+          },
+          method: "POST",
+        });
+        rows.push(...page);
+        selection = offlineArticles(rows, Date.now());
+        if (selection.complete || page.length < articlePageSize) break;
+      }
+    } catch {
+      // Best-effort: the next tree load tries again.
+      return;
+    } finally {
+      offlineSyncing = false;
+    }
+    if (!disposed && offlineUnreadEnabled() === "on")
+      postOfflineArticles(selection.articles, token);
+  }
   async function shareSelected() {
     const article = selected();
     if (!article) return;
@@ -470,6 +653,14 @@ export function Dashboard(props: {
     }
     return nextTree;
   }
+  const revealTree = () => {
+    if (!treeLoading()) return;
+    setTreeLoading(false);
+    // Focus the tree without select(), which would also load articles.
+    queueMicrotask(() =>
+      document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
+    );
+  };
   async function addNewFolder() {
     const name = await promptDialog("Folder name");
     if (!name?.trim()) return;
@@ -502,23 +693,39 @@ export function Dashboard(props: {
       skipObserverFirstPass = true;
     }
     try {
-      const nextTree = await loadTree();
-      await preloadFavicons(nextTree);
+      // loadTree replaces this array as it applies the fresh tree, so its
+      // identity tells whether the fresh one already landed.
+      const unloaded = tree();
+      const fresh = loadTree();
+      // Stale-while-revalidate (#989): the cached tree paints only if it
+      // beats the network, and the fresh one replaces it through loadTree.
+      // Everything that trusts the tree -- sign-in state, the poll's unread
+      // baseline, session restore -- still waits for the fresh answer, so a
+      // 401 routes to sign-in and the swap never reads as new articles.
+      const early = await Promise.race([
+        fresh.then(
+          () => undefined,
+          () => undefined,
+        ),
+        cachedTree(),
+      ]);
+      if (early && !disposed && tree() === unloaded) {
+        setTree(early);
+        revealTree();
+      }
+      const nextTree = await fresh;
       if (disposed) return;
       setAuthenticated(true);
       lastSeenUnread = totalUnread(nextTree);
-      if (restored) await restoreFromSnapshot(restored);
+      // Cleared by select() if a feed was picked from the cached tree.
+      if (restored && restoringSession()) await restoreFromSnapshot(restored);
       schedulePoll();
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
       reportError(cause, "Unable to load feeds.");
     } finally {
-      setTreeLoading(false);
-      // Focus the tree without select(), which would also load articles.
-      queueMicrotask(() =>
-        document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
-      );
+      revealTree();
     }
     // Delayed and set rather than present at mount, so a screen reader treats
     // it as a live-region change instead of part of the first read-through.
@@ -576,20 +783,29 @@ export function Dashboard(props: {
     if (!rememberReadingPosition()) return;
     const ratio = readingSession.readerScroll(id);
     if (ratio === undefined) return;
-    queueMicrotask(() => {
-      const reader = document.querySelector<HTMLElement>(".reader");
-      if (!reader) return;
-      reader.scrollTop = ratioToScrollTop(
-        ratio,
-        reader.scrollHeight,
-        reader.clientHeight,
-      );
-    });
+    // A hidden reader measures zero, which would resolve any ratio to the top.
+    queueMicrotask(() =>
+      props.whenPaneShown(() => {
+        const reader = document.querySelector<HTMLElement>(".reader");
+        if (!reader) return;
+        reader.scrollTop = ratioToScrollTop(
+          ratio,
+          reader.scrollHeight,
+          reader.clientHeight,
+        );
+      }),
+    );
   });
   async function select(
     node: TreeNode,
     restore?: { articleId: number; listScrollTop: number },
   ) {
+    // A feed picked from the cached tree while boot still waits to restore
+    // the session (#989) supersedes the snapshot, and is recorded in its place.
+    if (!restore && restoringSession()) {
+      skipObserverFirstPass = false;
+      setRestoringSession(false);
+    }
     props.focusPane("articles");
     // Picking a feed answers a different question than the search did, so the
     // box empties with the list rather than describing rows that are gone.
@@ -657,7 +873,7 @@ export function Dashboard(props: {
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id;
+      articleCursor = nextArticles.at(-1);
       // A stale snapshot (article gone, list refilled) degrades to row 0 --
       // the normal boot path -- without any error surface.
       const restoredIndex = restore
@@ -756,19 +972,24 @@ export function Dashboard(props: {
     try {
       const nextArticles = await api("/articles", articlesResponse, {
         body: JSON.stringify({
-          cursor,
+          cursor: cursor.id,
           filter: articleFilter(),
           ...scope,
           ...(today ? { view: "today" } : {}),
           ...(search ? { query: search } : {}),
         }),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(offlineUnreadEnabled() === "on"
+            ? { "X-Cursor-Published-At": cursor.publishedAt }
+            : {}),
+        },
         method: "POST",
         signal: controller.signal,
       });
       if (!selectionGuard.isCurrent(selection)) return;
       moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1)?.id ?? articleCursor;
+      articleCursor = nextArticles.at(-1) ?? articleCursor;
       if (!nextArticles.length) return;
       setArticles((current) => [...current, ...nextArticles]);
       topUpArticles();
@@ -1206,27 +1427,66 @@ export function Dashboard(props: {
       reportError(cause, "Could not delete item");
     }
   }
-  // Prefetch the article after the one just opened (#716), so keyboard
-  // navigation into it feels instant. One article only, feed mode only --
-  // Reader modes fetch through the extension, so there is nothing server-
-  // side to warm. The plain GET is a read with no side effects; the service
-  // worker caches it and serves it for a minute without a round trip (see
+  // In-flight article GETs by id, prefetches and opens alike. A press, a
+  // hover and the click that follows share one request: the service worker
+  // caches a response only once it lands, so a second GET started before
+  // then would hit the network too. Each carries its own controller so
+  // open() can adopt it and still cancel the body when the reader moves on.
+  const articleFetches = new Map<
+    number,
+    { controller: AbortController; request: Promise<Article> }
+  >();
+  function fetchArticle(id: number) {
+    const existing = articleFetches.get(id);
+    if (existing && !existing.controller.signal.aborted) return existing;
+    const controller = new AbortController();
+    const request = api(`/article?article=${id}`, articleResponse, {
+      signal: controller.signal,
+    });
+    const entry = { controller, request };
+    articleFetches.set(id, entry);
+    void request
+      .catch(() => {})
+      .finally(() => {
+        if (articleFetches.get(id) === entry) articleFetches.delete(id);
+      });
+    return entry;
+  }
+  // The plain GET is a read with no side effects; the service worker caches
+  // it and serves it for a minute without a round trip (see
   // recentArticleFirst in public/sw.js), and offline after that.
-  function schedulePrefetch() {
+  function prefetchArticle(id: number) {
     // Both "on" and "off" are truthy, so compare the setting explicitly.
     if (prefetchNextEnabled() !== "on") return;
     if (!shouldPrefetch(navigatorConnection())) return;
-    const selectedIndex = soleSelectedIndex(selectedIndexes());
-    const next =
-      selectedIndex === undefined ? undefined : articles()[selectedIndex + 1];
-    if (!next) return;
+    if (openedArticle()?.id === id) return;
+    // Best-effort: opening the article reports its own failure.
+    fetchArticle(id);
+  }
+  // Prefetch the articles either side of the one just opened (#716, #988),
+  // so keyboard navigation into them feels instant. Feed mode only --
+  // Reader modes fetch through the extension, so there is nothing server-
+  // side to warm.
+  function schedulePrefetch() {
+    const targets = neighbours(
+      articles(),
+      soleSelectedIndex(selectedIndexes()),
+    );
+    if (!targets.length) return;
     const run = () => {
-      void api(`/article?article=${next.id}`, articleResponse).catch(() => {
-        // Best-effort: opening the article fetches it properly anyway.
-      });
+      for (const target of targets) prefetchArticle(target.id);
     };
     if (typeof requestIdleCallback === "function") requestIdleCallback(run);
     else setTimeout(run, 200);
+  }
+  let hoverPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
+  // A mouse resting on a row for a moment usually means a click is coming.
+  // Touch has no hover; its pointerenter arrives with the press, which
+  // prefetches on its own.
+  function scheduleHoverPrefetch(id: number) {
+    clearTimeout(hoverPrefetchTimer);
+    if (!matchMedia("(pointer: fine)").matches) return;
+    hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
   async function open(
     article: ArticleSummary,
@@ -1234,8 +1494,8 @@ export function Dashboard(props: {
   ) {
     const request = articleRequestGuard.start();
     articleBodyAbortController?.abort();
-    const controller = new AbortController();
-    articleBodyAbortController = controller;
+    const body = fetchArticle(article.id);
+    articleBodyAbortController = body.controller;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -1254,11 +1514,7 @@ export function Dashboard(props: {
     // Whatever restore was waiting to apply belongs to the previous article.
     pendingReaderScrollId = undefined;
     try {
-      const opened = await api(
-        `/article?article=${article.id}`,
-        articleResponse,
-        { signal: controller.signal },
-      );
+      const opened = await body.request;
       if (!isCurrent()) return;
       setOpenedArticle(opened);
       recordAppSnapshot({ articleId: opened.id });
@@ -1405,11 +1661,16 @@ export function Dashboard(props: {
   // announces the focused row itself -- no aria-activedescendant plumbing.
   function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
-    const element = document.querySelector<HTMLElement>(
-      `[data-index="${index}"]`,
-    );
-    element?.focus({ preventScroll: true });
-    if (options?.scroll ?? true) element?.scrollIntoView({ block: "nearest" });
+    // A load that lands while the articles pane is still fading in must not
+    // focus a row that is display:none.
+    props.whenPaneShown(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-index="${index}"]`,
+      );
+      element?.focus({ preventScroll: true });
+      if (options?.scroll ?? true)
+        element?.scrollIntoView({ block: "nearest" });
+    });
   }
   function selectArticle(index: number, event?: MouseEvent | KeyboardEvent) {
     const next = transitionArticleSelection(
@@ -1488,9 +1749,11 @@ export function Dashboard(props: {
       if (!node) return;
       event.preventDefault();
       props.focusPane("sources");
-      document
-        .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
-        ?.focus();
+      props.whenPaneShown(() =>
+        document
+          .querySelector<HTMLElement>(`[data-tree-key="${treeNodeKey(node)}"]`)
+          ?.focus(),
+      );
     } else if (
       mapArticleShortcut(event) &&
       !isTextEntry(event.target) &&
@@ -1518,7 +1781,9 @@ export function Dashboard(props: {
           focusArticleAt(focusedIndex());
         } else {
           props.focusPane("reader");
-          readerPaneRef?.focus({ preventScroll: true });
+          props.whenPaneShown(() =>
+            readerPaneRef?.focus({ preventScroll: true }),
+          );
         }
       } else if (shortcut === "openOriginal") {
         event.preventDefault();
@@ -1876,6 +2141,11 @@ export function Dashboard(props: {
                       }}
                       data-index={index()}
                       href={safeArticleUrl(article.url, window.location.href)}
+                      // Starts the GET before the click lands; open() then
+                      // awaits the same request.
+                      onPointerDown={() => prefetchArticle(article.id)}
+                      onPointerEnter={() => scheduleHoverPrefetch(article.id)}
+                      onPointerLeave={() => clearTimeout(hoverPrefetchTimer)}
                       onClick={(event) => {
                         event.preventDefault();
                         selectArticle(index(), event);

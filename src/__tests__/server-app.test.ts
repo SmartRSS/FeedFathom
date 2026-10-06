@@ -19,6 +19,11 @@ import type {
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import {
+  ArticleEventHub,
+  type ArticleEventSubscriber,
+} from "#features/reader/article-event-hub.ts";
+import { articleEventsChannel } from "#features/feeds/article-events.ts";
 import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, mock, spyOn, test } from "bun:test";
@@ -118,6 +123,7 @@ type PasswordResetRouteDependencies = {
   };
 };
 type ReaderRouteDependencies = {
+  articleEventHub: Pick<ArticleEventHub, "close" | "listen">;
   articlesDataService: Pick<
     ArticlesDataService,
     | "batchUpsertArticles"
@@ -148,6 +154,7 @@ type ReaderRouteDependencies = {
     UserSourcesDataService,
     | "addSourceToUser"
     | "recomputeUnreadCounts"
+    | "getUserSourceIds"
     | "getUserSources"
     | "removeSourceFromUser"
     | "setSourceSnooze"
@@ -266,6 +273,10 @@ function createDependencies(): ServerFakes {
   };
 
   return {
+    articleEventHub: {
+      close: () => {},
+      listen: () => unexpected("articleEventHub.listen"),
+    },
     articlesDataService: {
       async batchUpsertArticles() {
         return unexpected("articlesDataService.batchUpsertArticles");
@@ -381,6 +392,9 @@ function createDependencies(): ServerFakes {
       async addSourceToUser() {
         return unexpected("userSourcesDataService.addSourceToUser");
       },
+      async getUserSourceIds() {
+        return [];
+      },
       async getUserSources() {
         return [];
       },
@@ -470,6 +484,7 @@ async function mockServices(dependencies: ServerFakes) {
   await mock.module("#features/feeds/services.ts", () => dependencies);
   await mock.module("#features/auth/services.ts", () => dependencies);
   await mock.module("#features/mail-ingest/services.ts", () => dependencies);
+  await mock.module("#features/reader/services.ts", () => dependencies);
   await mock.module("#platform/runtime.ts", () => dependencies);
   await mock.module("#platform/config.ts", () => ({
     config: dependencies.config,
@@ -678,6 +693,7 @@ test.each([
   "/api/find?link=https%3A%2F%2Fsite.example%2F",
   "/api/article?article=1",
   "/api/tree",
+  "/api/events",
   "/api/folders",
   "/api/options",
 ])("rejects unauthenticated access to %s", async (path) => {
@@ -2060,6 +2076,43 @@ test("passes the article list filter through to the query", async () => {
   // lives in the data service rather than being spelled out per caller.
   expect(filters).toEqual([undefined, "read", "all"]);
   expect(rejected.status).toBe(422);
+});
+
+// A bundle from before #992 rejects the extra field, so only a request that
+// asks gets it.
+test("lists article revisions only when asked", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.articlesDataService.getUserArticlesForSources = async () => [
+    {
+      author: "A",
+      group: "Today",
+      id: 11,
+      publishedAt: new Date("2026-10-06T10:00:00.000Z"),
+      read: false,
+      revision: "2026-10-06 10:00:00.000001+00",
+      sourceId: 3,
+      title: "T",
+      url: "https://articles.example/1",
+    },
+  ];
+  const app = await appFor(dependencies);
+  const list = async (body: unknown) => {
+    const response = await app.handle(
+      new Request("http://localhost/api/articles", {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: "sid=test" },
+        method: "POST",
+      }),
+    );
+    const rows: { revision?: string }[] = await response.json();
+    return rows.map((row) => row.revision);
+  };
+
+  expect(await list({ sources: [3] })).toEqual([undefined]);
+  expect(await list({ revision: true, sources: [3] })).toEqual([
+    "2026-10-06 10:00:00.000001+00",
+  ]);
 });
 
 test("searches every subscription rather than the selected sources", async () => {
@@ -4024,4 +4077,128 @@ test("cache headers: /assets/* is immutable, index.html is no-cache", async () =
     // Clean up temporary directory
     await Bun.spawn(["rm", "-rf", tmpDir]).exited;
   }
+});
+
+// #991: one shared subscriber fans out to every stream, and each stream
+// forwards only the sources its user subscribes to.
+test("the event stream forwards only the user's sources and unlistens on cancel", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  let deliver: ((channel: string, message: string) => void) | undefined;
+  let connections = 0;
+  const subscriber: ArticleEventSubscriber = {
+    disconnect: () => {},
+    on: (_event, listener) => {
+      deliver = listener;
+    },
+    subscribe: async () => 1,
+  };
+  const hub = new ArticleEventHub(() => {
+    connections++;
+    return subscriber;
+  });
+  let unlistened = 0;
+  dependencies.articleEventHub = {
+    close: () => hub.close(),
+    listen: (listener) => {
+      const off = hub.listen(listener);
+      return () => {
+        unlistened++;
+        off();
+      };
+    },
+  };
+  dependencies.userSourcesDataService.getUserSourceIds = async (userId) =>
+    userId === sessionUser.id ? [3] : [];
+  const app = await appFor(dependencies);
+  const open = async () =>
+    await app.handle(
+      new Request("http://localhost/api/events", {
+        headers: { cookie: "sid=test" },
+      }),
+    );
+
+  const first = await open();
+  const second = await open();
+  expect(first.status).toBe(200);
+  expect(first.headers.get("content-type")).toBe("text/event-stream");
+  expect(first.headers.get("cache-control")).toBe("no-cache");
+  expect(first.headers.get("x-accel-buffering")).toBe("no");
+  const reader = first.body!.getReader();
+  const decoder = new TextDecoder();
+  const next = async () => decoder.decode((await reader.read()).value);
+  expect(await next()).toContain(": connected");
+  expect(connections).toBe(1);
+
+  deliver?.("another-channel", JSON.stringify({ count: 1, sourceId: 3 }));
+  deliver?.(articleEventsChannel, "not json");
+  deliver?.(articleEventsChannel, JSON.stringify({ count: 2, sourceId: 4 }));
+  deliver?.(articleEventsChannel, JSON.stringify({ count: 5, sourceId: 3 }));
+  expect(await next()).toBe('data: {"count":5,"sourceId":3}\n\n');
+
+  await reader.cancel();
+  expect(unlistened).toBe(1);
+  await second.body!.cancel();
+  expect(unlistened).toBe(2);
+});
+
+test("a client gone during the source lookup leaves no listener behind", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const controller = new AbortController();
+  dependencies.userSourcesDataService.getUserSourceIds = async () => {
+    controller.abort();
+    return [3];
+  };
+  let listening = 0;
+  dependencies.articleEventHub = {
+    close: () => {},
+    listen: () => {
+      listening++;
+      return () => {
+        listening--;
+      };
+    },
+  };
+  const app = await appFor(dependencies);
+  await app.handle(
+    new Request("http://localhost/api/events", {
+      headers: { cookie: "sid=test" },
+      signal: controller.signal,
+    }),
+  );
+
+  expect(listening).toBe(0);
+});
+
+test("closing the hub ends open event streams", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const hub = new ArticleEventHub(() => ({
+    disconnect: () => {},
+    on: () => {},
+    subscribe: async () => 1,
+  }));
+  dependencies.articleEventHub = hub;
+  const app = await appFor(dependencies);
+  const response = await app.handle(
+    new Request("http://localhost/api/events", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+  const reader = response.body!.getReader();
+  await reader.read();
+
+  hub.close();
+  expect((await reader.read()).done).toBe(true);
+
+  // A stream that registers after shutdown began ends rather than resubscribe.
+  const late = await app.handle(
+    new Request("http://localhost/api/events", {
+      headers: { cookie: "sid=test" },
+    }),
+  );
+  const lateReader = late.body!.getReader();
+  await lateReader.read();
+  expect((await lateReader.read()).done).toBe(true);
 });

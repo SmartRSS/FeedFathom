@@ -26,6 +26,7 @@ import {
 } from "#features/feeds/websub.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
 
@@ -136,6 +137,10 @@ export class FeedParser {
       UserSourcesDataService,
       "recomputeUnreadCounts"
     >,
+    private readonly articleEventPublisher: Pick<
+      ArticleEventPublisher,
+      "publish"
+    >,
     // Undefined skips WebSub (see maybeSubscribeToWebSub): without a public
     // domain there is no callback URL a hub could reach.
     private readonly feedFathomDomain?: string,
@@ -212,6 +217,9 @@ export class FeedParser {
       }
       if (upsertError !== undefined) {
         throw upsertError;
+      }
+      if (changed > 0) {
+        this.articleEventPublisher.publish(source.id, changed);
       }
 
       await this.sourcesDataService.successSource(

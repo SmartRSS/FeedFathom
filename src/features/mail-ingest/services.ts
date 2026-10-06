@@ -1,4 +1,5 @@
 import {
+  articleEventPublisher,
   articlesDataService,
   sourcesDataService,
   userSourcesDataService,
@@ -9,4 +10,5 @@ export const emailHandler = /* @__PURE__ */ new EmailHandler(
   sourcesDataService,
   articlesDataService,
   userSourcesDataService,
+  articleEventPublisher,
 );

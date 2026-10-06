@@ -69,41 +69,6 @@ export function treeTabStopKey(
   return first ? treeNodeKey(first) : undefined;
 }
 
-export function faviconUrls(node: TreeNode): string[] {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(faviconUrls);
-}
-
-/** How long the first tree render holds its skeleton for favicons. */
-const FAVICON_PRELOAD_DEADLINE_MS = 300;
-
-function decodeImage(url: string): Promise<void> {
-  const image = new Image();
-  image.src = url;
-  return image.decode();
-}
-
-// First tree render only (see onMount in dashboard.tsx): holds the skeleton
-// until every favicon settles, so the tree doesn't flash in icon by icon --
-// but never past the deadline, so one slow icon host can't hold the whole
-// sidebar. Icons still loading fall back to TreeItem's per-icon skeleton.
-export function preloadFavicons(
-  tree: TreeNode[],
-  decode: (url: string) => Promise<void> = decodeImage,
-): Promise<void> {
-  const urls = tree.flatMap(faviconUrls);
-  if (!urls.length) return Promise.resolve();
-  return Promise.race([
-    Promise.all(urls.map((url) => decode(url).catch(() => {}))).then(() => {}),
-    new Promise<void>((resolve) =>
-      setTimeout(resolve, FAVICON_PRELOAD_DEADLINE_MS),
-    ),
-  ]);
-}
-
 export function withDecrementedUnread(
   nodes: TreeNode[],
   deltas: Map<string, number>,
@@ -255,11 +220,16 @@ export function isSnoozedNode(
 }
 
 // Background poll spacing, backing off so a long-idle tab asks less often:
-// 30s doubling to a 5-minute ceiling.
+// 30s doubling to a 5-minute ceiling. While the /api/events stream is open
+// (#991) it carries the signal, so the poll only backs it up at the ceiling.
 const firstPollDelayMs = 30_000;
 const maxPollDelayMs = 5 * 60_000;
 
-export function nextPollDelayMs(completedCycles: number): number {
+export function nextPollDelayMs(
+  completedCycles: number,
+  streamOpen = false,
+): number {
+  if (streamOpen) return maxPollDelayMs;
   return Math.min(
     maxPollDelayMs,
     firstPollDelayMs * 2 ** Math.max(0, completedCycles),

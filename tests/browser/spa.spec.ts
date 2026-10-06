@@ -115,6 +115,7 @@ const pagedSummary = (id: number) => ({
   id,
   publishedAt: "2026-07-20T10:00:00.000Z",
   read: false,
+  revision: null,
   sourceId: 3,
   title: `Article ${id}`,
   url: `https://articles.example/${id}`,
@@ -252,9 +253,9 @@ test("boots Solid and renders the authenticated nested tree", async ({
   ).toBeVisible();
 });
 
-// #938: the first render waits on favicons only up to a short deadline. A
-// cold load of a large tree must not hold the sidebar until the last icon
-// settles; icons still loading show their own placeholder, then swap in.
+// #989: the first render never waits on favicons. A cold load of a large
+// tree must not hold the sidebar until the last icon settles; icons still
+// loading show their own placeholder, then swap in.
 test("renders the tree while its favicons are still loading", async ({
   page,
 }) => {
@@ -284,9 +285,7 @@ test("renders the tree while its favicons are still loading", async ({
   });
   await page.goto("/");
 
-  // The icons never answer, so only the deadline can drop the skeleton.
-  // Generous next to the 300 ms deadline; waiting for the icons would never
-  // finish.
+  // The icons never answer, so waiting for them would never finish.
   await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
     timeout: 3000,
   });
@@ -1714,6 +1713,112 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
+// #990: the switch cross-fades only on the phone layout, and never under
+// reduced motion. Counting calls rather than watching pixels keeps it cheap.
+test("cross-fades mobile pane switches unless motion is reduced", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const start = document.startViewTransition.bind(document);
+    Object.assign(window, { viewTransitions: 0 });
+    document.startViewTransition = (update) => {
+      Object.assign(window, {
+        viewTransitions: Number(Reflect.get(window, "viewTransitions")) + 1,
+      });
+      return start(update);
+    };
+  });
+  const transitions = () =>
+    page.evaluate(() => Number(Reflect.get(window, "viewTransitions")));
+  await installApiFixture(page);
+  await page.goto("/");
+
+  await selectSource(page);
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(0);
+
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.getByRole("option", { name: /First article/ }).click();
+  await expect(page.locator(".reader-pane")).toBeVisible();
+  await expect(page.locator(".articles-pane")).toBeHidden();
+  expect(await transitions()).toBe(1);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page
+    .locator(".reader-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  expect(await transitions()).toBe(1);
+});
+
+// A second tap lands before the cross-fade has applied the first switch. It
+// must not push a second history entry, or Back would stay on the list.
+test("a double tap on a feed leaves one history entry to go back", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/");
+
+  // Both clicks in one task, so the second certainly beats the transition.
+  await page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .evaluate((button) => {
+      if (!(button instanceof HTMLElement)) return;
+      button.click();
+      button.click();
+    });
+  await expect(page.locator(".articles-pane")).toBeVisible();
+  await page
+    .locator(".articles-pane")
+    .getByRole("button", { name: "back" })
+    .click();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+});
+
+// #990: rows off screen skip rendering, and their placeholder height has to
+// match a rendered row exactly, or a restored scrollTop and the paging
+// threshold drift by the error times every row above.
+for (const theme of ["smart", "high-contrast"]) {
+  test(`off-screen article rows keep a rendered row's height (${theme})`, async ({
+    page,
+  }) => {
+    await page.addInitScript((value) => {
+      localStorage.setItem("theme", value);
+    }, theme);
+    await installApiFixture(page, { manyArticles: true });
+    await page.setViewportSize({ height: 600, width: 1280 });
+    await page.goto("/");
+    await selectSource(page);
+    await expect(articleOptions(page)).toHaveCount(60);
+    // A blank title and byline (an empty mail subject) must not collapse a
+    // row below the placeholder either.
+    await articleOptions(page)
+      .nth(1)
+      .evaluate((row) => {
+        for (const text of row.querySelectorAll(".title, .details > *"))
+          text.textContent = "";
+      });
+
+    const rows = await page
+      .locator(".article-list .article")
+      .evaluateAll((elements) =>
+        elements.map((row) => ({
+          height: row.getBoundingClientRect().height,
+          rendered:
+            row.firstElementChild?.checkVisibility({
+              contentVisibilityAuto: true,
+            }) ?? false,
+        })),
+      );
+    expect(rows[0]?.rendered).toBe(true);
+    expect(rows.at(-1)?.rendered).toBe(false);
+    expect(new Set(rows.map((row) => row.height)).size).toBe(1);
+  });
+}
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/preview");
@@ -2020,7 +2125,9 @@ test("o moves focus between the article list and the reader pane", async ({
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
   await selectSource(page);
-  await articleOptions(page).first().focus();
+  // The load focuses the first row even when it lands before the pane's
+  // cross-fade has shown the list (#990).
+  await expect(articleOptions(page).first()).toBeFocused();
 
   await page.keyboard.press("o");
   const reader = page.getByRole("article", { name: "Reader" });
@@ -2589,6 +2696,97 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });
 
+// #991: an article event from /api/events runs the poll within seconds rather
+// than waiting out the 30s timer, and raises the same toast.
+test("an article event refreshes the tree ahead of the poll", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await installApiFixture(page);
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  await page.route("**/api/events", async (route) => {
+    await released;
+    await route.fulfill({
+      body: 'retry: 600000\ndata: {"count":3,"sourceId":3}\n\n',
+      contentType: "text/event-stream",
+    });
+  });
+  await page.goto("/");
+  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(row.locator(".unread-count")).toHaveText("2");
+
+  let treeRequests = 0;
+  await page.route("**/api/tree", (route) => {
+    treeRequests++;
+    return route.fulfill({
+      json: {
+        tree: [
+          {
+            children: [
+              {
+                favicon: null,
+                homeUrl: "https://news.example/",
+                kind: "feed",
+                name: "Tech News",
+                type: "source",
+                uid: "3",
+                unreadCount: 5,
+                xmlUrl: "https://news.example/feed.xml",
+              },
+            ],
+            name: "Reading",
+            type: "folder",
+            uid: "7",
+          },
+        ],
+      },
+    });
+  });
+  release();
+  // Half-second steps, so the signal lands well inside the 30s first poll.
+  await expect
+    .poll(async () => {
+      await page.clock.runFor(500);
+      return treeRequests;
+    })
+    .toBe(1);
+  await expect(row.locator(".unread-count")).toHaveText("5");
+  await expect(page.getByText("3 new articles.")).toBeVisible();
+});
+
+// A proxy that accepts the stream and drops it on every reconnect must not
+// keep pushing the fallback poll back: it still lands at 30s.
+test("a stream that keeps dropping leaves the fallback poll on time", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const state = await installApiFixture(page);
+  let streams = 0;
+  await page.route("**/api/events", (route) => {
+    streams++;
+    return route.fulfill({
+      body: "retry: 100\n: connected\n\n",
+      contentType: "text/event-stream",
+    });
+  });
+  await page.goto("/");
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  expect(state.treeRequests).toBe(1);
+
+  // EventSource reconnects on real time, the poll on the installed clock.
+  const streamCount = () => streams;
+  for (let step = 0; step < 10; step++) {
+    const before = streams;
+    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
+    await expect.poll(streamCount).toBeGreaterThan(before);
+    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
+    await page.clock.runFor(3_000);
+  }
+  await expect.poll(() => state.treeRequests).toBe(2);
+});
+
 // #927: arrowing through the list opens each row it passes. The page cancels
 // the body requests of the rows it leaves behind, rather than only ignoring
 // them when they land, and the cancellation raises no error.
@@ -2638,6 +2836,82 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
   await navigatePastHeldArticles(page);
 });
 
+// #989: a slow network doesn't hold a tree the worker already has.
+// Releasing with no response lets the fixture answer as usual.
+type HeldTree = { json: object; status?: number } | undefined;
+const reloadWithHeldTree = async (
+  page: Page,
+  beforeReload?: () => Promise<void>,
+) => {
+  const context = page.context();
+  await installApiFixture(context);
+  await page.goto("/");
+  await page.waitForFunction(() => navigator.serviceWorker.controller);
+  await page.reload();
+  await page.waitForFunction(async () =>
+    Boolean(await caches.match("/api/tree")),
+  );
+  await beforeReload?.();
+  let release!: (response?: HeldTree) => void;
+  const held = new Promise<HeldTree>((resolve) => {
+    release = resolve;
+  });
+  await context.route("**/api/tree", async (route) => {
+    const response = await held;
+    await (response ? route.fulfill(response) : route.fallback());
+  });
+  await page.reload();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Tech News" }),
+  ).toBeVisible();
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0);
+  return release;
+};
+
+// The article bodies the worker holds for offline reading (#992).
+const downloaded = (page: Page) =>
+  page.evaluate(async () => {
+    const name = (await caches.keys()).find((key) => key.startsWith("api-"));
+    if (!name) return [];
+    const keys = await (await caches.open(name)).keys();
+    return keys
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === "/sw-offline-article")
+      .map((url) => url.search);
+  });
+
+// The fixture's articles date from July, past the 14-day bound, so the
+// unread list is answered with the same three dated now.
+const downloadUnread = async (page: Page) => {
+  const context = page.context();
+  await context.addInitScript(() =>
+    localStorage.setItem("offlineUnread", "on"),
+  );
+  await installApiFixture(context, { multipleArticles: true });
+  await context.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const publishedAt = new Date().toJSON();
+    return route.fulfill({
+      json: ["First", "Second", "Third"].map((title, index) => ({
+        author: "News Author",
+        group: "Today",
+        id: 11 + index,
+        publishedAt,
+        read: false,
+        revision: null,
+        sourceId: 3,
+        title: `${title} article`,
+        url: `https://articles.example/${index}`,
+      })),
+    });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => navigator.serviceWorker.controller);
+  // No reload: the first sync is skipped until the worker takes control,
+  // and controllerchange retries it.
+  await expect.poll(() => downloaded(page)).toHaveLength(3);
+};
+
 test.describe("under a controlling service worker", () => {
   test.use({ serviceWorkers: "allow" });
 
@@ -2661,16 +2935,148 @@ test.describe("under a controlling service worker", () => {
     const fromPage: string[] = [];
     const fromWorker: string[] = [];
     context.on("request", (request) => {
-      if (new URL(request.url()).pathname === "/api/tree")
-        (request.serviceWorker() ? fromWorker : fromPage).push(request.url());
+      const url = new URL(request.url());
+      if (url.pathname === "/api/tree")
+        (request.serviceWorker() ? fromWorker : fromPage).push(
+          url.pathname + url.search,
+        );
     });
     await page.reload();
     await expect(
       page.locator("button.source").filter({ hasText: "Tech News" }),
     ).toBeVisible();
-    expect({ fromPage, fromWorker }).toEqual({
-      fromPage: [expect.any(String)],
-      fromWorker: [expect.any(String)],
+    // The cache-only request (#989) is answered by the worker alone.
+    expect({ fromPage: fromPage.toSorted(), fromWorker }).toEqual({
+      fromPage: ["/api/tree", "/api/tree?cached"],
+      fromWorker: ["/api/tree"],
     });
+  });
+
+  test("a controlled reload paints the cached tree, then the fresh one", async ({
+    page,
+  }) => {
+    const release = await reloadWithHeldTree(page);
+    await expect(
+      page.getByRole("treeitem", { name: "Tech News 2 unread" }),
+    ).toBeVisible();
+
+    release({
+      json: {
+        tree: [
+          {
+            favicon: null,
+            homeUrl: "https://news.example/",
+            kind: "feed",
+            name: "Tech News",
+            type: "source",
+            uid: "3",
+            unreadCount: 5,
+            xmlUrl: "https://news.example/feed.xml",
+          },
+        ],
+      },
+    });
+    await expect(
+      page.getByRole("treeitem", { name: "Tech News 5 unread" }),
+    ).toBeVisible();
+    await expect(page.getByText(/new articles?\./)).toHaveCount(0);
+  });
+
+  test("a feed picked from the cached tree replaces the session restore", async ({
+    page,
+  }) => {
+    const snapshotNode = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(
+            sessionStorage.getItem("feedfathom:reading-session:v1") ?? "null",
+          )?.app?.nodeUid,
+      );
+    const release = await reloadWithHeldTree(page, async () => {
+      await selectSource(page, "Reading");
+      await expect.poll(snapshotNode).toBe("7");
+    });
+    await selectSource(page);
+    release();
+    await page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/tree",
+    );
+    await expectSelectedRow(page, /^Tech News/);
+    expect(await snapshotNode()).toBe("3");
+  });
+
+  test("a downloaded unread article opens offline without a request", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    await selectSource(page);
+    await expect(articleOptions(page)).toHaveCount(3);
+    const fromWorker: string[] = [];
+    page.context().on("request", (request) => {
+      if (request.serviceWorker()) fromWorker.push(request.url());
+    });
+    await page.context().setOffline(true);
+    await articleOptions(page).filter({ hasText: "Third article" }).click();
+    await expect(
+      page.locator(".reader").getByRole("heading", { name: "Third article" }),
+    ).toBeVisible();
+    expect(fromWorker).toEqual([]);
+    await page.context().setOffline(false);
+  });
+
+  // A reload offline needs a built shell, which the dev server doesn't
+  // serve, so the list is first asked for once offline.
+  test("offline, the downloaded articles are listed and open", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    // A controlled load, so the worker holds the tree a folder resolves by.
+    await page.reload();
+    await expect(page.locator("button.source").first()).toBeVisible();
+    // Routes still answer the worker under setOffline, so the API is cut
+    // off by a route that wins over the fixture's.
+    await page
+      .context()
+      .route("**/api/**", (route) => route.abort("internetdisconnected"));
+    await page.context().setOffline(true);
+    await selectSource(page, "Reading");
+    await expect(articleOptions(page)).toHaveCount(3);
+    await articleOptions(page).filter({ hasText: "Third article" }).click();
+    await expect(
+      page.locator(".reader").getByRole("heading", { name: "Third article" }),
+    ).toBeVisible();
+    await page.context().setOffline(false);
+    (browserFailures.get(page) ?? []).length = 0;
+  });
+
+  test("switching the download off, and logging out, drop stored bodies", async ({
+    page,
+  }) => {
+    await downloadUnread(page);
+    await page.goto("/options");
+    await page
+      .getByRole("combobox", {
+        name: "Download unread articles for offline reading",
+      })
+      .selectOption("off");
+    await expect.poll(() => downloaded(page)).toEqual([]);
+
+    // The init script switches it back on.
+    await page.goto("/");
+    await expect.poll(() => downloaded(page)).toHaveLength(3);
+    await page.goto("/options");
+    await page.getByRole("link", { name: "Account & security" }).click();
+    await page.getByRole("button", { name: "Logout" }).click();
+    await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+    expect(await downloaded(page)).toEqual([]);
+  });
+
+  test("a 401 behind the cached tree still routes to sign-in", async ({
+    page,
+  }) => {
+    const release = await reloadWithHeldTree(page);
+    release({ json: { error: "Unauthorized" }, status: 401 });
+    await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+    (browserFailures.get(page) ?? []).length = 0;
   });
 });

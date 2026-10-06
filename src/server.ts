@@ -1,6 +1,7 @@
 import { close, drizzleConnection } from "#platform/runtime.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import { articleEventHub } from "#features/reader/services.ts";
 import { createServerApp } from "./server-app.ts";
 
 const production = Bun.env.NODE_ENV === "production";
@@ -13,9 +14,13 @@ await waitForMigration(drizzleConnection.$client);
 app.listen(config.PORT ?? 3000);
 
 let shutdownPromise: Promise<void> | undefined;
-const shutdown = () =>
-  (shutdownPromise ??= Promise.resolve(app.stop())
+const shutdown = () => {
+  // First: graceful stop waits for open responses, and event streams never
+  // finish on their own.
+  articleEventHub.close();
+  return (shutdownPromise ??= Promise.resolve(app.stop())
     .then(() => close())
     .then(() => undefined));
+};
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
