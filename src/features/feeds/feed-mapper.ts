@@ -11,6 +11,8 @@ type FeedMapperItem = {
   content: string | null;
   description: string | null;
   id: string | null;
+  // Set, possibly empty, on every entry of a CAP feed, and only there.
+  language?: string;
   published: Date | null;
   title: string | null;
   updated: Date | null;
@@ -66,7 +68,7 @@ export type Source = {
   url: string;
 };
 
-const generateArticleGuid = (
+const baseArticleGuid = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
@@ -92,6 +94,22 @@ const generateArticleGuid = (
   return Bun.hash(hashInput).toString(36);
 };
 
+// NAAD lists each alert once per language and per CAP info block, all under
+// one id, and the store keeps one article per guid. A CAP entry's guid
+// therefore also hashes what tells those copies apart. It depends on the
+// entry alone, so it survives its neighbours changing, and identical copies
+// still collapse. Other feeds keep their guids unchanged.
+const generateArticleGuid = (
+  item: FeedMapperItem,
+  parsedFeed: FeedMapperInput,
+  sourceUrl: string,
+): string => {
+  const guid = baseArticleGuid(item, parsedFeed, sourceUrl);
+  if (item.language === undefined) return guid;
+  const entry = Bun.hash([item.language, item.url, item.title].join("\n"));
+  return `${guid}#${entry.toString(36)}`;
+};
+
 // The HTML an article body starts from, before its links are rewritten.
 const itemBody = (item: FeedMapperItem): string =>
   (item.cap ? renderCapAlert(item.cap) : "") +
@@ -113,7 +131,7 @@ export const mapFeedItemToArticle = (
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     content: rewriteLinksFunction(itemBody(item), url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),
-    publishedAt: new Date(item.published ?? now),
+    publishedAt: new Date(item.published ?? item.updated ?? now),
     sourceId: source.id,
     title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     updatedAt:

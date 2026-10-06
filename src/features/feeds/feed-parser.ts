@@ -6,7 +6,11 @@ import { type HttpClient } from "#platform/http/http-client.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
-import { attachCapAlerts } from "#features/feeds/cap-entry.ts";
+import {
+  attachCapAlerts,
+  declaresCapNamespace,
+  mentionsCapNamespace,
+} from "#features/feeds/cap-entry.ts";
 import {
   currentFeedItems,
   mapFeedItemToArticle,
@@ -119,6 +123,33 @@ export function validateParsedFeed(value: unknown): void {
     throw new Error("Feed parser returned an invalid feed projection");
   }
 }
+
+type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
+
+// The CAP namespace is in scope when the entry or an ancestor declares it.
+const inCapScope = (element: XmlElement | null): boolean =>
+  element !== null &&
+  (declaresCapNamespace(element.attributes) || inCapScope(element.parent));
+
+/**
+ * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
+ * `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
+ * `language`; see generateArticleGuid.
+ */
+export const parseXmlFeed = (text: string) => {
+  const feed = parseFeed(text);
+  if (!mentionsCapNamespace(text)) return feed;
+  for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
+    const language =
+      item.element.getAttribute("xml:lang") ??
+      item.categories
+        .find(({ term }) => term.startsWith("language="))
+        ?.term.slice("language=".length) ??
+      "";
+    Object.assign(item, { language });
+  }
+  return feed;
+};
 
 export class FeedParser {
   constructor(
@@ -382,7 +413,7 @@ export class FeedParser {
       ? parseJsonFeed(text)
       : isMicroformatHtml(text, contentType)
         ? parseMicroformatFeed(text, finalUrl)
-        : parseFeed(text);
+        : parseXmlFeed(text);
     validateParsedFeed(parsedFeed);
     attachCapAlerts(text, parsedFeed.items);
     return {

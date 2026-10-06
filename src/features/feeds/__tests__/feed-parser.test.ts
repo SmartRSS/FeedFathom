@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
+  parseXmlFeed,
   validateParsedFeed,
 } from "#features/feeds/feed-parser.ts";
 
@@ -99,5 +101,97 @@ describe("feed body encoding detection", () => {
     ).buffer;
     expect(() => decodeFeedBody(buffer, null)).not.toThrow();
     expect(decodeFeedBody(buffer, null)).toContain("ok");
+  });
+});
+
+const naadId =
+  "tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026";
+const naad = () =>
+  Bun.file(
+    "src/features/feeds/__tests__/feed-parser-cases/naad-bilingual.xml",
+  ).text();
+const entriesOf = (text: string) => text.match(/<entry>.*?<\/entry>/gsu) ?? [];
+// The feed with its entries replaced by the given ones.
+const withEntries = (text: string, entries: string[]) =>
+  text.replace(/<entry>.*<\/entry>/su, entries.join("\n"));
+const articlesOf = (text: string) =>
+  mapFeedToPreview(
+    parseXmlFeed(text),
+    "https://rss.naad-adna.pelmorex.com/",
+    (content) => content,
+    Date.parse("2026-10-06T08:06:42Z"),
+  ).articles;
+const guidsOf = (text: string) => articlesOf(text).map(({ guid }) => guid);
+const capFeedGuids = (lang: string) =>
+  guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+    <entry xml:lang="${lang}"><id>x</id><category term="language=en"/></entry>
+  </feed>`);
+
+describe("entries sharing an id", () => {
+  test("keeps every entry of a NAAD alert as its own article", async () => {
+    const articles = articlesOf(await naad());
+    expect(new Set(articles.map(({ guid }) => guid)).size).toBe(4);
+    expect(articles.every(({ guid }) => guid.startsWith(`${naadId}#`))).toBe(
+      true,
+    );
+    // NAAD entries carry no <published>.
+    expect(articles.map(({ publishedAt }) => publishedAt)).toEqual(
+      Array.from({ length: 4 }, () => new Date("2026-10-05T10:01:11Z")),
+    );
+  });
+
+  test("keeps each entry's guid when its neighbours change", async () => {
+    const text = await naad();
+    const guids = guidsOf(text);
+    const entries = entriesOf(text);
+    expect(guidsOf(withEntries(text, entries.slice(2)))).toEqual(
+      guids.slice(2),
+    );
+    expect(guidsOf(withEntries(text, entries.slice(2, 3)))).toEqual(
+      guids.slice(2, 3),
+    );
+    expect(
+      guidsOf(withEntries(text, [...entries.slice(2), ...entries.slice(0, 2)])),
+    ).toEqual([...guids.slice(2), ...guids.slice(0, 2)]);
+  });
+
+  test("gives identical copies one guid, so they still collapse", async () => {
+    const text = await naad();
+    const first = entriesOf(text).slice(0, 1);
+    expect(guidsOf(withEntries(text, [...first, ...first]))).toEqual([
+      ...guidsOf(text).slice(0, 1),
+      ...guidsOf(text).slice(0, 1),
+    ]);
+  });
+
+  test("leaves the guids of a feed without the CAP namespace alone", () => {
+    expect(
+      guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom">
+        <entry xml:lang="en"><id>x</id><title>A</title></entry>
+        <entry xml:lang="fr"><id>x</id><title>B</title></entry>
+        <entry><id>y</id><category term="language=en"/></entry>
+      </feed>`),
+    ).toEqual(["x", "x", "y"]);
+  });
+
+  test("treats a feed that only mentions the CAP namespace as ordinary", () => {
+    const [article] = articlesOf(`<feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>post</id><title>CAP</title>
+        <content type="html">&lt;cap:alert xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"&gt;</content>
+      </entry>
+    </feed>`);
+    expect(article?.guid).toBe("post");
+  });
+
+  test("treats a CAP namespace declared on an RSS item as CAP", () => {
+    expect(
+      guidsOf(`<rss><channel>
+        <item xmlns:c="urn:oasis:names:tc:emergency:cap:1.1"><guid>x</guid><c:event>E</c:event></item>
+      </channel></rss>`),
+    ).not.toEqual(["x"]);
+  });
+
+  test("tells CAP entries apart by xml:lang before the language category", () => {
+    expect(capFeedGuids("de")).not.toEqual(capFeedGuids("fr"));
   });
 });
