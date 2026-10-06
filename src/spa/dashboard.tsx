@@ -1463,6 +1463,22 @@ export function Dashboard(props: {
     // Best-effort: opening the article reports its own failure.
     fetchArticle(id);
   }
+  // A plain primary press is the click's own request started early, not an
+  // extra one, so the opt-in setting doesn't apply. A press that turns into
+  // a scroll fires pointercancel, which drops the request it started.
+  let pressFetch: AbortController | undefined;
+  function fetchOnPress(event: PointerEvent, id: number) {
+    pressFetch = undefined;
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey)
+      return;
+    if (!shouldPrefetch(navigatorConnection())) return;
+    if (openedArticle()?.id === id || articleFetches.has(id)) return;
+    pressFetch = fetchArticle(id).controller;
+  }
+  function cancelPressFetch() {
+    pressFetch?.abort();
+    pressFetch = undefined;
+  }
   // Prefetch the articles either side of the one just opened (#716, #988),
   // so keyboard navigation into them feels instant. Feed mode only --
   // Reader modes fetch through the extension, so there is nothing server-
@@ -1496,6 +1512,8 @@ export function Dashboard(props: {
     articleBodyAbortController?.abort();
     const body = fetchArticle(article.id);
     articleBodyAbortController = body.controller;
+    // Adopted: a late pointercancel must not abort the open article.
+    pressFetch = undefined;
     const mode = displayMode();
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
@@ -2143,7 +2161,8 @@ export function Dashboard(props: {
                       href={safeArticleUrl(article.url, window.location.href)}
                       // Starts the GET before the click lands; open() then
                       // awaits the same request.
-                      onPointerDown={() => prefetchArticle(article.id)}
+                      onPointerDown={(event) => fetchOnPress(event, article.id)}
+                      onPointerCancel={cancelPressFetch}
                       onPointerEnter={() => scheduleHoverPrefetch(article.id)}
                       onPointerLeave={() => clearTimeout(hoverPrefetchTimer)}
                       onClick={(event) => {
