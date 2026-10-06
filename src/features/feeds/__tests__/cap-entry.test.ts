@@ -53,7 +53,7 @@ describe("capAlerts", () => {
     const atom = `<feed xmlns="http://www.w3.org/2005/Atom"><entry>
       <content type="html">&lt;cap:event xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"&gt;</content>
     </entry></feed>`;
-    expect(capAlerts(atom)).toEqual([undefined]);
+    expect(capAlerts(atom)).toStrictEqual([undefined]);
   });
 
   test("reads only entries that declare the namespace or inherit it", () => {
@@ -84,19 +84,7 @@ describe("capAlerts", () => {
       <entry><cap:event>One</cap:event></entry>
       <a:entry><cap:event>Two</cap:event></a:entry>
     </feed>`;
-    expect(capAlerts(atom)).toEqual([undefined]);
-  });
-
-  test("reads only entries that declare the namespace or inherit it", () => {
-    const cap = "urn:oasis:names:tc:emergency:cap:1.2";
-    const atom = `<feed xmlns="http://www.w3.org/2005/Atom">
-      <entry xmlns:c="${cap}"><c:event>Declared</c:event></entry>
-      <entry><c:event xmlns:c="${cap}">Child only</c:event></entry>
-    </feed>`;
-    expect(capAlerts(atom).map((alert) => alert?.event)).toEqual([
-      "Declared",
-      undefined,
-    ]);
+    expect(capAlerts(atom)).toStrictEqual([]);
   });
 
   test("returns nothing for a feed without the CAP namespace", async () => {
