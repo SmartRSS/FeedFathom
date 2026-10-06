@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <title>Amtliche Warnungen</title>
+  <link rel="alternate" href="https://www.dwd.de/DWD/warnungen/cap-feed/de/atom.xml" />
+  <author>
+    <name>opendata@dwd.de (Deutscher Wetterdienst)</name>
+    <email>opendata@dwd.de</email>
+  </author>
+  <subtitle>Amtliche Warnungen des Deutschen Wetterdienstes</subtitle>
+  <id>https://www.dwd.de/DWD/warnungen/cap-feed/de/atom.xml</id>
+  <rights>public domain</rights>
+  <updated>2026-10-06T07:30:00Z</updated>
+  <dc:date>2026-10-06T07:30:00Z</dc:date>
+  <dc:rights>public domain</dc:rights>
+  <entry>
+    <title>(Alert) Amtliche WARNUNG vor NEBEL</title>
+    <link rel="alternate" href="https://www.dwd.de/DWD/warnungen/cap-feed/de/2.49.0.0.276.0.DWD.PVW.1791269160000.b0d835ea-1655-412a-a8d1-488bbeb952d7.DEU.xml" />
+    <link rel="related" type="application/cap+xml" href="https://www.dwd.de/DWD/warnungen/cap-feed/de/2.49.0.0.276.0.DWD.PVW.1791269160000.b0d835ea-1655-412a-a8d1-488bbeb952d7.DEU.xml" />
+    <author>
+      <name>opendata@dwd.de (Deutscher Wetterdienst)</name>
+      <email>opendata@dwd.de</email>
+    </author>
+    <id>https://www.dwd.de/DWD/warnungen/cap-feed/de/2.49.0.0.276.0.DWD.PVW.1791269160000.b0d835ea-1655-412a-a8d1-488bbeb952d7.DEU.xml</id>
+    <updated>2026-10-06T06:46:00Z</updated>
+    <published>2026-10-06T06:46:00Z</published>
+    <summary type="text">Es tritt gebietsweise Nebel mit Sichtweiten unter 150 Metern auf. - Betroffene Gebiete: Gemeinde Faßberg, Gemeinde Stavern, Gemeinde Eldingen, Gemeinde Twist, Gemeinde Hambühren, Gemeinde Nienhagen, Gemeinde Lachendorf, Gemeinde Wienhausen, Gemeinde Wietze, Gemeinde Wathlingen...</summary>
+    <dc:date>2026-10-06T06:46:00Z</dc:date>
+  </entry>
+</feed>

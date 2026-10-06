@@ -1402,6 +1402,35 @@ test("skips the next-article prefetch when the setting is Off", async ({
   expect(["11", "12", "13"]).toContain(ids[0]);
 });
 
+test("a press starts the article fetch even with prefetch Off", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "off");
+  });
+  await installApiFixture(page, { multipleArticles: true });
+  const ids = requestedArticleIds(page);
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+
+  // Settle first: loading the list may open an article of its own.
+  await page.waitForTimeout(1_000);
+  const before = ids.length;
+  // pointerdown alone, no click: the fetch must not wait for the release.
+  await articleOptions(page)
+    .last()
+    .dispatchEvent("pointerdown", { button: 0, pointerType: "mouse" });
+  await expect.poll(() => ids.length).toBe(before + 1);
+  // A right press never opens the article, so it fetches nothing.
+  await articleOptions(page)
+    .nth(1)
+    .dispatchEvent("pointerdown", { button: 2, pointerType: "mouse" });
+  await page.waitForTimeout(500);
+  expect(ids.length).toBe(before + 1);
+});
+
 test("shows the current account and logs out", async ({ page }) => {
   const state = await installApiFixture(page);
   await page.goto("/options");

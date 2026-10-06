@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
+import { capAlertSchema } from "#features/feeds/cap-entry.ts";
 import type {
   FeedMapperInput,
   FeedPreview,
@@ -24,6 +25,7 @@ const previewArticleWireSchema = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    expiresAt: Type.Optional(Type.Number()),
     guid: Type.String(),
     publishedAt: Type.Number(),
     title: Type.String(),
@@ -43,9 +45,11 @@ const feedWireSchema = Type.Object(
       Type.Object(
         {
           authors: Type.Array(Type.Object({ name: nullableString }, exact)),
+          cap: Type.Optional(capAlertSchema),
           content: nullableString,
           description: nullableString,
           id: nullableString,
+          language: Type.Optional(Type.String()),
           published: nullableTime,
           title: nullableString,
           updated: nullableTime,
@@ -92,9 +96,11 @@ const encodeFeed = (feed: FeedMapperInput): Static<typeof feedWireSchema> => ({
   description: feed.description,
   items: feed.items.map((item) => ({
     authors: item.authors.map((author) => ({ name: author.name })),
+    ...(item.cap === undefined ? {} : { cap: item.cap }),
     content: item.content,
     description: item.description,
     id: item.id,
+    ...(item.language === undefined ? {} : { language: item.language }),
     published: item.published?.getTime() ?? null,
     title: item.title,
     updated: item.updated?.getTime() ?? null,
