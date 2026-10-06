@@ -145,22 +145,31 @@ export async function postSubscribeHandler({
             // then let the original failure fall through to the
             // enqueue fallback below.
             let upsertError: unknown;
+            // A retry imports from the stored snapshot, which can hold an
+            // alert that has expired since.
+            const now = Date.now();
             try {
               await articlesDataService.batchUpsertArticles(
-                preview.articles.map((article) => ({
-                  author: article.author,
-                  content: article.content,
-                  guid: article.guid,
-                  lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  publishedAt: article.publishedAt,
-                  sourceId: subscription.source.id,
-                  title: article.title,
-                  updatedAt:
-                    article.updatedAt === undefined
-                      ? article.publishedAt
-                      : article.updatedAt,
-                  url: article.url,
-                })),
+                preview.articles
+                  .filter(
+                    (article) =>
+                      article.expiresAt === undefined ||
+                      article.expiresAt > now,
+                  )
+                  .map((article) => ({
+                    author: article.author,
+                    content: article.content,
+                    guid: article.guid,
+                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
+                    publishedAt: article.publishedAt,
+                    sourceId: subscription.source.id,
+                    title: article.title,
+                    updatedAt:
+                      article.updatedAt === undefined
+                        ? article.publishedAt
+                        : article.updatedAt,
+                    url: article.url,
+                  })),
               );
             } catch (error) {
               upsertError = error;

@@ -1,7 +1,13 @@
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
+import {
+  type CapAlert,
+  isCapAlertCurrent,
+  renderCapAlert,
+} from "#features/feeds/cap-entry.ts";
 
 type FeedMapperItem = {
   authors: readonly { name: string | null }[];
+  cap?: CapAlert;
   content: string | null;
   description: string | null;
   id: string | null;
@@ -32,6 +38,8 @@ export type ArticlePayload = {
 type FeedPreviewArticle = {
   author: string;
   content: string;
+  // A CAP alert's expiry: subscribing later must not import it once passed.
+  expiresAt?: number;
   guid: string;
   publishedAt: Date;
   title: string;
@@ -84,6 +92,11 @@ const generateArticleGuid = (
   return Bun.hash(hashInput).toString(36);
 };
 
+// The HTML an article body starts from, before its links are rewritten.
+const itemBody = (item: FeedMapperItem): string =>
+  (item.cap ? renderCapAlert(item.cap) : "") +
+  (item.content ?? item.description ?? "");
+
 export const mapFeedItemToArticle = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
@@ -98,10 +111,7 @@ export const mapFeedItemToArticle = (
   return {
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-    content: rewriteLinksFunction(
-      item.content ?? item.description ?? "",
-      url || homepage,
-    ),
+    content: rewriteLinksFunction(itemBody(item), url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),
     publishedAt: new Date(item.published ?? now),
     sourceId: source.id,
@@ -113,6 +123,15 @@ export const mapFeedItemToArticle = (
     url,
   };
 };
+
+// CAP feeds keep listing alerts that have expired, and may carry test ones.
+export const currentFeedItems = <Item extends FeedMapperItem>(
+  items: readonly Item[],
+  now: number,
+): Item[] =>
+  items.filter(
+    (item) => item.cap === undefined || isCapAlertCurrent(item.cap, now),
+  );
 
 // A preview is a sample for deciding whether to subscribe, and it runs on the
 // API server's event loop. Bounding the items before rewriting keeps that work
@@ -128,7 +147,7 @@ const previewItems = (
   let count = 0;
   for (const item of items) {
     if (count === previewArticleLimit) break;
-    bytes += Buffer.byteLength(item.content ?? item.description ?? "");
+    bytes += Buffer.byteLength(itemBody(item));
     // The first article always fits, so one oversized item still previews.
     if (count > 0 && bytes > previewContentBytesLimit) break;
     count++;
@@ -144,7 +163,7 @@ export const mapFeedToPreviewArticles = (
   items = parsedFeed.items,
 ): FeedPreviewArticle[] => {
   const source = { id: 0, url: sourceUrl };
-  return items.map((item) => {
+  return currentFeedItems(items, now).map((item) => {
     const article = mapFeedItemToArticle(
       item,
       parsedFeed,
@@ -152,15 +171,19 @@ export const mapFeedToPreviewArticles = (
       rewriteLinksFunction,
       now,
     );
-    return {
-      author: article.author,
-      content: article.content,
-      guid: article.guid,
-      publishedAt: article.publishedAt,
-      title: article.title,
-      updatedAt: article.updatedAt,
-      url: article.url,
-    };
+    const expiresAt = Date.parse(item.cap?.expires ?? "");
+    return Object.assign(
+      {
+        author: article.author,
+        content: article.content,
+        guid: article.guid,
+        publishedAt: article.publishedAt,
+        title: article.title,
+        updatedAt: article.updatedAt,
+        url: article.url,
+      },
+      Number.isNaN(expiresAt) ? {} : { expiresAt },
+    );
   });
 };
 
@@ -170,8 +193,9 @@ export const mapFeedToPreview = (
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
 ): FeedPreview => {
-  const items = previewItems(parsedFeed.items);
-  const truncated = items.length < parsedFeed.items.length;
+  const current = currentFeedItems(parsedFeed.items, now);
+  const items = previewItems(current);
+  const truncated = items.length < current.length;
   return Object.assign(
     {
       articles: mapFeedToPreviewArticles(
