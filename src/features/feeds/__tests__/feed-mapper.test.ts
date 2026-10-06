@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  mapFeedItemsToArticles,
   mapFeedItemToArticle,
   mapFeedToPreview,
   previewArticleLimit,
@@ -210,6 +211,69 @@ describe("mapFeedItemToArticle", () => {
     );
 
     expect(result.content).toBe("fallback description");
+  });
+});
+
+describe("mapFeedItemsToArticles", () => {
+  const source: Source = { id: 1, url: "https://example.com/feed.xml" };
+  const guids = (items: FeedItemInput[]) =>
+    mapFeedItemsToArticles(
+      items,
+      createMockFeed({ items }),
+      source,
+      mockRewriteLinks,
+    ).map((article) => article.guid);
+
+  test("leaves guids no other entry shares exactly as before", () => {
+    const items = [
+      createMockFeedItem({ id: "a", language: "en" }),
+      createMockFeedItem({ title: "t", url: "https://example.com/b" }),
+      createMockFeedItem({ content: "c" }),
+    ];
+    expect(guids(items)).toEqual(
+      items.map(
+        (item) =>
+          mapFeedItemToArticle(
+            item,
+            createMockFeed({ items }),
+            source,
+            mockRewriteLinks,
+          ).guid,
+      ),
+    );
+  });
+
+  test("appends the language to entries that share a guid", () => {
+    expect(
+      guids([
+        createMockFeedItem({ id: "alert", language: "en-CA" }),
+        createMockFeedItem({ id: "alert", language: "fr-CA" }),
+        createMockFeedItem({ id: "other" }),
+      ]),
+    ).toEqual(["alert#en-CA", "alert#fr-CA", "other"]);
+  });
+
+  test("numbers shared guids the language does not tell apart, in feed order", () => {
+    expect(
+      guids([
+        createMockFeedItem({ id: "alert" }),
+        createMockFeedItem({ id: "alert", language: "en-CA" }),
+        createMockFeedItem({ id: "alert" }),
+        createMockFeedItem({ id: "alert", language: "en-CA" }),
+      ]),
+    ).toEqual(["alert", "alert#en-CA", "alert#2", "alert#en-CA#2"]);
+  });
+
+  test("dates an entry without a published date by its updated date", () => {
+    const updated = new Date("2026-10-05T10:01:11Z");
+    const [article] = mapFeedItemsToArticles(
+      [createMockFeedItem({ id: "a", updated })],
+      createMockFeed(),
+      source,
+      mockRewriteLinks,
+      Date.parse("2026-10-06T00:00:00Z"),
+    );
+    expect(article?.publishedAt).toEqual(updated);
   });
 });
 

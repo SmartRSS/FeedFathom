@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.1" xmlns:georss="http://www.georss.org/georss">
+<id>http://rss.naad-adna.pelmorex.com/feed.atom</id>
+<title>Pelmorex - NAADS Alerts RSS feed, Quebec</title>
+<updated>2026-10-06T08:06:42-00:00</updated>
+<author>
+<name>Pelmorex</name>
+</author>
+<link href="http://rss.naad-adna.pelmorex.com/feed.atom" rel="self"/>
+<entry>
+<id>tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026</id>
+<title>squall watch in effect</title>
+<updated>2026-10-05T10:01:11-00:00</updated>
+<author>
+<name>Environment Canada</name>
+</author>
+<link href="http://capcp2.naad-adna.pelmorex.com/2026-10-05/2026_10_05T10_01_11_00_00Iurn_oid_2.49.0.1.124.2313967115.2026.xml" rel="alternate"/>
+<summary type="html">Description: Conditions are favourable for the development of squalls with wind gusts up to 35 knots and frequent lightning.&lt;br&gt;Area: Southern Georgian Bay</summary>
+<category term="status=Actual"/>
+<category term="msgType=Update"/>
+<category term="scope=Public"/>
+<category term="language=en-CA"/>
+<category term="category=Met"/>
+<category term="severity=Severe"/>
+<category term="urgency=Expected"/>
+<category term="certainty=Possible"/>
+<category term="event=squall"/>
+</entry>
+<entry>
+<id>tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026</id>
+<title>veille de grains en vigueur en vigueur</title>
+<updated>2026-10-05T10:01:11-00:00</updated>
+<author>
+<name>Environnement Canada</name>
+</author>
+<link href="http://capcp2.naad-adna.pelmorex.com/2026-10-05/2026_10_05T10_01_11_00_00Iurn_oid_2.49.0.1.124.2313967115.2026.xml" rel="alternate"/>
+<summary type="html">Description: Les conditions sont favorables à la formation de grains accompagnés de rafales soufflant jusqu’à 35 noeuds et de nombreux éclairs.&lt;br&gt;Area: baie Georgienne Sud</summary>
+<category term="status=Actual"/>
+<category term="msgType=Update"/>
+<category term="scope=Public"/>
+<category term="language=fr-CA"/>
+<category term="category=Met"/>
+<category term="severity=Severe"/>
+<category term="urgency=Expected"/>
+<category term="certainty=Possible"/>
+<category term="event=grains"/>
+</entry>
+<entry>
+<id>tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026</id>
+<title>squall watch ended</title>
+<updated>2026-10-05T10:01:11-00:00</updated>
+<author>
+<name>Environment Canada</name>
+</author>
+<link href="http://capcp2.naad-adna.pelmorex.com/2026-10-05/2026_10_05T10_01_11_00_00Iurn_oid_2.49.0.1.124.2313967115.2026.xml" rel="alternate"/>
+<summary type="html">Description: ###&lt;br&gt;Expires: 2026-10-05T11:00:22-00:00&lt;br&gt;Originated from CAP Alert: Environment Canada, 2026-10-05T10:01:11-00:00, urn:oid:2.49.0.1.124.2313967115.2026&lt;br&gt;Area: Northern Lake Huron, Northern Georgian Bay&lt;br&gt;Area: Northern Lake Huron, Northern Georgian Bay</summary>
+<category term="status=Actual"/>
+<category term="msgType=Update"/>
+<category term="scope=Public"/>
+<category term="language=en-CA"/>
+<category term="category=Met"/>
+<category term="severity=Minor"/>
+<category term="urgency=Past"/>
+<category term="certainty=Observed"/>
+<category term="event=squall"/>
+</entry>
+<entry>
+<id>tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026</id>
+<title>veille de grains terminée</title>
+<updated>2026-10-05T10:01:11-00:00</updated>
+<author>
+<name>Environnement Canada</name>
+</author>
+<link href="http://capcp2.naad-adna.pelmorex.com/2026-10-05/2026_10_05T10_01_11_00_00Iurn_oid_2.49.0.1.124.2313967115.2026.xml" rel="alternate"/>
+<summary type="html">Description: ###&lt;br&gt;Expires: 2026-10-05T11:00:22-00:00&lt;br&gt;Originated from CAP Alert: Environnement Canada, 2026-10-05T10:01:11-00:00, urn:oid:2.49.0.1.124.2313967115.2026&lt;br&gt;Area: lac Huron Nord, baie Georgienne Nord&lt;br&gt;Area: lac Huron Nord, baie Georgienne Nord</summary>
+<category term="status=Actual"/>
+<category term="msgType=Update"/>
+<category term="scope=Public"/>
+<category term="language=fr-CA"/>
+<category term="category=Met"/>
+<category term="severity=Minor"/>
+<category term="urgency=Past"/>
+<category term="certainty=Observed"/>
+<category term="event=grains"/>
+</entry>
+</feed>

@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { parseFeed } from "@rowanmanning/feed-parser";
+import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
   validateParsedFeed,
+  withItemLanguages,
 } from "#features/feeds/feed-parser.ts";
 
 const item = {
@@ -99,5 +102,55 @@ describe("feed body encoding detection", () => {
     ).buffer;
     expect(() => decodeFeedBody(buffer, null)).not.toThrow();
     expect(decodeFeedBody(buffer, null)).toContain("ok");
+  });
+});
+
+describe("entries sharing an id", () => {
+  test("keeps every language of a NAAD alert as its own article", async () => {
+    const text = await Bun.file(
+      "src/features/feeds/__tests__/feed-parser-cases/naad-bilingual.xml",
+    ).text();
+    const preview = mapFeedToPreview(
+      withItemLanguages(parseFeed(text)),
+      "https://rss.naad-adna.pelmorex.com/",
+      (content) => content,
+      Date.parse("2026-10-06T08:06:42Z"),
+    );
+    const id =
+      "tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026";
+    expect(
+      preview.articles.map(({ guid, publishedAt, title }) => ({
+        guid,
+        publishedAt,
+        title,
+      })),
+    ).toEqual(
+      [
+        { guid: `${id}#en-CA`, title: "squall watch in effect" },
+        {
+          guid: `${id}#fr-CA`,
+          title: "veille de grains en vigueur en vigueur",
+        },
+        { guid: `${id}#en-CA#2`, title: "squall watch ended" },
+        { guid: `${id}#fr-CA#2`, title: "veille de grains terminée" },
+      ].map((article) =>
+        Object.assign(article, {
+          publishedAt: new Date("2026-10-05T10:01:11Z"),
+        }),
+      ),
+    );
+  });
+
+  test("reads an entry's xml:lang before its language category", () => {
+    const parsed = withItemLanguages(
+      parseFeed(`<feed xmlns="http://www.w3.org/2005/Atom">
+        <entry xml:lang="de"><id>x</id><category term="language=en"/></entry>
+        <entry><id>x</id></entry>
+      </feed>`),
+    );
+    expect(parsed.items.map((entry) => entry.language)).toEqual([
+      "de",
+      undefined,
+    ]);
   });
 });

@@ -9,7 +9,7 @@ import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import { attachCapAlerts } from "#features/feeds/cap-entry.ts";
 import {
   currentFeedItems,
-  mapFeedItemToArticle,
+  mapFeedItemsToArticles,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
 import {
@@ -120,6 +120,29 @@ export function validateParsedFeed(value: unknown): void {
   }
 }
 
+type XmlFeed = ReturnType<typeof parseFeed>;
+type XmlFeedItem = XmlFeed["items"][number];
+
+/**
+ * Gives each entry its `xml:lang`, or else the `language=en-CA` category
+ * NAAD uses, as `language`: entries sharing an id are told apart by it.
+ */
+export const withItemLanguages = (
+  feed: XmlFeed,
+): Omit<XmlFeed, "items"> & {
+  items: (XmlFeedItem & { language?: string })[];
+} => {
+  for (const item of feed.items) {
+    const language =
+      item.element.getAttribute("xml:lang") ??
+      item.categories
+        .find(({ term }) => term.startsWith("language="))
+        ?.term.slice("language=".length);
+    if (language) Object.assign(item, { language });
+  }
+  return feed;
+};
+
 export class FeedParser {
   constructor(
     private readonly articlesDataService: ArticlesDataService,
@@ -178,20 +201,14 @@ export class FeedParser {
       }
 
       const observedAt = new Date();
-      const articlesToUpsert = currentFeedItems(
-        parsedFeed.items,
+      const articlesToUpsert = mapFeedItemsToArticles(
+        currentFeedItems(parsedFeed.items, observedAt.getTime()),
+        parsedFeed,
+        { id: source.id, url: source.url },
+        rewriteLinks,
         observedAt.getTime(),
-      ).map((item) =>
-        Object.assign(
-          mapFeedItemToArticle(
-            item,
-            parsedFeed,
-            { id: source.id, url: source.url },
-            rewriteLinks,
-            observedAt.getTime(),
-          ),
-          { lastSeenInFeedAt: observedAt },
-        ),
+      ).map((article) =>
+        Object.assign(article, { lastSeenInFeedAt: observedAt }),
       );
       // batchUpsertArticles commits batch by batch, so a later failure leaves
       // earlier articles committed. Recompute either way, then re-raise.
@@ -382,7 +399,7 @@ export class FeedParser {
       ? parseJsonFeed(text)
       : isMicroformatHtml(text, contentType)
         ? parseMicroformatFeed(text, finalUrl)
-        : parseFeed(text);
+        : withItemLanguages(parseFeed(text));
     validateParsedFeed(parsedFeed);
     attachCapAlerts(text, parsedFeed.items);
     return {

@@ -146,6 +146,33 @@ describe("FeedPreviewCache", () => {
     expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
   });
 
+  test("keeps item languages so subscribe tells shared ids apart", async () => {
+    const cache = new FeedPreviewCache(new FakeRedis());
+    const item = {
+      authors: [],
+      content: null,
+      description: null,
+      id: "alert",
+      published: publishedAt,
+      title: "Alert",
+      updated: null,
+      url: null,
+    };
+    const feed = {
+      description: null,
+      items: [
+        { ...item, language: "en-CA" },
+        { ...item, language: "fr-CA" },
+      ],
+      title: "Feed",
+      url: null,
+    };
+
+    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
+
+    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
+  });
+
   test("isolates previews by user and exact URL", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);
