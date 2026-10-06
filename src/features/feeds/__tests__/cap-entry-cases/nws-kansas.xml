@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+    <id>https://api.weather.gov/alerts.atom?area%5B0%5D=KS&amp;active=1&amp;limit=500</id>
+    <generator>NWS CAP Server</generator>
+    <updated>2026-10-06T07:36:00+00:00</updated>
+    <author>
+        <name>w-nws.webmaster@noaa.gov</name>
+    </author>
+    <title>Current watches, warnings, and advisories for Kansas</title>
+    <link rel="self" href="https://api.weather.gov/alerts.atom?area%5B0%5D=KS&amp;active=1&amp;limit=500"/>
+    <entry>
+        <id>https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3d524307b589191dd523bd3b9787af6c7fc8ecf8.001.1</id>
+        <link rel="alternate" href="https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3d524307b589191dd523bd3b9787af6c7fc8ecf8.001.1.cap"/>
+        <updated>2026-10-05T19:32:00-05:00</updated>
+        <published>2026-10-05T19:32:00-05:00</published>
+        <author>
+            <name>NWS</name>
+        </author>
+        <title>Flood Warning issued October 5 at 7:32PM CDT until October 8 at 7:00PM CDT by NWS Topeka KS</title>
+        <summary>...The Flood Warning continues for the following rivers in Kansas...
+
+Big Blue River near Blue Rapids affecting Marshall County.</summary>
+        <cap:event>Flood Warning</cap:event>
+        <cap:sent>2026-10-05T19:32:00-05:00</cap:sent>
+        <cap:effective>2026-10-05T19:32:00-05:00</cap:effective>
+        <cap:onset>2026-10-05T19:32:00-05:00</cap:onset>
+        <cap:expires>2026-10-06T10:45:00-05:00</cap:expires>
+        <cap:status>Actual</cap:status>
+        <cap:msgType>Update</cap:msgType>
+        <cap:category>Met</cap:category>
+        <cap:urgency>Immediate</cap:urgency>
+        <cap:severity>Severe</cap:severity>
+        <cap:certainty>Observed</cap:certainty>
+        <cap:areaDesc>Marshall, KS</cap:areaDesc>
+        <cap:polygon>39.71,-96.66 39.68,-96.58 39.57,-96.55 39.57,-96.59 39.68,-96.69 39.71,-96.66</cap:polygon>
+        <cap:scope>Public</cap:scope>
+        <cap:code>IPAWSv1.0</cap:code>
+        <cap:language>en-US</cap:language>
+        <cap:web>http://www.weather.gov</cap:web>
+    </entry>
+</feed>

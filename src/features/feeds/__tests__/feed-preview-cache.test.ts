@@ -110,6 +110,42 @@ describe("FeedPreviewCache", () => {
     expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
   });
 
+  test("keeps CAP alert fields so subscribe still renders and filters them", async () => {
+    const cache = new FeedPreviewCache(new FakeRedis());
+    const feed = {
+      description: null,
+      items: [
+        {
+          authors: [],
+          cap: {
+            areaDesc: "Central coastal zone",
+            certainty: "Likely",
+            event: "Yellow Wind warning",
+            expires: "2026-10-06T09:00:00+00:00",
+            msgType: "Alert",
+            onset: "2026-10-05T23:00:00+00:00",
+            severity: "Moderate",
+            status: "Actual",
+            urgency: "Expected",
+          },
+          content: null,
+          description: null,
+          id: "item-1",
+          published: publishedAt,
+          title: "Alert",
+          updated: null,
+          url: null,
+        },
+      ],
+      title: "Feed",
+      url: null,
+    };
+
+    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
+
+    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
+  });
+
   test("isolates previews by user and exact URL", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);

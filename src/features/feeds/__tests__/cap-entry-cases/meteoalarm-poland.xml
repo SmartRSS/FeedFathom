@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+  <link type="application/atom+xml" rel="self" href="https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-poland"/>
+  <link type="text/html" rel="alternate" href="https://meteoalarm.org"/>
+  <rights>Copyright © 2026 MeteoAlarm.Org. Licensed under terms equivalent to CC BY 4.0, with additional requirements for redistributing outlined in our Terms and Conditions.</rights>
+  <generator>MeteoAlarm Producer Server</generator>
+  <logo>https://feeds.meteoalarm.org/images/logo.svg</logo>
+  <author>
+    <name>meteoalarm.org</name>
+    <uri>https://meteoalarm.org</uri>
+    <email>meteoalarm@geosphere.at</email>
+  </author>
+  <id>tag:meteoalarm.org,2021-02-19:PL</id>
+  <title>MeteoAlarm - Alerting Europe for Extreme Weather</title>
+  <updated>2026-10-06T07:35:11.439957Z</updated>
+  <entry>
+    <cap:geocode>
+      <valueName>EMMA_ID</valueName>
+      <value>PL804</value>
+    </cap:geocode>
+    <link title="Central coastal zone" href="https://meteoalarm.org?geocode=EMMA_ID:PL804" hreflang="en"/>
+    <cap:areaDesc>Central coastal zone</cap:areaDesc>
+    <cap:event>Yellow Wind warning</cap:event>
+    <cap:sent>2026-10-05T22:38:51+00:00</cap:sent>
+    <cap:expires>2026-10-06T09:00:00+00:00</cap:expires>
+    <cap:effective>2026-10-05T22:38:00+00:00</cap:effective>
+    <cap:onset>2026-10-05T23:00:00+00:00</cap:onset>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Expected</cap:urgency>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Actual</cap:status>
+    <cap:identifier>2.49.0.0.616.0.PL.261005223851.PL804_01321</cap:identifier>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/df51bc15-5bd7-4b8e-ae94-93f2cbdd4540"/>
+    <link title="Poland" rel="related" href="https://meteoalarm.org?region=PL" hreflang="en"/>
+    <author>
+      <name>meteoalarm.org</name>
+      <uri>https://meteoalarm.org</uri>
+    </author>
+    <published>2026-10-05T22:38:51Z</published>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/df51bc15-5bd7-4b8e-ae94-93f2cbdd4540?index_info=1&amp;index_area=0&amp;index_geocode=0</id>
+    <title>Yellow Wind Warning issued for Poland - Central coastal zone</title>
+    <updated>2026-10-05T22:38:51Z</updated>
+  </entry>
+  <entry>
+    <cap:geocode>
+      <valueName>EMMA_ID</valueName>
+      <value>PL2661</value>
+    </cap:geocode>
+    <link title="Świętokrzyskie Province Kielce County" href="https://meteoalarm.org?geocode=EMMA_ID:PL2661" hreflang="en"/>
+    <cap:areaDesc>Świętokrzyskie Province Kielce County</cap:areaDesc>
+    <cap:event>Yellow Fog warning</cap:event>
+    <cap:sent>2026-10-05T08:08:00+00:00</cap:sent>
+    <cap:expires>2026-10-06T07:00:00+00:00</cap:expires>
+    <cap:effective>2026-10-05T08:08:00+00:00</cap:effective>
+    <cap:onset>2026-10-05T20:00:00+00:00</cap:onset>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Expected</cap:urgency>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Actual</cap:status>
+    <cap:identifier>2.49.0.0.616.0.PL.Sk20261005080808655.PL2661</cap:identifier>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/016fde9e-2152-41d3-8ae6-a7c9ce3ab20e"/>
+    <link title="Poland" rel="related" href="https://meteoalarm.org?region=PL" hreflang="en"/>
+    <author>
+      <name>meteoalarm.org</name>
+      <uri>https://meteoalarm.org</uri>
+    </author>
+    <published>2026-10-05T08:08:00Z</published>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/016fde9e-2152-41d3-8ae6-a7c9ce3ab20e?index_info=1&amp;index_area=0&amp;index_geocode=0</id>
+    <title>Yellow Fog Warning issued for Poland - Świętokrzyskie Province Kielce County</title>
+    <updated>2026-10-05T08:08:00Z</updated>
+  </entry>
+  <entry>
+    <cap:geocode>
+      <valueName>EMMA_ID</valueName>
+      <value>PL2613</value>
+    </cap:geocode>
+    <link title="Świętokrzyskie Province Włoszczowski County" href="https://meteoalarm.org?geocode=EMMA_ID:PL2613" hreflang="en"/>
+    <cap:areaDesc>Świętokrzyskie Province Włoszczowski County</cap:areaDesc>
+    <cap:event>Yellow Fog warning</cap:event>
+    <cap:sent>2026-10-05T08:08:00+00:00</cap:sent>
+    <cap:expires>2026-10-07T09:00:00+00:00</cap:expires>
+    <cap:effective>2026-10-05T08:08:00+00:00</cap:effective>
+    <cap:onset>2026-10-05T20:00:00+00:00</cap:onset>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Expected</cap:urgency>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Test</cap:status>
+    <cap:identifier>2.49.0.0.616.0.PL.Sk20261005080808655.PL2613</cap:identifier>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/271ce4ad-3a32-4f76-9ec7-a9dbf1c696c1"/>
+    <link title="Poland" rel="related" href="https://meteoalarm.org?region=PL" hreflang="en"/>
+    <author>
+      <name>meteoalarm.org</name>
+      <uri>https://meteoalarm.org</uri>
+    </author>
+    <published>2026-10-05T08:08:00Z</published>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/feeds-poland/271ce4ad-3a32-4f76-9ec7-a9dbf1c696c1?index_info=1&amp;index_area=0&amp;index_geocode=0</id>
+    <title>Yellow Fog Warning issued for Poland - Świętokrzyskie Province Włoszczowski County</title>
+    <updated>2026-10-05T08:08:00Z</updated>
+  </entry>
+</feed>

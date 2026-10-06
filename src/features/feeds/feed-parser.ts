@@ -6,7 +6,9 @@ import { type HttpClient } from "#platform/http/http-client.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import { attachCapAlerts } from "#features/feeds/cap-entry.ts";
 import {
+  currentFeedItems,
   mapFeedItemToArticle,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
@@ -176,7 +178,10 @@ export class FeedParser {
       }
 
       const observedAt = new Date();
-      const articlesToUpsert = parsedFeed.items.map((item) =>
+      const articlesToUpsert = currentFeedItems(
+        parsedFeed.items,
+        observedAt.getTime(),
+      ).map((item) =>
         Object.assign(
           mapFeedItemToArticle(
             item,
@@ -379,6 +384,7 @@ export class FeedParser {
         ? parseMicroformatFeed(text, finalUrl)
         : parseFeed(text);
     validateParsedFeed(parsedFeed);
+    attachCapAlerts(text, parsedFeed.items);
     return {
       cached: response.cached,
       feed: parsedFeed,

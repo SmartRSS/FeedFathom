@@ -1,7 +1,13 @@
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
+import {
+  type CapAlert,
+  isCapAlertCurrent,
+  renderCapAlert,
+} from "#features/feeds/cap-entry.ts";
 
 type FeedMapperItem = {
   authors: readonly { name: string | null }[];
+  cap?: CapAlert;
   content: string | null;
   description: string | null;
   id: string | null;
@@ -99,7 +105,8 @@ export const mapFeedItemToArticle = (
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     content: rewriteLinksFunction(
-      item.content ?? item.description ?? "",
+      (item.cap ? renderCapAlert(item.cap) : "") +
+        (item.content ?? item.description ?? ""),
       url || homepage,
     ),
     guid: generateArticleGuid(item, parsedFeed, source.url),
@@ -113,6 +120,15 @@ export const mapFeedItemToArticle = (
     url,
   };
 };
+
+// CAP feeds keep listing alerts that have expired, and may carry test ones.
+export const currentFeedItems = <Item extends FeedMapperItem>(
+  items: readonly Item[],
+  now: number,
+): Item[] =>
+  items.filter(
+    (item) => item.cap === undefined || isCapAlertCurrent(item.cap, now),
+  );
 
 // A preview is a sample for deciding whether to subscribe, and it runs on the
 // API server's event loop. Bounding the items before rewriting keeps that work
@@ -144,7 +160,7 @@ export const mapFeedToPreviewArticles = (
   items = parsedFeed.items,
 ): FeedPreviewArticle[] => {
   const source = { id: 0, url: sourceUrl };
-  return items.map((item) => {
+  return currentFeedItems(items, now).map((item) => {
     const article = mapFeedItemToArticle(
       item,
       parsedFeed,
@@ -170,8 +186,9 @@ export const mapFeedToPreview = (
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
 ): FeedPreview => {
-  const items = previewItems(parsedFeed.items);
-  const truncated = items.length < parsedFeed.items.length;
+  const current = currentFeedItems(parsedFeed.items, now);
+  const items = previewItems(current);
+  const truncated = items.length < current.length;
   return Object.assign(
     {
       articles: mapFeedToPreviewArticles(
