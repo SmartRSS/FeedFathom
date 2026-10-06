@@ -42,13 +42,12 @@ function decodedSubscriptionTarget(
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
 // refetch. Without that feed, the caller queues the source for the worker.
-// A CAP feed's preview keeps its feed too, so mapping it again here drops
-// alerts that expired while the preview was cached.
 function completePreview({
   feed,
   ...preview
 }: FeedPreview): FeedPreview | undefined {
-  if (!feed) return preview.truncated ? undefined : preview;
+  if (!preview.truncated) return preview;
+  if (!feed) return undefined;
   return {
     ...preview,
     articles: mapFeedToPreviewArticles(feed, preview.feedUrl, rewriteLinks),
@@ -146,22 +145,31 @@ export async function postSubscribeHandler({
             // then let the original failure fall through to the
             // enqueue fallback below.
             let upsertError: unknown;
+            // A retry imports from the stored snapshot, which can hold an
+            // alert that has expired since.
+            const now = Date.now();
             try {
               await articlesDataService.batchUpsertArticles(
-                preview.articles.map((article) => ({
-                  author: article.author,
-                  content: article.content,
-                  guid: article.guid,
-                  lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  publishedAt: article.publishedAt,
-                  sourceId: subscription.source.id,
-                  title: article.title,
-                  updatedAt:
-                    article.updatedAt === undefined
-                      ? article.publishedAt
-                      : article.updatedAt,
-                  url: article.url,
-                })),
+                preview.articles
+                  .filter(
+                    (article) =>
+                      article.expiresAt === undefined ||
+                      article.expiresAt > now,
+                  )
+                  .map((article) => ({
+                    author: article.author,
+                    content: article.content,
+                    guid: article.guid,
+                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
+                    publishedAt: article.publishedAt,
+                    sourceId: subscription.source.id,
+                    title: article.title,
+                    updatedAt:
+                      article.updatedAt === undefined
+                        ? article.publishedAt
+                        : article.updatedAt,
+                    url: article.url,
+                  })),
               );
             } catch (error) {
               upsertError = error;

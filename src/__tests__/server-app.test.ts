@@ -1464,39 +1464,40 @@ test("imports every article of a truncated preview on subscribe without a refetc
   expect(enqueues).toEqual([]);
 });
 
+const previewedAt = Date.parse("2020-01-01T00:00:00Z");
+const alertFeed = {
+  description: null,
+  items: [
+    {
+      authors: [],
+      cap: {
+        areaDesc: "",
+        certainty: "",
+        event: "Wind",
+        // Current when previewed, long gone by the time this test runs.
+        expires: "2020-01-01T00:05:00Z",
+        msgType: "",
+        onset: "",
+        severity: "",
+        status: "Actual",
+        urgency: "",
+      },
+      content: null,
+      description: null,
+      id: "alert-1",
+      published: new Date(previewedAt),
+      title: "Wind",
+      updated: null,
+      url: null,
+    },
+  ],
+  title: "Alerts",
+  url: subscriptionSource.homeUrl,
+};
+
 test("subscribing from a cached CAP preview drops alerts expired since", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const previewedAt = Date.parse("2020-01-01T00:00:00Z");
-  const alertFeed = {
-    description: null,
-    items: [
-      {
-        authors: [],
-        cap: {
-          areaDesc: "",
-          certainty: "",
-          event: "Wind",
-          // Current when previewed, long gone by the time this test runs.
-          expires: "2020-01-01T00:05:00Z",
-          msgType: "",
-          onset: "",
-          severity: "",
-          status: "Actual",
-          urgency: "",
-        },
-        content: null,
-        description: null,
-        id: "alert-1",
-        published: new Date(previewedAt),
-        title: "Wind",
-        updated: null,
-        url: null,
-      },
-    ],
-    title: "Alerts",
-    url: subscriptionSource.homeUrl,
-  };
   let stored: string | undefined;
   const upserts: Parameters<
     ServerFakes["articlesDataService"]["batchUpsertArticles"]
@@ -1537,6 +1538,45 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
     sourceUrl: subscriptionSource.url,
   });
 
+  expect(upserts.flat()).toEqual([]);
+});
+
+test("a retried subscription skips snapshot alerts that expired between attempts", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const upserts: Parameters<
+    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+  >[0][] = [];
+  const snapshot = mapFeedToPreview(
+    alertFeed,
+    subscriptionSource.url,
+    (content) => content,
+    previewedAt,
+  );
+
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    initializationSnapshot: serializeFeedPreview(snapshot),
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
+    upserts.push(articles);
+    return articles.length;
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async () => {};
+  dependencies.sourcesDataService.successSource = async () => {};
+  const app = await appFor(dependencies);
+
+  await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  expect(snapshot.articles).toHaveLength(1);
   expect(upserts.flat()).toEqual([]);
 });
 

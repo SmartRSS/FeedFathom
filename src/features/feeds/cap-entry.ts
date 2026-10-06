@@ -2,9 +2,9 @@
  * The `cap:*` fields CAP alert feeds (NWS, MeteoAlarm, AirNow) embed in each
  * Atom entry or RSS item. @rowanmanning/feed-parser keeps its XML element
  * private, so a feed that declares the CAP namespace is parsed a second time
- * here and matched back to the parser's items by entry id.
+ * here and matched back to the parser's items by position: entries are found
+ * the way the parser finds them, which keeps every one in document order.
  */
-import { decode as decodeEntities } from "html-entities";
 import { type Static, Type } from "typebox";
 import { isXmlElement, parseXml, type XmlElement } from "#platform/xml.ts";
 
@@ -99,55 +99,46 @@ const readAlert = (entry: Node): CapAlert | undefined => {
 };
 
 /**
- * CAP fields per entry id; empty, without parsing, for a non-CAP feed. Entries
- * and ids are found the way @rowanmanning/feed-parser finds them, ids decoded
- * the same way, so they match its items' ids.
+ * Each entry's CAP fields, in the parser's item order; empty, without
+ * parsing, for a non-CAP feed.
  */
-export const capAlertsById = (text: string): Map<string, CapAlert> => {
-  const alerts = new Map<string, CapAlert>();
-  if (!capNamespace.test(text)) return alerts;
+export const capAlerts = (text: string): (CapAlert | undefined)[] => {
+  if (!capNamespace.test(text)) return [];
   let document: Node;
   try {
     document = { name: "", node: parseXml(text), scope: {} };
   } catch {
     // The feed parser tolerates markup Bun.XML rejects; such a feed keeps
     // its articles, just without alert details.
-    return alerts;
+    return [];
   }
-  const entries = [
-    ...childrenNamed(document, "feed").flatMap((feed) =>
-      childrenNamed(feed, "entry").map((entry) => ({ entry, idName: "id" })),
-    ),
-    ...[
-      ...childrenNamed(document, "rss"),
-      ...childrenNamed(document, "rdf"),
-    ].flatMap((root) =>
-      [...childrenNamed(root, "channel").slice(0, 1), root].flatMap((parent) =>
-        childrenNamed(parent, "item").map((entry) => ({
-          entry,
-          idName: "guid",
-        })),
-      ),
-    ),
-  ];
-  for (const { entry, idName } of entries) {
-    const idNode = childrenNamed(entry, idName)[0];
-    const id = idNode ? decodeEntities(textOf(idNode)) : "";
-    const alert = readAlert(entry);
-    if (id && alert) alerts.set(id, alert);
-  }
-  return alerts;
+  const root = [
+    ...childrenNamed(document, "feed"),
+    ...childrenNamed(document, "rss"),
+    ...childrenNamed(document, "rdf"),
+  ][0];
+  if (!root) return [];
+  const entries =
+    localName(root.name) === "feed"
+      ? childrenNamed(root, "entry")
+      : [...childrenNamed(root, "channel").slice(0, 1), root].flatMap(
+          (parent) => childrenNamed(parent, "item"),
+        );
+  // Bun.XML groups siblings by tag, so entries spelled two ways (item and
+  // rss:item) lose their relative order.
+  if (new Set(entries.map((entry) => entry.name)).size > 1) return [];
+  return entries.map(readAlert);
 };
 
 /** Gives each parsed item whose entry carries CAP fields a `cap` property. */
 export const attachCapAlerts = (
   text: string,
-  items: readonly { id: string | null }[],
+  items: readonly object[],
 ): void => {
-  const alerts = capAlertsById(text);
-  if (alerts.size === 0) return;
-  for (const item of items) {
-    const alert = alerts.get(item.id ?? "");
+  const alerts = capAlerts(text);
+  if (alerts.length !== items.length) return;
+  for (const [index, item] of items.entries()) {
+    const alert = alerts[index];
     if (alert) Object.assign(item, { cap: alert });
   }
 };

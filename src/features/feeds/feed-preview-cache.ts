@@ -25,6 +25,7 @@ const previewArticleWireSchema = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    expiresAt: Type.Optional(Type.Number()),
     guid: Type.String(),
     publishedAt: Type.Number(),
     title: Type.String(),

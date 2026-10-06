@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import {
   attachCapAlerts,
-  capAlertsById,
+  capAlerts,
   renderCapAlert,
 } from "#features/feeds/cap-entry.ts";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
@@ -23,10 +23,9 @@ const parseCapFeed = async (name: string) => {
   return feed;
 };
 
-describe("capAlertsById", () => {
-  test("reads the NWS flattened cap:* fields keyed by entry id", async () => {
-    const alerts = capAlertsById(await fixture("nws-kansas.xml"));
-    expect([...alerts.values()]).toEqual([
+describe("capAlerts", () => {
+  test("reads the NWS flattened cap:* fields", async () => {
+    expect(capAlerts(await fixture("nws-kansas.xml"))).toEqual([
       {
         areaDesc: "Marshall, KS",
         certainty: "Observed",
@@ -39,37 +38,46 @@ describe("capAlertsById", () => {
         urgency: "Immediate",
       },
     ]);
-    expect([...alerts.keys()]).toEqual([
-      "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3d524307b589191dd523bd3b9787af6c7fc8ecf8.001.1",
-    ]);
   });
 
   test("reads MeteoAlarm's non-standard cap:message_type", async () => {
-    const alerts = capAlertsById(await fixture("meteoalarm-poland.xml"));
-    expect([...alerts.values()].map((alert) => alert.msgType)).toEqual([
+    const alerts = capAlerts(await fixture("meteoalarm-poland.xml"));
+    expect(alerts.map((alert) => alert?.msgType)).toEqual([
       "Alert",
       "Alert",
       "Alert",
     ]);
   });
 
-  test("reads RSS items by guid under any namespace prefix", () => {
+  test("reads RSS items, in order, under any namespace prefix", () => {
     const rss = `<rss xmlns:c="urn:oasis:names:tc:emergency:cap:1.1"><channel>
-      <item><guid isPermaLink="false"> g1 </guid><c:event>Ozone</c:event></item>
+      <item><title>Plain</title></item>
+      <item><title>Ozone</title><c:event>Ozone</c:event></item>
     </channel></rss>`;
-    expect(capAlertsById(rss).get("g1")?.event).toBe("Ozone");
+    expect(capAlerts(rss).map((alert) => alert?.event)).toEqual([
+      undefined,
+      "Ozone",
+    ]);
+  });
+
+  test("returns nothing when entries are spelled two ways, losing their order", () => {
+    const atom = `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:a="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+      <entry><cap:event>One</cap:event></entry>
+      <a:entry><cap:event>Two</cap:event></a:entry>
+    </feed>`;
+    expect(capAlerts(atom)).toEqual([]);
   });
 
   test("returns nothing for a feed without the CAP namespace", async () => {
-    expect(capAlertsById(await fixture("dwd.xml")).size).toBe(0);
+    expect(capAlerts(await fixture("dwd.xml"))).toEqual([]);
   });
 
   test("returns nothing for CAP-namespaced text that is not well-formed", () => {
     expect(
-      capAlertsById(
+      capAlerts(
         '<feed xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"><entry>',
-      ).size,
-    ).toBe(0);
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -155,16 +163,15 @@ describe("CAP feeds through the mapper", () => {
     expect(article?.content).toStartWith("Es tritt gebietsweise Nebel");
   });
 
-  test("a small CAP preview keeps its parsed feed so subscribe can drop alerts expired since", async () => {
+  test("a preview article carries its alert's expiry for subscribe to check", async () => {
     const feed = await parseCapFeed("nws-kansas.xml");
-    const preview = mapFeedToPreview(
+    const [article] = mapFeedToPreview(
       feed,
       "https://api.weather.gov/alerts.atom?area=KS&active=1",
       noRewrite,
       fetchedAt,
-    );
-    expect(preview.truncated).toBe(false);
-    expect(preview.feed?.items).toHaveLength(1);
+    ).articles;
+    expect(article?.expiresAt).toBe(Date.parse("2026-10-06T15:45:00Z"));
   });
 
   test("CAP text counts toward the preview byte budget", () => {
@@ -221,6 +228,15 @@ describe("CAP entries the feed parser reads its own way", () => {
         <entry xmlns:cap="https://example.com/other"><id>a</id><title>Other</title><cap:status>Test</cap:status></entry>
       </feed>`),
     ).toEqual(["Other"]);
+  });
+
+  test("RSS items without a guid", () => {
+    expect(
+      titlesOf(`<rss version="2.0" xmlns:cap="${capNs}"><channel><title>Alerts</title>
+        <item><title>Drill</title><link>https://example.com/1</link><cap:status>Test</cap:status></item>
+        <item><title>Ozone</title><link>https://example.com/2</link><cap:event>Ozone</cap:event></item>
+      </channel></rss>`),
+    ).toEqual(["Ozone"]);
   });
 
   test("an id the parser HTML-decodes", () => {

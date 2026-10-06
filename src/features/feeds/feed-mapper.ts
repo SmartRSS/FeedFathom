@@ -38,6 +38,8 @@ export type ArticlePayload = {
 type FeedPreviewArticle = {
   author: string;
   content: string;
+  // A CAP alert's expiry: subscribing later must not import it once passed.
+  expiresAt?: number;
   guid: string;
   publishedAt: Date;
   title: string;
@@ -169,15 +171,19 @@ export const mapFeedToPreviewArticles = (
       rewriteLinksFunction,
       now,
     );
-    return {
-      author: article.author,
-      content: article.content,
-      guid: article.guid,
-      publishedAt: article.publishedAt,
-      title: article.title,
-      updatedAt: article.updatedAt,
-      url: article.url,
-    };
+    const expiresAt = Date.parse(item.cap?.expires ?? "");
+    return Object.assign(
+      {
+        author: article.author,
+        content: article.content,
+        guid: article.guid,
+        publishedAt: article.publishedAt,
+        title: article.title,
+        updatedAt: article.updatedAt,
+        url: article.url,
+      },
+      Number.isNaN(expiresAt) ? {} : { expiresAt },
+    );
   });
 };
 
@@ -190,10 +196,6 @@ export const mapFeedToPreview = (
   const current = currentFeedItems(parsedFeed.items, now);
   const items = previewItems(current);
   const truncated = items.length < current.length;
-  // Subscribing maps the feed again, so it can drop an alert that expired
-  // while the preview sat in the cache.
-  const remapOnSubscribe =
-    truncated || current.some((item) => item.cap !== undefined);
   return Object.assign(
     {
       articles: mapFeedToPreviewArticles(
@@ -209,6 +211,6 @@ export const mapFeedToPreview = (
       title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
       truncated,
     },
-    remapOnSubscribe ? { feed: parsedFeed } : {},
+    truncated ? { feed: parsedFeed } : {},
   );
 };
