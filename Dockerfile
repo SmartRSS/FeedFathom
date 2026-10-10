@@ -1,5 +1,5 @@
 # dev image is used for development purposes
-FROM oven/bun:1.4.2-alpine AS dev
+FROM oven/bun:1.4.3-alpine AS dev
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY vendor/ /app/vendor/
@@ -9,14 +9,14 @@ USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Installer (shared dependencies) ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS installer
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-alpine AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY vendor/ /app/vendor/
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # --- Builder Base ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS builder-base
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-alpine AS builder-base
 WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
@@ -41,7 +41,7 @@ COPY drizzle /app/drizzle/
 RUN bun run build-migrator
 
 # --- Release Base ---
-FROM oven/bun:1.4.2-distroless AS release
+FROM oven/bun:1.4.3-distroless AS release
 WORKDIR /app
 ENV NODE_ENV=production
 USER 65532:65532
