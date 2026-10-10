@@ -1309,6 +1309,12 @@ img.skeleton-row {
     display: flex;
     flex-direction: column;
   }
+  /* A row's content-visibility: auto (#990) gives it size containment, so
+     its automatic minimum height drops to zero and a long list would
+     shrink every row to its padding instead of overflowing. */
+  html[data-mobile-list-anchor="on"] .articles-pane > .article-list > * {
+    flex-shrink: 0;
+  }
   html[data-mobile-list-anchor="on"]
     .articles-pane
     > .article-list
