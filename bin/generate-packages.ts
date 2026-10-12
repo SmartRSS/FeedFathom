@@ -11,6 +11,7 @@ type ExtensionManifest = typeof manifestTemplate & {
 };
 type BrowserTarget = "chromium" | "firefox";
 type ProjectionOptions = {
+  chromiumUpdateUrl?: string;
   firefoxUpdateUrl?: string;
   version?: string;
 };
@@ -38,7 +39,7 @@ function updateUrl(value: string): string {
   try {
     parsed = new URL(value);
   } catch (error) {
-    throw new Error("Invalid Firefox update URL", { cause: error });
+    throw new Error("Invalid update URL", { cause: error });
   }
   if (
     parsed.protocol !== "https:" ||
@@ -46,7 +47,7 @@ function updateUrl(value: string): string {
     parsed.password ||
     value.includes("#")
   ) {
-    throw new Error("Invalid Firefox update URL");
+    throw new Error("Invalid update URL");
   }
   return parsed.href;
 }
@@ -62,7 +63,14 @@ export function projectExtensionManifest(
 
   if (target === "chromium") {
     const { scripts: _scripts, ...chromiumBackground } = background;
-    return { ...shared, background: chromiumBackground, version };
+    return {
+      ...shared,
+      background: chromiumBackground,
+      ...(options.chromiumUpdateUrl
+        ? { update_url: updateUrl(options.chromiumUpdateUrl) }
+        : {}),
+      version,
+    };
   }
 
   const { service_worker: _serviceWorker, ...firefoxBackground } = background;
@@ -119,6 +127,9 @@ async function buildSharedExtension(): Promise<void> {
 
 export async function main(
   options: ProjectionOptions = {
+    ...(process.env["CHROMIUM_UPDATE_URL"]
+      ? { chromiumUpdateUrl: process.env["CHROMIUM_UPDATE_URL"] }
+      : {}),
     ...(process.env["FIREFOX_UPDATE_URL"]
       ? { firefoxUpdateUrl: process.env["FIREFOX_UPDATE_URL"] }
       : {}),

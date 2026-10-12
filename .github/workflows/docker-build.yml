@@ -296,6 +296,7 @@ jobs:
       - name: Build extension variants
         env:
           FIREFOX_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.json
+          CHROMIUM_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.xml
           EXTENSION_VERSION: ${{ needs.build_metadata.outputs.version }}
         run: bun run build-extension
 
@@ -310,16 +311,17 @@ jobs:
           # every run, so it is excluded -- otherwise nothing would ever
           # compare equal. Tree-shaken code correctly does not count as a
           # change: if it never reaches the bundle, nothing ships differently.
+          # Both variants are hashed, so a manifest change in either ships.
           CONTENT_HASH=$(bun -e '
             import { createHash } from "node:crypto";
             import { readdirSync, statSync, readFileSync } from "node:fs";
-            const root = "ext/build-ff";
+            const root = "ext";
             const walk = (dir) => readdirSync(dir).flatMap((entry) => {
               const full = `${dir}/${entry}`;
               return statSync(full).isDirectory() ? walk(full) : [full];
             });
             const hash = createHash("sha256");
-            for (const file of walk(root).sort()) {
+            for (const file of [...walk("ext/build-ch"), ...walk("ext/build-ff")].sort()) {
               hash.update(file.slice(root.length));
               if (file.endsWith("/manifest.json")) {
                 const { version, ...rest } = JSON.parse(readFileSync(file, "utf8"));
@@ -397,6 +399,20 @@ jobs:
           cp "${SIGNED_XPIS[0]}" dist-extension/feedfathom_ff.xpi
           cp ext/feedfathom_ch.zip dist-extension/feedfathom_ch.zip
           cp ext/build-ff/manifest.json dist-extension/manifest.json
+
+      - name: Pack Chromium extension
+        if: steps.content.outputs.changed == 'true'
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # The key fixes the extension ID (niaphaclbdnodpimigmdjmbgcmlopifj)
+          # that updates.xml names, so it must never be regenerated.
+          KEY_FILE="$RUNNER_TEMP/crx.pem"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          (umask 077 && printf '%s\n' "$CRX_PRIVATE_KEY" > "$KEY_FILE")
+          bunx crx3@2.0.0 -p "$KEY_FILE" -o dist-extension/feedfathom_ch.crx < ext/feedfathom_ch.zip
+          head -c 4 dist-extension/feedfathom_ch.crx | grep -q '^Cr24$'
 
       - name: Verify signed Firefox release
         if: steps.content.outputs.changed == 'true'
@@ -620,6 +636,7 @@ jobs:
           if [[ "${{ needs.build_extension.outputs.changed }}" == 'true' ]]; then
             mv dist-extension/feedfathom_ff.xpi "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
             mv dist-extension/feedfathom_ch.zip "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+            mv dist-extension/feedfathom_ch.crx "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.crx"
           fi
 
       - name: Create release
@@ -648,6 +665,7 @@ jobs:
             extension_assets=(
               "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
               "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+              "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.crx"
               "dist-extension/extension-content-hash.txt"
             )
             EXTENSION_NOTE="- extension: \`${EXTENSION_VERSION}\` (attached)"
@@ -1161,6 +1179,7 @@ jobs:
             mkdir -p dist-extension
             gh release download "$TAG" --pattern '*.xpi' --output dist-extension/feedfathom_ff.xpi
             gh release download "$TAG" --pattern '*.zip' --output dist-extension/feedfathom_ch.zip
+            gh release download "$TAG" --pattern '*.crx' --output dist-extension/feedfathom_ch.crx
             unzip -p dist-extension/feedfathom_ff.xpi manifest.json > dist-extension/manifest.json
             BUILD_DATE=$(date -u -d "$(gh release view "$TAG" --json publishedAt -q .publishedAt)" '+%Y-%m-%d %H:%M UTC')
           fi
@@ -1168,6 +1187,7 @@ jobs:
           mkdir -p docs/assets/extension
           cp dist-extension/feedfathom_ff.xpi docs/assets/extension/feedfathom_ff.xpi
           cp dist-extension/feedfathom_ch.zip docs/assets/extension/feedfathom_ch.zip
+          cp dist-extension/feedfathom_ch.crx docs/assets/extension/feedfathom_ch.crx
 
           # The manifest is the only source that agrees with the bytes just
           # copied; the job's own build metadata describes this run, which on a
@@ -1204,13 +1224,26 @@ jobs:
             );
           '
 
+      - name: Create Chromium update manifest
+        run: |
+          # Google update protocol (gupdate). The appid is derived from
+          # CRX_PRIVATE_KEY; the version is shared with the Firefox build.
+          cat > docs/assets/updates.xml <<EOF
+          <?xml version='1.0' encoding='UTF-8'?>
+          <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+            <app appid='niaphaclbdnodpimigmdjmbgcmlopifj'>
+              <updatecheck codebase='$PAGES_URL/assets/extension/feedfathom_ch.crx' version='$EXTENSION_VERSION' />
+            </app>
+          </gupdate>
+          EOF
+
       - name: Update extension documentation
         run: |
           sed -i \
             -e "s|FIREFOX_VERSION|$EXTENSION_VERSION|g" \
             -e "s|CHROME_VERSION|$EXTENSION_VERSION|g" \
             -e "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/feedfathom_ff.xpi|g" \
-            -e "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/feedfathom_ch.zip|g" \
+            -e "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/feedfathom_ch.crx|g" \
             -e "s|BUILD_DATE|$BUILD_DATE|g" \
             docs/extension.md
 

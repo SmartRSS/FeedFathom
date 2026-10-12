@@ -16,6 +16,19 @@ describe("extension package manifest projection", () => {
     expect("browser_specific_settings" in chromium).toBe(false);
     expect(chromium.permissions).toEqual(["contextMenus", "storage"]);
     expect(chromium.version).toBe("2026.723.12.1");
+    expect("update_url" in chromium).toBe(false);
+  });
+
+  test("points released Chromium builds at their update manifest", () => {
+    const chromium = projectExtensionManifest(sourceManifest(), "chromium", {
+      chromiumUpdateUrl: "https://example.com/assets/updates.xml",
+      firefoxUpdateUrl: "https://example.com/assets/updates.json",
+    });
+
+    expect(chromium).toMatchObject({
+      update_url: "https://example.com/assets/updates.xml",
+    });
+    expect(JSON.stringify(chromium)).not.toContain("updates.json");
   });
 
   test("projects Firefox scripts and release metadata", () => {
@@ -89,7 +102,12 @@ describe("extension package manifest projection", () => {
         projectExtensionManifest(sourceManifest(), "firefox", {
           firefoxUpdateUrl,
         }),
-      ).toThrow("Invalid Firefox update URL");
+      ).toThrow("Invalid update URL");
+      expect(() =>
+        projectExtensionManifest(sourceManifest(), "chromium", {
+          chromiumUpdateUrl: firefoxUpdateUrl,
+        }),
+      ).toThrow("Invalid update URL");
     }
   });
 });
