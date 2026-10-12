@@ -76,7 +76,20 @@ through AMO's unlisted channel and updates itself from this site.
 NOTE: The unsigned ZIP is development input only, not a production XPI. A
 temporary add-on is removed when Firefox restarts.
 
-### Chromium-based browsers
+### Chromium-based browsers, released build
+
+Ungoogled-chromium-based browsers, such as Helium, install the `.crx` from
+the Chrome download above:
+
+1. Set `chrome://flags/#extension-mime-request-handling` to "Always prompt
+   for install" and restart the browser.
+2. Open the download link, or drag the downloaded `.crx` onto a browser
+   window, and confirm the install.
+
+The extension then updates itself from this site. Google Chrome blocks
+`.crx` files from outside the Chrome Web Store; use a local build there.
+
+### Chromium-based browsers, local build
 
 1. Navigate to `chrome://extensions/`.
 2. Enable "Developer mode".
@@ -114,5 +127,10 @@ The Pages workflow supplies one release version to both variants, signs
 Repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` are required. The
 self-hosted update manifest uses the signed XPI's SHA-256 hash, together with
 the version and minimum Firefox version from the generated manifest.
+
+The workflow also packs `ext/feedfathom_ch.zip` into a signed CRX3 with the
+`CRX_PRIVATE_KEY` repository secret. That key fixes the extension ID, so it
+must not change. The Chromium build's `update_url` points at a self-hosted
+`updates.xml` that names the published `.crx` and its version.
 
 [Next: Contributing](./contributing.md){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
