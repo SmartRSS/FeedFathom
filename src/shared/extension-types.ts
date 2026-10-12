@@ -118,6 +118,11 @@ const badgeStorageResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const openRssStorageResultSchema = Type.Object(
+  { showOpenRss: Type.Optional(Type.Boolean()) },
+  { additionalProperties: false },
+);
+
 const readerResponseForRequestSchema = (request: ReaderRequest) =>
   Type.Intersect([
     readerResponseSchema,
@@ -144,6 +149,11 @@ export const storedBadgeEnabled = (value: unknown): boolean =>
   Value.Check(badgeStorageResultSchema, value)
     ? value.showBadge !== false
     : true;
+
+// The OpenRSS suggestion is opt-in: it sends the page address to a third
+// party, so only an explicit stored true turns it on.
+export const storedOpenRssEnabled = (value: unknown): boolean =>
+  Value.Check(openRssStorageResultSchema, value) && value.showOpenRss === true;
 
 export const isListFeedsMessage = (value: unknown): value is ListFeedsMessage =>
   Value.Check(listFeedsMessageSchema, value);
