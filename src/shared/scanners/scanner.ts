@@ -32,7 +32,7 @@ const scanners = [
   scanMicroformats,
 ];
 
-const scanPage = (address: string, page: ScannerPage) => {
+const scanPage = (address: string, page: ScannerPage, openRss: boolean) => {
   const feedDataList: FeedData[] = [];
   const addressUrl = new URL(address);
   const seenUrls = new Set<string>();
@@ -56,7 +56,7 @@ const scanPage = (address: string, page: ScannerPage) => {
     }
   }
 
-  if (feedDataList.length === 0) {
+  if (openRss && feedDataList.length === 0) {
     // Ensure we don't create malformed URLs with double protocols
     const cleanAddress = address.replace(/^https?:\/\//, "");
     feedDataList.push({
@@ -68,8 +68,8 @@ const scanPage = (address: string, page: ScannerPage) => {
   return feedDataList;
 };
 
-export const scan = (address: string, document_: Document) =>
-  scanPage(address, scannerPageFromDocument(address, document_));
+export const scan = (address: string, document_: Document, openRss: boolean) =>
+  scanPage(address, scannerPageFromDocument(address, document_), openRss);
 
 export const scanHtml = (address: string, html: string) =>
-  scanPage(address, scannerPageFromHtml(address, html));
+  scanPage(address, scannerPageFromHtml(address, html), true);

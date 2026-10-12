@@ -1,4 +1,8 @@
-import { storedBadgeEnabled, storedInstance } from "#shared/extension-types.ts";
+import {
+  storedBadgeEnabled,
+  storedInstance,
+  storedOpenRssEnabled,
+} from "#shared/extension-types.ts";
 import { pingInstance } from "./instance.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
@@ -98,6 +102,13 @@ void (async () => {
     });
   }
 
+  const openRssToggle = document.querySelector("#show-openrss");
+  if (openRssToggle instanceof HTMLInputElement) {
+    openRssToggle.addEventListener("change", () => {
+      void chrome.storage.sync.set({ showOpenRss: openRssToggle.checked });
+    });
+  }
+
   const storedValue =
     storedInstance(await chrome.storage.sync.get("instance")) ?? "";
   displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
@@ -105,6 +116,11 @@ void (async () => {
   if (badgeToggle instanceof HTMLInputElement) {
     badgeToggle.checked = storedBadgeEnabled(
       await chrome.storage.sync.get("showBadge"),
+    );
+  }
+  if (openRssToggle instanceof HTMLInputElement) {
+    openRssToggle.checked = storedOpenRssEnabled(
+      await chrome.storage.sync.get("showOpenRss"),
     );
   }
 })();

@@ -5,7 +5,18 @@ import {
   isReaderResponseForRequest,
   isScanRequestMessage,
   readerErrorResponse,
+  storedOpenRssEnabled,
 } from "#shared/extension-types.ts";
+
+const scanDocument = async (href: string) => {
+  let openRss = false;
+  try {
+    openRss = storedOpenRssEnabled(
+      await chrome.storage.sync.get("showOpenRss"),
+    );
+  } catch {}
+  return scan(href, document, openRss);
+};
 
 // The mobile popup fallback (no contextMenus) can't wait out the on-load
 // scan's debounce, so it asks for a fresh scan directly instead of trusting
@@ -13,11 +24,10 @@ import {
 chrome.runtime.onMessage.addListener(
   (message: unknown, _sender, sendResponse) => {
     if (!isScanRequestMessage(message)) return false;
-    sendResponse({
-      action: "list-feeds",
-      feedsData: scan(document.location.href, document),
-    });
-    return false;
+    void scanDocument(document.location.href).then((feedsData) =>
+      sendResponse({ action: "list-feeds", feedsData }),
+    );
+    return true;
   },
 );
 
@@ -92,7 +102,7 @@ const readerMessage = (event: MessageEvent<unknown>) => {
 
   const scanPage = async (href: string, generation: number) => {
     try {
-      const feeds = scan(href, document);
+      const feeds = await scanDocument(href);
       if (
         disposed ||
         generation !== scanGeneration ||
