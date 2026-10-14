@@ -142,6 +142,9 @@ const ARTICLE_SKELETON_TITLES = [
   "Another Example Headline",
 ];
 
+const articlesNoun = (count: number) =>
+  count === 1 ? "Article" : `${count} articles`;
+
 // Only a page the service worker controls asks, since only the worker
 // answers ?cached. only-if-cached keeps the request off the network when
 // something else does answer it, such as a worker from before #989 that
@@ -247,6 +250,12 @@ export function Dashboard(props: {
   // real text when high contrast mode is off.
   const [accessibilityAnnouncement, setAccessibilityAnnouncement] =
     createSignal("");
+  // A live region speaks only when its text changes, so a second "Article
+  // deleted." in a row would be silent: clear it, then set it a task later.
+  const announce = (message: string) => {
+    setAccessibilityAnnouncement("");
+    setTimeout(() => setAccessibilityAnnouncement(message), 100);
+  };
   const [contextMenu, setContextMenu] = createSignal<
     { items: ContextMenuItem[]; x: number; y: number } | undefined
   >();
@@ -529,7 +538,7 @@ export function Dashboard(props: {
     try {
       const outcome = await shareArticle(article);
       if (outcome === "copied")
-        setAccessibilityAnnouncement("Article link copied to the clipboard.");
+        announce("Article link copied to the clipboard.");
     } catch {
       // The clipboard can be denied or missing (insecure context), and the
       // button must not fail silently the way a rejected void promise does.
@@ -732,7 +741,7 @@ export function Dashboard(props: {
     if (resolvedTheme() !== "high-contrast")
       setTimeout(
         () =>
-          setAccessibilityAnnouncement(
+          announce(
             "A high-contrast theme is available in accessibility settings.",
           ),
         2000,
@@ -993,9 +1002,7 @@ export function Dashboard(props: {
       if (!nextArticles.length) return;
       setArticles((current) => [...current, ...nextArticles]);
       topUpArticles();
-      setAccessibilityAnnouncement(
-        `Loaded ${nextArticles.length} more articles.`,
-      );
+      announce(`Loaded ${nextArticles.length} more articles.`);
     } catch (cause) {
       if (selectionGuard.isCurrent(selection))
         reportError(cause, "Could not load more articles");
@@ -1084,9 +1091,19 @@ export function Dashboard(props: {
     const ids = indexes.map((index) => items[index]!.id);
     if (!ids.length) return;
     setError("");
-    void markArticlesRead(ids, read);
+    void markArticlesRead(
+      ids,
+      read,
+      `${articlesNoun(ids.length)} marked ${read ? "read" : "unread"}.`,
+    );
   }
-  async function markArticlesRead(ids: number[], read: boolean) {
+  // Only the explicit action passes an announcement: on-open and scroll-past
+  // marks happen per row as the reader moves, and would chatter.
+  async function markArticlesRead(
+    ids: number[],
+    read: boolean,
+    announcement?: string,
+  ) {
     const items = articles();
     const affected = new Set(ids);
     // Only rows whose read state actually flips move a badge -- re-marking
@@ -1139,6 +1156,7 @@ export function Dashboard(props: {
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
       });
+      if (announcement) announce(announcement);
       // Marked finished: its half-read position has no future (#718).
       if (read && rememberReadingPosition())
         readingSession.clearReaderScrolls(ids);
@@ -1260,7 +1278,7 @@ export function Dashboard(props: {
   async function copyToClipboard(url: string, announcement: string) {
     try {
       await navigator.clipboard.writeText(url);
-      setAccessibilityAnnouncement(announcement);
+      announce(announcement);
     } catch {
       setError("Could not access the clipboard.");
     }
@@ -1281,9 +1299,7 @@ export function Dashboard(props: {
         method: "PATCH",
       });
       await loadTree();
-      setAccessibilityAnnouncement(
-        pausedUntil === null ? "Feed unsnoozed." : "Feed snoozed.",
-      );
+      announce(pausedUntil === null ? "Feed unsnoozed." : "Feed snoozed.");
     } catch (cause) {
       reportError(
         cause,
@@ -1657,6 +1673,7 @@ export function Dashboard(props: {
 
     deletion
       .then(() => {
+        announce(`${articlesNoun(ids.length)} deleted.`);
         // Deleted articles have no reading position to remember (#718).
         if (rememberReadingPosition()) readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
