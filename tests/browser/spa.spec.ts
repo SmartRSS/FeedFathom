@@ -1571,6 +1571,30 @@ test("source properties reuses the discovery panel with feed/website locked", as
   await expect(page.getByRole("button", { name: "Find feeds" })).toHaveCount(0);
 });
 
+test("the discovery panel takes focus on open and Escape hands it back", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  // Opening the panel unmounts the toolbar button that was focused; without
+  // an explicit hand-off a keyboard user lands on <body>.
+  const add = page.getByRole("button", { name: "add source" });
+  await add.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Website")).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("heading", { name: "Discover feed" }),
+  ).toHaveCount(0);
+  await expect(add).toBeFocused();
+
+  await selectSource(page);
+  await page.getByRole("button", { name: "source properties" }).click();
+  await expect(page.getByLabel("Title")).toBeFocused();
+});
+
 test("renaming a source through the edit panel updates the tree", async ({
   page,
 }) => {
