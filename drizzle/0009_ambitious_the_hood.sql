@@ -1,0 +1,2 @@
+DROP INDEX "articles_source_published_idx";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "articles_source_published_covering_idx" ON "articles" USING btree ("source_id","published_at","id","guid","last_seen_in_feed_at","updated_at");
