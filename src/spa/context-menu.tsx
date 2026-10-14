@@ -96,6 +96,12 @@ export function ContextMenu(props: {
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       focusItemAt(-1);
+    } else if (event.key === "Tab") {
+      // Tab leaves the menu rather than trapping focus in it (WAI-ARIA menu
+      // pattern). Returning focus first means the browser's own Tab moves on
+      // from the invoker, so Shift+Tab goes backwards from it.
+      props.onClose();
+      returnFocus();
     }
   };
 
