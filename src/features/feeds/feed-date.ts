@@ -48,9 +48,10 @@ const zoneOffsets: Record<string, string> = {
 
 const isoWithoutZone =
   /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/iu;
-// A numeric offset is left off on purpose: the native parser reads it.
+// A numeric offset is left off on purpose: the native parser reads it. AM/PM
+// belongs to the time, or a 12-hour date would lose it as an unknown zone.
 const rfc822WithNamedOrNoZone =
-  /^((?:[a-z]+,?\s*)?\d{1,2}\s+[a-z]+\s+\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?)(?:\s+([a-z]{1,5}))?$/iu;
+  /^((?:[a-z]+,?\s*)?\d{1,2}\s+[a-z]+\s+\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)(?:\s+([a-z]{1,5}))?$/iu;
 
 // `new Date` reads a date with no zone in the process's local timezone, so
 // the same feed would store different instants on differently configured

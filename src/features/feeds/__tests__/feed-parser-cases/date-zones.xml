@@ -6,6 +6,8 @@
     <item><guid>gmt</guid><title>2003-06-10T04:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00 GMT</pubDate></item>
     <item><guid>no-zone</guid><title>2003-06-10T04:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00</pubDate></item>
     <item><guid>no-weekday-no-seconds</guid><title>2003-06-10T04:00:00.000Z</title><pubDate>10 Jun 2003 04:00</pubDate></item>
+    <item><guid>twelve-hour</guid><title>2003-06-10T16:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00 PM</pubDate></item>
+    <item><guid>twelve-hour-zone</guid><title>2003-06-10T14:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00 pm CEST</pubDate></item>
     <item><guid>cest</guid><title>2003-06-10T02:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00 CEST</pubDate></item>
     <item><guid>ist</guid><title>2003-06-09T22:30:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00 IST</pubDate></item>
     <item><guid>aest-lowercase</guid><title>2003-06-09T18:00:00.000Z</title><pubDate>Tue, 10 Jun 2003 04:00:00 aest</pubDate></item>
