@@ -105,20 +105,19 @@ export class ArticlesDataService {
       readAt: userArticles.readAt,
       userId: userArticles.userId,
     };
-    const loadedArticles = await this.drizzleConnection
+    // Two passes: the page is chosen reading only columns the covering index
+    // carries (articles_source_published_covering_idx), and the body-sized
+    // columns are fetched afterwards for the page alone. In one pass Postgres
+    // fetched the heap row of every candidate -- every visible article in the
+    // folder -- to carry author, title and url through the sort, and a
+    // 20-source folder read 27k heap pages per listing.
+    const page = this.drizzleConnection
       .select({
-        author: articles.author,
         id: articles.id,
         publishedAt: articles.publishedAt,
         // Answered by the same expression that filters, so the "all" view
         // cannot mark a row read that the "read" view would not have listed.
-        read: sql<boolean>`${readCondition(readStateColumns)}`,
-        // Bumped when a feed rewrites the article, so a body downloaded for
-        // offline reading (#992) can tell it is out of date.
-        revision: sql<null | string>`${articles.updatedAt}::text`,
-        sourceId: articles.sourceId,
-        title: articles.title,
-        url: articles.url,
+        read: sql<boolean>`${readCondition(readStateColumns)}`.as("read"),
       })
       .from(articles)
       .leftJoin(userArticles, userArticleStateJoin(userId))
@@ -126,8 +125,8 @@ export class ArticlesDataService {
       .where(
         and(
           // The time window rides the same index as the source filter
-          // (articles_source_published_idx), so the Today query stays a
-          // plain range scan.
+          // (articles_source_published_covering_idx), so the Today query
+          // stays a plain range scan.
           ...(options.allSubscribed
             ? []
             : options.folderId === undefined
@@ -184,7 +183,26 @@ export class ArticlesDataService {
       // id breaks the tie: published_at is not unique, and a keyset cursor on
       // an ambiguous ordering repeats or skips rows across pages.
       .orderBy(desc(articles.publishedAt), desc(articles.id))
-      .limit(articlePageSize);
+      .limit(articlePageSize)
+      .as("page");
+
+    const loadedArticles = await this.drizzleConnection
+      .select({
+        author: articles.author,
+        id: articles.id,
+        publishedAt: articles.publishedAt,
+        read: page.read,
+        // Bumped when a feed rewrites the article, so a body downloaded for
+        // offline reading (#992) can tell it is out of date.
+        revision: sql<null | string>`${articles.updatedAt}::text`,
+        sourceId: articles.sourceId,
+        title: articles.title,
+        url: articles.url,
+      })
+      .from(page)
+      .innerJoin(articles, eq(articles.id, page.id))
+      // The join does not keep the subquery's order.
+      .orderBy(desc(page.publishedAt), desc(page.id));
 
     const boundaryDates = generateBoundaryDates();
     return loadedArticles.map((item) =>

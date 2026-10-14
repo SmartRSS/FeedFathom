@@ -81,12 +81,17 @@ export function FeedDiscovery(props: {
   const requests = createSupersessionGuard();
   let disposed = false;
   let websiteInput!: HTMLInputElement;
+  let form!: HTMLFormElement;
   onCleanup(() => {
     disposed = true;
     requests.start();
   });
 
   onMount(() => {
+    // The pane that held focus (the toolbar button that opened this) was
+    // just unmounted, which drops focus to <body>: start in the form, on the
+    // first field that can be typed into (Title when editing).
+    form.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
     if (props.editing) {
       setFeedUrl(props.editing.xmlUrl);
       setLink(props.editing.homeUrl);
@@ -270,7 +275,14 @@ export function FeedDiscovery(props: {
         class="dashboard-pane sources-pane"
         classList={{ "focused-pane": props.pane() === "sources" }}
       >
-        <form class="feed-discovery-form" onSubmit={submit}>
+        <form
+          class="feed-discovery-form"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") props.close();
+          }}
+          onSubmit={submit}
+          ref={form}
+        >
           <h2>{props.editing ? "Edit feed" : "Discover feed"}</h2>
           <label>
             Website

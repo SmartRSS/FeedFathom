@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
+import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
@@ -137,6 +138,7 @@ const inCapScope = (element: XmlElement | null): boolean =>
  * `language`; see generateArticleGuid.
  */
 export const parseXmlFeed = (text: string) => {
+  rejectXmlEntityDeclarations(text);
   const feed = parseFeed(text);
   if (!mentionsCapNamespace(text)) return feed;
   for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
@@ -195,6 +197,7 @@ export class FeedParser {
       const {
         cached,
         feed: parsedFeed,
+        finalUrl,
         freshUntil,
         websub,
       } = await this.parseUrl(
@@ -220,6 +223,7 @@ export class FeedParser {
             { id: source.id, url: source.url },
             rewriteLinks,
             observedAt.getTime(),
+            finalUrl,
           ),
           { lastSeenInFeedAt: observedAt },
         ),
@@ -360,9 +364,19 @@ export class FeedParser {
     sourceUrl: string,
   ): Promise<ReturnType<typeof mapFeedToPreview> | undefined> {
     try {
-      const { feed: parsedFeed, freshUntil } = await this.parseUrl(sourceUrl);
+      const {
+        feed: parsedFeed,
+        finalUrl,
+        freshUntil,
+      } = await this.parseUrl(sourceUrl);
       return Object.assign(
-        mapFeedToPreview(parsedFeed, sourceUrl, rewriteLinks),
+        mapFeedToPreview(
+          parsedFeed,
+          sourceUrl,
+          rewriteLinks,
+          Date.now(),
+          finalUrl,
+        ),
         { freshUntil },
       );
     } catch (error_: unknown) {

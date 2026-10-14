@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  canRetryOfflineSync,
+  createOfflineSyncGate,
   navigatorConnection,
   neighbours,
   offlineArticles,
@@ -24,6 +26,21 @@ test("Save Data suppresses the prefetch; absent connection does not", () => {
   expect(shouldPrefetch({ saveData: true })).toBe(false);
   expect(shouldPrefetch({ saveData: false })).toBe(true);
   expect(shouldPrefetch(undefined)).toBe(true);
+});
+
+test("a sync requested while another is active is retried when it finishes", () => {
+  const gate = createOfflineSyncGate();
+  expect(gate.start()).toBe(true);
+  expect(gate.start()).toBe(false);
+  expect(gate.finish()).toBe(true);
+  expect(gate.start()).toBe(true);
+  expect(gate.finish()).toBe(false);
+});
+
+test("offline downloads can resume when visible, even after a started sync", () => {
+  expect(canRetryOfflineSync(true, false)).toBe(true);
+  expect(canRetryOfflineSync(true, true)).toBe(false);
+  expect(canRetryOfflineSync(false, false)).toBe(false);
 });
 
 test("navigatorConnection reads the real connection object when present", () => {

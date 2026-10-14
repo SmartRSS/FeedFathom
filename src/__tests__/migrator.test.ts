@@ -61,9 +61,9 @@ test("recognises only the statements a migration opted in", () => {
 });
 
 // The baseline creates every table in the same migration, so every index in
-// it lands on an empty table and none should be pre-built. This is what
-// makes the pass a no-op today; it exists for the migrations that come next.
-test("finds nothing to pre-build in the squashed baseline", async () => {
+// it lands on an empty table and none should be pre-built. Only the covering
+// index from 0009 opts in: it goes onto a populated articles table.
+test("pre-builds only the indexes added onto populated tables", async () => {
   const found = (
     await Promise.all(
       journal.entries.map(async (entry) =>
@@ -76,5 +76,12 @@ test("finds nothing to pre-build in the squashed baseline", async () => {
     )
   ).flat();
 
-  expect(found).toEqual([]);
+  expect(found).toEqual([
+    {
+      create:
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_published_covering_idx" ON "articles" USING btree ("source_id","published_at","id","guid","last_seen_in_feed_at","updated_at")',
+      name: "articles_source_published_covering_idx",
+      table: "articles",
+    },
+  ]);
 });
