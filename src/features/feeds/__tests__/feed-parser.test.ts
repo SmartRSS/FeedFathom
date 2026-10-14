@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
@@ -126,6 +127,28 @@ const capFeedGuids = (lang: string) =>
   guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
     <entry xml:lang="${lang}"><id>x</id><category term="language=en"/></entry>
   </feed>`);
+
+test("resolves relative entry links against a redirected feed URL", async () => {
+  const parsedFixtureFeed = parseXmlFeed(
+    await Bun.file(
+      "src/features/feeds/__tests__/feed-parser-cases/relative-links-after-redirect.xml",
+    ).text(),
+  );
+  const preview = mapFeedToPreview(
+    parsedFixtureFeed,
+    "https://publisher.example/old/feed.xml",
+    rewriteLinks,
+    Date.parse("2026-10-14T00:00:00Z"),
+    "https://cdn.example/new/path/feed.xml",
+  );
+
+  expect(preview.articles[0]?.url).toBe(
+    "https://cdn.example/new/path/articles/one",
+  );
+  expect(preview.articles[0]?.content).toContain(
+    'href="https://cdn.example/new/path/articles/images/cover.png"',
+  );
+});
 
 describe("entries sharing an id", () => {
   test("keeps every entry of a NAAD alert as its own article", async () => {

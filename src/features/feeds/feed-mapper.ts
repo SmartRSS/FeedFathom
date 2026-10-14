@@ -121,10 +121,13 @@ export const mapFeedItemToArticle = (
   source: Source,
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
+  baseUrl = source.url,
 ): ArticlePayload => {
   // Content links resolve against the article, then the feed homepage, then
   // the feed itself, so relative feed URLs still land on the publisher.
-  const homepage = safeHttpUrl(parsedFeed.url ?? "", source.url) || source.url;
+  const fallbackBase = safeHttpUrl(baseUrl, source.url) || source.url;
+  const homepage =
+    safeHttpUrl(parsedFeed.url ?? "", fallbackBase) || fallbackBase;
   const url = safeHttpUrl(item.url ?? "", homepage);
   return {
     author:
@@ -179,6 +182,7 @@ export const mapFeedToPreviewArticles = (
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
   items = parsedFeed.items,
+  baseUrl = sourceUrl,
 ): FeedPreviewArticle[] => {
   const source = { id: 0, url: sourceUrl };
   return currentFeedItems(items, now).map((item) => {
@@ -188,6 +192,7 @@ export const mapFeedToPreviewArticles = (
       source,
       rewriteLinksFunction,
       now,
+      baseUrl,
     );
     const expiresAt = Date.parse(item.cap?.expires ?? "");
     return Object.assign(
@@ -210,6 +215,7 @@ export const mapFeedToPreview = (
   sourceUrl: string,
   rewriteLinksFunction: (content: string, baseUrl: string) => string,
   now = Date.now(),
+  baseUrl = sourceUrl,
 ): FeedPreview => {
   const current = currentFeedItems(parsedFeed.items, now);
   const items = previewItems(current);
@@ -222,6 +228,7 @@ export const mapFeedToPreview = (
         rewriteLinksFunction,
         now,
         items,
+        baseUrl,
       ),
       description: parsedFeed.description ?? undefined,
       feedUrl: sourceUrl,
