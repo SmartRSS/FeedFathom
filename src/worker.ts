@@ -28,14 +28,15 @@ async function runWorker() {
     void shutdown();
   });
 
-  let migrationApplied = false;
+  let consuming = false;
 
-  // The port opens before the migration wait so a probe gets a definitive
+  // The port opens before startup finishes so a probe gets a definitive
   // answer rather than a refused connection -- but the answer is 503 until
-  // the schema this build was compiled against is actually present. A worker
-  // that cannot touch the database is not ready to be rolled onto, and
-  // reporting "ok" there let `up --wait` and Swarm's rollout monitor call a
-  // deployment finished against workers that could not do any work yet.
+  // the BullMQ worker is consuming jobs. That needs the schema this build was
+  // compiled against and a reachable Redis. Reporting "ok" any earlier let
+  // `up --wait` and Swarm's start-first rollout stop the old workers in
+  // favour of new ones still blocked on startup, and feed polling stopped
+  // with every check green.
   //
   // The healthcheck's start_period is what keeps that not-ready window from
   // reading as a crash loop, so it has to cover a normal migration; see the
@@ -51,9 +52,9 @@ async function runWorker() {
       }
 
       if (url.pathname === "/healthcheck") {
-        return migrationApplied
+        return consuming
           ? Response.json({ status: "ok" })
-          : Response.json({ status: "migrating" }, { status: 503 });
+          : Response.json({ status: "starting" }, { status: 503 });
       }
 
       return new Response("Not Found", { status: 404 });
@@ -62,7 +63,6 @@ async function runWorker() {
   });
 
   await waitForMigration(drizzleConnection.$client);
-  migrationApplied = true;
 
   try {
     await mainWorker.initialize();
@@ -70,6 +70,7 @@ async function runWorker() {
     console.error("Failed to initialize worker:", error);
     throw new Error("Worker initialization failed", { cause: error });
   }
+  consuming = true;
 }
 
 await runWorker();
