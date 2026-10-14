@@ -16,12 +16,34 @@ export type XmlElement = Record<string, unknown>;
 export const isXmlElement = (value: unknown): value is XmlElement =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+export const rejectXmlDoctype = (xml: string): void => {
+  for (let index = 0; index < xml.length;) {
+    const declaration = xml.indexOf("<!", index);
+    if (declaration === -1) return;
+    if (xml.startsWith("<!--", declaration)) {
+      const end = xml.indexOf("-->", declaration + 4);
+      index = end === -1 ? xml.length : end + 3;
+      continue;
+    }
+    if (xml.startsWith("<![CDATA[", declaration)) {
+      const end = xml.indexOf("]]>", declaration + 9);
+      index = end === -1 ? xml.length : end + 3;
+      continue;
+    }
+    if (/^<!doctype\b/i.test(xml.slice(declaration))) {
+      throw new Error("XML document type declarations are not allowed");
+    }
+    index = declaration + 2;
+  }
+};
+
 /**
  * Throws on malformed XML. Bun.XML is a conforming processor, so this also
  * covers what fast-xml-parser needed a separate XMLValidator pass for -- at
  * the cost of rejecting documents the tolerant parser used to recover from.
  */
 export const parseXml = (xml: string): XmlElement => {
+  rejectXmlDoctype(xml);
   const parsed: unknown = Bun.XML.parse(xml);
   if (!isXmlElement(parsed)) throw new Error("Invalid XML document");
   return parsed;

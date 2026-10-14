@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { xmlSafeText } from "#platform/xml.ts";
+import { parseXml, xmlSafeText } from "#platform/xml.ts";
 
 describe("xmlSafeText", () => {
   test("strips the C0 controls XML cannot represent", () => {
@@ -47,5 +47,14 @@ describe("xmlSafeText", () => {
     const safe = xmlSafeText(hostile);
     expect(() => Bun.XML.stringify({ root: safe })).not.toThrow();
     expect(safe).toBe("ab\tc\nde\ufffd\u{1f600}");
+  });
+});
+
+test("rejects a DTD but leaves a matching CDATA value alone", () => {
+  expect(() =>
+    parseXml(`<!DOCTYPE root [<!ENTITY payload "expanded">]><root />`),
+  ).toThrow("XML document type declarations are not allowed");
+  expect(parseXml("<root><![CDATA[<!DOCTYPE html>]]></root>")).toEqual({
+    root: "<!DOCTYPE html>",
   });
 });
