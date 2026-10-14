@@ -820,6 +820,50 @@ test("marks an article read, moving it between the filters", async ({
   expect(state.articleRequests).toBe(3);
 });
 
+// Bulk and destructive actions say what they did through the polite live
+// region (#1028), once per action rather than once per row, and a repeat of
+// the same message is spoken again rather than left as unchanged text.
+test("announces mark-read and delete results once per action", async ({
+  page,
+}) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(3);
+  const status = page.locator(".dashboard > [role='status']");
+  await expect(status).toHaveAttribute("aria-live", "polite");
+
+  // All keeps the marked rows in the list, leaving some to delete.
+  await page.getByRole("combobox", { name: "Show" }).selectOption("all");
+  await expect(articleOptions(page)).toHaveCount(3);
+  await page.getByRole("button", { exact: true, name: "select all" }).click();
+  await page.getByRole("button", { name: "Mark read" }).click();
+  await expect(status).toHaveText("3 articles marked read.");
+
+  await articleOptions(page).first().click();
+  await page.getByRole("button", { name: "delete articles" }).click();
+  await expect(status).toHaveText("Article deleted.");
+  // The second identical message has to clear the region first, or a
+  // screen reader hears nothing new.
+  await expect(articleOptions(page)).toHaveCount(2);
+  await articleOptions(page).first().click();
+  const cleared = status.evaluate(
+    (region) =>
+      new Promise<boolean>((resolve) => {
+        new MutationObserver(() => {
+          if (region.textContent === "") resolve(true);
+        }).observe(region, {
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
+      }),
+  );
+  await page.getByRole("button", { name: "delete articles" }).click();
+  expect(await cleared).toBe(true);
+  await expect(status).toHaveText("Article deleted.");
+});
+
 // The scroll-past policy (#714): rows held in view for the dwell time are
 // marked read in ONE batched request, not one per article. The All view keeps
 // rows in place, and the row open in the reader is excluded so nothing is
