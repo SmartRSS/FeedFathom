@@ -21,11 +21,40 @@ const shortIntervals = {
   background: shortInterval,
   interactive: shortInterval,
 };
-// The limiter spaces reservations; these tests time the transport calls that
-// follow them. A call can be stamped a millisecond after its reservation, so
-// the gap between two calls may read a few milliseconds under the interval
-// that separated the reservations.
-const minimumSendGap = shortInterval - 5;
+
+/**
+ * A fake Redis that logs each host slot it grants, stamped by its own clock,
+ * which is the one the limiter reads. A test pushes its transport calls onto
+ * the same log, so it can check that every request held a slot of its own
+ * and that the slots sat an interval apart. Timing the transport calls
+ * instead would also time however long the machine took between a
+ * reservation and the call after it.
+ */
+function slotLoggingRedis(log: string[]) {
+  const store = redis();
+  const slots = new Map<string, number[]>();
+  return {
+    ...store,
+    async send(command: string, args: string[]) {
+      const wait = await store.send(command, args);
+      const [script = "", , key = ""] = args;
+      if (script.includes("TIME") && wait === 0) {
+        const host = key.replace("http-last-request:", "");
+        log.push(`slot ${host}`);
+        slots.set(host, [
+          ...(slots.get(host) ?? []),
+          Number(store.values.get(key)),
+        ]);
+      }
+      return wait;
+    },
+    slots,
+  };
+}
+
+function gaps(times: number[] = []): number[] {
+  return times.slice(1).map((time, index) => time - times[index]!);
+}
 
 function nativeResponse(
   content: string | Uint8Array,
@@ -367,6 +396,9 @@ test("enforces one deadline through the streamed body and cancels it", async () 
   expect(destroyed).toBe(1);
 });
 
+// Read as text: the cap applies to the bytes read and to the cached copy,
+// before decoding, and `Uint8Array.from` spends seconds on a body this size.
+// The body is single-byte ASCII, so its text length is its byte count.
 test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
   const exact = Buffer.alloc(maximumBodyBytes, 65);
   const exactClient = new HttpClient(redis(), {
@@ -374,17 +406,11 @@ test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
       nativeResponse(exact, { headers: { "cache-control": "max-age=60" } }),
     ]),
   });
-  const exactResponse = await exactClient.get("https://1.1.1.1/feed", {
-    responseType: "arrayBuffer",
-  });
-  expect(exactResponse.data.byteLength).toBe(maximumBodyBytes);
-  expect(
-    (
-      await exactClient.get("https://1.1.1.1/feed", {
-        responseType: "arrayBuffer",
-      })
-    ).cached,
-  ).toBe(true);
+  const exactResponse = await exactClient.get("https://1.1.1.1/feed");
+  expect(exactResponse.data).toHaveLength(maximumBodyBytes);
+  const cachedResponse = await exactClient.get("https://1.1.1.1/feed");
+  expect(cachedResponse.cached).toBe(true);
+  expect(cachedResponse.data).toHaveLength(maximumBodyBytes);
 
   let destroyed = 0;
   const overClient = new HttpClient(redis(), {
@@ -398,7 +424,7 @@ test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
     "exceeds 24 MiB",
   );
   expect(destroyed).toBe(1);
-});
+}, 20_000);
 
 // Retry-After is not a 429-only header (RFC 9110 10.2.3). A 503 that carries
 // it used to fall through to the ordinary retryable path and be re-requested
@@ -434,8 +460,9 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
 // one retry sequence landed 200ms and 400ms apart -- three requests to one
 // host inside an interval that exists to allow one.
 test("spaces retries by the host interval instead of a fixed backoff", async () => {
-  const sentAt: number[] = [];
-  const client = new HttpClient(redis(), {
+  const log: string[] = [];
+  const store = slotLoggingRedis(log);
+  const client = new HttpClient(store, {
     intervalMs: shortIntervals,
     transport: queuedTransport(
       [
@@ -443,25 +470,34 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
         nativeResponse("unavailable", { status: 503 }),
         nativeResponse("feed"),
       ],
-      () => sentAt.push(Date.now()),
+      (url) => log.push(`send ${url}`),
     ),
   });
 
   expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
-  expect(sentAt).toHaveLength(3);
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
-  expect(sentAt[2]! - sentAt[1]!).toBeGreaterThanOrEqual(minimumSendGap);
+  expect(log).toEqual([
+    "slot 1.1.1.1",
+    "send https://1.1.1.1/feed",
+    "slot 1.1.1.1",
+    "send https://1.1.1.1/feed",
+    "slot 1.1.1.1",
+    "send https://1.1.1.1/feed",
+  ]);
+  for (const gap of gaps(store.slots.get("1.1.1.1"))) {
+    expect(gap).toBeGreaterThanOrEqual(shortInterval);
+  }
 });
 
 // Only the original hostname held a reservation, so every host reached
 // through a redirect was contacted with no interval and no block check --
 // the hop and a following direct request landed in the same millisecond.
 test("reserves the redirect target's slot, not just the original host's", async () => {
-  const sentAt = new Map<string, number>();
-  const client = new HttpClient(redis(), {
+  const log: string[] = [];
+  const store = slotLoggingRedis(log);
+  const client = new HttpClient(store, {
     intervalMs: shortIntervals,
     transport: async (url) => {
-      sentAt.set(url, Date.now());
+      log.push(`send ${url}`);
       return url === "https://1.1.1.1/a"
         ? nativeResponse("redirect", {
             headers: { location: "https://8.8.8.8/real" },
@@ -475,9 +511,17 @@ test("reserves the redirect target's slot, not just the original host's", async 
   await client.get("https://1.1.1.1/a");
   await client.get("https://8.8.8.8/direct");
 
-  expect(
-    sentAt.get("https://8.8.8.8/direct")! - sentAt.get("https://8.8.8.8/real")!,
-  ).toBeGreaterThanOrEqual(minimumSendGap);
+  expect(log).toEqual([
+    "slot 1.1.1.1",
+    "send https://1.1.1.1/a",
+    "slot 8.8.8.8",
+    "send https://8.8.8.8/real",
+    "slot 8.8.8.8",
+    "send https://8.8.8.8/direct",
+  ]);
+  for (const gap of gaps(store.slots.get("8.8.8.8"))) {
+    expect(gap).toBeGreaterThanOrEqual(shortInterval);
+  }
 });
 
 // A host that just answered 429 could be hammered through a redirect from
@@ -538,12 +582,13 @@ test("blocks the host that answered, not the one the chain started at", async ()
 // carry a large share of all feeds, so an import fired them back to back.
 test("post reserves the host, sends the body, and does not follow redirects", async () => {
   const sent: Array<{ body: string | undefined; url: string }> = [];
-  const sentAt: number[] = [];
-  const client = new HttpClient(redis(), {
+  const log: string[] = [];
+  const store = slotLoggingRedis(log);
+  const client = new HttpClient(store, {
     intervalMs: shortIntervals,
     transport: async (url, headers, _signal, body) => {
       sent.push({ body, url });
-      sentAt.push(Date.now());
+      log.push(`send ${url}`);
       expect(headers.get("content-type")).toBe(
         "application/x-www-form-urlencoded",
       );
@@ -568,7 +613,15 @@ test("post reserves the host, sends the body, and does not follow redirects", as
     "https://hub.example/",
   ]);
   expect(sent[0]?.body).toBe("hub.mode=subscribe");
-  expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(minimumSendGap);
+  expect(log).toEqual([
+    "slot hub.example",
+    "send https://hub.example/",
+    "slot hub.example",
+    "send https://hub.example/",
+  ]);
+  for (const gap of gaps(store.slots.get("hub.example"))) {
+    expect(gap).toBeGreaterThanOrEqual(shortInterval);
+  }
 });
 
 test("post honours a hub's Retry-After instead of discarding it", async () => {

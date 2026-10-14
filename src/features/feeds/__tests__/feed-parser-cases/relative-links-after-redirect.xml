@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Redirected feed</title>
+    <item>
+      <guid>article-1</guid>
+      <title>Relative article link</title>
+      <link>articles/one</link>
+      <description><![CDATA[<p><a href="images/cover.png">Cover</a></p>]]></description>
+    </item>
+  </channel>
+</rss>

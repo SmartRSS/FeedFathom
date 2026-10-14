@@ -315,36 +315,32 @@ export class UserSourcesDataService {
   public async recomputeUnreadCounts(sourceIds: number[], userId?: number) {
     if (sourceIds.length === 0) return;
     const userFilter =
-      userId === undefined ? sql`` : sql`AND us2.user_id = ${userId}`;
+      userId === undefined ? sql`` : sql`AND us.user_id = ${userId}`;
+    // One correlated count per subscription, so user_articles is read by its
+    // primary-key prefix (user_id, source_id) for that subscription alone. As
+    // a single join across every subscriber the planner hash-joined it, and
+    // each feed fetch sequentially scanned every user's read state (#1035).
     await this.drizzleConnection.execute(sql`
       UPDATE user_sources us
-      SET unread_count = counts.unread
-      FROM (
-        SELECT us2.id,
-          -- Counting what is unread, rather than subtracting what is not, so
-          -- this is literally the same expression the article list filters on
-          -- (see article-read-state.ts). The a.id test is what the LEFT JOIN
-          -- needs: with no article row at all, ua.user_id IS NULL is true and
-          -- an empty subscription would otherwise score one unread.
-          coalesce(count(CASE
-            WHEN a.id IS NOT NULL AND ${unreadCondition({
-              articleUpdatedAt: sql.raw("a.updated_at"),
-              deletedAt: sql.raw("ua.deleted_at"),
-              readAt: sql.raw("ua.read_at"),
-              userId: sql.raw("ua.user_id"),
-            })}
-            THEN 1
-          END), 0)::int AS unread
-        FROM user_sources us2
-        LEFT JOIN articles a
-          ON a.source_id = us2.source_id AND a.last_seen_in_feed_at >= us2.created_at
+      SET unread_count = (
+        -- Counting what is unread, rather than subtracting what is not, so
+        -- this is literally the same expression the article list filters on
+        -- (see article-read-state.ts).
+        SELECT count(*)::int
+        FROM articles a
         LEFT JOIN user_articles ua
-          ON ua.user_id = us2.user_id
-          AND ua.source_id = a.source_id AND ua.guid = a.guid
-        WHERE us2.source_id IN ${sourceIds} ${userFilter}
-        GROUP BY us2.id
-      ) counts
-      WHERE us.id = counts.id
+          ON ua.user_id = us.user_id
+          AND ua.source_id = us.source_id AND ua.guid = a.guid
+        WHERE a.source_id = us.source_id
+          AND a.last_seen_in_feed_at >= us.created_at
+          AND ${unreadCondition({
+            articleUpdatedAt: sql.raw("a.updated_at"),
+            deletedAt: sql.raw("ua.deleted_at"),
+            readAt: sql.raw("ua.read_at"),
+            userId: sql.raw("ua.user_id"),
+          })}
+      )
+      WHERE us.source_id IN ${sourceIds} ${userFilter}
     `);
   }
 }

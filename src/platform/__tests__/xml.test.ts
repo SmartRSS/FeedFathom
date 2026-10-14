@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { xmlSafeText } from "#platform/xml.ts";
+import { parseXml, xmlSafeText } from "#platform/xml.ts";
 
 describe("xmlSafeText", () => {
   test("strips the C0 controls XML cannot represent", () => {
@@ -47,5 +47,20 @@ describe("xmlSafeText", () => {
     const safe = xmlSafeText(hostile);
     expect(() => Bun.XML.stringify({ root: safe })).not.toThrow();
     expect(safe).toBe("ab\tc\nde\ufffd\u{1f600}");
+  });
+});
+
+test("rejects declared entities but not an external DTD or CDATA", () => {
+  expect(() =>
+    parseXml(`\uFEFF<?xml version="1.0"?>
+      <!-- generator --><!DOCTYPE root [<!ENTITY payload "expanded">]><root />`),
+  ).toThrow("XML entity declarations are not allowed");
+  expect(
+    parseXml(
+      `<?xml version="1.0"?><!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd"><rss version="0.91" />`,
+    ),
+  ).toEqual({ rss: { "@version": "0.91" } });
+  expect(parseXml("<root><![CDATA[<!DOCTYPE html [ ]>]]></root>")).toEqual({
+    root: "<!DOCTYPE html [ ]>",
   });
 });

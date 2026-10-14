@@ -81,12 +81,17 @@ export function FeedDiscovery(props: {
   const requests = createSupersessionGuard();
   let disposed = false;
   let websiteInput!: HTMLInputElement;
+  let form!: HTMLFormElement;
   onCleanup(() => {
     disposed = true;
     requests.start();
   });
 
   onMount(() => {
+    // The pane that held focus (the toolbar button that opened this) was
+    // just unmounted, which drops focus to <body>: start in the form, on the
+    // first field that can be typed into (Title when editing).
+    form.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
     if (props.editing) {
       setFeedUrl(props.editing.xmlUrl);
       setLink(props.editing.homeUrl);
@@ -270,7 +275,14 @@ export function FeedDiscovery(props: {
         class="dashboard-pane sources-pane"
         classList={{ "focused-pane": props.pane() === "sources" }}
       >
-        <form class="feed-discovery-form" onSubmit={submit}>
+        <form
+          class="feed-discovery-form"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") props.close();
+          }}
+          onSubmit={submit}
+          ref={form}
+        >
           <h2>{props.editing ? "Edit feed" : "Discover feed"}</h2>
           <label>
             Website
@@ -428,27 +440,33 @@ export function FeedDiscovery(props: {
               </p>
             }
           >
-            <For each={articles()}>
-              {(article, index) => (
-                <a
-                  aria-current={
-                    selectedIndex() === index() ? "true" : undefined
-                  }
-                  class="article"
-                  classList={{ selected: selectedIndex() === index() }}
-                  href={article.url || undefined}
-                  onClick={(event) => selectPreviewArticle(index(), event)}
-                >
-                  <span class="title">{article.title}</span>
-                  <span class="details">
-                    <span>{article.author}</span>
-                    <time datetime={article.publishedAt}>
-                      {formatDate(article.publishedAt)}
-                    </time>
-                  </span>
-                </a>
-              )}
-            </For>
+            {/* The list covers only the rows: the truncation note beside it
+                is not a listitem, and a list may only own listitems. */}
+            <div role="list">
+              <For each={articles()}>
+                {(article, index) => (
+                  <div role="listitem">
+                    <a
+                      aria-current={
+                        selectedIndex() === index() ? "true" : undefined
+                      }
+                      class="article"
+                      classList={{ selected: selectedIndex() === index() }}
+                      href={article.url || undefined}
+                      onClick={(event) => selectPreviewArticle(index(), event)}
+                    >
+                      <span class="title">{article.title}</span>
+                      <span class="details">
+                        <span>{article.author}</span>
+                        <time datetime={article.publishedAt}>
+                          {formatDate(article.publishedAt)}
+                        </time>
+                      </span>
+                    </a>
+                  </div>
+                )}
+              </For>
+            </div>
             <Show when={truncated()}>
               <p class="empty-pane">
                 This preview shows part of the feed. Subscribing imports all of

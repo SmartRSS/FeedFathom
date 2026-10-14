@@ -76,7 +76,9 @@ export class MainWorker {
   async initialize() {
     await this.setupScheduledTasks();
     await bullmqQueue.addBulk(await this.gatherParseSourceJobs());
-    this.startWorker();
+    // Resolves once both of the worker's Redis connections are up, the
+    // blocking one included, so the worker is fetching jobs from here on.
+    await this.startWorker().waitUntilReady();
   }
 
   async cleanup() {
@@ -285,15 +287,17 @@ export class MainWorker {
     const workerConcurrency = appConfig.WORKER_CONCURRENCY;
     console.log(`Setting up worker with concurrency: ${workerConcurrency}`);
 
-    this.worker = new Worker("tasks", this.processJob, {
+    const worker = new Worker("tasks", this.processJob, {
       concurrency: workerConcurrency,
       connection: bullmqRedis,
       lockDuration: appConfig.LOCK_DURATION * 1_000,
     });
-    this.worker.on("failed", (job, error) => {
+    worker.on("failed", (job, error) => {
       console.error(`Worker job failed: ${job?.id ?? "unknown"}`, error);
     });
+    this.worker = worker;
 
     console.log("Worker pool setup complete");
+    return worker;
   }
 }

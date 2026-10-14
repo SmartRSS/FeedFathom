@@ -16,12 +16,26 @@ export type XmlElement = Record<string, unknown>;
 export const isXmlElement = (value: unknown): value is XmlElement =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// Bun.XML caps entity expansion at about 100x the input, which a 24 MiB feed
+// body still turns into gigabytes. Entities can only be declared in a
+// DOCTYPE's internal subset, so refuse that. An external DTD, such as the one
+// RSS 0.91 feeds name, is never fetched and stays harmless.
+const internalSubset =
+  /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->)*<!DOCTYPE\b[^[>]*\[/i;
+
+export const rejectXmlEntityDeclarations = (xml: string): void => {
+  if (internalSubset.test(xml)) {
+    throw new Error("XML entity declarations are not allowed");
+  }
+};
+
 /**
  * Throws on malformed XML. Bun.XML is a conforming processor, so this also
  * covers what fast-xml-parser needed a separate XMLValidator pass for -- at
  * the cost of rejecting documents the tolerant parser used to recover from.
  */
 export const parseXml = (xml: string): XmlElement => {
+  rejectXmlEntityDeclarations(xml);
   const parsed: unknown = Bun.XML.parse(xml);
   if (!isXmlElement(parsed)) throw new Error("Invalid XML document");
   return parsed;

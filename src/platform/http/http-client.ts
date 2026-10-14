@@ -436,8 +436,11 @@ export class HttpClient {
     body: Buffer,
     options: HttpRequestOptions,
   ): ArrayBuffer | string {
+    // A copy, so the caller never sees Buffer's shared pool. The constructor
+    // copies in bulk; Uint8Array.from iterates byte by byte, which held
+    // ~440 MiB to copy a 20 MiB body (#1031).
     return options.responseType === "arrayBuffer"
-      ? Uint8Array.from(body).buffer
+      ? new Uint8Array(body).buffer
       : body.toString();
   }
 

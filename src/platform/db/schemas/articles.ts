@@ -58,15 +58,26 @@ export const articles = pgTable(
       sql`${table.url} = '' OR ${table.url} ~* '^https?://' OR ${table.url} LIKE '/article/%'`,
     ),
     index("last_seen_in_feed_at_idx").on(table.lastSeenInFeedAt),
-    index("articles_source_published_idx").on(
+    // Covers every column the article list and the unread recount read
+    // while deciding which rows qualify, so both run as index-only scans.
+    // Without it each candidate article -- every visible one in the folder,
+    // not just the page returned -- cost a heap page fetch, and a body-sized
+    // row fills a page: a 20-source folder read 27k heap pages per listing.
+    // Trailing key columns rather than INCLUDE because drizzle has no builder
+    // for INCLUDE; the prefix (source_id, published_at) is what gets searched
+    // and ordered on, exactly as the index this one replaced.
+    index("articles_source_published_covering_idx").on(
       table.sourceId,
       table.publishedAt,
+      table.id,
+      table.guid,
+      table.lastSeenInFeedAt,
+      table.updatedAt,
     ),
     index("articles_source_last_seen_idx").on(
       table.sourceId,
       table.lastSeenInFeedAt,
     ),
-    index("articles_updated_at_idx").on(table.updatedAt),
     index("articles_search_idx").using("gin", table.searchVector),
     unique().on(table.sourceId, table.guid),
   ],

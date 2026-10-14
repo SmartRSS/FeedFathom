@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
-import { migrateDatabase, parseConcurrentIndexes } from "../migrator.ts";
+import {
+  migrateDatabase,
+  parseConcurrentDrops,
+  parseConcurrentIndexes,
+} from "../migrator.ts";
 import journal from "../../drizzle/meta/_journal.json";
 
 test("lists every SQL migration in the Drizzle journal", async () => {
@@ -60,21 +64,43 @@ test("recognises only the statements a migration opted in", () => {
   ]);
 });
 
-// The baseline creates every table in the same migration, so every index in
-// it lands on an empty table and none should be pre-built. This is what
-// makes the pass a no-op today; it exists for the migrations that come next.
-test("finds nothing to pre-build in the squashed baseline", async () => {
-  const found = (
+test("pre-drops only the indexes a migration opted in", () => {
+  expect(
+    parseConcurrentDrops(`
+      DROP INDEX "widgets_plain_idx";
+      --> statement-breakpoint
+      DROP INDEX IF EXISTS "widgets_opted_in_idx";
+    `),
+  ).toEqual(["widgets_opted_in_idx"]);
+});
+
+const migrationStatements = async () =>
+  (
     await Promise.all(
       journal.entries.map(async (entry) =>
-        parseConcurrentIndexes(
-          await Bun.file(
-            new URL(`../../drizzle/${entry.tag}.sql`, import.meta.url).pathname,
-          ).text(),
-        ),
+        Bun.file(
+          new URL(`../../drizzle/${entry.tag}.sql`, import.meta.url).pathname,
+        ).text(),
       ),
     )
-  ).flat();
+  ).join("\n");
 
-  expect(found).toEqual([]);
+// The baseline creates every table in the same migration, so every index in
+// it lands on an empty table and none should be pre-built. Only the covering
+// index from 0009 opts in: it goes onto a populated articles table.
+test("pre-builds only the indexes added onto populated tables", async () => {
+  expect(parseConcurrentIndexes(await migrationStatements())).toEqual([
+    {
+      create:
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_published_covering_idx" ON "articles" USING btree ("source_id","published_at","id","guid","last_seen_in_feed_at","updated_at")',
+      name: "articles_source_published_covering_idx",
+      table: "articles",
+    },
+  ]);
+});
+
+test("pre-drops only the unused index on the populated articles table", async () => {
+  expect(parseConcurrentDrops(await migrationStatements())).toEqual([
+    "articles_updated_at_idx",
+  ]);
 });

@@ -13,8 +13,7 @@ const currentMigrationsFolder = fileURLToPath(
   new URL("../../drizzle", import.meta.url),
 );
 const expectedIndexNames = [
-  "articles_source_published_idx",
-  "articles_updated_at_idx",
+  "articles_source_published_covering_idx",
   "articles_source_last_seen_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
@@ -164,9 +163,11 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
     await resetDatabase(client);
     await migrateDatabase(databaseUrl, olderMigrationsFolder);
     expect(await indexExists(client, redundantIndexName)).toBe(true);
+    expect(await indexExists(client, "articles_updated_at_idx")).toBe(true);
 
     await migrateDatabase(databaseUrl, currentMigrationsFolder);
     expect(await indexExists(client, redundantIndexName)).toBe(false);
+    expect(await indexExists(client, "articles_updated_at_idx")).toBe(false);
     await expectIndexesValid(client);
 
     const constraints = await client<
@@ -227,7 +228,11 @@ test("a duplicate sid fails the session index migration and applies none of it",
     expect(await indexExists(client, "sessions_user_id_idx")).toBe(false);
     const [journaled] = await client<{ count: number }[]>`SELECT
       count(*)::integer AS "count" FROM "drizzle"."__drizzle_migrations"`;
-    expect(journaled?.count).toBe(journal.entries.length - 1);
+    expect(journaled?.count).toBe(
+      journal.entries.findIndex(
+        (entry) => entry.tag === "0008_optimal_vanisher",
+      ),
+    );
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });
