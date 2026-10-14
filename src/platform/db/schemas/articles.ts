@@ -78,7 +78,6 @@ export const articles = pgTable(
       table.sourceId,
       table.lastSeenInFeedAt,
     ),
-    index("articles_updated_at_idx").on(table.updatedAt),
     index("articles_search_idx").using("gin", table.searchVector),
     unique().on(table.sourceId, table.guid),
   ],

@@ -40,13 +40,15 @@ function storeFolderOpen(uid: string, open: boolean) {
 // query already reflects exactly what's visible, with no separate
 // flattened-tree bookkeeping to keep in sync with each TreeItem's own
 // open/closed signal.
+// Stops at the first and last row rather than wrapping (WAI-ARIA tree
+// pattern). Home and End pass -Infinity and Infinity, which clamp to the ends.
 function moveTreeFocus(current: HTMLElement, offset: number) {
   const items = [
     ...document.querySelectorAll<HTMLElement>(".sources-pane .source"),
   ];
   const index = items.indexOf(current);
   if (index === -1) return;
-  const next = items[(index + offset + items.length) % items.length];
+  const next = items[Math.min(items.length - 1, Math.max(0, index + offset))];
   next?.focus();
   next?.scrollIntoView({ block: "nearest" });
 }
@@ -123,6 +125,13 @@ export function TreeItem(props: {
       event.preventDefault();
       if (event.currentTarget instanceof HTMLElement)
         moveTreeFocus(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (event.currentTarget instanceof HTMLElement)
+        moveTreeFocus(
+          event.currentTarget,
+          event.key === "Home" ? -Infinity : Infinity,
+        );
     } else if (event.key === " " && isFolder()) {
       event.preventDefault();
       toggle();

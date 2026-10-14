@@ -5,6 +5,7 @@
 // page without an explicit h-feed wrapper, so both top-level h-entry items
 // and ones nested inside an h-feed count.
 import { mf2 } from "microformats-parser";
+import { parseFeedDate } from "#features/feeds/feed-date.ts";
 
 type MicroformatRoot = ReturnType<typeof mf2>["items"][number];
 type MicroformatProperty = NonNullable<
@@ -68,9 +69,9 @@ function mapEntry(root: MicroformatRoot) {
     content: entryContent(root),
     description: asText(properties["summary"]?.[0]),
     id: null,
-    published: published ? new Date(published) : null,
+    published: published ? parseFeedDate(published) : null,
     title: asText(properties["name"]?.[0]),
-    updated: updated ? new Date(updated) : null,
+    updated: updated ? parseFeedDate(updated) : null,
     url: asText(properties["url"]?.[0]),
   };
 }
