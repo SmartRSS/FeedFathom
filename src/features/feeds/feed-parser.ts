@@ -140,6 +140,13 @@ const inCapScope = (element: XmlElement | null): boolean =>
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
   const feed = parseFeed(text);
+  // An item without its own url, authors or categories falls back to the
+  // feed's, which the library recomputes on every read by wrapping each child
+  // of the channel, items included. Pinned once, reading every item is linear
+  // in the item count instead of quadratic (#1031).
+  for (const key of ["authors", "categories", "url"] as const) {
+    Object.defineProperty(feed, key, { value: feed[key] });
+  }
   if (!mentionsCapNamespace(text)) return feed;
   for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
     const language =
