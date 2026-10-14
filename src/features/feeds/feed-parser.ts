@@ -1,4 +1,5 @@
 import { parseFeed } from "@rowanmanning/feed-parser";
+import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
@@ -12,6 +13,7 @@ import {
   declaresCapNamespace,
   mentionsCapNamespace,
 } from "#features/feeds/cap-entry.ts";
+import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import {
   currentFeedItems,
   mapFeedItemToArticle,
@@ -125,6 +127,16 @@ export function validateParsedFeed(value: unknown): void {
   }
 }
 
+// feed-parser reads every RSS and Atom date, on items and on the feed, through
+// this one getter, which hands the text to a bare `new Date`. Replacing the
+// getter routes them all through parseFeedDate; the date-zones fixtures fail
+// if a feed-parser release stops reading dates through it.
+Object.defineProperty(Element.prototype, "textContentAsDate", {
+  get(this: Element) {
+    return parseFeedDate(this.textContent);
+  },
+});
+
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 
 // The CAP namespace is in scope when the entry or an ancestor declares it.
@@ -140,6 +152,13 @@ const inCapScope = (element: XmlElement | null): boolean =>
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
   const feed = parseFeed(text);
+  // An item without its own url, authors or categories falls back to the
+  // feed's, which the library recomputes on every read by wrapping each child
+  // of the channel, items included. Pinned once, reading every item is linear
+  // in the item count instead of quadratic (#1031).
+  for (const key of ["authors", "categories", "url"] as const) {
+    Object.defineProperty(feed, key, { value: feed[key] });
+  }
   if (!mentionsCapNamespace(text)) return feed;
   for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
     const language =
