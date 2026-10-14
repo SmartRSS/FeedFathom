@@ -22,6 +22,13 @@ const migrationJournal = Type.Object({
 const concurrentIndexPattern =
   /CREATE INDEX IF NOT EXISTS "(?<name>[^"]+)" ON "(?<table>[^"]+)"[^;]*/giu;
 
+// The same opt-in for removal: `DROP INDEX` waits for an ACCESS EXCLUSIVE lock
+// behind every running query on the table and blocks every new one until the
+// migration commits. Writing `DROP INDEX IF EXISTS` has this pass drop it
+// CONCURRENTLY first. If the migration then fails, the old schema carries on
+// without the index, which is fine for an index nothing needs any more.
+const concurrentDropPattern = /DROP INDEX IF EXISTS "(?<name>[^"]+)"/giu;
+
 async function journaledTimestamps(client: ReservedSQL) {
   const [journal] = await client<
     { migrationJournalExists: boolean }[]
@@ -53,7 +60,14 @@ export function parseConcurrentIndexes(statements: string): PendingIndex[] {
   return parsed;
 }
 
-async function pendingConcurrentIndexes(
+export function parseConcurrentDrops(statements: string): string[] {
+  return [...statements.matchAll(concurrentDropPattern)].flatMap((match) => {
+    const { name } = match.groups ?? {};
+    return name ? [name] : [];
+  });
+}
+
+async function pendingStatements(
   client: ReservedSQL,
   migrationsFolder: string,
 ) {
@@ -62,17 +76,14 @@ async function pendingConcurrentIndexes(
     await Bun.file(`${migrationsFolder}/meta/_journal.json`).json(),
   );
   const applied = await journaledTimestamps(client);
-  const pending: PendingIndex[] = [];
+  const pending: string[] = [];
 
   for (const entry of journal.entries) {
     if (applied.has(entry.when)) continue;
     // eslint-disable-next-line no-await-in-loop -- Migrations are ordered.
-    const statements = await Bun.file(
-      `${migrationsFolder}/${entry.tag}.sql`,
-    ).text();
-    pending.push(...parseConcurrentIndexes(statements));
+    pending.push(await Bun.file(`${migrationsFolder}/${entry.tag}.sql`).text());
   }
-  return pending;
+  return pending.join("\n");
 }
 
 async function prebuildIndexesConcurrently(
@@ -124,6 +135,18 @@ async function prebuildIndexesConcurrently(
   }
 }
 
+async function predropIndexesConcurrently(
+  client: ReservedSQL,
+  names: readonly string[],
+) {
+  for (const name of names) {
+    // A fresh database never built it, and an earlier run may already have
+    // dropped it. An interrupted drop leaves it invalid, which drops the same.
+    // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
+    await client.unsafe(`DROP INDEX CONCURRENTLY IF EXISTS "public"."${name}"`);
+  }
+}
+
 // On a cold start the migrator routinely beats PostgreSQL to accepting
 // connections. Retrying here keeps readiness out of the orchestrator's hands,
 // which Swarm does not manage at all. Only the initial connection retries; a
@@ -166,10 +189,12 @@ export async function migrateDatabase(
     try {
       await reserved`SELECT pg_advisory_lock(hashtextextended('feedfathom:migrations', 0))`;
       locked = true;
+      const pending = await pendingStatements(reserved, migrationsFolder);
       await prebuildIndexesConcurrently(
         reserved,
-        await pendingConcurrentIndexes(reserved, migrationsFolder),
+        parseConcurrentIndexes(pending),
       );
+      await predropIndexesConcurrently(reserved, parseConcurrentDrops(pending));
       await migrate(createDrizzleConnection(databaseUrl, reserved), {
         migrationsFolder,
       });
