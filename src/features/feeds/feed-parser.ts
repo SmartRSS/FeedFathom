@@ -195,6 +195,7 @@ export class FeedParser {
       const {
         cached,
         feed: parsedFeed,
+        finalUrl,
         freshUntil,
         websub,
       } = await this.parseUrl(
@@ -220,6 +221,7 @@ export class FeedParser {
             { id: source.id, url: source.url },
             rewriteLinks,
             observedAt.getTime(),
+            finalUrl,
           ),
           { lastSeenInFeedAt: observedAt },
         ),
@@ -360,9 +362,19 @@ export class FeedParser {
     sourceUrl: string,
   ): Promise<ReturnType<typeof mapFeedToPreview> | undefined> {
     try {
-      const { feed: parsedFeed, freshUntil } = await this.parseUrl(sourceUrl);
+      const {
+        feed: parsedFeed,
+        finalUrl,
+        freshUntil,
+      } = await this.parseUrl(sourceUrl);
       return Object.assign(
-        mapFeedToPreview(parsedFeed, sourceUrl, rewriteLinks),
+        mapFeedToPreview(
+          parsedFeed,
+          sourceUrl,
+          rewriteLinks,
+          Date.now(),
+          finalUrl,
+        ),
         { freshUntil },
       );
     } catch (error_: unknown) {
