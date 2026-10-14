@@ -118,6 +118,34 @@ export function shouldPrefetch(
   return !(connection?.saveData ?? false);
 }
 
+export function canRetryOfflineSync(
+  enabled: boolean,
+  hidden: boolean,
+): boolean {
+  return enabled && !hidden;
+}
+
+export function createOfflineSyncGate() {
+  let syncing = false;
+  let pending = false;
+  return {
+    finish() {
+      syncing = false;
+      const retry = pending;
+      pending = false;
+      return retry;
+    },
+    start() {
+      if (syncing) {
+        pending = true;
+        return false;
+      }
+      syncing = true;
+      return true;
+    },
+  };
+}
+
 // navigator.connection is not in the standard lib types.
 export function navigatorConnection(
   navigatorLike: Navigator = navigator,
