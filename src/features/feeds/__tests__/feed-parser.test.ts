@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { parseFeed } from "@rowanmanning/feed-parser";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
@@ -240,6 +241,51 @@ test("resolves relative entry links against a redirected feed URL", async () => 
     'href="https://cdn.example/new/path/articles/images/cover.png"',
   );
 });
+
+// Each read of a feed-level fallback scans every child of the channel, so one
+// read per item made a 20 MiB preview take minutes (#1031).
+test.each([
+  [
+    "RSS",
+    `<rss><channel><link>https://example.com/</link>${"<item><link>a</link></item>".repeat(3)}</channel></rss>`,
+  ],
+  [
+    "Atom",
+    `<feed xmlns="http://www.w3.org/2005/Atom"><link href="https://example.com/"/>${'<entry><link href="a"/></entry>'.repeat(3)}</feed>`,
+  ],
+])(
+  "reads an %s feed's own url, authors and categories once, not per item",
+  (_, text) => {
+    const prototype: object = Object.getPrototypeOf(parseFeed(text));
+    const reads = { authors: 0, categories: 0, url: 0 };
+    const keys = ["authors", "categories", "url"] as const;
+    const originals = keys.map((key) => {
+      const original = Object.getOwnPropertyDescriptor(prototype, key);
+      Object.defineProperty(prototype, key, {
+        configurable: true,
+        get(this: object) {
+          reads[key]++;
+          return original?.get?.call(this);
+        },
+      });
+      return [key, original] as const;
+    });
+    try {
+      const parsed = parseXmlFeed(text);
+      expect(parsed.items).toHaveLength(3);
+      for (const entry of parsed.items) {
+        expect(entry.url).toBe("https://example.com/a");
+        expect(entry.authors).toEqual([]);
+        expect(entry.categories).toEqual([]);
+      }
+      expect(reads).toEqual({ authors: 1, categories: 1, url: 1 });
+    } finally {
+      for (const [key, original] of originals) {
+        if (original) Object.defineProperty(prototype, key, original);
+      }
+    }
+  },
+);
 
 describe("entries sharing an id", () => {
   test("keeps every entry of a NAAD alert as its own article", async () => {
