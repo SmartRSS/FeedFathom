@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS "articles_updated_at_idx";
