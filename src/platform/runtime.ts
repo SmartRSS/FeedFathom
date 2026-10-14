@@ -5,13 +5,19 @@ import { config } from "#platform/config.ts";
 import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 
+// Once maxRetries runs out, Bun closes the client for good: every later
+// command fails with "Connection has failed", even after Redis returns. Bun's
+// backoff caps at about 2s, so 100 retries outlast only a ~3-minute outage, and
+// past that, login and every outbound fetch fail until something restarts the
+// process. Nothing would: the healthchecks don't touch Redis. The largest
+// value Bun accepts (u32) makes it retry forever, like the ioredis connections.
 const redis = new RedisClient(config.REDIS_URL, {
   autoReconnect: true,
   connectionTimeout: 60 * 60 * 1_000,
   enableAutoPipelining: false,
   enableOfflineQueue: true,
   idleTimeout: 0,
-  maxRetries: 100,
+  maxRetries: 2 ** 32 - 1,
   tls: false,
 });
 await redis.connect();
