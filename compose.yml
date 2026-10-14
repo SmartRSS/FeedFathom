@@ -31,9 +31,10 @@ x-database-env: &database-env
 
 # Neither application service reports healthy until the schema this build was
 # compiled against is applied: the server does not listen at all until then
-# (src/server.ts) and the worker answers 503 (src/worker.ts). So start_period
-# is not a boot budget, it is a migration budget -- 45s covers a cold start
-# plus an ordinary migration.
+# (src/server.ts) and the worker answers 503 until its BullMQ worker is
+# consuming, which also needs Redis (src/worker.ts). So start_period is not a
+# boot budget, it is a migration budget -- 45s covers a cold start plus an
+# ordinary migration.
 #
 # A migration that cannot finish inside it is a manual rollout: run the
 # migrator to completion first, then start or update the application

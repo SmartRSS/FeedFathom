@@ -218,6 +218,7 @@ async function mockWorkerServices(
       on(_event: string, listener: Parameters<WorkerControls["onFailed"]>[0]) {
         this.controls.onFailed(listener);
       }
+      async waitUntilReady() {}
     },
   }));
 }
