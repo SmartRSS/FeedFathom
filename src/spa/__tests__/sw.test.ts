@@ -700,6 +700,15 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
       { "X-Cursor-Published-At": dayAgo },
     ),
   ).toEqual([2]);
+  // Date.parse collapses these sub-millisecond timestamps. The cached row
+  // position still preserves the server's ordering after a kept cursor.
+  online = true;
+  await sw.keepOffline([
+    offlineRow(100, { publishedAt: "2026-10-14T10:00:00.000900Z" }),
+    offlineRow(200, { publishedAt: "2026-10-14T10:00:00.000500Z" }),
+  ]);
+  online = false;
+  expect(await list({ cursor: 100, sources: [3] })).toEqual([200]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 

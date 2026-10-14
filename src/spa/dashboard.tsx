@@ -82,6 +82,8 @@ import { shareArticle } from "./share-article.ts";
 import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
 import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
+  createOfflineSyncGate,
+  canRetryOfflineSync,
   navigatorConnection,
   neighbours,
   offlineArticles,
@@ -447,40 +449,38 @@ export function Dashboard(props: {
     tree();
     syncOfflineInIdleTime();
   });
-  // A sync skipped for a hidden or offline tab, or one the worker doesn't
-  // control yet, runs once that changes rather than at the next tree load,
-  // which with background checks off may never come.
-  let offlineSyncSkipped = false;
-  const retrySkippedOfflineSync = () => {
-    if (offlineSyncSkipped && !document.hidden) syncOfflineInIdleTime();
+  // Retry when the tab or network becomes available. A sync may have started
+  // before it was hidden or disconnected, leaving some bodies undownloaded.
+  const retryOfflineSync = () => {
+    if (canRetryOfflineSync(offlineUnreadEnabled() === "on", document.hidden))
+      syncOfflineInIdleTime();
   };
-  document.addEventListener("visibilitychange", retrySkippedOfflineSync);
-  addEventListener("online", retrySkippedOfflineSync);
+  document.addEventListener("visibilitychange", retryOfflineSync);
+  addEventListener("online", retryOfflineSync);
   navigator.serviceWorker?.addEventListener(
     "controllerchange",
-    retrySkippedOfflineSync,
+    retryOfflineSync,
   );
   onCleanup(() => {
     clearTimeout(offlineSyncTimer);
-    document.removeEventListener("visibilitychange", retrySkippedOfflineSync);
-    removeEventListener("online", retrySkippedOfflineSync);
+    document.removeEventListener("visibilitychange", retryOfflineSync);
+    removeEventListener("online", retryOfflineSync);
     navigator.serviceWorker?.removeEventListener(
       "controllerchange",
-      retrySkippedOfflineSync,
+      retryOfflineSync,
     );
   });
-  // One sync at a time, so a slow one can't post its older list after a
-  // newer one; a tree load during it is picked up by the next.
-  let offlineSyncing = false;
+  // One listing at a time prevents an older list from replacing a newer one.
+  const offlineSyncGate = createOfflineSyncGate();
   async function syncOfflineArticles(nodes: TreeNode[]) {
-    if (disposed || offlineSyncing || !shouldPrefetch(navigatorConnection()))
-      return;
-    offlineSyncSkipped =
+    if (disposed || !shouldPrefetch(navigatorConnection())) return;
+    if (
       document.hidden ||
       !navigator.onLine ||
-      !navigator.serviceWorker?.controller;
-    if (offlineSyncSkipped) return;
-    offlineSyncing = true;
+      !navigator.serviceWorker?.controller ||
+      !offlineSyncGate.start()
+    )
+      return;
     offlineSyncedAt = Date.now();
     const sources = unreadSourceIds(nodes);
     const rows: ArticleSummary[] = [];
@@ -516,7 +516,7 @@ export function Dashboard(props: {
       // Best-effort: the next tree load tries again.
       return;
     } finally {
-      offlineSyncing = false;
+      if (offlineSyncGate.finish()) syncOfflineInIdleTime();
     }
     if (!disposed && offlineUnreadEnabled() === "on")
       postOfflineArticles(selection.articles, token);

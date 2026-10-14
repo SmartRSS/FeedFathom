@@ -698,15 +698,17 @@ async function offlineArticleList(request) {
   const rows = await stored.json();
   let after = () => true;
   if (body.cursor !== undefined) {
-    const at = Date.parse(
-      rows.find((row) => row.id === body.cursor)?.publishedAt ??
-        request.headers.get("X-Cursor-Published-At"),
-    );
-    if (Number.isNaN(at)) return Response.json([]);
-    after = (row) => {
-      const published = Date.parse(row.publishedAt);
-      return published < at || (published === at && row.id < body.cursor);
-    };
+    const cursorIndex = rows.findIndex((row) => row.id === body.cursor);
+    if (cursorIndex !== -1) {
+      after = (_row, index) => index > cursorIndex;
+    } else {
+      const at = Date.parse(request.headers.get("X-Cursor-Published-At"));
+      if (Number.isNaN(at)) return Response.json([]);
+      after = (row) => {
+        const published = Date.parse(row.publishedAt);
+        return published < at || (published === at && row.id < body.cursor);
+      };
+    }
   }
   let inScope;
   if (body.view === "today") {
@@ -731,8 +733,8 @@ async function offlineArticleList(request) {
   return Response.json(
     rows
       .filter(
-        (row) =>
-          after(row) &&
+        (row, index) =>
+          after(row, index) &&
           inScope(row) &&
           bodies.has(row.id) &&
           !removed.has(row.id),
