@@ -50,11 +50,17 @@ describe("xmlSafeText", () => {
   });
 });
 
-test("rejects a DTD but leaves a matching CDATA value alone", () => {
+test("rejects declared entities but not an external DTD or CDATA", () => {
   expect(() =>
-    parseXml(`<!DOCTYPE root [<!ENTITY payload "expanded">]><root />`),
-  ).toThrow("XML document type declarations are not allowed");
-  expect(parseXml("<root><![CDATA[<!DOCTYPE html>]]></root>")).toEqual({
-    root: "<!DOCTYPE html>",
+    parseXml(`\uFEFF<?xml version="1.0"?>
+      <!-- generator --><!DOCTYPE root [<!ENTITY payload "expanded">]><root />`),
+  ).toThrow("XML entity declarations are not allowed");
+  expect(
+    parseXml(
+      `<?xml version="1.0"?><!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd"><rss version="0.91" />`,
+    ),
+  ).toEqual({ rss: { "@version": "0.91" } });
+  expect(parseXml("<root><![CDATA[<!DOCTYPE html [ ]>]]></root>")).toEqual({
+    root: "<!DOCTYPE html [ ]>",
   });
 });
