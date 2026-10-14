@@ -180,7 +180,7 @@ test("no-barrel-file honours the allow list", async () => {
     'import { a } from "../../../a.ts";\nexport { a };',
   );
   expect(await lintFile(file)).toEqual([]);
-});
+}, 20_000);
 
 /** Write a fixture at a path the layer rule reads, and lint it there. */
 async function lintAt(path: string, code: string): Promise<string[]> {

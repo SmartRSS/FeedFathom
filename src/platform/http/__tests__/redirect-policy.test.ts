@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
 import { RedirectPolicy } from "#platform/http/redirect-policy.ts";
 import {
@@ -49,6 +49,19 @@ const policy = (responses: NativeHttpResponse[]) => {
   };
 };
 
+// Each deadline arms a real timer; a run slow enough for it to fire would
+// abort whatever test was running by then.
+const deadlines: RequestDeadline[] = [];
+const deadline = () => {
+  const created = new RequestDeadline(5_000);
+  deadlines.push(created);
+  return created;
+};
+
+afterEach(() => {
+  for (const created of deadlines.splice(0)) created.dispose();
+});
+
 describe("RedirectPolicy", () => {
   test("a direct answer with no redirects reports not permanent", async () => {
     const { policy: subject } = policy([nativeResponse(200)]);
@@ -57,7 +70,7 @@ describe("RedirectPolicy", () => {
       "https://a.test/start",
       new Headers(),
       "interactive",
-      new RequestDeadline(5_000),
+      deadline(),
     );
     expect(result.permanent).toBe(false);
     expect(result.response.status).toBe(200);
@@ -74,7 +87,7 @@ describe("RedirectPolicy", () => {
       "https://a.test/start",
       new Headers(),
       "interactive",
-      new RequestDeadline(5_000),
+      deadline(),
     );
     expect(result.permanent).toBe(true);
     expect(result.response.url).toBe("https://b.test/final");
@@ -95,7 +108,7 @@ describe("RedirectPolicy", () => {
         "https://a.test/start",
         new Headers(),
         "interactive",
-        new RequestDeadline(5_000),
+        deadline(),
       );
       expect(result.permanent).toBe(false);
     }
@@ -115,7 +128,7 @@ describe("RedirectPolicy", () => {
       "https://a.test/start",
       new Headers(),
       "interactive",
-      new RequestDeadline(5_000),
+      deadline(),
     );
     expect(reserved).toEqual(["a.test", "b.test"]);
     expect(requested).toEqual(["https://a.test/start", "https://b.test/here"]);
@@ -135,7 +148,7 @@ describe("RedirectPolicy", () => {
       "https://a.test/start",
       new Headers(),
       "interactive",
-      new RequestDeadline(5_000),
+      deadline(),
     );
     expect(destroyed).toEqual([301]);
   });
@@ -155,7 +168,7 @@ describe("RedirectPolicy", () => {
         "https://a.test/start",
         new Headers(),
         "interactive",
-        new RequestDeadline(5_000),
+        deadline(),
       ),
     ).rejects.toBeInstanceOf(HttpPolicyError);
     expect(destroyed).toEqual([302]);
@@ -169,7 +182,7 @@ describe("RedirectPolicy", () => {
         "https://a.test/start",
         new Headers(),
         "interactive",
-        new RequestDeadline(5_000),
+        deadline(),
       ),
     ).rejects.toBeInstanceOf(HttpPolicyError);
   });
@@ -189,7 +202,7 @@ describe("RedirectPolicy", () => {
         "https://a.test/start",
         new Headers(),
         "interactive",
-        new RequestDeadline(5_000),
+        deadline(),
       ),
     ).rejects.toBeInstanceOf(HttpPolicyError);
     expect(requested).toHaveLength(6);
