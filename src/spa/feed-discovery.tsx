@@ -440,27 +440,33 @@ export function FeedDiscovery(props: {
               </p>
             }
           >
-            <For each={articles()}>
-              {(article, index) => (
-                <a
-                  aria-current={
-                    selectedIndex() === index() ? "true" : undefined
-                  }
-                  class="article"
-                  classList={{ selected: selectedIndex() === index() }}
-                  href={article.url || undefined}
-                  onClick={(event) => selectPreviewArticle(index(), event)}
-                >
-                  <span class="title">{article.title}</span>
-                  <span class="details">
-                    <span>{article.author}</span>
-                    <time datetime={article.publishedAt}>
-                      {formatDate(article.publishedAt)}
-                    </time>
-                  </span>
-                </a>
-              )}
-            </For>
+            {/* The list covers only the rows: the truncation note beside it
+                is not a listitem, and a list may only own listitems. */}
+            <div role="list">
+              <For each={articles()}>
+                {(article, index) => (
+                  <div role="listitem">
+                    <a
+                      aria-current={
+                        selectedIndex() === index() ? "true" : undefined
+                      }
+                      class="article"
+                      classList={{ selected: selectedIndex() === index() }}
+                      href={article.url || undefined}
+                      onClick={(event) => selectPreviewArticle(index(), event)}
+                    >
+                      <span class="title">{article.title}</span>
+                      <span class="details">
+                        <span>{article.author}</span>
+                        <time datetime={article.publishedAt}>
+                          {formatDate(article.publishedAt)}
+                        </time>
+                      </span>
+                    </a>
+                  </div>
+                )}
+              </For>
+            </div>
             <Show when={truncated()}>
               <p class="empty-pane">
                 This preview shows part of the feed. Subscribing imports all of

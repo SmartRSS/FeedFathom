@@ -207,6 +207,24 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
 
+test("Tab closes the context menu and moves focus on from its row", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+
+  const row = page
+    .locator("button.source")
+    .filter({ hasText: "Tech News" })
+    .first();
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(row).not.toBeFocused();
+});
+
 test("keeps the context menu inside a narrow viewport", async ({ page }) => {
   await installApiFixture(page);
   await page.setViewportSize({ height: 844, width: 390 });
@@ -1120,6 +1138,29 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
   await expect(tabStops).toHaveCount(1);
 });
 
+// WAI-ARIA tree pattern: Home and End go to the first and last visible row,
+// and the arrows stop at the ends instead of wrapping.
+test("tree arrows stop at the ends and Home and End jump to them", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  const rows = page.locator(".sources-pane .source");
+  await page.locator('[role="treeitem"][tabindex="0"]').focus();
+  await expect(rows.first()).toBeFocused();
+
+  await page.keyboard.press("ArrowUp");
+  await expect(rows.first()).toBeFocused();
+
+  await page.keyboard.press("End");
+  await expect(rows.last()).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.last()).toBeFocused();
+
+  await page.keyboard.press("Home");
+  await expect(rows.first()).toBeFocused();
+});
+
 // Every row reads the tab stop, and working it out walks the whole tree. It
 // has to be worked out once per focus change and shared, not once per row:
 // that is O(N) walks of O(N) each. hasNodeKey walks with Array#some.
@@ -1980,6 +2021,18 @@ test("notes when a preview shows only part of the feed", async ({ page }) => {
       .getByText(
         "This preview shows part of the feed. Subscribing imports all of it.",
       ),
+  ).toBeVisible();
+});
+
+test("lists the discovery preview articles as a list", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+
+  const articles = page.getByRole("region", { name: "Preview articles" });
+  await expect(articles.getByRole("list")).toHaveCount(1);
+  await expect(articles.getByRole("listitem")).toHaveCount(1);
+  await expect(
+    articles.getByRole("listitem").getByRole("link", { name: /article/ }),
   ).toBeVisible();
 });
 
