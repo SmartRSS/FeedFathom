@@ -1,4 +1,5 @@
 import { parseFeed } from "@rowanmanning/feed-parser";
+import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
@@ -12,6 +13,7 @@ import {
   declaresCapNamespace,
   mentionsCapNamespace,
 } from "#features/feeds/cap-entry.ts";
+import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import {
   currentFeedItems,
   mapFeedItemToArticle,
@@ -124,6 +126,16 @@ export function validateParsedFeed(value: unknown): void {
     throw new Error("Feed parser returned an invalid feed projection");
   }
 }
+
+// feed-parser reads every RSS and Atom date, on items and on the feed, through
+// this one getter, which hands the text to a bare `new Date`. Replacing the
+// getter routes them all through parseFeedDate; the date-zones fixtures fail
+// if a feed-parser release stops reading dates through it.
+Object.defineProperty(Element.prototype, "textContentAsDate", {
+  get(this: Element) {
+    return parseFeedDate(this.textContent);
+  },
+});
 
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 

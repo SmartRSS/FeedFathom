@@ -3,6 +3,8 @@
 // code than adding a dependency for it -- unlike RSS/Atom's actual XML
 // grammar, there's no real parsing to do here, just field renaming.
 
+import { parseFeedDate } from "#features/feeds/feed-date.ts";
+
 type JsonFeedAuthor = { name?: unknown };
 type JsonFeedItem = {
   author?: JsonFeedAuthor;
@@ -41,11 +43,8 @@ const asHtmlText = (value: unknown): string | null => {
     : Bun.escapeHTML(text).replaceAll(/\r\n?|\n/gu, "<br>");
 };
 
-const asDate = (value: unknown): Date | null => {
-  if (typeof value !== "string") return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
+const asDate = (value: unknown): Date | null =>
+  typeof value === "string" ? parseFeedDate(value) : null;
 
 function itemAuthors(item: JsonFeedItem, feedAuthors: unknown) {
   const list = Array.isArray(item.authors)
