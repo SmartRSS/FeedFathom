@@ -114,6 +114,88 @@ describe("feed body encoding detection", () => {
   });
 });
 
+// Feed bodies as they arrive on the wire. Markup is ASCII, so a string part is
+// one byte per char; non-ASCII text is always a literal byte array, never a JS
+// string, which would already be decoded.
+const asciiCodes = (text: string) =>
+  Array.from({ length: text.length }, (_, index) => text.charCodeAt(index));
+const fromParts = (...parts: (string | number[])[]) =>
+  parts.flatMap((part) => (typeof part === "string" ? asciiCodes(part) : part));
+const utf16le = (text: string) => asciiCodes(text).flatMap((code) => [code, 0]);
+const rss = (title: number[], head: string | number[] = "") =>
+  fromParts(
+    head,
+    '<rss version="2.0"><channel><title>',
+    title,
+    "</title><link>https://example.com/</link></channel></rss>",
+  );
+const titleOf = (body: number[], contentType: string | null) =>
+  parseXmlFeed(decodeFeedBody(Uint8Array.from(body).buffer, contentType)).title;
+
+const zazolc = [0x5a, 0x61, 0xbf, 0xf3, 0xb3, 0xe6]; // "Zażółć" in ISO-8859-2
+const nihongo = [0x93, 0xfa, 0x96, 0x7b, 0x8c, 0xea]; // "日本語" in Shift_JIS
+const cafe = [0x43, 0x61, 0x66, 0xe9, 0x20, 0x80, 0x35]; // "Café €5" in windows-1252
+const zazolcUtf8 = [0x5a, 0x61, 0xc5, 0xbc, 0xc3, 0xb3, 0xc5, 0x82, 0xc4, 0x87]; // "Zażółć" in UTF-8
+const zazolcUtf16le = [
+  0x5a, 0x00, 0x61, 0x00, 0x7c, 0x01, 0xf3, 0x00, 0x42, 0x01, 0x07, 0x01,
+]; // "Zażółć" in UTF-16LE
+
+describe("decoded feed titles from encoded bytes", () => {
+  test.each([
+    ["ISO-8859-2", zazolc, "Zażółć"],
+    ["Shift_JIS", nihongo, "日本語"],
+    ["windows-1252", cafe, "Café €5"],
+  ])("decodes %s from the HTTP charset", (label, title, expected) => {
+    expect(titleOf(rss(title), `text/xml; charset=${label}`)).toBe(expected);
+  });
+
+  test.each([
+    ["ISO-8859-2", zazolc, "Zażółć"],
+    ["Shift_JIS", nihongo, "日本語"],
+    ["windows-1252", cafe, "Café €5"],
+  ])(
+    "decodes %s from the XML prolog when there is no HTTP charset",
+    (label, title, expected) => {
+      const head = `<?xml version="1.0" encoding="${label}"?>`;
+      expect(titleOf(rss(title, head), "text/xml")).toBe(expected);
+      expect(titleOf(rss(title, head), null)).toBe(expected);
+    },
+  );
+
+  test("HTTP charset wins when the prolog names another encoding", () => {
+    const head = '<?xml version="1.0" encoding="ISO-8859-2"?>';
+    expect(titleOf(rss(cafe, head), "text/xml; charset=windows-1252")).toBe(
+      "Café €5",
+    );
+  });
+
+  test("HTTP charset wins over a Shift_JIS prolog", () => {
+    const head = '<?xml version="1.0" encoding="Shift_JIS"?>';
+    expect(titleOf(rss(zazolc, head), "text/xml; charset=ISO-8859-2")).toBe(
+      "Zażółć",
+    );
+  });
+
+  test("UTF-8 BOM beats an HTTP charset and a prolog that both disagree", () => {
+    const head = '<?xml version="1.0" encoding="Shift_JIS"?>';
+    const body = [0xef, 0xbb, 0xbf, ...rss(zazolcUtf8, head)];
+    expect(titleOf(body, "text/xml; charset=windows-1252")).toBe("Zażółć");
+  });
+
+  test("UTF-16LE BOM beats an HTTP charset and a prolog that both disagree", () => {
+    const head = utf16le('<?xml version="1.0" encoding="ISO-8859-2"?>');
+    const body = [
+      0xff,
+      0xfe,
+      ...head,
+      ...utf16le('<rss version="2.0"><channel><title>'),
+      ...zazolcUtf16le,
+      ...utf16le("</title></channel></rss>"),
+    ];
+    expect(titleOf(body, "text/xml; charset=windows-1252")).toBe("Zażółć");
+  });
+});
+
 const naadId =
   "tag:rss.naad-adna.pelmorex.com,2026-10-05:feed.atom/urn:oid:2.49.0.1.124.2313967115.2026";
 const naad = () =>
