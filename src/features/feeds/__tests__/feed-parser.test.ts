@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
@@ -7,6 +7,8 @@ import {
   parseXmlFeed,
   validateParsedFeed,
 } from "#features/feeds/feed-parser.ts";
+import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
+import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
 
 const item = {
   authors: [{ name: "Author" }],
@@ -305,5 +307,69 @@ describe("entries sharing an id", () => {
 
   test("tells CAP entries apart by xml:lang before the language category", () => {
     expect(capFeedGuids("de")).not.toEqual(capFeedGuids("fr"));
+  });
+});
+
+const fixture = (name: string) =>
+  Bun.file(`src/features/feeds/__tests__/feed-parser-cases/${name}`).text();
+
+describe("feed dates", () => {
+  // Under UTC a zoneless date reads the same either way, so pin a zone that
+  // tells local time and UTC apart.
+  const hostZone = process.env["TZ"];
+  beforeAll(() => {
+    process.env["TZ"] = "America/New_York";
+  });
+  afterAll(() => {
+    if (hostZone === undefined) delete process.env["TZ"];
+    else process.env["TZ"] = hostZone;
+  });
+
+  const ingestedAt = Date.parse("2026-10-14T00:00:00Z");
+  // Each fixture entry's title is the instant its date names.
+  const expectTitledInstants = (
+    parsed: Parameters<typeof mapFeedToPreview>[0],
+  ) =>
+    expect(
+      mapFeedToPreview(parsed, "https://example.com/", rewriteLinks, ingestedAt)
+        .articles.map(({ guid, publishedAt, title }) => [
+          guid,
+          publishedAt.toISOString(),
+          title === "ingest" ? new Date(ingestedAt).toISOString() : title,
+        ])
+        .filter(([, actual, expected]) => actual !== expected),
+    ).toEqual([]);
+
+  test("reads RSS dates in every zone spelling, falling back only when unparseable", async () => {
+    expectTitledInstants(parseXmlFeed(await fixture("date-zones.xml")));
+  });
+
+  test("reads zoneless Atom dates as UTC", async () => {
+    const parsed = parseXmlFeed(await fixture("date-zones-atom.xml"));
+    expectTitledInstants(parsed);
+    expect(parsed.items[0]?.updated?.toISOString()).toBe(
+      "2003-06-11T04:00:00.000Z",
+    );
+  });
+
+  test("reads zoneless JSON Feed dates as UTC", () => {
+    const [entry] = parseJsonFeed(
+      JSON.stringify({
+        items: [{ date_published: "2003-06-10T04:00:00", id: "a" }],
+      }),
+    ).items;
+    expect(entry?.published?.toISOString()).toBe("2003-06-10T04:00:00.000Z");
+  });
+
+  test("reads zoneless microformat dates as UTC and drops unparseable ones", () => {
+    const [entry, unparseable] = parseMicroformatFeed(
+      `<!doctype html><html><body>
+        <article class="h-entry"><time class="dt-published" datetime="2003-06-10 04:00"></time></article>
+        <article class="h-entry"><time class="dt-published" datetime="soon"></time></article>
+      </body></html>`,
+      "https://example.com/",
+    ).items;
+    expect(entry?.published?.toISOString()).toBe("2003-06-10T04:00:00.000Z");
+    expect(unparseable?.published).toBeNull();
   });
 });
