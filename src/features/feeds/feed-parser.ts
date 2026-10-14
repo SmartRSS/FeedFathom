@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
+import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
@@ -137,6 +138,7 @@ const inCapScope = (element: XmlElement | null): boolean =>
  * `language`; see generateArticleGuid.
  */
 export const parseXmlFeed = (text: string) => {
+  rejectXmlEntityDeclarations(text);
   const feed = parseFeed(text);
   if (!mentionsCapNamespace(text)) return feed;
   for (const item of feed.items.filter(({ element }) => inCapScope(element))) {

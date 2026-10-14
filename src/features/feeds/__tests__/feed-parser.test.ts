@@ -26,6 +26,13 @@ const feed = {
 };
 
 describe("external feed parser projection", () => {
+  test("rejects declared entities before the XML parser can expand them", () => {
+    expect(() =>
+      parseXmlFeed(`<!DOCTYPE rss [<!ENTITY payload "expanded">]>
+        <rss version="2.0"><channel><title>&payload;</title></channel></rss>`),
+    ).toThrow("XML entity declarations are not allowed");
+  });
+
   test("accepts the fields consumed by feed mapping", () => {
     expect(() => validateParsedFeed(feed)).not.toThrow();
   });
