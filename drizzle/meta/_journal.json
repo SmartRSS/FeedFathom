@@ -71,6 +71,13 @@
       "when": 1792001027867,
       "tag": "0009_ambitious_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792002320790,
+      "tag": "0010_careful_lilandra",
+      "breakpoints": true
     }
   ]
 }
