@@ -31,6 +31,7 @@ import {
   resolvedTheme,
 } from "./preferences.ts";
 import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
+import { reloadForUpdate } from "./reading-session.ts";
 import "./style.css";
 
 // Every route but the dashboard loads its chunk on first visit, so a
@@ -83,7 +84,6 @@ const paneSwitchHost: PaneSwitchHost = {
       ? (update) => document.startViewTransition(update)
       : undefined,
 };
-const [updateAvailable, setUpdateAvailable] = createSignal(false);
 
 function App() {
   const initialPath = currentPath();
@@ -225,14 +225,6 @@ function App() {
       </a>
       {/* One dialog host for every confirm()/prompt() replacement (#698). */}
       <DialogHost />
-      <Show when={updateAvailable()}>
-        <div class="update-banner" role="status">
-          <span>A new version is available.</span>
-          <button type="button" onClick={() => location.reload()}>
-            Reload
-          </button>
-        </div>
-      </Show>
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}
       <ErrorBoundary
@@ -343,14 +335,50 @@ function Router(props: {
 }
 
 if ("serviceWorker" in navigator) {
-  // A replacement worker can differ from the loaded JS bundle. Offer a reload
-  // rather than interrupting the session. Notifications are enabled only if
-  // the page has a controller when this listener is registered.
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController) return;
-    setUpdateAvailable(true);
+  // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
+  // VITE_SW_FILENAME for production builds, and Vite's dev server serves
+  // public/ files at their literal path anyway.
+  const workerPath = import.meta.env["VITE_SW_FILENAME"] ?? "/sw.js";
+  // A new deploy is applied the next time the page is hidden, so the user
+  // comes back to it without a prompt. By then the worker has cached the new
+  // shell with its assets, so the reload is served from cache.
+  let updatePending = false;
+  const markUpdatePending = () => {
+    updatePending = true;
+  };
+  // Fields typed into since their form last submitted. A form that unmounts
+  // unsent takes its fields out of the document, so it stops counting.
+  const editedFields = new Set<Element>();
+  document.addEventListener("input", (event) => {
+    if (event.target instanceof Element && event.target.closest("form"))
+      editedFields.add(event.target);
   });
+  document.addEventListener(
+    "submit",
+    (event) => {
+      for (const field of editedFields)
+        if (event.target instanceof Node && event.target.contains(field))
+          editedFields.delete(field);
+    },
+    true,
+  );
+  const hasUnsavedInput = () =>
+    document.querySelector("dialog[open]") !== null ||
+    [...editedFields].some((field) => field.isConnected);
+  document.addEventListener("visibilitychange", () => {
+    if (updatePending && document.hidden && !hasUnsavedInput())
+      reloadForUpdate();
+  });
+  // A page whose bundle already names the controlling worker sees a later
+  // controllerchange only from a newer deploy. A page loaded from a new shell
+  // under the previous worker is waiting for exactly the worker it registers,
+  // so that takeover is no update.
+  const controllerUrl = navigator.serviceWorker.controller?.scriptURL;
+  if (controllerUrl && new URL(controllerUrl).pathname === workerPath)
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      markUpdatePending,
+    );
   // The worker serves a cached shell first and reports when the server's
   // shell names different assets, which a bundle-only deploy never signals
   // through controllerchange.
@@ -362,14 +390,9 @@ if ("serviceWorker" in navigator) {
       "type" in data &&
       data.type === "shell-updated"
     )
-      setUpdateAvailable(true);
+      markUpdatePending();
   });
-  // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
-  // VITE_SW_FILENAME for production builds, and Vite's dev server serves
-  // public/ files at their literal path anyway.
-  void navigator.serviceWorker.register(
-    import.meta.env["VITE_SW_FILENAME"] ?? "/sw.js",
-  );
+  void navigator.serviceWorker.register(workerPath);
 }
 
 render(() => <App />, document.querySelector("#app")!);
