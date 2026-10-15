@@ -26,6 +26,15 @@ export type AppSnapshot = {
   listScrollTop: number;
   nodeType: "folder" | "source";
   nodeUid: string;
+  // The list around the open article. Optional, so a snapshot written before
+  // they existed still restores the article alone.
+  anchorId?: number | undefined;
+  focusedId?: number | undefined;
+  // Rows loaded, so a restore pages as far as the list had been scrolled.
+  loadedCount?: number | undefined;
+  // The search the list showed; its node is then only the feed to go back to.
+  search?: string | undefined;
+  selectedIds?: number[] | undefined;
 };
 
 export type ReaderScrollEntry = {
@@ -107,15 +116,26 @@ function parseAppSnapshot(value: unknown): AppSnapshot | undefined {
   )
     return undefined;
   const articleId = value["articleId"];
+  const optionalNumber = (key: string) =>
+    isFiniteNumber(value[key]) ? value[key] : undefined;
+  const selectedIds = value["selectedIds"];
   return {
+    anchorId: optionalNumber("anchorId"),
     articleFilter: value["articleFilter"],
     articleId:
       articleId === undefined || isFiniteNumber(articleId)
         ? articleId
         : undefined,
+    focusedId: optionalNumber("focusedId"),
     listScrollTop: value["listScrollTop"],
+    loadedCount: optionalNumber("loadedCount"),
     nodeType: value["nodeType"],
     nodeUid: value["nodeUid"],
+    search: typeof value["search"] === "string" ? value["search"] : undefined,
+    selectedIds:
+      Array.isArray(selectedIds) && selectedIds.every(isFiniteNumber)
+        ? selectedIds
+        : undefined,
   };
 }
 
@@ -312,5 +332,31 @@ export class ReadingSessionStore {
         storage?.setItem(READING_SESSION_STORAGE_KEY, raw);
       } catch {}
     }
+  }
+}
+
+// A reload that applies a new deploy resumes where the tab was, whatever the
+// remember-position setting says: the user asked for no reload. The page
+// dispatches UPDATE_RELOAD_EVENT so the dashboard writes a full snapshot, and
+// the flag tells the next boot to restore it.
+export const UPDATE_RELOAD_EVENT = "feedfathom:update-reload";
+const UPDATE_RELOAD_KEY = "feedfathom:update-reload";
+
+export function reloadForUpdate(): void {
+  dispatchEvent(new Event(UPDATE_RELOAD_EVENT));
+  try {
+    sessionStorage.setItem(UPDATE_RELOAD_KEY, "1");
+  } catch {}
+  location.reload();
+}
+
+/** True once, on the first boot after reloadForUpdate(). */
+export function takeUpdateReload(): boolean {
+  try {
+    const flagged = sessionStorage.getItem(UPDATE_RELOAD_KEY) !== null;
+    sessionStorage.removeItem(UPDATE_RELOAD_KEY);
+    return flagged;
+  } catch {
+    return false;
   }
 }

@@ -2529,6 +2529,115 @@ test.describe("session restoration", () => {
     ).toBeNull();
   });
 
+  test("an update reload resumes the article with the preference off", async ({
+    page,
+  }) => {
+    await installApiFixture(page, { longArticle: true });
+    await page.addInitScript(() => {
+      localStorage.setItem("rememberReadingPosition", "off");
+    });
+    await page.goto("/");
+
+    await selectSource(page);
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    const reader = page.locator(".reader");
+    const halfScroll = await reader.evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
+      return element.scrollTop;
+    });
+    // The worker reports a new deploy, then the page is hidden.
+    const reloaded = page.waitForEvent("load");
+    await page.evaluate(() => {
+      navigator.serviceWorker.dispatchEvent(
+        new MessageEvent("message", { data: { type: "shell-updated" } }),
+      );
+      Object.defineProperty(document, "hidden", { value: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await reloaded;
+
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    await expect(reader).toHaveJSProperty("scrollTop", halfScroll);
+    // The one-reload snapshot is gone, so a later reload starts fresh.
+    expect(
+      await page.evaluate(() => [
+        sessionStorage.getItem("feedfathom:reading-session:v1"),
+        localStorage.getItem("feedfathom:reading-session:v1"),
+      ]),
+    ).toEqual([null, null]);
+    // An on-demand reload still honours the preference.
+    await page.reload();
+    await selectSource(page);
+    await expect(page.locator(".reader h1")).toHaveText("First article");
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBe(0);
+  });
+
+  test("a reload restores a multi-row selection and the focus cursor", async ({
+    page,
+  }) => {
+    await installApiFixture(page, { manyArticles: true });
+    await page.goto("/");
+
+    await selectSource(page);
+    await articleOptions(page).nth(3).click();
+    await articleOptions(page)
+      .nth(5)
+      .click({ modifiers: ["Shift"] });
+    // Ctrl moves the cursor without changing the selection.
+    await page.keyboard.press("Control+ArrowDown");
+    await page.keyboard.press("Control+ArrowDown");
+    await expect(articleOptions(page).nth(7)).toBeFocused();
+
+    await page.reload();
+    await Promise.all(
+      [3, 4, 5].map((index) =>
+        expect(articleOptions(page).nth(index)).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      ),
+    );
+    await expect(articleOptions(page).nth(6)).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    await expect(articleOptions(page).nth(7)).toBeFocused();
+    // The anchor came back too: Shift-click extends from row 3.
+    await articleOptions(page)
+      .nth(1)
+      .click({ modifiers: ["Shift"] });
+    await Promise.all(
+      [1, 2, 3].map((index) =>
+        expect(articleOptions(page).nth(index)).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      ),
+    );
+    await expect(articleOptions(page).nth(4)).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  test("a reload restores a search and its open result", async ({ page }) => {
+    await installApiFixture(page);
+    await page.goto("/");
+
+    const search = page.getByLabel("Search articles");
+    await search.fill("subscribed");
+    await search.press("Enter");
+    await page.getByRole("option", { name: /Subscribed article/ }).click();
+    await expect(page.locator(".reader h1")).toHaveText("Subscribed article");
+
+    await page.reload();
+    await expect(search).toHaveValue("subscribed");
+    await expect(page.locator(".reader h1")).toHaveText("Subscribed article");
+    await expect(page.getByLabel("Show")).toHaveValue("all");
+  });
+
   test("a stale snapshot (deleted source) boots normally", async ({ page }) => {
     await installApiFixture(page);
     await page.addInitScript(() => {

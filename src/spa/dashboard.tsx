@@ -44,8 +44,12 @@ import {
 import {
   createThrottledRecorder,
   ratioToScrollTop,
+  READING_SESSION_STORAGE_KEY,
   ReadingSessionStore,
   scrollRatio,
+  takeUpdateReload,
+  UPDATE_RELOAD_EVENT,
+  type AppSnapshot,
 } from "./reading-session.ts";
 import {
   removalOutcome,
@@ -290,6 +294,34 @@ export function Dashboard(props: {
     local: localStorage,
     session: sessionStorage,
   });
+  const resumingUpdate = takeUpdateReload();
+  const restoreEnabled = () => rememberReadingPosition() || resumingUpdate;
+  // With the setting off the snapshot goes to sessionStorage only, so it
+  // survives this one reload and never reaches a later launch.
+  const saveForUpdateReload = () => {
+    const node = selectedNode();
+    if (!node && !activeSearch()) return;
+    const store = rememberReadingPosition()
+      ? readingSession
+      : new ReadingSessionStore({ session: sessionStorage });
+    const articleId = openedArticle()?.id;
+    store.recordApp({
+      ...listState(),
+      articleFilter: articleFilter(),
+      articleId,
+      listScrollTop:
+        document.querySelector<HTMLElement>(".article-list")?.scrollTop ?? 0,
+      nodeType: node?.type ?? "source",
+      nodeUid: node?.uid ?? "",
+    });
+    const reader = document.querySelector<HTMLElement>(".reader");
+    if (articleId !== undefined && reader)
+      store.recordReaderScroll(articleId, scrollRatio(reader));
+  };
+  addEventListener(UPDATE_RELOAD_EVENT, saveForUpdateReload);
+  onCleanup(() =>
+    removeEventListener(UPDATE_RELOAD_EVENT, saveForUpdateReload),
+  );
   const recordAppSnapshot = (
     patch: Parameters<ReadingSessionStore["recordApp"]>[0],
   ) => {
@@ -305,6 +337,28 @@ export function Dashboard(props: {
     if (id === undefined || !rememberReadingPosition() || restoringSession())
       return;
     readingSession.recordReaderScroll(id, scrollRatio(element));
+  });
+  // Rows are named by id: an index means nothing once the list is refetched.
+  const listState = () => {
+    const rows = articles();
+    const idAt = (index: number | undefined) =>
+      index === undefined ? undefined : rows[index]?.id;
+    return {
+      anchorId: idAt(selectionAnchor()),
+      focusedId: idAt(focusedIndex()),
+      loadedCount: rows.length,
+      search: activeSearch() || undefined,
+      selectedIds: [...selectedIndexes()].flatMap((index) => {
+        const id = idAt(index);
+        return id === undefined ? [] : [id];
+      }),
+    };
+  };
+  // Nothing to record before a list exists; recording then would overwrite
+  // the snapshot boot is about to restore.
+  createEffect(() => {
+    const state = listState();
+    if (selectedNode() || state.search) recordAppSnapshot(state);
   });
   const displayedArticle = ():
     | { article: Article; content: ReaderContent }
@@ -665,10 +719,13 @@ export function Dashboard(props: {
   const revealTree = () => {
     if (!treeLoading()) return;
     setTreeLoading(false);
-    // Focus the tree without select(), which would also load articles.
-    queueMicrotask(() =>
-      document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
-    );
+    // Focus the tree without select(), which would also load articles. A
+    // restored session has already put focus on its row; leave it there.
+    queueMicrotask(() => {
+      if (document.activeElement && document.activeElement !== document.body)
+        return;
+      document.querySelector<HTMLElement>(".sources-pane .source")?.focus();
+    });
   };
   async function addNewFolder() {
     const name = await promptDialog("Folder name");
@@ -694,9 +751,11 @@ export function Dashboard(props: {
     void probeReader();
     // Read the snapshot up front (before any await) so a reload restores the
     // state the tab actually left in, not whatever a faster boot wrote.
-    const restored = rememberReadingPosition()
-      ? readingSession.snapshot()
-      : undefined;
+    const restored = restoreEnabled() ? readingSession.snapshot() : undefined;
+    if (!rememberReadingPosition())
+      try {
+        sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);
+      } catch {}
     if (restored) {
       setRestoringSession(true);
       skipObserverFirstPass = true;
@@ -752,29 +811,25 @@ export function Dashboard(props: {
   // simply isn't found and the whole snapshot is dropped -- the normal boot
   // path proceeds, silently. Re-selecting the node runs the one and only
   // article fetch boot would ever run; no second fetch races it.
-  async function restoreFromSnapshot(snapshot: {
-    articleFilter: "all" | "read" | "unread";
-    articleId: number | undefined;
-    listScrollTop: number;
-    nodeType: "folder" | "source";
-    nodeUid: string;
-  }) {
+  async function restoreFromSnapshot(snapshot: AppSnapshot) {
     try {
       const node = findNode(
         withTodayNode(tree(), todayView() === "on"),
         snapshot.nodeType,
         snapshot.nodeUid,
       );
-      if (!node) {
+      const search = articleSearchBox() === "on" ? snapshot.search : undefined;
+      if (!node && !search) {
         readingSession.clear();
         setRestoringSession(false);
         return;
       }
       setArticleFilter(snapshot.articleFilter);
-      await select(node, {
-        articleId: snapshot.articleId ?? -1,
-        listScrollTop: snapshot.listScrollTop,
-      });
+      if (search) {
+        if (node) setSelectedNode(node);
+        setSearchTerms(search);
+        await runSearch(search, snapshot);
+      } else if (node) await select(node, snapshot);
     } catch {
       // A restore must never surface as an error; boot continues as usual.
       readingSession.clear();
@@ -789,7 +844,7 @@ export function Dashboard(props: {
     if (!item || item.article.id !== pendingReaderScrollId) return;
     const id = pendingReaderScrollId;
     pendingReaderScrollId = undefined;
-    if (!rememberReadingPosition()) return;
+    if (!restoreEnabled()) return;
     const ratio = readingSession.readerScroll(id);
     if (ratio === undefined) return;
     // A hidden reader measures zero, which would resolve any ratio to the top.
@@ -805,10 +860,7 @@ export function Dashboard(props: {
       }),
     );
   });
-  async function select(
-    node: TreeNode,
-    restore?: { articleId: number; listScrollTop: number },
-  ) {
+  async function select(node: TreeNode, restore?: AppSnapshot) {
     // A feed picked from the cached tree while boot still waits to restore
     // the session (#989) supersedes the snapshot, and is recorded in its place.
     if (!restore && restoringSession()) {
@@ -863,9 +915,9 @@ export function Dashboard(props: {
       query?: string;
     },
     selection: ReturnType<typeof selectionGuard.start>,
-    // Session restore (#718): re-select the article the snapshot had open
-    // rather than always row 0, so the restore is one fetch, not two.
-    restore?: { articleId: number; listScrollTop: number },
+    // Session restore (#718): re-select the rows the snapshot had selected
+    // rather than always row 0, paging as far as the list had been loaded.
+    restore?: AppSnapshot,
   ) {
     setArticlesLoading(true);
     const controller = new AbortController();
@@ -873,35 +925,87 @@ export function Dashboard(props: {
     try {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
-      const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({ filter: articleFilter(), ...body }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        signal: controller.signal,
-      });
+      const page = (cursor?: Pick<ArticleSummary, "id" | "publishedAt">) =>
+        api("/articles", articlesResponse, {
+          body: JSON.stringify({
+            filter: articleFilter(),
+            ...body,
+            ...(cursor ? { cursor: cursor.id } : {}),
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(cursor && offlineUnreadEnabled() === "on"
+              ? { "X-Cursor-Published-At": cursor.publishedAt }
+              : {}),
+          },
+          method: "POST",
+          signal: controller.signal,
+        });
+      let lastPage = await page();
+      const nextArticles = [...lastPage];
+      // ponytail: capped at five pages, so a restore never walks a huge list.
+      const restoreCount = Math.min(
+        restore?.loadedCount ?? 0,
+        articlePageSize * 5,
+      );
+      while (
+        nextArticles.length < restoreCount &&
+        lastPage.length === articlePageSize &&
+        selectionGuard.isCurrent(selection)
+      ) {
+        // oxlint-disable-next-line no-await-in-loop -- each page's cursor is the previous page's last row
+        lastPage = await page(nextArticles.at(-1));
+        nextArticles.push(...lastPage);
+      }
       if (!selectionGuard.isCurrent(selection)) return;
       setArticles(nextArticles);
-      moreArticles = nextArticles.length === articlePageSize;
-      articleCursor = nextArticles.at(-1);
-      // A stale snapshot (article gone, list refilled) degrades to row 0 --
-      // the normal boot path -- without any error surface.
-      const restoredIndex = restore
-        ? nextArticles.findIndex((item) => item.id === restore.articleId)
-        : -1;
-      const openIndex = restoredIndex >= 0 ? restoredIndex : 0;
-      const nextIndexes = new Set(nextArticles.length ? [openIndex] : []);
+      moreArticles = lastPage.length === articlePageSize;
+      articleCursor = nextArticles.at(-1) ?? articleCursor;
+      // A stale snapshot (rows gone, list refilled) degrades to row 0 -- the
+      // normal boot path -- without any error surface.
+      const indexOf = new Map(
+        nextArticles.map((item, index) => [item.id, index]),
+      );
+      const restoredIds = restore?.selectedIds?.length
+        ? restore.selectedIds
+        : restore?.articleId === undefined
+          ? []
+          : [restore.articleId];
+      const restoredIndexes = restoredIds.flatMap((id) => {
+        const index = indexOf.get(id);
+        return index === undefined ? [] : [index];
+      });
+      const restored = restoredIndexes.length > 0;
+      const restoredAt = (id: number | undefined) =>
+        id === undefined ? undefined : indexOf.get(id);
+      const openIndex = restored ? Math.min(...restoredIndexes) : 0;
+      const focusIndex =
+        (restored ? restoredAt(restore?.focusedId) : undefined) ?? openIndex;
+      const nextIndexes = new Set(
+        restored ? restoredIndexes : nextArticles.length ? [openIndex] : [],
+      );
       void setArticleSelection(nextIndexes, selection);
-      setSelectionAnchor(nextArticles.length ? openIndex : undefined);
-      queueMicrotask(() => focusArticleAt(openIndex));
+      setSelectionAnchor(
+        restored
+          ? (restoredAt(restore?.anchorId) ?? openIndex)
+          : nextArticles.length
+            ? openIndex
+            : undefined,
+      );
+      queueMicrotask(() => focusArticleAt(focusIndex));
       if (restore) {
         recordAppSnapshot({
           articleFilter: articleFilter(),
-          articleId: nextArticles[openIndex]?.id,
-          listScrollTop: restoredIndex >= 0 ? restore.listScrollTop : 0,
+          articleId:
+            nextIndexes.size === 1 ? nextArticles[openIndex]?.id : undefined,
+          listScrollTop: restored ? restore.listScrollTop : 0,
         });
-        if (restoredIndex >= 0) {
-          pendingReaderScrollId = restore.articleId;
-          props.focusPane("reader");
+        if (restored) {
+          // A multi-row selection opens no article, so the list keeps focus.
+          if (nextIndexes.size === 1) {
+            pendingReaderScrollId = nextArticles[openIndex]?.id;
+            props.focusPane("reader");
+          }
           applyRestoredScroll(restore.listScrollTop);
         } else {
           readingSession.clear();
@@ -1014,7 +1118,7 @@ export function Dashboard(props: {
   // is already loaded: the terms go to the server, which answers across every
   // subscription -- the article whose feed you no longer remember is the case
   // that makes search worth having -- and pages by the same keyset cursor.
-  async function runSearch(terms: string) {
+  async function runSearch(terms: string, restore?: AppSnapshot) {
     const query = terms.trim();
     if (!query) {
       await exitSearch();
@@ -1024,7 +1128,7 @@ export function Dashboard(props: {
     // unread default would answer it with an empty list. Only entering search
     // moves the dropdown: re-running the same terms under a filter the user
     // then chose has to keep that choice.
-    if (!activeSearch()) setArticleFilter("all");
+    if (!activeSearch() && !restore) setArticleFilter("all");
     setActiveSearch(query);
     props.focusPane("articles");
     setError("");
@@ -1033,7 +1137,7 @@ export function Dashboard(props: {
     pageAbortController?.abort();
     moreArticles = false;
     articleCursor = undefined;
-    await fetchArticlesForBody({ query, sources: [] }, selection);
+    await fetchArticlesForBody({ query, sources: [] }, selection, restore);
   }
   async function exitSearch() {
     if (!activeSearch()) return;
