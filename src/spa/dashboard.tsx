@@ -1844,8 +1844,7 @@ export function Dashboard(props: {
     setSelectionAnchor(index);
     void setArticleSelection(indexes);
   }
-  // Enter and `v` (#709) share one open-original path: the same safeArticleUrl
-  // wrapping and the same window.open options the branch always used, with no
+  // `v` (#709) opens the original, safeArticleUrl-wrapped, with no
   // mark-as-read side effect -- deleting, not reading, is this reader's flow.
   function openOriginalInNewTab() {
     for (const index of selectedIndexes()) {
@@ -1853,6 +1852,13 @@ export function Dashboard(props: {
       const url = value ? safeArticleUrl(value, window.location.href) : "";
       if (url) window.open(url, "_blank", "noopener");
     }
+  }
+  // Opening moves focus with the pane (#816): on a narrow screen the pane
+  // switch display:none's the list holding focus, which would drop it to
+  // <body> and strand the keyboard there.
+  function showReaderPane() {
+    props.focusPane("reader");
+    props.whenPaneShown(() => readerPaneRef?.focus({ preventScroll: true }));
   }
   function handleArticleKeys(event: KeyboardEvent) {
     if (event.key === "ArrowDown") moveSelection(1, event);
@@ -1880,9 +1886,6 @@ export function Dashboard(props: {
     ) {
       event.preventDefault();
       void setArticleSelection(new Set(articles().map((_, index) => index)));
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      openOriginalInNewTab();
     } else if (event.key === "ArrowLeft") {
       const node = selectedNode();
       if (!node) return;
@@ -1901,8 +1904,9 @@ export function Dashboard(props: {
       !document.querySelector("dialog[open]")
     ) {
       // The industry-standard layer (#709), on top of everything above:
-      // j/k mirror the arrow keys exactly, v aliases Enter's open-original,
-      // r reuses the refresh button's handler, ? opens the cheat sheet.
+      // j/k mirror the arrow keys exactly, Enter reads the row like a click,
+      // v opens the original, r reuses the refresh button's handler, ? opens
+      // the cheat sheet.
       const shortcut = mapArticleShortcut(event);
       if (shortcut === "next") moveSelection(1, event);
       else if (shortcut === "previous") moveSelection(-1, event);
@@ -1911,19 +1915,17 @@ export function Dashboard(props: {
         // The reader pane has no separate close affordance -- it always
         // shows whatever the single selection opened -- so "toggle" is the
         // pane toggle: list -> reader, reader -> back to the list row, the
-        // same journey ArrowLeft's focus hand-off already takes. Opening
-        // moves focus with the pane (#816): on a narrow screen the pane
-        // switch display:none's the list holding focus, which would drop it
-        // to <body> and strand the shortcut there.
+        // same journey ArrowLeft's focus hand-off already takes.
         if (props.pane() === "reader") {
           props.focusPane("articles");
           focusArticleAt(focusedIndex());
-        } else {
-          props.focusPane("reader");
-          props.whenPaneShown(() =>
-            readerPaneRef?.focus({ preventScroll: true }),
-          );
-        }
+        } else showReaderPane();
+      } else if (shortcut === "read") {
+        event.preventDefault();
+        if (!articles()[focusedIndex()]) return;
+        // The row's click handler: this article alone, in the reader.
+        selectArticle(focusedIndex());
+        showReaderPane();
       } else if (shortcut === "openOriginal") {
         event.preventDefault();
         openOriginalInNewTab();

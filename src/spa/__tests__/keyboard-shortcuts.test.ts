@@ -19,7 +19,14 @@ describe("mapArticleShortcut", () => {
     expect(mapArticleShortcut(key({ key: "?" }))).toBe("help");
   });
 
+  test("Enter reads in the app while o and v keep their meanings (#1029)", () => {
+    expect(mapArticleShortcut(key({ key: "Enter" }))).toBe("read");
+    expect(mapArticleShortcut(key({ key: "o" }))).toBe("open");
+    expect(mapArticleShortcut(key({ key: "v" }))).toBe("openOriginal");
+  });
+
   test("never fires with a modifier held", () => {
+    expect(mapArticleShortcut(key({ ctrlKey: true, key: "Enter" }))).toBeNull();
     expect(mapArticleShortcut(key({ ctrlKey: true, key: "r" }))).toBeNull();
     expect(mapArticleShortcut(key({ key: "j", metaKey: true }))).toBeNull();
     expect(mapArticleShortcut(key({ altKey: true, key: "k" }))).toBeNull();
@@ -29,7 +36,6 @@ describe("mapArticleShortcut", () => {
     expect(mapArticleShortcut(key({ key: "ArrowDown" }))).toBeNull();
     expect(mapArticleShortcut(key({ key: "m" }))).toBeNull();
     expect(mapArticleShortcut(key({ key: "J" }))).toBeNull();
-    expect(mapArticleShortcut(key({ key: "Enter" }))).toBeNull();
     expect(mapArticleShortcut(key({ key: "" }))).toBeNull();
   });
 });
