@@ -1,5 +1,5 @@
 // The industry-standard keyboard vocabulary (#709) layered on top of the
-// dashboard's existing arrow/Space/Delete/Ctrl+A/Enter handling. Pure on
+// dashboard's existing arrow/Space/Delete/Ctrl+A handling. Pure on
 // purpose: the keydown handler in dashboard.tsx owns every side effect, this
 // only decides which shortcut (if any) an event means, and whether a key
 // press landed in something the person is typing into.
@@ -8,12 +8,15 @@ export type ArticleShortcut =
   | "next"
   | "previous"
   | "open"
+  | "read"
   | "openOriginal"
   | "refresh"
   | "help";
 
-// Plain letters only: every modifier combination keeps its browser or
-// existing-app meaning, so a chorded press is never a shortcut. The `m`
+// Plain keys only: every modifier combination keeps its browser or
+// existing-app meaning, so a chorded press is never a shortcut. Enter reads
+// the row in the app (#1029), what activating a listbox option means to a
+// screen-reader user; `v` is the way to the original site. The `m`
 // read/unread toggle predates this module (#682) and stays in dashboard.tsx.
 export function mapArticleShortcut(
   event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">,
@@ -26,6 +29,8 @@ export function mapArticleShortcut(
       return "previous";
     case "o":
       return "open";
+    case "Enter":
+      return "read";
     case "v":
       return "openOriginal";
     case "r":
