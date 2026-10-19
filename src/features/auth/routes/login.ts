@@ -2,7 +2,6 @@ import { password } from "#platform/runtime.ts";
 import { authThrottle, usersDataService } from "#features/auth/services.ts";
 import { config } from "#platform/config.ts";
 import { Elysia } from "elysia";
-import { Value } from "typebox/value";
 import { loginRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
@@ -12,9 +11,7 @@ export function createLoginRoute(secureCookies: boolean) {
   return new Elysia().post(
     "/api/login",
     { body: loginRequest },
-    async ({ body, request, server }) => {
-      // Elysia 2.0-beta doesn't run Codec .Decode() transforms on bodies.
-      const parsed = Value.Decode(loginRequest, body);
+    async ({ body: parsed, request, server }) => {
       const address = clientAddress(
         request,
         server,

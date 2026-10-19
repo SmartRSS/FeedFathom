@@ -2,7 +2,6 @@ import { emailHandler } from "#features/mail-ingest/services.ts";
 import { config } from "#platform/config.ts";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Elysia } from "elysia";
-import { Value } from "typebox/value";
 import {
   mailRelaySecretHeader,
   maxRawEmailBytes,
@@ -28,7 +27,7 @@ export function createMailRoute() {
   return new Elysia().post(
     "/api/mail",
     { body: incomingMailRequest },
-    async ({ body, request }) => {
+    async ({ body: decoded, request }) => {
       if (!config.MAIL_ENABLED) {
         return json({ error: "Mail ingestion is disabled" }, 404);
       }
@@ -41,7 +40,6 @@ export function createMailRoute() {
         return json({ error: "Unauthorized" }, 401);
       }
 
-      const decoded = Value.Decode(incomingMailRequest, body);
       // Base64, not UTF-8 text: a MIME message is bytes, and an 8-bit body in
       // a legacy charset does not survive a round trip through UTF-8.
       const raw = Buffer.from(decoded.raw, "base64");

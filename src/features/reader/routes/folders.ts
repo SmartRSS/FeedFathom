@@ -1,9 +1,8 @@
 import { foldersDataService } from "#features/feeds/services.ts";
-import type { Static } from "typebox";
-import { Value } from "typebox/value";
-import type { removeFolderRequest } from "#shared/contracts/requests.ts";
-import {
+import type { Static, StaticDecode } from "typebox";
+import type {
   createFolderRequest,
+  removeFolderRequest,
   updateFolderRequest,
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
@@ -14,26 +13,22 @@ export async function getFoldersHandler({ user }: { user: AuthedUser }) {
 }
 
 export async function postFoldersHandler({
-  body,
+  body: decoded,
   user,
 }: {
-  body: Static<typeof createFolderRequest>;
+  body: StaticDecode<typeof createFolderRequest>;
   user: AuthedUser;
 }) {
-  // Elysia 2.0-beta validates body shape but doesn't run Codec .Decode()
-  // transforms, so normalized*() fields arrive undecoded; decode by hand.
-  const decoded = Value.Decode(createFolderRequest, body);
   return json(await foldersDataService.createFolder(user.id, decoded.name));
 }
 
 export async function patchFoldersHandler({
-  body,
+  body: decoded,
   user,
 }: {
-  body: Static<typeof updateFolderRequest>;
+  body: StaticDecode<typeof updateFolderRequest>;
   user: AuthedUser;
 }) {
-  const decoded = Value.Decode(updateFolderRequest, body);
   const updated = await foldersDataService.renameFolder(
     user.id,
     decoded.folderId,

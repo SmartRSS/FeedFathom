@@ -1,11 +1,10 @@
 import { sourcesDataService } from "#features/feeds/services.ts";
-import type { Static } from "typebox";
-import { Value } from "typebox/value";
+import type { Static, StaticDecode } from "typebox";
 import type {
   adminQuery,
   removeSourceRequest,
+  sourceUrlReplacementRequest,
 } from "#shared/contracts/requests.ts";
-import { sourceUrlReplacementRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 
 export async function getAdminHandler({
@@ -21,9 +20,11 @@ export async function getAdminHandler({
   );
 }
 
-export async function postAdminHandler({ body }: { body: unknown }) {
-  // Elysia 2.0-beta doesn't run Codec .Decode() transforms on bodies.
-  const decoded = Value.Decode(sourceUrlReplacementRequest, body);
+export async function postAdminHandler({
+  body: decoded,
+}: {
+  body: StaticDecode<typeof sourceUrlReplacementRequest>;
+}) {
   const result = await sourcesDataService.updateSourceUrl(
     decoded.oldUrl,
     decoded.newUrl,

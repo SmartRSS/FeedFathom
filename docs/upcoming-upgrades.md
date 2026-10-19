@@ -239,8 +239,9 @@ and ignored, so treat the output shape as fixed.
   to standalone `typebox`, nothing imports it (it was in knip's ignore list,
   which is now gone too).
 - Pinned `elysia` to an exact prerelease (now `2.0.0-rc.0`) instead of the
-  floating `next` tag. The workaround it still carries is in
-  `features/auth/routes/login.ts`, where a Codec `.Decode()` transform is run
-  by hand because beta.14 did not run it on bodies; revisit at 2.0 stable.
+  floating `next` tag.
+- Removed the hand-run `Value.Decode()` calls from the route handlers. Every
+  2.0 prerelease from beta.1 on decodes Codec fields in `body`, `query` and
+  `params` before the handler runs, so the handlers decoded a second time.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.
