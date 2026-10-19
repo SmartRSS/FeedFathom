@@ -93,8 +93,7 @@ export function createRegisterRoute() {
     .post(
       "/api/register",
       { body: registerRequest },
-      async ({ body, request: httpRequest, server }) => {
-        const request = Value.Decode(registerRequest, body);
+      async ({ body: request, request: httpRequest, server }) => {
         if (
           config.TURNSTILE_SECRET_KEY &&
           !(await validateCaptcha(

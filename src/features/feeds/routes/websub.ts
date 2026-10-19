@@ -4,7 +4,6 @@ import {
 } from "#features/feeds/services.ts";
 import { httpClient } from "#platform/runtime.ts";
 import { Elysia } from "elysia";
-import { Value } from "typebox/value";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
@@ -66,7 +65,7 @@ export function createWebSubRoutes() {
     .get(
       "/api/websub/callback/:token",
       { query: websubVerificationQuery },
-      async ({ params, query, status }) => {
+      async ({ params, query: decoded, status }) => {
         const source = await websubStateService.findSourceByWebSubCallbackToken(
           params.token,
         );
@@ -75,7 +74,6 @@ export function createWebSubRoutes() {
         // rather than retrying it forever.
         if (!source) return status(404);
 
-        const decoded = Value.Decode(websubVerificationQuery, query);
         if (decoded["hub.mode"] !== "subscribe") return status(404);
         // Confirms the hub is verifying the exact topic we asked it to
         // subscribe us to, not some other feed it's conflating with this

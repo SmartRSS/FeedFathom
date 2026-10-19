@@ -7,7 +7,6 @@ import {
 import { config } from "#platform/config.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
-import { Value } from "typebox/value";
 import {
   passwordResetConfirmRequest,
   passwordResetRequest,
@@ -30,8 +29,7 @@ export function createPasswordResetRoute() {
     .post(
       "/api/password-reset",
       { body: passwordResetRequest },
-      async ({ body, request, server }) => {
-        const { email } = Value.Decode(passwordResetRequest, body);
+      async ({ body: { email }, request, server }) => {
         // Always the same answer, whether or not the account exists, the
         // instance can send mail, or the request was throttled. Telling the
         // caller which would hand back the account list login already
@@ -82,8 +80,7 @@ export function createPasswordResetRoute() {
     .post(
       "/api/password-reset/confirm",
       { body: passwordResetConfirmRequest },
-      async ({ body }) => {
-        const parsed = Value.Decode(passwordResetConfirmRequest, body);
+      async ({ body: parsed }) => {
         const invalid = json(
           { error: "This reset link is no longer valid." },
           400,

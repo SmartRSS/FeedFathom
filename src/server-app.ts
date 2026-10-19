@@ -158,36 +158,39 @@ export async function createServerApp(options: ServerAppOptions = {}) {
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 
-  return new Elysia({
-    serve: { maxRequestBodySize: MAX_REQUEST_BODY_BYTES },
-  })
-    .request(({ request }) => {
-      requestStartedAt.set(request, performance.now());
+  return (
+    new Elysia({
+      serve: { maxRequestBodySize: MAX_REQUEST_BODY_BYTES },
     })
-    .use(createInternalRoutes())
-    .use(createPublicAuthRoutes(production))
-    .use(createReaderRoutes())
-    .use(createAdminOptionsRoutes())
-    .use(createWebSubRoutes())
-    .use(createMailRoute())
-    .use(spaRoutes)
-    .afterResponse(({ request, route, path, set, responseValue }) => {
-      const status =
-        responseValue instanceof Response
-          ? responseValue.status
-          : typeof set.status === "number"
-            ? set.status
-            : 200;
-      logSlowRequest(request, route, path, status);
-    })
-    .error(({ error, request, route, path }) => {
-      const response = buildErrorResponse(error, request, path);
-      logSlowRequest(
-        request,
-        route,
-        path,
-        response?.status ?? errorStatus(error) ?? 500,
-      );
-      return response;
-    });
+      .onRequest(({ request }) => {
+        requestStartedAt.set(request, performance.now());
+      })
+      .onAfterResponse(({ request, route, path, set, responseValue }) => {
+        const status =
+          responseValue instanceof Response
+            ? responseValue.status
+            : typeof set.status === "number"
+              ? set.status
+              : 200;
+        logSlowRequest(request, route, path, status);
+      })
+      .onError(({ error, request, route, path }) => {
+        const response = buildErrorResponse(error, request, path);
+        logSlowRequest(
+          request,
+          route,
+          path,
+          response?.status ?? errorStatus(error) ?? 500,
+        );
+        return response;
+      })
+      // Hooks only reach routes registered after them, so the routes come last.
+      .use(createInternalRoutes())
+      .use(createPublicAuthRoutes(production))
+      .use(createReaderRoutes())
+      .use(createAdminOptionsRoutes())
+      .use(createWebSubRoutes())
+      .use(createMailRoute())
+      .use(spaRoutes)
+  );
 }
