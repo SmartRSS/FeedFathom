@@ -7,12 +7,7 @@ import {
   userSourcesDataService,
 } from "#features/feeds/services.ts";
 import { config } from "#platform/config.ts";
-import type { Static } from "typebox";
-import { Value } from "typebox/value";
-import {
-  normalizedSubscriptionTarget,
-  type SubscriptionTarget,
-} from "#shared/validation/typebox-policy.ts";
+import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { outboundFetchBudget } from "#features/auth/services.ts";
@@ -26,18 +21,6 @@ import {
   mapFeedToPreviewArticles,
 } from "#features/feeds/feed-mapper.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
-
-// Elysia's body-schema validation decodes Codec fields (e.g. sourceUrl's
-// string -> {kind,value} transform) in some environments but not others, so
-// this normalizes either shape rather than depending on that being decoded
-// already.
-function decodedSubscriptionTarget(
-  value: SubscriptionTarget | string,
-): SubscriptionTarget {
-  return typeof value === "string"
-    ? Value.Decode(normalizedSubscriptionTarget, value)
-    : value;
-}
 
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
@@ -60,16 +43,14 @@ export async function postSubscribeHandler({
   request,
   user,
 }: {
-  body: Omit<Static<typeof subscribeRequest>, "sourceUrl"> & {
-    sourceUrl: SubscriptionTarget | string;
-  };
+  body: StaticDecode<typeof subscribeRequest>;
   request: Request;
   user: AuthedUser;
 }) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
-  const sourceUrl = decodedSubscriptionTarget(body.sourceUrl);
+  const { sourceUrl } = body;
   const isEmail = sourceUrl.kind === "email";
   if (!config.MAIL_ENABLED && isEmail)
     return json({ error: "Email subscriptions are not allowed." }, 400);
