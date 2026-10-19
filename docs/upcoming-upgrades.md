@@ -5,10 +5,10 @@ Researched 2026-08-16, versions rechecked 2026-09-07.
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
 | bun               | 1.4.3        | 1.4.3    | —                   |
-| elysia            | 2.0.0-beta.14 | 1.4.30  | 2.0.0-beta.14       |
-| solid-js          | 1.9.15       | 1.9.15   | 2.0.0-rc.6          |
+| elysia            | 2.0.0-rc.0   | 1.4.30   | 2.0.0-rc.0          |
+| solid-js          | 1.9.17       | 1.9.17   | 2.0.0-rc.6          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
-| typebox           | 1.3.28       | 1.3.28   | —                   |
+| typebox           | 1.4.2        | 1.4.2    | —                   |
 
 `npm-check-updates` resolves elysia to its `experimental` dist-tag
 (`2.0.0-exp.64`), which is a different line from the `next` beta the project
@@ -31,14 +31,18 @@ that replaces `fast-xml-parser`. See "XML parsing" below.
 ## Elysia 2.0
 
 Already migrated — the codebase is on the 2.0 beta and uses the new API
-throughout: `.error(Class, fn)` instead of code-based `onError`, `.derive("plugin", …)`
+throughout: `.onError(Class, fn)` instead of code-based `onError`, `.derive("plugin", …)`
 instead of `resolve`, `typebox` 1.x instead of `@sinclair/typebox` 0.34. The
 codemod (`bunx @elysia/codemod@latest`) has nothing left to do here.
 
 Remaining work is a version bump when 2.0.0 goes stable: change the pin to
-`^2.0.0`. Until then keep an exact beta pin rather than the `next` tag, so a
-new beta can't land unreviewed on a fresh install — moved beta.4 to beta.14
-on 2026-09-07, no source changes needed.
+`^2.0.0`. Until then keep an exact prerelease pin rather than the `next` tag,
+so a new release can't land unreviewed on a fresh install — moved beta.4 to
+beta.14 on 2026-09-07 with no source changes, and beta.14 to rc.0 on
+2026-10-19. The RC renamed the beta's short hooks back to `onRequest`,
+`onAfterResponse` and `onError`, and those hooks now reach only routes
+registered after them, so `server-app.ts` registers them before its `.use()`
+calls.
 
 Worth evaluating once stable, both opt-in and both currently unused here:
 
@@ -234,9 +238,9 @@ and ignored, so treat the output shape as fixed.
 - Removed `@sinclair/typebox` 0.34 — a dead dependency since the Elysia 2 move
   to standalone `typebox`, nothing imports it (it was in knip's ignore list,
   which is now gone too).
-- Pinned `elysia` to an exact beta (now `2.0.0-beta.14`) instead of the
+- Pinned `elysia` to an exact prerelease (now `2.0.0-rc.0`) instead of the
   floating `next` tag. The workaround it still carries is in
   `features/auth/routes/login.ts`, where a Codec `.Decode()` transform is run
-  by hand because the beta does not run it on bodies; revisit at 2.0 stable.
+  by hand because beta.14 did not run it on bodies; revisit at 2.0 stable.
 - Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.
