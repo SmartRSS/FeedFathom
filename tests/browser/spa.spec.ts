@@ -1633,6 +1633,51 @@ test("selecting a single article then pressing Delete removes only it", async ({
   expect(state.removedArticleIds).toEqual([12]);
 });
 
+// Forensics for deletes nobody could explain (see src/spa/delete-trace.ts):
+// the server log is only as good as what the request says triggered it.
+test("each article delete names the input that triggered it", async ({
+  page,
+}) => {
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("option", { name: /First article/ }).click();
+
+  const traceOf = async (action: () => Promise<void>) => {
+    const request = page.waitForRequest(
+      (candidate) =>
+        candidate.method() === "DELETE" &&
+        new URL(candidate.url()).pathname === "/api/articles",
+    );
+    await action();
+    return JSON.parse(
+      (await request).headers()["x-feedfathom-trace"] ?? "null",
+    );
+  };
+
+  const clicked = await traceOf(() =>
+    page.getByRole("button", { name: "delete articles" }).click(),
+  );
+  expect(clicked.trigger).toMatchObject({
+    target: "button[delete articles]",
+    trusted: true,
+    type: "click",
+  });
+  expect(clicked.sinceLastDeleteMs).toBeNull();
+
+  const pressed = await traceOf(() => page.keyboard.press("Delete"));
+  expect(pressed.trigger).toMatchObject({
+    key: "Delete",
+    repeat: false,
+    trusted: true,
+    type: "keydown",
+  });
+  expect(pressed.sinceLastDeleteMs).toBeGreaterThan(0);
+  expect(pressed.recent.map((entry: { type: string }) => entry.type)).toContain(
+    "click",
+  );
+});
+
 test("source properties reuses the discovery panel with feed/website locked", async ({
   page,
 }) => {

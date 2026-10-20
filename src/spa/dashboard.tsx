@@ -62,6 +62,7 @@ import {
   type SupersessionToken,
 } from "./supersession.ts";
 import { api } from "./api.ts";
+import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
   ReaderExtensionError,
@@ -1720,7 +1721,7 @@ export function Dashboard(props: {
     }
     return open(article, selection);
   }
-  function removeSelected() {
+  function removeSelected(trigger?: Event) {
     const items = articles();
     const indexes = new Set(
       [...selectedIndexes()].filter((index) => items[index]),
@@ -1732,7 +1733,10 @@ export function Dashboard(props: {
     // Fired first so network time overlaps the local UI work below.
     const deletion = api("/articles", removedArticlesResponse, {
       body: JSON.stringify({ removedArticleIdList: ids }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        [DELETE_TRACE_HEADER]: deleteTrace(trigger),
+      },
       method: "DELETE",
     });
 
@@ -1870,7 +1874,7 @@ export function Dashboard(props: {
       toggleSelectionAtCursor();
     } else if (event.key === "Delete") {
       event.preventDefault();
-      removeSelected();
+      removeSelected(event);
     } else if (
       event.key.toLowerCase() === "m" &&
       !event.ctrlKey &&
@@ -2154,7 +2158,7 @@ export function Dashboard(props: {
             <button
               aria-label="delete articles"
               disabled={selectedIndexes().size === 0}
-              onClick={() => removeSelected()}
+              onClick={(event) => removeSelected(event)}
             >
               <Icon raw={removeRaw} />
             </button>
@@ -2364,7 +2368,7 @@ export function Dashboard(props: {
             <button
               aria-label="delete article"
               disabled={!selected()}
-              onClick={() => removeSelected()}
+              onClick={(event) => removeSelected(event)}
             >
               <Icon raw={removeRaw} />
             </button>
