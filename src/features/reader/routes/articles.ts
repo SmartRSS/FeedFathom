@@ -53,11 +53,16 @@ export async function postArticlesHandler({
   );
 }
 
+// Client-supplied, so capped; JSON.stringify escapes it onto one log line.
+const MAX_TRACE_LOG_LENGTH = 4000;
+
 export async function deleteArticlesHandler({
   body,
+  request,
   user,
 }: {
   body: Static<typeof removeArticlesRequest>;
+  request: Request;
   user: AuthedUser;
 }) {
   const { articleIds, sourceIds } =
@@ -65,6 +70,24 @@ export async function deleteArticlesHandler({
       body.removedArticleIdList,
       user.id,
     );
+  // Deletes are terminal and were once sent by nobody anyone could name
+  // (see src/spa/delete-trace.ts), so each one is logged with what the
+  // client says triggered it.
+  console.info(
+    JSON.stringify({
+      cfRay: request.headers.get("cf-ray"),
+      event: "articles.delete",
+      removed: articleIds,
+      replayQueuedAt: request.headers.get("x-feedfathom-replay"),
+      requested: body.removedArticleIdList,
+      trace:
+        request.headers
+          .get("x-feedfathom-trace")
+          ?.slice(0, MAX_TRACE_LOG_LENGTH) ?? null,
+      userAgent: request.headers.get("user-agent"),
+      userId: user.id,
+    }),
+  );
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
   return json(articleIds);
 }

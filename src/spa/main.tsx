@@ -23,6 +23,7 @@ import {
 } from "./behavior.ts";
 import { Dashboard } from "./dashboard.tsx";
 import { DialogHost } from "./dialog.tsx";
+import { installDeleteTrace } from "./delete-trace.ts";
 import { isUnauthorizedError } from "./api.ts";
 import {
   mobileListAnchor,
@@ -395,4 +396,5 @@ if ("serviceWorker" in navigator) {
   void navigator.serviceWorker.register(workerPath);
 }
 
+installDeleteTrace();
 render(() => <App />, document.querySelector("#app")!);

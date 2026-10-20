@@ -98,7 +98,11 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 // Runs public/sw.js against an in-memory Cache API, a counting fetch and an
 // in-memory IndexedDB, and hands back its fetch listener.
 const loadServiceWorker = (
-  network: (path: string, method: string) => Response | Promise<Response>,
+  network: (
+    path: string,
+    method: string,
+    headers: Headers,
+  ) => Response | Promise<Response>,
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
   let onMessage: ((event: MessageEvent) => void) | undefined;
@@ -146,15 +150,18 @@ const loadServiceWorker = (
       const method =
         init?.method ?? (typeof input === "string" ? "GET" : input.method);
       requests.push(method === "GET" ? path : `${method} ${path}`);
+      const headers = new Headers(
+        init?.headers ?? (typeof input === "string" ? {} : input.headers),
+      );
       const { signal } = init ?? {};
-      if (!signal) return network(path, method);
+      if (!signal) return network(path, method, headers);
       // An aborted request rejects even while the network holds it.
       const aborted = new Promise<never>((_resolve, reject) =>
         signal.addEventListener("abort", () =>
           reject(new DOMException("Aborted", "AbortError")),
         ),
       );
-      return Promise.race([network(path, method), aborted]);
+      return Promise.race([network(path, method, headers), aborted]);
     },
     indexedDB: queue.indexedDB,
     self: {
@@ -194,7 +201,8 @@ const loadServiceWorker = (
     });
     // An unhandled request goes to the network untouched, as in a browser.
     const response =
-      handled ?? Promise.resolve(network(key(request), request.method));
+      handled ??
+      Promise.resolve(network(key(request), request.method, request.headers));
     const background = response.then(() => Promise.all(pending));
     return { background, response };
   };
@@ -983,6 +991,36 @@ test("a deletion queued offline replays on the next successful request", async (
     "DELETE /api/articles",
   ]);
   expect(sw.queue.rows.size).toBe(0);
+});
+
+test("a replayed deletion carries its original trace and says it is a replay", async () => {
+  let online = true;
+  const deletes: Headers[] = [];
+  const sw = loadServiceWorker((path, method, headers) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/session") return session(1);
+    if (method === "DELETE") deletes.push(headers);
+    return method === "GET" ? articleNetwork(path) : new Response(null);
+  });
+  await sw.loadArticle(1);
+  await settle();
+  online = false;
+  const removal = sw.dispatch(
+    new Request(`${ORIGIN}/api/articles`, {
+      body: JSON.stringify({ removedArticleIdList: [7] }),
+      headers: { "X-FeedFathom-Trace": '{"trigger":{"type":"click"}}' },
+      method: "DELETE",
+    }),
+  );
+  await removal.response;
+  online = true;
+  await sw.loadArticle(2);
+  await settle();
+  const replay = deletes.at(-1);
+  expect(replay?.get("X-FeedFathom-Trace")).toBe(
+    '{"trigger":{"type":"click"}}',
+  );
+  expect(Number(replay?.get("X-FeedFathom-Replay"))).toBeGreaterThan(0);
 });
 
 // The server refuses to remove a folder that still holds a source, so a
