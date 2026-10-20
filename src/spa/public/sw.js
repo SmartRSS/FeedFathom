@@ -16,6 +16,9 @@ const SHELL_REQUEST_INIT = {
 // ponytail: hand-picked table instead of generic mutation queueing, since
 // most /api/* mutations (subscribe, folder create) return server-generated
 // data we can't fake offline.
+// Mirrors DELETE_TRACE_HEADER in src/spa/delete-trace.ts.
+const DELETE_TRACE_HEADER = "X-FeedFathom-Trace";
+
 const QUEUEABLE_MUTATIONS = [
   {
     method: "DELETE",
@@ -267,7 +270,13 @@ async function flushQueue() {
       const response = await fetch(value.url, {
         body: value.body,
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // The server log tells a replay from a live request by this, and
+          // the original trace says what queued it and when.
+          "X-FeedFathom-Replay": String(value.queuedAt ?? "unknown"),
+          ...(value.trace ? { [DELETE_TRACE_HEADER]: value.trace } : {}),
+        },
         method: value.method,
       });
       if (response.ok) {
@@ -333,6 +342,8 @@ async function queueableMutation(request, route) {
       account,
       body: bodyText,
       method: request.method,
+      queuedAt: Date.now(),
+      trace: request.headers.get(DELETE_TRACE_HEADER),
       url: request.url,
     });
     if ("sync" in self.registration) {
