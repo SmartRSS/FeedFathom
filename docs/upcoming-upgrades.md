@@ -4,7 +4,7 @@ Researched 2026-08-16, versions rechecked 2026-09-07.
 
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
-| bun               | 1.4.3        | 1.4.3    | —                   |
+| bun               | 1.4.4        | 1.4.4    | —                   |
 | elysia            | 2.0.0-rc.0   | 1.4.30   | 2.0.0-rc.0          |
 | solid-js          | 1.9.17       | 1.9.17   | 2.0.0-rc.6          |
 | vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
@@ -17,7 +17,7 @@ is on. Bumping elysia is a deliberate edit, not something to accept from
 
 ## Bun 1.4
 
-Released, and we're on it — 1.4.3 as of 2026-10-10. The version is pinned in
+Released, and we're on it — 1.4.4 as of 2026-10-22. The version is pinned in
 three places: `packageManager` (CI reads this via `oven-sh/setup-bun`'s
 `bun-version-file`), `devDependencies["bun-types"]`, and 4 `oven/bun:` tags in
 the `Dockerfile`. All three move together, and the suite is run against a

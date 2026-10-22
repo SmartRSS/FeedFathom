@@ -209,7 +209,7 @@ export async function migrateDatabase(
             () => undefined,
           );
       } finally {
-        reserved.release();
+        await reserved.release();
       }
     }
   } finally {
