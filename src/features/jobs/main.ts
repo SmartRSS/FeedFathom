@@ -284,7 +284,9 @@ export class MainWorker {
       await bullmqQueue.upsertJobScheduler(
         name,
         { every },
-        { opts: { removeOnComplete: { count: 0 }, removeOnFail: { count: 0 } } },
+        {
+          opts: { removeOnComplete: { count: 0 }, removeOnFail: { count: 0 } },
+        },
       );
     }
   }
