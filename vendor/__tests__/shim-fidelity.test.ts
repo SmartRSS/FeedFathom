@@ -69,11 +69,20 @@ function importedNames(source: string, packageName: string): Set<string> {
 describe.each(shims)("$package shim", (shim) => {
   test("is what the dependent resolves, not a nested real package", async () => {
     // The real packages are 2.6 MB and 900 KB of source; a nested copy is how
-    // the override silently stops applying.
-    const nested = await readdir(
-      join(modules, shim.dependent, "node_modules"),
-    ).catch(() => [] as string[]);
-    expect(nested).not.toContain(shim.package);
+    // the override silently stops applying. Bun may still nest the shim
+    // itself, since its lockfile records the override under the dependent, so
+    // compare what the dependent resolves rather than where it sits.
+    const resolved = Bun.resolveSync(
+      shim.package,
+      join(modules, shim.dependent),
+    );
+    const shimEntry = Bun.resolveSync(
+      `../${shim.shimDirectory}`,
+      import.meta.dir,
+    );
+    expect(await Bun.file(resolved).text()).toBe(
+      await Bun.file(shimEntry).text(),
+    );
 
     const installed: unknown = await Bun.file(
       join(modules, shim.package, "package.json"),
