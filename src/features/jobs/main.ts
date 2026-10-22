@@ -278,8 +278,16 @@ export class MainWorker {
       [JobName.WebSubRenewal, daily],
     ];
     for (const [name, every] of schedule) {
+      // Without the template every tick stays in the completed set forever:
+      // a 20-second scheduler had piled up a million entries in Redis.
       // eslint-disable-next-line no-await-in-loop -- BullMQ scheduler registration is ordered.
-      await bullmqQueue.upsertJobScheduler(name, { every });
+      await bullmqQueue.upsertJobScheduler(
+        name,
+        { every },
+        {
+          opts: { removeOnComplete: { count: 0 }, removeOnFail: { count: 0 } },
+        },
+      );
     }
   }
 
