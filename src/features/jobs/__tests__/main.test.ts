@@ -273,12 +273,14 @@ async function createMainWorker(
 test("initializes scheduled jobs and closes the worker on cleanup", async () => {
   let closeCalls = 0;
   const repeatIntervals = new Map<string, number>();
+  const templates: unknown[] = [];
   let workerOptions: Parameters<MainWorkerFactory>[1] | undefined;
   const queue: MainWorkerQueue = {
     async add() {},
     async addBulk() {},
-    async upsertJobScheduler(name, options) {
+    async upsertJobScheduler(name, options, template) {
       repeatIntervals.set(name, options.every!);
+      templates.push(template?.opts);
     },
   };
   const createWorker: MainWorkerFactory = (_processor, options) => {
@@ -308,6 +310,12 @@ test("initializes scheduled jobs and closes the worker on cleanup", async () => 
   expect(repeatIntervals.get(JobName.Cleanup)).toBe(20_000);
   expect(repeatIntervals.get(JobName.GatherJobs)).toBe(30_000);
   expect(repeatIntervals.get(JobName.GatherFaviconJobs)).toBe(86_400_000);
+  for (const opts of templates) {
+    expect(opts).toEqual({
+      removeOnComplete: { count: 0 },
+      removeOnFail: { count: 0 },
+    });
+  }
   expect(repeatIntervals.get(JobName.WebSubRenewal)).toBe(86_400_000);
   expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
   expect(closeCalls).toBe(0);
