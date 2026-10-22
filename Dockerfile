@@ -13,7 +13,7 @@ FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-alpine AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY vendor/ /app/vendor/
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
+RUN bun install --frozen-lockfile
 
 # --- Builder Base ---
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-alpine AS builder-base
