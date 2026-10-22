@@ -44,7 +44,7 @@ test("disabled registration admits exactly one bootstrap account", async () => {
   expect(outcomes.filter((outcome) => outcome === "closed")).toHaveLength(7);
   const rows = await client<{ is_admin: boolean }[]>`
     SELECT is_admin FROM users`;
-  expect(rows).toEqual([{ is_admin: true }]);
+  expect([...rows]).toEqual([{ is_admin: true }]);
 });
 
 test("enabled registration admits everyone and one administrator", async () => {
@@ -124,7 +124,7 @@ test.each([false, true])(
     const rows = await client<{ password: string; token: string }[]>`
       SELECT password, activation_token AS token FROM users
       WHERE email = ${account(0).email}`;
-    expect(rows).toEqual([
+    expect([...rows]).toEqual([
       { password: `hash-${winner}`, token: `token-${winner}` },
     ]);
   },

@@ -112,7 +112,7 @@ test("a login using the replaced password gets no session", async () => {
   expect(current).toBeString();
   const rows = await client<{ sid: string }[]>`
     SELECT sid FROM sessions WHERE user_id = ${userId}`;
-  expect(rows).toEqual([{ sid: current ?? "" }]);
+  expect([...rows]).toEqual([{ sid: current ?? "" }]);
 });
 
 test("no session from the old password survives a racing reset", async () => {
