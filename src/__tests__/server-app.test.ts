@@ -689,6 +689,34 @@ test.each([
 });
 
 test.each([
+  ["/", false],
+  ["/index.html", false],
+  ["/settings", false],
+  ["/", true],
+  ["/index.html", true],
+  ["/settings", true],
+])(
+  "restricts scripts on the %s shell, allowing Turnstile only when enabled: %p",
+  async (path, turnstileEnabled) => {
+    const dependencies = createDependencies();
+    if (turnstileEnabled) dependencies.config.TURNSTILE_SITE_KEY = "site-key";
+    const app = await appFor(dependencies, true);
+    const response = await app.handle(
+      new Request(`http://localhost${path}`, {
+        headers: { accept: "text/html" },
+      }),
+    );
+
+    const policy = response.headers.get("content-security-policy") ?? "";
+    expect(policy).toStartWith("script-src 'self' 'sha256-");
+    expect(policy).not.toContain("default-src");
+    expect(policy.includes("https://challenges.cloudflare.com")).toBe(
+      turnstileEnabled,
+    );
+  },
+);
+
+test.each([
   "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
   "/api/find?link=https%3A%2F%2Fsite.example%2F",
   "/api/article?article=1",
