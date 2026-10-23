@@ -140,6 +140,7 @@ export async function postSubscribeHandler({
                   .map((article) => ({
                     author: article.author,
                     content: article.content,
+                    enclosures: article.enclosures ?? [],
                     guid: article.guid,
                     lastSeenInFeedAt: subscription.subscriptionCreatedAt,
                     publishedAt: article.publishedAt,

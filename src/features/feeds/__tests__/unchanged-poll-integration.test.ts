@@ -275,3 +275,30 @@ test("the throttle never lets the cull take an article that is still in the feed
 
   expect(await guids()).toEqual(["present"]);
 });
+
+test("enclosures are stored as a JSON array and read back as one", async () => {
+  await parse(
+    rss([{ content: "Notes", guid: "episode" }]).replace(
+      "</item>",
+      '<enclosure url="https://1.1.1.1/episode.mp3" type="audio/mpeg" length="1"/></item>',
+    ),
+  );
+  const [row] = await client<{ id: number; kind: string }[]>`
+    SELECT id, jsonb_typeof(enclosures) AS kind FROM articles`;
+  // A driver that stringified the value first would store a JSON string.
+  expect(row?.kind).toBe("array");
+  const userId = await subscribe(
+    "enclosures@example.com",
+    client`NOW() - INTERVAL '1 day'`,
+  );
+  const article = await articlesDataService.getUserArticle(row!.id, userId);
+  expect(article?.enclosures).toEqual([
+    {
+      medium: "audio",
+      mimeType: "audio/mpeg",
+      thumbnail: null,
+      title: null,
+      url: "https://1.1.1.1/episode.mp3",
+    },
+  ]);
+});

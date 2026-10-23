@@ -52,6 +52,7 @@ export class ArticlesDataService {
         .select({
           author: articles.author,
           content: articles.content,
+          enclosures: articles.enclosures,
           guid: articles.guid,
           id: articles.id,
           lastSeenInFeedAt: articles.lastSeenInFeedAt,
@@ -252,7 +253,7 @@ export class ArticlesDataService {
         OR excluded.updated_at > ${articles.updatedAt}
       )
     `;
-    // At 10 columns a row this is about 1000 bind parameters, far under
+    // At 11 columns a row this is about 1100 bind parameters, far under
     // Postgres's 65535, and puts a typical feed in one round trip.
     const BATCH_SIZE = 100;
     // Split per source so the latest-subscription lookup below is an
@@ -316,6 +317,11 @@ export class ArticlesDataService {
             set: {
               author: sql`excluded.author`,
               content: sql`excluded.content`,
+              // Not part of fieldChange: an attachment is not a revision of
+              // the text, and rows stored before enclosures existed would all
+              // read as rewritten. Any write, the re-stamp included, refreshes
+              // it.
+              enclosures: sql`excluded.enclosures`,
               lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
               publishedAt: sql`
                 CASE

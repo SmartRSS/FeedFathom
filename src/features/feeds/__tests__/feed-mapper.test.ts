@@ -73,6 +73,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "John Doe",
       content: "Test content",
+      enclosures: [],
       guid: "123",
       publishedAt: new Date("2024-03-06T12:00:00Z"),
       sourceId: 1,
@@ -95,6 +96,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "Feed Title",
       content: "",
+      enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
       sourceId: 1,
@@ -119,6 +121,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "https://example.com/feed.xml",
       content: "",
+      enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
       sourceId: 1,
@@ -288,6 +291,7 @@ describe("mapFeedToPreview", () => {
       {
         author: "Author",
         content: "Article content from https://example.com/",
+        enclosures: [],
         guid: expect.any(String),
         publishedAt,
         title: "Article title",

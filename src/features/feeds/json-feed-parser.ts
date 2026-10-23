@@ -4,9 +4,16 @@
 // grammar, there's no real parsing to do here, just field renaming.
 
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
+import type { FeedItemMedia } from "#features/feeds/feed-mapper.ts";
 
 type JsonFeedAuthor = { name?: unknown };
+type JsonFeedAttachment = {
+  mime_type?: unknown;
+  title?: unknown;
+  url?: unknown;
+};
 type JsonFeedItem = {
+  attachments?: unknown;
   author?: JsonFeedAuthor;
   authors?: unknown;
   content_html?: unknown;
@@ -36,7 +43,7 @@ const asString = (value: unknown): string | null =>
 
 // content_text and summary are plain text, but articles carry HTML: escape
 // them so literal markup and entities survive, and keep their line breaks.
-const asHtmlText = (value: unknown): string | null => {
+export const asHtmlText = (value: unknown): string | null => {
   const text = asString(value);
   return text === null
     ? null
@@ -63,6 +70,27 @@ function itemAuthors(item: JsonFeedItem, feedAuthors: unknown) {
   }));
 }
 
+// JSON Feed names only a MIME type; its top level stands in for the medium,
+// as feed-parser does for RSS enclosures.
+function itemMedia(item: JsonFeedItem): FeedItemMedia[] {
+  if (!Array.isArray(item.attachments)) return [];
+  return item.attachments.flatMap((raw: unknown) => {
+    const attachment = (raw ?? {}) as JsonFeedAttachment;
+    const url = asString(attachment.url);
+    if (!url) return [];
+    const mimeType = asString(attachment.mime_type)?.toLowerCase() ?? null;
+    return [
+      {
+        image: null,
+        mimeType,
+        title: asString(attachment.title),
+        type: mimeType?.split("/")[0] ?? null,
+        url,
+      },
+    ];
+  });
+}
+
 export function parseJsonFeed(text: string) {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null) {
@@ -82,6 +110,7 @@ export function parseJsonFeed(text: string) {
         content: asString(item.content_html) ?? asHtmlText(item.content_text),
         description: asHtmlText(item.summary),
         id: asString(item.id),
+        media: itemMedia(item),
         published: asDate(item.date_published),
         title: asString(item.title),
         updated: asDate(item.date_modified),

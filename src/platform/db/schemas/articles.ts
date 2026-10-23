@@ -12,6 +12,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sources } from "#platform/db/schemas/sources.ts";
+import type { Enclosure } from "#shared/contracts/responses.ts";
 
 // Search (#697) is Postgres-native, so the column type is too. drizzle has no
 // tsvector builder; nothing reads this column in TypeScript -- it exists for
@@ -20,11 +21,22 @@ const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => "tsvector",
 });
 
+// Bun SQL encodes a bound object as JSON itself. drizzle's jsonb() stringifies
+// it first, which Postgres then stores as one JSON string rather than the
+// array; passing the value through untouched keeps it an array.
+const enclosuresJsonb = customType<{
+  data: Enclosure[];
+  driverData: Enclosure[];
+}>({ dataType: () => "jsonb" });
+
 export const articles = pgTable(
   "articles",
   {
     author: varchar("author").notNull(),
     content: text("content").notNull(),
+    enclosures: enclosuresJsonb("enclosures")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     guid: varchar("guid").notNull(),
     // Every upsert attempt burns a sequence value whether it inserts or
     // conflicts, so this counter climbs by millions a day for a table of

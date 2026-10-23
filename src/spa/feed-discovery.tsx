@@ -11,6 +11,7 @@ import {
   type PreviewArticle,
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
+import { Enclosures } from "./enclosures.tsx";
 import { api } from "./api.ts";
 import { createSupersessionGuard } from "./supersession.ts";
 import {
@@ -496,6 +497,7 @@ export function FeedDiscovery(props: {
                 <Show when={item().url}>
                   <a href={item().url}>Original</a>
                 </Show>
+                <Enclosures article={item()} body={item().content} />
                 <div innerHTML={item().content} />
               </>
             )}

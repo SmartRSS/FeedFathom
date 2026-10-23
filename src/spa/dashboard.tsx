@@ -104,6 +104,7 @@ import {
   setNewArticlesCount,
   setUnreadTotal,
 } from "./news-signal.ts";
+import { Enclosures } from "./enclosures.tsx";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
 // DOM. As an external image it would need per-case light/dark guessing.
@@ -118,7 +119,16 @@ import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
 import checkCircleRaw from "./assets/icons/System/check-circle-fill.svg?raw";
 import dotCircleRaw from "./assets/icons/System/dot-circle-fill.svg?raw";
 
-function ReaderBody(props: { content: ReaderContent }) {
+function ReaderBody(props: { content: ReaderContent; article: Article }) {
+  return (
+    <>
+      <Enclosures article={props.article} body={props.content.content} />
+      <ReaderMarkup content={props.content} />
+    </>
+  );
+}
+
+function ReaderMarkup(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
     <div innerHTML={props.content.content} />
   ) : (
@@ -2469,7 +2479,10 @@ export function Dashboard(props: {
                   >
                     Original
                   </a>
-                  <ReaderBody content={item().content} />
+                  <ReaderBody
+                    article={item().article}
+                    content={item().content}
+                  />
                 </>
               )}
             </Show>
