@@ -1794,6 +1794,7 @@ test("scopes article detail to the subscriber and always returns Feed content", 
   const article = {
     author: "Author",
     content: "<p>Visible</p>",
+    enclosures: [],
     guid: "visible-guid",
     id: 7,
     lastSeenInFeedAt: new Date(),

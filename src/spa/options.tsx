@@ -13,7 +13,11 @@ import {
   feedFilterBox,
   isMarkReadPolicy,
   isReaderStep,
+  enclosuresOpen,
+  isEnclosuresOpen,
   isTheme,
+  isYoutubeHost,
+  isYoutubeLoad,
   markReadPolicy,
   mobileListAnchor,
   readerText,
@@ -27,9 +31,14 @@ import {
   setReaderWidth,
   setRememberReadingPosition,
   setTheme,
+  setEnclosuresOpen,
   setTodayView,
+  setYoutubeHost,
+  setYoutubeLoad,
   theme,
   todayView,
+  youtubeHost,
+  youtubeLoad,
 } from "./preferences.ts";
 import {
   dateFormat,
@@ -376,6 +385,48 @@ export function Options(props: {
                 <option value="small">Narrow</option>
                 <option value="medium">Medium</option>
                 <option value="large">Wide</option>
+              </select>
+            </label>
+            <label>
+              Attachments
+              <select
+                value={enclosuresOpen()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isEnclosuresOpen(value)) setEnclosuresOpen(value);
+                }}
+              >
+                <option value="single">Expand when there is only one</option>
+                <option value="always">Always expand</option>
+                <option value="never">Always collapse</option>
+              </select>
+            </label>
+            <label>
+              YouTube player
+              <select
+                value={youtubeLoad()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isYoutubeLoad(value)) setYoutubeLoad(value);
+                }}
+              >
+                <option value="click">Load on click</option>
+                <option value="open">Load when the article opens</option>
+              </select>
+            </label>
+            <label>
+              YouTube domain
+              <select
+                value={youtubeHost()}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  if (isYoutubeHost(value)) setYoutubeHost(value);
+                }}
+              >
+                <option value="nocookie">
+                  youtube-nocookie.com (no login)
+                </option>
+                <option value="youtube">youtube.com (keeps your login)</option>
               </select>
             </label>
           </section>

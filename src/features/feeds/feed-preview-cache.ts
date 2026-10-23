@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
+import { enclosureSchema } from "#shared/contracts/responses.ts";
 import { capAlertSchema } from "#features/feeds/cap-entry.ts";
 import type {
   FeedMapperInput,
@@ -25,6 +26,7 @@ const previewArticleWireSchema = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    enclosures: Type.Optional(Type.Array(enclosureSchema)),
     expiresAt: Type.Optional(Type.Number()),
     guid: Type.String(),
     publishedAt: Type.Number(),
@@ -50,6 +52,20 @@ const feedWireSchema = Type.Object(
           description: nullableString,
           id: nullableString,
           language: Type.Optional(Type.String()),
+          media: Type.Optional(
+            Type.Array(
+              Type.Object(
+                {
+                  image: nullableString,
+                  mimeType: nullableString,
+                  title: nullableString,
+                  type: nullableString,
+                  url: Type.String(),
+                },
+                exact,
+              ),
+            ),
+          ),
           published: nullableTime,
           title: nullableString,
           updated: nullableTime,
@@ -101,6 +117,17 @@ const encodeFeed = (feed: FeedMapperInput): Static<typeof feedWireSchema> => ({
     description: item.description,
     id: item.id,
     ...(item.language === undefined ? {} : { language: item.language }),
+    ...(item.media === undefined
+      ? {}
+      : {
+          media: item.media.map((media) => ({
+            image: media.image,
+            mimeType: media.mimeType,
+            title: media.title,
+            type: media.type,
+            url: media.url,
+          })),
+        }),
     published: item.published?.getTime() ?? null,
     title: item.title,
     updated: item.updated?.getTime() ?? null,
