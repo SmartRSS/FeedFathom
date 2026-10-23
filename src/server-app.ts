@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
 import { createPublicAuthRoutes } from "#features/auth/routes.ts";
@@ -77,9 +78,35 @@ function logSlowRequest(
   console.log(`${request.method} ${routePattern} ${status} ${durationMs}`);
 }
 
+// Only scripts are restricted: feed content loads images, media, styles and
+// frames from anywhere, so there is deliberately no default-src for those to
+// fall back to. The shell's inline scripts are allowed by hash, and
+// Turnstile's script origin only while a site key turns the captcha on.
+function contentSecurityPolicy(shell: string): string {
+  const scriptSources = ["'self'"];
+  for (const [, script = ""] of shell.matchAll(/<script>([\s\S]*?)<\/script>/g))
+    scriptSources.push(
+      `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
+    );
+  if (config.TURNSTILE_SITE_KEY?.trim())
+    scriptSources.push("https://challenges.cloudflare.com");
+  return `script-src ${scriptSources.join(" ")}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`;
+}
+
 export async function createServerApp(options: ServerAppOptions = {}) {
   const production = options.production ?? false;
   const spaDirectory = options.spaDirectory ?? "spa";
+  const shellFile = Bun.file(`${spaDirectory}/index.html`);
+  const shellHeaders = {
+    "Cache-Control": "no-cache",
+    ...(production && (await shellFile.exists())
+      ? {
+          "Content-Security-Policy": contentSecurityPolicy(
+            await shellFile.text(),
+          ),
+        }
+      : {}),
+  };
   const spaRoutes = production
     ? new Elysia().get("/*", async ({ path }) => {
         // Map / to /index.html for file lookup
@@ -99,9 +126,7 @@ export async function createServerApp(options: ServerAppOptions = {}) {
         }
         // index.html is revalidated on every request
         if (filePath === "/index.html") {
-          return new Response(file, {
-            headers: { "Cache-Control": "no-cache" },
-          });
+          return new Response(file, { headers: shellHeaders });
         }
         return file;
       })
@@ -117,9 +142,7 @@ export async function createServerApp(options: ServerAppOptions = {}) {
       production &&
       wantsSpaShellFallback(request, path)
     ) {
-      return new Response(Bun.file(`${spaDirectory}/index.html`), {
-        headers: { "Cache-Control": "no-cache" },
-      });
+      return new Response(shellFile, { headers: shellHeaders });
     }
     if (error instanceof NotFound) {
       return undefined;
