@@ -1,0 +1,1 @@
+ALTER TABLE "articles" ADD COLUMN "enclosures" jsonb DEFAULT '[]'::jsonb NOT NULL;

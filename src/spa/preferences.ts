@@ -308,3 +308,78 @@ export function setReaderWidth(value: ReaderStep) {
     localStorage.setItem(READER_WIDTH_KEY, value);
   } catch {}
 }
+
+// Whether attachment blocks start expanded. "single" is the default, as in
+// Smart-RSS: a lone attachment is usually the point of the article (an
+// episode, a video), while a list of them is usually a gallery.
+export type EnclosuresOpen = "always" | "never" | "single";
+const ENCLOSURES_OPEN_KEY = "enclosuresOpen";
+
+export function isEnclosuresOpen(value: string): value is EnclosuresOpen {
+  return value === "always" || value === "never" || value === "single";
+}
+
+// A YouTube attachment plays in an embedded player. "click" is the default: until the reader asks, YouTube receives nothing but
+// the thumbnail request. The cookieless host is the default for the same
+// reason; the main host keeps the viewer's YouTube login (Premium, history)
+// at the cost of letting YouTube follow them here.
+export type YoutubeLoad = "click" | "open";
+export type YoutubeHost = "nocookie" | "youtube";
+const YOUTUBE_LOAD_KEY = "youtubeLoad";
+const YOUTUBE_HOST_KEY = "youtubeHost";
+
+export function isYoutubeLoad(value: string): value is YoutubeLoad {
+  return value === "click" || value === "open";
+}
+export function isYoutubeHost(value: string): value is YoutubeHost {
+  return value === "nocookie" || value === "youtube";
+}
+
+function readChoice<T extends string>(
+  key: string,
+  is: (value: string) => value is T,
+  fallback: T,
+): T {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored && is(stored) ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+const [youtubeLoad, setYoutubeLoadSignal] = createSignal<YoutubeLoad>(
+  readChoice(YOUTUBE_LOAD_KEY, isYoutubeLoad, "click"),
+);
+export { youtubeLoad };
+
+export function setYoutubeLoad(value: YoutubeLoad) {
+  setYoutubeLoadSignal(value);
+  try {
+    localStorage.setItem(YOUTUBE_LOAD_KEY, value);
+  } catch {}
+}
+
+const [youtubeHost, setYoutubeHostSignal] = createSignal<YoutubeHost>(
+  readChoice(YOUTUBE_HOST_KEY, isYoutubeHost, "nocookie"),
+);
+export { youtubeHost };
+
+export function setYoutubeHost(value: YoutubeHost) {
+  setYoutubeHostSignal(value);
+  try {
+    localStorage.setItem(YOUTUBE_HOST_KEY, value);
+  } catch {}
+}
+
+const [enclosuresOpen, setEnclosuresOpenSignal] = createSignal<EnclosuresOpen>(
+  readChoice(ENCLOSURES_OPEN_KEY, isEnclosuresOpen, "single"),
+);
+export { enclosuresOpen };
+
+export function setEnclosuresOpen(value: EnclosuresOpen) {
+  setEnclosuresOpenSignal(value);
+  try {
+    localStorage.setItem(ENCLOSURES_OPEN_KEY, value);
+  } catch {}
+}

@@ -15,11 +15,13 @@ import {
 } from "#features/feeds/cap-entry.ts";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import {
+  type FeedMapperItem,
   currentFeedItems,
   mapFeedItemToArticle,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
 import {
+  asHtmlText,
   isJsonFeedText,
   parseJsonFeed,
 } from "#features/feeds/json-feed-parser.ts";
@@ -144,10 +146,22 @@ const inCapScope = (element: XmlElement | null): boolean =>
   element !== null &&
   (declaresCapNamespace(element.attributes) || inCapScope(element.parent));
 
+const isMediaRss = (element: XmlElement) =>
+  element.namespaceUri === "http://search.yahoo.com/mrss/" ||
+  element.namespaceUri === "https://search.yahoo.com/mrss/";
+
+// Media RSS's description, on the entry or its media:group. It is plain text.
+const mediaDescription = (element: XmlElement) =>
+  [element, ...element.findElementsWithName("group").filter(isMediaRss)]
+    .flatMap((parent) => parent.findElementsWithName("description"))
+    .find((child) => isMediaRss(child) && child.textContent.trim())
+    ?.textContent;
+
 /**
  * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
  * `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
- * `language`; see generateArticleGuid.
+ * `language`; see generateArticleGuid. An entry with no body of its own,
+ * such as every YouTube video, takes its Media RSS description instead.
  */
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
@@ -158,6 +172,13 @@ export const parseXmlFeed = (text: string) => {
   // in the item count instead of quadratic (#1031).
   for (const key of ["authors", "categories", "url"] as const) {
     Object.defineProperty(feed, key, { value: feed[key] });
+  }
+  for (const item of feed.items) {
+    if (item.content !== null || item.description !== null) continue;
+    const description = asHtmlText(mediaDescription(item.element));
+    // The prototype's getter has no setter, so plain assignment would throw.
+    if (description)
+      Object.defineProperty(item, "description", { value: description });
   }
   if (!mentionsCapNamespace(text)) return feed;
   for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
@@ -231,7 +252,7 @@ export class FeedParser {
       }
 
       const observedAt = new Date();
-      const articlesToUpsert = currentFeedItems(
+      const articlesToUpsert = currentFeedItems<FeedMapperItem>(
         parsedFeed.items,
         observedAt.getTime(),
       ).map((item) =>

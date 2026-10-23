@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { parseFeed } from "@rowanmanning/feed-parser";
-import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
+import {
+  mapFeedItemToArticle,
+  mapFeedToPreview,
+} from "#features/feeds/feed-mapper.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   decodeFeedBody,
@@ -417,5 +420,103 @@ describe("feed dates", () => {
     ).items;
     expect(entry?.published?.toISOString()).toBe("2003-06-10T04:00:00.000Z");
     expect(unparseable?.published).toBeNull();
+  });
+});
+
+const enclosuresOf = (parsed: ReturnType<typeof parseJsonFeed>) =>
+  mapFeedItemToArticle(
+    parsed.items[0]!,
+    parsed,
+    { id: 1, url: "https://example.com/feed" },
+    (content) => content,
+  ).enclosures;
+
+describe("enclosures", () => {
+  test("keeps YouTube's media:group video and thumbnail", () => {
+    const parsed =
+      parseXmlFeed(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+      <entry><id>yt:video:dQw4w9WgXcQ</id><title>Video</title>
+        <link rel="alternate" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"/>
+        <media:group>
+          <media:title>Video</media:title>
+          <media:content url="https://www.youtube.com/v/dQw4w9WgXcQ?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+          <media:thumbnail url="https://i1.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" width="480" height="360"/>
+        </media:group>
+      </entry></feed>`);
+    expect(enclosuresOf(parsed)).toEqual([
+      {
+        medium: "other",
+        mimeType: "application/x-shockwave-flash",
+        thumbnail: "https://i1.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+        title: "Video",
+        url: "https://www.youtube.com/v/dQw4w9WgXcQ?version=3",
+      },
+    ]);
+  });
+
+  test("uses a YouTube video's media:description as its body", () => {
+    const parsed =
+      parseXmlFeed(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+      <entry><id>a</id><media:group><media:description>Line one &lt;b&gt;
+Line two</media:description></media:group></entry>
+      <entry><id>b</id><summary>Own summary</summary><media:group><media:description>Ignored</media:description></media:group></entry>
+    </feed>`);
+    expect(parsed.items.map((entry) => entry.description)).toEqual([
+      "Line one &lt;b&gt;<br>Line two",
+      "Own summary",
+    ]);
+  });
+
+  test("keeps a podcast episode and drops unsafe or extra URLs", () => {
+    const items = [
+      '<enclosure url="/episodes/1.mp3" type="audio/mpeg" length="1"/>',
+      '<media:content url="javascript:alert(1)" medium="image"/>',
+      ...Array.from(
+        { length: 30 },
+        (_, index) => `<media:content url="/img/${index}.png" medium="image"/>`,
+      ),
+    ].join("");
+    const parsed = parseXmlFeed(
+      `<rss xmlns:media="http://search.yahoo.com/mrss/"><channel><link>https://pod.example/</link><item><link>https://pod.example/1</link>${items}</item></channel></rss>`,
+    );
+    const enclosures = enclosuresOf(parsed);
+    expect(enclosures[0]).toEqual({
+      medium: "audio",
+      mimeType: "audio/mpeg",
+      thumbnail: null,
+      title: null,
+      url: "https://pod.example/episodes/1.mp3",
+    });
+    expect(enclosures).toHaveLength(20);
+    expect(enclosures.every(({ url }) => url.startsWith("https:"))).toBe(true);
+  });
+
+  test("reads JSON Feed attachments", () => {
+    const parsed = parseJsonFeed(
+      JSON.stringify({
+        items: [
+          {
+            attachments: [
+              {
+                mime_type: "Video/MP4",
+                title: "Clip",
+                url: "https://e.x/a.mp4",
+              },
+              { title: "no url" },
+            ],
+            id: "1",
+          },
+        ],
+      }),
+    );
+    expect(enclosuresOf(parsed)).toEqual([
+      {
+        medium: "video",
+        mimeType: "video/mp4",
+        thumbnail: null,
+        title: "Clip",
+        url: "https://e.x/a.mp4",
+      },
+    ]);
   });
 });

@@ -1180,6 +1180,56 @@ img.skeleton-row {
 .reader-plain {
   white-space: pre-wrap;
 }
+.reader .enclosure {
+  margin: 0.5em 0;
+}
+.reader .enclosure summary {
+  cursor: pointer;
+}
+.reader .enclosure audio {
+  width: 100%;
+}
+.youtube-embed > * {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+.youtube-cover {
+  position: relative;
+  padding: 0;
+  background: #000 center / cover;
+  cursor: pointer;
+}
+/* Smart-RSS's lite-youtube play button. */
+.youtube-cover::before,
+.youtube-cover::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.youtube-cover::before {
+  width: 70px;
+  height: 46px;
+  border-radius: 14%;
+  background: #212121;
+  opacity: 0.8;
+  transition:
+    background-color 0.2s,
+    opacity 0.2s;
+}
+.youtube-cover::after {
+  border-style: solid;
+  border-width: 11px 0 11px 19px;
+  border-color: transparent transparent transparent #fff;
+}
+.youtube-cover:hover::before,
+.youtube-cover:focus-visible::before {
+  background: #f00;
+  opacity: 1;
+}
 
 .feed-discovery-form {
   display: grid;

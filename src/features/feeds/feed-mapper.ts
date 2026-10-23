@@ -1,3 +1,4 @@
+import type { Enclosure } from "#shared/contracts/responses.ts";
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
 import {
   type CapAlert,
@@ -5,7 +6,7 @@ import {
   renderCapAlert,
 } from "#features/feeds/cap-entry.ts";
 
-type FeedMapperItem = {
+export type FeedMapperItem = {
   authors: readonly { name: string | null }[];
   cap?: CapAlert;
   content: string | null;
@@ -13,10 +14,21 @@ type FeedMapperItem = {
   id: string | null;
   // Set, possibly empty, on every entry of a CAP feed, and only there.
   language?: string;
+  // feed-parser's enclosures and Media RSS content; `type` is the medium
+  // attribute, else the MIME type's top level.
+  media?: readonly FeedItemMedia[];
   published: Date | null;
   title: string | null;
   updated: Date | null;
   url: string | null;
+};
+
+export type FeedItemMedia = {
+  image: string | null;
+  mimeType: string | null;
+  title: string | null;
+  type: string | null;
+  url: string;
 };
 
 export type FeedMapperInput = {
@@ -29,6 +41,7 @@ export type FeedMapperInput = {
 export type ArticlePayload = {
   author: string;
   content: string;
+  enclosures: Enclosure[];
   guid: string;
   publishedAt: Date;
   sourceId: number;
@@ -40,6 +53,8 @@ export type ArticlePayload = {
 type FeedPreviewArticle = {
   author: string;
   content: string;
+  // Absent on a preview cached before enclosures existed.
+  enclosures?: Enclosure[];
   // A CAP alert's expiry: subscribing later must not import it once passed.
   expiresAt?: number;
   guid: string;
@@ -115,6 +130,33 @@ const itemBody = (item: FeedMapperItem): string =>
   (item.cap ? renderCapAlert(item.cap) : "") +
   (item.content ?? item.description ?? "");
 
+// ponytail: a feed listing hundreds of media per item keeps the first 20.
+const maxEnclosures = 20;
+const isPlayableMedium = (
+  value: null | string,
+): value is "audio" | "image" | "video" =>
+  value === "audio" || value === "image" || value === "video";
+
+const mapEnclosures = (
+  items: readonly FeedItemMedia[],
+  baseUrl: string,
+): Enclosure[] =>
+  items
+    .flatMap((item): Enclosure[] => {
+      const url = safeHttpUrl(item.url, baseUrl);
+      if (!url) return [];
+      return [
+        {
+          medium: isPlayableMedium(item.type) ? item.type : "other",
+          mimeType: item.mimeType,
+          thumbnail: safeHttpUrl(item.image ?? "", baseUrl) || null,
+          title: item.title,
+          url,
+        },
+      ];
+    })
+    .slice(0, maxEnclosures);
+
 export const mapFeedItemToArticle = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
@@ -133,6 +175,7 @@ export const mapFeedItemToArticle = (
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     content: rewriteLinksFunction(itemBody(item), url || homepage),
+    enclosures: mapEnclosures(item.media ?? [], url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),
     publishedAt: new Date(item.published ?? item.updated ?? now),
     sourceId: source.id,
@@ -199,6 +242,7 @@ export const mapFeedToPreviewArticles = (
       {
         author: article.author,
         content: article.content,
+        enclosures: article.enclosures,
         guid: article.guid,
         publishedAt: article.publishedAt,
         title: article.title,

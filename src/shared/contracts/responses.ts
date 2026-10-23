@@ -139,10 +139,33 @@ export const articlesResponse = Type.Array(articleSummaryResponse);
 // can have more results; request the next page with the last row's ID as cursor.
 export const articlePageSize = 200;
 
+// A file the feed attached to an article (RSS <enclosure>, Media RSS,
+// JSON Feed attachments): a podcast episode, a video, an image. Both URLs are
+// http(s) by the time they are stored.
+export const enclosureSchema = Type.Object(
+  {
+    medium: Type.Union([
+      Type.Literal("audio"),
+      Type.Literal("image"),
+      Type.Literal("other"),
+      Type.Literal("video"),
+    ]),
+    mimeType: Type.Union([Type.String(), Type.Null()]),
+    thumbnail: Type.Union([Type.String(), Type.Null()]),
+    title: Type.Union([Type.String(), Type.Null()]),
+    url: Type.String(),
+  },
+  exact,
+);
+export type Enclosure = Static<typeof enclosureSchema>;
+
 export const articleResponse = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    // Optional: the service worker keeps /api/article responses cached from
+    // before enclosures existed.
+    enclosures: Type.Optional(Type.Array(enclosureSchema)),
     guid: Type.String(),
     id,
     lastSeenInFeedAt: jsonDate,
@@ -178,6 +201,7 @@ const previewArticleResponse = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
+    enclosures: Type.Optional(Type.Array(enclosureSchema)),
     publishedAt: jsonDate,
     title: Type.String(),
     url: Type.String(),
