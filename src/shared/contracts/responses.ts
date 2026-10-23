@@ -201,7 +201,7 @@ const previewArticleResponse = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
-    enclosures: Type.Array(enclosureSchema),
+    enclosures: Type.Optional(Type.Array(enclosureSchema)),
     publishedAt: jsonDate,
     title: Type.String(),
     url: Type.String(),
