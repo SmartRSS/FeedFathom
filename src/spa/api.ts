@@ -110,6 +110,10 @@ export async function api<T extends TSchema>(
     throw invalidResponse(path, "malformed error payload", response.status);
   }
 
+  // A deploy that adds a response field reaches pages still running the
+  // previous bundle -- the worker serves its cached shell first -- so fields
+  // this bundle does not know are dropped rather than rejected.
+  Value.Clean(schema, payload);
   if (!Value.Check(schema, payload)) {
     const issue = Value.Errors(schema, payload)[0];
     throw invalidResponse(

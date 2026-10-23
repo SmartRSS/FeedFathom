@@ -133,12 +133,30 @@ describe("schema-first SPA API", () => {
   test.each([
     ["missing", {}],
     ["malformed", { message: 1 }],
-    ["extra", { extra: true, message: "ok" }],
   ])("rejects a %s successful payload", async (_name, payload) => {
     returnResponse(Response.json(payload));
     await expect(api("/message", exactMessage)).rejects.toThrow(
       "Invalid response from /api/message (200)",
     );
+  });
+
+  test("drops fields a newer server added", async () => {
+    returnResponse(
+      Response.json({
+        added: true,
+        items: [{ added: 1, message: "ok" }],
+        message: "ok",
+      }),
+    );
+    await expect(
+      api(
+        "/message",
+        Type.Object(
+          { items: Type.Array(exactMessage), message: Type.String() },
+          { additionalProperties: false },
+        ),
+      ),
+    ).resolves.toEqual({ items: [{ message: "ok" }], message: "ok" });
   });
 
   test("reports non-JSON successful responses", async () => {
