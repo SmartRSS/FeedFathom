@@ -42,10 +42,10 @@ function guardBrowser(page: Page) {
 async function installReaderResponder(
   context: BrowserContext,
   available: boolean,
-  elementHeavy = false,
+  article: "element-heavy" | "hostile" | "plain" = "plain",
 ) {
   await context.addInitScript(
-    ([isAvailable, isElementHeavy]) => {
+    ([isAvailable, articleKind]) => {
       window.addEventListener("message", (event) => {
         const request = event.data;
         if (
@@ -91,9 +91,16 @@ async function installReaderResponder(
               // step gives it is the app's own default. A data: URL keeps it
               // off the network: a failed request would land in the console
               // error guard rather than in the assertion.
-              html: isElementHeavy
-                ? `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`
-                : `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image" onerror="alert(1)"></p></article></body></html>`,
+              // The hostile page's image fails to decode without touching the
+              // network, so its handler fires wherever the image is loaded.
+              // It asks for eager loading because the app's lazy default
+              // would otherwise keep a detached copy from loading at all.
+              html:
+                articleKind === "element-heavy"
+                  ? `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`
+                  : articleKind === "hostile"
+                    ? `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:," alt="Hostile image" loading="eager" onerror="globalThis.readerHandlerRan = true"></p></article></body></html>`
+                    : `<html><head><title>Bridged article</title></head><body><article><h1>Bridged article</h1><p>${"Reader bridge content. ".repeat(40)}</p><p><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Bridged image" onerror="alert(1)"></p></article></body></html>`,
               id: request.id,
               ok: true,
               type: "response",
@@ -104,7 +111,7 @@ async function installReaderResponder(
         }
       });
     },
-    [available, elementHeavy],
+    [available, article] as const,
   );
 }
 
@@ -2163,6 +2170,34 @@ test("gives extracted images the app's own loading defaults", async ({
   await expect(image).not.toHaveAttribute("onerror");
 });
 
+for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
+  test(`never runs an extracted page's event handlers in ${mode}`, async ({
+    context,
+    page,
+  }) => {
+    await installReaderResponder(context, true, "hostile");
+    await installApiFixture(page);
+    await page.goto("/");
+    await selectSource(page);
+
+    await page
+      .getByRole("combobox", { name: "Article display mode" })
+      .selectOption(mode);
+    // The rendered copy started loading after any earlier one, so once it
+    // has failed, a handler that survived any step has already run.
+    await expect
+      .poll(() =>
+        page
+          .locator(".reader img")
+          .evaluate((image: HTMLImageElement) => image.complete),
+      )
+      .toBe(true);
+    expect(
+      await page.evaluate(() => Reflect.get(globalThis, "readerHandlerRan")),
+    ).toBeUndefined();
+  });
+}
+
 test("extracts article content with the alternate extractor", async ({
   context,
   page,
@@ -2185,7 +2220,7 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     context,
     page,
   }) => {
-    await installReaderResponder(context, true, true);
+    await installReaderResponder(context, true, "element-heavy");
     await installApiFixture(page);
     await page.goto("/");
     await selectSource(page);

@@ -95,10 +95,12 @@ const validatedBaseUrl = (value: string): URL => {
 // Shared by every HTML-producing extractor: rewrites relative URLs against
 // the article's real address, then strips anything DOMPurify considers
 // unsafe -- extracted content is still attacker-controlled HTML from an
-// arbitrary site, extractor choice doesn't change that.
+// arbitrary site, extractor choice doesn't change that. The working tree comes
+// from DOMParser, not the live document: an element the live document owns
+// starts loading its images while still detached, so an onerror handler
+// would run in the app's origin before DOMPurify ever saw it.
 const sanitizeExtractedHtml = (html: string, baseUrl: URL): string => {
-  const extracted = document.createElement("body");
-  extracted.innerHTML = html;
+  const extracted = new DOMParser().parseFromString(html, "text/html").body;
   rewriteDocumentUrls(extracted, baseUrl);
   // Same reason as the server-side sanitizer in extract-article.ts: a whole
   // extracted page lands in a pane the reader scrolls, so the images below
