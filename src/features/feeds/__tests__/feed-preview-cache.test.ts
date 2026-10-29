@@ -39,9 +39,11 @@ const preview: FeedPreview = {
     {
       author: "Author",
       content: "Content",
+      enclosures: [],
       guid: "article-guid",
       publishedAt,
       title: "Article",
+      updatedAt: null,
       url: "https://example.com/article",
     },
   ],
@@ -75,6 +77,36 @@ describe("FeedPreviewCache", () => {
     expect(
       (await cache.get(7, feedUrl))?.articles[0]?.publishedAt,
     ).toBeInstanceOf(Date);
+  });
+
+  test("revives a preview cached before enclosures and updatedAt", async () => {
+    const redis = new FakeRedis();
+    const cache = new FeedPreviewCache(redis);
+    await cache.save(7, feedUrl, preview);
+    const key = redis.setCalls[0]?.[0];
+    if (!key) throw new Error("Preview was not cached");
+    const {
+      enclosures: _enclosures,
+      updatedAt: _updatedAt,
+      ...legacy
+    } = previewWire.articles[0]!;
+    redis.values.set(
+      key,
+      JSON.stringify({ ...previewWire, articles: [legacy] }),
+    );
+
+    expect((await cache.get(7, feedUrl))?.articles).toEqual([
+      { ...preview.articles[0]!, enclosures: [], updatedAt: publishedAt },
+    ]);
+  });
+
+  test("keeps the final URL behind a truncated preview", async () => {
+    const cache = new FeedPreviewCache(new FakeRedis());
+    const finalUrl = "https://cdn.example/feed.xml";
+
+    await cache.save(7, feedUrl, { ...preview, finalUrl, truncated: true });
+
+    expect((await cache.get(7, feedUrl))?.finalUrl).toBe(finalUrl);
   });
 
   test("keeps the truncated flag of a bounded preview", async () => {

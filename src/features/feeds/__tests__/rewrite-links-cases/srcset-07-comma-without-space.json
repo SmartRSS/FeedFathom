@@ -1,0 +1,5 @@
+{
+  "description": "srcset candidates separated by a bare comma",
+  "content": "<img srcset=\"a.jpg 1x,b.jpg 2x\" />",
+  "expected": "<img srcset=\"https://example.com/a.jpg 1x, https://example.com/b.jpg 2x\" />"
+}

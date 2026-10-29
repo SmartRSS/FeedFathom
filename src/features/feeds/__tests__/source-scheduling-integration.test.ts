@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
+import { users } from "#platform/db/schemas/users.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
@@ -80,4 +82,39 @@ test("getSourcesToProcess only returns feed sources whose notBefore has passed",
   const ids = result.map((row) => row.id);
   expect(ids).toContain(due.id);
   expect(ids).not.toContain(notYetDue.id);
+});
+
+// The subscriber count once compared user_sources.source_id with
+// user_sources.id, because drizzle left the outer sources.id unqualified.
+test("findSourceById and listAllSources count a source's subscribers", async () => {
+  const source = await addFeedSource(
+    `https://source-scheduling.test/${Bun.randomUUIDv7()}`,
+  );
+  const subscribers = await drizzleConnection
+    .insert(users)
+    .values(
+      ["a", "b"].map((name) => ({
+        email: `${name}-${Bun.randomUUIDv7()}@source-scheduling.test`,
+        name,
+        password: "x",
+      })),
+    )
+    .returning({ id: users.id });
+  await drizzleConnection.insert(userSources).values(
+    subscribers.map(({ id }) => ({
+      name: "sub",
+      parentId: null,
+      sourceId: source.id,
+      userId: id,
+    })),
+  );
+
+  expect(
+    (await sourcesDataService.findSourceById(source.id))?.subscriberCount,
+  ).toBe(2);
+  const listed = await sourcesDataService.listAllSources(
+    "subscriberCount",
+    "desc",
+  );
+  expect(listed.find(({ id }) => id === source.id)?.subscriberCount).toBe(2);
 });

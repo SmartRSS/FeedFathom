@@ -4,7 +4,6 @@ import {
   mapFeedItemToArticle,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
@@ -211,12 +210,9 @@ const entriesOf = (text: string) => text.match(/<entry>.*?<\/entry>/gsu) ?? [];
 const withEntries = (text: string, entries: string[]) =>
   text.replace(/<entry>.*<\/entry>/su, entries.join("\n"));
 const articlesOf = (text: string) =>
-  mapFeedToPreview(
-    parseXmlFeed(text),
-    "https://rss.naad-adna.pelmorex.com/",
-    (content) => content,
-    Date.parse("2026-10-06T08:06:42Z"),
-  ).articles;
+  mapFeedToPreview(parseXmlFeed(text), "https://rss.naad-adna.pelmorex.com/", {
+    now: Date.parse("2026-10-06T08:06:42Z"),
+  }).articles;
 const guidsOf = (text: string) => articlesOf(text).map(({ guid }) => guid);
 const capFeedGuids = (lang: string) =>
   guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
@@ -232,9 +228,10 @@ test("resolves relative entry links against a redirected feed URL", async () => 
   const preview = mapFeedToPreview(
     parsedFixtureFeed,
     "https://publisher.example/old/feed.xml",
-    rewriteLinks,
-    Date.parse("2026-10-14T00:00:00Z"),
-    "https://cdn.example/new/path/feed.xml",
+    {
+      baseUrl: "https://cdn.example/new/path/feed.xml",
+      now: Date.parse("2026-10-14T00:00:00Z"),
+    },
   );
 
   expect(preview.articles[0]?.url).toBe(
@@ -380,7 +377,7 @@ describe("feed dates", () => {
     parsed: Parameters<typeof mapFeedToPreview>[0],
   ) =>
     expect(
-      mapFeedToPreview(parsed, "https://example.com/", rewriteLinks, ingestedAt)
+      mapFeedToPreview(parsed, "https://example.com/", { now: ingestedAt })
         .articles.map(({ guid, publishedAt, title }) => [
           guid,
           publishedAt.toISOString(),
@@ -423,13 +420,11 @@ describe("feed dates", () => {
   });
 });
 
-const enclosuresOf = (parsed: ReturnType<typeof parseJsonFeed>) =>
-  mapFeedItemToArticle(
-    parsed.items[0]!,
-    parsed,
-    { id: 1, url: "https://example.com/feed" },
-    (content) => content,
-  ).enclosures;
+const enclosuresOf = (parsed: Parameters<typeof mapFeedItemToArticle>[1]) =>
+  mapFeedItemToArticle(parsed.items[0]!, parsed, {
+    id: 1,
+    url: "https://example.com/feed",
+  }).enclosures;
 
 describe("enclosures", () => {
   test("keeps YouTube's media:group video and thumbnail", () => {

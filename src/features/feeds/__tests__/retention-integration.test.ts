@@ -3,7 +3,6 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
@@ -132,7 +131,6 @@ test("reports pruned sources so their unread totals can be recounted", async () 
   const drizzleConnection = createDrizzleConnection(databaseUrl);
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
-    new FoldersDataService(drizzleConnection),
     new SourcesDataService(drizzleConnection),
   );
 

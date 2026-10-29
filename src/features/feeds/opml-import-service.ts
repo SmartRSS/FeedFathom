@@ -3,10 +3,11 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "#shared/types/opml-types.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
-import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import type { Source } from "#platform/db/schemas/sources.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 
 type PendingImportNode = {
   node: OpmlNode;
@@ -17,6 +18,7 @@ export class OpmlImportService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
     private readonly sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">,
+    private readonly sourcesDataService: Pick<SourcesDataService, "addSource">,
   ) {}
 
   public async insertTree(
@@ -72,26 +74,10 @@ export class OpmlImportService {
             continue;
           }
 
-          const insertedSource = (
-            await transaction
-              .insert(sources)
-              .values({
-                homeUrl: current.node.homeUrl,
-                url: current.node.xmlUrl,
-              })
-              .onConflictDoNothing({ target: sources.url })
-              .returning()
-          ).at(0);
-          const source =
-            insertedSource ??
-            (
-              await transaction
-                .select()
-                .from(sources)
-                .where(eq(sources.url, current.node.xmlUrl))
-                .limit(1)
-            ).at(0);
-          if (!source) throw new Error("Failed to resolve OPML source");
+          const source = await this.sourcesDataService.addSource(
+            { homeUrl: current.node.homeUrl, url: current.node.xmlUrl },
+            transaction,
+          );
 
           const subscription = (
             await transaction

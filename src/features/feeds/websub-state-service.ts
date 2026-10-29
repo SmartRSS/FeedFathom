@@ -1,7 +1,11 @@
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { type AnyColumn, and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
+
+// The column's current value on a pending subscription, else `fresh`.
+const pendingOr = (column: AnyColumn, fresh: string) =>
+  sql<string>`CASE WHEN ${sources.websubStatus} = 'pending' THEN COALESCE(${column}, ${fresh}) ELSE ${fresh} END`;
 
 /**
  * WebSub subscription lease state on a source: the subscribe-attempt claim,
@@ -20,7 +24,10 @@ export class WebSubStateService {
   // Atomic claim (see the schema comment on websubSubscribeAttemptedAt):
   // returns false when another attempt already claimed this source inside the
   // cooldown, so the caller skips rather than racing a second hub request with
-  // a different callback token.
+  // a different callback token. A pending subscription waits a day: the hub
+  // may still verify the request it has, and one that never does should not
+  // get a new request on every poll.
+  // ponytail: a flat daily retry; count attempts if a dead hub's daily POST matters.
   public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
     const claimed = await this.drizzleConnection
       .update(sources)
@@ -32,7 +39,7 @@ export class WebSubStateService {
             isNull(sources.websubSubscribeAttemptedAt),
             lt(
               sources.websubSubscribeAttemptedAt,
-              sql`NOW() - INTERVAL '30 seconds'`,
+              sql`NOW() - CASE WHEN ${sources.websubStatus} = 'pending' THEN INTERVAL '1 day' ELSE INTERVAL '30 seconds' END`,
             ),
           ),
         ),
@@ -41,24 +48,33 @@ export class WebSubStateService {
     return claimed.length > 0;
   }
 
+  // A pending subscription keeps its token and secret, so a hub verifying
+  // the earlier request still finds its callback.
   public async recordWebSubDiscovery(
     sourceId: number,
     hubUrl: string,
     topicUrl: string,
   ): Promise<{ callbackToken: string; secret: string }> {
-    const callbackToken = crypto.randomUUID();
-    const secret = crypto.randomUUID();
-    await this.drizzleConnection
+    const [recorded] = await this.drizzleConnection
       .update(sources)
       .set({
-        websubCallbackToken: callbackToken,
+        websubCallbackToken: pendingOr(
+          sources.websubCallbackToken,
+          crypto.randomUUID(),
+        ),
         websubHubUrl: hubUrl,
-        websubSecret: secret,
+        websubSecret: pendingOr(sources.websubSecret, crypto.randomUUID()),
         websubStatus: "pending",
         websubTopicUrl: topicUrl,
       })
-      .where(eq(sources.id, sourceId));
-    return { callbackToken, secret };
+      .where(eq(sources.id, sourceId))
+      .returning({
+        callbackToken: sources.websubCallbackToken,
+        secret: sources.websubSecret,
+      });
+    if (!recorded?.callbackToken || !recorded.secret)
+      throw new Error(`Source ${sourceId} not found`);
+    return { callbackToken: recorded.callbackToken, secret: recorded.secret };
   }
 
   public async markWebSubVerified(sourceId: number, leaseExpiresAt: Date) {

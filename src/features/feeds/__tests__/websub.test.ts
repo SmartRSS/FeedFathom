@@ -6,6 +6,7 @@ import {
   requestHubSubscription,
   verifyHubSignature,
 } from "#features/feeds/websub.ts";
+import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 
 // Stands in for HttpClient.post, which is what carries the reservation, the
 // block check and Retry-After for the hub request.
@@ -92,7 +93,12 @@ describe("discoverWebSub", () => {
       title: "Feed",
     });
     expect(
-      discoverWebSub(new Headers(), body, "https://example.com/feed.json"),
+      discoverWebSub(
+        new Headers(),
+        body,
+        "https://example.com/feed.json",
+        parseJsonFeed(body).websubHubUrl,
+      ),
     ).toEqual({
       hubUrl: "https://hub.example/",
       topicUrl: "https://example.com/feed.json",
@@ -104,9 +110,15 @@ describe("discoverWebSub", () => {
       hubs: [{ type: "rssCloud", url: "https://hub.example/" }],
       items: [],
     });
-    expect(
-      discoverWebSub(new Headers(), body, "https://example.com/feed.json"),
-    ).toBeUndefined();
+    expect(parseJsonFeed(body).websubHubUrl).toBeUndefined();
+  });
+
+  test("ignores JSON Feed hubs when any entry is malformed", () => {
+    const body = JSON.stringify({
+      hubs: [{ type: "WebSub", url: "https://hub.example/" }, { type: 1 }],
+      items: [],
+    });
+    expect(parseJsonFeed(body).websubHubUrl).toBeUndefined();
   });
 });
 
@@ -147,15 +159,15 @@ describe("requestHubSubscription", () => {
   test("blocks a hub URL that resolves to a private address before any network call", async () => {
     const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
-      callbackUrl: "https://us.example/callback/token",
+      callbackToken: "token",
+      domain: "us.example",
       hubPoster: poster,
       hubUrl: "http://169.254.169.254/",
-      mode: "subscribe",
       secret: "x",
       topicUrl: "https://example.com/feed",
     });
     expect(result).toEqual({
-      error: "Hub URL resolves to a private address",
+      error: "Hub URL is not a public http or https URL",
       ok: false,
     });
     expect(calls).toHaveLength(0);
@@ -164,11 +176,10 @@ describe("requestHubSubscription", () => {
   test("posts the expected form fields and treats a 2xx as accepted", async () => {
     const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
-      callbackUrl: "https://us.example/callback/token",
+      callbackToken: "token",
+      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
-      leaseSeconds: 86_400,
-      mode: "subscribe",
       secret: "s3cr3t",
       topicUrl: "https://example.com/feed",
     });
@@ -177,9 +188,10 @@ describe("requestHubSubscription", () => {
     const body = calls[0]?.body;
     expect(body?.get("hub.mode")).toBe("subscribe");
     expect(body?.get("hub.topic")).toBe("https://example.com/feed");
-    expect(body?.get("hub.callback")).toBe("https://us.example/callback/token");
+    expect(body?.get("hub.callback")).toBe(
+      "https://us.example/api/websub/callback/token",
+    );
     expect(body?.get("hub.secret")).toBe("s3cr3t");
-    expect(body?.get("hub.lease_seconds")).toBe("86400");
     // Some hubs (WordPress.com's pushpress hub confirmed) reject a
     // subscribe request outright without this, even though verification is
     // always async regardless of what's sent here.
@@ -189,10 +201,10 @@ describe("requestHubSubscription", () => {
   test("treats a non-2xx hub response as failure", async () => {
     const { poster } = recordingPoster(async () => ({ status: 500 }));
     const result = await requestHubSubscription({
-      callbackUrl: "https://us.example/callback/token",
+      callbackToken: "token",
+      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
-      mode: "subscribe",
       secret: "x",
       topicUrl: "https://example.com/feed",
     });
@@ -210,10 +222,10 @@ describe("requestHubSubscription", () => {
       throw new Error("boom");
     });
     const result = await requestHubSubscription({
-      callbackUrl: "https://us.example/callback/token",
+      callbackToken: "token",
+      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
-      mode: "subscribe",
       secret: "x",
       topicUrl: "https://example.com/feed",
     });

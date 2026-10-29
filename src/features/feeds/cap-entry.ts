@@ -1,12 +1,9 @@
 /**
  * The `cap:*` fields CAP alert feeds (NWS, MeteoAlarm, AirNow) embed in each
- * Atom entry or RSS item. @rowanmanning/feed-parser keeps its XML element
- * private, so a feed that declares the CAP namespace is parsed a second time
- * here and matched back to the parser's items by position: entries are found
- * the way the parser finds them, which keeps every one in document order.
+ * Atom entry or RSS item, read from the parser's own element for the entry.
  */
+import type { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { type Static, Type } from "typebox";
-import { isXmlElement, parseXml, type XmlElement } from "#platform/xml.ts";
 
 export const capAlertSchema = Type.Object(
   {
@@ -35,135 +32,48 @@ const capNamespaces = new Set([
   "urn:oasis:names:tc:emergency:cap:1.1",
   "urn:oasis:names:tc:emergency:cap:1.2",
 ]);
-const isNamespaceDeclaration = (name: string) =>
-  name === "xmlns" || name.startsWith("xmlns:");
+const isCapNamespace = (uri: null | string | undefined) =>
+  capNamespaces.has(uri ?? "");
 
-/** True when the attributes declare the CAP namespace under some prefix. */
-export const declaresCapNamespace = (
-  attributes: Readonly<Record<string, string>>,
-): boolean =>
-  Object.entries(attributes).some(
+/**
+ * True when the entry or an ancestor declares the CAP namespace, even if a
+ * nearer declaration rebinds that prefix: entry guids depend on this.
+ */
+export const inCapScope = (entry: Element | null): boolean =>
+  entry !== null &&
+  (Object.entries(entry.attributes).some(
     ([name, value]) =>
-      isNamespaceDeclaration(name) && capNamespaces.has(value.trim()),
-  );
+      (name === "xmlns" || name.startsWith("xmlns:")) &&
+      isCapNamespace(value.trim()),
+  ) ||
+    inCapScope(entry.parent));
 
-/** Namespace URI per prefix in scope; "" is the default namespace. */
-type Scope = Readonly<Record<string, string>>;
-/** Bun.XML collapses an element without attributes or children to a string. */
-type Node = { name: string; node: string | XmlElement; scope: Scope };
-
-const withDeclarations = (element: XmlElement, scope: Scope): Scope => {
-  const declared = Object.entries(element).flatMap(([key, value]) =>
-    typeof value === "string" && (key === "@xmlns" || key.startsWith("@xmlns:"))
-      ? [[key.slice("@xmlns:".length), value.trim()]]
-      : [],
-  );
-  return declared.length === 0
-    ? scope
-    : { ...scope, ...Object.fromEntries(declared) };
-};
-
-const childrenOf = ({ node, scope }: Node): Node[] =>
-  typeof node === "string"
-    ? []
-    : Object.entries(node)
-        .filter(([name]) => !name.startsWith("@") && !name.startsWith("#"))
-        .flatMap(([name, value]) =>
-          (Array.isArray(value) ? value : [value]).flatMap((child): Node[] => {
-            if (typeof child === "string")
-              return [{ name, node: child, scope }];
-            return isXmlElement(child)
-              ? [{ name, node: child, scope: withDeclarations(child, scope) }]
-              : [];
-          }),
-        );
-
-// How @rowanmanning/feed-parser names an element: lowercased, prefix dropped.
-const localName = (name: string) => name.toLowerCase().replace(/^[^:]*:/u, "");
-const childrenNamed = (parent: Node, name: string) =>
-  childrenOf(parent).filter((child) => localName(child.name) === name);
-
-const isCapField = ({ name, scope }: Node) => {
-  const prefix = name.includes(":") ? name.slice(0, name.indexOf(":")) : "";
-  return capNamespaces.has(scope[prefix] ?? "");
-};
-
-const textOf = ({ node }: Node): string => {
-  const text = typeof node === "string" ? node : node["#text"];
-  return typeof text === "string" ? text.trim() : "";
-};
-
-const readAlert = (entry: Node): CapAlert | undefined => {
+/**
+ * The entry's CAP fields, or undefined when it has none. The parser hands
+ * back element names lowercased, prefix dropped.
+ */
+export const readCapAlert = (entry: Element): CapAlert | undefined => {
   const fields = new Map<string, string>();
-  for (const child of childrenOf(entry).filter(isCapField)) {
-    const name = child.name.slice(child.name.indexOf(":") + 1);
-    if (!fields.has(name)) fields.set(name, textOf(child));
+  for (const child of entry.children) {
+    if (typeof child === "string" || !isCapNamespace(child.namespaceUri))
+      continue;
+    if (!fields.has(child.name))
+      fields.set(child.name, child.textContent.trim());
   }
   if (fields.size === 0) return undefined;
   const cap = (name: string) => fields.get(name) ?? "";
   return {
-    areaDesc: cap("areaDesc"),
+    areaDesc: cap("areadesc"),
     certainty: cap("certainty"),
     event: cap("event"),
     expires: cap("expires"),
     // MeteoAlarm spells CAP's msgType as message_type.
-    msgType: cap("msgType") || cap("message_type"),
+    msgType: cap("msgtype") || cap("message_type"),
     onset: cap("onset") || cap("effective"),
     severity: cap("severity"),
     status: cap("status"),
     urgency: cap("urgency"),
   };
-};
-
-/**
- * Each entry's CAP fields, in the parser's item order; empty, without
- * parsing, for a non-CAP feed.
- */
-export const capAlerts = (text: string): (CapAlert | undefined)[] => {
-  if (!mentionsCapNamespace(text)) return [];
-  let document: Node;
-  try {
-    document = { name: "", node: parseXml(text), scope: {} };
-  } catch {
-    // The feed parser tolerates markup Bun.XML rejects; such a feed keeps
-    // its articles, just without alert details.
-    return [];
-  }
-  const root = [
-    ...childrenNamed(document, "feed"),
-    ...childrenNamed(document, "rss"),
-    ...childrenNamed(document, "rdf"),
-  ][0];
-  if (!root) return [];
-  const entries =
-    localName(root.name) === "feed"
-      ? childrenNamed(root, "entry")
-      : [...childrenNamed(root, "channel").slice(0, 1), root].flatMap(
-          (parent) => childrenNamed(parent, "item"),
-        );
-  // Bun.XML groups siblings by tag, so entries spelled two ways (item and
-  // rss:item) lose their relative order.
-  if (new Set(entries.map((entry) => entry.name)).size > 1) return [];
-  // An entry outside CAP namespace scope merely mentions it, as
-  // parseXmlFeed also judges per entry.
-  return entries.map((entry) =>
-    Object.values(entry.scope).some((uri) => capNamespaces.has(uri))
-      ? readAlert(entry)
-      : undefined,
-  );
-};
-
-/** Gives each parsed item whose entry carries CAP fields a `cap` property. */
-export const attachCapAlerts = (
-  text: string,
-  items: readonly object[],
-): void => {
-  const alerts = capAlerts(text);
-  if (alerts.length !== items.length) return;
-  for (const [index, item] of items.entries()) {
-    const alert = alerts[index];
-    if (alert) Object.assign(item, { cap: alert });
-  }
 };
 
 /**

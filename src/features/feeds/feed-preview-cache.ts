@@ -85,6 +85,7 @@ const previewWireSchema = Type.Object(
     description: Type.Optional(Type.String()),
     feed: Type.Optional(feedWireSchema),
     feedUrl: Type.String(),
+    finalUrl: Type.Optional(Type.String()),
     freshUntil: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     link: Type.Optional(Type.String()),
     title: Type.String(),
@@ -148,20 +149,18 @@ const decodePreview = (
 
   return Object.assign(
     {
-      articles: value.articles.map((article) =>
-        Object.assign(
-          {},
-          article,
-          { publishedAt: new Date(article.publishedAt) },
-          article.updatedAt === undefined
-            ? {}
-            : {
-                updatedAt:
-                  article.updatedAt === null
-                    ? null
-                    : new Date(article.updatedAt),
-              },
-        ),
+      // A preview cached before enclosures or updatedAt existed lacks them;
+      // subscribe imported such an article without enclosures, updated when
+      // it was published.
+      articles: value.articles.map(
+        ({ enclosures = [], publishedAt, updatedAt, ...article }) => ({
+          ...article,
+          enclosures,
+          publishedAt: new Date(publishedAt),
+          updatedAt: dateOrNull(
+            updatedAt === undefined ? publishedAt : updatedAt,
+          ),
+        }),
       ),
       description: value.description,
       feedUrl: value.feedUrl,
@@ -171,6 +170,7 @@ const decodePreview = (
     value.freshUntil === undefined ? {} : { freshUntil: value.freshUntil },
     value.truncated === undefined ? {} : { truncated: value.truncated },
     value.feed === undefined ? {} : { feed: decodeFeed(value.feed) },
+    value.finalUrl === undefined ? {} : { finalUrl: value.finalUrl },
   );
 };
 
@@ -181,16 +181,11 @@ export const serializeFeedPreview = ({
   JSON.stringify({
     ...preview,
     ...(feed === undefined ? {} : { feed: encodeFeed(feed) }),
-    articles: preview.articles.map((article) =>
-      Object.assign(
-        {},
-        article,
-        { publishedAt: article.publishedAt.getTime() },
-        article.updatedAt === undefined
-          ? {}
-          : { updatedAt: article.updatedAt?.getTime() ?? null },
-      ),
-    ),
+    articles: preview.articles.map((article) => ({
+      ...article,
+      publishedAt: article.publishedAt.getTime(),
+      updatedAt: article.updatedAt?.getTime() ?? null,
+    })),
   });
 
 export const deserializeFeedPreview = (

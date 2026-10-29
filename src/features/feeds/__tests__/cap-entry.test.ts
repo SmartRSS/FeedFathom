@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { parseFeed } from "@rowanmanning/feed-parser";
+import { renderCapAlert } from "#features/feeds/cap-entry.ts";
 import {
-  attachCapAlerts,
-  capAlerts,
-  renderCapAlert,
-} from "#features/feeds/cap-entry.ts";
-import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
+  type FeedMapperItem,
+  mapFeedToPreview,
+} from "#features/feeds/feed-mapper.ts";
+import { parseXmlFeed } from "#features/feeds/feed-parser.ts";
 
 const casesDir = "src/features/feeds/__tests__/cap-entry-cases";
 const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
@@ -14,14 +13,10 @@ const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
 // entry still current then, one already expired, and one expired entry edited
 // to status Test with a later expiry, so only its status can hide it.
 const fetchedAt = Date.parse("2026-10-06T07:36:00Z");
-const noRewrite = (content: string) => content;
 
-const parseCapFeed = async (name: string) => {
-  const text = await fixture(name);
-  const feed = parseFeed(text);
-  attachCapAlerts(text, feed.items);
-  return feed;
-};
+const parseCapFeed = async (name: string) => parseXmlFeed(await fixture(name));
+const capAlerts = (text: string) =>
+  parseXmlFeed(text).items.map((item: FeedMapperItem) => item.cap);
 
 describe("capAlerts", () => {
   test("reads the NWS flattened cap:* fields", async () => {
@@ -79,24 +74,21 @@ describe("capAlerts", () => {
     ]);
   });
 
-  test("returns nothing when entries are spelled two ways, losing their order", () => {
+  test("reads entries spelled two ways, in document order", () => {
     const atom = `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:a="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
       <entry><cap:event>One</cap:event></entry>
       <a:entry><cap:event>Two</cap:event></a:entry>
     </feed>`;
-    expect(capAlerts(atom)).toStrictEqual([]);
+    expect(capAlerts(atom).map((alert) => alert?.event)).toEqual([
+      "One",
+      "Two",
+    ]);
   });
 
-  test("returns nothing for a feed without the CAP namespace", async () => {
-    expect(capAlerts(await fixture("dwd.xml"))).toEqual([]);
-  });
-
-  test("returns nothing for CAP-namespaced text that is not well-formed", () => {
-    expect(
-      capAlerts(
-        '<feed xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"><entry>',
-      ),
-    ).toEqual([]);
+  test("reads nothing from a feed without the CAP namespace", async () => {
+    const alerts = capAlerts(await fixture("dwd.xml"));
+    expect(alerts.length).toBeGreaterThan(0);
+    expect(alerts.every((alert) => alert === undefined)).toBe(true);
   });
 });
 
@@ -125,8 +117,7 @@ describe("CAP feeds through the mapper", () => {
     const preview = mapFeedToPreview(
       feed,
       "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-poland",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     );
     expect(preview.articles.map((article) => article.title)).toEqual([
       "Yellow Wind Warning issued for Poland - Central coastal zone",
@@ -147,10 +138,10 @@ describe("CAP feeds through the mapper", () => {
     const feed = await parseCapFeed("nws-kansas.xml");
     const url = "https://api.weather.gov/alerts.atom?area=KS&active=1";
     expect(
-      mapFeedToPreview(feed, url, noRewrite, fetchedAt).articles,
+      mapFeedToPreview(feed, url, { now: fetchedAt }).articles,
     ).toHaveLength(1);
     expect(
-      mapFeedToPreview(feed, url, noRewrite, Date.parse("2026-10-06T15:45:00Z"))
+      mapFeedToPreview(feed, url, { now: Date.parse("2026-10-06T15:45:00Z") })
         .articles,
     ).toHaveLength(0);
   });
@@ -160,8 +151,7 @@ describe("CAP feeds through the mapper", () => {
     const [article] = mapFeedToPreview(
       feed,
       "https://api.weather.gov/alerts.atom?area=KS&active=1",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.content).toStartWith(
       "<dl><dt>Event</dt><dd>Flood Warning</dd>",
@@ -170,14 +160,11 @@ describe("CAP feeds through the mapper", () => {
   });
 
   test("a feed without CAP maps as before", async () => {
-    const text = await fixture("dwd.xml");
-    const feed = parseFeed(text);
-    attachCapAlerts(text, feed.items);
+    const feed = await parseCapFeed("dwd.xml");
     const [article] = mapFeedToPreview(
       feed,
       "https://www.dwd.de/DWD/warnungen/cap-feed/de/atom.xml",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.content).toStartWith("Es tritt gebietsweise Nebel");
   });
@@ -187,8 +174,7 @@ describe("CAP feeds through the mapper", () => {
     const [article] = mapFeedToPreview(
       feed,
       "https://api.weather.gov/alerts.atom?area=KS&active=1",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.expiresAt).toBe(Date.parse("2026-10-06T15:45:00Z"));
   });
@@ -210,16 +196,10 @@ describe("CAP feeds through the mapper", () => {
 });
 
 const capNs = "urn:oasis:names:tc:emergency:cap:1.2";
-const titlesOf = (xml: string) => {
-  const feed = parseFeed(xml);
-  attachCapAlerts(xml, feed.items);
-  return mapFeedToPreview(
-    feed,
-    "https://example.com/feed",
-    noRewrite,
-    fetchedAt,
-  ).articles.map((article) => article.title);
-};
+const titlesOf = (xml: string) =>
+  mapFeedToPreview(parseXmlFeed(xml), "https://example.com/feed", {
+    now: fetchedAt,
+  }).articles.map((article) => article.title);
 
 describe("CAP entries the feed parser reads its own way", () => {
   test("a prefixed Atom feed", () => {

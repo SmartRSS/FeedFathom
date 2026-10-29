@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { Source } from "#platform/db/schemas/sources.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 
 const source: Source = {
@@ -38,20 +39,22 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
       },
       async successSource() {},
     },
-    {
-      async batchUpsertArticles(articles) {
-        batches.push(articles);
-        return articles.length;
+    new ArticleImporter(
+      {
+        async batchUpsertArticles(articles) {
+          batches.push(articles);
+          return articles.length;
+        },
       },
-    },
-    {
-      async recomputeUnreadCounts() {},
-    },
-    {
-      publish(sourceId, count) {
-        published.push([sourceId, count]);
+      {
+        async recomputeUnreadCounts() {},
       },
-    },
+      {
+        publish(sourceId, count) {
+          published.push([sourceId, count]);
+        },
+      },
+    ),
   );
   const raw = Buffer.from(
     [

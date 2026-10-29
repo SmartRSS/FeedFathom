@@ -25,11 +25,13 @@ type JsonFeedItem = {
   title?: unknown;
   url?: unknown;
 };
+type JsonFeedHub = { type?: unknown; url?: unknown };
 type JsonFeedDocument = {
   authors?: unknown;
   description?: unknown;
   feed_url?: unknown;
   home_page_url?: unknown;
+  hubs?: unknown;
   items?: unknown;
   title?: unknown;
 };
@@ -91,6 +93,22 @@ function itemMedia(item: JsonFeedItem): FeedItemMedia[] {
   });
 }
 
+// The `hubs` entry of type "WebSub", JSON Feed's counterpart of a hub link.
+// A hubs array with any malformed entry names no hub at all.
+function websubHubUrl(hubs: unknown): string | undefined {
+  if (!Array.isArray(hubs)) return undefined;
+  const entries = hubs.map((hub: unknown) => (hub ?? {}) as JsonFeedHub);
+  if (
+    !entries.every(
+      (hub) => typeof hub.type === "string" && typeof hub.url === "string",
+    )
+  )
+    return undefined;
+  return (
+    asString(entries.find((hub) => hub.type === "WebSub")?.url) ?? undefined
+  );
+}
+
 export function parseJsonFeed(text: string) {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null) {
@@ -119,5 +137,6 @@ export function parseJsonFeed(text: string) {
     }),
     title: asString(feed.title),
     url: asString(feed.home_page_url) ?? asString(feed.feed_url),
+    websubHubUrl: websubHubUrl(feed.hubs),
   };
 }

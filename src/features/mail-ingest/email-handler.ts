@@ -4,9 +4,7 @@ import type { Readable } from "node:stream";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
+import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import {
   validateParsedMail,
   validatedMailContent,
@@ -53,18 +51,7 @@ export class EmailHandler {
       SourcesDataService,
       "findSourceByUrl" | "successSource"
     >,
-    private readonly articlesDataService: Pick<
-      ArticlesDataService,
-      "batchUpsertArticles"
-    >,
-    private readonly userSourcesDataService: Pick<
-      UserSourcesDataService,
-      "recomputeUnreadCounts"
-    >,
-    private readonly articleEventPublisher: Pick<
-      ArticleEventPublisher,
-      "publish"
-    >,
+    private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
   ) {}
 
   public async processEmail(
@@ -83,11 +70,9 @@ export class EmailHandler {
       source.id,
       envelope.from,
     );
-    const changed = await this.articlesDataService.batchUpsertArticles([
-      article,
-    ]);
-    await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
-    if (changed > 0) this.articleEventPublisher.publish(source.id, changed);
+    await this.articleImporter.importArticles(source.id, [article], {
+      alwaysRecount: true,
+    });
     await this.sourcesDataService.successSource(
       source.id,
       false,
