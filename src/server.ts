@@ -7,53 +7,25 @@ import {
 } from "#platform/runtime.ts";
 import { config } from "#platform/config.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
-import {
-  authThrottle,
-  mailSender,
-  outboundFetchBudget,
-  usersDataService,
-} from "#features/auth/services.ts";
-import {
-  articleImporter,
-  articlesDataService,
-  feedParser,
-  feedPreviewCache,
-  foldersDataService,
-  opmlImportService,
-  redirectMap,
-  sourceEnqueuer,
-  sourcesDataService,
-  userSourcesDataService,
-  websubStateService,
-} from "#features/feeds/services.ts";
-import { emailHandler } from "#features/mail-ingest/services.ts";
-import { articleEventHub } from "#features/reader/services.ts";
+import * as auth from "#features/auth/services.ts";
+import * as feeds from "#features/feeds/services.ts";
+import * as mailIngest from "#features/mail-ingest/services.ts";
+import * as reader from "#features/reader/services.ts";
 import { createServerApp } from "./server-app.ts";
 
 const production = Bun.env.NODE_ENV === "production";
+// The server uses every service these four modules build, so spreading them
+// pulls in nothing the bundle would otherwise drop.
 export const app = await createServerApp(
   {
-    articleEventHub,
-    articleImporter,
-    articlesDataService,
-    authThrottle,
+    ...auth,
+    ...feeds,
+    ...mailIngest,
+    ...reader,
     config,
-    emailHandler,
-    feedParser,
-    feedPreviewCache,
     fetcher,
-    foldersDataService,
     httpClient,
-    mailSender,
-    opmlImportService,
-    outboundFetchBudget,
     password,
-    redirectMap,
-    sourceEnqueuer,
-    sourcesDataService,
-    userSourcesDataService,
-    usersDataService,
-    websubStateService,
   },
   { production },
 );
@@ -68,7 +40,7 @@ let shutdownPromise: Promise<void> | undefined;
 const shutdown = () => {
   // First: graceful stop waits for open responses, and event streams never
   // finish on their own.
-  articleEventHub.close();
+  reader.articleEventHub.close();
   return (shutdownPromise ??= Promise.resolve(app.stop())
     .then(() => close())
     .then(() => undefined));

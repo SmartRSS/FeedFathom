@@ -156,9 +156,11 @@ large file and would change for several unrelated reasons.
 ## Tests
 
 `test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with
-an isolated module registry per test file. Route and worker tests replace
-shared modules with `mock.module`; running the full suite without isolation
-lets those mocks leak into other files. Cases within one file run sequentially.
+an isolated module registry per test file. Route and worker tests pass their
+services in; only `src/__tests__/worker.test.ts`, which tests the entrypoint
+itself, replaces modules with `mock.module`, and running the suite without
+isolation lets those mocks leak into other files. Cases within one file run
+sequentially.
 
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).

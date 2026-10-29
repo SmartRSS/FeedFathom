@@ -525,16 +525,26 @@ const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
 }) as HttpDeferredError;
 
 // BullMQ must always see the job as acknowledged: whatever was thrown, and
-// however the deferral or the log call went wrong, the processor resolves.
-test.each<[string, Partial<MainWorkerServices>, MainWorkerJob]>([
+// however the deferral or the log call went wrong, the processor resolves --
+// and logs what the job originally threw, which proves each case reached the
+// path it names rather than failing earlier on an unexpected call.
+const poisonedError = new PoisonedError();
+const deferral = new HttpDeferredError(Date.now() + 60_000);
+const throwsDeferral = strictFake<FeedParser>({
+  async parseSource() {
+    throw deferral;
+  },
+});
+test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
   [
     "a poisoned error whose message getter throws",
     {
       async cleanupOrphanedData() {
-        throw new PoisonedError();
+        throw poisonedError;
       },
     },
     job(JobName.Cleanup, {}),
+    poisonedError,
   ],
   [
     "an HttpDeferredError with a poisoned retryAt getter",
@@ -550,19 +560,21 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob]>([
         throw new Error("should never be called with a poisoned retryAt");
       },
     }),
+    poisonedDeferral,
   ],
   [
     "a moveToDelayed rejection (e.g. a real BullMQ/Redis failure)",
-    { feedParser: deferredParser() },
+    { feedParser: throwsDeferral },
     parseJob({
       async moveToDelayed() {
         throw new Error("Redis connection lost");
       },
     }),
+    deferral,
   ],
   [
     "a moveToDelayed rejection with a poisoned prototype",
-    { feedParser: deferredParser() },
+    { feedParser: throwsDeferral },
     parseJob({
       async moveToDelayed() {
         throw new Proxy(
@@ -575,8 +587,16 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob]>([
         );
       },
     }),
+    deferral,
   ],
-])("%s doesn't fail the job", async (_name, services, failing) => {
+])("%s doesn't fail the job", async (_name, services, failing, thrown) => {
   const { process } = await startWorker(services);
+  using logged = spyOn(console, "error").mockImplementation(() => {});
   await expect(process(failing)).resolves.toBeUndefined();
+  expect(logged.mock.calls).toHaveLength(1);
+  expect(logged.mock.calls[0]?.[0]).toBe(
+    `Error processing ${failing.name} job:`,
+  );
+  // toBe, not toEqual: comparing a poisoned value would read its getters.
+  expect(logged.mock.calls[0]?.[1]).toBe(thrown);
 });
