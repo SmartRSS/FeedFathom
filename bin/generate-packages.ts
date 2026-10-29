@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import manifestTemplate from "../src/extension/manifest.json";
 
@@ -18,9 +18,10 @@ type ProjectionOptions = {
 
 const root = path.resolve(import.meta.dir, "..");
 const extensionDirectory = path.join(root, "ext");
-const commonDirectory = path.join(extensionDirectory, "build-common");
-const chromiumDirectory = path.join(extensionDirectory, "build-ch");
-const firefoxDirectory = path.join(extensionDirectory, "build-ff");
+const targetDirectories: Record<BrowserTarget, string> = {
+  chromium: path.join(extensionDirectory, "build-ch"),
+  firefox: path.join(extensionDirectory, "build-ff"),
+};
 
 const portableExtensionVersion = /^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){0,3}$/;
 
@@ -91,7 +92,12 @@ export function projectExtensionManifest(
   };
 }
 
-async function buildSharedExtension(): Promise<void> {
+async function buildTarget(
+  target: BrowserTarget,
+  options: ProjectionOptions,
+): Promise<void> {
+  const directory = targetDirectories[target];
+  await rm(directory, { force: true, recursive: true });
   const result = await Bun.build({
     entrypoints: [
       path.join(root, "src/extension/background-event.ts"),
@@ -99,7 +105,7 @@ async function buildSharedExtension(): Promise<void> {
       path.join(root, "src/extension/options.ts"),
       path.join(root, "src/extension/popup.ts"),
     ],
-    outdir: commonDirectory,
+    outdir: directory,
     target: "browser",
   });
   if (!result.success) {
@@ -114,15 +120,19 @@ async function buildSharedExtension(): Promise<void> {
   ]) {
     await copyFile(
       path.join(root, "src/spa/assets", name),
-      path.join(commonDirectory, name),
+      path.join(directory, name),
     );
   }
   for (const name of ["extension.css", "options.html", "popup.html"]) {
     await copyFile(
       path.join(root, "src/extension", name),
-      path.join(commonDirectory, name),
+      path.join(directory, name),
     );
   }
+  await writeFile(
+    path.join(directory, "manifest.json"),
+    `${JSON.stringify(projectExtensionManifest(manifestTemplate, target, options), null, 2)}\n`,
+  );
 }
 
 export async function main(
@@ -139,33 +149,10 @@ export async function main(
   },
 ): Promise<void> {
   await mkdir(extensionDirectory, { recursive: true });
-  await Promise.all(
-    [commonDirectory, chromiumDirectory, firefoxDirectory].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
-  );
-  await mkdir(commonDirectory, { recursive: true });
-
-  try {
-    await buildSharedExtension();
-    await Promise.all([
-      cp(commonDirectory, chromiumDirectory, { recursive: true }),
-      cp(commonDirectory, firefoxDirectory, { recursive: true }),
-    ]);
-
-    await Promise.all([
-      writeFile(
-        path.join(chromiumDirectory, "manifest.json"),
-        `${JSON.stringify(projectExtensionManifest(manifestTemplate, "chromium", options), null, 2)}\n`,
-      ),
-      writeFile(
-        path.join(firefoxDirectory, "manifest.json"),
-        `${JSON.stringify(projectExtensionManifest(manifestTemplate, "firefox", options), null, 2)}\n`,
-      ),
-    ]);
-  } finally {
-    await rm(commonDirectory, { force: true, recursive: true });
-  }
+  await Promise.all([
+    buildTarget("chromium", options),
+    buildTarget("firefox", options),
+  ]);
 }
 
 if (import.meta.main) {
