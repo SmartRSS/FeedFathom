@@ -25,11 +25,7 @@ export function imageDimensions(
   ) {
     return { height: buffer.readUInt16LE(8), width: buffer.readUInt16LE(6) };
   }
-  if (
-    buffer.length >= 22 &&
-    buffer.readUInt16LE(0) === 0 &&
-    buffer.readUInt16LE(2) === 1
-  ) {
+  if (isIco(buffer)) {
     return {
       height: buffer[7] === 0 ? 256 : buffer[7]!,
       width: buffer[6] === 0 ? 256 : buffer[6]!,
@@ -69,6 +65,14 @@ export function imageDimensions(
     return { height: Infinity, width: Infinity };
   }
   return undefined;
+}
+
+export function isIco(buffer: Buffer): boolean {
+  return (
+    buffer.length >= 22 &&
+    buffer.readUInt16LE(0) === 0 &&
+    buffer.readUInt16LE(2) === 1
+  );
 }
 
 // Prefers the smallest candidate that still meets `target`, over always
