@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   HttpRateLimiter,
   rateLimitBlockUntil,
@@ -115,7 +115,9 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
     const deadline = new RequestDeadline(20_000);
-    const started = Date.now();
+    // The requested wait, not wall-clock time: the block was seeded before
+    // the call, so elapsed time can legitimately land a millisecond short.
+    using slept = spyOn(deadline, "sleep").mockResolvedValue();
 
     try {
       await new HttpRateLimiter(redis).reserve(
@@ -127,7 +129,10 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
       deadline.dispose();
     }
 
-    expect(Date.now() - started).toBeGreaterThanOrEqual(200);
+    expect(slept).toHaveBeenCalledTimes(1);
+    const [waited] = slept.mock.calls[0] ?? [];
+    expect(waited).toBeGreaterThan(0);
+    expect(waited).toBeLessThanOrEqual(200);
   });
 
   // Past the deadline it is a real deferral: the caller cannot afford the wait.
