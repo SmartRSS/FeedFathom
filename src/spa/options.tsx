@@ -10,56 +10,23 @@ import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
   articleSearchBox,
-  feedFilterBox,
-  isMarkReadPolicy,
-  isReaderStep,
   enclosuresOpen,
-  isEnclosuresOpen,
-  isTheme,
-  isYoutubeHost,
-  isYoutubeLoad,
+  feedFilterBox,
   markReadPolicy,
   mobileListAnchor,
+  type Preference,
   readerText,
   readerWidth,
   rememberReadingPosition,
-  setMarkReadPolicy,
-  setArticleSearchBox,
-  setFeedFilterBox,
-  setMobileListAnchor,
-  setReaderText,
-  setReaderWidth,
-  setRememberReadingPosition,
-  setTheme,
-  setEnclosuresOpen,
-  setTodayView,
-  setYoutubeHost,
-  setYoutubeLoad,
   theme,
   todayView,
   youtubeHost,
   youtubeLoad,
 } from "./preferences.ts";
-import {
-  dateFormat,
-  formatDate,
-  isDateFormat,
-  setDateFormat,
-} from "./format-date.ts";
+import { dateFormat, formatDate } from "./format-date.ts";
 import { describeUserAgent } from "./user-agent.ts";
-import {
-  isOnOff,
-  setBackgroundPollEnabled,
-  setUnreadBadgeEnabled,
-  unreadBadgeEnabled,
-  backgroundPollEnabled,
-} from "./news-signal.ts";
-import {
-  offlineUnreadEnabled,
-  prefetchNextEnabled,
-  setOfflineUnread,
-  setPrefetchNext,
-} from "./reading-prefetch.ts";
+import { backgroundPoll, unreadBadge } from "./news-signal.ts";
+import { offlineUnread, prefetchNext } from "./reading-prefetch.ts";
 import { helpDialog } from "./dialog.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
@@ -74,14 +41,36 @@ const sections = [
 
 type SectionId = (typeof sections)[number]["id"];
 
-// The mobile-layout knob only means anything where the mobile layout exists,
-// so its card tracks the same 768px breakpoint the stylesheet's mobile rules
-// use and disappears entirely on wider viewports.
-const mobileViewQuery = matchMedia("(max-width: 768px)");
-const [mobileView, setMobileView] = createSignal(mobileViewQuery.matches);
-mobileViewQuery.addEventListener("change", (event) =>
-  setMobileView(event.matches),
-);
+// The option values are String(value), which is also how the preference
+// stores them, so a boolean toggle's options are "true" and "false".
+function PreferenceSelect<T extends boolean | string>(props: {
+  label: string;
+  options: readonly (readonly [T, string])[];
+  preference: Preference<T>;
+}) {
+  return (
+    <label>
+      {props.label}
+      <select
+        value={String(props.preference.get())}
+        onChange={(event) => {
+          const { value } = event.currentTarget;
+          const option = props.options.find(([key]) => String(key) === value);
+          if (option) props.preference.set(option[0]);
+        }}
+      >
+        <For each={props.options}>
+          {([value, label]) => <option value={String(value)}>{label}</option>}
+        </For>
+      </select>
+    </label>
+  );
+}
+
+const SHOW_HIDE = [
+  [true, "Show"],
+  [false, "Hide"],
+] as const;
 
 // A hash usually names a section, but anchors into the old card stack must
 // keep resolving: the empty-tree guidance links #import-opml, which now
@@ -359,114 +348,75 @@ export function Options(props: {
         <section id="reading" class="options-section" aria-label="Reading">
           <section class="options-card">
             <h2>Reader</h2>
-            <label>
-              Text size
-              <select
-                value={readerText()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isReaderStep(value)) setReaderText(value);
-                }}
-              >
-                <option value="small">Small</option>
-                <option value="medium">Medium</option>
-                <option value="large">Large</option>
-              </select>
-            </label>
-            <label>
-              Line width
-              <select
-                value={readerWidth()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isReaderStep(value)) setReaderWidth(value);
-                }}
-              >
-                <option value="small">Narrow</option>
-                <option value="medium">Medium</option>
-                <option value="large">Wide</option>
-              </select>
-            </label>
-            <label>
-              Attachments
-              <select
-                value={enclosuresOpen()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isEnclosuresOpen(value)) setEnclosuresOpen(value);
-                }}
-              >
-                <option value="single">Expand when there is only one</option>
-                <option value="always">Always expand</option>
-                <option value="never">Always collapse</option>
-              </select>
-            </label>
-            <label>
-              YouTube player
-              <select
-                value={youtubeLoad()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isYoutubeLoad(value)) setYoutubeLoad(value);
-                }}
-              >
-                <option value="click">Load on click</option>
-                <option value="open">Load when the article opens</option>
-              </select>
-            </label>
-            <label>
-              YouTube domain
-              <select
-                value={youtubeHost()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isYoutubeHost(value)) setYoutubeHost(value);
-                }}
-              >
-                <option value="nocookie">
-                  youtube-nocookie.com (no login)
-                </option>
-                <option value="youtube">youtube.com (keeps your login)</option>
-              </select>
-            </label>
+            <PreferenceSelect
+              label="Text size"
+              preference={readerText}
+              options={[
+                ["small", "Small"],
+                ["medium", "Medium"],
+                ["large", "Large"],
+              ]}
+            />
+            <PreferenceSelect
+              label="Line width"
+              preference={readerWidth}
+              options={[
+                ["small", "Narrow"],
+                ["medium", "Medium"],
+                ["large", "Wide"],
+              ]}
+            />
+            <PreferenceSelect
+              label="Attachments"
+              preference={enclosuresOpen}
+              options={[
+                ["single", "Expand when there is only one"],
+                ["always", "Always expand"],
+                ["never", "Always collapse"],
+              ]}
+            />
+            <PreferenceSelect
+              label="YouTube player"
+              preference={youtubeLoad}
+              options={[
+                ["click", "Load on click"],
+                ["open", "Load when the article opens"],
+              ]}
+            />
+            <PreferenceSelect
+              label="YouTube domain"
+              preference={youtubeHost}
+              options={[
+                ["nocookie", "youtube-nocookie.com (no login)"],
+                ["youtube", "youtube.com (keeps your login)"],
+              ]}
+            />
           </section>
           <section class="options-card">
             <h2>Marking articles read</h2>
-            <label>
-              When articles get marked read
-              <select
-                value={markReadPolicy()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isMarkReadPolicy(value)) setMarkReadPolicy(value);
-                }}
-              >
-                <option value="manual">
-                  Manually only (m key or the Mark read button)
-                </option>
-                <option value="on-open">
-                  On open (opening an article marks it read, All view)
-                </option>
-                <option value="on-scroll-past">
-                  On scroll-past (a row left visible for a second is marked
-                  read)
-                </option>
-              </select>
-            </label>
-            <label>
-              Remember reading position
-              <select
-                value={rememberReadingPosition() ? "on" : "off"}
-                onChange={(event) =>
-                  setRememberReadingPosition(event.currentTarget.value === "on")
-                }
-              >
-                <option value="on">
-                  On (reopening the app resumes where you stopped)
-                </option>
-                <option value="off">Off (always start at the top)</option>
-              </select>
-            </label>
+            <PreferenceSelect
+              label="When articles get marked read"
+              preference={markReadPolicy}
+              options={[
+                ["manual", "Manually only (m key or the Mark read button)"],
+                [
+                  "on-open",
+                  "On open (opening an article marks it read, All view)",
+                ],
+                [
+                  "on-scroll-past",
+                  "On scroll-past (a row left visible for a second is marked read)",
+                ],
+              ]}
+            />
+            <PreferenceSelect
+              label="Remember reading position"
+              preference={rememberReadingPosition}
+              options={[
+                [true, "On (reopening the app resumes where you stopped)"],
+                [false, "Off (always start at the top)"],
+              ]}
+            />
             <p>
               Manual only, by default. This reader is built around deleting an
               article once you are done with it, so nothing is marked read
@@ -477,75 +427,40 @@ export function Options(props: {
           </section>
           <section class="options-card">
             <h2>Prefetch and "Today" view</h2>
-            <label>
-              Prefetch next article
-              <select
-                value={prefetchNextEnabled()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setPrefetchNext(value);
-                }}
-              >
-                <option value="off">Off</option>
-                <option value="on">
-                  On (fetches the next article after you open one)
-                </option>
-              </select>
-            </label>
-            <label>
-              Download unread articles for offline reading
-              <select
-                value={offlineUnreadEnabled()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setOfflineUnread(value);
-                }}
-              >
-                <option value="off">Off</option>
-                <option value="on">
-                  On (keeps up to 500 unread from the last 14 days)
-                </option>
-              </select>
-            </label>
-            <label>
-              "Today" view in the sidebar
-              <select
-                value={todayView()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setTodayView(value);
-                }}
-              >
-                <option value="on">Show (unread from the last 24h)</option>
-                <option value="off">Hide</option>
-              </select>
-            </label>
-            <label>
-              Feed filter box in the sidebar
-              <select
-                value={feedFilterBox()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setFeedFilterBox(value);
-                }}
-              >
-                <option value="on">Show</option>
-                <option value="off">Hide</option>
-              </select>
-            </label>
-            <label>
-              Article search box
-              <select
-                value={articleSearchBox()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setArticleSearchBox(value);
-                }}
-              >
-                <option value="on">Show</option>
-                <option value="off">Hide</option>
-              </select>
-            </label>
+            <PreferenceSelect
+              label="Prefetch next article"
+              preference={prefetchNext}
+              options={[
+                [false, "Off"],
+                [true, "On (fetches the next article after you open one)"],
+              ]}
+            />
+            <PreferenceSelect
+              label="Download unread articles for offline reading"
+              preference={offlineUnread}
+              options={[
+                [false, "Off"],
+                [true, "On (keeps up to 500 unread from the last 14 days)"],
+              ]}
+            />
+            <PreferenceSelect
+              label={'"Today" view in the sidebar'}
+              preference={todayView}
+              options={[
+                [true, "Show (unread from the last 24h)"],
+                [false, "Hide"],
+              ]}
+            />
+            <PreferenceSelect
+              label="Feed filter box in the sidebar"
+              preference={feedFilterBox}
+              options={SHOW_HIDE}
+            />
+            <PreferenceSelect
+              label="Article search box"
+              preference={articleSearchBox}
+              options={SHOW_HIDE}
+            />
           </section>
           <section class="options-card">
             <h2>Keyboard</h2>
@@ -566,58 +481,41 @@ export function Options(props: {
         >
           <section class="options-card">
             <h2>Appearance</h2>
-            <label>
-              Theme
-              <select
-                value={theme()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isTheme(value)) setTheme(value);
-                }}
-              >
-                <option value="auto">Auto (match OS colors)</option>
-                <option value="smart">Smart</option>
-                <option value="classic">Classic</option>
-                <option value="millennial">Millennial</option>
-                <option value="aero">Aero</option>
-                <option value="modern">Modern</option>
-                <option value="high-contrast">
-                  High contrast (accessibility)
-                </option>
-              </select>
-            </label>
-            <label>
-              Date format
-              <select
-                value={dateFormat()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isDateFormat(value)) setDateFormat(value);
-                }}
-              >
-                <option value="locale">System locale</option>
-                <option value="iso">ISO 8601 (UTC)</option>
-              </select>
-            </label>
+            <PreferenceSelect
+              label="Theme"
+              preference={theme}
+              options={[
+                ["auto", "Auto (match OS colors)"],
+                ["smart", "Smart"],
+                ["classic", "Classic"],
+                ["millennial", "Millennial"],
+                ["aero", "Aero"],
+                ["modern", "Modern"],
+                ["high-contrast", "High contrast (accessibility)"],
+              ]}
+            />
+            <PreferenceSelect
+              label="Date format"
+              preference={dateFormat}
+              options={[
+                ["locale", "System locale"],
+                ["iso", "ISO 8601 (UTC)"],
+              ]}
+            />
           </section>
-          <Show when={mobileView()}>
-            <section class="options-card">
-              <h2>Mobile layout</h2>
-              <label>
-                Layout variant
-                <select
-                  value={mobileListAnchor()}
-                  onChange={(event) => {
-                    const { value } = event.currentTarget;
-                    if (isOnOff(value)) setMobileListAnchor(value);
-                  }}
-                >
-                  <option value="off">Regular</option>
-                  <option value="on">Pull down</option>
-                </select>
-              </label>
-            </section>
-          </Show>
+          {/* Only where the mobile layout exists: style.css hides it past the
+              same 768px breakpoint the mobile rules use. */}
+          <section class="options-card options-mobile-layout">
+            <h2>Mobile layout</h2>
+            <PreferenceSelect
+              label="Layout variant"
+              preference={mobileListAnchor}
+              options={[
+                [false, "Regular"],
+                [true, "Pull down"],
+              ]}
+            />
+          </section>
         </section>
       </Show>
       <Show when={active() === "signal"}>
@@ -628,32 +526,19 @@ export function Options(props: {
         >
           <section class="options-card">
             <h2>New-article signal</h2>
-            <label>
-              Unread count in tab title
-              <select
-                value={unreadBadgeEnabled()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setUnreadBadgeEnabled(value);
-                }}
-              >
-                <option value="on">Show</option>
-                <option value="off">Hide</option>
-              </select>
-            </label>
-            <label>
-              Background check for new articles
-              <select
-                value={backgroundPollEnabled()}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  if (isOnOff(value)) setBackgroundPollEnabled(value);
-                }}
-              >
-                <option value="on">On (shows a "new articles" toast)</option>
-                <option value="off">Off (no background requests)</option>
-              </select>
-            </label>
+            <PreferenceSelect
+              label="Unread count in tab title"
+              preference={unreadBadge}
+              options={SHOW_HIDE}
+            />
+            <PreferenceSelect
+              label="Background check for new articles"
+              preference={backgroundPoll}
+              options={[
+                [true, 'On (shows a "new articles" toast)'],
+                [false, "Off (no background requests)"],
+              ]}
+            />
           </section>
         </section>
       </Show>

@@ -1,23 +1,8 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import {
-  dateFormat,
-  formatDate,
-  isDateFormat,
-  setDateFormat,
-} from "../format-date.ts";
+import { dateFormat, formatDate } from "../format-date.ts";
 
+const setDateFormat = dateFormat.set;
 afterEach(() => setDateFormat("locale"));
-
-test.each(["locale", "iso"])("parses each accepted format (%s)", (value) => {
-  expect(isDateFormat(value)).toBe(true);
-});
-
-test.each(["", "ISO", "unix", "system"])(
-  "rejects unknown format %s",
-  (value) => {
-    expect(isDateFormat(value)).toBe(false);
-  },
-);
 
 test("locale mode renders an absolute localized string", () => {
   setDateFormat("locale");
@@ -55,11 +40,4 @@ test("empty and unparseable values render as nothing in either mode", () => {
     expect(formatDate("")).toBe("");
     expect(formatDate("not a date")).toBe("");
   }
-});
-
-test("the preference signal reflects the last set value", () => {
-  setDateFormat("iso");
-  expect(dateFormat()).toBe("iso");
-  setDateFormat("locale");
-  expect(dateFormat()).toBe("locale");
 });

@@ -92,14 +92,14 @@ import {
   navigatorConnection,
   neighbours,
   offlineArticles,
-  offlineUnreadEnabled,
+  offlineUnread,
   postOfflineArticles,
-  prefetchNextEnabled,
+  prefetchNext,
   shouldPrefetch,
   unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
-  backgroundPollEnabled,
+  backgroundPoll,
   newArticlesCount,
   setNewArticlesCount,
   setUnreadTotal,
@@ -199,10 +199,10 @@ export function Dashboard(props: {
   // still narrowing the tree, or a list of search results with nothing on
   // screen to explain or undo them.
   createEffect(() => {
-    if (feedFilterBox() === "off" && treeFilter()) setTreeFilter("");
+    if (!feedFilterBox.get() && treeFilter()) setTreeFilter("");
   });
   createEffect(() => {
-    if (articleSearchBox() === "off") {
+    if (!articleSearchBox.get()) {
       setSearchTerms("");
       void exitSearch();
     }
@@ -214,7 +214,7 @@ export function Dashboard(props: {
   >("unread");
   // Memos, because every tree row reads these and each one walks the tree.
   const visibleTree = createMemo(() =>
-    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter()),
+    filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
@@ -306,13 +306,13 @@ export function Dashboard(props: {
     session: sessionStorage,
   });
   const resumingUpdate = takeUpdateReload();
-  const restoreEnabled = () => rememberReadingPosition() || resumingUpdate;
+  const restoreEnabled = () => rememberReadingPosition.get() || resumingUpdate;
   // With the setting off the snapshot goes to sessionStorage only, so it
   // survives this one reload and never reaches a later launch.
   const saveForUpdateReload = () => {
     const node = selectedNode();
     if (!node && !activeSearch()) return;
-    const store = rememberReadingPosition()
+    const store = rememberReadingPosition.get()
       ? readingSession
       : new ReadingSessionStore({ session: sessionStorage });
     const articleId = openedArticle()?.id;
@@ -336,7 +336,7 @@ export function Dashboard(props: {
   const recordAppSnapshot = (
     patch: Parameters<ReadingSessionStore["recordApp"]>[0],
   ) => {
-    if (!rememberReadingPosition() || restoringSession()) return;
+    if (!rememberReadingPosition.get() || restoringSession()) return;
     readingSession.recordApp(patch);
   };
   // Throttled scroll recorders: at most one storage write each per interval.
@@ -345,7 +345,11 @@ export function Dashboard(props: {
   });
   const recordReaderScroll = createThrottledRecorder((element: HTMLElement) => {
     const id = openedArticle()?.id;
-    if (id === undefined || !rememberReadingPosition() || restoringSession())
+    if (
+      id === undefined ||
+      !rememberReadingPosition.get() ||
+      restoringSession()
+    )
       return;
     readingSession.recordReaderScroll(id, scrollRatio(element));
   });
@@ -414,8 +418,7 @@ export function Dashboard(props: {
   const schedulePoll = () => {
     // A stream signal can run a poll while the timer is pending; one timer.
     clearTimeout(pollTimer);
-    // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (disposed || backgroundPollEnabled() !== "on") return;
+    if (disposed || !backgroundPoll.get()) return;
     const delay = nextPollDelayMs(pollCycles, streamOpen);
     pollDueAt = Date.now() + delay;
     pollTimer = setTimeout(() => {
@@ -452,7 +455,7 @@ export function Dashboard(props: {
     }, 2000);
   };
   createEffect(() => {
-    if (!authenticated() || backgroundPollEnabled() !== "on") return;
+    if (!authenticated() || !backgroundPoll.get()) return;
     const stream = new EventSource("/api/events");
     stream.addEventListener("open", () => {
       streamOpen = true;
@@ -509,7 +512,7 @@ export function Dashboard(props: {
   const runOfflineSync = () => void syncOfflineArticles(tree());
   const syncOfflineInIdleTime = () => {
     clearTimeout(offlineSyncTimer);
-    if (disposed || !authenticated() || offlineUnreadEnabled() !== "on") return;
+    if (disposed || !authenticated() || !offlineUnread.get()) return;
     offlineSyncTimer = setTimeout(
       () => {
         if (typeof requestIdleCallback === "function")
@@ -526,7 +529,7 @@ export function Dashboard(props: {
   // Retry when the tab or network becomes available. A sync may have started
   // before it was hidden or disconnected, leaving some bodies undownloaded.
   const retryOfflineSync = () => {
-    if (canRetryOfflineSync(offlineUnreadEnabled() === "on", document.hidden))
+    if (canRetryOfflineSync(offlineUnread.get(), document.hidden))
       syncOfflineInIdleTime();
   };
   document.addEventListener("visibilitychange", retryOfflineSync);
@@ -592,7 +595,7 @@ export function Dashboard(props: {
     } finally {
       if (offlineSyncGate.finish()) syncOfflineInIdleTime();
     }
-    if (!disposed && offlineUnreadEnabled() === "on")
+    if (!disposed && offlineUnread.get())
       postOfflineArticles(selection.articles, token);
   }
   async function shareSelected() {
@@ -763,7 +766,7 @@ export function Dashboard(props: {
     // Read the snapshot up front (before any await) so a reload restores the
     // state the tab actually left in, not whatever a faster boot wrote.
     const restored = restoreEnabled() ? readingSession.snapshot() : undefined;
-    if (!rememberReadingPosition())
+    if (!rememberReadingPosition.get())
       try {
         sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);
       } catch {}
@@ -825,11 +828,11 @@ export function Dashboard(props: {
   async function restoreFromSnapshot(snapshot: AppSnapshot) {
     try {
       const node = findNode(
-        withTodayNode(tree(), todayView() === "on"),
+        withTodayNode(tree(), todayView.get()),
         snapshot.nodeType,
         snapshot.nodeUid,
       );
-      const search = articleSearchBox() === "on" ? snapshot.search : undefined;
+      const search = articleSearchBox.get() ? snapshot.search : undefined;
       if (!node && !search) {
         readingSession.clear();
         setRestoringSession(false);
@@ -945,7 +948,7 @@ export function Dashboard(props: {
           }),
           headers: {
             "Content-Type": "application/json",
-            ...(cursor && offlineUnreadEnabled() === "on"
+            ...(cursor && offlineUnread.get()
               ? { "X-Cursor-Published-At": cursor.publishedAt }
               : {}),
           },
@@ -1104,7 +1107,7 @@ export function Dashboard(props: {
         }),
         headers: {
           "Content-Type": "application/json",
-          ...(offlineUnreadEnabled() === "on"
+          ...(offlineUnread.get()
             ? { "X-Cursor-Published-At": cursor.publishedAt }
             : {}),
         },
@@ -1273,7 +1276,7 @@ export function Dashboard(props: {
       });
       if (announcement) announce(announcement);
       // Marked finished: its half-read position has no future (#718).
-      if (read && rememberReadingPosition())
+      if (read && rememberReadingPosition.get())
         readingSession.clearReaderScrolls(ids);
       await loadTree();
     } catch (cause) {
@@ -1291,7 +1294,7 @@ export function Dashboard(props: {
   // optimistic removal and selection handling apply identically and no
   // second request shape races them.
   createEffect(() => {
-    if (markReadPolicy() !== "on-scroll-past") return;
+    if (markReadPolicy.get() !== "on-scroll-past") return;
     // A session restore is mid-flight: it is about to scroll this list to
     // the stored position, and the observer must not be watching yet, or the
     // programmatic scroll would count as the user scrolling past rows (#718).
@@ -1587,8 +1590,7 @@ export function Dashboard(props: {
   // it and serves it for a minute without a round trip (see
   // recentArticleFirst in public/sw.js), and offline after that.
   function prefetchArticle(id: number) {
-    // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (prefetchNextEnabled() !== "on") return;
+    if (!prefetchNext.get()) return;
     if (!shouldPrefetch(navigatorConnection())) return;
     if (openedArticle()?.id === id) return;
     // Best-effort: opening the article reports its own failure.
@@ -1671,7 +1673,7 @@ export function Dashboard(props: {
       // open would pull the row out from under the person reading it; there,
       // the toolbar button is the way.
       if (
-        markReadPolicy() === "on-open" &&
+        markReadPolicy.get() === "on-open" &&
         !article.read &&
         articleFilter() === "all"
       ) {
@@ -1793,7 +1795,8 @@ export function Dashboard(props: {
       .then(() => {
         announce(`${articlesNoun(ids.length)} deleted.`);
         // Deleted articles have no reading position to remember (#718).
-        if (rememberReadingPosition()) readingSession.clearReaderScrolls(ids);
+        if (rememberReadingPosition.get())
+          readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
           reportError(cause, "Could not refresh tree"),
         );
@@ -2094,7 +2097,7 @@ export function Dashboard(props: {
                 </div>
               }
             >
-              <Show when={feedFilterBox() === "on"}>
+              <Show when={feedFilterBox.get()}>
                 <input
                   aria-label="Filter feeds"
                   class="tree-filter"
@@ -2216,7 +2219,7 @@ export function Dashboard(props: {
               the box its own clear affordance; search runs on submit rather
               than per keystroke, because every query is a full-text scan on
               someone's home server (#697). */}
-          <Show when={articleSearchBox() === "on"}>
+          <Show when={articleSearchBox.get()}>
             <form
               class="article-search-field"
               role="search"

@@ -5,8 +5,8 @@ import { youtubeVideoId } from "./youtube-video-id.ts";
 
 function YoutubeEmbed(props: { id: string; title: string }) {
   // Read once: changing the setting should not tear down a playing video.
-  const onClick = youtubeLoad() === "click";
-  const host = youtubeHost() === "youtube" ? "youtube" : "youtube-nocookie";
+  const onClick = youtubeLoad.get() === "click";
+  const host = youtubeHost.get() === "youtube" ? "youtube" : "youtube-nocookie";
   const [loaded, setLoaded] = createSignal(!onClick);
   const src = () =>
     `https://www.${host}.com/embed/${props.id}${onClick ? "?autoplay=1" : ""}`;
@@ -86,8 +86,8 @@ export function Enclosures(props: {
 }) {
   const items = () => shownEnclosures(props.article, props.body);
   const open = () =>
-    enclosuresOpen() === "always" ||
-    (enclosuresOpen() === "single" && items().length === 1);
+    enclosuresOpen.get() === "always" ||
+    (enclosuresOpen.get() === "single" && items().length === 1);
   return (
     <For each={items()}>
       {(enclosure) => {

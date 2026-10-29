@@ -1,69 +1,79 @@
-import { describe, expect, test } from "bun:test";
-import {
-  isMarkReadPolicy,
-  isReaderStep,
-  parseMarkReadPolicy,
-  parseRememberReadingPosition,
-} from "../preferences.ts";
+import { afterEach, expect, test } from "bun:test";
 
-describe("parseMarkReadPolicy", () => {
-  test("defaults to manual when nothing is stored", () => {
-    expect(parseMarkReadPolicy(null, null)).toBe("manual");
-  });
-
-  test("reads each valid stored value through unchanged", () => {
-    expect(parseMarkReadPolicy("manual", null)).toBe("manual");
-    expect(parseMarkReadPolicy("on-open", null)).toBe("on-open");
-    expect(parseMarkReadPolicy("on-scroll-past", null)).toBe("on-scroll-past");
-  });
-
-  test("migrates the legacy markReadOnOpen boolean", () => {
-    expect(parseMarkReadPolicy(null, "true")).toBe("on-open");
-    // An explicit new value wins over whatever the legacy key holds.
-    expect(parseMarkReadPolicy("manual", "true")).toBe("manual");
-    expect(parseMarkReadPolicy("on-scroll-past", "true")).toBe(
-      "on-scroll-past",
-    );
-  });
-
-  test("anything malformed falls back to manual", () => {
-    expect(parseMarkReadPolicy("always", null)).toBe("manual");
-    expect(parseMarkReadPolicy(null, "false")).toBe("manual");
-    expect(parseMarkReadPolicy("", "nonsense")).toBe("manual");
-  });
-
-  test("isMarkReadPolicy accepts exactly the three values", () => {
-    expect(isMarkReadPolicy("manual")).toBe(true);
-    expect(isMarkReadPolicy("on-open")).toBe(true);
-    expect(isMarkReadPolicy("on-scroll-past")).toBe(true);
-    expect(isMarkReadPolicy("true")).toBe(false);
-    expect(isMarkReadPolicy("")).toBe(false);
-  });
+// Bun has no localStorage; a Map stands in for whatever the browser holds.
+const stored = new Map<string, string>();
+const storage = {
+  getItem: (key: string) => stored.get(key) ?? null,
+  setItem: (key: string, value: string) => stored.set(key, value),
+};
+Object.assign(globalThis, { localStorage: storage });
+// Before the import: the module-level preferences read storage on load.
+stored.set("markReadOnOpen", "true");
+const { markReadPolicy, storedPreference, storedToggle } =
+  await import("../preferences.ts");
+afterEach(() => {
+  stored.clear();
+  Object.assign(globalThis, { localStorage: storage });
 });
 
-describe("parseRememberReadingPosition", () => {
-  test("defaults to on when nothing is stored", () => {
-    expect(parseRememberReadingPosition(null)).toBe(true);
-  });
-
-  test("reads the stored toggle", () => {
-    expect(parseRememberReadingPosition("on")).toBe(true);
-    expect(parseRememberReadingPosition("off")).toBe(false);
-  });
-
-  test("anything malformed falls back to on", () => {
-    expect(parseRememberReadingPosition("true")).toBe(true);
-    expect(parseRememberReadingPosition("")).toBe(true);
-  });
+test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", () => {
+  expect(markReadPolicy.get()).toBe("on-open");
 });
 
-describe("isReaderStep", () => {
-  test("accepts exactly the three steps both reader settings share", () => {
-    for (const value of ["small", "medium", "large"])
-      expect(isReaderStep(value)).toBe(true);
-    // "narrow"/"wide" are the width select's labels, not its stored values;
-    // one vocabulary keeps one guard honest for both settings.
-    for (const value of ["narrow", "wide", "", "Medium"])
-      expect(isReaderStep(value)).toBe(false);
+test("reads a stored value and falls back on anything else", () => {
+  stored.set("step", "large");
+  const steps = ["small", "medium", "large"] as const;
+  expect(storedPreference("step", steps, "medium").get()).toBe("large");
+  for (const value of ["narrow", "", "Large"]) {
+    stored.set("step", value);
+    expect(storedPreference("step", steps, "medium").get()).toBe("medium");
+  }
+  stored.delete("step");
+  expect(storedPreference("step", steps, "medium").get()).toBe("medium");
+});
+
+test("set updates the signal and storage", () => {
+  const preference = storedPreference("load", ["click", "open"], "click");
+  preference.set("open");
+  expect(preference.get()).toBe("open");
+  expect(stored.get("load")).toBe("open");
+});
+
+test('toggles store booleans and still read the old "on"/"off" strings', () => {
+  stored.set("a", "off");
+  stored.set("b", "on");
+  expect(storedToggle("a", true).get()).toBe(false);
+  expect(storedToggle("b", false).get()).toBe(true);
+  stored.set("a", "nonsense");
+  expect(storedToggle("a", true).get()).toBe(true);
+
+  const toggle = storedToggle("a", true);
+  toggle.set(false);
+  expect(stored.get("a")).toBe("false");
+  expect(storedToggle("a", true).get()).toBe(false);
+});
+
+test("reload picks up a value another tab wrote", () => {
+  const toggle = storedToggle("sync", false);
+  stored.set("sync", "true");
+  expect(toggle.get()).toBe(false);
+  toggle.reload();
+  expect(toggle.get()).toBe(true);
+});
+
+test("storage that throws falls back without failing", () => {
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    },
   });
+  const toggle = storedToggle("blocked", true);
+  expect(toggle.get()).toBe(true);
+  toggle.set(false);
+  expect(toggle.get()).toBe(false);
 });

@@ -340,6 +340,11 @@ html[data-route="options"] #app {
   border: var(--border);
   border-radius: var(--radius);
 }
+@media (width > 768px) {
+  .options-mobile-layout {
+    display: none;
+  }
+}
 .options-card h2 {
   margin: 0;
 }
@@ -1334,9 +1339,9 @@ img.skeleton-row {
   }
   /* The bottom-anchored mobile layout is opt-in via the mobile-layout
      setting: column-reverse moves every pane's toolbar to the bottom edge
-     (with the article rows pulled down to meet it, below). "off" keeps the
+     (with the article rows pulled down to meet it, below). Off keeps the
      desktop order -- toolbars on top -- merely made responsive. */
-  html[data-mobile-list-anchor="on"] .dashboard-pane {
+  html[data-mobile-list-anchor="true"] .dashboard-pane {
     flex-flow: column-reverse;
   }
   .dashboard .reader-pane {
@@ -1347,13 +1352,13 @@ img.skeleton-row {
   }
   /* Short article lists: the list pane always fills the viewport, so a list
      shorter than one screen leaves a blank stretch that reads as unfinished.
-     "on" pushes the rows down to the toolbar at the pane's bottom edge. The
+     The setting pushes the rows down to the toolbar at the pane's bottom edge. The
      auto margin sits
      on the first child rather than justify-content: flex-end on the list
      itself, because justified overflow spills past the top edge and makes the
      first rows unreachable by scrolling -- an auto margin collapses to zero
      once the content overflows, so the long-list path is untouched. */
-  html[data-mobile-list-anchor="on"] .articles-pane > .article-list {
+  html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
     /* Auto margins only absorb free space in a flex container, so the list
        becomes one here; the rows are block links and lay out unchanged. */
     display: flex;
@@ -1362,10 +1367,10 @@ img.skeleton-row {
   /* A row's content-visibility: auto (#990) gives it size containment, so
      its automatic minimum height drops to zero and a long list would
      shrink every row to its padding instead of overflowing. */
-  html[data-mobile-list-anchor="on"] .articles-pane > .article-list > * {
+  html[data-mobile-list-anchor="true"] .articles-pane > .article-list > * {
     flex-shrink: 0;
   }
-  html[data-mobile-list-anchor="on"]
+  html[data-mobile-list-anchor="true"]
     .articles-pane
     > .article-list
     > :first-child:not(.skeleton) {

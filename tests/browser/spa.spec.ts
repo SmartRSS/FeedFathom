@@ -1390,7 +1390,7 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
-    .selectOption("off");
+    .selectOption("false");
   // The effect reruns wherever the app is, not only over the dashboard.
   await expect(page).toHaveTitle("Options · FeedFathom");
 
@@ -1400,6 +1400,21 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   // A reload re-reads the persisted setting from localStorage.
   await page.reload();
   await expect(page).toHaveTitle("FeedFathom");
+});
+
+// Toggles were stored as "on"/"off" before they were booleans; a reader who
+// switched one off then still has it off.
+test("reads a toggle stored as the old off string as off", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("unreadBadge", "off"));
+  await installApiFixture(page);
+  await page.goto("/");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page).toHaveTitle("FeedFathom");
+
+  await page.goto("/options#signal");
+  await expect(
+    page.getByRole("combobox", { name: "Unread count in tab title" }),
+  ).toHaveValue("false");
 });
 
 // Each search box is one row of a pane with little height to spare, so each
@@ -1417,7 +1432,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Feed filter box in the sidebar" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
 
   await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
@@ -1428,7 +1443,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Article search box" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 
@@ -1439,10 +1454,9 @@ test("hides the feed filter and article search boxes independently", async ({
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 });
 
-// The prefetch setting's Off used to read as on like every string-"off"
-// signal consumed bare (#765's root cause), so the requests it was
-// supposed to save went out anyway. These two pin both sides of the
-// toggle around the same open.
+// These two pin both sides of the prefetch toggle around the same open.
+// They store the "on"/"off" strings toggles used before they were booleans,
+// so they also cover reading those.
 const requestedArticleIds = (page: Page) => {
   const ids: string[] = [];
   page.on("request", (request) => {
@@ -3397,7 +3411,7 @@ test.describe("under a controlling service worker", () => {
       .getByRole("combobox", {
         name: "Download unread articles for offline reading",
       })
-      .selectOption("off");
+      .selectOption("false");
     await expect.poll(() => downloaded(page)).toEqual([]);
 
     // The init script switches it back on.

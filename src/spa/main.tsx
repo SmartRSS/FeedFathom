@@ -31,7 +31,7 @@ import {
   readerWidth,
   resolvedTheme,
 } from "./preferences.ts";
-import { unreadBadgeEnabled, unreadTotal } from "./news-signal.ts";
+import { unreadBadge, unreadTotal } from "./news-signal.ts";
 import { reloadForUpdate } from "./reading-session.ts";
 import "./style.css";
 
@@ -100,13 +100,15 @@ function App() {
   // for both: each attribute follows exactly one signal, which is the shape
   // Solid 2.0's compute-then-apply split wants (docs/upcoming-upgrades.md).
   createEffect(() => {
-    document.documentElement.dataset["readerText"] = readerText();
+    document.documentElement.dataset["readerText"] = readerText.get();
   });
   createEffect(() => {
-    document.documentElement.dataset["readerWidth"] = readerWidth();
+    document.documentElement.dataset["readerWidth"] = readerWidth.get();
   });
   createEffect(() => {
-    document.documentElement.dataset["mobileListAnchor"] = mobileListAnchor();
+    document.documentElement.dataset["mobileListAnchor"] = String(
+      mobileListAnchor.get(),
+    );
   });
 
   if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
@@ -167,13 +169,9 @@ function App() {
     const base = title === "FeedFathom" ? title : `${title} · FeedFathom`;
     // The tab-title unread badge (#717). Only the dashboard produces a
     // count; elsewhere it reads whatever the last dashboard left behind,
-    // and zero (badge hidden) once the dashboard is gone. The signal holds
-    // "on"/"off" strings -- "off" is truthy, so compare it explicitly
-    // (the bare && read it as always-on: #765).
+    // and zero (badge hidden) once the dashboard is gone.
     const badge =
-      unreadBadgeEnabled() === "on" && unreadTotal() > 0
-        ? `(${unreadTotal()}) `
-        : "";
+      unreadBadge.get() && unreadTotal() > 0 ? `(${unreadTotal()}) ` : "";
     document.title = `${badge}${base}`;
   });
 

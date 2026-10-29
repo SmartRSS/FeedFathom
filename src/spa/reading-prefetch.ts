@@ -1,55 +1,30 @@
-import { createSignal } from "solid-js";
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
+import { storedToggle } from "./preferences.ts";
 
 // Prefetching the next article's content (#716) costs the server one extra
 // extract-route hit per opened article, and some users count that as waste:
 // so this is off until it is switched on.
-export type OnOff = "off" | "on";
-
-function isOnOff(value: string): value is OnOff {
-  return value === "off" || value === "on";
-}
-
-const KEY = "prefetchNext";
-
-function read(key: string): OnOff {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored && isOnOff(stored) ? stored : "off";
-  } catch {
-    return "off";
-  }
-}
-
-const [prefetchNextEnabled, setPrefetchNextEnabled] = createSignal<OnOff>(
-  read(KEY),
-);
-export { prefetchNextEnabled };
-
-export function setPrefetchNext(next: OnOff) {
-  setPrefetchNextEnabled(next);
-  try {
-    localStorage.setItem(KEY, next);
-  } catch {}
-}
+export const prefetchNext = storedToggle("prefetchNext", false);
 
 // Offline reading (#992) downloads every recent unread body, a far larger
 // bill than one prefetch, so it is off until switched on too. The service
 // worker can't read localStorage: the dashboard sends it the unread rows to
 // keep, which also list the articles offline, and switching off sends none.
 const OFFLINE_UNREAD_KEY = "offlineUnread";
-
-const [offlineUnreadEnabled, setOfflineUnreadEnabled] = createSignal<OnOff>(
-  read(OFFLINE_UNREAD_KEY),
-);
-export { offlineUnreadEnabled };
+const offlineUnreadToggle = storedToggle(OFFLINE_UNREAD_KEY, false);
+export const offlineUnread: typeof offlineUnreadToggle = {
+  ...offlineUnreadToggle,
+  set(next) {
+    offlineUnreadToggle.set(next);
+    if (!next) postOfflineArticles([]);
+  },
+};
 // Another tab switching it off must stop this one's syncs too, or its next
 // one would download everything again.
 if (typeof window !== "undefined")
   window.addEventListener("storage", (event) => {
-    if (event.key === OFFLINE_UNREAD_KEY)
-      setOfflineUnreadEnabled(read(OFFLINE_UNREAD_KEY));
+    if (event.key === OFFLINE_UNREAD_KEY) offlineUnread.reload();
   });
 
 // `token` tags the list requests the rows came from; an empty list carries
@@ -63,14 +38,6 @@ export function postOfflineArticles(
     token,
     type: "offline-articles",
   });
-}
-
-export function setOfflineUnread(next: OnOff) {
-  setOfflineUnreadEnabled(next);
-  try {
-    localStorage.setItem(OFFLINE_UNREAD_KEY, next);
-  } catch {}
-  if (next === "off") postOfflineArticles([]);
 }
 
 // ponytail: 500 bodies from the last 14 days. Enough for a commute or a

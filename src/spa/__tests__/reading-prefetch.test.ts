@@ -5,21 +5,20 @@ import {
   navigatorConnection,
   neighbours,
   offlineArticles,
-  offlineUnreadEnabled,
-  prefetchNextEnabled,
-  setPrefetchNext,
+  offlineUnread,
+  prefetchNext,
   shouldPrefetch,
   unreadSourceIds,
 } from "../reading-prefetch.ts";
 
-afterEach(() => setPrefetchNext("off"));
+afterEach(() => prefetchNext.set(false));
 
 test("the preference defaults to off and follows the last set value", () => {
-  expect(prefetchNextEnabled()).toBe("off");
-  setPrefetchNext("on");
-  expect(prefetchNextEnabled()).toBe("on");
-  setPrefetchNext("off");
-  expect(prefetchNextEnabled()).toBe("off");
+  expect(prefetchNext.get()).toBe(false);
+  prefetchNext.set(true);
+  expect(prefetchNext.get()).toBe(true);
+  prefetchNext.set(false);
+  expect(prefetchNext.get()).toBe(false);
 });
 
 test("Save Data suppresses the prefetch; absent connection does not", () => {
@@ -64,7 +63,7 @@ test("neighbours returns the next then the previous article", () => {
 });
 
 test("offline reading defaults to off", () => {
-  expect(offlineUnreadEnabled()).toBe("off");
+  expect(offlineUnread.get()).toBe(false);
 });
 
 const DAY = 24 * 60 * 60 * 1000;
