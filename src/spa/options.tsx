@@ -198,49 +198,6 @@ export function Options(props: {
     setSessionMessage("");
     try {
       await api("/logout", successResponse, { method: "POST" });
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter((key) => key.startsWith("api-"))
-            .map((key) => caches.delete(key)),
-        );
-      }
-      if ("indexedDB" in window) {
-        try {
-          // Clearing the object store (rather than deleteDatabase) works
-          // even while the service worker holds its own open connection to
-          // this same database -- deleteDatabase requires every connection
-          // closed first and would otherwise block indefinitely if the SW
-          // is mid-flushQueue().
-          await new Promise<void>((resolve, reject) => {
-            const openRequest = window.indexedDB.open("mutation-queue", 1);
-            openRequest.addEventListener("upgradeneeded", () => {
-              openRequest.result.createObjectStore("mutations", {
-                autoIncrement: true,
-              });
-            });
-            openRequest.addEventListener("success", () => {
-              const db = openRequest.result;
-              const tx = db.transaction("mutations", "readwrite");
-              tx.objectStore("mutations").clear();
-              tx.addEventListener("complete", () => {
-                db.close();
-                resolve();
-              });
-              tx.addEventListener("error", () => {
-                db.close();
-                reject(tx.error);
-              });
-            });
-            openRequest.addEventListener("error", () =>
-              reject(openRequest.error),
-            );
-          });
-        } catch {
-          // Ignore: a queue clear failure must not block logout.
-        }
-      }
       props.navigate("/login");
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;

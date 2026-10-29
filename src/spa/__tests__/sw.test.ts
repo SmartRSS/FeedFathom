@@ -33,46 +33,31 @@ const offlineRow = (id: number, overrides: Partial<OfflineRow> = {}) => ({
 });
 
 // The slice of IndexedDB the mutation queue uses: one auto-increment store,
-// with every request settling on a later microtask as the real API does.
+// with each transaction completing on a later microtask as the real API does.
 const fakeIndexedDb = () => {
   const rows = new Map<number, unknown>();
   let nextKey = 1;
   let opens = 0;
+  const store = {
+    add: (value: unknown) => {
+      rows.set(nextKey, value);
+      return { result: nextKey++ };
+    },
+    clear: () => {
+      rows.clear();
+      return { result: undefined };
+    },
+    delete: (key: number) => {
+      rows.delete(key);
+      return { result: undefined };
+    },
+    getAll: () => ({ result: [...rows.values()] }),
+    getAllKeys: () => ({ result: [...rows.keys()] }),
+  };
   const transaction = () => {
     const tx: { oncomplete: Callback } = { oncomplete: undefined };
-    const complete = () => queueMicrotask(() => tx.oncomplete?.());
-    const objectStore = () => ({
-      add: (value: unknown) => {
-        rows.set(nextKey++, value);
-        complete();
-      },
-      delete: (key: number) => {
-        rows.delete(key);
-        complete();
-      },
-      openCursor: () => {
-        const request: { onsuccess: Callback; result: unknown } = {
-          onsuccess: undefined,
-          result: null,
-        };
-        const keys = [...rows.keys()];
-        const step = (index: number) => {
-          const key = keys[index];
-          request.result =
-            key === undefined
-              ? null
-              : {
-                  continue: () => queueMicrotask(() => step(index + 1)),
-                  key,
-                  value: rows.get(key),
-                };
-          request.onsuccess?.();
-        };
-        queueMicrotask(() => step(0));
-        return request;
-      },
-    });
-    return Object.assign(tx, { objectStore });
+    queueMicrotask(() => tx.oncomplete?.());
+    return Object.assign(tx, { objectStore: () => store });
   };
   return {
     indexedDB: {
@@ -1147,6 +1132,26 @@ test("a removal queued before the session expired replays when the same account 
     messages: [],
     queued: 0,
   });
+});
+
+test("logging out drops the removals waiting to replay, and the API cache", async () => {
+  const sw = loadServiceWorker((path) =>
+    path === "/api/logout"
+      ? Response.json({ success: true })
+      : Promise.reject(new TypeError("Failed to fetch")),
+  );
+  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/source`, {
+      body: JSON.stringify({ removeSourceId: 3 }),
+      method: "DELETE",
+    }),
+  ).response;
+  expect(sw.queue.rows.size).toBe(1);
+  await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
+    .response;
+  expect(sw.queue.rows.size).toBe(0);
+  expect([...sw.entries.keys()]).toEqual([]);
 });
 
 // index.html gates its /api/tree preload on the same route list, so the page

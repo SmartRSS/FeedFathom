@@ -129,60 +129,37 @@ function openQueueDb() {
 // database only to find it empty.
 let queueMayHaveEntries = true;
 
-// Every call closes its connection once the transaction settles. Logout
-// deletes this same database (see options.tsx), and IndexedDB blocks a
-// deletion indefinitely while any connection stays open.
-
-async function queueAdd(entry) {
-  const db = await openQueueDb();
-  try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readwrite");
-      tx.objectStore(QUEUE_STORE).add(entry);
-      tx.oncomplete = () => {
-        queueMayHaveEntries = true;
-        resolve();
-      };
-      tx.onerror = () => reject(tx.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function queueAll() {
+// Runs the requests `run` makes on the store in one transaction, and resolves
+// with their results once it completes.
+async function queueTransaction(mode, run) {
   const db = await openQueueDb();
   try {
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readonly");
-      const cursorRequest = tx.objectStore(QUEUE_STORE).openCursor();
-      const entries = [];
-      cursorRequest.onsuccess = () => {
-        const cursor = cursorRequest.result;
-        if (!cursor) return resolve(entries);
-        entries.push({ key: cursor.key, value: cursor.value });
-        cursor.continue();
-      };
-      cursorRequest.onerror = () => reject(cursorRequest.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function queueDelete(key) {
-  const db = await openQueueDb();
-  try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readwrite");
-      tx.objectStore(QUEUE_STORE).delete(key);
-      tx.oncomplete = resolve;
+      const tx = db.transaction(QUEUE_STORE, mode);
+      const requests = run(tx.objectStore(QUEUE_STORE));
+      tx.oncomplete = () => resolve(requests.map((request) => request.result));
       tx.onerror = () => reject(tx.error);
     });
   } finally {
     db.close();
   }
 }
+
+async function queueAdd(entry) {
+  await queueTransaction("readwrite", (store) => [store.add(entry)]);
+  queueMayHaveEntries = true;
+}
+
+async function queueAll() {
+  const [keys, values] = await queueTransaction("readonly", (store) => [
+    store.getAllKeys(),
+    store.getAll(),
+  ]);
+  return keys.map((key, index) => ({ key, value: values[index] }));
+}
+
+const queueDelete = (key) =>
+  queueTransaction("readwrite", (store) => [store.delete(key)]);
 
 async function notifyMutationFailed(value, status) {
   const clients = await self.clients.matchAll({ type: "window" });
@@ -385,18 +362,22 @@ async function cacheFirst(request, cacheName, init) {
 }
 
 // The API cache holds one account's private data and isn't keyed by account,
-// so a sign-in empties it before the page sees the response. Logout clears it
-// too (options.tsx), but a session that expired or was revoked reaches the
-// login form without logging out, and the next sign-in may be another
-// account (#974). That also drops the recorded queue account; the next flush
-// fetches the new one. Logout passes through here too, so it fences session
-// lookups that are still in flight.
-async function changeAccount(request) {
+// so a sign-in or logout empties it before the page sees the response: a
+// session that expired or was revoked reaches the login form without logging
+// out, and the next sign-in may be another account (#974). That also drops
+// the recorded queue account; the next flush fetches the new one. Both fence
+// session lookups that are still in flight. A logout drops the removals still
+// waiting to replay too, which a sign-in keeps for their account's return.
+async function changeAccount(request, path) {
   accountChanges++;
   const response = await fetch(request);
   if (response.ok) {
     accountChanges++;
     await caches.delete(API_CACHE);
+    if (path === "/api/logout")
+      await queueTransaction("readwrite", (store) => [store.clear()]).catch(
+        () => {}, // a queue clear failure must not block logout
+      );
     queueMayHaveEntries = true;
   }
   return response;
@@ -898,7 +879,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") {
     if (url.pathname === "/api/login" || url.pathname === "/api/logout") {
-      event.respondWith(changeAccount(request));
+      event.respondWith(changeAccount(request, url.pathname));
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/articles") {
