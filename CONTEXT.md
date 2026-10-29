@@ -58,7 +58,7 @@ feeds       → auth
 reader      → feeds, auth
 admin       → feeds, auth
 mail-ingest → feeds
-jobs        → feeds, admin
+jobs        → feeds
 ```
 
 Any edge not on that list is a lint error. The list must also stay acyclic,
@@ -80,11 +80,10 @@ up in the diff, instead of arriving as a quiet new import.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
-- **`admin`** — the admin and options routes and the job-failures data service.
-  Two route groups rather than one, because `/api/options` is per-user and
-  `/api/admin` is not: the admin group carries `createAdminPlugin`, so the
-  authorisation check is a property of the group instead of something each
-  handler has to restate.
+- **`admin`** — the admin and options routes. Two route groups rather than
+  one, because `/api/options` is per-user and `/api/admin` is not: the admin
+  group carries `createAdminPlugin`, so the authorisation check is a property
+  of the group instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.

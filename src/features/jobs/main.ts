@@ -5,7 +5,6 @@ import type { SourcesDataService } from "#features/feeds/source-data-service.ts"
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { DelayedError, type Job, type JobsOptions } from "bullmq";
@@ -103,7 +102,6 @@ export type MainWorkerServices = {
   faviconRefresher: FaviconRefresher;
   feedParser: FeedParser;
   hubPoster: HubPoster;
-  jobFailuresDataService: JobFailuresDataService;
   sourceEnqueuer: SourceEnqueuer;
   sourcesDataService: SourcesDataService;
   userSourcesDataService: UserSourcesDataService;
@@ -153,7 +151,6 @@ export class MainWorker {
       faviconRefresher,
       feedParser,
       hubPoster,
-      jobFailuresDataService,
       sourceEnqueuer,
       sourcesDataService,
       userSourcesDataService,
@@ -310,17 +307,14 @@ export class MainWorker {
         }
       }
       try {
-        // Nothing in here -- logging, building the message, recording it --
-        // may become a job failure, or an adversarial thrown value (a poisoned
-        // `message` getter, a poisoned custom-inspect symbol) puts the job into
-        // BullMQ's failure state instead of always acknowledging and keeping
-        // outcomes in Postgres.
-        console.error("Error processing job:", error);
-        const message = error instanceof Error ? error.message : String(error);
-        await jobFailuresDataService.record(job.name, message);
+        // Logged and acknowledged, never rethrown, so BullMQ never holds the
+        // job in its failure state. The outcomes something reads stay in
+        // Postgres where their owner writes them: parseSource records a
+        // source's failure, and the WebSub renewal above its own.
+        console.error(`Error processing ${job.name} job:`, error);
       } catch {
-        // Swallowed without logging: any statement in the block above can
-        // throw, so logging the failure risks the same unguarded throw.
+        // Swallowed without logging: an adversarial thrown value (a poisoned
+        // custom-inspect symbol) is what made the log call throw.
       }
     }
   };

@@ -5,8 +5,7 @@ import type { SourcesDataService } from "#features/feeds/source-data-service.ts"
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { DelayedError } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -85,12 +84,6 @@ const idleSourceEnqueuer = () =>
     "sourceEnqueuer",
   );
 
-const idleJobFailures = () =>
-  strictFake<JobFailuresDataService>(
-    { async record() {} },
-    "jobFailuresDataService",
-  );
-
 // Initializes a MainWorker over idle services, with the test's replacements
 // on top, and hands back the job processor it gave its BullMQ worker.
 async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
@@ -109,7 +102,6 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
       "feedParser",
     ),
     hubPoster: strictFake({}, "hubPoster"),
-    jobFailuresDataService: idleJobFailures(),
     sourceEnqueuer: idleSourceEnqueuer(),
     sourcesDataService: idleSources(),
     userSourcesDataService: strictFake<UserSourcesDataService>(
@@ -479,22 +471,21 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
   expect(downstreamCalls).toEqual([]);
 });
 
-test("records a durable failure for non-ParseSource job errors", async () => {
-  const recorded: [string, string][] = [];
+test("logs a job error and acknowledges the job", async () => {
+  const failure = new Error("cleanup exploded");
   const { process } = await startWorker({
     async cleanupOrphanedData() {
-      throw new Error("cleanup exploded");
+      throw failure;
     },
-    jobFailuresDataService: strictFake<JobFailuresDataService>({
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
-      },
-    }),
   });
+  using logged = spyOn(console, "error").mockImplementation(() => {});
 
-  await process(job(JobName.Cleanup, {}));
+  await expect(process(job(JobName.Cleanup, {}))).resolves.toBeUndefined();
 
-  expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
+  expect(logged).toHaveBeenCalledWith(
+    `Error processing ${JobName.Cleanup} job:`,
+    failure,
+  );
 });
 
 // The prune bypasses the services that own the unread badge, so the worker
@@ -534,23 +525,8 @@ const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
 }) as HttpDeferredError;
 
 // BullMQ must always see the job as acknowledged: whatever was thrown, and
-// however the deferral or the failure record went wrong, the processor
-// resolves.
+// however the deferral or the log call went wrong, the processor resolves.
 test.each<[string, Partial<MainWorkerServices>, MainWorkerJob]>([
-  [
-    "a failure while recording a job failure",
-    {
-      async cleanupOrphanedData() {
-        throw new Error("cleanup exploded");
-      },
-      jobFailuresDataService: strictFake<JobFailuresDataService>({
-        async record() {
-          throw new Error("database unavailable");
-        },
-      }),
-    },
-    job(JobName.Cleanup, {}),
-  ],
   [
     "a poisoned error whose message getter throws",
     {
@@ -603,30 +579,4 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob]>([
 ])("%s doesn't fail the job", async (_name, services, failing) => {
   const { process } = await startWorker(services);
   await expect(process(failing)).resolves.toBeUndefined();
-});
-
-// A deferral that cannot be moved is a failure like any other, recorded with
-// what deferred it.
-test("a deferral that cannot be moved is recorded as the job's failure", async () => {
-  const recorded: [string, string][] = [];
-  const { process } = await startWorker({
-    feedParser: deferredParser(),
-    jobFailuresDataService: strictFake<JobFailuresDataService>({
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
-      },
-    }),
-  });
-
-  await process(
-    parseJob({
-      async moveToDelayed() {
-        throw new Error("Redis connection lost");
-      },
-    }),
-  );
-
-  expect(recorded).toHaveLength(1);
-  expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
-  expect(recorded[0]?.[1]).toStartWith("Request deferred until ");
 });

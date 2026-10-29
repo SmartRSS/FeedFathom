@@ -17,10 +17,7 @@ import {
   websubStateService,
 } from "#features/feeds/services.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
-import {
-  faviconRefresher,
-  jobFailuresDataService,
-} from "#features/jobs/services.ts";
+import { faviconRefresher } from "#features/jobs/services.ts";
 import { MainWorker } from "#features/jobs/main.ts";
 
 async function runWorker() {
@@ -34,7 +31,6 @@ async function runWorker() {
     faviconRefresher,
     feedParser,
     hubPoster: httpClient,
-    jobFailuresDataService,
     sourceEnqueuer,
     sourcesDataService,
     userSourcesDataService,

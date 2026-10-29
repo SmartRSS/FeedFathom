@@ -1,5 +1,4 @@
 import { articles } from "#platform/db/schemas/articles.ts";
-import { jobFailures } from "#platform/db/schemas/job-failures.ts";
 import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
 import { sources } from "#platform/db/schemas/sources.ts";
@@ -19,5 +18,4 @@ export {
   articles,
   userArticles,
   sessions,
-  jobFailures,
 };
