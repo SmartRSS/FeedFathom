@@ -1,133 +1,98 @@
-// Hostname-only guard shared by extension reader fetching and WebSub URL
-// validation. It parses IP literals and applies our block rules without DNS
-// lookup. Server requests also validate and pin DNS results in
-// platform/http/http-native-transport.ts; the extension cannot do that.
-//
-// Because real HTTP clients accept non-canonical IP literal forms
-// (inet_aton-style "2130706433" or "127.1", hex "0x7f.1", octal "017.0.0.1",
-// IPv6 zone ids, dotted tails inside IPv4-mapped addresses), a purely
-// string-shaped check for dotted quad / canonical IPv6 is not enough. Any
-// host that looks IP-ish is normalized to an address before the range
-// checks; an IP-ish host we cannot normalize is blocked rather than treated
-// as a hostname (fail closed).
-type Ipv4Address = [number, number, number, number];
+// The one table of non-global address ranges. The server checks every
+// resolved and literal address against it in
+// platform/http/http-native-transport.ts; the extension, which cannot resolve
+// DNS, checks only IP-literal hostnames. Callers pass a WHATWG URL.hostname,
+// which has already turned inet_aton forms ("127.1", "0x7f000001") into a
+// dotted quad and rejected anything that does not parse.
+const blockedSubnets = [
+  "0.0.0.0/8",
+  "10.0.0.0/8",
+  "100.64.0.0/10",
+  "127.0.0.0/8",
+  "169.254.0.0/16",
+  "172.16.0.0/12",
+  "192.0.0.0/24",
+  "192.0.2.0/24",
+  "192.88.99.0/24",
+  "192.168.0.0/16",
+  "198.18.0.0/15",
+  "198.51.100.0/24",
+  "203.0.113.0/24",
+  "224.0.0.0/4",
+  "240.0.0.0/4",
+  "::/96",
+  "::ffff:0:0/96",
+  "64:ff9b::/96",
+  "64:ff9b:1::/48",
+  "100::/64",
+  "2001::/23",
+  "2001:db8::/32",
+  "2002::/16",
+  "3fff::/20",
+  "5f00::/16",
+  "fc00::/7",
+  "fe80::/10",
+  "fec0::/10",
+  "ff00::/8",
+];
 
-// inet_aton semantics: 1-4 dot-separated parts, each decimal, octal
-// (leading 0) or hex (0x); the last part carries the remaining bytes, so
-// "127.1" is 127.0.0.1 and "2130706433" is the same address.
-const parseIpv4Literal = (hostname: string): Ipv4Address | "blocked" | null => {
-  const parts = hostname.split(".");
-  if (parts.length > 4) return null;
-  const numbers: number[] = [];
-  for (const part of parts) {
-    if (/^0x[\da-f]+$/i.test(part)) {
-      numbers.push(Number.parseInt(part, 16));
-    } else if (/^0\d+$/.test(part)) {
-      // Octal form: only octal digits parse; "08" is neither octal nor
-      // something a client agrees on, so fail closed.
-      if (!/^[0-7]+$/.test(part)) return "blocked";
-      numbers.push(Number.parseInt(part, 8));
-    } else if (/^\d+$/.test(part)) {
-      numbers.push(Number.parseInt(part, 10));
-    } else {
-      // A non-numeric part means this was never an IPv4 literal -- an
-      // ordinary hostname like "mirror2.example.com" is fine.
-      return null;
-    }
-  }
-  let value = numbers.pop()!;
-  for (let index = numbers.length - 1; index >= 0; index--) {
-    const number = numbers[index]!;
-    if (number > 255) return "blocked";
-    value += number * 256 ** (numbers.length - index);
-  }
-  if (value > 0xffffffff) return "blocked";
-  return [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ];
+const ipv4Bytes = (address: string): number[] | undefined => {
+  const parts = address.split(".");
+  if (parts.length !== 4) return undefined;
+  if (parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255))
+    return undefined;
+  return parts.map(Number);
 };
 
-const isBlockedIpv4 = ([first, second]: Ipv4Address): boolean =>
-  first === 0 ||
-  first === 10 ||
-  first === 127 ||
-  (first === 100 && second >= 64 && second <= 127) ||
-  (first === 169 && second === 254) ||
-  (first === 172 && second >= 16 && second <= 31) ||
-  (first === 192 && second === 168) ||
-  (first === 198 && (second === 18 || second === 19)) ||
-  first >= 224;
-
-// Expands "::" into the full eight 16-bit groups; the tail may end in a
-// dotted quad (::ffff:127.0.0.1). Malformed addresses return undefined,
-// which the caller treats as blocked.
-const ipv6Groups = (
-  address: string,
-):
-  | readonly [number, number, number, number, number, number, number, number]
-  | undefined => {
-  let tail = address;
-  if (tail.includes(".")) {
-    const dot = tail.lastIndexOf(":");
-    if (dot === -1) return undefined;
-    const parsed = parseIpv4Literal(tail.slice(dot + 1));
-    if (!parsed || parsed === "blocked") return undefined;
-    tail = `${tail.slice(0, dot + 1)}${((parsed[0] << 8) | parsed[1]).toString(16)}:${(
-      (parsed[2] << 8) |
-      parsed[3]
-    ).toString(16)}`;
+// Expands "::" into eight 16-bit groups; the tail may be a dotted quad
+// (::ffff:127.0.0.1), as a DNS lookup can return.
+const ipv6Bytes = (address: string): number[] | undefined => {
+  let groups = address;
+  const lastColon = groups.lastIndexOf(":");
+  if (groups.includes(".")) {
+    const ipv4 = ipv4Bytes(groups.slice(lastColon + 1));
+    if (!ipv4) return undefined;
+    groups = `${groups.slice(0, lastColon + 1)}${((ipv4[0]! << 8) | ipv4[1]!).toString(16)}:${((ipv4[2]! << 8) | ipv4[3]!).toString(16)}`;
   }
-
-  const sections = tail.split("::");
+  const sections = groups.split("::");
   if (sections.length > 2) return undefined;
   const head = sections[0] ? sections[0].split(":") : [];
-  const back =
-    sections.length === 2 ? (sections[1] ? sections[1].split(":") : []) : [];
+  const back = sections[1] ? sections[1].split(":") : [];
   const missing = 8 - head.length - back.length;
   if (sections.length === 2 ? missing < 1 : missing !== 0) return undefined;
-  const groups = [
+  const all = [
     ...head,
-    ...Array.from<string>({ length: Math.max(missing, 0) }).fill("0"),
+    ...Array<string>(Math.max(missing, 0)).fill("0"),
     ...back,
   ];
-  if (groups.some((group) => !/^[\da-f]{1,4}$/i.test(group))) return undefined;
-  const values = groups.map((group) => Number.parseInt(group, 16));
-  return [
-    values[0]!,
-    values[1]!,
-    values[2]!,
-    values[3]!,
-    values[4]!,
-    values[5]!,
-    values[6]!,
-    values[7]!,
-  ];
+  if (all.some((group) => !/^[\da-f]{1,4}$/i.test(group))) return undefined;
+  return all.flatMap((group) => {
+    const value = Number.parseInt(group, 16);
+    return [value >> 8, value & 255];
+  });
 };
 
-const isBlockedIpv6 = (address: string): boolean => {
-  // Only IPv6 literals carry a zone id, and only link-local scopes use
-  // one (fe80::1%eth0) -- blocked either way.
-  if (address.includes("%")) return true;
-  const groups = ipv6Groups(address);
-  if (!groups) return true;
-  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
-  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0) {
-    if (g5 === 0) {
-      if (g6 === 0 && g7 === 0) return true; // unspecified ::
-      if (g6 === 0 && g7 === 1) return true; // loopback ::1
-    }
-    if (g5 === 0xffff)
-      return isBlockedIpv4([g6 >> 8, g6 & 255, g7 >> 8, g7 & 255]);
+const addressBytes = (address: string) =>
+  address.includes(":") ? ipv6Bytes(address) : ipv4Bytes(address);
+
+const subnets = blockedSubnets.map((subnet) => {
+  const [address = "", prefix] = subnet.split("/");
+  return { bytes: addressBytes(address)!, prefix: Number(prefix) };
+});
+
+const inSubnet = (bytes: number[], subnet: (typeof subnets)[number]) => {
+  if (bytes.length !== subnet.bytes.length) return false;
+  for (let bit = 0; bit < subnet.prefix; bit += 8) {
+    const mask = (0xff << (8 - Math.min(8, subnet.prefix - bit))) & 0xff;
+    if (((bytes[bit / 8]! ^ subnet.bytes[bit / 8]!) & mask) !== 0) return false;
   }
-  return (
-    (g0 & 0xfe00) === 0xfc00 ||
-    (g0 & 0xffc0) === 0xfe80 ||
-    (g0 & 0xffc0) === 0xfec0 ||
-    (g0 & 0xff00) === 0xff00
-  );
+  return true;
+};
+
+/** A bare IPv4 or IPv6 address; true when unparseable (fail closed). */
+export const isBlockedAddress = (address: string): boolean => {
+  const bytes = addressBytes(address.toLowerCase());
+  return !bytes || subnets.some((subnet) => inSubnet(bytes, subnet));
 };
 
 export const isBlockedHostname = (hostname: string): boolean => {
@@ -137,14 +102,8 @@ export const isBlockedHostname = (hostname: string): boolean => {
     .replace(/\.$/, "");
   if (normalized === "localhost" || normalized.endsWith(".localhost"))
     return true;
-
-  const ipv4 = parseIpv4Literal(normalized);
-  if (ipv4 !== null) {
-    return ipv4 === "blocked" ? true : isBlockedIpv4(ipv4);
-  }
-
-  if (!normalized.includes(":")) return false;
-  return isBlockedIpv6(normalized);
+  if (!normalized.includes(":") && !/^[\d.]+$/.test(normalized)) return false;
+  return isBlockedAddress(normalized);
 };
 
 // The inverse question, for the internal healthcheck endpoints: an address is

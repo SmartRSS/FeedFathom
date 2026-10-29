@@ -30,15 +30,24 @@ describe("isBlockedHostname", () => {
     "192.168.1.1",
     "169.254.1.1",
     "100.64.0.1",
+    "192.0.2.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "192.88.99.1",
     "224.0.0.1",
     "0.0.0.0",
-    "::",
-    "::1",
-    "fc00::1",
-    "fe80::1",
-    "ff02::1",
-    "fec0::1",
-  ])("blocks private or reserved address %s", (hostname) => {
+    "[::]",
+    "[::1]",
+    "[fc00::1]",
+    "[fe80::1]",
+    "[ff02::1]",
+    "[fec0::1]",
+    "[2001:db8::1]",
+    "[64:ff9b::a00:1]",
+    "[2002::1]",
+    "[::ffff:7f00:1]",
+    "[::ffff:808:808]",
+  ])("blocks non-global address %s", (hostname) => {
     expect(isBlockedHostname(hostname)).toBe(true);
   });
 
@@ -47,51 +56,41 @@ describe("isBlockedHostname", () => {
     "mirror2.example.com",
     "151.101.1.1",
     "8.8.8.8",
-    "2001:db8::1",
-    "2606:4700::1111",
-    "::ffff:151.101.1.1",
-    "::ffff:8.8.4.4",
+    "8.8.8.8.",
+    "[2606:4700::1111]",
   ])("allows public host %s", (hostname) => {
     expect(isBlockedHostname(hostname)).toBe(false);
   });
 
-  // Every one of these parses to a private address in a real HTTP client,
-  // so the string check must not wave it through as a hostname.
+  // Callers pass URL.hostname, which normalizes these to a dotted quad or a
+  // compressed IPv6 address before the table sees them.
   test.each([
-    "2130706433", // integer literal -> 127.0.0.1
-    "0x7f000001", // hex integer -> 127.0.0.1
-    "127.1", // inet_aton 2-part -> 127.0.0.1
-    "0x7f.1", // hex 2-part -> 127.0.0.1
-    "0177.0.0.1", // octal -> 127.0.0.1
-    "0x7f.0.0.1", // hex dotted quad
-    "0:0:0:0:0:0:0:1", // full-form loopback
-    "0:0:0:0:0:0:0:0", // full-form unspecified
-    "::ffff:127.0.0.1", // IPv4-mapped loopback, dotted tail
-    "::ffff:7f00:1", // IPv4-mapped loopback, hex groups
-    "[::1]", // bracketed IPv6
-    "fe80::1%eth0", // zone id
-    "FE80::1", // uppercase IPv6
-  ])("blocks non-canonical literal %s", (hostname) => {
-    expect(isBlockedHostname(hostname)).toBe(true);
+    "2130706433",
+    "0x7f000001",
+    "127.1",
+    "0x7f.1",
+    "0177.0.0.1",
+    "[0:0:0:0:0:0:0:1]",
+    "[0:0:0:0:0:0:0:0]",
+    "[::ffff:127.0.0.1]",
+    "[FE80::1]",
+  ])("blocks non-canonical literal %s via URL.hostname", (host) => {
+    expect(isBlockedHostname(new URL(`http://${host}/`).hostname)).toBe(true);
   });
 
-  // IP-ish hosts that do not normalize to any address are blocked rather
-  // than treated as hostnames (fail closed).
-  test.each([
-    "127.08.0.1", // invalid octal: neither octal nor agreed decimal
-    "999.1.1.1", // non-final octet out of range
-    "4294967296", // 2^32: does not fit an IPv4 literal
-    "::1::2", // two "::"
-    "12345::", // group too wide
-  ])("blocks malformed IP-ish host %s", (hostname) => {
-    expect(isBlockedHostname(hostname)).toBe(true);
-  });
+  test.each(["017.0.0.1", "134744072"])(
+    "allows public non-canonical literal %s via URL.hostname",
+    (host) => {
+      expect(isBlockedHostname(new URL(`http://${host}/`).hostname)).toBe(
+        false,
+      );
+    },
+  );
 
-  test.each([
-    "017.0.0.1", // octal 15 -> 15.0.0.1, public
-    "134744072", // integer -> 8.8.8.8
-    "8.8.8.8.", // trailing dot
-  ])("normalizes public non-canonical literal %s", (hostname) => {
-    expect(isBlockedHostname(hostname)).toBe(false);
-  });
+  test.each(["::1::2", "12345::", "1.2.3"])(
+    "blocks malformed IP-ish host %s",
+    (hostname) => {
+      expect(isBlockedHostname(hostname)).toBe(true);
+    },
+  );
 });

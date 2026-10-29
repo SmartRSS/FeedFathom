@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
+import { parseHttpUrl } from "#platform/http/http-native-transport.ts";
 
 const supportedSignatureAlgorithms = new Set([
   "sha1",
@@ -41,14 +41,11 @@ function scanFeedBodyRels(xml: string): Map<string, string> {
 }
 
 // Both the hub and topic URLs come from the feed's own content or headers, so
-// they are attacker-influenced and need the same private-network guard as the
-// extension's arbitrary-URL reader fetch. Resolved against the feed's URL.
+// they are attacker-influenced and get the same URL policy as every outbound
+// request. Resolved against the feed's URL.
 function resolvePublicUrl(value: string, base?: string): string | undefined {
   try {
-    const url = new URL(value, base);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-    if (isBlockedHostname(url.hostname)) return undefined;
-    return url.href;
+    return parseHttpUrl(new URL(value, base).href).href;
   } catch {
     return undefined;
   }
