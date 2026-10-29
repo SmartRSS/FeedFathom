@@ -1,10 +1,45 @@
-import { close, drizzleConnection } from "#platform/runtime.ts";
+import { Worker } from "bullmq";
+import { config } from "#platform/config.ts";
+import {
+  bullmqQueue,
+  bullmqRedis,
+  close,
+  drizzleConnection,
+  httpClient,
+} from "#platform/runtime.ts";
 import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import {
+  feedParser,
+  sourceEnqueuer,
+  sourcesDataService,
+  userSourcesDataService,
+  websubStateService,
+} from "#features/feeds/services.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import {
+  faviconRefresher,
+  jobFailuresDataService,
+} from "#features/jobs/services.ts";
 import { MainWorker } from "#features/jobs/main.ts";
 
 async function runWorker() {
-  const mainWorker = new MainWorker();
+  const mainWorker = new MainWorker({
+    bullmqQueue,
+    cleanupOrphanedData: (...days) =>
+      cleanupOrphanedData(drizzleConnection, ...days),
+    config,
+    createWorker: (processor, options) =>
+      new Worker("tasks", processor, { ...options, connection: bullmqRedis }),
+    faviconRefresher,
+    feedParser,
+    hubPoster: httpClient,
+    jobFailuresDataService,
+    sourceEnqueuer,
+    sourcesDataService,
+    userSourcesDataService,
+    websubStateService,
+  });
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () => {
     shutdownPromise ??= (async () => {
