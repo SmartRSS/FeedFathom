@@ -383,10 +383,10 @@ async function changeAccount(request, path) {
   return response;
 }
 
-async function networkFirst(request, cacheName) {
+async function networkFirst(request, cacheName, network = fetch(request)) {
   const cache = await caches.open(cacheName);
   try {
-    const response = await fetch(request);
+    const response = await network;
     if (response.ok) {
       cache.put(request, response.clone());
       void flushQueue();
@@ -397,27 +397,6 @@ async function networkFirst(request, cacheName) {
     if (cached) return cached;
     throw error;
   }
-}
-
-function treeFaviconUrls(node) {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(treeFaviconUrls);
-}
-
-function withInlinedFavicon(node, dataUrlByPath) {
-  if (node.type === "source") {
-    const inlined = node.favicon && dataUrlByPath.get(node.favicon);
-    return inlined ? { ...node, favicon: inlined } : node;
-  }
-  return {
-    ...node,
-    children: (node.children ?? []).map((child) =>
-      withInlinedFavicon(child, dataUrlByPath),
-    ),
-  };
 }
 
 // Articles in the cache carry the time they were fetched, so their age is
@@ -435,55 +414,6 @@ function putWithFetchedAt(cache, request, response) {
       headers,
     }),
   );
-}
-
-// Keyed by path -- the path is content-addressed (tree.ts appends a
-// fingerprint of sources.favicon as ?v=), so the same path always decodes to
-// the same bytes and the memo never needs invalidating.
-const faviconDataUrls = new Map();
-
-async function faviconDataUrl(path, cached) {
-  const memo = faviconDataUrls.get(path);
-  if (memo) return memo;
-  const contentType =
-    cached.headers.get("Content-Type") ?? "application/octet-stream";
-  const bytes = new Uint8Array(await cached.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
-  faviconDataUrls.set(path, dataUrl);
-  return dataUrl;
-}
-
-// Inlines whichever favicons are already cached -- cache.match() only, no
-// network, so the tree never waits. Uncached ones stay plain
-// /api/favicon/:id?v=... URLs, covered by the per-icon skeleton in
-// dashboard.tsx and cached by the fetch handler's cacheFirst on first load.
-async function inlineTreeFavicons(response, cache) {
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    return null;
-  }
-  const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
-  const dataUrlByPath = new Map();
-  await Promise.allSettled(
-    urls.map(async (path) => {
-      const cached = await cache.match(path);
-      if (cached) dataUrlByPath.set(path, await faviconDataUrl(path, cached));
-    }),
-  );
-  if (dataUrlByPath.size === 0) return null;
-  const patched = {
-    ...data,
-    tree: (data.tree ?? []).map((node) =>
-      withInlinedFavicon(node, dataUrlByPath),
-    ),
-  };
-  return new Response(JSON.stringify(patched), {
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 // The dashboard prefetches the next article in idle time (#716); a copy this
@@ -787,40 +717,18 @@ async function articleList(request) {
 }
 
 // Set by shell() on a dashboard-bound navigation, so the tree fetch starts
-// before the page's JS bundle loads; treeWithInlineFavicons reuses it instead
-// of firing a second round trip.
+// before the page's JS bundle loads; the page's /api/tree request reuses it
+// instead of firing a second round trip.
 let treePreload;
-
-async function treeWithInlineFavicons(event, request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const preload = treePreload;
-  treePreload = undefined;
-  try {
-    const response = await (preload ?? fetch(request));
-    if (response.ok) {
-      cache.put(request, response.clone());
-      void flushQueue();
-      const patched = await inlineTreeFavicons(response.clone(), cache);
-      if (patched) return patched;
-    }
-    return response;
-  } catch (error) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    throw error;
-  }
-}
 
 // Boot paints from this while its real /api/tree request is in flight
 // (#989), so a cached tree shows at once on a slow connection. It never goes
 // to the network -- the real request already has -- so a miss is a bare 504
 // the page reads as "nothing cached". The cache holds the current account's
 // data only (see changeAccount).
-async function cachedTree(cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match("/api/tree");
-  if (!cached) return new Response(null, { status: 504 });
-  return (await inlineTreeFavicons(cached.clone(), cache)) ?? cached;
+async function cachedTree() {
+  const cached = await (await caches.open(API_CACHE)).match("/api/tree");
+  return cached ?? new Response(null, { status: 504 });
 }
 
 // Routes that never show the dashboard tree.
@@ -903,12 +811,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, API_CACHE, { cache: "no-cache" }));
     return;
   }
+  if (url.searchParams.has("cached") && url.pathname === "/api/tree") {
+    event.respondWith(cachedTree());
+    return;
+  }
   if (url.pathname === "/api/tree") {
-    event.respondWith(
-      url.searchParams.has("cached")
-        ? cachedTree(API_CACHE)
-        : treeWithInlineFavicons(event, request, API_CACHE),
-    );
+    event.respondWith(networkFirst(request, API_CACHE, treePreload));
+    treePreload = undefined;
     return;
   }
   // A file download rather than application state. networkFirst would put the

@@ -150,7 +150,6 @@ const loadServiceWorker = (
     Headers,
     Response,
     URL,
-    btoa,
     // One store stands in for every named cache, so deleting any of them
     // empties it.
     caches: {
@@ -325,28 +324,6 @@ test("activation drops favicons cached without headers once, keeping offline art
   expect(sw.entries.has("/api/favicon/1?v=new")).toBe(true);
 });
 
-test("a cached favicon is inlined as a data URL, and a warm tree reload fetches none", async () => {
-  const sw = loadServiceWorker(network);
-  await Promise.all(
-    tree.tree.map(
-      (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
-    ),
-  );
-  expect(await sw.loadTree()).toEqual({
-    tree: [
-      { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
-      { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
-    ],
-  });
-  const before = sw.requests.length;
-  await sw.loadTree();
-  expect(
-    sw.requests
-      .slice(before)
-      .filter((path) => path.startsWith("/api/favicon/")),
-  ).toHaveLength(0);
-});
-
 test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
   const sw = loadServiceWorker(network);
   const cachedTree = () =>
@@ -354,15 +331,10 @@ test("a cached tree request answers from the cache alone, and a miss is a 504", 
   expect((await cachedTree()).status).toBe(504);
   expect(sw.requests).toEqual([]);
 
-  await sw.dispatch(new Request(`${ORIGIN}${tree.tree[0]?.favicon}`)).response;
   await sw.loadTree();
+  await settle();
   const before = sw.requests.length;
-  expect(await (await cachedTree()).json()).toEqual({
-    tree: [
-      { favicon: "data:image/png;base64,aWNvbg==", type: "source" },
-      { favicon: "/api/favicon/2?v=def", type: "source" },
-    ],
-  });
+  expect(await (await cachedTree()).json()).toEqual(tree);
   expect(sw.requests.slice(before)).toEqual([]);
 });
 
