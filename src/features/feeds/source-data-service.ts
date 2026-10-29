@@ -55,8 +55,9 @@ export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 /**
  * Sources repository: CRUD on the sources table plus the poll-schedule
  * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
- * the fetch pipeline. WebSub lease state lives in WebSubStateService, favicon
- * storage in FaviconStore, and ParseSource enqueueing in SourceEnqueuer.
+ * the fetch pipeline, and the favicon data URL written by the favicon refresher
+ * and read back by the /api/favicon route. WebSub lease state lives in
+ * WebSubStateService, and ParseSource enqueueing in SourceEnqueuer.
  */
 export class SourcesDataService {
   constructor(
@@ -120,6 +121,28 @@ export class SourcesDataService {
       })
       .from(sources)
       .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+  }
+
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer,
+    contentType: string,
+  ) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        favicon: `data:${contentType};base64,${favicon.toString("base64")}`,
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  public async getFavicon(sourceId: number) {
+    const [row] = await this.drizzleConnection
+      .select({ favicon: sources.favicon })
+      .from(sources)
+      .where(eq(sources.id, sourceId))
+      .limit(1);
+    return row?.favicon ?? null;
   }
 
   // "email" has no endpoint to poll. "feed" is gated purely by notBefore,

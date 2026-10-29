@@ -3,7 +3,6 @@ import type { HttpClient, HttpResponse } from "#platform/http/http-client.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
-import type { FaviconStore } from "#features/feeds/favicon-store.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
@@ -148,10 +147,9 @@ type ReaderRouteDependencies = {
     get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
   };
   mailEnabled: boolean;
-  faviconStore: Pick<FaviconStore, "getFavicon">;
   outboundFetchBudget: Pick<OutboundFetchBudget, "consume">;
   sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  sourcesDataService: Pick<SourcesDataService, "successSource">;
+  sourcesDataService: Pick<SourcesDataService, "getFavicon" | "successSource">;
   userSourcesDataService: Pick<
     UserSourcesDataService,
     | "addSourceToUser"
@@ -302,11 +300,6 @@ function createDependencies(): ServerFakes {
         return unexpected("emailHandler.processEmail");
       },
     },
-    faviconStore: {
-      async getFavicon() {
-        return null;
-      },
-    },
     feedParser: {
       async discoverAndSubscribeWebSub() {},
       async parseUrl() {
@@ -378,6 +371,9 @@ function createDependencies(): ServerFakes {
     },
     sourcesDataService: {
       async deleteSource() {},
+      async getFavicon() {
+        return null;
+      },
       async listAllSources() {
         return [];
       },
@@ -4207,7 +4203,7 @@ test("logs a slow request with its route pattern, never the raw query string", a
   // A tiny threshold stands in for an artificially slow handler: every
   // request that completes at all is "slow" against it.
   dependencies.config.SLOW_REQUEST_MS = 0;
-  dependencies.faviconStore.getFavicon = async () =>
+  dependencies.sourcesDataService.getFavicon = async () =>
     "data:image/png;base64,AAAA";
   const app = await appFor(dependencies);
   const log = spyOn(console, "log").mockImplementation(() => {});

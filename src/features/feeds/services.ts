@@ -10,7 +10,6 @@ import { RedirectMap } from "#platform/http/redirect-map.ts";
 import { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import { FaviconStore } from "#features/feeds/favicon-store.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
@@ -42,7 +41,6 @@ export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(
   bullmqRedis,
 );
 export const redirectMap = /* @__PURE__ */ new RedirectMap(redis);
-export const faviconStore = /* @__PURE__ */ new FaviconStore(drizzleConnection);
 export const feedPreviewCache = /* @__PURE__ */ new FeedPreviewCache(redis);
 export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,
