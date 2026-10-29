@@ -6,6 +6,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
+import type * as Dialogs from "../../src/spa/dialog.tsx";
 import { installApiFixture } from "./api-fixture.ts";
 
 // The real service worker (see src/spa/public/sw.js) takes /api/* fetches
@@ -2479,6 +2480,36 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   expect(
     await page.evaluate(() => document.activeElement?.getAttribute("role")),
   ).toBe("option");
+});
+
+// The dialog host shows one request at a time. A second one replaces the
+// first, which must then settle as cancelled rather than leave its caller
+// waiting forever. The page imports the app's own module instance from the
+// dev server, as no control can open a dialog over an open one.
+test("a second dialog request cancels the one still pending", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  // Boot focuses the first tree row; wait for that before moving focus.
+  await expect(page.locator(".sources-pane .source").first()).toBeFocused();
+  const opener = page.getByRole("button", { name: "add folder" });
+  await opener.focus();
+
+  const first = await page.evaluate(async (url) => {
+    const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
+    const pending = confirmDialog("First?");
+    void promptDialog("Second", "kept");
+    return await pending;
+  }, "/dialog.tsx");
+  expect(first).toBe(false);
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAccessibleName("Second");
+  await expect(dialog.getByRole("textbox")).toHaveValue("kept");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
 });
 
 test("the options page can open the shortcut help dialog without a keyboard", async ({

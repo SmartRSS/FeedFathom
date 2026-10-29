@@ -86,12 +86,20 @@ const [request, setRequest] = createSignal<DialogRequest>();
 const cancelValue = (current: DialogRequest) =>
   current.kind === "prompt" ? null : false;
 
+// One dialog at a time: a request replacing one still pending cancels it, so
+// that caller is not left awaiting forever.
+function show(next: DialogRequest) {
+  const pending = request();
+  pending?.resolve(cancelValue(pending));
+  setRequest(next);
+}
+
 export function confirmDialog(
   message: string,
   options?: { danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) =>
-    setRequest({
+    show({
       danger: options?.danger ?? false,
       kind: "confirm",
       message,
@@ -105,7 +113,7 @@ export function promptDialog(
   initial = "",
 ): Promise<string | null> {
   return new Promise((resolve) =>
-    setRequest({
+    show({
       initial,
       kind: "prompt",
       label,
@@ -117,7 +125,7 @@ export function promptDialog(
 // No value: the cheat sheet only ever resolves through a dismissal.
 export function helpDialog(): Promise<void> {
   return new Promise((resolve) =>
-    setRequest({ kind: "help", resolve: () => resolve() }),
+    show({ kind: "help", resolve: () => resolve() }),
   );
 }
 
@@ -136,9 +144,11 @@ export function DialogHost() {
   createEffect(() => {
     const current = request();
     if (!current) return;
-    invoker = document.activeElement;
+    // A request replacing an open one reuses its dialog, and its invoker:
+    // focus is inside that dialog by now.
+    if (!dialogRef?.open) invoker = document.activeElement;
     queueMicrotask(() => {
-      dialogRef?.showModal();
+      if (!dialogRef?.open) dialogRef?.showModal();
       if (current.kind === "prompt") inputRef?.select();
       else confirmRef?.focus();
     });
