@@ -78,12 +78,10 @@ export async function postSubscribeHandler({
   const preview =
     subscription.initializationSnapshot === null
       ? undefined
-      : subscription.initializationSnapshot === undefined
-        ? importablePreview
-        : deserializeFeedPreview(
-            subscription.initializationSnapshot,
-            sourceUrl.value,
-          );
+      : deserializeFeedPreview(
+          subscription.initializationSnapshot,
+          sourceUrl.value,
+        );
   if (subscription.initializationSnapshot && !preview) {
     throw new Error("Stored subscription snapshot is invalid");
   }

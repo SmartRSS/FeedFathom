@@ -6,7 +6,6 @@ import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
@@ -35,7 +34,6 @@ const articlesDataService = new ArticlesDataService(drizzleConnection);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 const userSourcesDataService = new UserSourcesDataService(
   drizzleConnection,
-  new FoldersDataService(drizzleConnection),
   sourcesDataService,
 );
 

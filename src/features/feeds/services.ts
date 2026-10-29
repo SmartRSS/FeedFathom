@@ -36,7 +36,6 @@ export const websubStateService = /* @__PURE__ */ new WebSubStateService(
 export const userSourcesDataService =
   /* @__PURE__ */ new UserSourcesDataService(
     drizzleConnection,
-    foldersDataService,
     sourcesDataService,
   );
 export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(

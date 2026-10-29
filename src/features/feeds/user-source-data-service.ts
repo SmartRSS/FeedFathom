@@ -2,15 +2,14 @@ import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { unreadCondition } from "#features/feeds/article-read-state.ts";
-import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 
 type SubscriptionResult = {
-  created?: boolean;
   initialized?: boolean;
-  initializationSnapshot?: null | string;
+  initializationSnapshot: null | string;
   source: Source;
   subscriptionCreatedAt: Date;
   subscriptionId: number;
@@ -19,7 +18,6 @@ type SubscriptionResult = {
 export class UserSourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly foldersDataService: FoldersDataService,
     private readonly sourcesDataService: SourcesDataService,
   ) {}
 
@@ -34,18 +32,11 @@ export class UserSourcesDataService {
       url: string;
     },
   ): Promise<SubscriptionResult | undefined> {
-    if (sourcePayload.parentId) {
-      const folders = await this.foldersDataService.getUserFolders(userId);
-      if (
-        !folders.some((folder) => {
-          return folder.id === sourcePayload.parentId;
-        })
-      ) {
-        console.error(
-          `Subscription refused: folder ${sourcePayload.parentId} is not one of user ${userId}'s`,
-        );
-        return undefined;
-      }
+    if (!(await this.ownsFolder(userId, sourcePayload.parentId))) {
+      console.error(
+        `Subscription refused: folder ${sourcePayload.parentId} is not one of user ${userId}'s`,
+      );
+      return undefined;
     }
 
     const source = await this.sourcesDataService.addSource({
@@ -53,10 +44,6 @@ export class UserSourcesDataService {
       kind: sourcePayload.kind,
       url: sourcePayload.url,
     });
-
-    if (!source) {
-      throw new Error("Source not found or created");
-    }
 
     const inserted = (
       await this.drizzleConnection
@@ -93,12 +80,9 @@ export class UserSourcesDataService {
     if (!userSource)
       throw new Error("Subscription conflict resolved without a row");
 
-    const created = inserted !== undefined;
-    const initialized = userSource.initializedAt !== null;
     return {
-      created,
       initializationSnapshot: userSource.initializationSnapshot,
-      initialized,
+      initialized: userSource.initializedAt !== null,
       source,
       subscriptionCreatedAt: userSource.createdAt,
       subscriptionId: userSource.id,
@@ -219,12 +203,7 @@ export class UserSourcesDataService {
     sourceId: number,
     changes: { name: string; parentId: null | number },
   ) {
-    if (changes.parentId) {
-      const folders = await this.foldersDataService.getUserFolders(userId);
-      if (!folders.some((folder) => folder.id === changes.parentId)) {
-        return undefined;
-      }
-    }
+    if (!(await this.ownsFolder(userId, changes.parentId))) return undefined;
     return (
       await this.drizzleConnection
         .update(userSources)
@@ -237,6 +216,17 @@ export class UserSourcesDataService {
         )
         .returning({ id: userSources.sourceId })
     ).at(0);
+  }
+
+  // The root (null) is everyone's; any other folder must be the user's own.
+  private async ownsFolder(userId: number, folderId: null | number) {
+    if (!folderId) return true;
+    const owned = await this.drizzleConnection
+      .select({ id: userFolders.id })
+      .from(userFolders)
+      .where(and(eq(userFolders.id, folderId), eq(userFolders.userId, userId)))
+      .limit(1);
+    return owned.length > 0;
   }
 
   public async removeSourceFromUser(userId: number, sourceId: number) {

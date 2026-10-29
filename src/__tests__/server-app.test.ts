@@ -1305,6 +1305,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   ) => {
     additions.push(parameters);
     return {
+      initializationSnapshot: parameters[1].initializationSnapshot ?? null,
       source: subscriptionSource,
       subscriptionCreatedAt,
       subscriptionId: 1,
@@ -1398,6 +1399,7 @@ test("queues a truncated cached preview so the worker imports the whole feed", a
   ) => {
     additions.push(parameters);
     return {
+      initializationSnapshot: parameters[1].initializationSnapshot ?? null,
       source: subscriptionSource,
       subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
       subscriptionId: 1,
@@ -1467,7 +1469,11 @@ test("imports every article of a truncated preview on subscribe without a refetc
   };
   dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
     subscriptionId: 1,
@@ -1544,7 +1550,11 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   };
   dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
     subscriptionId: 1,
@@ -1632,7 +1642,11 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
   };
   dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
     subscriptionId: 1,
@@ -1707,7 +1721,11 @@ test("falls back to queueing when inline persistence fails", async () => {
   >[0][] = [];
 
   dependencies.feedPreviewCache.get = async () => cachedPreview;
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
     subscriptionId: 1,
@@ -1752,6 +1770,7 @@ test("queues URL cache misses but never email subscriptions", async () => {
     additions.push(parameters);
     const sourceUrl = parameters[1].url;
     return {
+      initializationSnapshot: parameters[1].initializationSnapshot ?? null,
       source: {
         ...subscriptionSource,
         id: sourceUrl.includes("@") ? 92 : 91,
@@ -1800,6 +1819,7 @@ test("triggers WebSub discovery immediately at subscribe time, but not for email
     _userId,
     payload,
   ) => ({
+    initializationSnapshot: payload.initializationSnapshot ?? null,
     source: {
       ...subscriptionSource,
       id: payload.url.includes("@") ? 94 : 93,
@@ -1837,7 +1857,11 @@ test("responds without waiting for WebSub discovery to settle", async () => {
       // Never resolves, simulating a hub that never answers -- the
       // response must not wait on it.
     });
-  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
     source: subscriptionSource,
     subscriptionCreatedAt: new Date(),
     subscriptionId: 1,
