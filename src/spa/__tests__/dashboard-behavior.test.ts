@@ -5,8 +5,6 @@ import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
   articleScope,
   filterTree,
-  folderOpenFromStored,
-  folderOpenToStored,
   findNode,
   findParentFolderUid,
   isSnoozedNode,
@@ -215,19 +213,6 @@ describe("findParentFolderUid", () => {
 
   test("a source at the root has no parent folder", () => {
     expect(findParentFolderUid([source("1")], "1")).toBeUndefined();
-  });
-});
-
-describe("folder open persistence", () => {
-  test('only the literal "closed" collapses a folder', () => {
-    expect(folderOpenFromStored("closed")).toBe(false);
-    for (const value of ["open", null, "", "CLOSED"])
-      expect(folderOpenFromStored(value)).toBe(true);
-  });
-
-  test("serializes both folder states", () => {
-    expect(folderOpenToStored(true)).toBe("open");
-    expect(folderOpenToStored(false)).toBe("closed");
   });
 });
 

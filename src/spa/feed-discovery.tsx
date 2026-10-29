@@ -14,8 +14,6 @@ import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, messageOf } from "./api.ts";
 import {
-  clickSelectsArticle,
-  initialPreviewSelection,
   newsletterAddress,
   websiteValidationMessage,
   withScheme,
@@ -194,7 +192,8 @@ export function FeedDiscovery(props: {
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      setSelectedIndex(initialPreviewSelection(result.articles.length));
+      // A preview lands on its first article, or on nothing when it is empty.
+      setSelectedIndex(result.articles.length ? 0 : undefined);
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
@@ -209,7 +208,10 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    if (!clickSelectsArticle(event)) return;
+    // A modified click is the browser's gesture for "open this elsewhere",
+    // so the pane must not swallow it by selecting instead.
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+      return;
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");

@@ -519,6 +519,21 @@ test("keeps folder state usable when localStorage throws", async ({ page }) => {
   ).toBeHidden();
 });
 
+test("a collapsed folder stays collapsed across a reload", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  const source = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(source).toBeVisible();
+  await page.locator(".chevron").first().click();
+  await expect(source).toBeHidden();
+
+  await page.reload();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Reading" }),
+  ).toBeVisible();
+  await expect(source).toBeHidden();
+});
+
 test("preserves an unauthenticated deep link through login", async ({
   page,
 }) => {
@@ -1509,6 +1524,47 @@ test("skips the next-article prefetch when the setting is Off", async ({
   expect(["11", "12", "13"]).toContain(ids[0]);
 });
 
+test("skips the next-article prefetch under Save Data", async ({ page }) => {
+  // Requests are recorded in the page as they start, so the check below
+  // needs no wait for Playwright's own request events.
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "true");
+    Object.defineProperty(navigator, "connection", {
+      value: { saveData: true },
+    });
+    const fetchPage = window.fetch.bind(window);
+    Object.defineProperty(window, "fetch", {
+      value: (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+          location.href,
+        );
+        if (url.pathname === "/api/article")
+          sessionStorage.setItem(
+            "articleRequests",
+            `${sessionStorage.getItem("articleRequests") ?? ""} ${url.searchParams.get("article")}`,
+          );
+        return fetchPage(input, init);
+      },
+    });
+  });
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  // Loading the list opens its first row, which is when a prefetch would be
+  // queued, in an idle callback. One queued after it runs after it.
+  await expect(page.locator(".reader")).toContainText("Feed article content");
+  const requested = await page.evaluate(
+    () =>
+      new Promise<string>((resolve) =>
+        requestIdleCallback(() =>
+          resolve(sessionStorage.getItem("articleRequests") ?? ""),
+        ),
+      ),
+  );
+  expect(new Set(requested.trim().split(" "))).toEqual(new Set(["11"]));
+});
+
 test("a press starts the article fetch even with prefetch Off", async ({
   page,
 }) => {
@@ -2145,6 +2201,41 @@ test("lists the discovery preview articles as a list", async ({ page }) => {
   await expect(
     articles.getByRole("listitem").getByRole("link", { name: /article/ }),
   ).toBeVisible();
+});
+
+// A preview opens on its first article. A modified click on one is the
+// browser's gesture for "open this elsewhere", so the pane leaves it be.
+test("a preview opens its first article and leaves modified clicks alone", async ({
+  page,
+}) => {
+  // Runs after the app's delegated handler: records whether it took the
+  // click, then keeps the browser from opening anything.
+  await page.addInitScript(() =>
+    window.addEventListener("click", (event) => {
+      sessionStorage.setItem("clickTaken", String(event.defaultPrevented));
+      event.preventDefault();
+    }),
+  );
+  await installApiFixture(page);
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+  const link = page
+    .getByRole("region", { name: "Preview articles" })
+    .getByRole("link", { name: /article/ });
+  await expect(link).toHaveAttribute("aria-current", "true");
+  await expect(
+    page.getByRole("article", { name: "Preview reader" }),
+  ).toContainText("Preview article content");
+
+  const clickTaken = async (
+    modifiers: ("Alt" | "ControlOrMeta" | "Shift")[],
+  ) => {
+    await link.click({ modifiers });
+    return await page.evaluate(() => sessionStorage.getItem("clickTaken"));
+  };
+  expect(await clickTaken([])).toBe("true");
+  expect(await clickTaken(["Alt"])).toBe("false");
+  expect(await clickTaken(["ControlOrMeta"])).toBe("false");
+  expect(await clickTaken(["Shift"])).toBe("false");
 });
 
 test("exposes Reader modes only when the bridge is available", async ({

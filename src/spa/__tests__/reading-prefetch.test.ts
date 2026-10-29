@@ -2,12 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import {
   canRetryOfflineSync,
   createOfflineSyncGate,
-  navigatorConnection,
   neighbours,
   offlineArticles,
   offlineUnread,
   prefetchNext,
-  shouldPrefetch,
   unreadSourceIds,
 } from "../reading-prefetch.ts";
 
@@ -19,12 +17,6 @@ test("the preference defaults to off and follows the last set value", () => {
   expect(prefetchNext.get()).toBe(true);
   prefetchNext.set(false);
   expect(prefetchNext.get()).toBe(false);
-});
-
-test("Save Data suppresses the prefetch; absent connection does not", () => {
-  expect(shouldPrefetch({ saveData: true })).toBe(false);
-  expect(shouldPrefetch({ saveData: false })).toBe(true);
-  expect(shouldPrefetch(undefined)).toBe(true);
 });
 
 test("a sync requested while another is active is retried when it finishes", () => {
@@ -40,17 +32,6 @@ test("offline downloads can resume when visible, even after a started sync", () 
   expect(canRetryOfflineSync(true, false)).toBe(true);
   expect(canRetryOfflineSync(true, true)).toBe(false);
   expect(canRetryOfflineSync(false, false)).toBe(false);
-});
-
-test("navigatorConnection reads the real connection object when present", () => {
-  const withConnection = { connection: { saveData: true } };
-  // Partial mock: the function only reads `connection`.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  expect(navigatorConnection(withConnection as unknown as Navigator)).toEqual({
-    saveData: true,
-  });
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  expect(navigatorConnection({} as Navigator)).toBeUndefined();
 });
 
 test("neighbours returns the next then the previous article", () => {

@@ -26,31 +26,6 @@ export function websiteValidationMessage(link: string): string {
   }
 }
 
-// A preview lands on its first article, or on nothing when the feed is empty.
-export function initialPreviewSelection(
-  articleCount: number,
-): number | undefined {
-  return articleCount ? 0 : undefined;
-}
-
-export type ClickModifiers = {
-  altKey?: boolean;
-  ctrlKey?: boolean;
-  metaKey?: boolean;
-  shiftKey?: boolean;
-};
-
-// A modified click is the browser's gesture for "open this elsewhere", so the
-// pane must not swallow it by selecting instead.
-export function clickSelectsArticle(modifiers: ClickModifiers): boolean {
-  return !(
-    modifiers.ctrlKey === true ||
-    modifiers.metaKey === true ||
-    modifiers.shiftKey === true ||
-    modifiers.altKey === true
-  );
-}
-
 // A newsletter subscription is just a source whose URL is an address the mail
 // ingest routes back here, so the address only has to be unguessable and
 // unique -- no server round trip needed to mint one.

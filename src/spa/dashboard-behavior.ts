@@ -235,17 +235,3 @@ export function nextPollDelayMs(
     firstPollDelayMs * 2 ** Math.max(0, completedCycles),
   );
 }
-
-// Folder open/closed state persists as a string. Only the literal "closed"
-// collapses a folder: an absent key (never toggled), a value written by an
-// older build, or a corrupted one all read as open, so a bad entry can never
-// hide a user's feeds.
-export const folderOpenStorageKey = (uid: string) => `folder:${uid}`;
-
-export function folderOpenFromStored(value: null | string): boolean {
-  return value !== "closed";
-}
-
-export function folderOpenToStored(open: boolean): string {
-  return open ? "open" : "closed";
-}

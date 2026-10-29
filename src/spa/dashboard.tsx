@@ -85,13 +85,12 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   createOfflineSyncGate,
   canRetryOfflineSync,
-  navigatorConnection,
   neighbours,
   offlineArticles,
   offlineUnread,
   postOfflineArticles,
   prefetchNext,
-  shouldPrefetch,
+  saveData,
   unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
@@ -566,7 +565,7 @@ export function Dashboard(props: {
   // One listing at a time prevents an older list from replacing a newer one.
   const offlineSyncGate = createOfflineSyncGate();
   async function syncOfflineArticles(nodes: TreeNode[]) {
-    if (disposed || !shouldPrefetch(navigatorConnection())) return;
+    if (disposed || saveData()) return;
     if (
       document.hidden ||
       !navigator.onLine ||
@@ -1553,7 +1552,7 @@ export function Dashboard(props: {
   // recentArticleFirst in public/sw.js), and offline after that.
   function prefetchArticle(id: number) {
     if (!prefetchNext.get()) return;
-    if (!shouldPrefetch(navigatorConnection())) return;
+    if (saveData()) return;
     if (openedArticle()?.id === id) return;
     // Best-effort: opening the article reports its own failure.
     fetchArticle(id);
@@ -1566,7 +1565,7 @@ export function Dashboard(props: {
     pressFetch = undefined;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey)
       return;
-    if (!shouldPrefetch(navigatorConnection())) return;
+    if (saveData()) return;
     if (openedArticle()?.id === id || articleFetches.has(id)) return;
     pressFetch = fetchArticle(id).controller;
   }

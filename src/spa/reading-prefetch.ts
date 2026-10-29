@@ -77,12 +77,13 @@ export function unreadSourceIds(nodes: readonly TreeNode[]): number[] {
 }
 
 // Save Data is the user telling every site to send fewer bytes; a
-// prefetch is exactly what they asked not to receive. Unknown connection
-// objects (Safari, Firefox) read as "no constraint".
-export function shouldPrefetch(
-  connection: { saveData?: boolean } | undefined,
-): boolean {
-  return !(connection?.saveData ?? false);
+// prefetch is exactly what they asked not to receive. Browsers without
+// navigator.connection (Safari, Firefox) read as "no constraint".
+export function saveData(): boolean {
+  // The member exists in Chromium but not in the type library.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const { connection } = navigator as { connection?: { saveData?: boolean } };
+  return connection?.saveData === true;
 }
 
 export function canRetryOfflineSync(
@@ -111,16 +112,6 @@ export function createOfflineSyncGate() {
       return true;
     },
   };
-}
-
-// navigator.connection is not in the standard lib types.
-export function navigatorConnection(
-  navigatorLike: Navigator = navigator,
-): { saveData?: boolean } | undefined {
-  // The assertion is the seam: the member exists in browsers but not in the
-  // type library, and the function exists to read it defensively.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return (navigatorLike as { connection?: { saveData?: boolean } }).connection;
 }
 
 // The articles either side of the open one, next first: reading moves
