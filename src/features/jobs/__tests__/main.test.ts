@@ -80,7 +80,7 @@ const idleSources = {
   async findSourceById() {
     return source;
   },
-  async getRecentlySuccessfulSources() {
+  async getSourcesDueFaviconRefresh() {
     return [];
   },
   async getSourcesToProcess() {
@@ -146,7 +146,7 @@ type MainWorkerConfig = Pick<
 
 type MainWorkerSources = Pick<
   SourcesDataService,
-  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
+  "findSourceById" | "getSourcesDueFaviconRefresh" | "getSourcesToProcess"
 >;
 
 type MainWorkerWebSubState = Pick<
@@ -649,7 +649,7 @@ test("starts every favicon queue addition before awaiting completion", async () 
   };
   const sourcesWithFaviconTargets = {
     ...idleSources,
-    async getRecentlySuccessfulSources() {
+    async getSourcesDueFaviconRefresh() {
       return [source, { ...source, id: 2 }];
     },
   };
@@ -735,8 +735,8 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
         downstreamCalls.push("findSourceById");
         return source;
       },
-      async getRecentlySuccessfulSources() {
-        downstreamCalls.push("getRecentlySuccessfulSources");
+      async getSourcesDueFaviconRefresh() {
+        downstreamCalls.push("getSourcesDueFaviconRefresh");
         return [];
       },
       async getSourcesToProcess() {

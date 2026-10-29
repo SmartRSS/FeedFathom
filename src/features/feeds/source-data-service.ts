@@ -113,14 +113,17 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  public async getRecentlySuccessfulSources() {
+  // Every source fetched in the past day, missing icon or not: the window
+  // matches GatherFaviconJobs' daily run, so each live source is refreshed
+  // once per run and a dead one stops costing provider requests.
+  public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
       .from(sources)
-      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '1 day'`));
   }
 
   public async updateFavicon(

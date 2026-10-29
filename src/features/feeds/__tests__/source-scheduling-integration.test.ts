@@ -118,3 +118,32 @@ test("findSourceById and listAllSources count a source's subscribers", async () 
   );
   expect(listed.find(({ id }) => id === source.id)?.subscriberCount).toBe(2);
 });
+
+test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily run", async () => {
+  const hoursAgo = await addFeedSource("https://source-scheduling.test/hours");
+  await sourcesDataService.successSource(
+    hoursAgo.id,
+    false,
+    undefined,
+    new Date(Date.now() - 6 * 60 * 60_000),
+  );
+  const daysAgo = await addFeedSource("https://source-scheduling.test/days");
+  await sourcesDataService.successSource(
+    daysAgo.id,
+    false,
+    undefined,
+    new Date(Date.now() - 2 * 24 * 60 * 60_000),
+  );
+  const neverFetched = await addFeedSource(
+    "https://source-scheduling.test/never",
+  );
+
+  const dueIds = new Set(
+    (await sourcesDataService.getSourcesDueFaviconRefresh()).map(
+      (source) => source.id,
+    ),
+  );
+  expect(dueIds.has(hoursAgo.id)).toBe(true);
+  expect(dueIds.has(daysAgo.id)).toBe(false);
+  expect(dueIds.has(neverFetched.id)).toBe(false);
+});
