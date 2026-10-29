@@ -7,16 +7,3 @@ export class HttpDeferredError extends Error {
     super(`Request deferred until ${new Date(retryAt).toISOString()}`);
   }
 }
-
-// `instanceof` can itself throw (e.g. a Proxy with a poisoned
-// getPrototypeOf trap), so callers that can't trust their caught value
-// should go through this guard instead of a bare `instanceof` check.
-export function isHttpDeferredError(
-  error: unknown,
-): error is HttpDeferredError {
-  try {
-    return error instanceof HttpDeferredError;
-  } catch {
-    return false;
-  }
-}

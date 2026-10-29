@@ -3,8 +3,8 @@ import type { StaticDecode } from "typebox";
 import type { findQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { HttpResponse } from "#platform/http/http-client.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
 import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
 import { scanHtml } from "#shared/scanners/scanner.ts";
@@ -44,7 +44,10 @@ export async function getFindHandler(
     // running out, which is a 504 and not the user's URL being wrong.
     // Anything else here is a failure to fetch a URL the user supplied,
     // which is a client error.
-    if (isHttpDeferredError(error_) || isHttpDeadlineError(error_))
+    if (
+      error_ instanceof HttpDeferredError ||
+      error_ instanceof HttpDeadlineError
+    )
       throw error_;
     return json({ error: "Invalid feed url" }, 400);
   }

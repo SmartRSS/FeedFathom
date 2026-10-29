@@ -1,8 +1,5 @@
 import { type HttpClient } from "#platform/http/http-client.ts";
-import {
-  HttpDeferredError,
-  isHttpDeferredError,
-} from "#platform/http/http-deferred-error.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import {
   imageDimensions,
@@ -42,7 +39,7 @@ export class FaviconRefresher {
     let earliestRetryAt = Infinity;
     for (const result of results) {
       if (result.status === "rejected") {
-        if (isHttpDeferredError(result.reason)) {
+        if (result.reason instanceof HttpDeferredError) {
           earliestRetryAt = Math.min(earliestRetryAt, result.reason.retryAt);
         }
         continue;

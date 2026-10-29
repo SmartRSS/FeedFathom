@@ -999,7 +999,7 @@ test("find reports our own expired deadline as a 504, not a bad url", async () =
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.httpClient.get = async () => {
-    throw new HttpDeadlineError();
+    throw new HttpDeadlineError(30_000);
   };
   const app = await appFor(dependencies);
 
