@@ -238,13 +238,12 @@ export class FeedParser {
       );
       await this.articleImporter.importArticles(source.id, articlesToUpsert);
 
-      await this.sourcesDataService.successSource(
-        source.id,
+      await this.sourcesDataService.successSource(source.id, {
         cached,
-        freshUntil ? new Date(freshUntil) : undefined,
+        notBefore: freshUntil ? new Date(freshUntil) : undefined,
         observedAt,
-        source.trigger ?? "poll",
-      );
+        trigger: source.trigger ?? "poll",
+      });
     } catch (error_: unknown) {
       if (error_ instanceof HttpDeferredError) {
         throw error_;

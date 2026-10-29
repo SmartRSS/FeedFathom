@@ -154,11 +154,12 @@ export async function postSubscribeHandler(
                 ),
               { alwaysRecount: true },
             );
-            await sourcesDataService.successSource(
-              subscription.source.id,
-              true,
-              preview.freshUntil ? new Date(preview.freshUntil) : undefined,
-            );
+            await sourcesDataService.successSource(subscription.source.id, {
+              cached: true,
+              notBefore: preview.freshUntil
+                ? new Date(preview.freshUntil)
+                : undefined,
+            });
           } catch {
             await sourceEnqueuer.enqueueSource(subscription.source);
           }

@@ -28,7 +28,7 @@ test("successSource clamps notBefore to the 5-minute floor even for a shorter ca
     "https://source-scheduling.test/short-cache",
   );
   const before = Date.now();
-  await sourcesDataService.successSource(source.id, false, new Date());
+  await sourcesDataService.successSource(source.id, { notBefore: new Date() });
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBeGreaterThanOrEqual(
@@ -41,7 +41,7 @@ test("successSource honors a cache lifetime longer than the floor", async () => 
     "https://source-scheduling.test/long-cache",
   );
   const notBefore = new Date(Date.now() + 60 * 60_000);
-  await sourcesDataService.successSource(source.id, false, notBefore);
+  await sourcesDataService.successSource(source.id, { notBefore });
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBe(notBefore.getTime());
@@ -72,11 +72,9 @@ test("getSourcesToProcess only returns feed sources whose notBefore has passed",
   const notYetDue = await addFeedSource(
     "https://source-scheduling.test/not-due",
   );
-  await sourcesDataService.successSource(
-    notYetDue.id,
-    false,
-    new Date(Date.now() + 60 * 60_000),
-  );
+  await sourcesDataService.successSource(notYetDue.id, {
+    notBefore: new Date(Date.now() + 60 * 60_000),
+  });
 
   const result = await sourcesDataService.getSourcesToProcess();
   const ids = result.map((row) => row.id);
@@ -121,19 +119,13 @@ test("findSourceById and listAllSources count a source's subscribers", async () 
 
 test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily run", async () => {
   const hoursAgo = await addFeedSource("https://source-scheduling.test/hours");
-  await sourcesDataService.successSource(
-    hoursAgo.id,
-    false,
-    undefined,
-    new Date(Date.now() - 6 * 60 * 60_000),
-  );
+  await sourcesDataService.successSource(hoursAgo.id, {
+    observedAt: new Date(Date.now() - 6 * 60 * 60_000),
+  });
   const daysAgo = await addFeedSource("https://source-scheduling.test/days");
-  await sourcesDataService.successSource(
-    daysAgo.id,
-    false,
-    undefined,
-    new Date(Date.now() - 2 * 24 * 60 * 60_000),
-  );
+  await sourcesDataService.successSource(daysAgo.id, {
+    observedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000),
+  });
   const neverFetched = await addFeedSource(
     "https://source-scheduling.test/never",
   );
@@ -142,7 +134,7 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
     kind: "email",
     url: "newsletter@source-scheduling.test",
   });
-  await sourcesDataService.successSource(email.id, false);
+  await sourcesDataService.successSource(email.id);
 
   const dueIds = new Set(
     (await sourcesDataService.getSourcesDueFaviconRefresh()).map(

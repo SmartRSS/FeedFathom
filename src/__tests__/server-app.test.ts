@@ -1108,9 +1108,8 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
-  expect(successes[0]?.slice(0, 2)).toEqual([91, true]);
   // No freshness from the cached fetch, so successSource applies its poll floor.
-  expect(successes[0]?.[2]).toBeUndefined();
+  expect(successes[0]).toEqual([91, { cached: true, notBefore: undefined }]);
   expect(enqueues).toEqual([]);
 });
 

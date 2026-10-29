@@ -237,14 +237,22 @@ export class SourcesDataService {
 
   public async successSource(
     sourceId: number,
-    cached = false,
-    notBefore = new Date(Date.now() + pollFloorMs),
-    // parseSource passes its own observedAt so this matches the
-    // last_seen_in_feed_at written for the same fetch's articles exactly;
-    // otherwise the two differ by this call's latency and cleanupOrphanedData
-    // cannot tell "not in this fetch" from "just fetched".
-    observedAt = new Date(),
-    trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
+    {
+      cached = false,
+      notBefore = new Date(Date.now() + pollFloorMs),
+      // parseSource passes its own observedAt so this matches the
+      // last_seen_in_feed_at written for the same fetch's articles exactly;
+      // otherwise the two differ by this call's latency and
+      // cleanupOrphanedData cannot tell "not in this fetch" from "just
+      // fetched".
+      observedAt = new Date(),
+      trigger = "poll",
+    }: {
+      cached?: boolean;
+      notBefore?: Date | undefined;
+      observedAt?: Date;
+      trigger?: "email" | "manual" | "poll" | "websub-push";
+    } = {},
   ) {
     const clampedNotBefore = clampToPollFloor(notBefore, Date.now());
     await this.drizzleConnection

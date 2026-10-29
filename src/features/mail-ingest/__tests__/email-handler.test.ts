@@ -94,3 +94,35 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
   });
   expect(published).toEqual([[source.id, 1]]);
 });
+
+test.each([
+  ["text/html", "<p>HTML body</p>", "<p>HTML body</p>"],
+  ["text/plain", "Plain body", "<p>Plain body</p>"],
+])("stores a %s body as the article content", async (type, body, content) => {
+  const batches: Parameters<ArticlesDataService["batchUpsertArticles"]>[0][] =
+    [];
+  const handler = new EmailHandler(
+    { findSourceByUrl: async () => source, async successSource() {} },
+    new ArticleImporter(
+      {
+        async batchUpsertArticles(articles) {
+          batches.push(articles);
+          return articles.length;
+        },
+      },
+      { async recomputeUnreadCounts() {} },
+      { publish() {} },
+    ),
+  );
+
+  await handler.processEmail(
+    Buffer.from(
+      [`Subject: Body`, `Content-Type: ${type}; charset=utf-8`, "", body].join(
+        "\r\n",
+      ),
+    ),
+    { from: "sender@example.com", to: source.url },
+  );
+
+  expect(batches[0]?.[0]?.content).toBe(content);
+});
