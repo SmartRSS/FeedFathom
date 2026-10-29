@@ -812,7 +812,8 @@ async function shell(event, path) {
   const network = fetch("/", SHELL_REQUEST_INIT);
   const revalidated = network.then(async (response) => {
     if (!response.ok) return;
-    if (cached) await pruneShell(cache, cached.assetUrls);
+    // A failed prune must not cost the shell update.
+    if (cached) await pruneShell(cache, cached.assetUrls).catch(() => {});
     const assetUrls = await putShell(cache, response.clone());
     if (cached && assetUrls.join() !== cached.assetUrls.join())
       await notifyShellUpdated();

@@ -198,6 +198,19 @@ export function Options(props: {
     setSessionMessage("");
     try {
       await api("/logout", successResponse, { method: "POST" });
+      // The worker clears these on a logout it sees, but a page it doesn't
+      // control (after a hard reload) logs out past it, and the next sign-in
+      // from this page would too. Dropping the API cache here also drops the
+      // queue-owner record, so the next account's removals aren't filed
+      // under this one.
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("api-"))
+            .map((key) => caches.delete(key)),
+        );
+      }
       props.navigate("/login");
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;

@@ -3391,6 +3391,27 @@ const reloadWithHeldTree = async (
   return release;
 };
 
+// Playwright blocks worker registration here, so this page is as uncontrolled
+// as one after a hard reload: its logout never reaches the worker, and the
+// page itself must drop the account's cached data.
+test("logging out from an uncontrolled page drops the API cache", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/options#account");
+  await page.evaluate(async () => {
+    const cache = await caches.open("api-test");
+    await cache.put("/sw-queue-account", new Response("1"));
+  });
+  await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(
+    await page.evaluate(async () =>
+      (await caches.keys()).filter((key) => key.startsWith("api-")),
+    ),
+  ).toEqual([]);
+});
+
 // The article bodies the worker holds for offline reading (#992).
 const downloaded = (page: Page) =>
   page.evaluate(async () => {
