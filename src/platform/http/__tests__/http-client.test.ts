@@ -78,6 +78,17 @@ function nativeResponse(
   };
 }
 
+// The HttpDeferredError a request was refused with.
+async function deferral(request: Promise<unknown>) {
+  const error = await request.then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+  if (!(error instanceof HttpDeferredError))
+    throw new Error("Expected the request to be deferred", { cause: error });
+  return error;
+}
+
 function queuedTransport(
   responses: NativeHttpResponse[],
   onRequest?: (url: string) => void,
@@ -178,12 +189,8 @@ test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
   });
 
   await client.get("https://1.1.1.1/feed");
-  const error = await client
-    .get("https://1.1.1.1/another")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/another"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBe(reset * 1_000);
 });
 
@@ -201,12 +208,8 @@ test("uses the fallback delay when Retry-After is absent or empty", async () => 
       });
       const before = Date.now();
 
-      const error = await client
-        .get("https://1.1.1.1/feed")
-        .catch((caught: unknown) => caught);
+      const error = await deferral(client.get("https://1.1.1.1/feed"));
 
-      expect(error).toBeInstanceOf(HttpDeferredError);
-      if (!(error instanceof HttpDeferredError)) throw error;
       expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
       expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
     }),
@@ -445,12 +448,8 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
   });
   const before = Date.now();
 
-  const error = await client
-    .get("https://1.1.1.1/feed")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/feed"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
   expect(requests).toBe(1);
   expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
@@ -541,12 +540,8 @@ test("checks the redirect target against its own block", async () => {
       }),
   });
 
-  const error = await client
-    .get("https://1.1.1.1/a")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/a"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBe(retryAt);
 });
 
