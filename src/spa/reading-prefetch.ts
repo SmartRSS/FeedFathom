@@ -1,55 +1,31 @@
-import { createSignal } from "solid-js";
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
+import { sourceIds } from "./dashboard-behavior.ts";
+import { storedToggle } from "./preferences.ts";
 
 // Prefetching the next article's content (#716) costs the server one extra
 // extract-route hit per opened article, and some users count that as waste:
 // so this is off until it is switched on.
-export type OnOff = "off" | "on";
-
-function isOnOff(value: string): value is OnOff {
-  return value === "off" || value === "on";
-}
-
-const KEY = "prefetchNext";
-
-function read(key: string): OnOff {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored && isOnOff(stored) ? stored : "off";
-  } catch {
-    return "off";
-  }
-}
-
-const [prefetchNextEnabled, setPrefetchNextEnabled] = createSignal<OnOff>(
-  read(KEY),
-);
-export { prefetchNextEnabled };
-
-export function setPrefetchNext(next: OnOff) {
-  setPrefetchNextEnabled(next);
-  try {
-    localStorage.setItem(KEY, next);
-  } catch {}
-}
+export const prefetchNext = storedToggle("prefetchNext", false);
 
 // Offline reading (#992) downloads every recent unread body, a far larger
 // bill than one prefetch, so it is off until switched on too. The service
 // worker can't read localStorage: the dashboard sends it the unread rows to
 // keep, which also list the articles offline, and switching off sends none.
 const OFFLINE_UNREAD_KEY = "offlineUnread";
-
-const [offlineUnreadEnabled, setOfflineUnreadEnabled] = createSignal<OnOff>(
-  read(OFFLINE_UNREAD_KEY),
-);
-export { offlineUnreadEnabled };
+const offlineUnreadToggle = storedToggle(OFFLINE_UNREAD_KEY, false);
+export const offlineUnread: typeof offlineUnreadToggle = {
+  ...offlineUnreadToggle,
+  set(next) {
+    offlineUnreadToggle.set(next);
+    if (!next) postOfflineArticles([]);
+  },
+};
 // Another tab switching it off must stop this one's syncs too, or its next
 // one would download everything again.
 if (typeof window !== "undefined")
   window.addEventListener("storage", (event) => {
-    if (event.key === OFFLINE_UNREAD_KEY)
-      setOfflineUnreadEnabled(read(OFFLINE_UNREAD_KEY));
+    if (event.key === OFFLINE_UNREAD_KEY) offlineUnread.reload();
   });
 
 // `token` tags the list requests the rows came from; an empty list carries
@@ -63,14 +39,6 @@ export function postOfflineArticles(
     token,
     type: "offline-articles",
   });
-}
-
-export function setOfflineUnread(next: OnOff) {
-  setOfflineUnreadEnabled(next);
-  try {
-    localStorage.setItem(OFFLINE_UNREAD_KEY, next);
-  } catch {}
-  if (next === "off") postOfflineArticles([]);
 }
 
 // ponytail: 500 bodies from the last 14 days. Enough for a commute or a
@@ -96,26 +64,24 @@ export function offlineArticles<T extends Pick<ArticleSummary, "publishedAt">>(
   };
 }
 
-function unreadSources(node: TreeNode): number[] {
-  if (node.type !== "source") return node.children.flatMap(unreadSources);
-  return node.unreadCount > 0 ? [Number(node.uid)] : [];
-}
-
 // Only sources with something unread are asked about. ponytail: one article
 // request accepts 500 source ids, so past that many sources with unread the
 // rest go undownloaded; a server-side "every subscription" unread scope
 // lifts it.
 export function unreadSourceIds(nodes: readonly TreeNode[]): number[] {
-  return nodes.flatMap(unreadSources).slice(0, maximumRequestIds);
+  return nodes
+    .flatMap((node) => sourceIds(node, (source) => source.unreadCount > 0))
+    .slice(0, maximumRequestIds);
 }
 
 // Save Data is the user telling every site to send fewer bytes; a
-// prefetch is exactly what they asked not to receive. Unknown connection
-// objects (Safari, Firefox) read as "no constraint".
-export function shouldPrefetch(
-  connection: { saveData?: boolean } | undefined,
-): boolean {
-  return !(connection?.saveData ?? false);
+// prefetch is exactly what they asked not to receive. Browsers without
+// navigator.connection (Safari, Firefox) read as "no constraint".
+export function saveData(): boolean {
+  // The member exists in Chromium but not in the type library.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const { connection } = navigator as { connection?: { saveData?: boolean } };
+  return connection?.saveData === true;
 }
 
 export function canRetryOfflineSync(
@@ -144,16 +110,6 @@ export function createOfflineSyncGate() {
       return true;
     },
   };
-}
-
-// navigator.connection is not in the standard lib types.
-export function navigatorConnection(
-  navigatorLike: Navigator = navigator,
-): { saveData?: boolean } | undefined {
-  // The assertion is the seam: the member exists in browsers but not in the
-  // type library, and the function exists to read it defensively.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return (navigatorLike as { connection?: { saveData?: boolean } }).connection;
 }
 
 // The articles either side of the open one, next first: reading moves

@@ -4,10 +4,14 @@ export function treeNodeKey(node: TreeNode): string {
   return `${node.type}:${node.uid}`;
 }
 
-export function sourceIds(node: TreeNode): number[] {
-  return node.type === "source"
-    ? [Number(node.uid)]
-    : (node.children ?? []).flatMap(sourceIds);
+// The ids of the sources under a node, or of those `keep` accepts.
+export function sourceIds(
+  node: TreeNode,
+  keep: (source: Extract<TreeNode, { type: "source" }>) => boolean = () => true,
+): number[] {
+  if (node.type !== "source")
+    return (node.children ?? []).flatMap((child) => sourceIds(child, keep));
+  return keep(node) ? [Number(node.uid)] : [];
 }
 
 // A folder is asked for by id and the server resolves its sources (#976):
@@ -234,18 +238,4 @@ export function nextPollDelayMs(
     maxPollDelayMs,
     firstPollDelayMs * 2 ** Math.max(0, completedCycles),
   );
-}
-
-// Folder open/closed state persists as a string. Only the literal "closed"
-// collapses a folder: an absent key (never toggled), a value written by an
-// older build, or a corrupted one all read as open, so a bad entry can never
-// hide a user's feeds.
-export const folderOpenStorageKey = (uid: string) => `folder:${uid}`;
-
-export function folderOpenFromStored(value: null | string): boolean {
-  return value !== "closed";
-}
-
-export function folderOpenToStored(open: boolean): string {
-  return open ? "open" : "closed";
 }

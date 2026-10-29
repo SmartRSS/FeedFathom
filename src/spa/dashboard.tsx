@@ -57,11 +57,7 @@ import {
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import {
-  createSupersessionGuard,
-  type SupersessionToken,
-} from "./supersession.ts";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
@@ -89,17 +85,16 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   createOfflineSyncGate,
   canRetryOfflineSync,
-  navigatorConnection,
   neighbours,
   offlineArticles,
-  offlineUnreadEnabled,
+  offlineUnread,
   postOfflineArticles,
-  prefetchNextEnabled,
-  shouldPrefetch,
+  prefetchNext,
+  saveData,
   unreadSourceIds,
 } from "./reading-prefetch.ts";
 import {
-  backgroundPollEnabled,
+  backgroundPoll,
   newArticlesCount,
   setNewArticlesCount,
   setUnreadTotal,
@@ -160,6 +155,20 @@ const ARTICLE_SKELETON_TITLES = [
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
+// What one article list asks the server for. Its later pages ask the same.
+type ListScope = {
+  folder?: number;
+  query?: string;
+  sources: number[];
+  view?: "today";
+};
+// Today is scoped by `view`, not by an id list: its node uid is the string
+// "today", which as a source id would serialise to [null] and be refused.
+const nodeScope = (node: TreeNode): ListScope =>
+  isTodayNode(node) ? { sources: [], view: "today" } : articleScope(node);
+// Search answers across every subscription, so it names no source.
+const searchScope = (query: string): ListScope => ({ query, sources: [] });
+
 // Only a page the service worker controls asks, since only the worker
 // answers ?cached. only-if-cached keeps the request off the network when
 // something else does answer it, such as a worker from before #989 that
@@ -199,10 +208,10 @@ export function Dashboard(props: {
   // still narrowing the tree, or a list of search results with nothing on
   // screen to explain or undo them.
   createEffect(() => {
-    if (feedFilterBox() === "off" && treeFilter()) setTreeFilter("");
+    if (!feedFilterBox.get() && treeFilter()) setTreeFilter("");
   });
   createEffect(() => {
-    if (articleSearchBox() === "off") {
+    if (!articleSearchBox.get()) {
       setSearchTerms("");
       void exitSearch();
     }
@@ -214,7 +223,7 @@ export function Dashboard(props: {
   >("unread");
   // Memos, because every tree row reads these and each one walks the tree.
   const visibleTree = createMemo(() =>
-    filterTree(withTodayNode(tree(), todayView() === "on"), treeFilter()),
+    filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
@@ -231,7 +240,7 @@ export function Dashboard(props: {
   // than a plain flag, so a page abandoned by a feed, filter or search change
   // neither blocks the new list's next page nor, when it settles late, clears
   // that page's loading state.
-  let loadingMoreSelection: SupersessionToken | undefined;
+  let loadingMoreSelection: AbortController | undefined;
   // The last row loaded; its publishedAt places it in the offline list (#992)
   // once it has left the kept rows.
   let articleCursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined;
@@ -281,7 +290,7 @@ export function Dashboard(props: {
   const [error, setError] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setError(cause instanceof Error ? cause.message : fallback);
+    setError(messageOf(cause, fallback));
   };
   const [showDiscovery, setShowDiscovery] = createSignal(
     props.initialDiscovery ?? false,
@@ -305,14 +314,20 @@ export function Dashboard(props: {
     local: localStorage,
     session: sessionStorage,
   });
+  // A restore that cannot apply drops its snapshot, so the next boot does
+  // not try it again.
+  const abandonRestore = () => {
+    readingSession.clear();
+    setRestoringSession(false);
+  };
   const resumingUpdate = takeUpdateReload();
-  const restoreEnabled = () => rememberReadingPosition() || resumingUpdate;
+  const restoreEnabled = () => rememberReadingPosition.get() || resumingUpdate;
   // With the setting off the snapshot goes to sessionStorage only, so it
   // survives this one reload and never reaches a later launch.
   const saveForUpdateReload = () => {
     const node = selectedNode();
     if (!node && !activeSearch()) return;
-    const store = rememberReadingPosition()
+    const store = rememberReadingPosition.get()
       ? readingSession
       : new ReadingSessionStore({ session: sessionStorage });
     const articleId = openedArticle()?.id;
@@ -336,7 +351,7 @@ export function Dashboard(props: {
   const recordAppSnapshot = (
     patch: Parameters<ReadingSessionStore["recordApp"]>[0],
   ) => {
-    if (!rememberReadingPosition() || restoringSession()) return;
+    if (!rememberReadingPosition.get() || restoringSession()) return;
     readingSession.recordApp(patch);
   };
   // Throttled scroll recorders: at most one storage write each per interval.
@@ -345,7 +360,11 @@ export function Dashboard(props: {
   });
   const recordReaderScroll = createThrottledRecorder((element: HTMLElement) => {
     const id = openedArticle()?.id;
-    if (id === undefined || !rememberReadingPosition() || restoringSession())
+    if (
+      id === undefined ||
+      !rememberReadingPosition.get() ||
+      restoringSession()
+    )
       return;
     readingSession.recordReaderScroll(id, scrollRatio(element));
   });
@@ -414,8 +433,7 @@ export function Dashboard(props: {
   const schedulePoll = () => {
     // A stream signal can run a poll while the timer is pending; one timer.
     clearTimeout(pollTimer);
-    // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (disposed || backgroundPollEnabled() !== "on") return;
+    if (disposed || !backgroundPoll.get()) return;
     const delay = nextPollDelayMs(pollCycles, streamOpen);
     pollDueAt = Date.now() + delay;
     pollTimer = setTimeout(() => {
@@ -452,7 +470,7 @@ export function Dashboard(props: {
     }, 2000);
   };
   createEffect(() => {
-    if (!authenticated() || backgroundPollEnabled() !== "on") return;
+    if (!authenticated() || !backgroundPoll.get()) return;
     const stream = new EventSource("/api/events");
     stream.addEventListener("open", () => {
       streamOpen = true;
@@ -509,7 +527,7 @@ export function Dashboard(props: {
   const runOfflineSync = () => void syncOfflineArticles(tree());
   const syncOfflineInIdleTime = () => {
     clearTimeout(offlineSyncTimer);
-    if (disposed || !authenticated() || offlineUnreadEnabled() !== "on") return;
+    if (disposed || !authenticated() || !offlineUnread.get()) return;
     offlineSyncTimer = setTimeout(
       () => {
         if (typeof requestIdleCallback === "function")
@@ -526,7 +544,7 @@ export function Dashboard(props: {
   // Retry when the tab or network becomes available. A sync may have started
   // before it was hidden or disconnected, leaving some bodies undownloaded.
   const retryOfflineSync = () => {
-    if (canRetryOfflineSync(offlineUnreadEnabled() === "on", document.hidden))
+    if (canRetryOfflineSync(offlineUnread.get(), document.hidden))
       syncOfflineInIdleTime();
   };
   document.addEventListener("visibilitychange", retryOfflineSync);
@@ -547,7 +565,7 @@ export function Dashboard(props: {
   // One listing at a time prevents an older list from replacing a newer one.
   const offlineSyncGate = createOfflineSyncGate();
   async function syncOfflineArticles(nodes: TreeNode[]) {
-    if (disposed || !shouldPrefetch(navigatorConnection())) return;
+    if (disposed || saveData()) return;
     if (
       document.hidden ||
       !navigator.onLine ||
@@ -592,7 +610,7 @@ export function Dashboard(props: {
     } finally {
       if (offlineSyncGate.finish()) syncOfflineInIdleTime();
     }
-    if (!disposed && offlineUnreadEnabled() === "on")
+    if (!disposed && offlineUnread.get())
       postOfflineArticles(selection.articles, token);
   }
   async function shareSelected() {
@@ -627,18 +645,16 @@ export function Dashboard(props: {
       reportError(cause, "Could not refresh articles");
     }
   }
-  const selectionGuard = createSupersessionGuard();
-  const articleRequestGuard = createSupersessionGuard();
-  const capabilityProbeGuard = createSupersessionGuard();
-  const treeRequestGuard = createSupersessionGuard();
-  let articleAbortController: AbortController | undefined;
+  // Each request kind keeps its latest controller. Starting the next one
+  // aborts it, so `signal.aborted` is also what says a request was
+  // superseded. The list's controller covers its first and later pages.
+  let listController = new AbortController();
   let articleBodyAbortController: AbortController | undefined;
-  let pageAbortController: AbortController | undefined;
+  let probeController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   let readerPaneRef: HTMLElement | undefined;
   const disableReader = (message: string) => {
-    articleRequestGuard.start();
     articleBodyAbortController?.abort();
     setReaderAvailable(false);
     setDisplayMode("FEED");
@@ -647,9 +663,11 @@ export function Dashboard(props: {
     setError(message);
   };
   const probeReader = async () => {
-    const probe = capabilityProbeGuard.start();
+    probeController?.abort();
+    const probe = new AbortController();
+    probeController = probe;
     const available = await readerBridge.available();
-    if (!capabilityProbeGuard.isCurrent(probe)) return;
+    if (probe.signal.aborted) return;
     setReaderAvailable(available);
     if (!available && displayMode() !== "FEED")
       disableReader("The Reader extension is unavailable. Showing Feed mode.");
@@ -671,8 +689,7 @@ export function Dashboard(props: {
     }
   };
   onCleanup(() => {
-    capabilityProbeGuard.start();
-    articleRequestGuard.start();
+    probeController?.abort();
     articleBodyAbortController?.abort();
     removeEventListener("focus", focusReaderProbe);
     navigator.serviceWorker?.removeEventListener(
@@ -682,7 +699,6 @@ export function Dashboard(props: {
     readerBridge.dispose();
   });
   async function loadTree(): Promise<TreeNode[]> {
-    const request = treeRequestGuard.start();
     treeAbortController?.abort();
     const controller = new AbortController();
     treeAbortController = controller;
@@ -704,7 +720,7 @@ export function Dashboard(props: {
         if (
           cause instanceof DOMException &&
           cause.name === "AbortError" &&
-          !treeRequestGuard.isCurrent(request)
+          treeAbortController !== controller
         ) {
           return treeRequestPromise ?? Promise.reject(cause);
         }
@@ -713,19 +729,19 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (disposed || !treeRequestGuard.isCurrent(request)) return nextTree;
-    const current = selectedNode();
-    setTree(nextTree);
-    if (current) {
-      // The virtual Today node is not in the stored tree; keep it selected
-      // across refreshes instead of letting findNode drop it.
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    if (controller.signal.aborted) return nextTree;
+    applyTree(nextTree);
     return nextTree;
+  }
+  // The selection moves to its node in the new tree. The virtual Today node
+  // is not in the stored tree, so it stays selected rather than letting
+  // findNode drop it and leave the pane with nothing to page, refresh or
+  // re-select against.
+  function applyTree(nextTree: TreeNode[]) {
+    setTree(nextTree);
+    const current = selectedNode();
+    if (current && !isTodayNode(current))
+      setSelectedNode(findNode(nextTree, current.type, current.uid));
   }
   const revealTree = () => {
     if (!treeLoading()) return;
@@ -763,7 +779,7 @@ export function Dashboard(props: {
     // Read the snapshot up front (before any await) so a reload restores the
     // state the tab actually left in, not whatever a faster boot wrote.
     const restored = restoreEnabled() ? readingSession.snapshot() : undefined;
-    if (!rememberReadingPosition())
+    if (!rememberReadingPosition.get())
       try {
         sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);
       } catch {}
@@ -825,14 +841,13 @@ export function Dashboard(props: {
   async function restoreFromSnapshot(snapshot: AppSnapshot) {
     try {
       const node = findNode(
-        withTodayNode(tree(), todayView() === "on"),
+        withTodayNode(tree(), todayView.get()),
         snapshot.nodeType,
         snapshot.nodeUid,
       );
-      const search = articleSearchBox() === "on" ? snapshot.search : undefined;
+      const search = articleSearchBox.get() ? snapshot.search : undefined;
       if (!node && !search) {
-        readingSession.clear();
-        setRestoringSession(false);
+        abandonRestore();
         return;
       }
       setArticleFilter(snapshot.articleFilter);
@@ -843,8 +858,7 @@ export function Dashboard(props: {
       } else if (node) await select(node, snapshot);
     } catch {
       // A restore must never surface as an error; boot continues as usual.
-      readingSession.clear();
-      setRestoringSession(false);
+      abandonRestore();
     }
   }
   // Applies a restored reader ratio once that article's content has
@@ -871,6 +885,14 @@ export function Dashboard(props: {
       }),
     );
   });
+  // A new list abandons whatever the old one still has in flight.
+  function resetList() {
+    listController.abort();
+    listController = new AbortController();
+    moreArticles = false;
+    articleCursor = undefined;
+    return listController;
+  }
   async function select(node: TreeNode, restore?: AppSnapshot) {
     // A feed picked from the cached tree while boot still waits to restore
     // the session (#989) supersedes the snapshot, and is recorded in its place.
@@ -890,68 +912,53 @@ export function Dashboard(props: {
       nodeType: node.type,
       nodeUid: node.uid,
     });
-    const selection = selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
-    moreArticles = false;
-    articleCursor = undefined;
-    if (isTodayNode(node)) {
-      await fetchArticlesForBody(
-        { sources: [], view: "today" },
-        selection,
-        restore,
-      );
-      return;
-    }
-    const ids = sourceIds(node);
-    if (!ids.length) {
+    const selection = resetList();
+    if (!isTodayNode(node) && !sourceIds(node).length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
-      if (restore) {
-        readingSession.clear();
-        setRestoringSession(false);
-      }
+      if (restore) abandonRestore();
       return;
     }
-    await fetchArticlesForBody(articleScope(node), selection, restore);
+    await fetchArticlesForBody(nodeScope(node), selection, restore);
+  }
+  // One page of a list, after `cursor` when given. The cursor's publishedAt
+  // places it in the offline list (#992) once it has left the kept rows.
+  function articlesRequest(
+    scope: ListScope,
+    cursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined,
+    signal: AbortSignal,
+  ) {
+    return api("/articles", articlesResponse, {
+      body: JSON.stringify({
+        filter: articleFilter(),
+        ...scope,
+        ...(cursor ? { cursor: cursor.id } : {}),
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(cursor && offlineUnread.get()
+          ? { "X-Cursor-Published-At": cursor.publishedAt }
+          : {}),
+      },
+      method: "POST",
+      signal,
+    });
   }
   async function fetchArticlesForBody(
-    body: {
-      sources: number[];
-      folder?: number;
-      view?: "today";
-      cursor?: number;
-      query?: string;
-    },
-    selection: ReturnType<typeof selectionGuard.start>,
+    scope: ListScope,
+    selection: AbortController,
     // Session restore (#718): re-select the rows the snapshot had selected
     // rather than always row 0, paging as far as the list had been loaded.
     restore?: AppSnapshot,
   ) {
     setArticlesLoading(true);
-    const controller = new AbortController();
-    articleAbortController = controller;
     try {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const page = (cursor?: Pick<ArticleSummary, "id" | "publishedAt">) =>
-        api("/articles", articlesResponse, {
-          body: JSON.stringify({
-            filter: articleFilter(),
-            ...body,
-            ...(cursor ? { cursor: cursor.id } : {}),
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            ...(cursor && offlineUnreadEnabled() === "on"
-              ? { "X-Cursor-Published-At": cursor.publishedAt }
-              : {}),
-          },
-          method: "POST",
-          signal: controller.signal,
-        });
+        articlesRequest(scope, cursor, selection.signal);
       let lastPage = await page();
       const nextArticles = [...lastPage];
       // ponytail: capped at five pages, so a restore never walks a huge list.
@@ -962,13 +969,13 @@ export function Dashboard(props: {
       while (
         nextArticles.length < restoreCount &&
         lastPage.length === articlePageSize &&
-        selectionGuard.isCurrent(selection)
+        !selection.signal.aborted
       ) {
         // oxlint-disable-next-line no-await-in-loop -- each page's cursor is the previous page's last row
         lastPage = await page(nextArticles.at(-1));
         nextArticles.push(...lastPage);
       }
-      if (!selectionGuard.isCurrent(selection)) return;
+      if (selection.signal.aborted) return;
       setArticles(nextArticles);
       moreArticles = lastPage.length === articlePageSize;
       articleCursor = nextArticles.at(-1) ?? articleCursor;
@@ -1019,8 +1026,7 @@ export function Dashboard(props: {
           }
           applyRestoredScroll(restore.listScrollTop);
         } else {
-          readingSession.clear();
-          setRestoringSession(false);
+          abandonRestore();
         }
       } else {
         recordAppSnapshot({
@@ -1030,14 +1036,11 @@ export function Dashboard(props: {
         });
       }
     } catch (cause) {
-      if (!selectionGuard.isCurrent(selection)) return;
+      if (selection.signal.aborted) return;
       reportError(cause, "Could not load articles");
-      if (restore) {
-        readingSession.clear();
-        setRestoringSession(false);
-      }
+      if (restore) abandonRestore();
     } finally {
-      if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
+      if (!selection.signal.aborted) setArticlesLoading(false);
     }
   }
   // Scrolls the restored list position in once the rows are on screen. Runs
@@ -1076,42 +1079,21 @@ export function Dashboard(props: {
     // -- searching before ever picking a feed is a normal way in.
     if (
       !moreArticles ||
-      loadingMoreSelection === selectionGuard.current() ||
+      loadingMoreSelection === listController ||
       cursor === undefined ||
       (!node && !search)
     )
       return;
     if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
-    // Today is scoped by `view`, not by an id list -- its node uid is the
-    // string "today", so running it through sourceIds yields [NaN], which
-    // serialises to [null] and the request is refused. The next page has to
-    // be asked the same way the first one was.
-    const today = !search && node !== undefined && isTodayNode(node);
-    const scope =
-      search || today || !node ? { sources: [] } : articleScope(node);
-    const selection = selectionGuard.current();
+    const selection = listController;
     loadingMoreSelection = selection;
-    const controller = new AbortController();
-    pageAbortController = controller;
     try {
-      const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({
-          cursor: cursor.id,
-          filter: articleFilter(),
-          ...scope,
-          ...(today ? { view: "today" } : {}),
-          ...(search ? { query: search } : {}),
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          ...(offlineUnreadEnabled() === "on"
-            ? { "X-Cursor-Published-At": cursor.publishedAt }
-            : {}),
-        },
-        method: "POST",
-        signal: controller.signal,
-      });
-      if (!selectionGuard.isCurrent(selection)) return;
+      const nextArticles = await articlesRequest(
+        search || !node ? searchScope(search) : nodeScope(node),
+        cursor,
+        selection.signal,
+      );
+      if (selection.signal.aborted) return;
       moreArticles = nextArticles.length === articlePageSize;
       articleCursor = nextArticles.at(-1) ?? articleCursor;
       if (!nextArticles.length) return;
@@ -1119,7 +1101,7 @@ export function Dashboard(props: {
       topUpArticles();
       announce(`Loaded ${nextArticles.length} more articles.`);
     } catch (cause) {
-      if (selectionGuard.isCurrent(selection))
+      if (!selection.signal.aborted)
         reportError(cause, "Could not load more articles");
     } finally {
       if (loadingMoreSelection === selection) loadingMoreSelection = undefined;
@@ -1143,12 +1125,7 @@ export function Dashboard(props: {
     setActiveSearch(query);
     props.focusPane("articles");
     setError("");
-    const selection = selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
-    moreArticles = false;
-    articleCursor = undefined;
-    await fetchArticlesForBody({ query, sources: [] }, selection, restore);
+    await fetchArticlesForBody(searchScope(query), resetList(), restore);
   }
   async function exitSearch() {
     if (!activeSearch()) return;
@@ -1158,19 +1135,15 @@ export function Dashboard(props: {
     // runSearch() give theirs. Without it, a response that lands after the
     // clear repopulates a list the user just emptied (#815) -- reachable
     // whenever no feed is selected, since that is the one branch below that
-    // neither aborts nor starts a new guard token.
-    selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
+    // starts no new list.
+    resetList();
     const node = selectedNode();
     if (node) await select(node);
     else {
       // No replacement fetch starts here, and the aborted one will not clear
-      // the loading signal its superseded token now hides, so the empty
+      // the loading signal its aborted controller now hides, so the empty
       // state behind the cleared list would never appear.
       setArticlesLoading(false);
-      moreArticles = false;
-      articleCursor = undefined;
       setArticles([]);
     }
   }
@@ -1226,16 +1199,7 @@ export function Dashboard(props: {
     // Reuse the computed tree: Solid 2.0 defers setter visibility to the
     // microtask flush, so a synchronous tree() read sees the pre-delta one.
     const deltas = readStateDeltas(items, ids, read);
-    const nextTree = withDecrementedUnread(tree(), deltas);
-    setTree(nextTree);
-    const current = selectedNode();
-    if (current) {
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    applyTree(withDecrementedUnread(tree(), deltas));
     if (articleFilter() === "all") {
       setArticles(
         items.map((article) =>
@@ -1273,7 +1237,7 @@ export function Dashboard(props: {
       });
       if (announcement) announce(announcement);
       // Marked finished: its half-read position has no future (#718).
-      if (read && rememberReadingPosition())
+      if (read && rememberReadingPosition.get())
         readingSession.clearReaderScrolls(ids);
       await loadTree();
     } catch (cause) {
@@ -1291,7 +1255,7 @@ export function Dashboard(props: {
   // optimistic removal and selection handling apply identically and no
   // second request shape races them.
   createEffect(() => {
-    if (markReadPolicy() !== "on-scroll-past") return;
+    if (markReadPolicy.get() !== "on-scroll-past") return;
     // A session restore is mid-flight: it is about to scroll this list to
     // the stored position, and the observer must not be watching yet, or the
     // programmatic scroll would count as the user scrolling past rows (#718).
@@ -1540,6 +1504,8 @@ export function Dashboard(props: {
         }
         return;
       }
+      // resetList also stops a pending delete from rolling its rows back.
+      resetList();
       setSelectedNode(undefined);
       setArticles([]);
       // The source (and everything under a deleted folder) is gone: no
@@ -1587,9 +1553,8 @@ export function Dashboard(props: {
   // it and serves it for a minute without a round trip (see
   // recentArticleFirst in public/sw.js), and offline after that.
   function prefetchArticle(id: number) {
-    // Both "on" and "off" are truthy, so compare the setting explicitly.
-    if (prefetchNextEnabled() !== "on") return;
-    if (!shouldPrefetch(navigatorConnection())) return;
+    if (!prefetchNext.get()) return;
+    if (saveData()) return;
     if (openedArticle()?.id === id) return;
     // Best-effort: opening the article reports its own failure.
     fetchArticle(id);
@@ -1602,7 +1567,7 @@ export function Dashboard(props: {
     pressFetch = undefined;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey)
       return;
-    if (!shouldPrefetch(navigatorConnection())) return;
+    if (saveData()) return;
     if (openedArticle()?.id === id || articleFetches.has(id)) return;
     pressFetch = fetchArticle(id).controller;
   }
@@ -1635,11 +1600,7 @@ export function Dashboard(props: {
     if (!matchMedia("(pointer: fine)").matches) return;
     hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
-  async function open(
-    article: ArticleSummary,
-    selection = selectionGuard.current(),
-  ) {
-    const request = articleRequestGuard.start();
+  async function open(article: ArticleSummary, selection = listController) {
     articleBodyAbortController?.abort();
     const body = fetchArticle(article.id);
     articleBodyAbortController = body.controller;
@@ -1649,8 +1610,8 @@ export function Dashboard(props: {
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
       return (
-        articleRequestGuard.isCurrent(request) &&
-        selectionGuard.isCurrent(selection) &&
+        !body.controller.signal.aborted &&
+        !selection.signal.aborted &&
         mode === displayMode() &&
         selectedIndex !== undefined &&
         articles()[selectedIndex]?.id === article.id
@@ -1671,7 +1632,7 @@ export function Dashboard(props: {
       // open would pull the row out from under the person reading it; there,
       // the toolbar button is the way.
       if (
-        markReadPolicy() === "on-open" &&
+        markReadPolicy.get() === "on-open" &&
         !article.read &&
         articleFilter() === "all"
       ) {
@@ -1705,18 +1666,18 @@ export function Dashboard(props: {
         setDisplayMode("FEED");
         setReaderContent(undefined);
         setError(
-          `${cause instanceof Error ? cause.message : "Could not load Reader content."} Showing Feed mode.`,
+          `${messageOf(cause, "Could not load Reader content.")} Showing Feed mode.`,
         );
         return;
       }
       reportError(cause, "Could not load article");
     } finally {
-      if (articleRequestGuard.isCurrent(request)) setLoadingArticle(false);
+      if (!body.controller.signal.aborted) setLoadingArticle(false);
     }
   }
   function setArticleSelection(
     indexes: Set<number>,
-    selection = selectionGuard.current(),
+    selection = listController,
   ): Promise<void> | undefined {
     setSelectedIndexes(indexes);
     setOpenedArticle(undefined);
@@ -1724,7 +1685,6 @@ export function Dashboard(props: {
     const index = soleSelectedIndex(indexes);
     const article = index === undefined ? undefined : articles()[index];
     if (!article) {
-      articleRequestGuard.start();
       articleBodyAbortController?.abort();
       setLoadingArticle(false);
       return undefined;
@@ -1739,6 +1699,7 @@ export function Dashboard(props: {
     const ids = [...indexes].map((index) => items[index]!.id);
     if (!ids.length) return;
     setError("");
+    const list = listController;
 
     // Fired first so network time overlaps the local UI work below.
     const deletion = api("/articles", removedArticlesResponse, {
@@ -1773,19 +1734,7 @@ export function Dashboard(props: {
     }
     // Reuse the computed tree: Solid 2.0 defers setter visibility to the
     // microtask flush, so a synchronous tree() read sees the pre-decrement one.
-    const nextTree = withDecrementedUnread(tree(), deltas);
-    setTree(nextTree);
-    const current = selectedNode();
-    if (current) {
-      // Same as loadTree: the virtual Today node is not in the stored tree,
-      // so findNode would drop the selection and leave the pane with nothing
-      // to page, refresh or re-select against.
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    applyTree(withDecrementedUnread(tree(), deltas));
     // The removed rows' nodes are gone, dropping focus to document.body.
     queueMicrotask(() => focusArticleAt(restoreIndex));
 
@@ -1793,18 +1742,23 @@ export function Dashboard(props: {
       .then(() => {
         announce(`${articlesNoun(ids.length)} deleted.`);
         // Deleted articles have no reading position to remember (#718).
-        if (rememberReadingPosition()) readingSession.clearReaderScrolls(ids);
+        if (rememberReadingPosition.get())
+          readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
           reportError(cause, "Could not refresh tree"),
         );
       })
       .catch((cause) => {
-        // Optimistic update already applied; resync rather than hand-revert.
         reportError(cause, "Could not delete articles");
-        setArticles(items);
-        void setArticleSelection(new Set(indexes));
-        setFocusedIndex(Math.min(...indexes));
-        setSelectionAnchor(Math.min(...indexes));
+        // The rows go back only into the list they left. A list loaded since
+        // already shows what the server holds, and the tree reload below
+        // undoes the optimistic unread counts either way.
+        if (!list.signal.aborted) {
+          setArticles(items);
+          void setArticleSelection(new Set(indexes));
+          setFocusedIndex(Math.min(...indexes));
+          setSelectionAnchor(Math.min(...indexes));
+        }
         loadTree().catch((reloadCause) =>
           reportError(reloadCause, "Could not refresh tree"),
         );
@@ -2094,7 +2048,7 @@ export function Dashboard(props: {
                 </div>
               }
             >
-              <Show when={feedFilterBox() === "on"}>
+              <Show when={feedFilterBox.get()}>
                 <input
                   aria-label="Filter feeds"
                   class="tree-filter"
@@ -2216,7 +2170,7 @@ export function Dashboard(props: {
               the box its own clear affordance; search runs on submit rather
               than per keystroke, because every query is a full-text scan on
               someone's home server (#697). */}
-          <Show when={articleSearchBox() === "on"}>
+          <Show when={articleSearchBox.get()}>
             <form
               class="article-search-field"
               role="search"
@@ -2526,16 +2480,11 @@ export function Dashboard(props: {
             setShowDiscovery(false);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
-            const nextTree = await loadTree();
-            const nodes = [...nextTree];
-            let savedNode: TreeNode | undefined;
-            for (const node of nodes) {
-              if (node.type === "source" && node.uid === sourceId.toString()) {
-                savedNode = node;
-                break;
-              }
-              nodes.push(...(node.type === "folder" ? node.children : []));
-            }
+            const savedNode = findNode(
+              await loadTree(),
+              "source",
+              sourceId.toString(),
+            );
             if (!savedNode) return;
             await select(savedNode);
             // Editing renames or moves an existing feed; nothing to fetch, so

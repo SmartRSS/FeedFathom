@@ -6,6 +6,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
+import type * as Dialogs from "../../src/spa/dialog.tsx";
 import { installApiFixture } from "./api-fixture.ts";
 
 // The real service worker (see src/spa/public/sw.js) takes /api/* fetches
@@ -516,6 +517,21 @@ test("keeps folder state usable when localStorage throws", async ({ page }) => {
   await expect(
     page.locator("button.source").filter({ hasText: "Tech News" }),
   ).toBeHidden();
+});
+
+test("a collapsed folder stays collapsed across a reload", async ({ page }) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  const source = page.locator("button.source").filter({ hasText: "Tech News" });
+  await expect(source).toBeVisible();
+  await page.locator(".chevron").first().click();
+  await expect(source).toBeHidden();
+
+  await page.reload();
+  await expect(
+    page.locator("button.source").filter({ hasText: "Reading" }),
+  ).toBeVisible();
+  await expect(source).toBeHidden();
 });
 
 test("preserves an unauthenticated deep link through login", async ({
@@ -1390,7 +1406,7 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
-    .selectOption("off");
+    .selectOption("false");
   // The effect reruns wherever the app is, not only over the dashboard.
   await expect(page).toHaveTitle("Options · FeedFathom");
 
@@ -1400,6 +1416,35 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   // A reload re-reads the persisted setting from localStorage.
   await page.reload();
   await expect(page).toHaveTitle("FeedFathom");
+});
+
+// Toggles were stored as "on"/"off" before they were booleans; a reader who
+// switched one off then still has it off.
+test("reads a toggle stored as the old off string as off", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("unreadBadge", "off"));
+  await installApiFixture(page);
+  await page.goto("/");
+  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
+  await expect(page).toHaveTitle("FeedFathom");
+
+  await page.goto("/options#signal");
+  await expect(
+    page.getByRole("combobox", { name: "Unread count in tab title" }),
+  ).toHaveValue("false");
+});
+
+// Before #714 the only choice was a boolean under its own key.
+test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("markReadOnOpen", "true"),
+  );
+  await installApiFixture(page);
+  await page.goto("/options");
+  await expect(
+    page.getByRole("combobox", { name: "When articles get marked read" }),
+  ).toHaveValue("on-open");
 });
 
 // Each search box is one row of a pane with little height to spare, so each
@@ -1417,7 +1462,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Feed filter box in the sidebar" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
 
   await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
@@ -1428,7 +1473,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Article search box" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 
@@ -1439,10 +1484,9 @@ test("hides the feed filter and article search boxes independently", async ({
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 });
 
-// The prefetch setting's Off used to read as on like every string-"off"
-// signal consumed bare (#765's root cause), so the requests it was
-// supposed to save went out anyway. These two pin both sides of the
-// toggle around the same open.
+// These two pin both sides of the prefetch toggle around the same open.
+// They store the "on"/"off" strings toggles used before they were booleans,
+// so they also cover reading those.
 const requestedArticleIds = (page: Page) => {
   const ids: string[] = [];
   page.on("request", (request) => {
@@ -1492,6 +1536,47 @@ test("skips the next-article prefetch when the setting is Off", async ({
   await page.waitForTimeout(1_000);
   expect(new Set(ids).size).toBe(1);
   expect(["11", "12", "13"]).toContain(ids[0]);
+});
+
+test("skips the next-article prefetch under Save Data", async ({ page }) => {
+  // Requests are recorded in the page as they start, so the check below
+  // needs no wait for Playwright's own request events.
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "true");
+    Object.defineProperty(navigator, "connection", {
+      value: { saveData: true },
+    });
+    const fetchPage = window.fetch.bind(window);
+    Object.defineProperty(window, "fetch", {
+      value: (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+          location.href,
+        );
+        if (url.pathname === "/api/article")
+          sessionStorage.setItem(
+            "articleRequests",
+            `${sessionStorage.getItem("articleRequests") ?? ""} ${url.searchParams.get("article")}`,
+          );
+        return fetchPage(input, init);
+      },
+    });
+  });
+  await installApiFixture(page, { multipleArticles: true });
+  await page.goto("/");
+  await selectSource(page);
+  // Loading the list opens its first row, which is when a prefetch would be
+  // queued, in an idle callback. One queued after it runs after it.
+  await expect(page.locator(".reader")).toContainText("Feed article content");
+  const requested = await page.evaluate(
+    () =>
+      new Promise<string>((resolve) =>
+        requestIdleCallback(() =>
+          resolve(sessionStorage.getItem("articleRequests") ?? ""),
+        ),
+      ),
+  );
+  expect(new Set(requested.trim().split(" "))).toEqual(new Set(["11"]));
 });
 
 test("a press starts the article fetch even with prefetch Off", async ({
@@ -2132,6 +2217,41 @@ test("lists the discovery preview articles as a list", async ({ page }) => {
   ).toBeVisible();
 });
 
+// A preview opens on its first article. A modified click on one is the
+// browser's gesture for "open this elsewhere", so the pane leaves it be.
+test("a preview opens its first article and leaves modified clicks alone", async ({
+  page,
+}) => {
+  // Runs after the app's delegated handler: records whether it took the
+  // click, then keeps the browser from opening anything.
+  await page.addInitScript(() =>
+    window.addEventListener("click", (event) => {
+      sessionStorage.setItem("clickTaken", String(event.defaultPrevented));
+      event.preventDefault();
+    }),
+  );
+  await installApiFixture(page);
+  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+  const link = page
+    .getByRole("region", { name: "Preview articles" })
+    .getByRole("link", { name: /article/ });
+  await expect(link).toHaveAttribute("aria-current", "true");
+  await expect(
+    page.getByRole("article", { name: "Preview reader" }),
+  ).toContainText("Preview article content");
+
+  const clickTaken = async (
+    modifiers: ("Alt" | "ControlOrMeta" | "Shift")[],
+  ) => {
+    await link.click({ modifiers });
+    return await page.evaluate(() => sessionStorage.getItem("clickTaken"));
+  };
+  expect(await clickTaken([])).toBe("true");
+  expect(await clickTaken(["Alt"])).toBe("false");
+  expect(await clickTaken(["ControlOrMeta"])).toBe("false");
+  expect(await clickTaken(["Shift"])).toBe("false");
+});
+
 test("exposes Reader modes only when the bridge is available", async ({
   context,
   page,
@@ -2465,6 +2585,39 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   expect(
     await page.evaluate(() => document.activeElement?.getAttribute("role")),
   ).toBe("option");
+});
+
+// The dialog host shows one request at a time. A second one replaces the
+// first, which must then settle as cancelled rather than leave its caller
+// waiting forever. The page imports the app's own module instance from the
+// dev server, as no control can open a dialog over an open one.
+test("a second dialog request cancels the one still pending", async ({
+  page,
+}) => {
+  await installApiFixture(page);
+  await page.goto("/");
+  // Boot focuses the first tree row; wait for that before moving focus.
+  await expect(page.locator(".sources-pane .source").first()).toBeFocused();
+  const opener = page.getByRole("button", { name: "add folder" });
+  await opener.focus();
+
+  const first = await page.evaluate(async (url) => {
+    const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
+    const pending = confirmDialog("First?");
+    // Let the first dialog open and take focus, so the second replaces an
+    // open dialog and must keep the first one's focus-return target.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    void promptDialog("Second", "kept");
+    return await pending;
+  }, "/dialog.tsx");
+  expect(first).toBe(false);
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAccessibleName("Second");
+  await expect(dialog.getByRole("textbox")).toHaveValue("kept");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
 });
 
 test("the options page can open the shortcut help dialog without a keyboard", async ({
@@ -2924,6 +3077,37 @@ test("switching feeds does not wait on the old feed's next page", async ({
   held.get(9)!();
   await expect(rows).toHaveCount(pageSize + 3);
   expect(pageRequests).toEqual([[3], [9]]);
+});
+
+// A delete that fails after the reader moved to another feed must not put
+// the old feed's rows back over the new feed's list.
+test("a failed delete leaves the feed switched to since alone", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await routeTwoSourceTree(page, state);
+  let failDelete: (() => void) | undefined;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "DELETE") return await route.fallback();
+    await new Promise<void>((release) => (failDelete = release));
+    // Malformed rather than a 500, which the console guard would flag.
+    await route.fulfill({ json: { removed: "malformed" } });
+  });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("option", { name: /Second article/ }).click();
+  await page.keyboard.press("Delete");
+  await expect(articleOptions(page)).toHaveCount(2);
+  await expect.poll(() => failDelete).toBeDefined();
+
+  await selectSource(page, "Tech Preview");
+  await expect(
+    page.getByRole("option", { name: /Subscribed article/ }),
+  ).toBeVisible();
+  failDelete!();
+  await expect(page.getByRole("alert")).toContainText("Invalid response");
+  await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
+  await expectSelectedRow(page, /Tech Preview/);
 });
 
 test("tree context menu actions target the clicked row", async ({ page }) => {
@@ -3397,7 +3581,7 @@ test.describe("under a controlling service worker", () => {
       .getByRole("combobox", {
         name: "Download unread articles for offline reading",
       })
-      .selectOption("off");
+      .selectOption("false");
     await expect.poll(() => downloaded(page)).toEqual([]);
 
     // The init script switches it back on.

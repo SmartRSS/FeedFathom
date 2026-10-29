@@ -28,6 +28,11 @@ export class ApiError extends Error {
 export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
+// An Error carries its own message for the user; anything else thrown does
+// not, so the caller names what failed.
+export const messageOf = (cause: unknown, fallback: string) =>
+  cause instanceof Error ? cause.message : fallback;
+
 const invalidResponse = (
   path: string,
   message: string,

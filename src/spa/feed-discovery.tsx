@@ -12,11 +12,8 @@ import {
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api } from "./api.ts";
-import { createSupersessionGuard } from "./supersession.ts";
+import { api, messageOf } from "./api.ts";
 import {
-  clickSelectsArticle,
-  initialPreviewSelection,
   newsletterAddress,
   websiteValidationMessage,
   withScheme,
@@ -73,19 +70,26 @@ export function FeedDiscovery(props: {
   const [mailDomain, setMailDomain] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setMessage(cause instanceof Error ? cause.message : fallback);
+    setMessage(messageOf(cause, fallback));
   };
   const selectedArticle = () => {
     const index = selectedIndex();
     return index === undefined ? undefined : articles()[index];
   };
-  const requests = createSupersessionGuard();
+  // Finding and previewing share one controller: starting either abandons
+  // whichever is still in flight.
+  let requests = new AbortController();
+  const startRequest = () => {
+    requests.abort();
+    requests = new AbortController();
+    return requests.signal;
+  };
   let disposed = false;
   let websiteInput!: HTMLInputElement;
   let form!: HTMLFormElement;
   onCleanup(() => {
     disposed = true;
-    requests.start();
+    requests.abort();
   });
 
   onMount(() => {
@@ -121,9 +125,7 @@ export function FeedDiscovery(props: {
         if (props.editing) setFolderId(props.editing.parentUid ?? "");
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
-        setStartupMessage(
-          cause instanceof Error ? cause.message : "Could not load folders.",
-        );
+        setStartupMessage(messageOf(cause, "Could not load folders."));
       }
     })();
     // Separate from the folders load: mail being unavailable only costs the
@@ -148,21 +150,22 @@ export function FeedDiscovery(props: {
     const normalizedLink = withScheme(link());
     if (normalizedLink !== link()) setLink(normalizedLink);
     if (!websiteIsValid()) return;
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Finding feeds…");
     try {
       const found = await api(
         `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "No feeds found");
+      if (!signal.aborted) reportError(cause, "No feeds found");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
@@ -170,7 +173,7 @@ export function FeedDiscovery(props: {
   }
 
   async function preview(url = feedUrl()) {
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Loading preview…");
     setArticles([]);
@@ -181,21 +184,23 @@ export function FeedDiscovery(props: {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeedUrl(result.feedUrl);
       setLink(result.link ?? "");
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      setSelectedIndex(initialPreviewSelection(result.articles.length));
+      // A preview lands on its first article, or on nothing when it is empty.
+      setSelectedIndex(result.articles.length ? 0 : undefined);
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "Preview failed");
+      if (!signal.aborted) reportError(cause, "Preview failed");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
@@ -203,7 +208,10 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    if (!clickSelectsArticle(event)) return;
+    // A modified click is the browser's gesture for "open this elsewhere",
+    // so the pane must not swallow it by selecting instead.
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+      return;
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");
