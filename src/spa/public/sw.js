@@ -367,12 +367,14 @@ async function cacheFirst(request, cacheName, init) {
 // out, and the next sign-in may be another account (#974). That also drops
 // the recorded queue account; the next flush fetches the new one. Both fence
 // session lookups that are still in flight. A logout drops the removals still
-// waiting to replay too, which a sign-in keeps for their account's return.
+// waiting to replay too, which a sign-in keeps for their account's return,
+// and a tree preload nothing used, which answers for the previous session.
 async function changeAccount(request, path) {
   accountChanges++;
   const response = await fetch(request);
   if (response.ok) {
     accountChanges++;
+    treePreload = undefined;
     await caches.delete(API_CACHE);
     if (path === "/api/logout")
       await queueTransaction("readwrite", (store) => [store.clear()]).catch(

@@ -386,6 +386,26 @@ test("a cached shell missing one of its assets waits for the network", async () 
   expect(await response.text()).toBe(shellHtml("index-new"));
 });
 
+// The navigation's tree preload goes unused, as when the dashboard sends a
+// signed-out visitor to the login form.
+test("a tree preloaded before a sign-in is not served after it", async () => {
+  let account = "a";
+  const sw = loadServiceWorker((path) => {
+    if (path === "/api/login") {
+      account = "b";
+      return Response.json({ sid: "s" });
+    }
+    return path === "/api/tree"
+      ? Response.json({ account, tree: [] })
+      : shellNetwork("index")(path);
+  });
+  await sw.navigate("/").background;
+  await sw.dispatch(
+    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
+  ).response;
+  expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
+});
+
 const articleNetwork = (path: string) =>
   Response.json({ path, servedAt: performance.now() });
 
