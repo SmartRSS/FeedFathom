@@ -9,6 +9,7 @@ import {
   isNull,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -55,8 +56,9 @@ export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 /**
  * Sources repository: CRUD on the sources table plus the poll-schedule
  * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
- * the fetch pipeline. WebSub lease state lives in WebSubStateService, favicon
- * storage in FaviconStore, and ParseSource enqueueing in SourceEnqueuer.
+ * the fetch pipeline, and the favicon data URL written by the favicon refresher
+ * and read back by the /api/favicon route. WebSub lease state lives in
+ * WebSubStateService, and ParseSource enqueueing in SourceEnqueuer.
  */
 export class SourcesDataService {
   constructor(
@@ -112,14 +114,47 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  public async getRecentlySuccessfulSources() {
+  // Every feed fetched in the past day, missing icon or not: the window
+  // covers GatherFaviconJobs' daily run (an hour of slack for a daily poll
+  // landing just late), so each live source gets a job per run, mostly
+  // answered from the HTTP cache, and a dead one stops costing provider
+  // requests. Email sources are skipped: their homeUrl is the app's own
+  // origin, whose icon would replace the mail glyph.
+  public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
       .from(sources)
-      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+      .where(
+        and(
+          gt(sources.lastSuccess, sql`NOW() - INTERVAL '25 hours'`),
+          ne(sources.kind, "email"),
+        ),
+      );
+  }
+
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer,
+    contentType: string,
+  ) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        favicon: `data:${contentType};base64,${favicon.toString("base64")}`,
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  public async getFavicon(sourceId: number) {
+    const [row] = await this.drizzleConnection
+      .select({ favicon: sources.favicon })
+      .from(sources)
+      .where(eq(sources.id, sourceId))
+      .limit(1);
+    return row?.favicon ?? null;
   }
 
   // "email" has no endpoint to poll. "feed" is gated purely by notBefore,

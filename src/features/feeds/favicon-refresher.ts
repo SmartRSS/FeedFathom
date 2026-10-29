@@ -3,7 +3,7 @@ import {
   HttpDeferredError,
   isHttpDeferredError,
 } from "#platform/http/http-deferred-error.ts";
-import type { FaviconStore } from "#features/feeds/favicon-store.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import {
   imageDimensions,
   isBetterFavicon,
@@ -21,7 +21,10 @@ import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
 export class FaviconRefresher {
   constructor(
     private readonly httpClient: HttpClient,
-    private readonly faviconStore: Pick<FaviconStore, "updateFavicon">,
+    private readonly sourcesDataService: Pick<
+      SourcesDataService,
+      "updateFavicon"
+    >,
   ) {}
 
   private async bestFavicon(urls: string[]) {
@@ -35,14 +38,12 @@ export class FaviconRefresher {
     );
 
     let best: { buffer: Buffer; contentType: string; size: number } | undefined;
-    let earliestRetryAt: number | undefined;
+    // Infinity until a provider defers, so two passes merge with Math.min.
+    let earliestRetryAt = Infinity;
     for (const result of results) {
       if (result.status === "rejected") {
         if (isHttpDeferredError(result.reason)) {
-          earliestRetryAt = Math.min(
-            earliestRetryAt ?? Infinity,
-            result.reason.retryAt,
-          );
+          earliestRetryAt = Math.min(earliestRetryAt, result.reason.retryAt);
         }
         continue;
       }
@@ -82,37 +83,27 @@ export class FaviconRefresher {
     } catch {
       return;
     }
-    const primaryUrls = [
-      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${source.homeUrl}&size=${targetFaviconSize}`,
-      `https://favicon.im/${source.homeUrl}`,
+    // homeUrl is encoded: a raw `?` or `&` in it would end up in gstatic's
+    // own query string. favicon.im takes a bare domain in its path, and
+    // without throw-error-on-404 it answers an unknown domain with a generic
+    // SVG that would outrank every real icon below 64 px.
+    const primary = await this.bestFavicon([
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(source.homeUrl)}&size=${targetFaviconSize}`,
+      `https://favicon.im/${hostname}?throw-error-on-404=true`,
       `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
-    ];
-
-    const primary = await this.bestFavicon(primaryUrls);
-    let result = primary;
-    if (!primary.best) {
-      const fallback = await this.bestFavicon([
-        `https://unavatar.io/domain/${hostname}?size=${targetFaviconSize}`,
-      ]);
-      result = {
-        best: fallback.best,
-        earliestRetryAt:
-          primary.earliestRetryAt !== undefined ||
-          fallback.earliestRetryAt !== undefined
-            ? Math.min(
-                primary.earliestRetryAt ?? Infinity,
-                fallback.earliestRetryAt ?? Infinity,
-              )
-            : undefined,
-      };
-    }
+    ]);
+    const result = primary.best
+      ? primary
+      : await this.bestFavicon([
+          `https://unavatar.io/domain/${hostname}?size=${targetFaviconSize}`,
+        ]);
 
     if (result.best) {
       const favicon = await normalizeFavicon(
         result.best.buffer,
         result.best.contentType,
       );
-      await this.faviconStore.updateFavicon(
+      await this.sourcesDataService.updateFavicon(
         source.id,
         favicon.buffer,
         favicon.contentType,
@@ -123,8 +114,7 @@ export class FaviconRefresher {
     // Nothing usable came back, but a rate-limited provider might have
     // something once it's no longer throttled — retry later instead of
     // treating this as a dead end.
-    if (result.earliestRetryAt !== undefined) {
-      throw new HttpDeferredError(result.earliestRetryAt);
-    }
+    const retryAt = Math.min(primary.earliestRetryAt, result.earliestRetryAt);
+    if (retryAt !== Infinity) throw new HttpDeferredError(retryAt);
   }
 }

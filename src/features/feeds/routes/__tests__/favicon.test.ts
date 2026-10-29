@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 
 let stored: string | null = null;
 await mock.module("#features/feeds/services.ts", () => ({
-  faviconStore: { getFavicon: async () => stored },
+  sourcesDataService: { getFavicon: async () => stored },
 }));
 const { getFaviconHandler } = await import("#features/feeds/routes/favicon.ts");
 

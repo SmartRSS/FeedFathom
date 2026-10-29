@@ -1,4 +1,4 @@
-import { faviconStore } from "#features/feeds/services.ts";
+import { sourcesDataService } from "#features/feeds/services.ts";
 
 export async function getFaviconHandler({
   params,
@@ -9,7 +9,7 @@ export async function getFaviconHandler({
 }) {
   const sourceId = Number(params.id);
   const dataUrl = Number.isInteger(sourceId)
-    ? await faviconStore.getFavicon(sourceId)
+    ? await sourcesDataService.getFavicon(sourceId)
     : null;
   // Parameters (`image/png; charset=x`) are dropped and anything but image/* is
   // refused. The CSP sandbox below is what keeps an SVG opened directly from

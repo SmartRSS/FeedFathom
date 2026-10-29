@@ -126,13 +126,15 @@ export class MainWorker {
         }
 
         case JobName.GatherFaviconJobs: {
-          const successfulSources =
-            await sourcesDataService.getRecentlySuccessfulSources();
+          const dueSources =
+            await sourcesDataService.getSourcesDueFaviconRefresh();
 
           await Promise.all(
-            successfulSources.map((source) => {
+            dueSources.map((source) => {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
               return bullmqQueue.add(JobName.RefreshFavicon, source, {
+                // A refresh still delayed by a provider's Retry-After keeps
+                // this id, so the next day's add does not jump its backoff.
                 jobId,
                 // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
                 // GatherJobs) first, so a large favicon run can't crowd out
