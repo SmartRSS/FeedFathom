@@ -133,6 +133,33 @@ const loadServiceWorker = (
   const queue = fakeIndexedDb();
   const requests: string[] = [];
   const messages: unknown[] = [];
+  // The unread rows the server lists to the worker's offline sync, newest
+  // first, in pages of 200 as articlePageSize has them. A held listing waits
+  // for its release.
+  let listed: OfflineRow[] = [];
+  const heldListings: Promise<void>[] = [];
+  const holdListing = () => {
+    let release!: () => void;
+    heldListings.push(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    return release;
+  };
+  const listArticles = async (body: unknown) => {
+    await heldListings.shift();
+    const parsed: unknown = typeof body === "string" ? JSON.parse(body) : {};
+    const cursor =
+      parsed && typeof parsed === "object" && "cursor" in parsed
+        ? parsed.cursor
+        : undefined;
+    const start =
+      cursor === undefined
+        ? 0
+        : listed.findIndex((row) => row.id === cursor) + 1;
+    return Response.json(listed.slice(start, start + 200));
+  };
   runInNewContext(source, {
     AbortController,
     Headers,
@@ -157,15 +184,23 @@ const loadServiceWorker = (
       const headers = new Headers(
         init?.headers ?? (typeof input === "string" ? {} : input.headers),
       );
+      // The worker's own listing names its URL as a string; the page's list
+      // requests reach here as the Request the page sent.
+      const answer =
+        typeof input === "string" &&
+        method === "POST" &&
+        path === "/api/articles"
+          ? listArticles(init?.body)
+          : network(path, method, headers);
       const { signal } = init ?? {};
-      if (!signal) return network(path, method, headers);
+      if (!signal) return answer;
       // An aborted request rejects even while the network holds it.
       const aborted = new Promise<never>((_resolve, reject) =>
         signal.addEventListener("abort", () =>
           reject(new DOMException("Aborted", "AbortError")),
         ),
       );
-      return Promise.race([network(path, method, headers), aborted]);
+      return Promise.race([answer, aborted]);
     },
     indexedDB: queue.indexedDB,
     self: {
@@ -231,34 +266,16 @@ const loadServiceWorker = (
     await background;
     return body;
   };
-  // What the dashboard posts each offline-reading sync: unread rows, or bare
-  // ids standing for rows never updated. Settles once the worker's downloads
-  // have.
-  // The dashboard lists the rows first, tagging the requests with a token.
-  let tokens = 0;
-  const listOffline = async (token = String(++tokens)) => {
-    await dispatch(
-      new Request(`${ORIGIN}/api/articles`, {
-        body: "{}",
-        headers: { "X-Offline-Sync": token },
-        method: "POST",
-      }),
-    ).response;
-    return token;
-  };
-  const keepOffline = async (
-    articles: (number | OfflineRow)[],
-    token?: string,
-  ) => {
+  // An offline-reading sync: the server lists these unread rows, or bare ids
+  // standing for rows never updated, and switching the option off lists
+  // none. Settles once the worker's downloads have.
+  const keepOffline = async (articles: (number | OfflineRow)[]) => {
+    listed = articles.map((row) =>
+      typeof row === "number" ? offlineRow(row) : row,
+    );
     const pending: Promise<unknown>[] = [];
     onMessage?.({
-      data: {
-        articles: articles.map((row) =>
-          typeof row === "number" ? offlineRow(row) : row,
-        ),
-        token: token ?? (articles.length > 0 ? await listOffline() : undefined),
-        type: "offline-articles",
-      },
+      data: { sources: articles.length > 0 ? [3] : [], type: "offline-sync" },
       waitUntil: (promise) => pending.push(promise),
     });
     await Promise.all(pending);
@@ -272,8 +289,8 @@ const loadServiceWorker = (
     activate,
     dispatch,
     entries,
+    holdListing,
     keepOffline,
-    listOffline,
     loadArticle,
     loadTree,
     messages,
@@ -560,89 +577,67 @@ test("rows posted before a sign-in are dropped, even queued behind a download", 
   expect([...sw.entries.keys()]).toEqual([]);
 });
 
-test("rows listed before a sign-in in another tab are dropped when posted after it", async () => {
+test("rows listed before a sign-in are dropped when they answer after it", async () => {
   const sw = loadServiceWorker((path, method) =>
-    method === "POST" ? Response.json([]) : articleNetwork(path),
+    method === "POST" ? Response.json({ sid: "s" }) : articleNetwork(path),
   );
-  const token = await sw.listOffline();
+  const release = sw.holdListing();
+  const sync = sw.keepOffline([2]);
+  await settle();
   await sw.dispatch(
     new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
   ).response;
-  await sw.keepOffline([2], token);
-  await sw.keepOffline([3], "never-listed");
+  release();
+  await sync;
   expect([...sw.entries.keys()]).toEqual([]);
   expect(articleRequests(sw.requests)).toEqual([]);
 });
 
-test("a sync interleaved with another account's keeps its own account", async () => {
-  const sw = loadServiceWorker((path, method) =>
-    method === "POST" ? Response.json([]) : articleNetwork(path),
-  );
-  const before = await sw.listOffline();
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
-  await sw.keepOffline([5]);
-  // The earlier sync's next page, and then its rows, empty or not.
-  await sw.listOffline(before);
-  await sw.keepOffline([2], before);
-  await sw.keepOffline([], before);
-  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
-});
-
-test("rows from before a sign-in don't stop the current account's downloads", async () => {
-  let answer: (() => void) | undefined;
-  let held = false;
-  const sw = loadServiceWorker((path, method) => {
-    if (method === "POST") return Response.json([]);
-    if (held) return articleNetwork(path);
-    held = true;
-    return new Promise<Response>((resolve) => {
-      answer = () => resolve(articleNetwork(path));
-    });
-  });
-  const before = await sw.listOffline();
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
-  const current = sw.keepOffline([5]);
-  await settle();
-  await sw.keepOffline([2], before);
-  answer?.();
-  await current;
-  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=5"]);
-});
-
-test("rows another tab listed earlier don't replace newer ones", async () => {
+test("a listing in flight when the option goes off can't undo it", async () => {
   const sw = loadServiceWorker(articleNetwork);
-  const earlier = await sw.listOffline();
-  const later = await sw.listOffline();
-  await sw.keepOffline([1, 2], later);
-  await sw.keepOffline([1], earlier);
+  const release = sw.holdListing();
+  const inFlight = sw.keepOffline([2]);
+  await settle();
+  await sw.keepOffline([]);
+  release();
+  await inFlight;
+  expect([...sw.entries.keys()]).toEqual([]);
+});
+
+test("a newer sync's rows win over an older listing still in flight", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  const release = sw.holdListing();
+  const older = sw.keepOffline([1]);
+  await settle();
+  await sw.keepOffline([1, 2]);
+  release();
+  await older;
   expect(storedBodies(sw.entries)).toEqual([
     "/sw-offline-article?article=1",
     "/sw-offline-article?article=2",
   ]);
 });
 
-// The dashboard names its token on the first page only, so a token the
-// worker forgot can't be registered afresh, under a newer account, by a
-// later page.
-test("a sync's later pages register no token", async () => {
-  const sw = loadServiceWorker((path, method) =>
-    method === "POST" ? Response.json([]) : articleNetwork(path),
-  );
-  await sw.listOffline("next");
-  await sw.keepOffline([2], "next");
-  expect([...sw.entries.keys()]).toEqual([]);
-});
+const listings = (requests: string[]) =>
+  requests.filter((request) => request === "POST /api/articles");
 
-test("a listing in flight when the option goes off can't undo it", async () => {
+test("a sync keeps the newest 500 unread rows, none older than 14 days", async () => {
   const sw = loadServiceWorker(articleNetwork);
-  const inFlight = await sw.listOffline();
-  await sw.keepOffline([]);
-  await sw.keepOffline([2], inFlight);
-  expect([...sw.entries.keys()]).toEqual([]);
+  await sw.keepOffline(Array.from({ length: 600 }, (_, index) => 600 - index));
+  expect(listings(sw.requests)).toHaveLength(3);
+  const kept = storedBodies(sw.entries);
+  expect(kept).toHaveLength(500);
+  expect(kept).toContain("/sw-offline-article?article=600");
+  expect(kept).not.toContain("/sw-offline-article?article=100");
+
+  sw.requests.length = 0;
+  const stale = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toJSON();
+  await sw.keepOffline([2, 1, offlineRow(3, { publishedAt: stale }), 4]);
+  expect(listings(sw.requests)).toHaveLength(1);
+  expect(storedBodies(sw.entries)).toEqual([
+    "/sw-offline-article?article=1",
+    "/sw-offline-article?article=2",
+  ]);
 });
 
 test("switching off clears at once, even behind a stalled download", async () => {
@@ -736,9 +731,10 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   // Date.parse collapses these sub-millisecond timestamps. The cached row
   // position still preserves the server's ordering after a kept cursor.
   online = true;
+  const millisecond = new Date().toJSON().slice(0, -1);
   await sw.keepOffline([
-    offlineRow(100, { publishedAt: "2026-10-14T10:00:00.000900Z" }),
-    offlineRow(200, { publishedAt: "2026-10-14T10:00:00.000500Z" }),
+    offlineRow(100, { publishedAt: `${millisecond}900Z` }),
+    offlineRow(200, { publishedAt: `${millisecond}500Z` }),
   ]);
   online = false;
   expect(await list({ cursor: 100, sources: [3] })).toEqual([200]);
