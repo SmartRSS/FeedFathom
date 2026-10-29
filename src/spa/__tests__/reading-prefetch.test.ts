@@ -1,9 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  canRetryOfflineSync,
-  createOfflineSyncGate,
   neighbours,
-  offlineArticles,
   offlineUnread,
   prefetchNext,
   unreadSourceIds,
@@ -19,21 +16,6 @@ test("the preference defaults to off and follows the last set value", () => {
   expect(prefetchNext.get()).toBe(false);
 });
 
-test("a sync requested while another is active is retried when it finishes", () => {
-  const gate = createOfflineSyncGate();
-  expect(gate.start()).toBe(true);
-  expect(gate.start()).toBe(false);
-  expect(gate.finish()).toBe(true);
-  expect(gate.start()).toBe(true);
-  expect(gate.finish()).toBe(false);
-});
-
-test("offline downloads can resume when visible, even after a started sync", () => {
-  expect(canRetryOfflineSync(true, false)).toBe(true);
-  expect(canRetryOfflineSync(true, true)).toBe(false);
-  expect(canRetryOfflineSync(false, false)).toBe(false);
-});
-
 test("neighbours returns the next then the previous article", () => {
   const items = ["a", "b", "c"];
   expect(neighbours(items, 1)).toEqual(["c", "a"]);
@@ -45,32 +27,6 @@ test("neighbours returns the next then the previous article", () => {
 
 test("offline reading defaults to off", () => {
   expect(offlineUnread.get()).toBe(false);
-});
-
-const DAY = 24 * 60 * 60 * 1000;
-const NOW = Date.parse("2026-10-06T12:00:00.000Z");
-const row = (id: number, ageDays: number) => ({
-  id,
-  publishedAt: new Date(NOW - ageDays * DAY).toJSON(),
-});
-
-const ids = (rows: { id: number }[]) => rows.map((item) => item.id);
-
-test("offline selection stops at the first row older than 14 days", () => {
-  const stale = offlineArticles([row(3, 0), row(2, 13.9), row(1, 14.1)], NOW);
-  expect(stale.complete).toBe(true);
-  expect(ids(stale.articles)).toEqual([3, 2]);
-  const fresh = offlineArticles([row(3, 0)], NOW);
-  expect(fresh.complete).toBe(false);
-  expect(ids(fresh.articles)).toEqual([3]);
-});
-
-test("offline selection keeps at most 500 articles", () => {
-  const rows = Array.from({ length: 600 }, (_, index) => row(600 - index, 0));
-  const { articles, complete } = offlineArticles(rows, NOW);
-  expect(complete).toBe(true);
-  expect(articles).toHaveLength(500);
-  expect(articles[0]?.id).toBe(600);
 });
 
 const source = (uid: string, unreadCount: number) => ({

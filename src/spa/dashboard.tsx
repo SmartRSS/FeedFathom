@@ -83,12 +83,9 @@ import { shareArticle } from "./share-article.ts";
 import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
 import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
-  createOfflineSyncGate,
-  canRetryOfflineSync,
   neighbours,
-  offlineArticles,
   offlineUnread,
-  postOfflineArticles,
+  postOfflineSync,
   prefetchNext,
   saveData,
   unreadSourceIds,
@@ -524,7 +521,7 @@ export function Dashboard(props: {
   // offline tab.
   let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
   let offlineSyncedAt = 0;
-  const runOfflineSync = () => void syncOfflineArticles(tree());
+  const runOfflineSync = () => syncOfflineArticles(tree());
   const syncOfflineInIdleTime = () => {
     clearTimeout(offlineSyncTimer);
     if (disposed || !authenticated() || !offlineUnread.get()) return;
@@ -544,8 +541,7 @@ export function Dashboard(props: {
   // Retry when the tab or network becomes available. A sync may have started
   // before it was hidden or disconnected, leaving some bodies undownloaded.
   const retryOfflineSync = () => {
-    if (canRetryOfflineSync(offlineUnread.get(), document.hidden))
-      syncOfflineInIdleTime();
+    if (offlineUnread.get() && !document.hidden) syncOfflineInIdleTime();
   };
   document.addEventListener("visibilitychange", retryOfflineSync);
   addEventListener("online", retryOfflineSync);
@@ -562,56 +558,18 @@ export function Dashboard(props: {
       retryOfflineSync,
     );
   });
-  // One listing at a time prevents an older list from replacing a newer one.
-  const offlineSyncGate = createOfflineSyncGate();
-  async function syncOfflineArticles(nodes: TreeNode[]) {
-    if (disposed || saveData()) return;
+  function syncOfflineArticles(nodes: TreeNode[]) {
     if (
+      disposed ||
+      saveData() ||
       document.hidden ||
       !navigator.onLine ||
       !navigator.serviceWorker?.controller ||
-      !offlineSyncGate.start()
+      !offlineUnread.get()
     )
       return;
     offlineSyncedAt = Date.now();
-    const sources = unreadSourceIds(nodes);
-    const rows: ArticleSummary[] = [];
-    let selection = offlineArticles(rows, Date.now());
-    // Lets the worker tell which account these rows were listed under. With
-    // no source unread the one request still goes out -- the server answers
-    // an empty source list without a query -- so even an empty list carries
-    // a token the worker knows.
-    const token = crypto.randomUUID();
-    try {
-      for (;;) {
-        // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
-        const page = await api("/articles", articlesResponse, {
-          body: JSON.stringify({
-            cursor: rows.at(-1)?.id,
-            filter: "unread",
-            revision: true,
-            sources,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            // Only the first page names the token: a later one naming it could
-            // register it afresh, under a newer account, once it was forgotten.
-            "X-Offline-Sync": rows.length === 0 ? token : "next",
-          },
-          method: "POST",
-        });
-        rows.push(...page);
-        selection = offlineArticles(rows, Date.now());
-        if (selection.complete || page.length < articlePageSize) break;
-      }
-    } catch {
-      // Best-effort: the next tree load tries again.
-      return;
-    } finally {
-      if (offlineSyncGate.finish()) syncOfflineInIdleTime();
-    }
-    if (!disposed && offlineUnread.get())
-      postOfflineArticles(selection.articles, token);
+    postOfflineSync(unreadSourceIds(nodes));
   }
   async function shareSelected() {
     const article = selected();

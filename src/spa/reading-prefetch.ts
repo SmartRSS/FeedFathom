@@ -1,5 +1,5 @@
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
-import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
+import type { TreeNode } from "#shared/contracts/responses.ts";
 import { sourceIds } from "./dashboard-behavior.ts";
 import { storedToggle } from "./preferences.ts";
 
@@ -10,15 +10,15 @@ export const prefetchNext = storedToggle("prefetchNext", false);
 
 // Offline reading (#992) downloads every recent unread body, a far larger
 // bill than one prefetch, so it is off until switched on too. The service
-// worker can't read localStorage: the dashboard sends it the unread rows to
-// keep, which also list the articles offline, and switching off sends none.
+// worker can't read localStorage: the dashboard sends it the sources with
+// unread articles, and switching off sends none.
 const OFFLINE_UNREAD_KEY = "offlineUnread";
 const offlineUnreadToggle = storedToggle(OFFLINE_UNREAD_KEY, false);
 export const offlineUnread: typeof offlineUnreadToggle = {
   ...offlineUnreadToggle,
   set(next) {
     offlineUnreadToggle.set(next);
-    if (!next) postOfflineArticles([]);
+    if (!next) postOfflineSync([]);
   },
 };
 // Another tab switching it off must stop this one's syncs too, or its next
@@ -28,40 +28,12 @@ if (typeof window !== "undefined")
     if (event.key === OFFLINE_UNREAD_KEY) offlineUnread.reload();
   });
 
-// `token` tags the list requests the rows came from; an empty list carries
-// none.
-export function postOfflineArticles(
-  articles: ArticleSummary[],
-  token?: string,
-) {
+// The worker lists and downloads the unread articles of these sources.
+export function postOfflineSync(sources: number[]) {
   navigator.serviceWorker?.controller?.postMessage({
-    articles,
-    token,
-    type: "offline-articles",
+    sources,
+    type: "offline-sync",
   });
-}
-
-// ponytail: 500 bodies from the last 14 days. Enough for a commute or a
-// flight; a byte budget is the upgrade if bodies heavy with inline media make
-// that too much for a phone.
-const OFFLINE_ARTICLE_LIMIT = 500;
-const OFFLINE_ARTICLE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-
-// The rows worth keeping from unread rows that arrive newest first, and
-// whether the next page could add any.
-export function offlineArticles<T extends Pick<ArticleSummary, "publishedAt">>(
-  rows: readonly T[],
-  now: number,
-): { articles: T[]; complete: boolean } {
-  const cutoff = now - OFFLINE_ARTICLE_MAX_AGE_MS;
-  const stale = rows.findIndex(
-    (row) => new Date(row.publishedAt).getTime() < cutoff,
-  );
-  const fresh = stale === -1 ? rows : rows.slice(0, stale);
-  return {
-    articles: fresh.slice(0, OFFLINE_ARTICLE_LIMIT),
-    complete: stale !== -1 || fresh.length >= OFFLINE_ARTICLE_LIMIT,
-  };
 }
 
 // Only sources with something unread are asked about. ponytail: one article
@@ -82,34 +54,6 @@ export function saveData(): boolean {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const { connection } = navigator as { connection?: { saveData?: boolean } };
   return connection?.saveData === true;
-}
-
-export function canRetryOfflineSync(
-  enabled: boolean,
-  hidden: boolean,
-): boolean {
-  return enabled && !hidden;
-}
-
-export function createOfflineSyncGate() {
-  let syncing = false;
-  let pending = false;
-  return {
-    finish() {
-      syncing = false;
-      const retry = pending;
-      pending = false;
-      return retry;
-    },
-    start() {
-      if (syncing) {
-        pending = true;
-        return false;
-      }
-      syncing = true;
-      return true;
-    },
-  };
 }
 
 // The articles either side of the open one, next first: reading moves

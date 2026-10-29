@@ -11,31 +11,20 @@ const SHELL_REQUEST_INIT = {
   headers: { Accept: "text/html" },
 };
 
-// Deletes/removals we know how to fake an optimistic success response for,
-// so the UI updates immediately while the real request replays once online.
-// ponytail: hand-picked table instead of generic mutation queueing, since
-// most /api/* mutations (subscribe, folder create) return server-generated
-// data we can't fake offline.
 // Mirrors DELETE_TRACE_HEADER in src/spa/delete-trace.ts.
 const DELETE_TRACE_HEADER = "X-FeedFathom-Trace";
 
-const QUEUEABLE_MUTATIONS = [
-  {
-    method: "DELETE",
-    path: "/api/articles",
-    optimisticBody: (body) => body.removedArticleIdList,
-  },
-  {
-    method: "DELETE",
-    path: "/api/source",
-    optimisticBody: (body) => body.removeSourceId,
-  },
-  {
-    method: "DELETE",
-    path: "/api/folders",
-    optimisticBody: (body) => body.removeFolderId,
-  },
-];
+// Removals we know how to fake an optimistic success response for, so the UI
+// updates immediately while the real request replays once online: each DELETE
+// path with the request body field its response echoes.
+// ponytail: hand-picked table instead of generic mutation queueing, since
+// most /api/* mutations (subscribe, folder create) return server-generated
+// data we can't fake offline.
+const QUEUEABLE_REMOVALS = new Map([
+  ["/api/articles", "removedArticleIdList"],
+  ["/api/source", "removeSourceId"],
+  ["/api/folders", "removeFolderId"],
+]);
 
 function shellAssetUrls(html) {
   return [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(
@@ -89,6 +78,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Deletes the entries whose URL `stale` picks.
+async function deleteWhere(cache, stale) {
+  const keys = (await cache.keys()).filter((key) => stale(new URL(key.url)));
+  await Promise.all(keys.map((key) => cache.delete(key)));
+}
+
 // Favicons cached before the route sent its CSP and nosniff headers are
 // dropped once, keeping the rest of API_CACHE (offline articles survive). The
 // marker records that the purge ran.
@@ -96,12 +91,7 @@ const FAVICON_PURGE_MARKER = "/sw-favicon-headers-purged";
 async function purgeHeaderlessFavicons() {
   const cache = await caches.open(API_CACHE);
   if (await cache.match(FAVICON_PURGE_MARKER)) return;
-  const keys = await cache.keys();
-  await Promise.all(
-    keys
-      .filter((key) => new URL(key.url).pathname.startsWith("/api/favicon/"))
-      .map((key) => cache.delete(key)),
-  );
+  await deleteWhere(cache, (url) => url.pathname.startsWith("/api/favicon/"));
   await cache.put(FAVICON_PURGE_MARKER, new Response(""));
 }
 
@@ -129,60 +119,37 @@ function openQueueDb() {
 // database only to find it empty.
 let queueMayHaveEntries = true;
 
-// Every call closes its connection once the transaction settles. Logout
-// deletes this same database (see options.tsx), and IndexedDB blocks a
-// deletion indefinitely while any connection stays open.
-
-async function queueAdd(entry) {
-  const db = await openQueueDb();
-  try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readwrite");
-      tx.objectStore(QUEUE_STORE).add(entry);
-      tx.oncomplete = () => {
-        queueMayHaveEntries = true;
-        resolve();
-      };
-      tx.onerror = () => reject(tx.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function queueAll() {
+// Runs the requests `run` makes on the store in one transaction, and resolves
+// with their results once it completes.
+async function queueTransaction(mode, run) {
   const db = await openQueueDb();
   try {
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readonly");
-      const cursorRequest = tx.objectStore(QUEUE_STORE).openCursor();
-      const entries = [];
-      cursorRequest.onsuccess = () => {
-        const cursor = cursorRequest.result;
-        if (!cursor) return resolve(entries);
-        entries.push({ key: cursor.key, value: cursor.value });
-        cursor.continue();
-      };
-      cursorRequest.onerror = () => reject(cursorRequest.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function queueDelete(key) {
-  const db = await openQueueDb();
-  try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(QUEUE_STORE, "readwrite");
-      tx.objectStore(QUEUE_STORE).delete(key);
-      tx.oncomplete = resolve;
+      const tx = db.transaction(QUEUE_STORE, mode);
+      const requests = run(tx.objectStore(QUEUE_STORE));
+      tx.oncomplete = () => resolve(requests.map((request) => request.result));
       tx.onerror = () => reject(tx.error);
     });
   } finally {
     db.close();
   }
 }
+
+async function queueAdd(entry) {
+  await queueTransaction("readwrite", (store) => [store.add(entry)]);
+  queueMayHaveEntries = true;
+}
+
+async function queueAll() {
+  const [keys, values] = await queueTransaction("readonly", (store) => [
+    store.getAllKeys(),
+    store.getAll(),
+  ]);
+  return keys.map((key, index) => ({ key, value: values[index] }));
+}
+
+const queueDelete = (key) =>
+  queueTransaction("readwrite", (store) => [store.delete(key)]);
 
 async function notifyMutationFailed(value, status) {
   const clients = await self.clients.matchAll({ type: "window" });
@@ -245,7 +212,24 @@ async function sessionAccount(generation) {
   }
 }
 
-async function flushQueue() {
+// One replay at a time: an overlapping one would read entries the running
+// one hasn't deleted yet and send them twice. A call during a replay runs one
+// more after it, for whatever was queued meanwhile.
+let replaying = Promise.resolve();
+let replayPending = false;
+function flushQueue() {
+  if (replayPending) return replaying;
+  replayPending = true;
+  replaying = replaying
+    .catch(() => {})
+    .then(() => {
+      replayPending = false;
+      return replayQueue();
+    });
+  return replaying;
+}
+
+async function replayQueue() {
   if (!queueMayHaveEntries) return;
   // Cleared before the read, so an entry queued mid-flush sets it again.
   queueMayHaveEntries = false;
@@ -343,7 +327,7 @@ async function ownerAccount() {
   return pending?.generation === generation ? await pending.lookup : undefined;
 }
 
-async function queueableMutation(request, route) {
+async function queueableMutation(request, echoedField) {
   // Read before the request goes out, so a sign-in in another tab while it is
   // in flight doesn't become the owner of a removal it didn't make.
   const owner = ownerAccount();
@@ -371,7 +355,7 @@ async function queueableMutation(request, route) {
         // opportunistically on the next successful /api/* request
       }
     }
-    return Response.json(route.optimisticBody(JSON.parse(bodyText)));
+    return Response.json(JSON.parse(bodyText)[echoedField]);
   }
 }
 
@@ -385,29 +369,38 @@ async function cacheFirst(request, cacheName, init) {
 }
 
 // The API cache holds one account's private data and isn't keyed by account,
-// so a sign-in empties it before the page sees the response. Logout clears it
-// too (options.tsx), but a session that expired or was revoked reaches the
-// login form without logging out, and the next sign-in may be another
-// account (#974). That also drops the recorded queue account; the next flush
-// fetches the new one. Logout passes through here too, so it fences session
-// lookups that are still in flight.
-async function changeAccount(request) {
+// so a sign-in or logout empties it before the page sees the response: a
+// session that expired or was revoked reaches the login form without logging
+// out, and the next sign-in may be another account (#974). That also drops
+// the recorded queue account; the next flush fetches the new one. Both fence
+// session lookups that are still in flight. A logout drops the removals still
+// waiting to replay too, which a sign-in keeps for their account's return,
+// and a tree preload nothing used, which answers for the previous session.
+async function changeAccount(request, path) {
   accountChanges++;
   const response = await fetch(request);
   if (response.ok) {
     accountChanges++;
+    treePreload = undefined;
     await caches.delete(API_CACHE);
+    if (path === "/api/logout")
+      await queueTransaction("readwrite", (store) => [store.clear()]).catch(
+        () => {}, // a queue clear failure must not block logout
+      );
     queueMayHaveEntries = true;
   }
   return response;
 }
 
-async function networkFirst(request, cacheName) {
+async function networkFirst(request, cacheName, network = fetch(request)) {
   const cache = await caches.open(cacheName);
   try {
-    const response = await fetch(request);
+    const response = await network;
     if (response.ok) {
-      cache.put(request, response.clone());
+      const { pathname, search } = new URL(request.url);
+      cache
+        .put(request, response.clone())
+        .then(() => search && trimPath(cache, pathname, QUERY_CACHE_LIMIT));
       void flushQueue();
     }
     return response;
@@ -418,90 +411,17 @@ async function networkFirst(request, cacheName) {
   }
 }
 
-function treeFaviconUrls(node) {
-  return node.type === "source"
-    ? node.favicon
-      ? [node.favicon]
-      : []
-    : (node.children ?? []).flatMap(treeFaviconUrls);
-}
-
-function withInlinedFavicon(node, dataUrlByPath) {
-  if (node.type === "source") {
-    const inlined = node.favicon && dataUrlByPath.get(node.favicon);
-    return inlined ? { ...node, favicon: inlined } : node;
-  }
-  return {
-    ...node,
-    children: (node.children ?? []).map((child) =>
-      withInlinedFavicon(child, dataUrlByPath),
-    ),
-  };
-}
-
 // Articles in the cache carry the time they were fetched, so their age is
 // known even after the worker restarts.
 const FETCHED_AT = "X-SW-Fetched-At";
 
-function putWithFetchedAt(cache, request, response) {
+function withHeader(response, name, value) {
   const headers = new Headers(response.headers);
-  headers.set(FETCHED_AT, String(Date.now()));
-  return cache.put(
-    request,
-    new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    }),
-  );
-}
-
-// Keyed by path -- the path is content-addressed (tree.ts appends a
-// fingerprint of sources.favicon as ?v=), so the same path always decodes to
-// the same bytes and the memo never needs invalidating.
-const faviconDataUrls = new Map();
-
-async function faviconDataUrl(path, cached) {
-  const memo = faviconDataUrls.get(path);
-  if (memo) return memo;
-  const contentType =
-    cached.headers.get("Content-Type") ?? "application/octet-stream";
-  const bytes = new Uint8Array(await cached.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
-  faviconDataUrls.set(path, dataUrl);
-  return dataUrl;
-}
-
-// Inlines whichever favicons are already cached -- cache.match() only, no
-// network, so the tree never waits. Uncached ones stay plain
-// /api/favicon/:id?v=... URLs, covered by the per-icon skeleton in
-// dashboard.tsx and cached by the fetch handler's cacheFirst on first load.
-async function inlineTreeFavicons(response, cache) {
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    return null;
-  }
-  const urls = (data.tree ?? []).flatMap(treeFaviconUrls);
-  const dataUrlByPath = new Map();
-  await Promise.allSettled(
-    urls.map(async (path) => {
-      const cached = await cache.match(path);
-      if (cached) dataUrlByPath.set(path, await faviconDataUrl(path, cached));
-    }),
-  );
-  if (dataUrlByPath.size === 0) return null;
-  const patched = {
-    ...data,
-    tree: (data.tree ?? []).map((node) =>
-      withInlinedFavicon(node, dataUrlByPath),
-    ),
-  };
-  return new Response(JSON.stringify(patched), {
-    headers: { "Content-Type": "application/json" },
+  headers.set(name, value);
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
   });
 }
 
@@ -513,16 +433,18 @@ const ARTICLE_FRESH_MS = 60 * 1000;
 // Nothing else evicts an opened article before CACHE_VERSION changes.
 const ARTICLE_CACHE_LIMIT = 200;
 
+// Each query string is an entry of its own -- a lookup per URL for
+// /api/find and /api/preview -- so every path keeps only its newest few.
+const QUERY_CACHE_LIMIT = 20;
+
 // cache.keys() lists entries in insertion order, and a put replaces an
 // entry at the end, so the oldest fetches come first.
-async function trimArticles(cache) {
-  const articles = (await cache.keys()).filter(
-    (request) => new URL(request.url).pathname === "/api/article",
+async function trimPath(cache, pathname, limit) {
+  const entries = (await cache.keys()).filter(
+    (request) => new URL(request.url).pathname === pathname,
   );
   await Promise.all(
-    articles
-      .slice(0, -ARTICLE_CACHE_LIMIT)
-      .map((request) => cache.delete(request)),
+    entries.slice(0, -limit).map((request) => cache.delete(request)),
   );
 }
 
@@ -538,9 +460,9 @@ async function recentArticleFirst(request, cacheName) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      putWithFetchedAt(cache, request, response.clone()).then(() =>
-        trimArticles(cache),
-      );
+      cache
+        .put(request, withHeader(response.clone(), FETCHED_AT, `${Date.now()}`))
+        .then(() => trimPath(cache, "/api/article", ARTICLE_CACHE_LIMIT));
       void flushQueue();
     }
     return response;
@@ -551,49 +473,89 @@ async function recentArticleFirst(request, cacheName) {
 }
 
 // Unread bodies downloaded for offline reading (#992). Their keys sit apart
-// from /api/article, so trimArticles leaves them alone and recentArticleFirst
+// from /api/article, so trimPath leaves them alone and recentArticleFirst
 // serves them without a round trip. They live in the API cache, so a sign-in
 // or logout empties them with the rest of the account's data. The page owns
-// the setting and the selection: each sync posts the unread rows it wants
-// kept, and an empty list when the option is switched off. The rows are kept
-// too, as the article list offline (offlineArticleList).
+// the setting: each sync posts the sources with something unread, and none
+// when the option is switched off. The worker lists the rows to keep and
+// keeps them too, as the article list offline (offlineArticleList).
 const OFFLINE_ARTICLE_PATH = "/sw-offline-article";
 const OFFLINE_LIST_KEY = "/sw-offline-articles";
 const offlineArticleKey = (id) => `${OFFLINE_ARTICLE_PATH}?article=${id}`;
 // The row's revision when the body was fetched: a feed that rewrites the
 // article bumps it, and the next sync fetches the body again.
 const OFFLINE_VERSION = "X-SW-Version";
+// ponytail: 500 bodies from the last 14 days. Enough for a commute or a
+// flight; a byte budget is the upgrade if bodies heavy with inline media make
+// that too much for a phone.
+const OFFLINE_ARTICLE_LIMIT = 500;
+const OFFLINE_ARTICLE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+// Mirrors articlePageSize in src/shared/contracts/responses.ts.
+const ARTICLE_PAGE_SIZE = 200;
 
-// Bumped per sync, so a newer list -- or the option going off -- stops the
-// downloads of an older one.
+// Bumped per sync, so a newer one -- or the option going off -- stops an
+// older one's listing and downloads.
 let offlineSyncs = 0;
 // Syncs run one after another, so an older one can't prune what a newer one
 // keeps.
 let offlineQueue = Promise.resolve();
+let offlineDownloads = new AbortController();
 
 async function anyVisibleClient() {
   const clients = await self.clients.matchAll({ type: "window" });
   return clients.some((client) => client.visibilityState === "visible");
 }
 
-// The page's sync tags its list requests with a token; this records the
-// account count when each token's first request passed through, so rows
-// listed before a sign-in or logout -- even one in another tab -- are
-// dropped rather than written into the next account's cache. It records the
-// listing's order too: rows listed before the last applied ones, by another
-// tab, are older news and dropped.
-const OFFLINE_SYNC_HEADER = "X-Offline-Sync";
-const offlineListings = new Map();
-let offlineListingOrder = 0;
-let offlineApplied = 0;
-let offlineDownloads = new AbortController();
-// ponytail: a few tabs' syncs at once; the oldest token is forgotten past
-// this, and its rows dropped like any unknown token's.
-const OFFLINE_LISTINGS_LIMIT = 16;
+// The unread rows worth keeping, newest first: pages until one reaches a row
+// older than 14 days, the limit, or the end of the list.
+async function listOfflineRows(sources, signal) {
+  const cutoff = Date.now() - OFFLINE_ARTICLE_MAX_AGE_MS;
+  const rows = [];
+  while (sources.length > 0) {
+    // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
+    const response = await fetch("/api/articles", {
+      body: JSON.stringify({
+        cursor: rows.at(-1)?.id,
+        filter: "unread",
+        revision: true,
+        sources,
+      }),
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      signal,
+    });
+    if (!response.ok) throw new Error(`article list ${response.status}`);
+    // eslint-disable-next-line no-await-in-loop -- keyset pages are sequential
+    const page = await response.json();
+    const stale = page.findIndex(
+      (row) => Date.parse(row.publishedAt) < cutoff,
+    );
+    rows.push(...(stale === -1 ? page : page.slice(0, stale)));
+    if (
+      stale !== -1 ||
+      rows.length >= OFFLINE_ARTICLE_LIMIT ||
+      page.length < ARTICLE_PAGE_SIZE
+    )
+      break;
+  }
+  return rows
+    .slice(0, OFFLINE_ARTICLE_LIMIT)
+    .filter((row) => Number.isSafeInteger(row?.id));
+}
 
-// `generation` is that count for the posted rows.
-async function syncOfflineArticles(sync, generation, articles, signal) {
+// `generation` is the account count when the page asked: rows listed or
+// bodies fetched after a sign-in or logout are dropped rather than written
+// into the next account's cache.
+async function syncOfflineArticles(sync, generation, sources, signal) {
   const current = () => sync === offlineSyncs && generation === accountChanges;
+  let articles;
+  try {
+    articles = await listOfflineRows(sources, signal);
+  } catch {
+    return; // best-effort: the page's next sync lists again
+  }
+  if (!current()) return;
   const cache = await caches.open(API_CACHE);
   // Checked after the open: one that resolves after a sign-in hands back the
   // next account's cache.
@@ -631,12 +593,7 @@ async function syncOfflineArticles(sync, generation, articles, signal) {
         signal,
       });
       if (!response.ok) return;
-      const headers = new Headers(response.headers);
-      headers.set(OFFLINE_VERSION, versions.get(id));
-      const versioned = new Response(response.body, {
-        headers,
-        status: response.status,
-      });
+      const versioned = withHeader(response, OFFLINE_VERSION, versions.get(id));
       // eslint-disable-next-line no-await-in-loop -- throttled on purpose
       if (current()) await cache.put(offlineArticleKey(id), versioned);
     }
@@ -648,33 +605,16 @@ async function syncOfflineArticles(sync, generation, articles, signal) {
 
 self.addEventListener("message", (event) => {
   const { data } = event;
-  if (data?.type !== "offline-articles" || !Array.isArray(data.articles))
-    return;
-  const articles = data.articles.filter((row) => Number.isSafeInteger(row?.id));
-  // Rows count from when the page started listing them, and are rejected
-  // before the count moves, so stale rows can't stop the current account's
-  // downloads. Switching the option off posts no token: the device-wide
-  // setting clears whoever is signed in, and outranks every listing so far.
+  if (data?.type !== "offline-sync" || !Array.isArray(data.sources)) return;
+  const sources = data.sources.filter(Number.isSafeInteger);
   const generation = accountChanges;
-  let order = offlineListingOrder;
-  if (data.token !== undefined) {
-    const listing = offlineListings.get(data.token);
-    offlineListings.delete(data.token);
-    if (listing?.generation !== generation || listing.order < offlineApplied)
-      return;
-    order = listing.order;
-  } else {
-    // No listing in flight may undo "off".
-    offlineListings.clear();
-  }
-  offlineApplied = order;
   const sync = ++offlineSyncs;
-  // A stalled download would otherwise hold the queue, and a clear behind it.
+  // A stalled request would otherwise hold the queue, and a clear behind it.
   offlineDownloads.abort();
   offlineDownloads = new AbortController();
   const { signal } = offlineDownloads;
   offlineQueue = offlineQueue
-    .then(() => syncOfflineArticles(sync, generation, articles, signal))
+    .then(() => syncOfflineArticles(sync, generation, sources, signal))
     .catch(() => {});
   event.waitUntil(offlineQueue);
 });
@@ -773,21 +713,9 @@ async function offlineArticleList(request) {
 }
 
 async function articleList(request) {
-  const token = request.headers.get(OFFLINE_SYNC_HEADER);
-  // "next" marks a sync's later pages, which register nothing.
-  if (token && token !== "next" && !offlineListings.has(token)) {
-    offlineListings.set(token, {
-      generation: accountChanges,
-      order: ++offlineListingOrder,
-    });
-    if (offlineListings.size > OFFLINE_LISTINGS_LIMIT)
-      offlineListings.delete(offlineListings.keys().next().value);
-  }
   try {
     return await fetch(request.clone());
   } catch (error) {
-    // A sync answered from its own kept rows would only shrink them.
-    if (token) throw error;
     const offline = await offlineArticleList(request);
     if (offline) return offline;
     throw error;
@@ -795,28 +723,33 @@ async function articleList(request) {
 }
 
 // Set by shell() on a dashboard-bound navigation, so the tree fetch starts
-// before the page's JS bundle loads; treeWithInlineFavicons reuses it instead
-// of firing a second round trip.
+// before the page's JS bundle loads; the page's /api/tree request reuses it
+// instead of firing a second round trip.
 let treePreload;
 
-async function treeWithInlineFavicons(event, request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const preload = treePreload;
-  treePreload = undefined;
-  try {
-    const response = await (preload ?? fetch(request));
-    if (response.ok) {
-      cache.put(request, response.clone());
-      void flushQueue();
-      const patched = await inlineTreeFavicons(response.clone(), cache);
-      if (patched) return patched;
-    }
-    return response;
-  } catch (error) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    throw error;
-  }
+function treeFaviconUrls(node) {
+  if (node.type === "source") return node.favicon ? [node.favicon] : [];
+  return (node.children ?? []).flatMap(treeFaviconUrls);
+}
+
+// A favicon's URL changes with the icon (?v=), and a removed source leaves
+// its icon behind: only the icons the latest tree names stay cached.
+async function pruneFavicons(response) {
+  const { tree } = await response.json();
+  if (!Array.isArray(tree)) return;
+  const named = new Set(tree.flatMap(treeFaviconUrls));
+  await deleteWhere(
+    await caches.open(API_CACHE),
+    (url) =>
+      url.pathname.startsWith("/api/favicon/") &&
+      !named.has(url.pathname + url.search),
+  );
+}
+
+async function freshTree(request, preload) {
+  const response = await networkFirst(request, API_CACHE, preload);
+  if (response.ok) pruneFavicons(response.clone()).catch(() => {});
+  return response;
 }
 
 // Boot paints from this while its real /api/tree request is in flight
@@ -824,11 +757,9 @@ async function treeWithInlineFavicons(event, request, cacheName) {
 // to the network -- the real request already has -- so a miss is a bare 504
 // the page reads as "nothing cached". The cache holds the current account's
 // data only (see changeAccount).
-async function cachedTree(cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match("/api/tree");
-  if (!cached) return new Response(null, { status: 504 });
-  return (await inlineTreeFavicons(cached.clone(), cache)) ?? cached;
+async function cachedTree() {
+  const cached = await (await caches.open(API_CACHE)).match("/api/tree");
+  return cached ?? new Response(null, { status: 504 });
 }
 
 // Routes that never show the dashboard tree.
@@ -846,6 +777,26 @@ async function completeCachedShell(cache) {
   return assets.every(Boolean) ? { assetUrls, response: cached } : undefined;
 }
 
+// Hash-named assets would otherwise pile up, a set per deploy. What the
+// served shell can load stays: the assets its HTML names, and the lazy chunks
+// its scripts name in turn (as "assets/<file>"). A newer shell's assets are
+// stored after this runs, so the cache holds the served deploy and the next.
+async function pruneShell(cache, assetUrls) {
+  const keep = new Set(assetUrls);
+  for (const url of assetUrls.filter((asset) => asset.endsWith(".js"))) {
+    // eslint-disable-next-line no-await-in-loop -- a handful of entry scripts
+    const script = await cache.match(url);
+    if (!script) return; // its chunks can't be told from a past deploy's
+    // eslint-disable-next-line no-await-in-loop -- a handful of entry scripts
+    for (const [chunk] of (await script.text()).matchAll(/assets\/[\w.-]+/g))
+      keep.add(`/${chunk}`);
+  }
+  await deleteWhere(
+    cache,
+    ({ pathname }) => pathname.startsWith("/assets/") && !keep.has(pathname),
+  );
+}
+
 async function notifyShellUpdated() {
   const clients = await self.clients.matchAll({ type: "window" });
   for (const client of clients) client.postMessage({ type: "shell-updated" });
@@ -861,6 +812,8 @@ async function shell(event, path) {
   const network = fetch("/", SHELL_REQUEST_INIT);
   const revalidated = network.then(async (response) => {
     if (!response.ok) return;
+    // A failed prune must not cost the shell update.
+    if (cached) await pruneShell(cache, cached.assetUrls).catch(() => {});
     const assetUrls = await putShell(cache, response.clone());
     if (cached && assetUrls.join() !== cached.assetUrls.join())
       await notifyShellUpdated();
@@ -887,18 +840,17 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") {
     if (url.pathname === "/api/login" || url.pathname === "/api/logout") {
-      event.respondWith(changeAccount(request));
+      event.respondWith(changeAccount(request, url.pathname));
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/articles") {
       event.respondWith(articleList(request));
       return;
     }
-    const route = QUEUEABLE_MUTATIONS.find(
-      (candidate) =>
-        candidate.method === request.method && url.pathname === candidate.path,
-    );
-    if (route) event.respondWith(queueableMutation(request, route));
+    const echoedField =
+      request.method === "DELETE" && QUEUEABLE_REMOVALS.get(url.pathname);
+    if (echoedField)
+      event.respondWith(queueableMutation(request, echoedField));
     return;
   }
 
@@ -911,12 +863,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, API_CACHE, { cache: "no-cache" }));
     return;
   }
+  if (url.searchParams.has("cached") && url.pathname === "/api/tree") {
+    event.respondWith(cachedTree());
+    return;
+  }
   if (url.pathname === "/api/tree") {
-    event.respondWith(
-      url.searchParams.has("cached")
-        ? cachedTree(API_CACHE)
-        : treeWithInlineFavicons(event, request, API_CACHE),
-    );
+    event.respondWith(freshTree(request, treePreload));
+    treePreload = undefined;
     return;
   }
   // A file download rather than application state. networkFirst would put the
