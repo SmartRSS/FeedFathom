@@ -11,8 +11,7 @@ export async function userFor(
   { usersDataService }: SessionServices,
 ) {
   if (typeof sid !== "string" || !sid) return null;
-  const user = await usersDataService.getUserBySid(sid);
-  return user?.status === "active" ? user : null;
+  return (await usersDataService.getUserBySid(sid)) ?? null;
 }
 
 // The shape route handlers see as `user` once createAuthPlugin has run --

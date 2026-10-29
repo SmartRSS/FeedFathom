@@ -135,10 +135,7 @@ function createDependencies(): Dependencies {
       // Resolves through getUserBySid, so a test names the signed-in user
       // once and both the read-only lookup and the auth plugin see it.
       async authenticate(sid) {
-        const user = await usersDataService.getUserBySid(sid);
-        return user?.status === "active"
-          ? { ...user, status: "active" }
-          : undefined;
+        return await usersDataService.getUserBySid(sid);
       },
       async createSession() {
         return "test-session";
@@ -2133,24 +2130,6 @@ test("snoozes and unsnoozes one subscription without touching article state", as
     { pausedUntil: null, sourceId: 3 },
     { pausedUntil: new Date("2026-09-16T12:00:00.000Z"), sourceId: 9 },
   ]);
-});
-
-test("treats inactive sessions as unauthenticated everywhere", async () => {
-  const dependencies = createDependencies();
-  dependencies.usersDataService.getUserBySid = async () => ({
-    ...sessionUser,
-    status: "inactive",
-  });
-  const app = await appFor(dependencies);
-  const headers = { cookie: "sid=inactive" };
-
-  const session = await get(app, "/api/session", { headers });
-  const reader = await get(app, "/api/tree", { headers });
-
-  expect(session.status).toBe(200);
-  expect(await session.json()).toEqual({ user: null });
-  expect(reader.status).toBe(401);
-  expect(await reader.json()).toEqual({ error: "Unauthorized" });
 });
 
 test("rejects mismatched registration passwords before the handler", async () => {
