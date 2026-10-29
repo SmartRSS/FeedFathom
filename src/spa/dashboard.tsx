@@ -1698,6 +1698,7 @@ export function Dashboard(props: {
     const ids = [...indexes].map((index) => items[index]!.id);
     if (!ids.length) return;
     setError("");
+    const list = listController;
 
     // Fired first so network time overlaps the local UI work below.
     const deletion = api("/articles", removedArticlesResponse, {
@@ -1747,12 +1748,16 @@ export function Dashboard(props: {
         );
       })
       .catch((cause) => {
-        // Optimistic update already applied; resync rather than hand-revert.
         reportError(cause, "Could not delete articles");
-        setArticles(items);
-        void setArticleSelection(new Set(indexes));
-        setFocusedIndex(Math.min(...indexes));
-        setSelectionAnchor(Math.min(...indexes));
+        // The rows go back only into the list they left. A list loaded since
+        // already shows what the server holds, and the tree reload below
+        // undoes the optimistic unread counts either way.
+        if (!list.signal.aborted) {
+          setArticles(items);
+          void setArticleSelection(new Set(indexes));
+          setFocusedIndex(Math.min(...indexes));
+          setSelectionAnchor(Math.min(...indexes));
+        }
         loadTree().catch((reloadCause) =>
           reportError(reloadCause, "Could not refresh tree"),
         );

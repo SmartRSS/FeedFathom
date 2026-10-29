@@ -2940,6 +2940,37 @@ test("switching feeds does not wait on the old feed's next page", async ({
   expect(pageRequests).toEqual([[3], [9]]);
 });
 
+// A delete that fails after the reader moved to another feed must not put
+// the old feed's rows back over the new feed's list.
+test("a failed delete leaves the feed switched to since alone", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await routeTwoSourceTree(page, state);
+  let failDelete: (() => void) | undefined;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "DELETE") return await route.fallback();
+    await new Promise<void>((release) => (failDelete = release));
+    // Malformed rather than a 500, which the console guard would flag.
+    await route.fulfill({ json: { removed: "malformed" } });
+  });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("option", { name: /Second article/ }).click();
+  await page.keyboard.press("Delete");
+  await expect(articleOptions(page)).toHaveCount(2);
+  await expect.poll(() => failDelete).toBeDefined();
+
+  await selectSource(page, "Tech Preview");
+  await expect(
+    page.getByRole("option", { name: /Subscribed article/ }),
+  ).toBeVisible();
+  failDelete!();
+  await expect(page.getByRole("alert")).toContainText("Invalid response");
+  await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
+  await expectSelectedRow(page, /Tech Preview/);
+});
+
 test("tree context menu actions target the clicked row", async ({ page }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
