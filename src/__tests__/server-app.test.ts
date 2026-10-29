@@ -990,7 +990,7 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   expect(response.status).toBe(500);
 });
 
-// Our own 30 second budget running out is an upstream timeout, not the
+// Our own request deadline running out is an upstream timeout, not the
 // user's URL being wrong. find used to collapse it into "Invalid feed url".
 test("find reports our own expired deadline as a 504, not a bad url", async () => {
   const dependencies = createDependencies();

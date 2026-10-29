@@ -379,7 +379,12 @@ export class FeedParser {
     const rememberRedirect = response.redirectedPermanently
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
-      : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
+      : // The cache only saves a hop on the next fetch; failing to write it
+        // must not cost this fetch's articles.
+        (from: string, to: string) =>
+          this.redirectMap.setRedirect(from, to).catch((error: unknown) => {
+            console.error(`Could not cache redirect ${from} -> ${to}:`, error);
+          });
     // Only remember original -> final when this fetch actually redirected.
     // fetchedUrl is already pre-substituted from the cache, so refreshing on a
     // non-redirect would rewrite a stale mapping forever once the origin's
