@@ -3,7 +3,7 @@
 // cached copy past what Cache-Control suggests. CACHE_VERSION is separate --
 // bump it only to force-purge every cached entry when the caching scheme
 // itself changes.
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v6";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 const SHELL_REQUEST_INIT = {
@@ -83,10 +83,27 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key)),
         ),
       )
+      .then(() => purgeHeaderlessFavicons())
       .then(() => self.clients.claim())
       .then(() => flushQueue()),
   );
 });
+
+// Favicons cached before the route sent its CSP and nosniff headers are
+// dropped once, keeping the rest of API_CACHE (offline articles survive). The
+// marker records that the purge ran.
+const FAVICON_PURGE_MARKER = "/sw-favicon-headers-purged";
+async function purgeHeaderlessFavicons() {
+  const cache = await caches.open(API_CACHE);
+  if (await cache.match(FAVICON_PURGE_MARKER)) return;
+  const keys = await cache.keys();
+  await Promise.all(
+    keys
+      .filter((key) => new URL(key.url).pathname.startsWith("/api/favicon/"))
+      .map((key) => cache.delete(key)),
+  );
+  await cache.put(FAVICON_PURGE_MARKER, new Response(""));
+}
 
 self.addEventListener("sync", (event) => {
   if (event.tag === "replay-mutations") event.waitUntil(flushQueue());

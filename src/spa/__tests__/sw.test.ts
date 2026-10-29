@@ -106,6 +106,9 @@ const loadServiceWorker = (
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
   let onMessage: ((event: MessageEvent) => void) | undefined;
+  let onActivate:
+    | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
+    | undefined;
   // Map order stands in for the Cache API's insertion order; put deletes
   // first so a replaced entry moves to the end, as it does there.
   const entries = new Map<string, Response>();
@@ -143,6 +146,7 @@ const loadServiceWorker = (
         entries.clear();
         return true;
       },
+      keys: async () => [],
       open: async () => cache,
     },
     fetch: async (input: Request | string, init?: RequestInit) => {
@@ -168,12 +172,15 @@ const loadServiceWorker = (
       addEventListener: (
         type: string,
         listener: ((event: FetchEvent) => void) &
-          ((event: MessageEvent) => void),
+          ((event: MessageEvent) => void) &
+          ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void),
       ) => {
         if (type === "fetch") onFetch = listener;
         if (type === "message") onMessage = listener;
+        if (type === "activate") onActivate = listener;
       },
       clients: {
+        claim: async () => {},
         matchAll: async () => [
           {
             postMessage: (message: unknown) => messages.push(message),
@@ -256,7 +263,13 @@ const loadServiceWorker = (
     });
     await Promise.all(pending);
   };
+  const activate = async () => {
+    const pending: Promise<unknown>[] = [];
+    onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
+    await Promise.all(pending);
+  };
   return {
+    activate,
     dispatch,
     entries,
     keepOffline,
@@ -296,6 +309,18 @@ test("a favicon is fetched once and then served from the cache", async () => {
   expect(
     sw.requests.filter((path) => path === "/api/favicon/1?v=abc"),
   ).toHaveLength(1);
+});
+
+test("activation drops favicons cached without headers once, keeping offline articles", async () => {
+  const sw = loadServiceWorker(network);
+  sw.entries.set("/api/favicon/1?v=old", new Response("icon"));
+  sw.entries.set("/sw-offline-article?article=1", new Response("body"));
+  await sw.activate();
+  expect(sw.entries.has("/api/favicon/1?v=old")).toBe(false);
+  expect(sw.entries.has("/sw-offline-article?article=1")).toBe(true);
+  sw.entries.set("/api/favicon/1?v=new", new Response("icon"));
+  await sw.activate();
+  expect(sw.entries.has("/api/favicon/1?v=new")).toBe(true);
 });
 
 test("a cached favicon is inlined as a data URL, and a warm tree reload fetches none", async () => {
