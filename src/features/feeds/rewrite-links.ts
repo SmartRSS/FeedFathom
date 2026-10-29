@@ -11,32 +11,22 @@ const tagAttributePairs = [
   ["picture", "srcset"],
 ] as const;
 
-const isAbsoluteUrl = (url: string) => {
-  return URL.canParse(url);
-};
-
 const srcsetSplitterExpression = /\s+/u;
+// A candidate ends at a comma followed by whitespace or one right after its
+// descriptor; a comma inside the URL itself, as in a data: URI, splits nothing.
+const srcsetCandidateSeparator = /\s*,\s+|(?<=\s[\d.]+[hwx]),\s*/u;
 
-const processSrcset = (srcsetValue: string, baseUrl: string): string => {
-  return srcsetValue
-    .split(", ")
+const processSrcset = (srcsetValue: string, baseUrl: string): string =>
+  srcsetValue
+    .trim()
+    .split(srcsetCandidateSeparator)
     .map((path) => {
-      const [url, width] = path.trim().split(srcsetSplitterExpression);
-      if (!url) return path;
-
-      if (isAbsoluteUrl(url)) {
-        return width ? `${url} ${width}` : url;
-      }
-
-      if (URL.canParse(url, baseUrl)) {
-        const absoluteUrl = new URL(url, baseUrl).href;
-        return width ? `${absoluteUrl} ${width}` : absoluteUrl;
-      }
-
-      return path;
+      const [url, width] = path.split(srcsetSplitterExpression);
+      if (!url || !URL.canParse(url, baseUrl)) return path;
+      const absoluteUrl = URL.canParse(url) ? url : new URL(url, baseUrl).href;
+      return width ? `${absoluteUrl} ${width}` : absoluteUrl;
     })
     .join(", ");
-};
 
 const handleElement = (
   element: HTMLRewriterTypes.Element,
@@ -50,32 +40,28 @@ const handleElement = (
   }
 
   if (attributeName === "srcset") {
-    const processedSrcset = processSrcset(attributeValue, articleUrl);
-    element.setAttribute(attributeName, processedSrcset);
+    element.setAttribute(
+      attributeName,
+      processSrcset(attributeValue, articleUrl),
+    );
     return;
   }
 
-  if (isAbsoluteUrl(attributeValue)) {
-    if (tagName === "a") {
-      element.setAttribute("target", "_blank");
-      element.setAttribute("rel", "noopener noreferrer");
-    }
-
-    return;
+  if (!URL.canParse(attributeValue, articleUrl)) return;
+  if (!URL.canParse(attributeValue)) {
+    element.setAttribute(
+      attributeName,
+      new URL(attributeValue, articleUrl).href,
+    );
   }
-
-  if (URL.canParse(attributeValue, articleUrl)) {
-    const absoluteUrl = new URL(attributeValue, articleUrl).href;
-    element.setAttribute(attributeName, absoluteUrl);
-    if (tagName === "a") {
-      element.setAttribute("target", "_blank");
-      element.setAttribute("rel", "noopener noreferrer");
-    }
+  if (tagName === "a") {
+    element.setAttribute("target", "_blank");
+    element.setAttribute("rel", "noopener noreferrer");
   }
 };
 
 export const rewriteLinks = (content: string, articleUrl: string) => {
-  let rewriter: HTMLRewriter | null = new HTMLRewriter();
+  const rewriter = new HTMLRewriter();
   for (const [tagName, attributeName] of tagAttributePairs) {
     rewriter.on(`${tagName}[${attributeName}]`, {
       element: (element) => {
@@ -83,8 +69,5 @@ export const rewriteLinks = (content: string, articleUrl: string) => {
       },
     });
   }
-
-  const result = rewriter.transform(content);
-  rewriter = null;
-  return result;
+  return rewriter.transform(content);
 };

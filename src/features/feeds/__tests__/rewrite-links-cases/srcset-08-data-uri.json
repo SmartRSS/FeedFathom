@@ -1,0 +1,5 @@
+{
+  "description": "srcset data URI keeps its own comma",
+  "content": "<img srcset=\"data:image/gif;base64,R0lGOD 1x, /b.jpg 2x\" />",
+  "expected": "<img srcset=\"data:image/gif;base64,R0lGOD 1x, https://example.com/b.jpg 2x\" />"
+}
