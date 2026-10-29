@@ -8,6 +8,7 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
+import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
@@ -61,27 +62,21 @@ function subscriptionTree(
     url: null | string;
   }[],
 ): OpmlNode[] {
-  const foldered = new Map<number, OpmlSource[]>();
-  const roots: OpmlNode[] = [];
-  for (const source of sources) {
-    if (source.kind === "email" || !source.url?.startsWith("http")) continue;
-    const outline: OpmlSource = {
+  const { children, roots } = groupByFolder(
+    sources.filter(
+      (source) => source.kind !== "email" && source.url?.startsWith("http"),
+    ),
+    (source): OpmlSource => ({
       homeUrl: source.homeUrl ?? "",
       name: source.name,
       type: "source",
-      xmlUrl: source.url,
-    };
-    if (source.parentId === null) roots.push(outline);
-    else {
-      const siblings = foldered.get(source.parentId) ?? [];
-      siblings.push(outline);
-      foldered.set(source.parentId, siblings);
-    }
-  }
+      xmlUrl: source.url ?? "",
+    }),
+  );
   // Stable ordering keeps exports comparable even if query order changes.
   return [
     ...folders.toSorted(byName).map((folder) => ({
-      children: (foldered.get(folder.id) ?? []).toSorted(byName),
+      children: (children.get(folder.id) ?? []).toSorted(byName),
       name: folder.name,
       type: "folder" as const,
     })),
