@@ -2,7 +2,7 @@ import { parseFeed } from "@rowanmanning/feed-parser";
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -66,23 +66,6 @@ const feedProjection = Type.Object(
   { additionalProperties: true },
 );
 const feedProjectionCheck = Schema.Compile(feedProjection);
-const feedResponseStatusProjection = Type.Object(
-  { status: Type.Number() },
-  { additionalProperties: true },
-);
-const feedResponseStatusProjectionCheck = Schema.Compile(
-  feedResponseStatusProjection,
-);
-const successfulFeedResponse = Type.Object(
-  {
-    cached: Type.Boolean(),
-    status: Type.Literal(200),
-    url: Type.Intersect([Type.String(), webUrlPolicy]),
-  },
-  { additionalProperties: true },
-);
-const successfulFeedResponseCheck = Schema.Compile(successfulFeedResponse);
-
 const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
 
 // The <?xml ...?> prolog is guaranteed ASCII-compatible up to the encoding
@@ -388,8 +371,12 @@ export class FeedParser {
       skipCache,
       ...(subscribers === undefined ? {} : { subscribers }),
     });
-    this.validateFeedResponse(response, fetchedUrl);
-    const finalUrl = response.url || fetchedUrl;
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
+      );
+    }
+    const finalUrl = response.url;
     // 301/308 are permanent, so persist onto the subscribed source's URL;
     // 302/303/307 belong only in the short-lived Redis redirect cache.
     const rememberRedirect = response.redirectedPermanently
@@ -421,21 +408,5 @@ export class FeedParser {
       freshUntil: response.freshUntil,
       websub: discoverWebSub(response.headers, text, finalUrl),
     };
-  }
-
-  private validateFeedResponse(response: unknown, fetchedUrl: string): void {
-    if (successfulFeedResponseCheck.Check(response)) return;
-
-    if (
-      feedResponseStatusProjectionCheck.Check(response) &&
-      response.status !== 200
-    ) {
-      throw new Error(
-        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
-      );
-    }
-    throw new Error(
-      `Failed to load data for ${fetchedUrl}, unexpected payload type`,
-    );
   }
 }
