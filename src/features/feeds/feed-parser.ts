@@ -135,8 +135,9 @@ const mediaDescription = (element: XmlElement) =>
 
 /**
  * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
- * alert fields as `cap`, and its `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
- * `language`; see generateArticleGuid. An entry with no body of its own,
+ * alert fields, if any, as `cap`, and its `xml:lang`, else the
+ * `language=en-CA` category NAAD uses, else "", as `language`; see
+ * generateArticleGuid. An entry with no body of its own,
  * such as every YouTube video, takes its Media RSS description instead.
  */
 export const parseXmlFeed = (text: string) => {
@@ -354,7 +355,7 @@ export class FeedParser {
       skipCache?: boolean | undefined;
       // Left undefined by discovery and preview callers -- see buildUserAgent.
       subscribers?: number | undefined;
-      // Whether to look for a WebSub hub, which only a subscribe needs.
+      // Whether to look for a WebSub hub; a preview never needs one.
       websub?: boolean;
     } = {},
   ) {
