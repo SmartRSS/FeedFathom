@@ -9,9 +9,9 @@ import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import {
-  attachCapAlerts,
-  declaresCapNamespace,
+  inCapScope,
   mentionsCapNamespace,
+  readCapAlert,
 } from "#features/feeds/cap-entry.ts";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import {
@@ -141,11 +141,6 @@ Object.defineProperty(Element.prototype, "textContentAsDate", {
 
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 
-// The CAP namespace is in scope when the entry or an ancestor declares it.
-const inCapScope = (element: XmlElement | null): boolean =>
-  element !== null &&
-  (declaresCapNamespace(element.attributes) || inCapScope(element.parent));
-
 const isMediaRss = (element: XmlElement) =>
   element.namespaceUri === "http://search.yahoo.com/mrss/" ||
   element.namespaceUri === "https://search.yahoo.com/mrss/";
@@ -159,7 +154,7 @@ const mediaDescription = (element: XmlElement) =>
 
 /**
  * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
- * `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
+ * alert fields as `cap`, and its `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
  * `language`; see generateArticleGuid. An entry with no body of its own,
  * such as every YouTube video, takes its Media RSS description instead.
  */
@@ -188,7 +183,8 @@ export const parseXmlFeed = (text: string) => {
         .find(({ term }) => term.startsWith("language="))
         ?.term.slice("language=".length) ??
       "";
-    Object.assign(item, { language });
+    const cap = readCapAlert(item.element);
+    Object.assign(item, cap ? { cap, language } : { language });
   }
   return feed;
 };
@@ -469,7 +465,6 @@ export class FeedParser {
         ? parseMicroformatFeed(text, finalUrl)
         : parseXmlFeed(text);
     validateParsedFeed(parsedFeed);
-    attachCapAlerts(text, parsedFeed.items);
     return {
       cached: response.cached,
       feed: parsedFeed,

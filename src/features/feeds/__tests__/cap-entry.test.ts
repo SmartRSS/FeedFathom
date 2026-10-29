@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { parseFeed } from "@rowanmanning/feed-parser";
+import { renderCapAlert } from "#features/feeds/cap-entry.ts";
 import {
-  attachCapAlerts,
-  capAlerts,
-  renderCapAlert,
-} from "#features/feeds/cap-entry.ts";
-import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
+  type FeedMapperItem,
+  mapFeedToPreview,
+} from "#features/feeds/feed-mapper.ts";
+import { parseXmlFeed } from "#features/feeds/feed-parser.ts";
 
 const casesDir = "src/features/feeds/__tests__/cap-entry-cases";
 const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
@@ -16,12 +15,9 @@ const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
 const fetchedAt = Date.parse("2026-10-06T07:36:00Z");
 const noRewrite = (content: string) => content;
 
-const parseCapFeed = async (name: string) => {
-  const text = await fixture(name);
-  const feed = parseFeed(text);
-  attachCapAlerts(text, feed.items);
-  return feed;
-};
+const parseCapFeed = async (name: string) => parseXmlFeed(await fixture(name));
+const capAlerts = (text: string) =>
+  parseXmlFeed(text).items.map((item: FeedMapperItem) => item.cap);
 
 describe("capAlerts", () => {
   test("reads the NWS flattened cap:* fields", async () => {
@@ -79,24 +75,21 @@ describe("capAlerts", () => {
     ]);
   });
 
-  test("returns nothing when entries are spelled two ways, losing their order", () => {
+  test("reads entries spelled two ways, in document order", () => {
     const atom = `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:a="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
       <entry><cap:event>One</cap:event></entry>
       <a:entry><cap:event>Two</cap:event></a:entry>
     </feed>`;
-    expect(capAlerts(atom)).toStrictEqual([]);
+    expect(capAlerts(atom).map((alert) => alert?.event)).toEqual([
+      "One",
+      "Two",
+    ]);
   });
 
-  test("returns nothing for a feed without the CAP namespace", async () => {
-    expect(capAlerts(await fixture("dwd.xml"))).toEqual([]);
-  });
-
-  test("returns nothing for CAP-namespaced text that is not well-formed", () => {
-    expect(
-      capAlerts(
-        '<feed xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"><entry>',
-      ),
-    ).toEqual([]);
+  test("reads nothing from a feed without the CAP namespace", async () => {
+    const alerts = capAlerts(await fixture("dwd.xml"));
+    expect(alerts.length).toBeGreaterThan(0);
+    expect(alerts.every((alert) => alert === undefined)).toBe(true);
   });
 });
 
@@ -170,9 +163,7 @@ describe("CAP feeds through the mapper", () => {
   });
 
   test("a feed without CAP maps as before", async () => {
-    const text = await fixture("dwd.xml");
-    const feed = parseFeed(text);
-    attachCapAlerts(text, feed.items);
+    const feed = await parseCapFeed("dwd.xml");
     const [article] = mapFeedToPreview(
       feed,
       "https://www.dwd.de/DWD/warnungen/cap-feed/de/atom.xml",
@@ -210,16 +201,13 @@ describe("CAP feeds through the mapper", () => {
 });
 
 const capNs = "urn:oasis:names:tc:emergency:cap:1.2";
-const titlesOf = (xml: string) => {
-  const feed = parseFeed(xml);
-  attachCapAlerts(xml, feed.items);
-  return mapFeedToPreview(
-    feed,
+const titlesOf = (xml: string) =>
+  mapFeedToPreview(
+    parseXmlFeed(xml),
     "https://example.com/feed",
     noRewrite,
     fetchedAt,
   ).articles.map((article) => article.title);
-};
 
 describe("CAP entries the feed parser reads its own way", () => {
   test("a prefixed Atom feed", () => {
