@@ -2055,6 +2055,18 @@ for (const theme of ["smart", "high-contrast"]) {
   });
 }
 
+// The extension's newsletter action opens this URL rather than minting an
+// address of its own, so the SPA's format is the only one in use.
+test("mints a newsletter address when opened with ?newsletter", async ({
+  page,
+}) => {
+  await openApp(page, { mailDomain: "mail.example" }, "/preview?newsletter");
+
+  await expect(page.getByLabel("Feed URL")).toHaveValue(
+    /^[\da-f]{16}@mail\.example$/u,
+  );
+});
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await openApp(page, {}, "/preview");
   const website = page.getByLabel("Website");

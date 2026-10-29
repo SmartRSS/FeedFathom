@@ -49,6 +49,7 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
+  initialNewsletter?: boolean;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
@@ -135,7 +136,10 @@ export function FeedDiscovery(props: {
       void (async () => {
         try {
           const session = await api("/session", sessionResponse);
-          if (!disposed) setMailDomain(session.mailDomain ?? "");
+          if (disposed) return;
+          setMailDomain(session.mailDomain ?? "");
+          if (props.initialNewsletter && session.mailDomain && !feedUrl())
+            setFeedUrl(newsletterAddress(session.mailDomain));
         } catch {}
       })();
   });

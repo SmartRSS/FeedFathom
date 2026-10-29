@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildNewsletterAddress,
+  buildNewsletterUrl,
   buildPreviewUrl,
   canonicalizeInstance,
   normalizeFeedAddress,
@@ -82,27 +82,15 @@ describe("buildPreviewUrl", () => {
   });
 });
 
-describe("buildNewsletterAddress", () => {
-  test("uses the canonical hostname without the port", () => {
-    expect(buildNewsletterAddress("https://example.com:8443", "01ABC")).toBe(
-      "01ABC@example.com",
-    );
-  });
-
-  test("prefers the instance's configured mail domain", () => {
-    expect(
-      buildNewsletterAddress("https://app.example.com", "01ABC", "mail.test"),
-    ).toBe("01ABC@mail.test");
-  });
-
-  test("falls back to the hostname for a blank mail domain", () => {
-    expect(buildNewsletterAddress("https://example.com", "01ABC", " ")).toBe(
-      "01ABC@example.com",
+describe("buildNewsletterUrl", () => {
+  test("opens the instance's preview page in newsletter mode", () => {
+    expect(buildNewsletterUrl("https://example.com:8443")).toBe(
+      "https://example.com:8443/preview?newsletter",
     );
   });
 
   test("returns undefined for an invalid instance", () => {
-    expect(buildNewsletterAddress("file:///tmp/feed", "01ABC")).toBeUndefined();
+    expect(buildNewsletterUrl("file:///tmp/feed")).toBeUndefined();
   });
 });
 

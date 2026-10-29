@@ -328,6 +328,9 @@ function Router(props: {
         initialFeedUrl={
           props.route.name === "preview" ? props.route.feedUrl : undefined
         }
+        initialNewsletter={
+          props.route.name === "preview" && props.route.newsletter === true
+        }
       />
     </Show>
   );

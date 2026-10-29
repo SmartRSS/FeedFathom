@@ -109,6 +109,13 @@ describe("resolveRoute", () => {
     expect(resolveRoute("/preview")).toEqual({ name: "preview" });
   });
 
+  test("asks the preview page to mint a newsletter address", () => {
+    expect(resolveRoute("/preview?newsletter")).toEqual({
+      name: "preview",
+      newsletter: true,
+    });
+  });
+
   test("requires an exact match for named pages", () => {
     expect(resolveRoute("/options")).toEqual({ name: "options" });
     expect(resolveRoute("/options/more")).toEqual({ name: "dashboard" });

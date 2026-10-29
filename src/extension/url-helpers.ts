@@ -68,20 +68,9 @@ export const resolveFeedOpenUrl = (
   (instance && buildPreviewUrl(instance, feedUrl)) ??
   normalizeFeedAddress(feedUrl);
 
-// mailDomain comes from the instance's own config (see /api/session):
-// inbound mail is routed wherever Email Routing is configured, which is
-// rarely the host the app is served from. The instance hostname is only a
-// fallback for the single-domain case.
-export const buildNewsletterAddress = (
-  instance: string,
-  id: string,
-  mailDomain?: string,
-): string | undefined => {
+// The SPA mints the address itself, at the mail domain the instance
+// advertises, so the extension only opens the page that does it.
+export const buildNewsletterUrl = (instance: string): string | undefined => {
   const origin = canonicalizeInstance(instance);
-  if (!origin) {
-    return undefined;
-  }
-
-  const host = mailDomain?.trim() ?? "";
-  return `${id}@${host === "" ? new URL(origin).hostname : host}`;
+  return origin ? new URL("/preview?newsletter", origin).href : undefined;
 };
