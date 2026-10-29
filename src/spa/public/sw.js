@@ -11,31 +11,20 @@ const SHELL_REQUEST_INIT = {
   headers: { Accept: "text/html" },
 };
 
-// Deletes/removals we know how to fake an optimistic success response for,
-// so the UI updates immediately while the real request replays once online.
-// ponytail: hand-picked table instead of generic mutation queueing, since
-// most /api/* mutations (subscribe, folder create) return server-generated
-// data we can't fake offline.
 // Mirrors DELETE_TRACE_HEADER in src/spa/delete-trace.ts.
 const DELETE_TRACE_HEADER = "X-FeedFathom-Trace";
 
-const QUEUEABLE_MUTATIONS = [
-  {
-    method: "DELETE",
-    path: "/api/articles",
-    optimisticBody: (body) => body.removedArticleIdList,
-  },
-  {
-    method: "DELETE",
-    path: "/api/source",
-    optimisticBody: (body) => body.removeSourceId,
-  },
-  {
-    method: "DELETE",
-    path: "/api/folders",
-    optimisticBody: (body) => body.removeFolderId,
-  },
-];
+// Removals we know how to fake an optimistic success response for, so the UI
+// updates immediately while the real request replays once online: each DELETE
+// path with the request body field its response echoes.
+// ponytail: hand-picked table instead of generic mutation queueing, since
+// most /api/* mutations (subscribe, folder create) return server-generated
+// data we can't fake offline.
+const QUEUEABLE_REMOVALS = new Map([
+  ["/api/articles", "removedArticleIdList"],
+  ["/api/source", "removeSourceId"],
+  ["/api/folders", "removeFolderId"],
+]);
 
 function shellAssetUrls(html) {
   return [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(
@@ -89,6 +78,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Deletes the entries whose URL `stale` picks.
+async function deleteWhere(cache, stale) {
+  const keys = (await cache.keys()).filter((key) => stale(new URL(key.url)));
+  await Promise.all(keys.map((key) => cache.delete(key)));
+}
+
 // Favicons cached before the route sent its CSP and nosniff headers are
 // dropped once, keeping the rest of API_CACHE (offline articles survive). The
 // marker records that the purge ran.
@@ -96,12 +91,7 @@ const FAVICON_PURGE_MARKER = "/sw-favicon-headers-purged";
 async function purgeHeaderlessFavicons() {
   const cache = await caches.open(API_CACHE);
   if (await cache.match(FAVICON_PURGE_MARKER)) return;
-  const keys = await cache.keys();
-  await Promise.all(
-    keys
-      .filter((key) => new URL(key.url).pathname.startsWith("/api/favicon/"))
-      .map((key) => cache.delete(key)),
-  );
+  await deleteWhere(cache, (url) => url.pathname.startsWith("/api/favicon/"));
   await cache.put(FAVICON_PURGE_MARKER, new Response(""));
 }
 
@@ -337,7 +327,7 @@ async function ownerAccount() {
   return pending?.generation === generation ? await pending.lookup : undefined;
 }
 
-async function queueableMutation(request, route) {
+async function queueableMutation(request, echoedField) {
   // Read before the request goes out, so a sign-in in another tab while it is
   // in flight doesn't become the owner of a removal it didn't make.
   const owner = ownerAccount();
@@ -365,7 +355,7 @@ async function queueableMutation(request, route) {
         // opportunistically on the next successful /api/* request
       }
     }
-    return Response.json(route.optimisticBody(JSON.parse(bodyText)));
+    return Response.json(JSON.parse(bodyText)[echoedField]);
   }
 }
 
@@ -425,17 +415,14 @@ async function networkFirst(request, cacheName, network = fetch(request)) {
 // known even after the worker restarts.
 const FETCHED_AT = "X-SW-Fetched-At";
 
-function putWithFetchedAt(cache, request, response) {
+function withHeader(response, name, value) {
   const headers = new Headers(response.headers);
-  headers.set(FETCHED_AT, String(Date.now()));
-  return cache.put(
-    request,
-    new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    }),
-  );
+  headers.set(name, value);
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
 }
 
 // The dashboard prefetches the next article in idle time (#716); a copy this
@@ -473,9 +460,9 @@ async function recentArticleFirst(request, cacheName) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      putWithFetchedAt(cache, request, response.clone()).then(() =>
-        trimPath(cache, "/api/article", ARTICLE_CACHE_LIMIT),
-      );
+      cache
+        .put(request, withHeader(response.clone(), FETCHED_AT, `${Date.now()}`))
+        .then(() => trimPath(cache, "/api/article", ARTICLE_CACHE_LIMIT));
       void flushQueue();
     }
     return response;
@@ -606,12 +593,7 @@ async function syncOfflineArticles(sync, generation, sources, signal) {
         signal,
       });
       if (!response.ok) return;
-      const headers = new Headers(response.headers);
-      headers.set(OFFLINE_VERSION, versions.get(id));
-      const versioned = new Response(response.body, {
-        headers,
-        status: response.status,
-      });
+      const versioned = withHeader(response, OFFLINE_VERSION, versions.get(id));
       // eslint-disable-next-line no-await-in-loop -- throttled on purpose
       if (current()) await cache.put(offlineArticleKey(id), versioned);
     }
@@ -756,15 +738,12 @@ async function pruneFavicons(response) {
   const { tree } = await response.json();
   if (!Array.isArray(tree)) return;
   const named = new Set(tree.flatMap(treeFaviconUrls));
-  const cache = await caches.open(API_CACHE);
-  const stale = (await cache.keys())
-    .map((request) => new URL(request.url))
-    .filter(
-      (url) =>
-        url.pathname.startsWith("/api/favicon/") &&
-        !named.has(url.pathname + url.search),
-    );
-  await Promise.all(stale.map((url) => cache.delete(url.pathname + url.search)));
+  await deleteWhere(
+    await caches.open(API_CACHE),
+    (url) =>
+      url.pathname.startsWith("/api/favicon/") &&
+      !named.has(url.pathname + url.search),
+  );
 }
 
 async function freshTree(request, preload) {
@@ -812,10 +791,10 @@ async function pruneShell(cache, assetUrls) {
     for (const [chunk] of (await script.text()).matchAll(/assets\/[\w.-]+/g))
       keep.add(`/${chunk}`);
   }
-  const stale = (await cache.keys())
-    .map((request) => new URL(request.url).pathname)
-    .filter((path) => path.startsWith("/assets/") && !keep.has(path));
-  await Promise.all(stale.map((path) => cache.delete(path)));
+  await deleteWhere(
+    cache,
+    ({ pathname }) => pathname.startsWith("/assets/") && !keep.has(pathname),
+  );
 }
 
 async function notifyShellUpdated() {
@@ -867,11 +846,10 @@ self.addEventListener("fetch", (event) => {
       event.respondWith(articleList(request));
       return;
     }
-    const route = QUEUEABLE_MUTATIONS.find(
-      (candidate) =>
-        candidate.method === request.method && url.pathname === candidate.path,
-    );
-    if (route) event.respondWith(queueableMutation(request, route));
+    const echoedField =
+      request.method === "DELETE" && QUEUEABLE_REMOVALS.get(url.pathname);
+    if (echoedField)
+      event.respondWith(queueableMutation(request, echoedField));
     return;
   }
 
