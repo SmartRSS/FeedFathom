@@ -52,16 +52,22 @@ bunx playwright install chromium
 ```
 
 `bun run quality` does not cover the integration tests, which need a real
-PostgreSQL and only run in CI unless you point them at one. Anything touching
-the schema, a migration or a query is worth running them against:
+PostgreSQL and Redis and only run in CI unless you point them at one. Anything
+touching the schema, a migration, a query or a queue is worth running them
+against:
 
 ```bash
 docker run -d --rm --name feedfathom-test-db -p 55432:5432 \
-  -e POSTGRES_PASSWORD=postgres postgres:17-alpine
-docker exec feedfathom-test-db psql -U postgres -c 'CREATE DATABASE feedfathom_migration_test'
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=feedfathom_migration_test postgres:17-alpine
+docker run -d --rm --name feedfathom-test-redis -p 56379:6379 redis:7-alpine
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/feedfathom_migration_test \
 MIGRATION_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/feedfathom_migration_test \
-  bun run test:migrations
+REDIS_TEST_URL=redis://127.0.0.1:56379/15 \
+  bun run test:integration
 ```
+
+`test:integration` runs every `*-integration.test.ts`, so a new one needs no
+script change.
 
 These tests drop the `public` schema before every run, so the URL is checked
 first and rejected unless the database name carries a `test` or `disposable`

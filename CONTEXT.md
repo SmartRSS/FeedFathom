@@ -163,7 +163,7 @@ next to `foo.ts` (i.e. `__tests__/foo.test.ts`).
 
 A co-located test that needs a real PostgreSQL is named
 `foo-integration.test.ts`. `test:unit` skips every `*-integration.test.ts`
-wherever it lives and `test:migrations` names them explicitly, so `bun run
+wherever it lives and `test:integration` runs exactly those, so `bun run
 test:unit` stays runnable with nothing but the repo checked out. Needing a
 database is not a reason to move a test away from its module.
 
