@@ -6,7 +6,6 @@ import {
 } from "#features/feeds/json-feed-parser.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 const feedText = JSON.stringify({
   description: "About the feed",
@@ -83,11 +82,7 @@ const previewContent = (item: Record<string, string>) => {
   const parsed = parseJsonFeed(
     JSON.stringify({ items: [{ id: "1", ...item }] }),
   );
-  const preview = mapFeedToPreview(
-    parsed,
-    "https://example.com/feed.json",
-    rewriteLinks,
-  );
+  const preview = mapFeedToPreview(parsed, "https://example.com/feed.json");
   return extractArticle(preview.articles[0]?.content);
 };
 

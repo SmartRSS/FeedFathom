@@ -1,5 +1,5 @@
 import {
-  articlesDataService,
+  articleImporter,
   feedParser,
   feedPreviewCache,
   sourceEnqueuer,
@@ -20,7 +20,6 @@ import {
   type FeedPreview,
   mapFeedToPreviewArticles,
 } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
@@ -33,7 +32,9 @@ function completePreview({
   if (!feed) return undefined;
   return {
     ...preview,
-    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, rewriteLinks),
+    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, {
+      baseUrl: preview.finalUrl,
+    }),
     truncated: false,
   };
 }
@@ -117,55 +118,29 @@ export async function postSubscribeHandler({
           // discovery) -- inserting those already-parsed articles is a
           // plain DB upsert, no network fetch, so doing it inline keeps
           // subscribe fast without the async round-trip through the
-          // worker. Falls back to enqueueing if anything here fails.
+          // worker. Falls back to enqueueing if anything here fails,
+          // including an import that committed only some batches.
           try {
-            // batchUpsertArticles processes batches sequentially and a
-            // later batch can fail after earlier ones already
-            // committed -- recompute regardless of that outcome so
-            // committed articles aren't left counted as unread-stale,
-            // then let the original failure fall through to the
-            // enqueue fallback below.
-            let upsertError: unknown;
             // A retry imports from the stored snapshot, which can hold an
             // alert that has expired since.
             const now = Date.now();
-            try {
-              await articlesDataService.batchUpsertArticles(
-                preview.articles
-                  .filter(
-                    (article) =>
-                      article.expiresAt === undefined ||
-                      article.expiresAt > now,
-                  )
-                  .map((article) => ({
-                    author: article.author,
-                    content: article.content,
-                    enclosures: article.enclosures ?? [],
-                    guid: article.guid,
-                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                    publishedAt: article.publishedAt,
-                    sourceId: subscription.source.id,
-                    title: article.title,
-                    updatedAt:
-                      article.updatedAt === undefined
-                        ? article.publishedAt
-                        : article.updatedAt,
-                    url: article.url,
-                  })),
-              );
-            } catch (error) {
-              upsertError = error;
-            }
-            await userSourcesDataService.recomputeUnreadCounts([
+            await articleImporter.importArticles(
               subscription.source.id,
-            ]);
-            if (upsertError !== undefined) {
-              throw upsertError;
-            }
+              preview.articles
+                .filter(
+                  (article) =>
+                    article.expiresAt === undefined || article.expiresAt > now,
+                )
+                .map(({ expiresAt: _expiresAt, ...article }) =>
+                  Object.assign(article, {
+                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
+                  }),
+                ),
+            );
             await sourcesDataService.successSource(
               subscription.source.id,
               true,
-              new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
+              preview.freshUntil ? new Date(preview.freshUntil) : undefined,
             );
           } catch {
             await sourceEnqueuer.enqueueSource(subscription.source);

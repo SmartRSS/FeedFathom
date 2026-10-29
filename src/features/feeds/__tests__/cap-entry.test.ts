@@ -13,7 +13,6 @@ const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
 // entry still current then, one already expired, and one expired entry edited
 // to status Test with a later expiry, so only its status can hide it.
 const fetchedAt = Date.parse("2026-10-06T07:36:00Z");
-const noRewrite = (content: string) => content;
 
 const parseCapFeed = async (name: string) => parseXmlFeed(await fixture(name));
 const capAlerts = (text: string) =>
@@ -118,8 +117,7 @@ describe("CAP feeds through the mapper", () => {
     const preview = mapFeedToPreview(
       feed,
       "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-poland",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     );
     expect(preview.articles.map((article) => article.title)).toEqual([
       "Yellow Wind Warning issued for Poland - Central coastal zone",
@@ -140,10 +138,10 @@ describe("CAP feeds through the mapper", () => {
     const feed = await parseCapFeed("nws-kansas.xml");
     const url = "https://api.weather.gov/alerts.atom?area=KS&active=1";
     expect(
-      mapFeedToPreview(feed, url, noRewrite, fetchedAt).articles,
+      mapFeedToPreview(feed, url, { now: fetchedAt }).articles,
     ).toHaveLength(1);
     expect(
-      mapFeedToPreview(feed, url, noRewrite, Date.parse("2026-10-06T15:45:00Z"))
+      mapFeedToPreview(feed, url, { now: Date.parse("2026-10-06T15:45:00Z") })
         .articles,
     ).toHaveLength(0);
   });
@@ -153,8 +151,7 @@ describe("CAP feeds through the mapper", () => {
     const [article] = mapFeedToPreview(
       feed,
       "https://api.weather.gov/alerts.atom?area=KS&active=1",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.content).toStartWith(
       "<dl><dt>Event</dt><dd>Flood Warning</dd>",
@@ -167,8 +164,7 @@ describe("CAP feeds through the mapper", () => {
     const [article] = mapFeedToPreview(
       feed,
       "https://www.dwd.de/DWD/warnungen/cap-feed/de/atom.xml",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.content).toStartWith("Es tritt gebietsweise Nebel");
   });
@@ -178,8 +174,7 @@ describe("CAP feeds through the mapper", () => {
     const [article] = mapFeedToPreview(
       feed,
       "https://api.weather.gov/alerts.atom?area=KS&active=1",
-      noRewrite,
-      fetchedAt,
+      { now: fetchedAt },
     ).articles;
     expect(article?.expiresAt).toBe(Date.parse("2026-10-06T15:45:00Z"));
   });
@@ -202,12 +197,9 @@ describe("CAP feeds through the mapper", () => {
 
 const capNs = "urn:oasis:names:tc:emergency:cap:1.2";
 const titlesOf = (xml: string) =>
-  mapFeedToPreview(
-    parseXmlFeed(xml),
-    "https://example.com/feed",
-    noRewrite,
-    fetchedAt,
-  ).articles.map((article) => article.title);
+  mapFeedToPreview(parseXmlFeed(xml), "https://example.com/feed", {
+    now: fetchedAt,
+  }).articles.map((article) => article.title);
 
 describe("CAP entries the feed parser reads its own way", () => {
   test("a prefixed Atom feed", () => {

@@ -23,7 +23,7 @@ export async function getPreviewHandler({
     articles: source.articles.map((article) => ({
       author: article.author,
       content: extractArticle(article.content),
-      enclosures: article.enclosures ?? [],
+      enclosures: article.enclosures,
       publishedAt: article.publishedAt,
       title: article.title,
       url: article.url,

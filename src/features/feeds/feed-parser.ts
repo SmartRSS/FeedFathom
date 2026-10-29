@@ -35,10 +35,7 @@ import {
   discoverWebSub,
   requestHubSubscription,
 } from "#features/feeds/websub.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
+import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
@@ -191,7 +188,7 @@ export const parseXmlFeed = (text: string) => {
 
 export class FeedParser {
   constructor(
-    private readonly articlesDataService: ArticlesDataService,
+    private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
     private readonly httpClient: HttpClient,
     private readonly sourcesDataService: Pick<
       SourcesDataService,
@@ -204,14 +201,6 @@ export class FeedParser {
       | "recordWebSubDiscovery"
     >,
     private readonly redirectMap: RedirectMap,
-    private readonly userSourcesDataService: Pick<
-      UserSourcesDataService,
-      "recomputeUnreadCounts"
-    >,
-    private readonly articleEventPublisher: Pick<
-      ArticleEventPublisher,
-      "publish"
-    >,
     // Undefined skips WebSub (see maybeSubscribeToWebSub): without a public
     // domain there is no callback URL a hub could reach.
     private readonly feedFathomDomain?: string,
@@ -257,51 +246,17 @@ export class FeedParser {
             item,
             parsedFeed,
             { id: source.id, url: source.url },
-            rewriteLinks,
-            observedAt.getTime(),
-            finalUrl,
+            { baseUrl: finalUrl, now: observedAt.getTime() },
           ),
           { lastSeenInFeedAt: observedAt },
         ),
       );
-      // batchUpsertArticles commits batch by batch, so a later failure leaves
-      // earlier articles committed. Recompute either way, then re-raise.
-      // Otherwise recompute only when the upsert reports a row a badge could
-      // count differently: most polls change nothing, and the recount
-      // aggregates every retained article against every subscriber (#897).
-      let upsertError: unknown;
-      let changed = 0;
-      try {
-        changed =
-          await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
-      } catch (error) {
-        upsertError = error;
-      }
-      try {
-        if (upsertError !== undefined || changed > 0) {
-          await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
-        }
-      } catch (recomputeError) {
-        // The upsert failure is the root cause; don't let this replace it.
-        if (upsertError === undefined) {
-          throw recomputeError;
-        }
-        console.error(
-          "recomputeUnreadCounts failed after batchUpsertArticles error:",
-          recomputeError,
-        );
-      }
-      if (upsertError !== undefined) {
-        throw upsertError;
-      }
-      if (changed > 0) {
-        this.articleEventPublisher.publish(source.id, changed);
-      }
+      await this.articleImporter.importArticles(source.id, articlesToUpsert);
 
       await this.sourcesDataService.successSource(
         source.id,
         cached,
-        new Date(freshUntil ?? Date.now() + 5 * 60_000),
+        freshUntil ? new Date(freshUntil) : undefined,
         observedAt,
         source.trigger ?? "poll",
       );
@@ -406,13 +361,7 @@ export class FeedParser {
         freshUntil,
       } = await this.parseUrl(sourceUrl);
       return Object.assign(
-        mapFeedToPreview(
-          parsedFeed,
-          sourceUrl,
-          rewriteLinks,
-          Date.now(),
-          finalUrl,
-        ),
+        mapFeedToPreview(parsedFeed, sourceUrl, { baseUrl: finalUrl }),
         { freshUntil },
       );
     } catch (error_: unknown) {

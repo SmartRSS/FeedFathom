@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
@@ -89,7 +90,20 @@ async function parse(body: string) {
     set: async () => "OK",
   };
   const parser = new FeedParser(
-    articlesDataService,
+    new ArticleImporter(
+      articlesDataService,
+      {
+        recomputeUnreadCounts: async (sourceIds, userId) => {
+          recounts++;
+          await userSourcesDataService.recomputeUnreadCounts(sourceIds, userId);
+        },
+      },
+      {
+        publish: (id, count) => {
+          published.push([id, count]);
+        },
+      },
+    ),
     new HttpClient(createFakeHttpRedis(), {
       transport: async () => ({
         body: Readable.from([body]),
@@ -108,17 +122,6 @@ async function parse(body: string) {
       },
     },
     new RedirectMap(redirectRedis),
-    {
-      recomputeUnreadCounts: async (sourceIds, userId) => {
-        recounts++;
-        await userSourcesDataService.recomputeUnreadCounts(sourceIds, userId);
-      },
-    },
-    {
-      publish: (id, count) => {
-        published.push([id, count]);
-      },
-    },
   );
   await parser.parseSource({ id: sourceId, url: feedUrl });
 }

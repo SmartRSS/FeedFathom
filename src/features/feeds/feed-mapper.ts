@@ -1,5 +1,6 @@
 import type { Enclosure } from "#shared/contracts/responses.ts";
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
+import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   type CapAlert,
   isCapAlertCurrent,
@@ -50,18 +51,9 @@ export type ArticlePayload = {
   url: string;
 };
 
-type FeedPreviewArticle = {
-  author: string;
-  content: string;
-  // Absent on a preview cached before enclosures existed.
-  enclosures?: Enclosure[];
+export type FeedPreviewArticle = Omit<ArticlePayload, "sourceId"> & {
   // A CAP alert's expiry: subscribing later must not import it once passed.
   expiresAt?: number;
-  guid: string;
-  publishedAt: Date;
-  title: string;
-  updatedAt?: Date | null;
-  url: string;
 };
 
 export type FeedPreview = {
@@ -76,7 +68,14 @@ export type FeedPreview = {
   // The complete parsed feed behind a truncated preview. The preview cache
   // keeps it so subscribing imports every article without a refetch.
   feed?: FeedMapperInput;
+  // Where the feed was fetched from after redirects. Kept with `feed`, whose
+  // relative links resolve against it the way every poll resolves them.
+  finalUrl?: string;
 };
+
+// `baseUrl` is where the feed was fetched from after redirects, the source
+// URL by default; `now` dates an entry that carries no date of its own.
+type MapOptions = { baseUrl?: string | undefined; now?: number };
 
 export type Source = {
   id: number;
@@ -161,9 +160,7 @@ export const mapFeedItemToArticle = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
   source: Source,
-  rewriteLinksFunction: (content: string, baseUrl: string) => string,
-  now = Date.now(),
-  baseUrl = source.url,
+  { baseUrl = source.url, now = Date.now() }: MapOptions = {},
 ): ArticlePayload => {
   // Content links resolve against the article, then the feed homepage, then
   // the feed itself, so relative feed URLs still land on the publisher.
@@ -174,7 +171,7 @@ export const mapFeedItemToArticle = (
   return {
     author:
       item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
-    content: rewriteLinksFunction(itemBody(item), url || homepage),
+    content: rewriteLinks(itemBody(item), url || homepage),
     enclosures: mapEnclosures(item.media ?? [], url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),
     publishedAt: new Date(item.published ?? item.updated ?? now),
@@ -222,64 +219,48 @@ const previewItems = (
 export const mapFeedToPreviewArticles = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
-  rewriteLinksFunction: (content: string, baseUrl: string) => string,
-  now = Date.now(),
-  items = parsedFeed.items,
-  baseUrl = sourceUrl,
+  {
+    baseUrl,
+    items = parsedFeed.items,
+    now = Date.now(),
+  }: MapOptions & { items?: readonly FeedMapperItem[] } = {},
 ): FeedPreviewArticle[] => {
   const source = { id: 0, url: sourceUrl };
   return currentFeedItems(items, now).map((item) => {
-    const article = mapFeedItemToArticle(
+    const { sourceId: _sourceId, ...article } = mapFeedItemToArticle(
       item,
       parsedFeed,
       source,
-      rewriteLinksFunction,
-      now,
-      baseUrl,
+      { baseUrl, now },
     );
     const expiresAt = Date.parse(item.cap?.expires ?? "");
-    return Object.assign(
-      {
-        author: article.author,
-        content: article.content,
-        enclosures: article.enclosures,
-        guid: article.guid,
-        publishedAt: article.publishedAt,
-        title: article.title,
-        updatedAt: article.updatedAt,
-        url: article.url,
-      },
-      Number.isNaN(expiresAt) ? {} : { expiresAt },
-    );
+    return Number.isNaN(expiresAt)
+      ? article
+      : Object.assign(article, { expiresAt });
   });
 };
 
 export const mapFeedToPreview = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
-  rewriteLinksFunction: (content: string, baseUrl: string) => string,
-  now = Date.now(),
-  baseUrl = sourceUrl,
+  { baseUrl = sourceUrl, now = Date.now() }: MapOptions = {},
 ): FeedPreview => {
   const current = currentFeedItems(parsedFeed.items, now);
   const items = previewItems(current);
   const truncated = items.length < current.length;
   return Object.assign(
     {
-      articles: mapFeedToPreviewArticles(
-        parsedFeed,
-        sourceUrl,
-        rewriteLinksFunction,
-        now,
-        items,
+      articles: mapFeedToPreviewArticles(parsedFeed, sourceUrl, {
         baseUrl,
-      ),
+        items,
+        now,
+      }),
       description: parsedFeed.description ?? undefined,
       feedUrl: sourceUrl,
       link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
       title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
       truncated,
     },
-    truncated ? { feed: parsedFeed } : {},
+    truncated ? { feed: parsedFeed, finalUrl: baseUrl } : {},
   );
 };

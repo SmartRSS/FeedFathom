@@ -24,6 +24,7 @@ import {
   type ArticleEventSubscriber,
 } from "#features/reader/article-event-hub.ts";
 import { articleEventsChannel } from "#features/feeds/article-events.ts";
+import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, mock, spyOn, test } from "bun:test";
@@ -36,6 +37,7 @@ import {
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
 import {
+  mapFeedItemToArticle,
   mapFeedToPreview,
   previewArticleLimit,
 } from "#features/feeds/feed-mapper.ts";
@@ -123,6 +125,7 @@ type PasswordResetRouteDependencies = {
   };
 };
 type ReaderRouteDependencies = {
+  articleImporter: Pick<ArticleImporter, "importArticles">;
   articleEventHub: Pick<ArticleEventHub, "close" | "listen">;
   articlesDataService: Pick<
     ArticlesDataService,
@@ -272,7 +275,7 @@ function createDependencies(): ServerFakes {
     WORKER_CONCURRENCY: 1,
   };
 
-  return {
+  const fakes: Omit<ServerFakes, "articleImporter"> = {
     articleEventHub: {
       close: () => {},
       listen: () => unexpected("articleEventHub.listen"),
@@ -478,6 +481,15 @@ function createDependencies(): ServerFakes {
       async markWebSubVerified() {},
     },
   };
+  // The real importer over the fakes, so a test's batchUpsertArticles and
+  // recomputeUnreadCounts replacements are what subscribe reaches.
+  return Object.assign(fakes, {
+    articleImporter: new ArticleImporter(
+      fakes.articlesDataService,
+      fakes.userSourcesDataService,
+      { publish() {} },
+    ),
+  });
 }
 
 async function mockServices(dependencies: ServerFakes) {
@@ -642,9 +654,11 @@ const cachedPreview = {
     {
       author: "Cached author",
       content: "Cached content",
+      enclosures: [],
       guid: "cached-guid",
       publishedAt: new Date("2026-07-19T12:00:00.000Z"),
       title: "Cached article",
+      updatedAt: new Date("2026-07-19T12:00:00.000Z"),
       url: "https://site.example/article",
     },
   ],
@@ -917,17 +931,21 @@ test("returns sanitized transient preview articles and rejects parser failures",
               author: "Author",
               content:
                 '<p onclick="alert(1)">Visible<script>alert(1)</script><a href="javascript:alert(1)">link</a></p>',
+              enclosures: [],
               guid: "preview-guid",
               publishedAt: new Date("2024-03-06T12:00:00Z"),
               title: "Article title",
+              updatedAt: null,
               url: "https://site.example/article",
             },
             {
               author: "Author",
               content: "<p>Second</p>",
+              enclosures: [],
               guid: "preview-guid-2",
               publishedAt: new Date("2024-03-05T12:00:00Z"),
               title: "Second title",
+              updatedAt: null,
               url: "https://site.example/second",
             },
           ],
@@ -1355,7 +1373,8 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
   expect(successes[0]?.slice(0, 2)).toEqual([91, true]);
-  expect(successes[0]?.[2]).toBeInstanceOf(Date);
+  // No freshness from the cached fetch, so successSource applies its poll floor.
+  expect(successes[0]?.[2]).toBeUndefined();
   expect(enqueues).toEqual([]);
 });
 
@@ -1441,7 +1460,7 @@ test("imports every article of a truncated preview on subscribe without a refetc
 
   dependencies.feedParser.preview = async (sourceUrl) => {
     previews++;
-    return mapFeedToPreview(largeFeed, sourceUrl, (content) => content);
+    return mapFeedToPreview(largeFeed, sourceUrl);
   };
   dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
     stored = serializeFeedPreview(preview);
@@ -1492,6 +1511,81 @@ test("imports every article of a truncated preview on subscribe without a refetc
   expect(enqueues).toEqual([]);
 });
 
+// A truncated preview's full feed has to resolve its relative links where
+// every poll does, against the redirected URL, or the first poll rewrites each
+// article's url and content and read articles come back unread.
+test("a truncated preview of a redirected feed imports the links a poll stores", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const finalUrl = "https://cdn.example/moved/feed.xml";
+  const feed = {
+    description: null,
+    items: Array.from({ length: previewArticleLimit + 1 }, (_, index) => ({
+      authors: [],
+      content: `<a href="post-${index}">Body</a>`,
+      description: null,
+      id: `item-${index}`,
+      published: new Date("2026-07-19T12:00:00.000Z"),
+      title: `Article ${index}`,
+      updated: null,
+      url: `post-${index}`,
+    })),
+    title: "Moved feed",
+    url: null,
+  };
+  let stored: string | undefined;
+  const upserts: Parameters<
+    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+  >[0][] = [];
+  dependencies.feedParser.preview = async (sourceUrl) =>
+    mapFeedToPreview(feed, sourceUrl, { baseUrl: finalUrl });
+  dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
+    stored = serializeFeedPreview(preview);
+  };
+  dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
+    stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
+    upserts.push(articles);
+    return articles.length;
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async () => {};
+  dependencies.sourcesDataService.successSource = async () => {};
+  const app = await appFor(dependencies);
+
+  await app.handle(
+    new Request(
+      `http://localhost/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+      { headers: { cookie: "sid=test" } },
+    ),
+  );
+  await subscribe(app, {
+    sourceFolder: null,
+    sourceName: "URL feed",
+    sourceUrl: subscriptionSource.url,
+  });
+
+  const polled = mapFeedItemToArticle(
+    feed.items[0]!,
+    feed,
+    subscriptionSource,
+    {
+      baseUrl: finalUrl,
+    },
+  );
+  expect(polled.url).toBe("https://cdn.example/moved/post-0");
+  expect(upserts[0]?.[0]).toMatchObject({
+    content: polled.content,
+    url: polled.url,
+  });
+});
+
 const previewedAt = Date.parse("2020-01-01T00:00:00Z");
 const alertFeed = {
   description: null,
@@ -1532,7 +1626,7 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
   >[0][] = [];
 
   dependencies.feedParser.preview = async (sourceUrl) =>
-    mapFeedToPreview(alertFeed, sourceUrl, (content) => content, previewedAt);
+    mapFeedToPreview(alertFeed, sourceUrl, { now: previewedAt });
   dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
     stored = serializeFeedPreview(preview);
   };
@@ -1575,12 +1669,9 @@ test("a retried subscription skips snapshot alerts that expired between attempts
   const upserts: Parameters<
     ServerFakes["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
-  const snapshot = mapFeedToPreview(
-    alertFeed,
-    subscriptionSource.url,
-    (content) => content,
-    previewedAt,
-  );
+  const snapshot = mapFeedToPreview(alertFeed, subscriptionSource.url, {
+    now: previewedAt,
+  });
 
   dependencies.userSourcesDataService.addSourceToUser = async () => ({
     initializationSnapshot: serializeFeedPreview(snapshot),
