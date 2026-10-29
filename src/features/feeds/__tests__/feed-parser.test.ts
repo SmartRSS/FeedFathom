@@ -420,7 +420,7 @@ describe("feed dates", () => {
   });
 });
 
-const enclosuresOf = (parsed: ReturnType<typeof parseJsonFeed>) =>
+const enclosuresOf = (parsed: Parameters<typeof mapFeedItemToArticle>[1]) =>
   mapFeedItemToArticle(parsed.items[0]!, parsed, {
     id: 1,
     url: "https://example.com/feed",

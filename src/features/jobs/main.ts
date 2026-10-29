@@ -211,10 +211,10 @@ export class MainWorker {
               )
                 return;
               const result = await requestHubSubscription({
-                callbackUrl: `https://${domain}/api/websub/callback/${subscription.callbackToken}`,
+                callbackToken: subscription.callbackToken,
+                domain,
                 hubPoster,
                 hubUrl: subscription.hubUrl,
-                mode: "subscribe",
                 secret: subscription.secret,
                 topicUrl: subscription.topicUrl,
               });

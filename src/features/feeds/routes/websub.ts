@@ -55,11 +55,6 @@ const readCappedPushBody = async (
   return Buffer.concat(chunks);
 };
 
-// The hub SHOULD send hub.lease_seconds on every verification per spec, but
-// "should" isn't "must" -- if it's missing, assume a short lease instead of
-// an indefinite one, so a source without a real lease gets caught by the
-// next day's renewal sweep instead of silently never renewing.
-
 export function createWebSubRoutes() {
   return new Elysia()
     .get(
