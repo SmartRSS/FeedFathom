@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
+import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
 // Enough of Redis for OutboundFetchBudget: one counter per key, with expiry

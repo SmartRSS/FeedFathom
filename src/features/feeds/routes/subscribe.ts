@@ -1,5 +1,4 @@
 import type * as feeds from "#features/feeds/services.ts";
-import type * as auth from "#features/auth/services.ts";
 import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
@@ -54,16 +53,16 @@ export async function postSubscribeHandler(
     sourceEnqueuer,
     sourcesDataService,
     userSourcesDataService,
-  }: Pick<typeof auth, "outboundFetchBudget"> &
-    Pick<
-      typeof feeds,
-      | "articleImporter"
-      | "feedParser"
-      | "feedPreviewCache"
-      | "sourceEnqueuer"
-      | "sourcesDataService"
-      | "userSourcesDataService"
-    > & { config: AppConfig },
+  }: Pick<
+    typeof feeds,
+    | "articleImporter"
+    | "feedParser"
+    | "feedPreviewCache"
+    | "outboundFetchBudget"
+    | "sourceEnqueuer"
+    | "sourcesDataService"
+    | "userSourcesDataService"
+  > & { config: AppConfig },
 ) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.

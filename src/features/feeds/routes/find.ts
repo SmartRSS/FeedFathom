@@ -1,5 +1,4 @@
 import type * as feeds from "#features/feeds/services.ts";
-import type * as auth from "#features/auth/services.ts";
 import type { StaticDecode } from "typebox";
 import type { findQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
@@ -22,13 +21,12 @@ export async function getFindHandler(
     feedParser,
     httpClient,
     outboundFetchBudget,
-  }: Pick<typeof auth, "outboundFetchBudget"> &
-    Pick<typeof feeds, "feedParser"> & {
-      // The one call find makes: a page fetched as text, and where it ended up.
-      httpClient: {
-        get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
-      };
-    },
+  }: Pick<typeof feeds, "feedParser" | "outboundFetchBudget"> & {
+    // The one call find makes: a page fetched as text, and where it ended up.
+    httpClient: {
+      get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
+    };
+  },
 ) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.

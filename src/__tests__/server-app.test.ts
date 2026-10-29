@@ -7,7 +7,7 @@ import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
-import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
+import type { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";

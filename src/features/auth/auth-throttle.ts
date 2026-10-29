@@ -1,3 +1,5 @@
+import { countInWindow } from "#platform/redis-window-counter.ts";
+
 // Failed attempts are counted in Redis and the count gates further ones.
 // Two counters per scope, neither keyed on the account alone: an attacker who
 // knows a real address must not be able to lock its owner out by guessing at
@@ -26,13 +28,6 @@ const addressFailureLimit = 50;
 
 // TTL -1 means the key exists without an expiry; -2 (absent) is left alone so
 // a read never creates a counter.
-const countScript = `
-local count = redis.call('INCR', KEYS[1])
-if redis.call('TTL', KEYS[1]) == -1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return count`;
-
 const readScript = `
 local counts = redis.call('MGET', KEYS[1], KEYS[2])
 for index, key in ipairs(KEYS) do
@@ -92,12 +87,7 @@ export class AuthThrottle {
   }
 
   private async count(key: string): Promise<void> {
-    await this.redis.send("EVAL", [
-      countScript,
-      "1",
-      key,
-      windowSeconds.toString(),
-    ]);
+    await countInWindow(this.redis, key, windowSeconds);
   }
 }
 
