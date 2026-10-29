@@ -264,6 +264,18 @@ const loadServiceWorker = (
     });
     await Promise.all(pending);
   };
+  // A sign-in from any tab, answered by the network.
+  const login = () =>
+    dispatch(new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }))
+      .response;
+  // Unsubscribing from source 3, which the worker queues while offline.
+  const removeSource = () =>
+    dispatch(
+      new Request(`${ORIGIN}/api/source`, {
+        body: JSON.stringify({ removeSourceId: 3 }),
+        method: "DELETE",
+      }),
+    );
   const activate = async () => {
     const pending: Promise<unknown>[] = [];
     onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
@@ -277,9 +289,11 @@ const loadServiceWorker = (
     keepOffline,
     loadArticle,
     loadTree,
+    login,
     messages,
     navigate,
     queue,
+    removeSource,
     requests,
   };
 };
@@ -400,9 +414,7 @@ test("a tree preloaded before a sign-in is not served after it", async () => {
       : shellNetwork("index")(path);
   });
   await sw.navigate("/").background;
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
 });
 
@@ -517,9 +529,7 @@ test("signing in drops articles cached under the previous account", async () => 
   );
   expect(await sw.loadArticle(2)).toMatchObject({ account: "a" });
   account = "b";
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   expect(await sw.loadArticle(2)).toMatchObject({ account: "b" });
 });
 
@@ -621,9 +631,7 @@ test("rows posted before a sign-in are dropped, even queued behind a download", 
   const first = sw.keepOffline([2]);
   await settle();
   const queued = sw.keepOffline([3]);
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   answer?.();
   await Promise.all([first, queued]);
   expect([...sw.entries.keys()]).toEqual([]);
@@ -636,9 +644,7 @@ test("rows listed before a sign-in are dropped when they answer after it", async
   const release = sw.holdListing();
   const sync = sw.keepOffline([2]);
   await settle();
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   release();
   await sync;
   expect([...sw.entries.keys()]).toEqual([]);
@@ -803,9 +809,7 @@ test("a download answered after a sign-in is not stored", async () => {
   });
   const sync = sw.keepOffline([2]);
   await settle();
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   answer?.();
   await sync;
   expect([...sw.entries.keys()]).toEqual([]);
@@ -844,12 +848,7 @@ test("a failed account lookup is retried, so a later offline removal still repla
   await sw.loadTree();
   await settle();
   online = false;
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  await sw.removeSource().response;
   online = true;
   await sw.loadTree();
   await settle();
@@ -877,12 +876,7 @@ test("a removal made while the first account lookup is in flight waits for it", 
   await sw.loadTree();
   await settle();
   online = false;
-  const removal = sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  const removal = sw.removeSource().response;
   await settle();
   answerLookup?.();
   expect(await (await removal).json()).toBe(3);
@@ -906,12 +900,7 @@ test("a removal with no known account fails offline instead of being queued", as
   await sw.loadTree();
   await settle();
   online = false;
-  const removal = sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  );
+  const removal = sw.removeSource();
   removal.background.catch(() => {});
   await expect(removal.response).rejects.toThrow("Failed to fetch");
   await settle();
@@ -979,16 +968,9 @@ test("a removal that fails after another account signs in stays account 1's", as
   });
   await sw.loadTree();
   await settle();
-  const removal = sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  const removal = sw.removeSource().response;
   await settle();
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   await sw.loadTree();
   await settle();
   failRemoval?.();
@@ -1020,16 +1002,9 @@ test("a signed-out session answer doesn't erase the owner of later offline remov
   account = null;
   await sw.dispatch(new Request(`${ORIGIN}/api/session`)).response;
   online = false;
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  await sw.removeSource().response;
   online = true;
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   await sw.loadTree();
   await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
@@ -1206,20 +1181,13 @@ const removeOfflineThenSignIn = async (nextAccount: number) => {
   await sw.loadTree();
   await settle();
   online = false;
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  await sw.removeSource().response;
   online = true;
   account = null;
   await sw.loadTree();
   await settle();
   expect(sw.queue.rows.size).toBe(1);
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }),
-  ).response;
+  await sw.login();
   await sw.loadTree();
   await settle();
   return {
@@ -1252,12 +1220,7 @@ test("logging out drops the removals waiting to replay, and the API cache", asyn
       : Promise.reject(new TypeError("Failed to fetch")),
   );
   sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/source`, {
-      body: JSON.stringify({ removeSourceId: 3 }),
-      method: "DELETE",
-    }),
-  ).response;
+  await sw.removeSource().response;
   expect(sw.queue.rows.size).toBe(1);
   await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
     .response;

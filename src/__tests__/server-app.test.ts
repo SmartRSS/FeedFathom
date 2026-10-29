@@ -1,5 +1,4 @@
 import type { AppConfig } from "#platform/config.ts";
-import type { HttpClient, HttpResponse } from "#platform/http/http-client.ts";
 import type { RedirectMap } from "#platform/http/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
@@ -10,10 +9,7 @@ import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import type {
-  SourcesDataService,
-  SourceUrlUpdateResult,
-} from "#features/feeds/source-data-service.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { UsersDataService } from "#features/auth/user-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
@@ -25,9 +21,10 @@ import { articleEventsChannel } from "#features/feeds/article-events.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { createHash, createHmac } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, mock, spyOn, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import {
@@ -41,189 +38,22 @@ import {
 } from "#features/feeds/feed-mapper.ts";
 import { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
-
-type PublicAuthRouteDependencies = {
-  config: AppConfig;
-  authThrottle: LoginRouteDependencies["authThrottle"];
-  fetcher: (
-    ...args: Parameters<typeof globalThis.fetch>
-  ) => ReturnType<typeof globalThis.fetch>;
-  mailSender: Pick<
-    MailSender,
-    "sendAccountExistsEmail" | "sendActivationEmail" | "sendPasswordResetEmail"
-  >;
-  password: Password;
-  secureCookies: boolean;
-  // Picked rather than restated, so a signature change on the service is a
-  // type error here instead of two descriptions of the same method drifting
-  // apart. The two exceptions are widened deliberately: their results are a
-  // driver-specific execute()/insert() value that no handler reads and no
-  // test double can plausibly produce.
-  usersDataService: Pick<
-    UsersDataService,
-    | "createSession"
-    | "deleteSession"
-    | "findUser"
-    | "findUserByActivationToken"
-    | "findUserByPasswordResetToken"
-    | "getUserBySid"
-    | "getUserCount"
-    | "withdrawActivationToken"
-  > &
-    PasswordResetRouteDependencies["usersDataService"] & {
-      activateUser(userId: number): Promise<unknown>;
-      createUser(
-        ...args: Parameters<UsersDataService["createUser"]>
-      ): Promise<unknown>;
-    };
-};
-type LoginRouteDependencies = {
-  config: Pick<AppConfig, "TRUSTED_PROXY_HEADER">;
-  authThrottle: Pick<
-    AuthThrottle,
-    "blocked" | "clearFailures" | "recordFailure"
-  >;
-  password: Password;
-  secureCookies: boolean;
-  usersDataService: {
-    createSession(
-      ...args: Parameters<UsersDataService["createSession"]>
-    ): ReturnType<UsersDataService["createSession"]>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-  };
-};
-type PasswordResetRouteDependencies = {
-  config: Pick<
-    AppConfig,
-    "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "TRUSTED_PROXY_HEADER"
-  >;
-  authThrottle: Pick<AuthThrottle, "blocked" | "recordFailure">;
-  mailSender: Pick<MailSender, "sendPasswordResetEmail">;
-  password: { hash(password: string): Promise<string> };
-  usersDataService: {
-    completePasswordReset(
-      userId: number,
-      tokenHash: string,
-      passwordHash: string,
-    ): Promise<boolean>;
-    findUser(email: string): ReturnType<UsersDataService["findUser"]>;
-    findUserByPasswordResetToken(
-      tokenHash: string,
-    ): ReturnType<UsersDataService["findUserByPasswordResetToken"]>;
-    refreshActivationToken(
-      userId: number,
-      token: string,
-      expiresAt: Date,
-    ): Promise<boolean>;
-    startPasswordReset(
-      userId: number,
-      tokenHash: string,
-      expiresAt: Date,
-    ): Promise<void>;
-  };
-};
-type ReaderRouteDependencies = {
-  articleImporter: Pick<ArticleImporter, "importArticles">;
-  articleEventHub: Pick<ArticleEventHub, "close" | "listen">;
-  articlesDataService: Pick<
-    ArticlesDataService,
-    | "batchUpsertArticles"
-    | "getUserArticle"
-    | "getUserArticlesForSources"
-    | "removeUserArticles"
-    | "setUserArticlesRead"
-  >;
-  usersDataService: Pick<UsersDataService, "authenticate" | "getUserBySid">;
-  feedParser: Pick<
-    FeedParser,
-    "discoverAndSubscribeWebSub" | "parseUrl" | "preview"
-  >;
-  feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
-  foldersDataService: Pick<
-    FoldersDataService,
-    "createFolder" | "getUserFolders" | "removeEmptyUserFolder" | "renameFolder"
-  >;
-  httpClient: {
-    get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
-  };
-  mailEnabled: boolean;
-  outboundFetchBudget: Pick<OutboundFetchBudget, "consume">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  sourcesDataService: Pick<SourcesDataService, "getFavicon" | "successSource">;
-  userSourcesDataService: Pick<
-    UserSourcesDataService,
-    | "addSourceToUser"
-    | "recomputeUnreadCounts"
-    | "getUserSourceIds"
-    | "getUserSources"
-    | "removeSourceFromUser"
-    | "setSourceSnooze"
-    | "updateUserSource"
-    | "withSubscriptionInitializationLease"
-  >;
-};
-type AdminOptionsRouteDependencies = {
-  foldersDataService: Pick<FoldersDataService, "getUserFolders">;
-  opmlImportService: Pick<OpmlImportService, "insertTree">;
-  password: Password;
-  redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;
-  sourcesDataService: Pick<
-    SourcesDataService,
-    "deleteSource" | "listAllSources"
-  > & {
-    updateSourceUrl(
-      oldUrl: string,
-      newUrl: string,
-    ): Promise<SourceUrlUpdateResult | void>;
-  };
-  userSourcesDataService: Pick<UserSourcesDataService, "getUserSources">;
-  usersDataService: Pick<
-    UsersDataService,
-    | "authenticate"
-    | "findUser"
-    | "getUserBySid"
-    | "listSessions"
-    | "deleteSessionById"
-    | "deleteOtherSessions"
-  > & {
-    updatePassword(
-      userId: number,
-      currentHash: string,
-      passwordHash: string,
-    ): Promise<boolean>;
-  };
-};
-type WebSubRouteDependencies = {
-  httpClient: Pick<HttpClient, "seedCache">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">;
-  websubStateService: Pick<
-    WebSubStateService,
-    "findSourceByWebSubCallbackToken" | "markWebSubVerified"
-  >;
-};
-type MailRouteDependencies = {
-  config: AppConfig;
-  emailHandler: Pick<EmailHandler, "processEmail">;
-};
-type Password = {
-  hash(password: string): Promise<string>;
-  verify(password: string, hash: string): Promise<boolean>;
-};
-type ServerFakes = Omit<PublicAuthRouteDependencies, "secureCookies"> &
-  ReaderRouteDependencies &
-  AdminOptionsRouteDependencies &
-  WebSubRouteDependencies &
-  MailRouteDependencies;
+import {
+  createServerApp,
+  MAX_REQUEST_BODY_BYTES,
+  type ServerServices,
+} from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
 const mailRelaySecretHeader = "x-feedfathom-mail-secret";
 const maxRawEmailBytes = 5 * 1_024 * 1_024;
 const relayed = (raw: string) => Buffer.from(raw).toString("base64");
-const unexpected = (name: string): never => {
-  throw new Error(`Unexpected dependency call: ${name}`);
-};
+const relayMail = (app: App, envelope: Record<string, unknown>) =>
+  post(app, "/api/mail", envelope, {
+    headers: { [mailRelaySecretHeader]: "relay-secret" },
+  });
 
-const runLease: ServerFakes["userSourcesDataService"]["withSubscriptionInitializationLease"] =
+const runLease: UserSourcesDataService["withSubscriptionInitializationLease"] =
   async (_subscriptionId, work) => ({
     outcome: "claimed",
     result: await work(),
@@ -253,8 +83,16 @@ const account = {
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
 
-function createDependencies(): ServerFakes {
-  const appConfig: ServerFakes["config"] = {
+// Writable, so a test can swap a whole service rather than one method.
+type Dependencies = {
+  -readonly [Key in keyof ServerServices]: ServerServices[Key];
+};
+
+// Every service a request can reach, each a strict fake: the defaults below
+// answer the reads most routes make on the way in, and anything else a test
+// has not arranged throws and names itself.
+function createDependencies(): Dependencies {
+  const config: AppConfig = {
     ALLOWED_EMAILS: [],
     ARTICLE_STALE_AFTER_DAYS: 365,
     CLEANUP_INTERVAL: 1_000,
@@ -270,164 +108,40 @@ function createDependencies(): ServerFakes {
     USER_EXPIRY_DAYS: 730,
     WORKER_CONCURRENCY: 1,
   };
-
-  const fakes: Omit<ServerFakes, "articleImporter"> = {
-    articleEventHub: {
-      close: () => {},
-      listen: () => unexpected("articleEventHub.listen"),
-    },
-    articlesDataService: {
-      async batchUpsertArticles() {
-        return unexpected("articlesDataService.batchUpsertArticles");
-      },
+  const articlesDataService = strictFake<ArticlesDataService>(
+    {
       async getUserArticle() {
         return undefined;
       },
       async getUserArticlesForSources() {
         return [];
       },
-      async removeUserArticles() {
-        return unexpected("articlesDataService.removeUserArticles");
-      },
-      async setUserArticlesRead() {
-        return unexpected("articlesDataService.setUserArticlesRead");
-      },
     },
-    authThrottle: new AuthThrottle(createFakeThrottleRedis()),
-    config: appConfig,
-    emailHandler: {
-      async processEmail() {
-        return unexpected("emailHandler.processEmail");
-      },
-    },
-    feedParser: {
-      async discoverAndSubscribeWebSub() {},
-      async parseUrl() {
-        return unexpected("feedParser.parseUrl");
-      },
-      async preview() {
-        return undefined;
-      },
-    },
-    feedPreviewCache: {
-      async get() {
-        return undefined;
-      },
-      async save() {},
-    },
-    fetcher: async () => Response.json({ success: false }),
-    foldersDataService: {
-      async createFolder() {
-        return unexpected("foldersDataService.createFolder");
-      },
-      async getUserFolders() {
-        return [];
-      },
-      async removeEmptyUserFolder() {
-        return unexpected("foldersDataService.removeEmptyUserFolder");
-      },
-      async renameFolder() {
-        return unexpected("foldersDataService.renameFolder");
-      },
-    },
-    httpClient: {
-      async get(url) {
-        return { data: "", url };
-      },
-      async seedCache() {},
-    },
-    get mailEnabled() {
-      return appConfig.MAIL_ENABLED;
-    },
-    mailSender: {
-      async sendAccountExistsEmail() {},
-      async sendActivationEmail() {},
-      async sendPasswordResetEmail() {},
-    },
-    opmlImportService: {
-      async insertTree() {
-        return unexpected("opmlImportService.insertTree");
-      },
-    },
-    outboundFetchBudget: {
-      async consume() {},
-    },
-    password: {
-      async hash(value) {
-        return `hashed:${value}`;
-      },
-      async verify(value, hash) {
-        return hash === `hashed:${value}`;
-      },
-    },
-    redirectMap: {
-      async getAllRedirects() {
-        return {};
-      },
-      async removeRedirect() {},
-    },
-    sourceEnqueuer: {
-      async enqueueSource() {},
-    },
-    sourcesDataService: {
-      async deleteSource() {},
-      async getFavicon() {
-        return null;
-      },
-      async listAllSources() {
-        return [];
-      },
-      async successSource() {},
-      async updateSourceUrl() {},
-    },
-    userSourcesDataService: {
-      async addSourceToUser() {
-        return unexpected("userSourcesDataService.addSourceToUser");
-      },
+    "articlesDataService",
+  );
+  const userSourcesDataService = strictFake<UserSourcesDataService>(
+    {
       async getUserSourceIds() {
         return [];
       },
       async getUserSources() {
         return [];
       },
-      async recomputeUnreadCounts() {
-        return unexpected("userSourcesDataService.recomputeUnreadCounts");
-      },
-      async removeSourceFromUser() {
-        return unexpected("userSourcesDataService.removeSourceFromUser");
-      },
-      async setSourceSnooze() {
-        return unexpected("userSourcesDataService.setSourceSnooze");
-      },
-      async updateUserSource() {
-        return unexpected("userSourcesDataService.updateUserSource");
-      },
-      async withSubscriptionInitializationLease() {
-        return unexpected(
-          "userSourcesDataService.withSubscriptionInitializationLease",
-        );
-      },
     },
-    usersDataService: {
-      async activateUser() {
-        return unexpected("usersDataService.activateUser");
-      },
+    "userSourcesDataService",
+  );
+  const usersDataService: UsersDataService = strictFake<UsersDataService>(
+    {
       // Resolves through getUserBySid, so a test names the signed-in user
       // once and both the read-only lookup and the auth plugin see it.
       async authenticate(sid) {
-        const user = await this.getUserBySid(sid);
+        const user = await usersDataService.getUserBySid(sid);
         return user?.status === "active"
           ? { ...user, status: "active" }
           : undefined;
       },
-      async completePasswordReset() {
-        return unexpected("usersDataService.completePasswordReset");
-      },
       async createSession() {
         return "test-session";
-      },
-      async createUser() {
-        return undefined;
       },
       async deleteOtherSessions() {},
       async deleteSession() {},
@@ -450,57 +164,165 @@ function createDependencies(): ServerFakes {
       async listSessions() {
         return [];
       },
-      async refreshActivationToken() {
-        return unexpected("usersDataService.refreshActivationToken");
-      },
-      async startPasswordReset() {
-        return unexpected("usersDataService.startPasswordReset");
-      },
-      async updatePassword() {
-        return unexpected("usersDataService.updatePassword");
-      },
-      async withdrawActivationToken() {
-        return unexpected("usersDataService.withdrawActivationToken");
-      },
     },
-    websubStateService: {
-      async findSourceByWebSubCallbackToken() {
-        return undefined;
-      },
-      async markWebSubVerified() {},
-    },
-  };
-  // The real importer over the fakes, so a test's batchUpsertArticles and
-  // recomputeUnreadCounts replacements are what subscribe reaches.
-  return Object.assign(fakes, {
+    "usersDataService",
+  );
+  return {
+    articleEventHub: strictFake<ArticleEventHub>(
+      { close: () => {} },
+      "articleEventHub",
+    ),
+    // The real importer over the fakes, so a test's batchUpsertArticles and
+    // recomputeUnreadCounts replacements are what subscribe reaches.
     articleImporter: new ArticleImporter(
-      fakes.articlesDataService,
-      fakes.userSourcesDataService,
+      articlesDataService,
+      userSourcesDataService,
       { publish() {} },
     ),
-  });
+    articlesDataService,
+    authThrottle: new AuthThrottle(createFakeThrottleRedis()),
+    config,
+    emailHandler: strictFake<EmailHandler>({}, "emailHandler"),
+    feedParser: strictFake<FeedParser>(
+      {
+        async discoverAndSubscribeWebSub() {},
+        async preview() {
+          return undefined;
+        },
+      },
+      "feedParser",
+    ),
+    feedPreviewCache: strictFake<FeedPreviewCache>(
+      {
+        async get() {
+          return undefined;
+        },
+        async save() {},
+      },
+      "feedPreviewCache",
+    ),
+    fetcher: async () => Response.json({ success: false }),
+    foldersDataService: strictFake<FoldersDataService>(
+      {
+        async getUserFolders() {
+          return [];
+        },
+      },
+      "foldersDataService",
+    ),
+    httpClient: strictFake<ServerServices["httpClient"]>(
+      {
+        async seedCache() {},
+      },
+      "httpClient",
+    ),
+    mailSender: strictFake<MailSender>(
+      {
+        async sendAccountExistsEmail() {},
+        async sendActivationEmail() {},
+        async sendPasswordResetEmail() {},
+      },
+      "mailSender",
+    ),
+    opmlImportService: strictFake<OpmlImportService>({}, "opmlImportService"),
+    outboundFetchBudget: strictFake<OutboundFetchBudget>(
+      { async consume() {} },
+      "outboundFetchBudget",
+    ),
+    password: {
+      async hash(value) {
+        return `hashed:${value}`;
+      },
+      async verify(value, hash) {
+        return hash === `hashed:${value}`;
+      },
+    },
+    redirectMap: strictFake<RedirectMap>(
+      {
+        async getAllRedirects() {
+          return {};
+        },
+        async removeRedirect() {},
+      },
+      "redirectMap",
+    ),
+    sourceEnqueuer: strictFake<SourceEnqueuer>(
+      { async enqueueSource() {} },
+      "sourceEnqueuer",
+    ),
+    sourcesDataService: strictFake<SourcesDataService>(
+      {
+        async deleteSource() {},
+        async getFavicon() {
+          return null;
+        },
+        async listAllSources() {
+          return [];
+        },
+        async successSource() {},
+        async updateSourceUrl() {
+          return "updated";
+        },
+      },
+      "sourcesDataService",
+    ),
+    userSourcesDataService,
+    usersDataService,
+    websubStateService: strictFake<WebSubStateService>(
+      {
+        async findSourceByWebSubCallbackToken() {
+          return undefined;
+        },
+      },
+      "websubStateService",
+    ),
+  };
 }
 
-async function mockServices(dependencies: ServerFakes) {
-  await mock.module("#features/feeds/services.ts", () => dependencies);
-  await mock.module("#features/auth/services.ts", () => dependencies);
-  await mock.module("#features/mail-ingest/services.ts", () => dependencies);
-  await mock.module("#features/reader/services.ts", () => dependencies);
-  await mock.module("#platform/runtime.ts", () => dependencies);
-  await mock.module("#platform/config.ts", () => ({
-    config: dependencies.config,
-  }));
-}
-await mockServices(createDependencies());
-const { createServerApp, MAX_REQUEST_BODY_BYTES } =
-  await import("../server-app.ts");
+const appFor = async (dependencies: Dependencies, production = false) =>
+  createServerApp(dependencies, { production, spaDirectory });
 
-const appFor = async (dependencies: ServerFakes, production = false) => {
-  await mockServices(dependencies);
-  return createServerApp({ production, spaDirectory });
+type App = Awaited<ReturnType<typeof appFor>>;
+type RequestOptions = {
+  // Sends the session cookie a test's getUserBySid answers for.
+  auth?: boolean;
+  headers?: Record<string, string>;
+  origin?: string;
 };
 
-const authenticated = (dependencies: ServerFakes) => {
+// One request through the whole app. A body is sent as JSON.
+const send = (
+  app: App,
+  method: string,
+  path: string,
+  body?: unknown,
+  {
+    auth = false,
+    headers = {},
+    origin = "http://localhost",
+  }: RequestOptions = {},
+) =>
+  app.handle(
+    new Request(`${origin}${path}`, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: {
+        ...(auth ? { cookie: "sid=test" } : {}),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...headers,
+      },
+    }),
+  );
+const get = (app: App, path: string, options?: RequestOptions) =>
+  send(app, "GET", path, undefined, options);
+const post = (
+  app: App,
+  path: string,
+  body?: unknown,
+  options?: RequestOptions,
+) => send(app, "POST", path, body, options);
+
+const authenticated = (dependencies: Dependencies) => {
   dependencies.usersDataService.getUserBySid = async () => sessionUser;
 };
 
@@ -509,11 +331,7 @@ test("returns a session matching the browser contract", async () => {
   authenticated(dependencies);
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/session", {
-      headers: { cookie: "sid=test" },
-    }),
-  );
+  const response = await get(app, "/api/session", { auth: true });
   const body: unknown = await response.json();
 
   expect(response.status).toBe(200);
@@ -527,28 +345,25 @@ test("returns a session matching the browser contract", async () => {
 // login-time snapshots and nothing else in the app would notice.
 test("each authenticated request refreshes the session row", async () => {
   const dependencies = createDependencies();
-  const authenticatedWith: Array<[string, null | string]> = [];
-  dependencies.usersDataService.authenticate = async (sid, userAgent) => {
-    authenticatedWith.push([sid, userAgent]);
+  const authenticatedWith: Parameters<UsersDataService["authenticate"]>[] = [];
+  dependencies.usersDataService.authenticate = async (...args) => {
+    authenticatedWith.push(args);
     return sessionUser;
   };
   const app = await appFor(dependencies);
 
-  await app.handle(
-    new Request("http://localhost/api/options", {
-      headers: { cookie: "sid=test", "user-agent": "Mozilla/5.0 TestClient" },
-    }),
-  );
+  await get(app, "/api/options", {
+    auth: true,
+    headers: { "user-agent": "Mozilla/5.0 TestClient" },
+  });
   expect(authenticatedWith).toEqual([["test", "Mozilla/5.0 TestClient"]]);
 
   // A request without a cookie has no row to refresh -- the plugin answers
   // 401 without reaching the database.
   authenticatedWith.length = 0;
-  const unauthorized = await app.handle(
-    new Request("http://localhost/api/options", {
-      headers: { "user-agent": "Mozilla/5.0 TestClient" },
-    }),
-  );
+  const unauthorized = await get(app, "/api/options", {
+    headers: { "user-agent": "Mozilla/5.0 TestClient" },
+  });
   expect(unauthorized.status).toBe(401);
   expect(authenticatedWith).toEqual([]);
 });
@@ -574,11 +389,7 @@ test.each([
     if (mailDomain !== undefined) dependencies.config.MAIL_DOMAIN = mailDomain;
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request("http://localhost/api/session", {
-        headers: { cookie: "sid=test" },
-      }),
-    );
+    const response = await get(app, "/api/session", { auth: true });
     const body: unknown = await response.json();
 
     expect(Value.Check(sessionResponse, body)).toBe(true);
@@ -597,15 +408,10 @@ test("ends only the current session and clears its cookie", async () => {
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/logout", {
-      headers: { cookie: "sid=current-session" },
-      method: "POST",
-    }),
-  );
-  const withoutCookie = await app.handle(
-    new Request("http://localhost/api/logout", { method: "POST" }),
-  );
+  const response = await post(app, "/api/logout", undefined, {
+    headers: { cookie: "sid=current-session" },
+  });
+  const withoutCookie = await post(app, "/api/logout");
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ success: true });
@@ -661,16 +467,10 @@ const subscribe = (
   app: Awaited<ReturnType<typeof createServerApp>>,
   body: Record<string, unknown>,
 ) =>
-  app.handle(
-    new Request("https://reader.example/api/subscribe", {
-      body: JSON.stringify(body),
-      headers: {
-        "content-type": "application/json",
-        cookie: "sid=test",
-      },
-      method: "POST",
-    }),
-  );
+  post(app, "/api/subscribe", body, {
+    auth: true,
+    origin: "https://reader.example",
+  });
 
 test.each([
   ["/settings", "text/html", 200, "text/html"],
@@ -682,9 +482,7 @@ test.each([
   ["/settings", "application/json", 404, null],
 ])("serves %s selectively", async (path, accept, status, contentType) => {
   const app = await appFor(createDependencies(), true);
-  const response = await app.handle(
-    new Request(`http://localhost${path}`, { headers: { accept } }),
-  );
+  const response = await get(app, path, { headers: { accept } });
 
   expect(response.status).toBe(status);
   if (contentType)
@@ -704,11 +502,7 @@ test.each([
     const dependencies = createDependencies();
     if (turnstileEnabled) dependencies.config.TURNSTILE_SITE_KEY = "site-key";
     const app = await appFor(dependencies, true);
-    const response = await app.handle(
-      new Request(`http://localhost${path}`, {
-        headers: { accept: "text/html" },
-      }),
-    );
+    const response = await get(app, path, { headers: { accept: "text/html" } });
 
     const policy = response.headers.get("content-security-policy") ?? "";
     expect(policy).toStartWith("script-src 'self' 'sha256-");
@@ -729,7 +523,7 @@ test.each([
   "/api/options",
 ])("rejects unauthenticated access to %s", async (path) => {
   const app = await appFor(createDependencies());
-  const response = await app.handle(new Request(`http://localhost${path}`));
+  const response = await get(app, path);
 
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ error: "Unauthorized" });
@@ -737,13 +531,7 @@ test.each([
 
 test("rejects unauthenticated article list requests", async () => {
   const app = await appFor(createDependencies());
-  const response = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: [3] }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/articles", { sources: [3] });
 
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ error: "Unauthorized" });
@@ -767,43 +555,37 @@ test("normalizes reader inputs and rejects malformed values before dependencies"
     return { createdAt: now, id: 7, name, updatedAt: now, userId };
   };
   const app = await appFor(dependencies);
-  const cookie = { cookie: "sid=test" };
 
-  const articles = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: [3, 5] }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const articles = await post(
+    app,
+    "/api/articles",
+    { sources: [3, 5] },
+    { auth: true },
   );
-  const malformedArticles = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: [3, "nope"] }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const malformedArticles = await post(
+    app,
+    "/api/articles",
+    { sources: [3, "nope"] },
+    { auth: true },
   );
   const largeSources = Array.from({ length: 501 }, (_, index) => index + 1);
-  const largeArticleRequest = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: largeSources }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const largeArticleRequest = await post(
+    app,
+    "/api/articles",
+    { sources: largeSources },
+    { auth: true },
   );
-  const folder = await app.handle(
-    new Request("http://localhost/api/folders", {
-      body: JSON.stringify({ name: "  Reading  " }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const folder = await post(
+    app,
+    "/api/folders",
+    { name: "  Reading  " },
+    { auth: true },
   );
-  const blankFolder = await app.handle(
-    new Request("http://localhost/api/folders", {
-      body: JSON.stringify({ name: "   " }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const blankFolder = await post(
+    app,
+    "/api/folders",
+    { name: "   " },
+    { auth: true },
   );
 
   expect(articles.status).toBe(200);
@@ -818,39 +600,27 @@ test("normalizes reader inputs and rejects malformed values before dependencies"
 test("routes the Today view to every subscribed source with a 24h window", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const calls: [
-    number[],
-    number,
-    number | undefined,
-    "all" | "read" | "unread" | undefined,
-    { allSubscribed?: boolean; publishedWithinHours?: number } | undefined,
-  ][] = [];
+  const calls: Parameters<ArticlesDataService["getUserArticlesForSources"]>[] =
+    [];
   dependencies.articlesDataService.getUserArticlesForSources = async (
-    sourceIds,
-    userId,
-    cursor,
-    filter,
-    options,
+    ...args
   ) => {
-    calls.push([sourceIds, userId, cursor, filter, options]);
+    calls.push(args);
     return [];
   };
   const app = await appFor(dependencies);
-  const cookie = { cookie: "sid=test" };
 
-  const today = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: [], view: "today" }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const today = await post(
+    app,
+    "/api/articles",
+    { sources: [], view: "today" },
+    { auth: true },
   );
-  const unknownView = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ sources: [3], view: "week" }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const unknownView = await post(
+    app,
+    "/api/articles",
+    { sources: [3], view: "week" },
+    { auth: true },
   );
 
   expect(today.status).toBe(200);
@@ -907,7 +677,7 @@ test("rejects invalid subscription policies before cache or database calls", asy
 test("returns sanitized transient preview articles and rejects parser failures", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const cached: Parameters<ServerFakes["feedPreviewCache"]["save"]>[] = [];
+  const cached: Parameters<ServerServices["feedPreviewCache"]["save"]>[] = [];
   dependencies.feedPreviewCache.save = async (...parameters) => {
     cached.push(parameters);
   };
@@ -945,12 +715,9 @@ test("returns sanitized transient preview articles and rejects parser failures",
         };
   const app = await appFor(dependencies);
   const preview = (sourceUrl: string) =>
-    app.handle(
-      new Request(
-        `http://localhost/api/preview?feedUrl=${encodeURIComponent(sourceUrl)}`,
-        { headers: { cookie: "sid=test" } },
-      ),
-    );
+    get(app, `/api/preview?feedUrl=${encodeURIComponent(sourceUrl)}`, {
+      auth: true,
+    });
 
   const valid = await preview("https://feed.example/rss");
   const invalid = await preview("https://feed.example/invalid");
@@ -1005,20 +772,14 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   };
   const app = await appFor(dependencies);
 
-  const preview = await app.handle(
-    new Request(
-      "http://localhost/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
-      { headers: { cookie: "sid=test" } },
-    ),
+  const preview = await get(
+    app,
+    "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
+    { auth: true },
   );
-  const find = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
-  );
+  const find = await get(app, "/api/find?link=https%3A%2F%2Fsite.example%2F", {
+    auth: true,
+  });
 
   expect(preview.status).toBe(429);
   expect(preview.headers.get("Retry-After")).toBe("3");
@@ -1033,7 +794,7 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
 // The discovery fan-out reads only `websub` off a parse, but the real
 // parseUrl signature returns the whole parsed feed, so a double has to supply
 // it. That asymmetry is the case for giving discovery its own dependency.
-type ParsedFeed = Awaited<ReturnType<ServerFakes["feedParser"]["parseUrl"]>>;
+type ParsedFeed = Awaited<ReturnType<ServerServices["feedParser"]["parseUrl"]>>;
 
 function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
   return {
@@ -1111,11 +872,10 @@ test.each([
     };
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request(
-        `http://localhost/api/find?link=${encodeURIComponent(requestedUrl)}`,
-        { headers: { cookie: "sid=test" } },
-      ),
+    const response = await get(
+      app,
+      `/api/find?link=${encodeURIComponent(requestedUrl)}`,
+      { auth: true },
     );
 
     expect(response.status).toBe(200);
@@ -1147,13 +907,10 @@ test("find marks push feeds and preserves plain or failed candidates", async () 
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
+  const response = await get(
+    app,
+    "/api/find?link=https%3A%2F%2Fsite.example%2F",
+    { auth: true },
   );
 
   expect(response.status).toBe(200);
@@ -1177,13 +934,10 @@ test("find falls back to an OpenRSS suggestion for a page with no feeds", async 
   dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
+  const response = await get(
+    app,
+    "/api/find?link=https%3A%2F%2Fsite.example%2F",
+    { auth: true },
   );
 
   expect(response.status).toBe(200);
@@ -1209,13 +963,10 @@ test("find still answers 400 when fetching a user-supplied url simply fails", as
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      {
-        headers: { cookie: "sid=test" },
-      },
-    ),
+  const response = await get(
+    app,
+    "/api/find?link=https%3A%2F%2Fsite.example%2F",
+    { auth: true },
   );
 
   expect(response.status).toBe(400);
@@ -1233,11 +984,10 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
-      { headers: { cookie: "sid=test" } },
-    ),
+  const response = await get(
+    app,
+    "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
+    { auth: true },
   );
 
   expect(response.status).toBe(500);
@@ -1253,11 +1003,10 @@ test("find reports our own expired deadline as a 504, not a bad url", async () =
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/find?link=https%3A%2F%2Fsite.example%2F",
-      { headers: { cookie: "sid=test" } },
-    ),
+  const response = await get(
+    app,
+    "/api/find?link=https%3A%2F%2Fsite.example%2F",
+    { auth: true },
   );
 
   expect(response.status).toBe(504);
@@ -1268,19 +1017,19 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   authenticated(dependencies);
   const subscriptionCreatedAt = new Date("2026-07-20T12:00:00.000Z");
   const additions: Parameters<
-    ServerFakes["userSourcesDataService"]["addSourceToUser"]
+    ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const upserts: Parameters<
-    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+    ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   const recomputes: Parameters<
-    ServerFakes["userSourcesDataService"]["recomputeUnreadCounts"]
+    ServerServices["userSourcesDataService"]["recomputeUnreadCounts"]
   >[0][] = [];
   const successes: Parameters<
-    ServerFakes["sourcesDataService"]["successSource"]
+    ServerServices["sourcesDataService"]["successSource"]
   >[] = [];
   const enqueues: Parameters<
-    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
   let parserCalls = 0;
 
@@ -1372,10 +1121,10 @@ test("queues a truncated cached preview so the worker imports the whole feed", a
   const dependencies = createDependencies();
   authenticated(dependencies);
   const additions: Parameters<
-    ServerFakes["userSourcesDataService"]["addSourceToUser"]
+    ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const enqueues: Parameters<
-    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
   let upserts = 0;
 
@@ -1443,10 +1192,10 @@ test("imports every article of a truncated preview on subscribe without a refetc
   let stored: string | undefined;
   let previews = 0;
   const upserts: Parameters<
-    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+    ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   const enqueues: Parameters<
-    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
   dependencies.feedParser.preview = async (sourceUrl) => {
@@ -1480,11 +1229,10 @@ test("imports every article of a truncated preview on subscribe without a refetc
   };
   const app = await appFor(dependencies);
 
-  const preview = await app.handle(
-    new Request(
-      `http://localhost/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
-      { headers: { cookie: "sid=test" } },
-    ),
+  const preview = await get(
+    app,
+    `/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+    { auth: true },
   );
   const previewBody = await preview.json();
   const response = await subscribe(app, {
@@ -1530,7 +1278,7 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   };
   let stored: string | undefined;
   const upserts: Parameters<
-    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+    ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   dependencies.feedParser.preview = async (sourceUrl) =>
     mapFeedToPreview(feed, sourceUrl, { baseUrl: finalUrl });
@@ -1558,11 +1306,10 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   dependencies.sourcesDataService.successSource = async () => {};
   const app = await appFor(dependencies);
 
-  await app.handle(
-    new Request(
-      `http://localhost/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
-      { headers: { cookie: "sid=test" } },
-    ),
+  await get(
+    app,
+    `/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+    { auth: true },
   );
   await subscribe(app, {
     sourceFolder: null,
@@ -1621,7 +1368,7 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
   authenticated(dependencies);
   let stored: string | undefined;
   const upserts: Parameters<
-    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+    ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
 
   dependencies.feedParser.preview = async (sourceUrl) =>
@@ -1650,11 +1397,10 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
   dependencies.sourcesDataService.successSource = async () => {};
   const app = await appFor(dependencies);
 
-  const preview = await app.handle(
-    new Request(
-      `http://localhost/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
-      { headers: { cookie: "sid=test" } },
-    ),
+  const preview = await get(
+    app,
+    `/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+    { auth: true },
   );
   expect(Reflect.get(await preview.json(), "articles")).toHaveLength(1);
   await subscribe(app, {
@@ -1670,7 +1416,7 @@ test("a retried subscription skips snapshot alerts that expired between attempts
   const dependencies = createDependencies();
   authenticated(dependencies);
   const upserts: Parameters<
-    ServerFakes["articlesDataService"]["batchUpsertArticles"]
+    ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   const snapshot = mapFeedToPreview(alertFeed, subscriptionSource.url, {
     now: previewedAt,
@@ -1706,7 +1452,7 @@ test("falls back to queueing when inline persistence fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const enqueues: Parameters<
-    ServerFakes["sourceEnqueuer"]["enqueueSource"]
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
   dependencies.feedPreviewCache.get = async () => cachedPreview;
@@ -1744,7 +1490,7 @@ test("queues URL cache misses but never email subscriptions", async () => {
   authenticated(dependencies);
   dependencies.config.MAIL_ENABLED = true;
   const additions: Parameters<
-    ServerFakes["userSourcesDataService"]["addSourceToUser"]
+    ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const cacheLookups: [number, string][] = [];
   const enqueues: [number, string][] = [];
@@ -1796,13 +1542,10 @@ test("triggers WebSub discovery immediately at subscribe time, but not for email
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.MAIL_ENABLED = true;
-  const discoveryCalls: [number, string, string | undefined][] = [];
-  dependencies.feedParser.discoverAndSubscribeWebSub = async (
-    sourceId,
-    url,
-    websubStatus,
-  ) => {
-    discoveryCalls.push([sourceId, url, websubStatus]);
+  const discoveryCalls: Parameters<FeedParser["discoverAndSubscribeWebSub"]>[] =
+    [];
+  dependencies.feedParser.discoverAndSubscribeWebSub = async (...args) => {
+    discoveryCalls.push(args);
   };
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -1873,27 +1616,23 @@ test("responds without waiting for WebSub discovery to settle", async () => {
 test("protects nonempty folders and deletes empty owned folders", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const deletions: [number, number][] = [];
-  dependencies.foldersDataService.removeEmptyUserFolder = async (
-    userId,
-    folderId,
-  ) => {
-    deletions.push([userId, folderId]);
+  const deletions: Parameters<FoldersDataService["removeEmptyUserFolder"]>[] =
+    [];
+  dependencies.foldersDataService.removeEmptyUserFolder = async (...args) => {
+    deletions.push(args);
+    const [, folderId] = args;
     if (folderId === 7) return "not-empty";
     if (folderId === 9) return "not-found";
     return "removed";
   };
   const app = await appFor(dependencies);
   const removeFolder = (folderId: number) =>
-    app.handle(
-      new Request("http://localhost/api/folders", {
-        body: JSON.stringify({ removeFolderId: folderId }),
-        headers: {
-          "content-type": "application/json",
-          cookie: "sid=test",
-        },
-        method: "DELETE",
-      }),
+    send(
+      app,
+      "DELETE",
+      "/api/folders",
+      { removeFolderId: folderId },
+      { auth: true },
     );
 
   const nonempty = await removeFolder(7);
@@ -1945,11 +1684,7 @@ test("scopes article detail to the subscriber and always returns Feed content", 
   };
   const app = await appFor(dependencies);
   const request = (id: number, query = "") =>
-    app.handle(
-      new Request(`http://localhost/api/article?article=${id}${query}`, {
-        headers: { cookie: "sid=test" },
-      }),
-    );
+    get(app, `/api/article?article=${id}${query}`, { auth: true });
 
   const visible = await request(7, "&displayMode=READABILITY");
   const foreign = await request(8);
@@ -1980,13 +1715,9 @@ test("scopes article detail to the subscriber and always returns Feed content", 
 
 test("rejects synthetic requests to /healthcheck", async () => {
   const app = await appFor(createDependencies());
-  const response = await app.handle(
-    new Request("http://localhost/healthcheck", {
-      headers: {
-        "x-forwarded-for": "127.0.0.1",
-      },
-    }),
-  );
+  const response = await get(app, "/healthcheck", {
+    headers: { "x-forwarded-for": "127.0.0.1" },
+  });
 
   expect(response.status).toBe(403);
 });
@@ -2028,13 +1759,7 @@ test.each([
   ["/api/mail", {}, 422],
 ])("keeps POST %s public", async (path, body, status) => {
   const app = await appFor(createDependencies());
-  const response = await app.handle(
-    new Request(`http://localhost${path}`, {
-      body: JSON.stringify(body),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, path, body);
 
   expect(response.status).toBe(status);
 });
@@ -2046,7 +1771,7 @@ test("authenticates only active users without revealing account state", async ()
     { email: "inactive@example.com", password: "password" },
   ];
 
-  /* eslint-disable no-await-in-loop -- Module mocks are shared within this test file. */
+  /* eslint-disable no-await-in-loop -- Sequential, so a failure names the case that broke. */
   for (const attempt of attempts) {
     const dependencies = createDependencies();
     let sessionCalls = 0;
@@ -2070,13 +1795,7 @@ test("authenticates only active users without revealing account state", async ()
     };
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request("http://localhost/api/login", {
-        body: JSON.stringify(attempt),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    const response = await post(app, "/api/login", attempt);
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Wrong login data" });
@@ -2093,13 +1812,10 @@ test("authenticates only active users without revealing account state", async ()
   dependencies.password.verify = async (value, hash) =>
     hash === account.password && value === "password";
   const app = await appFor(dependencies);
-  const response = await app.handle(
-    new Request("http://localhost/api/login", {
-      body: JSON.stringify({ email: account.email, password: "password" }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/login", {
+    email: account.email,
+    password: "password",
+  });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ sid: "test-session" });
@@ -2130,15 +1846,13 @@ test("login stores the request's user agent on the created session", async () =>
   };
   const app = await appFor(dependencies);
   const login = (userAgent?: string) =>
-    app.handle(
-      new Request("http://localhost/api/login", {
-        body: JSON.stringify({ email: account.email, password: "password" }),
-        headers: {
-          "content-type": "application/json",
-          ...(userAgent === undefined ? {} : { "user-agent": userAgent }),
-        },
-        method: "POST",
-      }),
+    post(
+      app,
+      "/api/login",
+      { email: account.email, password: "password" },
+      {
+        headers: userAgent === undefined ? {} : { "user-agent": userAgent },
+      },
     );
 
   expect((await login("Mozilla/5.0 FeedFathom Test")).status).toBe(200);
@@ -2164,7 +1878,7 @@ test("login refuses when the verified password was replaced before issuance", as
     hash === account.password && value === "password";
   dependencies.usersDataService.createSession = async () => undefined;
   const throttled: string[] = [];
-  dependencies.authThrottle = {
+  dependencies.authThrottle = strictFake<AuthThrottle>({
     async blocked() {
       return false;
     },
@@ -2174,18 +1888,14 @@ test("login refuses when the verified password was replaced before issuance", as
     async recordFailure() {
       throttled.push("failure");
     },
-  };
+  });
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/login", {
-      body: JSON.stringify({ email: account.email, password: "password" }),
-      headers: {
-        "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.9",
-      },
-      method: "POST",
-    }),
+  const response = await post(
+    app,
+    "/api/login",
+    { email: account.email, password: "password" },
+    { headers: { "x-forwarded-for": "203.0.113.9" } },
   );
 
   expect(response.status).toBe(401);
@@ -2208,15 +1918,11 @@ test("stops guessing at one account from one address", async () => {
     hash === target.password && value === "password";
   const app = await appFor(dependencies);
   const attempt = (password: string, address: string) =>
-    app.handle(
-      new Request("http://localhost/api/login", {
-        body: JSON.stringify({ email: target.email, password }),
-        headers: {
-          "content-type": "application/json",
-          "x-forwarded-for": address,
-        },
-        method: "POST",
-      }),
+    post(
+      app,
+      "/api/login",
+      { email: target.email, password },
+      { headers: { "x-forwarded-for": address } },
     );
 
   for (let guess = 0; guess < 10; guess++) {
@@ -2257,24 +1963,15 @@ test("marks articles read and recomputes the badge from the store", async () => 
   };
   const app = await appFor(dependencies);
   const patch = (body: unknown) =>
-    app.handle(
-      new Request("http://localhost/api/articles", {
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json", cookie: "sid=test" },
-        method: "PATCH",
-      }),
-    );
+    send(app, "PATCH", "/api/articles", body, { auth: true });
 
   const read = await patch({ articleIdList: [11, 12], read: true });
   const unread = await patch({ articleIdList: [11], read: false });
   const malformed = await patch({ articleIdList: [], read: true });
-  const anonymous = await app.handle(
-    new Request("http://localhost/api/articles", {
-      body: JSON.stringify({ articleIdList: [11], read: true }),
-      headers: { "content-type": "application/json" },
-      method: "PATCH",
-    }),
-  );
+  const anonymous = await send(app, "PATCH", "/api/articles", {
+    articleIdList: [11],
+    read: true,
+  });
 
   expect(read.status).toBe(200);
   expect(await read.json()).toEqual([11, 12]);
@@ -2308,13 +2005,7 @@ test("passes the article list filter through to the query", async () => {
   };
   const app = await appFor(dependencies);
   const list = (body: unknown) =>
-    app.handle(
-      new Request("http://localhost/api/articles", {
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json", cookie: "sid=test" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/articles", body, { auth: true });
 
   await list({ sources: [3] });
   await list({ filter: "read", sources: [3] });
@@ -2347,13 +2038,7 @@ test("lists article revisions only when asked", async () => {
   ];
   const app = await appFor(dependencies);
   const list = async (body: unknown) => {
-    const response = await app.handle(
-      new Request("http://localhost/api/articles", {
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json", cookie: "sid=test" },
-        method: "POST",
-      }),
-    );
+    const response = await post(app, "/api/articles", body, { auth: true });
     const rows: { revision?: string }[] = await response.json();
     return rows.map((row) => row.revision);
   };
@@ -2380,13 +2065,7 @@ test("searches every subscription rather than the selected sources", async () =>
   };
   const app = await appFor(dependencies);
   const list = (body: unknown) =>
-    app.handle(
-      new Request("http://localhost/api/articles", {
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json", cookie: "sid=test" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/articles", body, { auth: true });
 
   const searched = await list({ query: "  service mesh ", sources: [] });
   const scoped = await list({ query: "mesh", sources: [3] });
@@ -2425,16 +2104,7 @@ test("snoozes and unsnoozes one subscription without touching article state", as
   };
   const app = await appFor(dependencies);
   const snooze = (body: unknown, authed = true) =>
-    app.handle(
-      new Request("http://localhost/api/source/snooze", {
-        body: JSON.stringify(body),
-        headers: {
-          "content-type": "application/json",
-          ...(authed ? { cookie: "sid=test" } : {}),
-        },
-        method: "PATCH",
-      }),
-    );
+    send(app, "PATCH", "/api/source/snooze", body, { auth: authed });
 
   const snoozeWeek = await snooze({
     pausedUntil: "2026-09-16T12:00:00.000Z",
@@ -2474,12 +2144,8 @@ test("treats inactive sessions as unauthenticated everywhere", async () => {
   const app = await appFor(dependencies);
   const headers = { cookie: "sid=inactive" };
 
-  const session = await app.handle(
-    new Request("http://localhost/api/session", { headers }),
-  );
-  const reader = await app.handle(
-    new Request("http://localhost/api/tree", { headers }),
-  );
+  const session = await get(app, "/api/session", { headers });
+  const reader = await get(app, "/api/tree", { headers });
 
   expect(session.status).toBe(200);
   expect(await session.json()).toEqual({ user: null });
@@ -2496,18 +2162,12 @@ test("rejects mismatched registration passwords before the handler", async () =>
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "reader@example.com",
-        password: "password",
-        passwordConfirm: "different",
-        username: "Reader",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "reader@example.com",
+    password: "password",
+    passwordConfirm: "different",
+    username: "Reader",
+  });
 
   expect(response.status).toBe(422);
   expect(handlerCalls).toBe(0);
@@ -2515,35 +2175,26 @@ test("rejects mismatched registration passwords before the handler", async () =>
 
 test("rejects mismatched password changes before account checks", async () => {
   const dependencies = createDependencies();
-  let sessionLookups = 0;
   let accountChecks = 0;
-  dependencies.usersDataService.getUserBySid = async () => {
-    sessionLookups++;
-    return sessionUser;
-  };
+  authenticated(dependencies);
   dependencies.usersDataService.findUser = async () => {
     accountChecks++;
     return account;
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/options/password", {
-      body: JSON.stringify({
-        oldPassword: "old",
-        password1: "new-password",
-        password2: "different",
-      }),
-      headers: {
-        "content-type": "application/json",
-        cookie: "sid=test",
-      },
-      method: "POST",
-    }),
+  const response = await post(
+    app,
+    "/api/options/password",
+    {
+      oldPassword: "old",
+      password1: "new-password",
+      password2: "different",
+    },
+    { auth: true },
   );
 
   expect(response.status).toBe(422);
-  expect(sessionLookups).toBe(0);
   expect(accountChecks).toBe(0);
 });
 
@@ -2557,30 +2208,22 @@ test("refuses a password change whose verified password was replaced", async () 
   dependencies.password.verify = async (value, hash) =>
     hash === account.password && value === "old-password";
   dependencies.password.hash = async () => "replacement-hash";
-  const updates: [number, string, string][] = [];
-  dependencies.usersDataService.updatePassword = async (
-    userId,
-    currentHash,
-    passwordHash,
-  ) => {
-    updates.push([userId, currentHash, passwordHash]);
+  const updates: Parameters<UsersDataService["updatePassword"]>[] = [];
+  dependencies.usersDataService.updatePassword = async (...args) => {
+    updates.push(args);
     return false;
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/options/password", {
-      body: JSON.stringify({
-        oldPassword: "old-password",
-        password1: "new-password",
-        password2: "new-password",
-      }),
-      headers: {
-        "content-type": "application/json",
-        cookie: "sid=test",
-      },
-      method: "POST",
-    }),
+  const response = await post(
+    app,
+    "/api/options/password",
+    {
+      oldPassword: "old-password",
+      password1: "new-password",
+      password2: "new-password",
+    },
+    { auth: true },
   );
 
   expect(updates).toEqual([[account.id, account.password, "replacement-hash"]]);
@@ -2604,27 +2247,26 @@ test("validates admin sort and URL policies before service calls", async () => {
   };
   dependencies.sourcesDataService.updateSourceUrl = async () => {
     updates++;
+    return "updated";
   };
   const app = await appFor(dependencies);
   const cookie = { cookie: "sid=admin" };
 
-  const validSort = await app.handle(
-    new Request(
-      "http://localhost/api/admin?sortBy=subscriberCount&order=desc",
-      { headers: cookie },
-    ),
+  const validSort = await get(
+    app,
+    "/api/admin?sortBy=subscriberCount&order=desc",
+    { headers: cookie },
   );
-  const invalidSort = await app.handle(
-    new Request("http://localhost/api/admin?sortBy=id;drop&order=sideways", {
-      headers: cookie,
-    }),
+  const invalidSort = await get(
+    app,
+    "/api/admin?sortBy=id;drop&order=sideways",
+    { headers: cookie },
   );
-  const invalidUpdate = await app.handle(
-    new Request("http://localhost/api/admin", {
-      body: JSON.stringify({ newUrl: "javascript:x", oldUrl: "not a url" }),
-      headers: { ...cookie, "content-type": "application/json" },
-      method: "POST",
-    }),
+  const invalidUpdate = await post(
+    app,
+    "/api/admin",
+    { newUrl: "javascript:x", oldUrl: "not a url" },
+    { headers: cookie },
   );
 
   expect(validSort.status).toBe(200);
@@ -2663,21 +2305,19 @@ test("fails closed when mail ingestion or relay authentication is unavailable", 
       handlerCalls++;
     };
     const app = await appFor(dependencies);
-    const headers = new Headers({ "content-type": "application/json" });
-    if (testCase.requestSecret) {
-      headers.set(mailRelaySecretHeader, testCase.requestSecret);
-    }
-
-    const response = await app.handle(
-      new Request("http://localhost/api/mail", {
-        body: JSON.stringify({
-          from: "sender@example.com",
-          raw: relayed("Subject: Test\r\n\r\nBody"),
-          to: "reader@example.com",
-        }),
-        headers,
-        method: "POST",
-      }),
+    const response = await post(
+      app,
+      "/api/mail",
+      {
+        from: "sender@example.com",
+        raw: relayed("Subject: Test\r\n\r\nBody"),
+        to: "reader@example.com",
+      },
+      {
+        headers: testCase.requestSecret
+          ? { [mailRelaySecretHeader]: testCase.requestSecret }
+          : {},
+      },
     );
 
     expect(response.status).toBe(testCase.expectedStatus);
@@ -2700,20 +2340,11 @@ test("authenticates incoming mail and passes the normalized trusted envelope", a
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/mail", {
-      body: JSON.stringify({
-        from: "  sender@example.com  ",
-        raw: relayed("Subject: Test\r\n\r\nBody"),
-        to: " Reader@Example.com ",
-      }),
-      headers: {
-        "content-type": "application/json",
-        [mailRelaySecretHeader]: "relay-secret",
-      },
-      method: "POST",
-    }),
-  );
+  const response = await relayMail(app, {
+    from: "  sender@example.com  ",
+    raw: relayed("Subject: Test\r\n\r\nBody"),
+    to: " Reader@Example.com ",
+  });
 
   expect(response.status).toBe(200);
   expect(processed).toEqual([
@@ -2738,20 +2369,11 @@ test("enforces the raw MIME byte limit before EmailHandler", async () => {
   };
   const app = await appFor(dependencies);
   const mail = (raw: string) =>
-    app.handle(
-      new Request("http://localhost/api/mail", {
-        body: JSON.stringify({
-          from: "sender@example.com",
-          raw,
-          to: "reader@example.com",
-        }),
-        headers: {
-          "content-type": "application/json",
-          [mailRelaySecretHeader]: "relay-secret",
-        },
-        method: "POST",
-      }),
-    );
+    relayMail(app, {
+      from: "sender@example.com",
+      raw,
+      to: "reader@example.com",
+    });
 
   const exact = await mail(relayed("a".repeat(maxRawEmailBytes)));
   const over = await mail(relayed("a".repeat(maxRawEmailBytes + 1)));
@@ -2781,20 +2403,11 @@ test("delivers raw MIME bytes that are not valid UTF-8", async () => {
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/mail", {
-      body: JSON.stringify({
-        from: "sender@example.com",
-        raw: latin1.toString("base64"),
-        to: "reader@example.com",
-      }),
-      headers: {
-        "content-type": "application/json",
-        [mailRelaySecretHeader]: "relay-secret",
-      },
-      method: "POST",
-    }),
-  );
+  const response = await relayMail(app, {
+    from: "sender@example.com",
+    raw: latin1.toString("base64"),
+    to: "reader@example.com",
+  });
 
   expect(response.status).toBe(200);
   expect(received).toHaveLength(1);
@@ -2811,19 +2424,10 @@ test("rejects malformed mail envelopes before EmailHandler", async () => {
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/mail", {
-      body: JSON.stringify({
-        from: "sender@example.com",
-        raw: "Subject: Test\r\n\r\nBody",
-      }),
-      headers: {
-        "content-type": "application/json",
-        [mailRelaySecretHeader]: "relay-secret",
-      },
-      method: "POST",
-    }),
-  );
+  const response = await relayMail(app, {
+    from: "sender@example.com",
+    raw: "Subject: Test\r\n\r\nBody",
+  });
 
   expect(response.status).toBe(422);
   expect(handlerCalls).toBe(0);
@@ -2832,8 +2436,9 @@ test("rejects malformed mail envelopes before EmailHandler", async () => {
 test("validates OPML files and checks plain-text content before parsing", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const trees: Parameters<ServerFakes["opmlImportService"]["insertTree"]>[1][] =
-    [];
+  const trees: Parameters<
+    ServerServices["opmlImportService"]["insertTree"]
+  >[1][] = [];
   dependencies.opmlImportService.insertTree = async (_userId, tree) => {
     trees.push(tree);
   };
@@ -2904,14 +2509,8 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   ];
   const app = await appFor(dependencies);
 
-  const anonymous = await app.handle(
-    new Request("http://localhost/api/options/opml"),
-  );
-  const response = await app.handle(
-    new Request("http://localhost/api/options/opml", {
-      headers: { cookie: "sid=test" },
-    }),
-  );
+  const anonymous = await get(app, "/api/options/opml");
+  const response = await get(app, "/api/options/opml", { auth: true });
   const body = await response.text();
 
   expect(anonymous.status).toBe(401);
@@ -2988,13 +2587,7 @@ test("exports the same bytes whatever order the services return rows in", async 
     dependencies.userSourcesDataService.getUserSources = async () =>
       reversed ? sources.toReversed() : sources;
     const app = await appFor(dependencies);
-    return await (
-      await app.handle(
-        new Request("http://localhost/api/options/opml", {
-          headers: { cookie: "sid=test" },
-        }),
-      )
-    ).text();
+    return await (await get(app, "/api/options/opml", { auth: true })).text();
   };
 
   const first = await exportWith(false);
@@ -3008,7 +2601,7 @@ test("exports the same bytes whatever order the services return rows in", async 
 test("creates active users without registration integrations", async () => {
   const dependencies = createDependencies();
   let created:
-    | Parameters<ServerFakes["usersDataService"]["createUser"]>[0]
+    | Parameters<ServerServices["usersDataService"]["createUser"]>[0]
     | undefined;
   let fetchCalls = 0;
   let mailCalls = 0;
@@ -3020,25 +2613,19 @@ test("creates active users without registration integrations", async () => {
   dependencies.usersDataService.findUser = async () => undefined;
   dependencies.usersDataService.createUser = async (payload) => {
     created = payload;
-    return undefined;
+    return "created";
   };
   dependencies.mailSender.sendActivationEmail = async () => {
     mailCalls++;
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "active@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Active user",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "active@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Active user",
+  });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ success: true });
@@ -3074,6 +2661,7 @@ test.each([
     });
     dependencies.usersDataService.createUser = async () => {
       calls.push("create");
+      return "created";
     };
     dependencies.usersDataService.updatePassword = async () => {
       calls.push("update-password");
@@ -3087,18 +2675,12 @@ test.each([
     };
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: account.email,
-          password: "replacement-password",
-          passwordConfirm: "replacement-password",
-          username: "Replacement name",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    const response = await post(app, "/api/register", {
+      email: account.email,
+      password: "replacement-password",
+      passwordConfirm: "replacement-password",
+      username: "Replacement name",
+    });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
@@ -3121,26 +2703,22 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   dependencies.password.hash = async () => "hashed-password";
   dependencies.usersDataService.getUserCount = async () => 1;
   dependencies.usersDataService.findUser = async () => undefined;
-  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => "created";
   dependencies.mailSender.sendActivationEmail = async () => {
     mailCalls++;
   };
   const app = await appFor(dependencies);
   const register = (email: string, address: string) =>
-    app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email,
-          password: "password",
-          passwordConfirm: "password",
-          username: "Stranger",
-        }),
-        headers: {
-          "content-type": "application/json",
-          "x-forwarded-for": address,
-        },
-        method: "POST",
-      }),
+    post(
+      app,
+      "/api/register",
+      {
+        email,
+        password: "password",
+        passwordConfirm: "password",
+        username: "Stranger",
+      },
+      { headers: { "x-forwarded-for": address } },
     );
 
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -3171,21 +2749,16 @@ test("answers a disposable address with generic success and no account", async (
   dependencies.usersDataService.findUser = async () => undefined;
   dependencies.usersDataService.createUser = async () => {
     created++;
+    return "created";
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: " reader@mailinator.com ",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Stranger",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: " reader@mailinator.com ",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Stranger",
+  });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ success: true });
@@ -3204,7 +2777,7 @@ test("never throttles the first operator of an empty instance", async () => {
   dependencies.password.hash = async () => "hashed-password";
   dependencies.usersDataService.getUserCount = async () => 0;
   dependencies.usersDataService.findUser = async () => undefined;
-  dependencies.usersDataService.createUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => "created";
   dependencies.mailSender.sendActivationEmail = async () => {
     mailCalls++;
   };
@@ -3212,18 +2785,12 @@ test("never throttles the first operator of an empty instance", async () => {
 
   for (let attempt = 0; attempt < 12; attempt++) {
     // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: "operator@example.com",
-          password: "password",
-          passwordConfirm: "password",
-          username: "Operator",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    await post(app, "/api/register", {
+      email: "operator@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Operator",
+    });
   }
   expect(mailCalls).toBe(12);
 });
@@ -3253,7 +2820,7 @@ test("rejects missing or malformed Turnstile responses before database mutation"
   };
   dependencies.usersDataService.createUser = async () => {
     databaseCalls++;
-    return undefined;
+    return "created";
   };
   dependencies.usersDataService.updatePassword = async () => {
     databaseCalls++;
@@ -3264,19 +2831,13 @@ test("rejects missing or malformed Turnstile responses before database mutation"
   };
   const app = await appFor(dependencies);
   const register = (token?: string) =>
-    app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: "protected@example.com",
-          password: "password",
-          passwordConfirm: "password",
-          username: "Protected user",
-          ...(token ? { "cf-turnstile-response": token } : {}),
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/register", {
+      email: "protected@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Protected user",
+      ...(token ? { "cf-turnstile-response": token } : {}),
+    });
 
   const missing = await register();
   const failed = await register("invalid-token");
@@ -3303,14 +2864,14 @@ test("creates inactive users and sends one activation email with Mailjet", async
   dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
   dependencies.password.hash = async () => "hashed-password";
   let created:
-    | Parameters<ServerFakes["usersDataService"]["createUser"]>[0]
+    | Parameters<ServerServices["usersDataService"]["createUser"]>[0]
     | undefined;
   const sent: [string, string][] = [];
   const events: string[] = [];
   dependencies.usersDataService.createUser = async (payload) => {
     events.push("create");
     created = payload;
-    return undefined;
+    return "created";
   };
   dependencies.mailSender.sendActivationEmail = async (email, token) => {
     events.push("send");
@@ -3319,18 +2880,12 @@ test("creates inactive users and sends one activation email with Mailjet", async
   const app = await appFor(dependencies);
 
   const startedAt = Date.now();
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "inactive@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Inactive user",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "inactive@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Inactive user",
+  });
   const finishedAt = Date.now();
 
   expect(response.status).toBe(200);
@@ -3375,18 +2930,12 @@ test("withdraws the stored activation token when delivery fails", async () => {
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "inactive@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Inactive user",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "inactive@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Inactive user",
+  });
 
   expect(response.status).toBe(500);
   expect(events).toEqual(["create", "send", "withdraw-stored"]);
@@ -3395,9 +2944,9 @@ test("withdraws the stored activation token when delivery fails", async () => {
 // A same-address registration that lost the race to the insert gets the
 // answer an existing account gets, and a failed insert mails nothing: every
 // link sent points at a committed row (#848).
-const lostRace: ServerFakes["usersDataService"]["createUser"] = async () =>
+const lostRace: ServerServices["usersDataService"]["createUser"] = async () =>
   "exists";
-const failedInsert: ServerFakes["usersDataService"]["createUser"] =
+const failedInsert: ServerServices["usersDataService"]["createUser"] =
   async () => {
     throw new Error("insert failed");
   };
@@ -3418,18 +2967,12 @@ test.each([
     };
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: "racer@example.com",
-          password: "password",
-          passwordConfirm: "password",
-          username: "Racer",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    const response = await post(app, "/api/register", {
+      email: "racer@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Racer",
+    });
 
     expect(response.status).toBe(status);
     if (status === 200)
@@ -3461,18 +3004,12 @@ test.each([false, true])(
     };
     const app = await appFor(dependencies);
 
-    const response = await app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: "second@example.com",
-          password: "password",
-          passwordConfirm: "password",
-          username: "Second",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    const response = await post(app, "/api/register", {
+      email: "second@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Second",
+    });
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
@@ -3507,13 +3044,7 @@ test("resets a password without admitting whether the account exists", async () 
   };
   const app = await appFor(dependencies);
   const request = (email: string) =>
-    app.handle(
-      new Request("http://localhost/api/password-reset", {
-        body: JSON.stringify({ email }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/password-reset", { email });
 
   const known = await request(target.email);
   const unknown = await request("nobody@example.com");
@@ -3577,13 +3108,7 @@ test("spends a reset token once and refuses an expired one", async () => {
   dependencies.password.hash = async (value) => `hashed:${value}`;
   const app = await appFor(dependencies);
   const confirm = (token: string, password1: string, password2 = password1) =>
-    app.handle(
-      new Request("http://localhost/api/password-reset/confirm", {
-        body: JSON.stringify({ password1, password2, token }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/password-reset/confirm", { password1, password2, token });
 
   const good = await confirm("good", "a-new-password");
   const expired = await confirm("stale", "a-new-password");
@@ -3617,13 +3142,11 @@ test("a confirmation that loses the race for its link is refused", async () => {
   dependencies.password.hash = async (value) => `hashed:${value}`;
   const app = await appFor(dependencies);
 
-  const rejected = await app.handle(
-    new Request("http://localhost/api/password-reset/confirm", {
-      body: JSON.stringify({ password1: "one", password2: "one", token: "t" }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const rejected = await post(app, "/api/password-reset/confirm", {
+    password1: "one",
+    password2: "one",
+    token: "t",
+  });
   expect(rejected.status).toBe(400);
   expect(await rejected.json()).toEqual({
     error: "This reset link is no longer valid.",
@@ -3639,25 +3162,15 @@ test("has no reset flow at all when outgoing mail is not configured", async () =
   };
   const app = await appFor(dependencies);
 
-  const info = await app.handle(new Request("http://localhost/api/register"));
-  const requested = await app.handle(
-    new Request("http://localhost/api/password-reset", {
-      body: JSON.stringify({ email: account.email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
-  const confirmed = await app.handle(
-    new Request("http://localhost/api/password-reset/confirm", {
-      body: JSON.stringify({
-        password1: "x",
-        password2: "x",
-        token: "anything",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const info = await get(app, "/api/register");
+  const requested = await post(app, "/api/password-reset", {
+    email: account.email,
+  });
+  const confirmed = await post(app, "/api/password-reset/confirm", {
+    password1: "x",
+    password2: "x",
+    token: "anything",
+  });
 
   // The login view hides the link on this flag, and the request route still
   // answers exactly as it does for an account that does not exist.
@@ -3689,15 +3202,9 @@ test("activates valid tokens but rejects expired tokens", async () => {
   };
   const app = await appFor(dependencies);
 
-  const valid = await app.handle(
-    new Request("http://localhost/api/activate/valid", { method: "POST" }),
-  );
-  const expired = await app.handle(
-    new Request("http://localhost/api/activate/expired", { method: "POST" }),
-  );
-  const blank = await app.handle(
-    new Request("http://localhost/api/activate/%20%20", { method: "POST" }),
-  );
+  const valid = await post(app, "/api/activate/valid", undefined);
+  const expired = await post(app, "/api/activate/expired", undefined);
+  const blank = await post(app, "/api/activate/%20%20", undefined);
 
   expect(valid.status).toBe(200);
   expect(await valid.json()).toEqual({ success: true });
@@ -3739,18 +3246,12 @@ test("registering an address with an expired link sends a fresh one", async () =
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "pending@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Pending user",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "pending@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Pending user",
+  });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ success: true });
@@ -3798,18 +3299,12 @@ test("a failed replacement activation mail is retried on the next attempt", asyn
   };
   const app = await appFor(dependencies);
   const register = () =>
-    app.handle(
-      new Request("http://localhost/api/register", {
-        body: JSON.stringify({
-          email: "pending@example.com",
-          password: "password",
-          passwordConfirm: "password",
-          username: "Pending user",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      }),
-    );
+    post(app, "/api/register", {
+      email: "pending@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Pending user",
+    });
 
   expect((await register()).status).toBe(500);
   expect(row.token).toBeNull();
@@ -3852,18 +3347,12 @@ test("registering an active address sends the account-exists reset notice", asyn
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/register", {
-      body: JSON.stringify({
-        email: "active@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Active user",
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    }),
-  );
+  const response = await post(app, "/api/register", {
+    email: "active@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Active user",
+  });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ success: true });
@@ -3902,22 +3391,7 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
   const call = (
     [method, path, body]: (typeof adminOnlyRequests)[number],
     sid: string,
-  ) =>
-    app.handle(
-      new Request(`http://localhost${path}`, {
-        ...(body === undefined
-          ? {}
-          : {
-              body: JSON.stringify(body),
-              headers: { "content-type": "application/json" },
-            }),
-        headers: {
-          cookie: `sid=${sid}`,
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        method,
-      }),
-    );
+  ) => send(app, method, path, body, { headers: { cookie: `sid=${sid}` } });
 
   const reader = await Promise.all(
     adminOnlyRequests.map((request) => call(request, "reader")),
@@ -3944,11 +3418,9 @@ test("leaves the per-user options routes open to any signed-in user", async () =
   });
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request("http://localhost/api/options", {
-      headers: { cookie: "sid=reader" },
-    }),
-  );
+  const response = await get(app, "/api/options", {
+    headers: { cookie: "sid=reader" },
+  });
 
   expect(response.status).toBe(200);
 });
@@ -3975,16 +3447,14 @@ test("WebSub callback verification requires no session and echoes the challenge"
   };
   const app = await appFor(dependencies);
 
-  const response = await app.handle(
-    new Request(
-      "http://localhost/api/websub/callback/callback-token?" +
-        new URLSearchParams({
-          "hub.challenge": "abc123",
-          "hub.lease_seconds": "600",
-          "hub.mode": "subscribe",
-          "hub.topic": websubSource.websubTopicUrl,
-        }),
-    ),
+  const response = await get(
+    app,
+    `/api/websub/callback/callback-token?${new URLSearchParams({
+      "hub.challenge": "abc123",
+      "hub.lease_seconds": "600",
+      "hub.mode": "subscribe",
+      "hub.topic": websubSource.websubTopicUrl,
+    })}`,
   );
 
   expect(response.status).toBe(200);
@@ -3998,29 +3468,23 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.websubStateService.markWebSubVerified = async () =>
-    unexpected("websubStateService.markWebSubVerified");
   const app = await appFor(dependencies);
 
-  const unknownToken = await app.handle(
-    new Request(
-      "http://localhost/api/websub/callback/nope?" +
-        new URLSearchParams({
-          "hub.challenge": "abc123",
-          "hub.mode": "subscribe",
-          "hub.topic": websubSource.websubTopicUrl,
-        }),
-    ),
+  const unknownToken = await get(
+    app,
+    `/api/websub/callback/nope?${new URLSearchParams({
+      "hub.challenge": "abc123",
+      "hub.mode": "subscribe",
+      "hub.topic": websubSource.websubTopicUrl,
+    })}`,
   );
-  const mismatchedTopic = await app.handle(
-    new Request(
-      "http://localhost/api/websub/callback/callback-token?" +
-        new URLSearchParams({
-          "hub.challenge": "abc123",
-          "hub.mode": "subscribe",
-          "hub.topic": "https://someone-else.example/feed",
-        }),
-    ),
+  const mismatchedTopic = await get(
+    app,
+    `/api/websub/callback/callback-token?${new URLSearchParams({
+      "hub.challenge": "abc123",
+      "hub.mode": "subscribe",
+      "hub.topic": "https://someone-else.example/feed",
+    })}`,
   );
 
   expect(unknownToken.status).toBe(404);
@@ -4033,8 +3497,9 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
 // cached copy holding the document the push replaced.
 test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
-    [];
+  const enqueued: Parameters<
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
+  >[] = [];
   const seeded: Array<{
     body: string;
     contentType: null | string;
@@ -4095,8 +3560,9 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
 // to seed, so the parse has to go and get it.
 test("WebSub push with no body falls back to a fetch", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
-    [];
+  const enqueued: Parameters<
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
+  >[] = [];
   let seedCalls = 0;
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
@@ -4110,11 +3576,11 @@ test("WebSub push with no body falls back to a fetch", async () => {
   const app = await appFor(dependencies);
   const validSignature = `sha256=${createHmac("sha256", websubSource.websubSecret).update("").digest("hex")}`;
 
-  const response = await app.handle(
-    new Request("http://localhost/api/websub/callback/callback-token", {
-      headers: { "x-hub-signature-256": validSignature },
-      method: "POST",
-    }),
+  const response = await post(
+    app,
+    "/api/websub/callback/callback-token",
+    undefined,
+    { headers: { "x-hub-signature-256": validSignature } },
   );
 
   expect(response.status).toBe(200);
@@ -4127,8 +3593,9 @@ test("WebSub push with no body falls back to a fetch", async () => {
 // Losing the saved request is acceptable; losing the notification is not.
 test("WebSub push still re-parses when the cache seed fails", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
-    [];
+  const enqueued: Parameters<
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
+  >[] = [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
@@ -4158,8 +3625,9 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
 
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<ServerFakes["sourceEnqueuer"]["enqueueSource"]>[] =
-    [];
+  const enqueued: Parameters<
+    ServerServices["sourceEnqueuer"]["enqueueSource"]
+  >[] = [];
   const seeded: unknown[] = [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
@@ -4209,11 +3677,7 @@ test("logs a slow request with its route pattern, never the raw query string", a
   const log = spyOn(console, "log").mockImplementation(() => {});
 
   try {
-    const response = await app.handle(
-      new Request("http://localhost/api/favicon/7?v=abc123", {
-        headers: { cookie: "sid=test" },
-      }),
-    );
+    const response = await get(app, "/api/favicon/7?v=abc123", { auth: true });
 
     expect(response.status).toBe(200);
     expect(log).toHaveBeenCalledTimes(1);
@@ -4235,11 +3699,7 @@ test("a request under the threshold logs nothing", async () => {
   const log = spyOn(console, "log").mockImplementation(() => {});
 
   try {
-    const response = await app.handle(
-      new Request("http://localhost/api/session", {
-        headers: { cookie: "sid=test" },
-      }),
-    );
+    const response = await get(app, "/api/session", { auth: true });
 
     expect(response.status).toBe(200);
     expect(log).not.toHaveBeenCalled();
@@ -4281,40 +3741,32 @@ test("cache headers: /assets/* is immutable, index.html is no-cache", async () =
     await Bun.write(`${tmpDir}/index.html`, "<html>test</html>");
     await Bun.write(`${tmpDir}/assets/x-abc123.js`, "console.log('test');");
 
-    const appWithSpa = await createServerApp({
+    const appWithSpa = await createServerApp(createDependencies(), {
       production: true,
       spaDirectory: tmpDir,
     });
 
     // Test /assets/* → immutable
-    const assetResponse = await appWithSpa.handle(
-      new Request("http://localhost/assets/x-abc123.js"),
-    );
+    const assetResponse = await get(appWithSpa, "/assets/x-abc123.js");
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("Cache-Control")).toBe(
       "public, max-age=31536000, immutable",
     );
 
     // Test / → no-cache
-    const indexResponse = await appWithSpa.handle(
-      new Request("http://localhost/"),
-    );
+    const indexResponse = await get(appWithSpa, "/");
     expect(indexResponse.status).toBe(200);
     expect(indexResponse.headers.get("Cache-Control")).toBe("no-cache");
 
     // Test /index.html → no-cache
-    const indexHtmlResponse = await appWithSpa.handle(
-      new Request("http://localhost/index.html"),
-    );
+    const indexHtmlResponse = await get(appWithSpa, "/index.html");
     expect(indexHtmlResponse.status).toBe(200);
     expect(indexHtmlResponse.headers.get("Cache-Control")).toBe("no-cache");
 
     // Test SPA fallback (404 with Accept: text/html returns index.html) → no-cache
-    const spaFallbackResponse = await appWithSpa.handle(
-      new Request("http://localhost/some/spa/route", {
-        headers: { accept: "text/html" },
-      }),
-    );
+    const spaFallbackResponse = await get(appWithSpa, "/some/spa/route", {
+      headers: { accept: "text/html" },
+    });
     expect(spaFallbackResponse.status).toBe(200);
     expect(spaFallbackResponse.headers.get("Cache-Control")).toBe("no-cache");
   } finally {
@@ -4342,7 +3794,7 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
     return subscriber;
   });
   let unlistened = 0;
-  dependencies.articleEventHub = {
+  dependencies.articleEventHub = strictFake<ArticleEventHub>({
     close: () => hub.close(),
     listen: (listener) => {
       const off = hub.listen(listener);
@@ -4351,16 +3803,11 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
         off();
       };
     },
-  };
+  });
   dependencies.userSourcesDataService.getUserSourceIds = async (userId) =>
     userId === sessionUser.id ? [3] : [];
   const app = await appFor(dependencies);
-  const open = async () =>
-    await app.handle(
-      new Request("http://localhost/api/events", {
-        headers: { cookie: "sid=test" },
-      }),
-    );
+  const open = async () => await get(app, "/api/events", { auth: true });
 
   const first = await open();
   const second = await open();
@@ -4395,7 +3842,7 @@ test("a client gone during the source lookup leaves no listener behind", async (
     return [3];
   };
   let listening = 0;
-  dependencies.articleEventHub = {
+  dependencies.articleEventHub = strictFake<ArticleEventHub>({
     close: () => {},
     listen: () => {
       listening++;
@@ -4403,7 +3850,7 @@ test("a client gone during the source lookup leaves no listener behind", async (
         listening--;
       };
     },
-  };
+  });
   const app = await appFor(dependencies);
   await app.handle(
     new Request("http://localhost/api/events", {
@@ -4425,11 +3872,7 @@ test("closing the hub ends open event streams", async () => {
   }));
   dependencies.articleEventHub = hub;
   const app = await appFor(dependencies);
-  const response = await app.handle(
-    new Request("http://localhost/api/events", {
-      headers: { cookie: "sid=test" },
-    }),
-  );
+  const response = await get(app, "/api/events", { auth: true });
   const reader = response.body!.getReader();
   await reader.read();
 
@@ -4437,11 +3880,7 @@ test("closing the hub ends open event streams", async () => {
   expect((await reader.read()).done).toBe(true);
 
   // A stream that registers after shutdown began ends rather than resubscribe.
-  const late = await app.handle(
-    new Request("http://localhost/api/events", {
-      headers: { cookie: "sid=test" },
-    }),
-  );
+  const late = await get(app, "/api/events", { auth: true });
   const lateReader = late.body!.getReader();
   await lateReader.read();
   expect((await lateReader.read()).done).toBe(true);

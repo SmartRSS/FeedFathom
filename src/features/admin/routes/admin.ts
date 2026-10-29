@@ -1,4 +1,4 @@
-import { sourcesDataService } from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import type { Static, StaticDecode } from "typebox";
 import type {
   adminQuery,
@@ -7,11 +7,16 @@ import type {
 } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 
-export async function getAdminHandler({
-  query,
-}: {
-  query: Static<typeof adminQuery>;
-}) {
+type AdminServices = Pick<typeof feeds, "sourcesDataService">;
+
+export async function getAdminHandler(
+  {
+    query,
+  }: {
+    query: Static<typeof adminQuery>;
+  },
+  { sourcesDataService }: AdminServices,
+) {
   return json(
     await sourcesDataService.listAllSources(
       query.sortBy ?? "createdAt",
@@ -20,11 +25,14 @@ export async function getAdminHandler({
   );
 }
 
-export async function postAdminHandler({
-  body: decoded,
-}: {
-  body: StaticDecode<typeof sourceUrlReplacementRequest>;
-}) {
+export async function postAdminHandler(
+  {
+    body: decoded,
+  }: {
+    body: StaticDecode<typeof sourceUrlReplacementRequest>;
+  },
+  { sourcesDataService }: AdminServices,
+) {
   const result = await sourcesDataService.updateSourceUrl(
     decoded.oldUrl,
     decoded.newUrl,
@@ -36,11 +44,14 @@ export async function postAdminHandler({
   return json({ success: true });
 }
 
-export async function deleteAdminHandler({
-  body,
-}: {
-  body: Static<typeof removeSourceRequest>;
-}) {
+export async function deleteAdminHandler(
+  {
+    body,
+  }: {
+    body: Static<typeof removeSourceRequest>;
+  },
+  { sourcesDataService }: AdminServices,
+) {
   await sourcesDataService.deleteSource(body.removeSourceId);
   return json(body.removeSourceId);
 }

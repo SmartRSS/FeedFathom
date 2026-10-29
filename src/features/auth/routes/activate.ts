@@ -1,9 +1,11 @@
-import { usersDataService } from "#features/auth/services.ts";
+import type * as auth from "#features/auth/services.ts";
 import { Elysia } from "elysia";
 import { activationParams } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 
-export function createActivateRoute() {
+export function createActivateRoute({
+  usersDataService,
+}: Pick<typeof auth, "usersDataService">) {
   return new Elysia().post(
     "/api/activate/:token",
     { params: activationParams },

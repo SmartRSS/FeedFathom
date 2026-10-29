@@ -1,6 +1,8 @@
-import { usersDataService } from "#features/auth/services.ts";
+import type * as auth from "#features/auth/services.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+
+type SessionServices = Pick<typeof auth, "usersDataService">;
 
 // Elysia's cookie jar types a value opaquely (logout guards it the same
 // way), so the sid extraction is narrowed here rather than at each route.
@@ -17,6 +19,7 @@ export const currentSidFromCookie = (cookie: {
 export async function getOptionsSessionsHandler(
   user: AuthedUser,
   currentSid: string,
+  { usersDataService }: SessionServices,
 ) {
   const sessions = await usersDataService.listSessions(user.id, currentSid);
   return json({ sessions });
@@ -25,6 +28,7 @@ export async function getOptionsSessionsHandler(
 export async function deleteOptionsSessionHandler(
   user: AuthedUser,
   params: Record<string, string>,
+  { usersDataService }: SessionServices,
 ) {
   const id = Number(params["id"]);
   if (!Number.isInteger(id)) return json({ error: "Unknown session." }, 400);
@@ -35,6 +39,7 @@ export async function deleteOptionsSessionHandler(
 export async function deleteOtherSessionsHandler(
   user: AuthedUser,
   currentSid: string,
+  { usersDataService }: SessionServices,
 ) {
   await usersDataService.deleteOtherSessions(user.id, currentSid);
   return json({ success: true });

@@ -1,16 +1,9 @@
-import {
-  articleImporter,
-  feedParser,
-  feedPreviewCache,
-  sourceEnqueuer,
-  sourcesDataService,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
-import { config } from "#platform/config.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { outboundFetchBudget } from "#features/auth/services.ts";
 import { json } from "#platform/http/json.ts";
 import {
   deserializeFeedPreview,
@@ -42,15 +35,36 @@ function completePreview({
   };
 }
 
-export async function postSubscribeHandler({
-  body,
-  request,
-  user,
-}: {
-  body: StaticDecode<typeof subscribeRequest>;
-  request: Request;
-  user: AuthedUser;
-}) {
+export async function postSubscribeHandler(
+  {
+    body,
+    request,
+    user,
+  }: {
+    body: StaticDecode<typeof subscribeRequest>;
+    request: Request;
+    user: AuthedUser;
+  },
+  {
+    articleImporter,
+    config,
+    feedParser,
+    feedPreviewCache,
+    outboundFetchBudget,
+    sourceEnqueuer,
+    sourcesDataService,
+    userSourcesDataService,
+  }: Pick<typeof auth, "outboundFetchBudget"> &
+    Pick<
+      typeof feeds,
+      | "articleImporter"
+      | "feedParser"
+      | "feedPreviewCache"
+      | "sourceEnqueuer"
+      | "sourcesDataService"
+      | "userSourcesDataService"
+    > & { config: AppConfig },
+) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);

@@ -1,11 +1,18 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
+import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import { getTreeHandler } from "#features/reader/routes/tree.ts";
+import type { AuthedUser } from "#features/auth/session-plugin.ts";
 
 // A source's favicon URL carries the SQL-computed content fingerprint
 // (getUserSources) as ?v= (#902), so the browser can cache the response
 // forever: the URL only changes when sources.favicon does.
-await mock.module("#features/feeds/services.ts", () => ({
-  foldersDataService: { getUserFolders: async () => [] },
-  userSourcesDataService: {
+const services = {
+  foldersDataService: strictFake<FoldersDataService>({
+    getUserFolders: async () => [],
+  }),
+  userSourcesDataService: strictFake<UserSourcesDataService>({
     getUserSources: async () => [
       {
         faviconFingerprint: "d41d8cd98f00b204e9800998ecf8427e",
@@ -30,17 +37,13 @@ await mock.module("#features/feeds/services.ts", () => ({
         url: "https://b.example/feed.xml",
       },
     ],
-  },
-}));
-
-const { getTreeHandler } = await import("#features/reader/routes/tree.ts");
+  }),
+};
 
 test("a source's favicon URL carries its fingerprint, and a source with no icon gets none", async () => {
-  const args = { user: { id: 1 } };
-  // Partial fixture: the handler destructures only `user`.
   const response = await getTreeHandler(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    args as Parameters<typeof getTreeHandler>[0],
+    { user: strictFake<AuthedUser>({ id: 1 }) },
+    services,
   );
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const body = (await response.json()) as { tree: unknown[] };

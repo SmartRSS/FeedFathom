@@ -1,5 +1,5 @@
-import { emailHandler } from "#features/mail-ingest/services.ts";
-import { config } from "#platform/config.ts";
+import type * as mailIngest from "#features/mail-ingest/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Elysia } from "elysia";
 import {
@@ -23,7 +23,11 @@ function matchesMailRelaySecret(
   return Boolean(expected && provided) && matches;
 }
 
-export function createMailRoute() {
+export type MailRouteServices = Pick<typeof mailIngest, "emailHandler"> & {
+  config: AppConfig;
+};
+
+export function createMailRoute({ config, emailHandler }: MailRouteServices) {
   return new Elysia().post(
     "/api/mail",
     { body: incomingMailRequest },

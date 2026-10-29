@@ -89,7 +89,6 @@ test("applies the baseline to an empty database, idempotently", async () => {
     expect(tables.map((table) => table.name).toSorted()).toEqual(
       [
         "articles",
-        "job_failures",
         "opml_imports",
         "sessions",
         "sources",

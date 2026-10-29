@@ -224,7 +224,7 @@ export class UsersDataService {
   }
 
   public async activateUser(userId: number) {
-    return await this.drizzleConnection
+    await this.drizzleConnection
       .update(users)
       .set({
         activationToken: null,

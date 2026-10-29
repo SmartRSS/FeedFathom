@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   HttpRateLimiter,
   rateLimitBlockUntil,
@@ -14,158 +14,98 @@ import {
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;
 
-describe("retryAtFrom", () => {
-  test("passes an absolute instant straight through", () => {
-    expect(retryAtFrom(now + 1_000, now)).toBe(now + 1_000);
-  });
-
-  test("reads a delta in seconds", () => {
-    expect(retryAtFrom("120", now)).toBe(now + 120_000);
-  });
-
-  test("reads an HTTP date", () => {
-    const when = now + 90_000;
-    expect(retryAtFrom(new Date(when).toUTCString(), now)).toBe(when);
-  });
-
-  // Falling back to "right now" would turn a 429 into a hot retry loop
-  // against a host that has just asked us to stop.
-  test("falls back to five minutes when the header is absent", () => {
-    expect(retryAtFrom(null, now)).toBe(now + fiveMinutes);
-    expect(retryAtFrom("", now)).toBe(now + fiveMinutes);
-    expect(retryAtFrom("   ", now)).toBe(now + fiveMinutes);
-  });
-
-  test("falls back to five minutes on an unparseable header", () => {
-    expect(retryAtFrom("later", now)).toBe(now + fiveMinutes);
-  });
-
-  // A Retry-After in the past is honoured as-is; it means "try again now",
-  // and the caller compares against the clock anyway.
-  test("honours a date already in the past", () => {
-    const when = now - 60_000;
-    expect(retryAtFrom(new Date(when).toUTCString(), now)).toBe(when);
-  });
+// A missing or unreadable header falls back to five minutes: "right now"
+// would turn a 429 into a hot retry loop against a host that has just asked us
+// to stop. A date in the past is honoured as-is; it means "try again now", and
+// the caller compares against the clock anyway.
+test.each<[string, number | null | string, number]>([
+  ["an absolute instant", now + 1_000, now + 1_000],
+  ["a delta in seconds", "120", now + 120_000],
+  ["an HTTP date", new Date(now + 90_000).toUTCString(), now + 90_000],
+  ["an absent header", null, now + fiveMinutes],
+  ["an empty header", "", now + fiveMinutes],
+  ["a blank header", "   ", now + fiveMinutes],
+  ["an unparseable header", "later", now + fiveMinutes],
+  ["a date already past", new Date(now - 60_000).toUTCString(), now - 60_000],
+])("retryAtFrom reads %s", (_name, header, expected) => {
+  expect(retryAtFrom(header, now)).toBe(expected);
 });
 
-const headers = (entries: Record<string, string>) => new Headers(entries);
+const epoch = (at: number) => String(at / 1_000);
 
-describe("rateLimitBlockUntil", () => {
-  test("has no opinion without both headers", () => {
-    expect(rateLimitBlockUntil(headers({}), now)).toBeUndefined();
-    expect(
-      rateLimitBlockUntil(headers({ "x-ratelimit-remaining": "0" }), now),
-    ).toBeUndefined();
-    expect(
-      rateLimitBlockUntil(headers({ "x-ratelimit-reset": "1" }), now),
-    ).toBeUndefined();
-  });
-
-  test("does not block while budget remains", () => {
-    const plenty = headers({
+// The request that would spend the last unit is the one worth holding back, so
+// a block starts at one remaining rather than at zero. RFC 9331 defines reset
+// as delta-seconds and GitHub sends an epoch; a delta of 60 read as an epoch is
+// 1970, which silently dropped the header.
+test.each<[string, Record<string, string>, number | undefined]>([
+  ["no headers", {}, undefined],
+  ["remaining without reset", { "x-ratelimit-remaining": "0" }, undefined],
+  ["reset without remaining", { "x-ratelimit-reset": "1" }, undefined],
+  [
+    "budget left",
+    {
       "x-ratelimit-remaining": "50",
-      "x-ratelimit-reset": String((now + 60_000) / 1_000),
-    });
-    expect(rateLimitBlockUntil(plenty, now)).toBeUndefined();
-  });
-
-  // The request that would spend the last unit is the one worth holding back,
-  // so this acts at one remaining rather than at zero.
-  test("blocks at one remaining, not just at zero", () => {
-    const reset = (now + 60_000) / 1_000;
-    const one = headers({
-      "x-ratelimit-remaining": "1",
-      "x-ratelimit-reset": String(reset),
-    });
-    expect(rateLimitBlockUntil(one, now)).toBe(reset * 1_000);
-
-    const none = headers({
-      "x-ratelimit-remaining": "0",
-      "x-ratelimit-reset": String(reset),
-    });
-    expect(rateLimitBlockUntil(none, now)).toBe(reset * 1_000);
-  });
-
-  test("ignores a reset that has already passed", () => {
-    const stale = headers({
-      "x-ratelimit-remaining": "0",
-      "x-ratelimit-reset": String((now - 60_000) / 1_000),
-    });
-    expect(rateLimitBlockUntil(stale, now)).toBeUndefined();
-  });
-
-  test("ignores an unparseable reset", () => {
-    const bad = headers({
-      "x-ratelimit-remaining": "0",
-      "x-ratelimit-reset": "soon",
-    });
-    expect(rateLimitBlockUntil(bad, now)).toBeUndefined();
-  });
-});
-
-describe("rateLimitBlockUntil header spellings and reset units", () => {
-  test("reads an epoch reset with un-prefixed header names", () => {
-    const reset = (now + 60_000) / 1_000;
-    expect(
-      rateLimitBlockUntil(
-        headers({
-          "ratelimit-remaining": "0",
-          "ratelimit-reset": String(reset),
-        }),
-        now,
-      ),
-    ).toBe(reset * 1_000);
-  });
-
-  test("prefers the un-prefixed name when both are present", () => {
-    const standard = (now + 60_000) / 1_000;
-    expect(
-      rateLimitBlockUntil(
-        headers({
-          "ratelimit-remaining": "0",
-          "ratelimit-reset": String(standard),
-          "x-ratelimit-remaining": "500",
-          "x-ratelimit-reset": String((now + 3_600_000) / 1_000),
-        }),
-        now,
-      ),
-    ).toBe(standard * 1_000);
-  });
-
-  // RFC 9331 defines reset as delta-seconds; GitHub sends an epoch. A delta
-  // of 60 read as an epoch is 1970, which silently dropped the header.
-  test("reads a small reset as delta-seconds", () => {
-    expect(
-      rateLimitBlockUntil(
-        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "60" }),
-        now,
-      ),
-    ).toBe(now + 60_000);
-  });
-
-  test("ignores a delta of zero and a negative reset", () => {
-    expect(
-      rateLimitBlockUntil(
-        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "0" }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      rateLimitBlockUntil(
-        headers({ "ratelimit-remaining": "0", "ratelimit-reset": "-60" }),
-        now,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("ignores an unparseable remaining count", () => {
-    expect(
-      rateLimitBlockUntil(
-        headers({ "ratelimit-remaining": "none", "ratelimit-reset": "60" }),
-        now,
-      ),
-    ).toBeUndefined();
-  });
+      "x-ratelimit-reset": epoch(now + 60_000),
+    },
+    undefined,
+  ],
+  [
+    "one remaining",
+    { "x-ratelimit-remaining": "1", "x-ratelimit-reset": epoch(now + 60_000) },
+    now + 60_000,
+  ],
+  [
+    "none remaining",
+    { "x-ratelimit-remaining": "0", "x-ratelimit-reset": epoch(now + 60_000) },
+    now + 60_000,
+  ],
+  [
+    "a reset already past",
+    { "x-ratelimit-remaining": "0", "x-ratelimit-reset": epoch(now - 60_000) },
+    undefined,
+  ],
+  [
+    "an unparseable reset",
+    { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "soon" },
+    undefined,
+  ],
+  [
+    "un-prefixed names with an epoch reset",
+    { "ratelimit-remaining": "0", "ratelimit-reset": epoch(now + 60_000) },
+    now + 60_000,
+  ],
+  [
+    "both spellings, preferring the un-prefixed one",
+    {
+      "ratelimit-remaining": "0",
+      "ratelimit-reset": epoch(now + 60_000),
+      "x-ratelimit-remaining": "500",
+      "x-ratelimit-reset": epoch(now + 3_600_000),
+    },
+    now + 60_000,
+  ],
+  [
+    "a small reset as delta-seconds",
+    { "ratelimit-remaining": "0", "ratelimit-reset": "60" },
+    now + 60_000,
+  ],
+  [
+    "a delta of zero",
+    { "ratelimit-remaining": "0", "ratelimit-reset": "0" },
+    undefined,
+  ],
+  [
+    "a negative reset",
+    { "ratelimit-remaining": "0", "ratelimit-reset": "-60" },
+    undefined,
+  ],
+  [
+    "an unparseable remaining count",
+    { "ratelimit-remaining": "none", "ratelimit-reset": "60" },
+    undefined,
+  ],
+])("rateLimitBlockUntil with %s", (_name, entries, expected) => {
+  expect(rateLimitBlockUntil(new Headers(entries), now)).toBe(expected);
 });
 
 describe("HttpRateLimiter.reserve for an interactive caller", () => {
@@ -175,7 +115,9 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
     const deadline = new RequestDeadline(20_000);
-    const started = Date.now();
+    // The requested wait, not wall-clock time: the block was seeded before
+    // the call, so elapsed time can legitimately land a millisecond short.
+    using slept = spyOn(deadline, "sleep").mockResolvedValue();
 
     try {
       await new HttpRateLimiter(redis).reserve(
@@ -187,7 +129,10 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
       deadline.dispose();
     }
 
-    expect(Date.now() - started).toBeGreaterThanOrEqual(200);
+    expect(slept).toHaveBeenCalledTimes(1);
+    const [waited] = slept.mock.calls[0] ?? [];
+    expect(waited).toBeGreaterThan(0);
+    expect(waited).toBeLessThanOrEqual(200);
   });
 
   // Past the deadline it is a real deferral: the caller cannot afford the wait.

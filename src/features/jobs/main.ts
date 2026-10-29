@@ -1,26 +1,20 @@
-import { config as appConfig } from "#platform/config.ts";
-import {
-  bullmqQueue,
-  bullmqRedis,
-  drizzleConnection,
-  httpClient as hubPoster,
-} from "#platform/runtime.ts";
-import {
-  feedParser,
-  sourceEnqueuer,
-  sourcesDataService,
-  userSourcesDataService,
-  websubStateService,
-} from "#features/feeds/services.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
-import { faviconRefresher, jobFailuresDataService } from "./services.ts";
+import type { AppConfig } from "#platform/config.ts";
+import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
+import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { DelayedError, Worker } from "bullmq";
+import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { requestHubSubscription } from "#features/feeds/websub.ts";
+import {
+  type HubPoster,
+  requestHubSubscription,
+} from "#features/feeds/websub.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
 const sourceUrl = Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]);
@@ -70,12 +64,58 @@ export type MainWorkerJob = {
   updateData(data: unknown): Promise<unknown>;
 };
 
+type MainWorkerQueue = {
+  add(name: string, data: unknown, opts?: JobsOptions): Promise<unknown>;
+  addBulk(
+    jobs: { data: unknown; name: string; opts?: JobsOptions }[],
+  ): Promise<unknown>;
+  upsertJobScheduler(
+    name: string,
+    repeat: { every: number },
+    template: { opts: JobsOptions },
+  ): Promise<unknown>;
+};
+
+type JobWorker = {
+  close(): Promise<void>;
+  on(
+    event: "failed",
+    listener: (job: Job | undefined, error: Error) => void,
+  ): unknown;
+  waitUntilReady(): Promise<unknown>;
+};
+
+export type MainWorkerServices = {
+  bullmqQueue: MainWorkerQueue;
+  // The retention prune over the worker's own database connection.
+  cleanupOrphanedData(
+    userDormantAfterDays: number,
+    articleStaleAfterDays: number,
+    userExpiryDays: number,
+  ): Promise<number[]>;
+  config: AppConfig;
+  // The BullMQ worker on the "tasks" queue, consuming with this processor.
+  createWorker(
+    processor: (job: MainWorkerJob) => Promise<void>,
+    options: { concurrency: number; lockDuration: number },
+  ): JobWorker;
+  faviconRefresher: FaviconRefresher;
+  feedParser: FeedParser;
+  hubPoster: HubPoster;
+  sourceEnqueuer: SourceEnqueuer;
+  sourcesDataService: SourcesDataService;
+  userSourcesDataService: UserSourcesDataService;
+  websubStateService: WebSubStateService;
+};
+
 export class MainWorker {
-  private worker: Worker | undefined;
+  private worker: JobWorker | undefined;
+
+  constructor(private readonly services: MainWorkerServices) {}
 
   async initialize() {
     await this.setupScheduledTasks();
-    await bullmqQueue.addBulk(await this.gatherParseSourceJobs());
+    await this.services.bullmqQueue.addBulk(await this.gatherParseSourceJobs());
     // Resolves once both of the worker's Redis connections are up, the
     // blocking one included, so the worker is fetching jobs from here on.
     await this.startWorker().waitUntilReady();
@@ -86,6 +126,7 @@ export class MainWorker {
   }
 
   private async gatherParseSourceJobs() {
+    const { sourcesDataService } = this.services;
     const sources = await sourcesDataService.getSourcesToProcess();
 
     return sources.map((source) => ({
@@ -104,6 +145,17 @@ export class MainWorker {
     // deferral from there on retries from job.data, so the intent has to be
     // written into it or the retry would parse the original request (#847).
     let retryData: unknown;
+    const {
+      bullmqQueue,
+      config: appConfig,
+      faviconRefresher,
+      feedParser,
+      hubPoster,
+      sourceEnqueuer,
+      sourcesDataService,
+      userSourcesDataService,
+      websubStateService,
+    } = this.services;
     try {
       const input = { data: job.data, name: job.name };
       if (!mainWorkerJobCheck.Check(input)) {
@@ -112,8 +164,7 @@ export class MainWorker {
 
       switch (input.name) {
         case JobName.Cleanup: {
-          const prunedSourceIds = await cleanupOrphanedData(
-            drizzleConnection,
+          const prunedSourceIds = await this.services.cleanupOrphanedData(
             appConfig.USER_DORMANT_AFTER_DAYS,
             appConfig.ARTICLE_STALE_AFTER_DAYS,
             appConfig.USER_EXPIRY_DAYS,
@@ -256,22 +307,20 @@ export class MainWorker {
         }
       }
       try {
-        // Nothing in here -- logging, building the message, recording it --
-        // may become a job failure, or an adversarial thrown value (a poisoned
-        // `message` getter, a poisoned custom-inspect symbol) puts the job into
-        // BullMQ's failure state instead of always acknowledging and keeping
-        // outcomes in Postgres.
-        console.error("Error processing job:", error);
-        const message = error instanceof Error ? error.message : String(error);
-        await jobFailuresDataService.record(job.name, message);
+        // Logged and acknowledged, never rethrown, so BullMQ never holds the
+        // job in its failure state. The outcomes something reads stay in
+        // Postgres where their owner writes them: parseSource records a
+        // source's failure, and the WebSub renewal above its own.
+        console.error(`Error processing ${job.name} job:`, error);
       } catch {
-        // Swallowed without logging: any statement in the block above can
-        // throw, so logging the failure risks the same unguarded throw.
+        // Swallowed without logging: an adversarial thrown value (a poisoned
+        // custom-inspect symbol) is what made the log call throw.
       }
     }
   };
 
   private async setupScheduledTasks() {
+    const { bullmqQueue, config: appConfig } = this.services;
     const daily = 86_400_000;
     const schedule: Array<[JobName, number]> = [
       [JobName.Cleanup, appConfig.CLEANUP_INTERVAL * 1_000],
@@ -294,12 +343,12 @@ export class MainWorker {
   }
 
   private startWorker() {
+    const { config: appConfig } = this.services;
     const workerConcurrency = appConfig.WORKER_CONCURRENCY;
     console.log(`Setting up worker with concurrency: ${workerConcurrency}`);
 
-    const worker = new Worker("tasks", this.processJob, {
+    const worker = this.services.createWorker(this.processJob, {
       concurrency: workerConcurrency,
-      connection: bullmqRedis,
       lockDuration: appConfig.LOCK_DURATION * 1_000,
     });
     worker.on("failed", (job, error) => {

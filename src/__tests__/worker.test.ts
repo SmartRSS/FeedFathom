@@ -4,9 +4,15 @@ const migrated = Promise.withResolvers<void>();
 const initializeCalled = Promise.withResolvers<void>();
 const workerConsuming = Promise.withResolvers<void>();
 
+// The service modules the entrypoint wires only store these.
+await mock.module("#platform/config.ts", () => ({ config: {} }));
 await mock.module("#platform/runtime.ts", () => ({
+  bullmqQueue: {},
+  bullmqRedis: {},
   async close() {},
   drizzleConnection: { $client: {} },
+  httpClient: {},
+  redis: {},
 }));
 await mock.module("#platform/db/connection.ts", () => ({
   waitForMigration: () => migrated.promise,

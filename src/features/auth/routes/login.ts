@@ -1,13 +1,22 @@
-import { password } from "#platform/runtime.ts";
-import { authThrottle, usersDataService } from "#features/auth/services.ts";
-import { config } from "#platform/config.ts";
+import type * as runtime from "#platform/runtime.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { Elysia } from "elysia";
 import { loginRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
-export function createLoginRoute(secureCookies: boolean) {
+export function createLoginRoute(
+  secureCookies: boolean,
+  {
+    authThrottle,
+    config,
+    password,
+    usersDataService,
+  }: Pick<typeof auth, "authThrottle" | "usersDataService"> &
+    Pick<typeof runtime, "password"> & { config: AppConfig },
+) {
   return new Elysia().post(
     "/api/login",
     { body: loginRequest },

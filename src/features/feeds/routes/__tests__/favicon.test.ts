@@ -1,15 +1,17 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
 
-let stored: string | null = null;
-await mock.module("#features/feeds/services.ts", () => ({
-  sourcesDataService: { getFavicon: async () => stored },
-}));
-const { getFaviconHandler } = await import("#features/feeds/routes/favicon.ts");
-
-const serve = (dataUrl: string) => {
-  stored = dataUrl;
-  return getFaviconHandler({ params: { id: "1" }, status: (code) => code });
-};
+const serve = (dataUrl: string) =>
+  getFaviconHandler(
+    { params: { id: "1" }, status: (code) => code },
+    {
+      sourcesDataService: strictFake<SourcesDataService>({
+        getFavicon: async () => dataUrl,
+      }),
+    },
+  );
 
 test("serves an image with a restrictive CSP and nosniff", async () => {
   const response = await serve("data:image/svg+xml;base64,PHN2Zy8+");

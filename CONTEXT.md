@@ -29,9 +29,12 @@ Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`) and
 
 `src/platform/runtime.ts` constructs the shared connections, queue and HTTP
 client once per process. Each feature's `services.ts` constructs its service
-instances from those resources. Routes and jobs import the instances they use
-directly. Importing those modules starts the runtime, so unit tests mock them
-before importing routes or jobs. Constructors marked `@__PURE__` only store
+instances from those resources. Only the entrypoints import those instances:
+`server.ts` passes them to `createServerApp` and `worker.ts` to `MainWorker`,
+and each route group and handler takes the services it declares as an
+argument. Routes and jobs import the service modules for their types alone, so
+a unit test passes `strictFake` doubles (`src/shared/__tests__/strict-fake.ts`)
+instead of mocking modules. Constructors marked `@__PURE__` only store
 their arguments; the marker lets the bundler remove unused service instances.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
@@ -58,7 +61,7 @@ feeds       → auth
 reader      → feeds, auth
 admin       → feeds, auth
 mail-ingest → feeds
-jobs        → feeds, admin
+jobs        → feeds
 ```
 
 Any edge not on that list is a lint error. The list must also stay acyclic,
@@ -80,11 +83,10 @@ up in the diff, instead of arriving as a quiet new import.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
-- **`admin`** — the admin and options routes and the job-failures data service.
-  Two route groups rather than one, because `/api/options` is per-user and
-  `/api/admin` is not: the admin group carries `createAdminPlugin`, so the
-  authorisation check is a property of the group instead of something each
-  handler has to restate.
+- **`admin`** — the admin and options routes. Two route groups rather than
+  one, because `/api/options` is per-user and `/api/admin` is not: the admin
+  group carries `createAdminPlugin`, so the authorisation check is a property
+  of the group instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.
@@ -154,9 +156,11 @@ large file and would change for several unrelated reasons.
 ## Tests
 
 `test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with
-an isolated module registry per test file. Route and worker tests replace
-shared modules with `mock.module`; running the full suite without isolation
-lets those mocks leak into other files. Cases within one file run sequentially.
+an isolated module registry per test file. Route and worker tests pass their
+services in; only `src/__tests__/worker.test.ts`, which tests the entrypoint
+itself, replaces modules with `mock.module`, and running the suite without
+isolation lets those mocks leak into other files. Cases within one file run
+sequentially.
 
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).

@@ -79,5 +79,11 @@ export {
   httpClient,
   redis,
 };
-export const fetcher = fetch;
-export const password = Bun.password;
+// Typed as the calls the routes make, so a test can stand in for them.
+export const fetcher: (
+  ...args: Parameters<typeof fetch>
+) => ReturnType<typeof fetch> = fetch;
+export const password: {
+  hash(password: string): Promise<string>;
+  verify(password: string, hash: string): Promise<boolean>;
+} = Bun.password;

@@ -83,7 +83,7 @@
           "admin": ["auth", "feeds"],
           "auth": [],
           "feeds": ["auth"],
-          "jobs": ["admin", "feeds"],
+          "jobs": ["feeds"],
           "mail-ingest": ["feeds"],
           "reader": ["auth", "feeds"]
         }
