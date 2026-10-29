@@ -9,14 +9,15 @@ export const scanVimeo = (currentUrl: URL, page: ScannerPage): FeedData[] => {
   const channelNameFromUrl = channelNameFromUrlExpression.exec(
     currentUrl.href,
   )?.[1];
-  const channelNameFromLink = page.vimeoChannelHref?.replace("/", "") ?? "";
+  const channelName = channelNameTestExpression.test(channelNameFromUrl ?? "")
+    ? channelNameFromUrl
+    : page.vimeoChannelHref?.replace("/", "");
+  if (!channelName) return [];
 
   return [
     {
       title: "Channel feed",
-      url: channelNameTestExpression.test(channelNameFromUrl ?? "")
-        ? `https://vimeo.com/${channelNameFromUrl}/videos/rss/`
-        : `https://vimeo.com/${channelNameFromLink}/videos/rss/`,
+      url: `https://vimeo.com/${channelName}/videos/rss/`,
     },
   ];
 };

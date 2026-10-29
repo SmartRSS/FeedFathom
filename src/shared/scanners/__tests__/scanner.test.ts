@@ -137,4 +137,35 @@ describe("scanHtml", () => {
       results.some((result) => result.title === "This page (h-entry)"),
     ).toBe(false);
   });
+  test("skips an unparseable link href and keeps the other feeds", () => {
+    expect(
+      scanHtml(
+        "https://publisher.example/",
+        `<html><head>
+          <link rel="alternate" type="application/rss+xml" href="http://[" title="Broken">
+          <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="Good">
+        </head><body></body></html>`,
+      ),
+    ).toEqual([{ title: "Good", url: "https://publisher.example/feed.xml" }]);
+  });
+
+  test("falls back to OpenRSS for a Vimeo page with no channel", () => {
+    expect(
+      scanHtml("https://vimeo.com/123456", "<html><body></body></html>"),
+    ).toEqual([
+      {
+        title: "Attempt to use OpenRSS",
+        url: "https://openrss.org/vimeo.com/123456",
+      },
+    ]);
+  });
+
+  test.each([
+    ["https://steemit.com/@user?x=1#c", "https://www.hiverss.com/@user/feed"],
+    ["https://hive.blog/@user?x=1#c", "https://www.hiverss.com/@user/feed"],
+  ])("builds the hiverss feed for %s from its path alone", (address, url) => {
+    expect(scanHtml(address, "<html><body></body></html>")).toEqual([
+      { title: "Channel feed", url },
+    ]);
+  });
 });
