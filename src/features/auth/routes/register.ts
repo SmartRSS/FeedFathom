@@ -1,6 +1,7 @@
 import type * as runtime from "#platform/runtime.ts";
 import type * as auth from "#features/auth/services.ts";
 import type { AppConfig } from "#platform/config.ts";
+import { mailConfigured } from "#features/auth/mail-sender.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { Type } from "typebox";
@@ -74,17 +75,13 @@ export function createRegisterRoute({
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
   );
-  const useEmailActivation = Boolean(
-    config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
-  );
+  const useEmailActivation = mailConfigured(config);
 
   return new Elysia()
     .get("/api/register", async () => {
       const count = await usersDataService.getUserCount();
       return json({
-        passwordResetEnabled: Boolean(
-          config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
-        ),
+        passwordResetEnabled: useEmailActivation,
         registrationStatus:
           count === 0
             ? "FIRST_USER"
