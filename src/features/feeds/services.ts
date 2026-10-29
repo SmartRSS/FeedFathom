@@ -49,9 +49,7 @@ export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   sourceEnqueuer,
   sourcesDataService,
 );
-export const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(
-  redis,
-);
+const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(redis);
 export const articleImporter = /* @__PURE__ */ new ArticleImporter(
   articlesDataService,
   userSourcesDataService,

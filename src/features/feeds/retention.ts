@@ -159,10 +159,7 @@ export async function cleanupOrphanedData(
   // prune and a re-inserted article stays removed. The buffer stays because
   // re-fetching content is waste, not because being wrong is destructive.
   //
-  // Email sources are excluded from the rule below; they prune separately on
-  // flat delivery age (see emailRetentionDays) because they have no feed to
-  // be absent from, and each delivery stamps last_success, which would make
-  // every earlier newsletter look dropped if read as an absence.
+  // Email sources are excluded; they prune separately below.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
