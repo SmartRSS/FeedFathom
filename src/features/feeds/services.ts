@@ -6,7 +6,7 @@ import {
   bullmqQueue,
   bullmqRedis,
 } from "#platform/runtime.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";

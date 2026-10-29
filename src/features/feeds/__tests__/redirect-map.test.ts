@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { RedirectMap } from "#features/feeds/redirect-map.ts";
 
 const prefix = "redirect_map:";
 

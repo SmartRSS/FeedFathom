@@ -9,7 +9,7 @@ import {
 } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
-import { digestToken } from "#shared/util/token-digest.ts";
+import { digestToken } from "#features/auth/token-digest.ts";
 
 const tokenLifetimeMs = 60 * 60 * 1_000;
 

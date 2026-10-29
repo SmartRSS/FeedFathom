@@ -1,5 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
-import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";

@@ -7,7 +7,7 @@ import { type HttpClient } from "#platform/http/http-client.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
-import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import {
   inCapScope,
   mentionsCapNamespace,
