@@ -1,18 +1,26 @@
-import { feedParser, feedPreviewCache } from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type * as auth from "#features/auth/services.ts";
 import type { StaticDecode } from "typebox";
 import type { previewQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { outboundFetchBudget } from "#features/auth/services.ts";
 import { json } from "#platform/http/json.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 
-export async function getPreviewHandler({
-  query: decoded,
-  user,
-}: {
-  query: StaticDecode<typeof previewQuery>;
-  user: AuthedUser;
-}) {
+export async function getPreviewHandler(
+  {
+    query: decoded,
+    user,
+  }: {
+    query: StaticDecode<typeof previewQuery>;
+    user: AuthedUser;
+  },
+  {
+    feedParser,
+    feedPreviewCache,
+    outboundFetchBudget,
+  }: Pick<typeof auth, "outboundFetchBudget"> &
+    Pick<typeof feeds, "feedParser" | "feedPreviewCache">,
+) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);

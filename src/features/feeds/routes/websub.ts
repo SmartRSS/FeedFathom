@@ -1,8 +1,5 @@
-import {
-  sourceEnqueuer,
-  websubStateService,
-} from "#features/feeds/services.ts";
-import { httpClient } from "#platform/runtime.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type { HttpClient } from "#platform/http/http-client.ts";
 import { Elysia } from "elysia";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
@@ -55,7 +52,16 @@ const readCappedPushBody = async (
   return Buffer.concat(chunks);
 };
 
-export function createWebSubRoutes() {
+export type WebSubRouteServices = Pick<
+  typeof feeds,
+  "sourceEnqueuer" | "websubStateService"
+> & { httpClient: Pick<HttpClient, "seedCache"> };
+
+export function createWebSubRoutes({
+  httpClient,
+  sourceEnqueuer,
+  websubStateService,
+}: WebSubRouteServices) {
   return new Elysia()
     .get(
       "/api/websub/callback/:token",

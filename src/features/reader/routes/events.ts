@@ -1,7 +1,8 @@
 import type { Server } from "bun";
 import { type AuthedUser, userFor } from "#features/auth/session-plugin.ts";
-import { userSourcesDataService } from "#features/feeds/services.ts";
-import { articleEventHub } from "#features/reader/services.ts";
+import type * as auth from "#features/auth/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type * as reader from "#features/reader/services.ts";
 
 // Under the 100 s Cloudflare and 60 s nginx idle cuts, so a quiet stream
 // stays open between article events.
@@ -16,17 +17,23 @@ const refreshMs = 60_000;
  * the sources this user subscribes to. A signal only -- the dashboard answers
  * it by reloading the tree it would otherwise poll for.
  */
-export async function getEventsHandler({
-  cookie,
-  request,
-  server,
-  user,
-}: {
-  cookie: { sid?: { value?: unknown } };
-  request: Request;
-  server: null | Pick<Server<unknown>, "timeout">;
-  user: AuthedUser;
-}) {
+export async function getEventsHandler(
+  {
+    cookie,
+    request,
+    server,
+    user,
+  }: {
+    cookie: { sid?: { value?: unknown } };
+    request: Request;
+    server: null | Pick<Server<unknown>, "timeout">;
+    user: AuthedUser;
+  },
+  services: Pick<typeof auth, "usersDataService"> &
+    Pick<typeof feeds, "userSourcesDataService"> &
+    Pick<typeof reader, "articleEventHub">,
+) {
+  const { articleEventHub, userSourcesDataService } = services;
   let sourceIds = new Set(
     await userSourcesDataService.getUserSourceIds(user.id),
   );
@@ -58,7 +65,7 @@ export async function getEventsHandler({
       const refresh = setInterval(() => {
         void (async () => {
           try {
-            const current = await userFor(sid);
+            const current = await userFor(sid, services);
             if (closed) return;
             if (current?.id !== user.id) {
               // The reconnect meets the session check and stops there.

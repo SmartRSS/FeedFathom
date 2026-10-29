@@ -1,22 +1,35 @@
-import { httpClient } from "#platform/runtime.ts";
-import { feedParser } from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type * as auth from "#features/auth/services.ts";
 import type { StaticDecode } from "typebox";
 import type { findQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { outboundFetchBudget } from "#features/auth/services.ts";
+import type { HttpResponse } from "#platform/http/http-client.ts";
 import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
 import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
 import { scanHtml } from "#shared/scanners/scanner.ts";
 
-export async function getFindHandler({
-  query: decoded,
-  user,
-}: {
-  query: StaticDecode<typeof findQuery>;
-  user: AuthedUser;
-}) {
+export async function getFindHandler(
+  {
+    query: decoded,
+    user,
+  }: {
+    query: StaticDecode<typeof findQuery>;
+    user: AuthedUser;
+  },
+  {
+    feedParser,
+    httpClient,
+    outboundFetchBudget,
+  }: Pick<typeof auth, "outboundFetchBudget"> &
+    Pick<typeof feeds, "feedParser"> & {
+      // The one call find makes: a page fetched as text, and where it ended up.
+      httpClient: {
+        get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
+      };
+    },
+) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);

@@ -1,10 +1,6 @@
-import { password } from "#platform/runtime.ts";
-import {
-  authThrottle,
-  mailSender,
-  usersDataService,
-} from "#features/auth/services.ts";
-import { config } from "#platform/config.ts";
+import type * as runtime from "#platform/runtime.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import {
@@ -17,7 +13,14 @@ import { digestToken } from "#shared/util/token-digest.ts";
 
 const tokenLifetimeMs = 60 * 60 * 1_000;
 
-export function createPasswordResetRoute() {
+export function createPasswordResetRoute({
+  authThrottle,
+  config,
+  mailSender,
+  password,
+  usersDataService,
+}: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
+  Pick<typeof runtime, "password"> & { config: AppConfig }) {
   // Gated on outgoing mail the same way public registration is: with no way
   // to deliver a link there is no flow, and the routes answer as they would
   // for an account that does not exist rather than admitting the difference.

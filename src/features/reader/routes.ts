@@ -38,48 +38,64 @@ import {
 } from "#features/reader/routes/source.ts";
 import { getEventsHandler } from "#features/reader/routes/events.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
+// Whatever the handlers below declare they need, so the group asks for no
+// more than its routes use.
+export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
+  Parameters<typeof getTreeHandler>[1] &
+  Parameters<typeof getEventsHandler>[1] &
+  Parameters<typeof getFaviconHandler>[1] &
+  Parameters<typeof postArticlesHandler>[1] &
+  Parameters<typeof deleteArticlesHandler>[1] &
+  Parameters<typeof getFoldersHandler>[1] &
+  Parameters<typeof deleteSourceHandler>[1] &
+  Parameters<typeof getPreviewHandler>[1] &
+  Parameters<typeof getFindHandler>[1] &
+  Parameters<typeof getArticleHandler>[1] &
+  Parameters<typeof postSubscribeHandler>[1];
 
-export const createReaderRoutes = () =>
+export const createReaderRoutes = (services: ReaderRouteServices) =>
   new Elysia()
-    .use(createAuthPlugin())
-    .get("/api/tree", (ctx) => getTreeHandler(ctx))
-    .get("/api/events", (ctx) => getEventsHandler(ctx))
-    .get("/api/favicon/:id", (ctx) => getFaviconHandler(ctx))
+    .use(createAuthPlugin(services))
+    .get("/api/tree", (ctx) => getTreeHandler(ctx, services))
+    .get("/api/events", (ctx) => getEventsHandler(ctx, services))
+    .get("/api/favicon/:id", (ctx) => getFaviconHandler(ctx, services))
     .post("/api/articles", { body: articlesRequest }, (ctx) =>
-      postArticlesHandler(ctx),
+      postArticlesHandler(ctx, services),
     )
     .delete("/api/articles", { body: removeArticlesRequest }, (ctx) =>
-      deleteArticlesHandler(ctx),
+      deleteArticlesHandler(ctx, services),
     )
     .patch("/api/articles", { body: readArticlesRequest }, (ctx) =>
-      patchArticlesHandler(ctx),
+      patchArticlesHandler(ctx, services),
     )
-    .get("/api/folders", (ctx) => getFoldersHandler(ctx))
+    .get("/api/folders", (ctx) => getFoldersHandler(ctx, services))
     .post("/api/folders", { body: createFolderRequest }, (ctx) =>
-      postFoldersHandler(ctx),
+      postFoldersHandler(ctx, services),
     )
     .delete("/api/folders", { body: removeFolderRequest }, (ctx) =>
-      deleteFoldersHandler(ctx),
+      deleteFoldersHandler(ctx, services),
     )
     .patch("/api/folders", { body: updateFolderRequest }, (ctx) =>
-      patchFoldersHandler(ctx),
+      patchFoldersHandler(ctx, services),
     )
     .delete("/api/source", { body: removeSourceRequest }, (ctx) =>
-      deleteSourceHandler(ctx),
+      deleteSourceHandler(ctx, services),
     )
     .patch("/api/source", { body: updateSourceRequest }, (ctx) =>
-      patchSourceHandler(ctx),
+      patchSourceHandler(ctx, services),
     )
     .patch("/api/source/snooze", { body: snoozeSourceRequest }, (ctx) =>
-      snoozeSourceHandler(ctx),
+      snoozeSourceHandler(ctx, services),
     )
     .get("/api/preview", { query: previewQuery }, (ctx) =>
-      getPreviewHandler(ctx),
+      getPreviewHandler(ctx, services),
     )
-    .get("/api/find", { query: findQuery }, (ctx) => getFindHandler(ctx))
+    .get("/api/find", { query: findQuery }, (ctx) =>
+      getFindHandler(ctx, services),
+    )
     .get("/api/article", { query: articleQuery }, (ctx) =>
-      getArticleHandler(ctx),
+      getArticleHandler(ctx, services),
     )
     .post("/api/subscribe", { body: subscribeRequest }, (ctx) =>
-      postSubscribeHandler(ctx),
+      postSubscribeHandler(ctx, services),
     );

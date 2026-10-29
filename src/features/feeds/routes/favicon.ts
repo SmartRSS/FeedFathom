@@ -1,12 +1,15 @@
-import { sourcesDataService } from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 
-export async function getFaviconHandler({
-  params,
-  status,
-}: {
-  params: { id: string };
-  status: (code: number) => unknown;
-}) {
+export async function getFaviconHandler(
+  {
+    params,
+    status,
+  }: {
+    params: { id: string };
+    status: (code: number) => unknown;
+  },
+  { sourcesDataService }: Pick<typeof feeds, "sourcesDataService">,
+) {
   const sourceId = Number(params.id);
   const dataUrl = Number.isInteger(sourceId)
     ? await sourcesDataService.getFavicon(sourceId)

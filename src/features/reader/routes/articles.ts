@@ -1,7 +1,4 @@
-import {
-  articlesDataService,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import type {
   articlesRequest,
@@ -12,15 +9,23 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 
-export async function postArticlesHandler({
-  body,
-  request,
-  user,
-}: {
-  body: Static<typeof articlesRequest>;
-  request: Request;
-  user: AuthedUser;
-}) {
+type ArticleServices = Pick<
+  typeof feeds,
+  "articlesDataService" | "userSourcesDataService"
+>;
+
+export async function postArticlesHandler(
+  {
+    body,
+    request,
+    user,
+  }: {
+    body: Static<typeof articlesRequest>;
+    request: Request;
+    user: AuthedUser;
+  },
+  { articlesDataService }: Pick<ArticleServices, "articlesDataService">,
+) {
   if (
     !body.sources.length &&
     body.view !== "today" &&
@@ -56,15 +61,18 @@ export async function postArticlesHandler({
 // Client-supplied, so capped; JSON.stringify escapes it onto one log line.
 const MAX_TRACE_LOG_LENGTH = 4000;
 
-export async function deleteArticlesHandler({
-  body,
-  request,
-  user,
-}: {
-  body: Static<typeof removeArticlesRequest>;
-  request: Request;
-  user: AuthedUser;
-}) {
+export async function deleteArticlesHandler(
+  {
+    body,
+    request,
+    user,
+  }: {
+    body: Static<typeof removeArticlesRequest>;
+    request: Request;
+    user: AuthedUser;
+  },
+  { articlesDataService, userSourcesDataService }: ArticleServices,
+) {
   const { articleIds, sourceIds } =
     await articlesDataService.removeUserArticles(
       body.removedArticleIdList,
@@ -92,13 +100,16 @@ export async function deleteArticlesHandler({
   return json(articleIds);
 }
 
-export async function patchArticlesHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof readArticlesRequest>;
-  user: AuthedUser;
-}) {
+export async function patchArticlesHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof readArticlesRequest>;
+    user: AuthedUser;
+  },
+  { articlesDataService, userSourcesDataService }: ArticleServices,
+) {
   const { articleIds, sourceIds } =
     await articlesDataService.setUserArticlesRead(
       body.articleIdList,

@@ -1,9 +1,12 @@
-import { usersDataService } from "#features/auth/services.ts";
+import type * as auth from "#features/auth/services.ts";
 import { Elysia } from "elysia";
 import { json } from "#platform/http/json.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
-export function createLogoutRoute(secureCookies: boolean) {
+export function createLogoutRoute(
+  secureCookies: boolean,
+  { usersDataService }: Pick<typeof auth, "usersDataService">,
+) {
   return new Elysia().post("/api/logout", async ({ cookie }) => {
     const sid = cookie["sid"]?.value;
     if (typeof sid === "string") await usersDataService.deleteSession(sid);

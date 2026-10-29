@@ -1,8 +1,4 @@
-import {
-  foldersDataService,
-  opmlImportService,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import { createHash } from "node:crypto";
 import { t } from "elysia";
 import { type Static, Type } from "typebox";
@@ -17,13 +13,16 @@ import { parseOpml } from "#features/feeds/opml-parser.ts";
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });
 
-export async function postOptionsOpmlHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof opmlRequest>;
-  user: AuthedUser;
-}) {
+export async function postOptionsOpmlHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof opmlRequest>;
+    user: AuthedUser;
+  },
+  { opmlImportService }: Pick<typeof feeds, "opmlImportService">,
+) {
   if (body.opml.size > maximumOpmlBytes)
     return json({ error: "File is too large", success: false }, 413);
 
@@ -90,7 +89,13 @@ function subscriptionTree(
   ];
 }
 
-export async function getOptionsOpmlHandler({ user }: { user: AuthedUser }) {
+export async function getOptionsOpmlHandler(
+  { user }: { user: AuthedUser },
+  {
+    foldersDataService,
+    userSourcesDataService,
+  }: Pick<typeof feeds, "foldersDataService" | "userSourcesDataService">,
+) {
   const [folders, sources] = await Promise.all([
     foldersDataService.getUserFolders(user.id),
     userSourcesDataService.getUserSources(user.id),

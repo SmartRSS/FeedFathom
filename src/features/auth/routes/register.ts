@@ -1,10 +1,6 @@
-import { fetcher, password } from "#platform/runtime.ts";
-import {
-  authThrottle,
-  mailSender,
-  usersDataService,
-} from "#features/auth/services.ts";
-import { config } from "#platform/config.ts";
+import type * as runtime from "#platform/runtime.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { Type } from "typebox";
@@ -30,7 +26,7 @@ const resetLifetimeMs = 60 * 60 * 1_000;
 async function validateCaptcha(
   token: string | undefined,
   secret: string,
-  fetchFn: typeof globalThis.fetch,
+  fetchFn: (typeof runtime)["fetcher"],
 ) {
   if (!token) return false;
   try {
@@ -54,19 +50,27 @@ async function validateCaptcha(
 const registrationDisabled = () =>
   json({ error: "Registration is currently disabled", success: false }, 403);
 
-// If delivery fails, withdraw the stored token so the next registration
-// attempt for this address is treated as an expired link and sends a fresh
-// one, rather than waiting out a link nobody received.
-async function sendActivation(email: string, token: string) {
-  try {
-    await mailSender.sendActivationEmail(email, token);
-  } catch (error) {
-    await usersDataService.withdrawActivationToken(token);
-    throw error;
-  }
-}
+export function createRegisterRoute({
+  authThrottle,
+  config,
+  fetcher,
+  mailSender,
+  password,
+  usersDataService,
+}: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
+  Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig }) {
+  // If delivery fails, withdraw the stored token so the next registration
+  // attempt for this address is treated as an expired link and sends a fresh
+  // one, rather than waiting out a link nobody received.
+  const sendActivation = async (email: string, token: string) => {
+    try {
+      await mailSender.sendActivationEmail(email, token);
+    } catch (error) {
+      await usersDataService.withdrawActivationToken(token);
+      throw error;
+    }
+  };
 
-export function createRegisterRoute() {
   const allowedEmailPolicy = Type.String(
     config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
   );

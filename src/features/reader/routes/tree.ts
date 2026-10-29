@@ -1,12 +1,15 @@
-import {
-  foldersDataService,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { isSnoozed } from "#features/feeds/source-snooze-policy.ts";
 
-export async function getTreeHandler({ user }: { user: AuthedUser }) {
+export async function getTreeHandler(
+  { user }: { user: AuthedUser },
+  {
+    foldersDataService,
+    userSourcesDataService,
+  }: Pick<typeof feeds, "foldersDataService" | "userSourcesDataService">,
+) {
   const [sources, folders] = await Promise.all([
     userSourcesDataService.getUserSources(user.id),
     foldersDataService.getUserFolders(user.id),

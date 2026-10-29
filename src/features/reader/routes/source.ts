@@ -1,4 +1,4 @@
-import { userSourcesDataService } from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import type { Static } from "typebox";
 import type {
   removeSourceRequest,
@@ -8,13 +8,18 @@ import type {
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 
-export async function deleteSourceHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof removeSourceRequest>;
-  user: AuthedUser;
-}) {
+type SourceServices = Pick<typeof feeds, "userSourcesDataService">;
+
+export async function deleteSourceHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof removeSourceRequest>;
+    user: AuthedUser;
+  },
+  { userSourcesDataService }: SourceServices,
+) {
   await userSourcesDataService.removeSourceFromUser(
     user.id,
     body.removeSourceId,
@@ -22,13 +27,16 @@ export async function deleteSourceHandler({
   return json(body.removeSourceId);
 }
 
-export async function patchSourceHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof updateSourceRequest>;
-  user: AuthedUser;
-}) {
+export async function patchSourceHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof updateSourceRequest>;
+    user: AuthedUser;
+  },
+  { userSourcesDataService }: SourceServices,
+) {
   const updated = await userSourcesDataService.updateUserSource(
     user.id,
     body.sourceId,
@@ -43,13 +51,16 @@ export async function patchSourceHandler({
  * touches only the timestamp -- article state and unread counts are left
  * alone, and suppression is evaluated lazily wherever unread is read.
  */
-export async function snoozeSourceHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof snoozeSourceRequest>;
-  user: AuthedUser;
-}) {
+export async function snoozeSourceHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof snoozeSourceRequest>;
+    user: AuthedUser;
+  },
+  { userSourcesDataService }: SourceServices,
+) {
   const updated = await userSourcesDataService.setSourceSnooze(
     user.id,
     body.sourceId,
