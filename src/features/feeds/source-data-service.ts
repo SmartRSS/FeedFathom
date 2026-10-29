@@ -1,8 +1,18 @@
-import { type Static, Type } from "typebox";
-import Schema from "typebox/schema";
-import { eq, getTableColumns, gt, sql } from "drizzle-orm";
+import type { Static } from "typebox";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { dateType } from "#shared/validation/typebox-policy.ts";
 import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
@@ -12,90 +22,25 @@ import {
   pollFloorMs,
 } from "#features/feeds/source-schedule-policy.ts";
 
-export interface SourceWithSubscriberCount {
-  id: number;
-  url: string;
-  homeUrl: string;
-  createdAt: Date;
-  lastAttempt: Date | null;
-  lastFetchTrigger: "email" | "manual" | "poll" | "websub-push" | null;
-  lastSuccess: Date | null;
-  recentFailures: number;
-  subscriberCount: number;
-  recentFailureDetails: string;
-  websubStatus: "failed" | "none" | "pending" | "verified";
-}
-
 // Bound each gathering pass when an outage makes many sources due at once.
 // notBefore staggers normal arrivals; the cap does not scale with backlog size.
 const gatherBatchLimit = 500;
-const exact = { additionalProperties: false } as const;
-type SourceSort = Static<typeof sourceSortSchema>;
-// The whole defence for the interpolation in listAllSources: an unrecognised
-// key falls back to a literal spelled out here, so nothing caller-supplied
-// reaches the SQL text.
-const sourceSortSql = new Map([
-  ["createdAt", "s.created_at"],
-  ["lastAttempt", "s.last_attempt"],
-  ["lastSuccess", "s.last_success"],
-  ["recentFailures", "s.recent_failures"],
-  ["subscriberCount", '"subscriberCount"'],
-  ["url", "s.url"],
-]);
-const sourceOrderSql = new Map([
-  ["asc", "ASC"],
-  ["desc", "DESC"],
-]);
-const sourceListRowsSchema = Type.Array(
-  Type.Object(
-    {
-      createdAt: dateType,
-      homeUrl: Type.String(),
-      id: Type.Integer(),
-      lastAttempt: Type.Union([dateType, Type.Null()]),
-      lastFetchTrigger: Type.Union([
-        Type.Literal("email"),
-        Type.Literal("manual"),
-        Type.Literal("poll"),
-        Type.Literal("websub-push"),
-        Type.Null(),
-      ]),
-      lastSuccess: Type.Union([dateType, Type.Null()]),
-      recentFailureDetails: Type.String(),
-      recentFailures: Type.Integer(),
-      subscriberCount: Type.Integer({ minimum: 0 }),
-      url: Type.String(),
-      websubStatus: Type.Union([
-        Type.Literal("none"),
-        Type.Literal("pending"),
-        Type.Literal("verified"),
-        Type.Literal("failed"),
-      ]),
-    },
-    exact,
-  ),
-);
-const sourceListRowsCheck = Schema.Compile(sourceListRowsSchema);
-const sourcesToProcessRowsSchema = Type.Array(
-  Type.Object({ id: Type.Integer(), url: Type.String() }, exact),
-);
-const sourcesToProcessRowsCheck = Schema.Compile(sourcesToProcessRowsSchema);
-
-export function parseSourceListRows(
-  value: unknown,
-): SourceWithSubscriberCount[] {
-  if (!sourceListRowsCheck.Check(value)) {
-    throw new Error("Database returned invalid source list rows");
-  }
-  return value;
-}
-
-export function resolveSourceListOrder(sortBy: string, order: string) {
-  return {
-    order: sourceOrderSql.get(order) ?? "ASC",
-    sort: sourceSortSql.get(sortBy) ?? "s.created_at",
-  };
-}
+// A correlated subquery keeps each caller to one round trip. The outer id is
+// qualified by hand: drizzle drops the table name from columns in a
+// single-table select, and a bare "id" here would mean user_sources.id.
+const subscriberCount = sql<number>`(
+  SELECT COUNT(*)::int
+  FROM ${userSources}
+  WHERE ${userSources.sourceId} = ${sources}.${sql.identifier(sources.id.name)}
+)`;
+const sourceSortColumns = {
+  createdAt: sources.createdAt,
+  lastAttempt: sources.lastAttempt,
+  lastSuccess: sources.lastSuccess,
+  recentFailures: sources.recentFailures,
+  subscriberCount,
+  url: sources.url,
+} satisfies Record<Static<typeof sourceSortSchema>, unknown>;
 
 const isUniqueViolation = (error: unknown, depth = 0): boolean => {
   if (typeof error !== "object" || error === null || depth > 3) return false;
@@ -138,21 +83,13 @@ export class SourcesDataService {
   }
 
   // subscriberCount rides along for the ParseSource job's User-Agent (see
-  // buildUserAgent). A correlated subquery keeps the hot polling path to one
-  // round trip.
+  // buildUserAgent).
   public async findSourceById(
     sourceId: number,
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
     return (
       await this.drizzleConnection
-        .select({
-          ...getTableColumns(sources),
-          subscriberCount: sql<number>`(
-            SELECT COUNT(*)::int
-            FROM ${userSources}
-            WHERE ${userSources.sourceId} = ${sources.id}
-          )`,
-        })
+        .select({ ...getTableColumns(sources), subscriberCount })
         .from(sources)
         .where(eq(sources.id, sourceId))
         .limit(1)
@@ -185,74 +122,52 @@ export class SourcesDataService {
   // value from a normal fetch would otherwise pull the next check inside a
   // day and undo the reduced cadence.
   public async getSourcesToProcess() {
-    const result: unknown = await this.drizzleConnection.execute(sql`
-      WITH "due_sources" AS (
-        SELECT ${sources.id} AS "id", ${sources.url} AS "url", ${sources.lastAttempt} AS "last_attempt"
-        FROM ${sources}
-        WHERE (
-          (
-            ${sources.kind} = 'feed'
-            AND ${sources.notBefore} <= NOW()
-          )
-          OR (
-            ${sources.kind} = 'websub'
-            AND (
-              ${sources.lastAttempt} IS NULL
-              OR ${sources.lastAttempt} < NOW() - INTERVAL '1 day'
-            )
-          )
-        )
+    return await this.drizzleConnection
+      .select({ id: sources.id, url: sources.url })
+      .from(sources)
+      .where(
+        or(
+          and(eq(sources.kind, "feed"), lte(sources.notBefore, sql`NOW()`)),
+          and(
+            eq(sources.kind, "websub"),
+            or(
+              isNull(sources.lastAttempt),
+              lt(sources.lastAttempt, sql`NOW() - INTERVAL '1 day'`),
+            ),
+          ),
+        ),
       )
-      SELECT "id", "url"
-      FROM "due_sources"
-      ORDER BY "last_attempt" ASC NULLS FIRST
-      LIMIT ${gatherBatchLimit}
-    `);
-    if (!sourcesToProcessRowsCheck.Check(result)) {
-      throw new Error("Database returned invalid source processing rows");
-    }
-    return result;
+      .orderBy(sql`${sources.lastAttempt} ASC NULLS FIRST`)
+      .limit(gatherBatchLimit);
   }
 
   public async listAllSources(
-    sortBy: SourceSort,
+    sortBy: Static<typeof sourceSortSchema>,
     order: "asc" | "desc",
-  ): Promise<SourceWithSubscriberCount[]> {
-    const resolved = resolveSourceListOrder(sortBy, order);
-
-    const query = `
-        WITH subscriber_counts AS (
-            SELECT
-                us.source_id,
-                COUNT(us.user_id)::int AS count
-            FROM user_sources AS us
-            GROUP BY us.source_id
-        )
-        SELECT
-            s.id,
-            s.url,
-            s.home_url as "homeUrl",
-            s.created_at as "createdAt",
-            s.last_attempt as "lastAttempt",
-            s.last_fetch_trigger as "lastFetchTrigger",
-            s.last_success as "lastSuccess",
-            COALESCE(s.recent_failures, 0) as "recentFailures",
-            COALESCE(sc.count, 0) AS "subscriberCount",
-            s.recent_failure_details as "recentFailureDetails",
-            s.websub_status as "websubStatus"
-        FROM sources AS s
-        LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
-        -- id breaks the tie: every column the admin table can sort by holds
-        -- duplicates (recent_failures is 0 for almost every row), and without
-        -- a unique last key the tied rows reshuffle between two loads of the
-        -- same sort, which reads as the table changing on its own.
-        ORDER BY ${resolved.sort} ${resolved.order}, s.id ASC
-    `;
-
-    const result: unknown = await this.drizzleConnection.execute(
-      sql.raw(query),
-    );
-    return parseSourceListRows(result);
+  ) {
+    return await this.drizzleConnection
+      .select({
+        createdAt: sources.createdAt,
+        homeUrl: sources.homeUrl,
+        id: sources.id,
+        lastAttempt: sources.lastAttempt,
+        lastFetchTrigger: sources.lastFetchTrigger,
+        lastSuccess: sources.lastSuccess,
+        recentFailureDetails: sources.recentFailureDetails,
+        recentFailures: sources.recentFailures,
+        subscriberCount,
+        url: sources.url,
+        websubStatus: sources.websubStatus,
+      })
+      .from(sources)
+      // id breaks the tie: every column the admin table can sort by holds
+      // duplicates (recent_failures is 0 for almost every row), and without
+      // a unique last key the tied rows reshuffle between two loads of the
+      // same sort, which reads as the table changing on its own.
+      .orderBy(
+        (order === "desc" ? desc : asc)(sourceSortColumns[sortBy]),
+        asc(sources.id),
+      );
   }
 
   // Cascades via FK to articles and user_sources. Admin-level, distinct from
