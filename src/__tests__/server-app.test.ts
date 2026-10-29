@@ -9,7 +9,6 @@ import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
-import type { OpmlParser } from "#features/feeds/opml-parser.ts";
 import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type {
@@ -168,7 +167,6 @@ type ReaderRouteDependencies = {
 type AdminOptionsRouteDependencies = {
   foldersDataService: Pick<FoldersDataService, "getUserFolders">;
   opmlImportService: Pick<OpmlImportService, "insertTree">;
-  opmlParser: Pick<OpmlParser, "parseOpml">;
   password: Password;
   redirectMap: Pick<RedirectMap, "getAllRedirects" | "removeRedirect">;
   sourcesDataService: Pick<
@@ -356,11 +354,6 @@ function createDependencies(): ServerFakes {
     opmlImportService: {
       async insertTree() {
         return unexpected("opmlImportService.insertTree");
-      },
-    },
-    opmlParser: {
-      parseOpml() {
-        return [];
       },
     },
     outboundFetchBudget: {
@@ -2843,14 +2836,10 @@ test("rejects malformed mail envelopes before EmailHandler", async () => {
 test("validates OPML files and checks plain-text content before parsing", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const parsed: string[] = [];
-  let inserts = 0;
-  dependencies.opmlParser.parseOpml = (content) => {
-    parsed.push(content);
-    return [];
-  };
-  dependencies.opmlImportService.insertTree = async () => {
-    inserts++;
+  const trees: Parameters<ServerFakes["opmlImportService"]["insertTree"]>[1][] =
+    [];
+  dependencies.opmlImportService.insertTree = async (_userId, tree) => {
+    trees.push(tree);
   };
   const app = await appFor(dependencies);
   const upload = (file?: File) => {
@@ -2878,8 +2867,7 @@ test("validates OPML files and checks plain-text content before parsing", async 
   expect(valid.status).toBe(200);
   expect(binary.status).toBe(400);
   expect(missing.status).toBe(422);
-  expect(parsed).toEqual(["<opml><body /></opml>"]);
-  expect(inserts).toBe(1);
+  expect(trees).toEqual([[]]);
 });
 
 test("exports the subscription tree as OPML, without newsletters", async () => {

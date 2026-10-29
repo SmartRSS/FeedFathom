@@ -1,7 +1,6 @@
 import {
   foldersDataService,
   opmlImportService,
-  opmlParser,
   userSourcesDataService,
 } from "#features/feeds/services.ts";
 import { createHash } from "node:crypto";
@@ -13,7 +12,7 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
-import type { OpmlParser } from "#features/feeds/opml-parser.ts";
+import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });
@@ -30,12 +29,12 @@ export async function postOptionsOpmlHandler({
 
   const bytes = new Uint8Array(await body.opml.arrayBuffer());
   let content: string;
-  let tree: ReturnType<OpmlParser["parseOpml"]>;
+  let tree: OpmlNode[];
   try {
     content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     if (!Value.Check(plainTextPolicy, content))
       return json({ error: "Invalid file", success: false }, 400);
-    tree = opmlParser.parseOpml(content);
+    tree = parseOpml(content);
   } catch {
     return json({ error: "Invalid OPML", success: false }, 400);
   }
