@@ -1352,12 +1352,12 @@ img.skeleton-row {
   }
   /* Short article lists: the list pane always fills the viewport, so a list
      shorter than one screen leaves a blank stretch that reads as unfinished.
-     The setting pushes the rows down to the toolbar at the pane's bottom edge. The
-     auto margin sits
-     on the first child rather than justify-content: flex-end on the list
-     itself, because justified overflow spills past the top edge and makes the
-     first rows unreachable by scrolling -- an auto margin collapses to zero
-     once the content overflows, so the long-list path is untouched. */
+     The setting pushes the rows down to the toolbar at the pane's bottom
+     edge. The auto margin sits on the first child rather than
+     justify-content: flex-end on the list itself, because justified overflow
+     spills past the top edge and makes the first rows unreachable by
+     scrolling -- an auto margin collapses to zero once the content
+     overflows, so the long-list path is untouched. */
   html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
     /* Auto margins only absorb free space in a flex container, so the list
        becomes one here; the rows are block links and lay out unchanged. */

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 
 // Bun has no localStorage; a Map stands in for whatever the browser holds.
 const stored = new Map<string, string>();
@@ -7,17 +7,13 @@ const storage = {
   setItem: (key: string, value: string) => stored.set(key, value),
 };
 Object.assign(globalThis, { localStorage: storage });
-// Before the import: the module-level preferences read storage on load.
-stored.set("markReadOnOpen", "true");
-const { markReadPolicy, storedPreference, storedToggle } =
-  await import("../preferences.ts");
+const { storedPreference, storedToggle } = await import("../preferences.ts");
 afterEach(() => {
   stored.clear();
   Object.assign(globalThis, { localStorage: storage });
 });
-
-test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", () => {
-  expect(markReadPolicy.get()).toBe("on-open");
+afterAll(() => {
+  Reflect.deleteProperty(globalThis, "localStorage");
 });
 
 test("reads a stored value and falls back on anything else", () => {

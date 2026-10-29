@@ -1504,6 +1504,8 @@ export function Dashboard(props: {
         }
         return;
       }
+      // resetList also stops a pending delete from rolling its rows back.
+      resetList();
       setSelectedNode(undefined);
       setArticles([]);
       // The source (and everything under a deleted folder) is gone: no

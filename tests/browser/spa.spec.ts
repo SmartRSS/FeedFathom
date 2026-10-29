@@ -1433,6 +1433,20 @@ test("reads a toggle stored as the old off string as off", async ({ page }) => {
   ).toHaveValue("false");
 });
 
+// Before #714 the only choice was a boolean under its own key.
+test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("markReadOnOpen", "true"),
+  );
+  await installApiFixture(page);
+  await page.goto("/options");
+  await expect(
+    page.getByRole("combobox", { name: "When articles get marked read" }),
+  ).toHaveValue("on-open");
+});
+
 // Each search box is one row of a pane with little height to spare, so each
 // can be hidden -- and hiding one must drop what it held, or a filter nobody
 // can see keeps narrowing the tree.
@@ -2590,6 +2604,9 @@ test("a second dialog request cancels the one still pending", async ({
   const first = await page.evaluate(async (url) => {
     const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
     const pending = confirmDialog("First?");
+    // Let the first dialog open and take focus, so the second replaces an
+    // open dialog and must keep the first one's focus-return target.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     void promptDialog("Second", "kept");
     return await pending;
   }, "/dialog.tsx");
