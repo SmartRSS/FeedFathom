@@ -20,6 +20,7 @@ const processSrcset = (srcsetValue: string, baseUrl: string): string =>
   srcsetValue
     .trim()
     .split(srcsetCandidateSeparator)
+    .filter(Boolean)
     .map((path) => {
       const [url, width] = path.split(srcsetSplitterExpression);
       if (!url || !URL.canParse(url, baseUrl)) return path;

@@ -70,7 +70,9 @@ export class EmailHandler {
       source.id,
       envelope.from,
     );
-    await this.articleImporter.importArticles(source.id, [article]);
+    await this.articleImporter.importArticles(source.id, [article], {
+      alwaysRecount: true,
+    });
     await this.sourcesDataService.successSource(
       source.id,
       false,

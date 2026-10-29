@@ -24,8 +24,11 @@ import {
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
 // refetch. Without that feed, the caller queues the source for the worker.
+// finalUrl is dropped too: only mapping needs it, and a replica still on the
+// previous release rejects a stored snapshot that carries it.
 function completePreview({
   feed,
+  finalUrl,
   ...preview
 }: FeedPreview): FeedPreview | undefined {
   if (!preview.truncated) return preview;
@@ -33,7 +36,7 @@ function completePreview({
   return {
     ...preview,
     articles: mapFeedToPreviewArticles(feed, preview.feedUrl, {
-      baseUrl: preview.finalUrl,
+      baseUrl: finalUrl,
     }),
     truncated: false,
   };
@@ -90,8 +93,10 @@ export async function postSubscribeHandler({
   // and its hub POST can take up to the request deadline.
   // discoverAndSubscribeWebSub catches its own errors, so nothing here
   // needs to observe how it settles. If the process exits before it
-  // finishes, the next parseSource poll re-discovers the hub, and
-  // claimWebSubSubscribeAttempt keeps that retry from double-subscribing.
+  // finishes, a later parseSource poll re-discovers the hub: the next one
+  // if the claim was never taken, otherwise once the pending source's daily
+  // retry comes due. claimWebSubSubscribeAttempt keeps that retry from
+  // double-subscribing.
   if (!isEmail) {
     void feedParser.discoverAndSubscribeWebSub(
       subscription.source.id,
@@ -134,6 +139,7 @@ export async function postSubscribeHandler({
                     lastSeenInFeedAt: subscription.subscriptionCreatedAt,
                   }),
                 ),
+              { alwaysRecount: true },
             );
             await sourcesDataService.successSource(
               subscription.source.id,

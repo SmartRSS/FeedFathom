@@ -215,7 +215,7 @@ export class FeedParser {
         skipCache: source.skipCache,
         subscribers: source.subscriberCount,
         websub:
-          this.feedFathomDomain !== undefined &&
+          Boolean(this.feedFathomDomain) &&
           shouldAttemptWebSubSubscribe(source.websubStatus),
       });
 

@@ -21,18 +21,20 @@ export class ArticleImporter {
   ) {}
 
   /**
-   * Stores one source's articles and returns how many a badge could count
-   * differently. batchUpsertArticles commits batch by batch, so a later
+   * Stores one source's articles. batchUpsertArticles commits batch by batch, so a later
    * failure leaves earlier articles committed: the badges are recounted
    * either way, then the upsert error is re-raised. Otherwise they are
    * recounted only when a row changed: most polls change nothing, and the
    * recount aggregates every retained article against every subscriber
-   * (#897).
+   * (#897). `alwaysRecount` is for one-off imports (subscribe, mail), whose
+   * retry after a crash between upsert and recount changes no row yet still
+   * has a badge to fix.
    */
   public async importArticles(
     sourceId: number,
     rows: readonly Omit<ArticleInsert, "sourceId">[],
-  ): Promise<number> {
+    { alwaysRecount = false }: { alwaysRecount?: boolean } = {},
+  ): Promise<void> {
     let upsertError: unknown;
     let changed = 0;
     try {
@@ -43,7 +45,7 @@ export class ArticleImporter {
       upsertError = error;
     }
     try {
-      if (upsertError !== undefined || changed > 0) {
+      if (alwaysRecount || upsertError !== undefined || changed > 0) {
         await this.userSourcesDataService.recomputeUnreadCounts([sourceId]);
       }
     } catch (recomputeError) {
@@ -56,6 +58,5 @@ export class ArticleImporter {
     }
     if (upsertError !== undefined) throw upsertError;
     if (changed > 0) this.articleEventPublisher.publish(sourceId, changed);
-    return changed;
   }
 }
