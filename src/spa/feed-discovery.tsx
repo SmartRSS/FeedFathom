@@ -12,7 +12,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { createSupersessionGuard } from "./supersession.ts";
 import {
   clickSelectsArticle,
@@ -73,7 +73,7 @@ export function FeedDiscovery(props: {
   const [mailDomain, setMailDomain] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setMessage(cause instanceof Error ? cause.message : fallback);
+    setMessage(messageOf(cause, fallback));
   };
   const selectedArticle = () => {
     const index = selectedIndex();
@@ -121,9 +121,7 @@ export function FeedDiscovery(props: {
         if (props.editing) setFolderId(props.editing.parentUid ?? "");
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
-        setStartupMessage(
-          cause instanceof Error ? cause.message : "Could not load folders.",
-        );
+        setStartupMessage(messageOf(cause, "Could not load folders."));
       }
     })();
     // Separate from the folders load: mail being unavailable only costs the

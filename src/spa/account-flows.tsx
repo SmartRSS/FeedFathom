@@ -13,7 +13,7 @@ import {
   type Registration,
 } from "#shared/contracts/responses.ts";
 import type { Turnstile } from "./turnstile.d.ts";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { loginPath, registerPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 
@@ -45,7 +45,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
       });
       props.navigate(props.next);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Login failed");
+      setError(messageOf(cause, "Login failed"));
     }
   }
   return (
@@ -157,9 +157,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
     } catch (cause) {
       if (disposed) return;
       setRegistration(null);
-      setMessage(
-        cause instanceof Error ? cause.message : "Could not load registration.",
-      );
+      setMessage(messageOf(cause, "Could not load registration."));
     }
   });
   onCleanup(() => {
@@ -194,9 +192,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
       });
       setRegistered(true);
     } catch (cause) {
-      setMessage(
-        cause instanceof Error ? cause.message : "Registration failed",
-      );
+      setMessage(messageOf(cause, "Registration failed"));
     }
   }
   return (
@@ -317,9 +313,7 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
       );
       setResult("success");
     } catch (cause) {
-      setMessage(
-        cause instanceof Error ? cause.message : "Account activation failed.",
-      );
+      setMessage(messageOf(cause, "Account activation failed."));
       setResult("error");
     }
   }
@@ -367,9 +361,7 @@ export function PasswordReset(props: { navigate(to: string): void }) {
       });
       setSent(true);
     } catch (cause) {
-      setMessage(
-        cause instanceof Error ? cause.message : "Could not send the email.",
-      );
+      setMessage(messageOf(cause, "Could not send the email."));
     }
   }
 
@@ -439,11 +431,7 @@ export function PasswordResetConfirm(props: {
       });
       setDone(true);
     } catch (cause) {
-      setMessage(
-        cause instanceof Error
-          ? cause.message
-          : "Could not reset the password.",
-      );
+      setMessage(messageOf(cause, "Could not reset the password."));
     }
   }
 

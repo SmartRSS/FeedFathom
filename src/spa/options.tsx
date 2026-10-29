@@ -5,7 +5,7 @@ import {
   sessionsResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
@@ -139,9 +139,7 @@ export function Options(props: {
       void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionMessage(
-        cause instanceof Error ? cause.message : "Could not load session.",
-      );
+      setSessionMessage(messageOf(cause, "Could not load session."));
     }
     // The empty-tree guidance links here with a hash; the SPA navigation
     // never scrolls on its own, so honour the target once it is rendered.
@@ -161,9 +159,7 @@ export function Options(props: {
       setSessions(listed.sessions);
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(
-        cause instanceof Error ? cause.message : "Could not load sessions.",
-      );
+      setSessionsMessage(messageOf(cause, "Could not load sessions."));
     }
   }
 
@@ -177,9 +173,7 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(
-        cause instanceof Error ? cause.message : "Could not sign out session.",
-      );
+      setSessionsMessage(messageOf(cause, "Could not sign out session."));
     } finally {
       setRevokingId(undefined);
     }
@@ -193,9 +187,7 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(
-        cause instanceof Error ? cause.message : "Could not sign out sessions.",
-      );
+      setSessionsMessage(messageOf(cause, "Could not sign out sessions."));
     } finally {
       setRevokingId(undefined);
     }
@@ -252,9 +244,7 @@ export function Options(props: {
       props.navigate("/login");
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionMessage(
-        cause instanceof Error ? cause.message : "Could not log out.",
-      );
+      setSessionMessage(messageOf(cause, "Could not log out."));
       setLogoutLoading(false);
     }
   }
@@ -284,9 +274,7 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setPasswordFailed(true);
-      setPasswordMessage(
-        cause instanceof Error ? cause.message : "Could not change password.",
-      );
+      setPasswordMessage(messageOf(cause, "Could not change password."));
     } finally {
       setPasswordLoading(false);
     }
@@ -309,9 +297,7 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setOpmlFailed(true);
-      setOpmlMessage(
-        cause instanceof Error ? cause.message : "Could not import OPML.",
-      );
+      setOpmlMessage(messageOf(cause, "Could not import OPML."));
     } finally {
       setOpmlLoading(false);
     }

@@ -61,7 +61,7 @@ import {
   createSupersessionGuard,
   type SupersessionToken,
 } from "./supersession.ts";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
@@ -281,7 +281,7 @@ export function Dashboard(props: {
   const [error, setError] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setError(cause instanceof Error ? cause.message : fallback);
+    setError(messageOf(cause, fallback));
   };
   const [showDiscovery, setShowDiscovery] = createSignal(
     props.initialDiscovery ?? false,
@@ -1707,7 +1707,7 @@ export function Dashboard(props: {
         setDisplayMode("FEED");
         setReaderContent(undefined);
         setError(
-          `${cause instanceof Error ? cause.message : "Could not load Reader content."} Showing Feed mode.`,
+          `${messageOf(cause, "Could not load Reader content.")} Showing Feed mode.`,
         );
         return;
       }
