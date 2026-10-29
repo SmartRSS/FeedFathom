@@ -349,7 +349,7 @@ test("each authenticated request refreshes the session row", async () => {
   };
   const app = await appFor(dependencies);
 
-  await get(app, "/api/options", {
+  await get(app, "/api/options/sessions", {
     auth: true,
     headers: { "user-agent": "Mozilla/5.0 TestClient" },
   });
@@ -358,7 +358,7 @@ test("each authenticated request refreshes the session row", async () => {
   // A request without a cookie has no row to refresh -- the plugin answers
   // 401 without reaching the database.
   authenticatedWith.length = 0;
-  const unauthorized = await get(app, "/api/options", {
+  const unauthorized = await get(app, "/api/options/sessions", {
     headers: { "user-agent": "Mozilla/5.0 TestClient" },
   });
   expect(unauthorized.status).toBe(401);
@@ -517,7 +517,7 @@ test.each([
   "/api/tree",
   "/api/events",
   "/api/folders",
-  "/api/options",
+  "/api/options/sessions",
 ])("rejects unauthenticated access to %s", async (path) => {
   const app = await appFor(createDependencies());
   const response = await get(app, path);
@@ -3397,7 +3397,7 @@ test("leaves the per-user options routes open to any signed-in user", async () =
   });
   const app = await appFor(dependencies);
 
-  const response = await get(app, "/api/options", {
+  const response = await get(app, "/api/options/sessions", {
     headers: { cookie: "sid=reader" },
   });
 

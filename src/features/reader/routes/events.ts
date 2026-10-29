@@ -19,14 +19,14 @@ const refreshMs = 60_000;
  */
 export async function getEventsHandler(
   {
-    cookie,
     request,
     server,
+    sid,
     user,
   }: {
-    cookie: { sid?: { value?: unknown } };
     request: Request;
     server: null | Pick<Server<unknown>, "timeout">;
+    sid: string;
     user: AuthedUser;
   },
   services: Pick<typeof auth, "usersDataService"> &
@@ -37,7 +37,6 @@ export async function getEventsHandler(
   let sourceIds = new Set(
     await userSourcesDataService.getUserSourceIds(user.id),
   );
-  const sid = cookie.sid?.value;
   // Bun closes a connection idle for 10 s by default; this one is meant to be.
   server?.timeout(request, 0);
   const encoder = new TextEncoder();
