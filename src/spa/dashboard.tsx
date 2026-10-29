@@ -156,6 +156,20 @@ const ARTICLE_SKELETON_TITLES = [
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
+// What one article list asks the server for. Its later pages ask the same.
+type ListScope = {
+  folder?: number;
+  query?: string;
+  sources: number[];
+  view?: "today";
+};
+// Today is scoped by `view`, not by an id list: its node uid is the string
+// "today", which as a source id would serialise to [null] and be refused.
+const nodeScope = (node: TreeNode): ListScope =>
+  isTodayNode(node) ? { sources: [], view: "today" } : articleScope(node);
+// Search answers across every subscription, so it names no source.
+const searchScope = (query: string): ListScope => ({ query, sources: [] });
+
 // Only a page the service worker controls asks, since only the worker
 // answers ?cached. only-if-cached keeps the request off the network when
 // something else does answer it, such as a worker from before #989 that
@@ -301,6 +315,12 @@ export function Dashboard(props: {
     local: localStorage,
     session: sessionStorage,
   });
+  // A restore that cannot apply drops its snapshot, so the next boot does
+  // not try it again.
+  const abandonRestore = () => {
+    readingSession.clear();
+    setRestoringSession(false);
+  };
   const resumingUpdate = takeUpdateReload();
   const restoreEnabled = () => rememberReadingPosition.get() || resumingUpdate;
   // With the setting off the snapshot goes to sessionStorage only, so it
@@ -711,18 +731,18 @@ export function Dashboard(props: {
     treeRequestPromise = attempt;
     const nextTree = await attempt;
     if (controller.signal.aborted) return nextTree;
-    const current = selectedNode();
-    setTree(nextTree);
-    if (current) {
-      // The virtual Today node is not in the stored tree; keep it selected
-      // across refreshes instead of letting findNode drop it.
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    applyTree(nextTree);
     return nextTree;
+  }
+  // The selection moves to its node in the new tree. The virtual Today node
+  // is not in the stored tree, so it stays selected rather than letting
+  // findNode drop it and leave the pane with nothing to page, refresh or
+  // re-select against.
+  function applyTree(nextTree: TreeNode[]) {
+    setTree(nextTree);
+    const current = selectedNode();
+    if (current && !isTodayNode(current))
+      setSelectedNode(findNode(nextTree, current.type, current.uid));
   }
   const revealTree = () => {
     if (!treeLoading()) return;
@@ -828,8 +848,7 @@ export function Dashboard(props: {
       );
       const search = articleSearchBox.get() ? snapshot.search : undefined;
       if (!node && !search) {
-        readingSession.clear();
-        setRestoringSession(false);
+        abandonRestore();
         return;
       }
       setArticleFilter(snapshot.articleFilter);
@@ -840,8 +859,7 @@ export function Dashboard(props: {
       } else if (node) await select(node, snapshot);
     } catch {
       // A restore must never surface as an error; boot continues as usual.
-      readingSession.clear();
-      setRestoringSession(false);
+      abandonRestore();
     }
   }
   // Applies a restored reader ratio once that article's content has
@@ -896,36 +914,41 @@ export function Dashboard(props: {
       nodeUid: node.uid,
     });
     const selection = resetList();
-    if (isTodayNode(node)) {
-      await fetchArticlesForBody(
-        { sources: [], view: "today" },
-        selection,
-        restore,
-      );
-      return;
-    }
-    const ids = sourceIds(node);
-    if (!ids.length) {
+    if (!isTodayNode(node) && !sourceIds(node).length) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
       setFocusedIndex(0);
       setSelectionAnchor(undefined);
-      if (restore) {
-        readingSession.clear();
-        setRestoringSession(false);
-      }
+      if (restore) abandonRestore();
       return;
     }
-    await fetchArticlesForBody(articleScope(node), selection, restore);
+    await fetchArticlesForBody(nodeScope(node), selection, restore);
+  }
+  // One page of a list, after `cursor` when given. The cursor's publishedAt
+  // places it in the offline list (#992) once it has left the kept rows.
+  function articlesRequest(
+    scope: ListScope,
+    cursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined,
+    signal: AbortSignal,
+  ) {
+    return api("/articles", articlesResponse, {
+      body: JSON.stringify({
+        filter: articleFilter(),
+        ...scope,
+        ...(cursor ? { cursor: cursor.id } : {}),
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(cursor && offlineUnread.get()
+          ? { "X-Cursor-Published-At": cursor.publishedAt }
+          : {}),
+      },
+      method: "POST",
+      signal,
+    });
   }
   async function fetchArticlesForBody(
-    body: {
-      sources: number[];
-      folder?: number;
-      view?: "today";
-      cursor?: number;
-      query?: string;
-    },
+    scope: ListScope,
     selection: AbortController,
     // Session restore (#718): re-select the rows the snapshot had selected
     // rather than always row 0, paging as far as the list had been loaded.
@@ -936,21 +959,7 @@ export function Dashboard(props: {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
       const page = (cursor?: Pick<ArticleSummary, "id" | "publishedAt">) =>
-        api("/articles", articlesResponse, {
-          body: JSON.stringify({
-            filter: articleFilter(),
-            ...body,
-            ...(cursor ? { cursor: cursor.id } : {}),
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            ...(cursor && offlineUnread.get()
-              ? { "X-Cursor-Published-At": cursor.publishedAt }
-              : {}),
-          },
-          method: "POST",
-          signal: selection.signal,
-        });
+        articlesRequest(scope, cursor, selection.signal);
       let lastPage = await page();
       const nextArticles = [...lastPage];
       // ponytail: capped at five pages, so a restore never walks a huge list.
@@ -1018,8 +1027,7 @@ export function Dashboard(props: {
           }
           applyRestoredScroll(restore.listScrollTop);
         } else {
-          readingSession.clear();
-          setRestoringSession(false);
+          abandonRestore();
         }
       } else {
         recordAppSnapshot({
@@ -1031,10 +1039,7 @@ export function Dashboard(props: {
     } catch (cause) {
       if (selection.signal.aborted) return;
       reportError(cause, "Could not load articles");
-      if (restore) {
-        readingSession.clear();
-        setRestoringSession(false);
-      }
+      if (restore) abandonRestore();
     } finally {
       if (!selection.signal.aborted) setArticlesLoading(false);
     }
@@ -1081,33 +1086,14 @@ export function Dashboard(props: {
     )
       return;
     if (list.scrollHeight - list.scrollTop - list.clientHeight > 600) return;
-    // Today is scoped by `view`, not by an id list -- its node uid is the
-    // string "today", so running it through sourceIds yields [NaN], which
-    // serialises to [null] and the request is refused. The next page has to
-    // be asked the same way the first one was.
-    const today = !search && node !== undefined && isTodayNode(node);
-    const scope =
-      search || today || !node ? { sources: [] } : articleScope(node);
     const selection = listController;
     loadingMoreSelection = selection;
     try {
-      const nextArticles = await api("/articles", articlesResponse, {
-        body: JSON.stringify({
-          cursor: cursor.id,
-          filter: articleFilter(),
-          ...scope,
-          ...(today ? { view: "today" } : {}),
-          ...(search ? { query: search } : {}),
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          ...(offlineUnread.get()
-            ? { "X-Cursor-Published-At": cursor.publishedAt }
-            : {}),
-        },
-        method: "POST",
-        signal: selection.signal,
-      });
+      const nextArticles = await articlesRequest(
+        search || !node ? searchScope(search) : nodeScope(node),
+        cursor,
+        selection.signal,
+      );
       if (selection.signal.aborted) return;
       moreArticles = nextArticles.length === articlePageSize;
       articleCursor = nextArticles.at(-1) ?? articleCursor;
@@ -1140,7 +1126,7 @@ export function Dashboard(props: {
     setActiveSearch(query);
     props.focusPane("articles");
     setError("");
-    await fetchArticlesForBody({ query, sources: [] }, resetList(), restore);
+    await fetchArticlesForBody(searchScope(query), resetList(), restore);
   }
   async function exitSearch() {
     if (!activeSearch()) return;
@@ -1214,16 +1200,7 @@ export function Dashboard(props: {
     // Reuse the computed tree: Solid 2.0 defers setter visibility to the
     // microtask flush, so a synchronous tree() read sees the pre-delta one.
     const deltas = readStateDeltas(items, ids, read);
-    const nextTree = withDecrementedUnread(tree(), deltas);
-    setTree(nextTree);
-    const current = selectedNode();
-    if (current) {
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    applyTree(withDecrementedUnread(tree(), deltas));
     if (articleFilter() === "all") {
       setArticles(
         items.map((article) =>
@@ -1755,19 +1732,7 @@ export function Dashboard(props: {
     }
     // Reuse the computed tree: Solid 2.0 defers setter visibility to the
     // microtask flush, so a synchronous tree() read sees the pre-decrement one.
-    const nextTree = withDecrementedUnread(tree(), deltas);
-    setTree(nextTree);
-    const current = selectedNode();
-    if (current) {
-      // Same as loadTree: the virtual Today node is not in the stored tree,
-      // so findNode would drop the selection and leave the pane with nothing
-      // to page, refresh or re-select against.
-      setSelectedNode(
-        isTodayNode(current)
-          ? current
-          : findNode(nextTree, current.type, current.uid),
-      );
-    }
+    applyTree(withDecrementedUnread(tree(), deltas));
     // The removed rows' nodes are gone, dropping focus to document.body.
     queueMicrotask(() => focusArticleAt(restoreIndex));
 
