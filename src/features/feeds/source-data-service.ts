@@ -9,6 +9,7 @@ import {
   isNull,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -113,9 +114,12 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  // Every source fetched in the past day, missing icon or not: the window
-  // matches GatherFaviconJobs' daily run, so each live source is refreshed
-  // once per run and a dead one stops costing provider requests.
+  // Every feed fetched in the past day, missing icon or not: the window
+  // covers GatherFaviconJobs' daily run (an hour of slack for a daily poll
+  // landing just late), so each live source gets a job per run, mostly
+  // answered from the HTTP cache, and a dead one stops costing provider
+  // requests. Email sources are skipped: their homeUrl is the app's own
+  // origin, whose icon would replace the mail glyph.
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
@@ -123,7 +127,12 @@ export class SourcesDataService {
         id: sources.id,
       })
       .from(sources)
-      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '1 day'`));
+      .where(
+        and(
+          gt(sources.lastSuccess, sql`NOW() - INTERVAL '25 hours'`),
+          ne(sources.kind, "email"),
+        ),
+      );
   }
 
   public async updateFavicon(

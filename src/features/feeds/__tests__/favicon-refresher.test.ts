@@ -44,7 +44,9 @@ test("encodes the home URL into the provider query string", async () => {
     "https://example.com/blog?a=1&b=2",
   );
   expect(gstatic.searchParams.get("size")).toBe("64");
-  expect(requested).toContain("https://favicon.im/example.com");
+  expect(requested).toContain(
+    "https://favicon.im/example.com?throw-error-on-404=true",
+  );
 });
 
 test("defers to the earliest retry time across both provider passes", async () => {

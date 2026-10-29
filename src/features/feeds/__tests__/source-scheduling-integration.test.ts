@@ -137,6 +137,12 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
   const neverFetched = await addFeedSource(
     "https://source-scheduling.test/never",
   );
+  const email = await sourcesDataService.addSource({
+    homeUrl: "https://source-scheduling.test",
+    kind: "email",
+    url: "newsletter@source-scheduling.test",
+  });
+  await sourcesDataService.successSource(email.id, false);
 
   const dueIds = new Set(
     (await sourcesDataService.getSourcesDueFaviconRefresh()).map(
@@ -146,4 +152,5 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
   expect(dueIds.has(hoursAgo.id)).toBe(true);
   expect(dueIds.has(daysAgo.id)).toBe(false);
   expect(dueIds.has(neverFetched.id)).toBe(false);
+  expect(dueIds.has(email.id)).toBe(false);
 });

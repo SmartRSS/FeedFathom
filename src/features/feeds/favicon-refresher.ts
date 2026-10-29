@@ -84,10 +84,12 @@ export class FaviconRefresher {
       return;
     }
     // homeUrl is encoded: a raw `?` or `&` in it would end up in gstatic's
-    // own query string. favicon.im takes a bare domain in its path.
+    // own query string. favicon.im takes a bare domain in its path, and
+    // without throw-error-on-404 it answers an unknown domain with a generic
+    // SVG that would outrank every real icon below 64 px.
     const primary = await this.bestFavicon([
       `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(source.homeUrl)}&size=${targetFaviconSize}`,
-      `https://favicon.im/${hostname}`,
+      `https://favicon.im/${hostname}?throw-error-on-404=true`,
       `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
     ]);
     const result = primary.best
