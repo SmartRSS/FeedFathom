@@ -1068,6 +1068,50 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
   expect(sw.messages).toEqual([]);
 });
 
+// A removal queued while a replay waits on its session lookup starts a
+// second flush, which reads the entries the first hasn't sent yet.
+test("a flush that starts during another doesn't replay its entries twice", async () => {
+  let online = false;
+  let foldersDown = true;
+  let answerLookup: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (path === "/api/session" && !answerLookup)
+      return new Promise<Response>((resolve) => {
+        answerLookup = () => resolve(session(1));
+      });
+    if (path === "/api/session") return session(1);
+    if (method === "GET") return Response.json({ tree: [] });
+    if (!online || (path === "/api/folders" && foldersDown))
+      throw new TypeError("Failed to fetch");
+    return new Response(null);
+  });
+  const remove = (path: string, body: object) =>
+    sw.dispatch(
+      new Request(`${ORIGIN}${path}`, {
+        body: JSON.stringify(body),
+        method: "DELETE",
+      }),
+    ).response;
+  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  await remove("/api/source", { removeSourceId: 1 });
+  online = true;
+  await sw.loadTree();
+  await settle();
+  await remove("/api/folders", { removeFolderId: 2 });
+  foldersDown = false;
+  await sw.loadTree();
+  await settle();
+  answerLookup?.();
+  await settle();
+  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
+    "DELETE /api/source",
+    "DELETE /api/folders",
+    "DELETE /api/source",
+    "DELETE /api/folders",
+  ]);
+  expect(sw.queue.rows.size).toBe(0);
+});
+
 // Account 1 removes a source offline and its session lapses. Whoever signs in
 // next decides whether the removal replays (#982).
 const removeOfflineThenSignIn = async (nextAccount: number) => {

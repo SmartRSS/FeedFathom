@@ -222,7 +222,24 @@ async function sessionAccount(generation) {
   }
 }
 
-async function flushQueue() {
+// One replay at a time: an overlapping one would read entries the running
+// one hasn't deleted yet and send them twice. A call during a replay runs one
+// more after it, for whatever was queued meanwhile.
+let replaying = Promise.resolve();
+let replayPending = false;
+function flushQueue() {
+  if (replayPending) return replaying;
+  replayPending = true;
+  replaying = replaying
+    .catch(() => {})
+    .then(() => {
+      replayPending = false;
+      return replayQueue();
+    });
+  return replaying;
+}
+
+async function replayQueue() {
   if (!queueMayHaveEntries) return;
   // Cleared before the read, so an entry queued mid-flush sets it again.
   queueMayHaveEntries = false;
