@@ -4,10 +4,14 @@ export function treeNodeKey(node: TreeNode): string {
   return `${node.type}:${node.uid}`;
 }
 
-export function sourceIds(node: TreeNode): number[] {
-  return node.type === "source"
-    ? [Number(node.uid)]
-    : (node.children ?? []).flatMap(sourceIds);
+// The ids of the sources under a node, or of those `keep` accepts.
+export function sourceIds(
+  node: TreeNode,
+  keep: (source: Extract<TreeNode, { type: "source" }>) => boolean = () => true,
+): number[] {
+  if (node.type !== "source")
+    return (node.children ?? []).flatMap((child) => sourceIds(child, keep));
+  return keep(node) ? [Number(node.uid)] : [];
 }
 
 // A folder is asked for by id and the server resolves its sources (#976):

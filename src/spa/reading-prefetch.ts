@@ -1,5 +1,6 @@
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
+import { sourceIds } from "./dashboard-behavior.ts";
 import { storedToggle } from "./preferences.ts";
 
 // Prefetching the next article's content (#716) costs the server one extra
@@ -63,17 +64,14 @@ export function offlineArticles<T extends Pick<ArticleSummary, "publishedAt">>(
   };
 }
 
-function unreadSources(node: TreeNode): number[] {
-  if (node.type !== "source") return node.children.flatMap(unreadSources);
-  return node.unreadCount > 0 ? [Number(node.uid)] : [];
-}
-
 // Only sources with something unread are asked about. ponytail: one article
 // request accepts 500 source ids, so past that many sources with unread the
 // rest go undownloaded; a server-side "every subscription" unread scope
 // lifts it.
 export function unreadSourceIds(nodes: readonly TreeNode[]): number[] {
-  return nodes.flatMap(unreadSources).slice(0, maximumRequestIds);
+  return nodes
+    .flatMap((node) => sourceIds(node, (source) => source.unreadCount > 0))
+    .slice(0, maximumRequestIds);
 }
 
 // Save Data is the user telling every site to send fewer bytes; a

@@ -2478,16 +2478,11 @@ export function Dashboard(props: {
             setShowDiscovery(false);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
-            const nextTree = await loadTree();
-            const nodes = [...nextTree];
-            let savedNode: TreeNode | undefined;
-            for (const node of nodes) {
-              if (node.type === "source" && node.uid === sourceId.toString()) {
-                savedNode = node;
-                break;
-              }
-              nodes.push(...(node.type === "folder" ? node.children : []));
-            }
+            const savedNode = findNode(
+              await loadTree(),
+              "source",
+              sourceId.toString(),
+            );
             if (!savedNode) return;
             await select(savedNode);
             // Editing renames or moves an existing feed; nothing to fetch, so
