@@ -190,6 +190,7 @@ export function Dashboard(props: {
   handleUnauthorized(cause: unknown): boolean;
   initialDiscovery?: boolean;
   initialFeedUrl?: string | undefined;
+  initialNewsletter?: boolean;
   navigate(to: string): void;
   pane(): DashboardPane;
   whenPaneShown(run: () => void): void;
@@ -2416,6 +2417,7 @@ export function Dashboard(props: {
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
           initialFeedUrl={props.initialFeedUrl}
+          initialNewsletter={props.initialNewsletter ?? false}
           pane={props.pane}
           close={() => {
             const wasEditing = editingSource() !== undefined;

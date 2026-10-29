@@ -2055,6 +2055,24 @@ for (const theme of ["smart", "high-contrast"]) {
   });
 }
 
+// The extension's newsletter action opens this URL rather than minting an
+// address of its own, so new addresses all come in the SPA's format. The
+// address lands in the URL: a reload must not replace one already copied.
+test("mints a newsletter address when opened with ?newsletter", async ({
+  page,
+}) => {
+  await openApp(page, { mailDomain: "mail.example" }, "/preview?newsletter");
+
+  const feedUrl = page.getByLabel("Feed URL");
+  await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
+  const minted = await feedUrl.inputValue();
+  await expect(page).toHaveURL(
+    `/preview?feedUrl=${encodeURIComponent(minted)}`,
+  );
+  await page.reload();
+  await expect(feedUrl).toHaveValue(minted);
+});
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await openApp(page, {}, "/preview");
   const website = page.getByLabel("Website");
