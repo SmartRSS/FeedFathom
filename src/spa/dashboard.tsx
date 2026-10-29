@@ -57,10 +57,6 @@ import {
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import {
-  createSupersessionGuard,
-  type SupersessionToken,
-} from "./supersession.ts";
 import { api, messageOf } from "./api.ts";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
@@ -231,7 +227,7 @@ export function Dashboard(props: {
   // than a plain flag, so a page abandoned by a feed, filter or search change
   // neither blocks the new list's next page nor, when it settles late, clears
   // that page's loading state.
-  let loadingMoreSelection: SupersessionToken | undefined;
+  let loadingMoreSelection: AbortController | undefined;
   // The last row loaded; its publishedAt places it in the offline list (#992)
   // once it has left the kept rows.
   let articleCursor: Pick<ArticleSummary, "id" | "publishedAt"> | undefined;
@@ -630,18 +626,16 @@ export function Dashboard(props: {
       reportError(cause, "Could not refresh articles");
     }
   }
-  const selectionGuard = createSupersessionGuard();
-  const articleRequestGuard = createSupersessionGuard();
-  const capabilityProbeGuard = createSupersessionGuard();
-  const treeRequestGuard = createSupersessionGuard();
-  let articleAbortController: AbortController | undefined;
+  // Each request kind keeps its latest controller. Starting the next one
+  // aborts it, so `signal.aborted` is also what says a request was
+  // superseded. The list's controller covers its first and later pages.
+  let listController = new AbortController();
   let articleBodyAbortController: AbortController | undefined;
-  let pageAbortController: AbortController | undefined;
+  let probeController: AbortController | undefined;
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   let readerPaneRef: HTMLElement | undefined;
   const disableReader = (message: string) => {
-    articleRequestGuard.start();
     articleBodyAbortController?.abort();
     setReaderAvailable(false);
     setDisplayMode("FEED");
@@ -650,9 +644,11 @@ export function Dashboard(props: {
     setError(message);
   };
   const probeReader = async () => {
-    const probe = capabilityProbeGuard.start();
+    probeController?.abort();
+    const probe = new AbortController();
+    probeController = probe;
     const available = await readerBridge.available();
-    if (!capabilityProbeGuard.isCurrent(probe)) return;
+    if (probe.signal.aborted) return;
     setReaderAvailable(available);
     if (!available && displayMode() !== "FEED")
       disableReader("The Reader extension is unavailable. Showing Feed mode.");
@@ -674,8 +670,7 @@ export function Dashboard(props: {
     }
   };
   onCleanup(() => {
-    capabilityProbeGuard.start();
-    articleRequestGuard.start();
+    probeController?.abort();
     articleBodyAbortController?.abort();
     removeEventListener("focus", focusReaderProbe);
     navigator.serviceWorker?.removeEventListener(
@@ -685,7 +680,6 @@ export function Dashboard(props: {
     readerBridge.dispose();
   });
   async function loadTree(): Promise<TreeNode[]> {
-    const request = treeRequestGuard.start();
     treeAbortController?.abort();
     const controller = new AbortController();
     treeAbortController = controller;
@@ -707,7 +701,7 @@ export function Dashboard(props: {
         if (
           cause instanceof DOMException &&
           cause.name === "AbortError" &&
-          !treeRequestGuard.isCurrent(request)
+          treeAbortController !== controller
         ) {
           return treeRequestPromise ?? Promise.reject(cause);
         }
@@ -716,7 +710,7 @@ export function Dashboard(props: {
     })();
     treeRequestPromise = attempt;
     const nextTree = await attempt;
-    if (disposed || !treeRequestGuard.isCurrent(request)) return nextTree;
+    if (controller.signal.aborted) return nextTree;
     const current = selectedNode();
     setTree(nextTree);
     if (current) {
@@ -874,6 +868,14 @@ export function Dashboard(props: {
       }),
     );
   });
+  // A new list abandons whatever the old one still has in flight.
+  function resetList() {
+    listController.abort();
+    listController = new AbortController();
+    moreArticles = false;
+    articleCursor = undefined;
+    return listController;
+  }
   async function select(node: TreeNode, restore?: AppSnapshot) {
     // A feed picked from the cached tree while boot still waits to restore
     // the session (#989) supersedes the snapshot, and is recorded in its place.
@@ -893,11 +895,7 @@ export function Dashboard(props: {
       nodeType: node.type,
       nodeUid: node.uid,
     });
-    const selection = selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
-    moreArticles = false;
-    articleCursor = undefined;
+    const selection = resetList();
     if (isTodayNode(node)) {
       await fetchArticlesForBody(
         { sources: [], view: "today" },
@@ -928,14 +926,12 @@ export function Dashboard(props: {
       cursor?: number;
       query?: string;
     },
-    selection: ReturnType<typeof selectionGuard.start>,
+    selection: AbortController,
     // Session restore (#718): re-select the rows the snapshot had selected
     // rather than always row 0, paging as far as the list had been loaded.
     restore?: AppSnapshot,
   ) {
     setArticlesLoading(true);
-    const controller = new AbortController();
-    articleAbortController = controller;
     try {
       setOpenedArticle(undefined);
       setReaderContent(undefined);
@@ -953,7 +949,7 @@ export function Dashboard(props: {
               : {}),
           },
           method: "POST",
-          signal: controller.signal,
+          signal: selection.signal,
         });
       let lastPage = await page();
       const nextArticles = [...lastPage];
@@ -965,13 +961,13 @@ export function Dashboard(props: {
       while (
         nextArticles.length < restoreCount &&
         lastPage.length === articlePageSize &&
-        selectionGuard.isCurrent(selection)
+        !selection.signal.aborted
       ) {
         // oxlint-disable-next-line no-await-in-loop -- each page's cursor is the previous page's last row
         lastPage = await page(nextArticles.at(-1));
         nextArticles.push(...lastPage);
       }
-      if (!selectionGuard.isCurrent(selection)) return;
+      if (selection.signal.aborted) return;
       setArticles(nextArticles);
       moreArticles = lastPage.length === articlePageSize;
       articleCursor = nextArticles.at(-1) ?? articleCursor;
@@ -1033,14 +1029,14 @@ export function Dashboard(props: {
         });
       }
     } catch (cause) {
-      if (!selectionGuard.isCurrent(selection)) return;
+      if (selection.signal.aborted) return;
       reportError(cause, "Could not load articles");
       if (restore) {
         readingSession.clear();
         setRestoringSession(false);
       }
     } finally {
-      if (selectionGuard.isCurrent(selection)) setArticlesLoading(false);
+      if (!selection.signal.aborted) setArticlesLoading(false);
     }
   }
   // Scrolls the restored list position in once the rows are on screen. Runs
@@ -1079,7 +1075,7 @@ export function Dashboard(props: {
     // -- searching before ever picking a feed is a normal way in.
     if (
       !moreArticles ||
-      loadingMoreSelection === selectionGuard.current() ||
+      loadingMoreSelection === listController ||
       cursor === undefined ||
       (!node && !search)
     )
@@ -1092,10 +1088,8 @@ export function Dashboard(props: {
     const today = !search && node !== undefined && isTodayNode(node);
     const scope =
       search || today || !node ? { sources: [] } : articleScope(node);
-    const selection = selectionGuard.current();
+    const selection = listController;
     loadingMoreSelection = selection;
-    const controller = new AbortController();
-    pageAbortController = controller;
     try {
       const nextArticles = await api("/articles", articlesResponse, {
         body: JSON.stringify({
@@ -1112,9 +1106,9 @@ export function Dashboard(props: {
             : {}),
         },
         method: "POST",
-        signal: controller.signal,
+        signal: selection.signal,
       });
-      if (!selectionGuard.isCurrent(selection)) return;
+      if (selection.signal.aborted) return;
       moreArticles = nextArticles.length === articlePageSize;
       articleCursor = nextArticles.at(-1) ?? articleCursor;
       if (!nextArticles.length) return;
@@ -1122,7 +1116,7 @@ export function Dashboard(props: {
       topUpArticles();
       announce(`Loaded ${nextArticles.length} more articles.`);
     } catch (cause) {
-      if (selectionGuard.isCurrent(selection))
+      if (!selection.signal.aborted)
         reportError(cause, "Could not load more articles");
     } finally {
       if (loadingMoreSelection === selection) loadingMoreSelection = undefined;
@@ -1146,12 +1140,7 @@ export function Dashboard(props: {
     setActiveSearch(query);
     props.focusPane("articles");
     setError("");
-    const selection = selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
-    moreArticles = false;
-    articleCursor = undefined;
-    await fetchArticlesForBody({ query, sources: [] }, selection, restore);
+    await fetchArticlesForBody({ query, sources: [] }, resetList(), restore);
   }
   async function exitSearch() {
     if (!activeSearch()) return;
@@ -1161,19 +1150,15 @@ export function Dashboard(props: {
     // runSearch() give theirs. Without it, a response that lands after the
     // clear repopulates a list the user just emptied (#815) -- reachable
     // whenever no feed is selected, since that is the one branch below that
-    // neither aborts nor starts a new guard token.
-    selectionGuard.start();
-    articleAbortController?.abort();
-    pageAbortController?.abort();
+    // starts no new list.
+    resetList();
     const node = selectedNode();
     if (node) await select(node);
     else {
       // No replacement fetch starts here, and the aborted one will not clear
-      // the loading signal its superseded token now hides, so the empty
+      // the loading signal its aborted controller now hides, so the empty
       // state behind the cleared list would never appear.
       setArticlesLoading(false);
-      moreArticles = false;
-      articleCursor = undefined;
       setArticles([]);
     }
   }
@@ -1637,11 +1622,7 @@ export function Dashboard(props: {
     if (!matchMedia("(pointer: fine)").matches) return;
     hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
-  async function open(
-    article: ArticleSummary,
-    selection = selectionGuard.current(),
-  ) {
-    const request = articleRequestGuard.start();
+  async function open(article: ArticleSummary, selection = listController) {
     articleBodyAbortController?.abort();
     const body = fetchArticle(article.id);
     articleBodyAbortController = body.controller;
@@ -1651,8 +1632,8 @@ export function Dashboard(props: {
     const isCurrent = () => {
       const selectedIndex = soleSelectedIndex(selectedIndexes());
       return (
-        articleRequestGuard.isCurrent(request) &&
-        selectionGuard.isCurrent(selection) &&
+        !body.controller.signal.aborted &&
+        !selection.signal.aborted &&
         mode === displayMode() &&
         selectedIndex !== undefined &&
         articles()[selectedIndex]?.id === article.id
@@ -1713,12 +1694,12 @@ export function Dashboard(props: {
       }
       reportError(cause, "Could not load article");
     } finally {
-      if (articleRequestGuard.isCurrent(request)) setLoadingArticle(false);
+      if (!body.controller.signal.aborted) setLoadingArticle(false);
     }
   }
   function setArticleSelection(
     indexes: Set<number>,
-    selection = selectionGuard.current(),
+    selection = listController,
   ): Promise<void> | undefined {
     setSelectedIndexes(indexes);
     setOpenedArticle(undefined);
@@ -1726,7 +1707,6 @@ export function Dashboard(props: {
     const index = soleSelectedIndex(indexes);
     const article = index === undefined ? undefined : articles()[index];
     if (!article) {
-      articleRequestGuard.start();
       articleBodyAbortController?.abort();
       setLoadingArticle(false);
       return undefined;

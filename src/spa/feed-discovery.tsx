@@ -13,7 +13,6 @@ import {
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, messageOf } from "./api.ts";
-import { createSupersessionGuard } from "./supersession.ts";
 import {
   clickSelectsArticle,
   initialPreviewSelection,
@@ -79,13 +78,20 @@ export function FeedDiscovery(props: {
     const index = selectedIndex();
     return index === undefined ? undefined : articles()[index];
   };
-  const requests = createSupersessionGuard();
+  // Finding and previewing share one controller: starting either abandons
+  // whichever is still in flight.
+  let requests = new AbortController();
+  const startRequest = () => {
+    requests.abort();
+    requests = new AbortController();
+    return requests.signal;
+  };
   let disposed = false;
   let websiteInput!: HTMLInputElement;
   let form!: HTMLFormElement;
   onCleanup(() => {
     disposed = true;
-    requests.start();
+    requests.abort();
   });
 
   onMount(() => {
@@ -146,21 +152,22 @@ export function FeedDiscovery(props: {
     const normalizedLink = withScheme(link());
     if (normalizedLink !== link()) setLink(normalizedLink);
     if (!websiteIsValid()) return;
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Finding feeds…");
     try {
       const found = await api(
         `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "No feeds found");
+      if (!signal.aborted) reportError(cause, "No feeds found");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
@@ -168,7 +175,7 @@ export function FeedDiscovery(props: {
   }
 
   async function preview(url = feedUrl()) {
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Loading preview…");
     setArticles([]);
@@ -179,8 +186,9 @@ export function FeedDiscovery(props: {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeedUrl(result.feedUrl);
       setLink(result.link ?? "");
       setTitle(result.title);
@@ -191,9 +199,9 @@ export function FeedDiscovery(props: {
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "Preview failed");
+      if (!signal.aborted) reportError(cause, "Preview failed");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
