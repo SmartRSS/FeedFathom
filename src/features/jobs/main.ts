@@ -10,7 +10,7 @@ import Schema from "typebox/schema";
 import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   type HubPoster,
   requestHubSubscription,
@@ -156,6 +156,7 @@ export class MainWorker {
       userSourcesDataService,
       websubStateService,
     } = this.services;
+    let delayed = false;
     try {
       const input = { data: job.data, name: job.name };
       if (!mainWorkerJobCheck.Check(input)) {
@@ -283,40 +284,28 @@ export class MainWorker {
         }
       }
     } catch (error: unknown) {
-      if (isHttpDeferredError(error)) {
+      // Anything thrown, including by the deferral itself (a Redis error, a
+      // poisoned retryAt getter), is logged and acknowledged, so BullMQ
+      // never holds the job in its failure state. The outcomes something
+      // reads stay in Postgres where their owner writes them: parseSource
+      // records a source's failure, and the WebSub renewal above its own.
+      try {
+        if (!(error instanceof HttpDeferredError)) throw error;
+        if (retryData !== undefined) await job.updateData(retryData);
+        await job.moveToDelayed(error.retryAt, job.token);
+        delayed = true;
+      } catch {
         try {
-          if (retryData !== undefined) await job.updateData(retryData);
-          await job.moveToDelayed(error.retryAt, job.token);
-          throw new DelayedError();
-        } catch (moveError) {
-          // `instanceof` reads the value's prototype, which a thrown Proxy can
-          // poison into throwing -- see the poisoned-trap case in main.test.ts.
-          const isDelayed = (() => {
-            try {
-              return moveError instanceof DelayedError;
-            } catch {
-              return false;
-            }
-          })();
-          if (isDelayed) {
-            throw moveError;
-          }
-          // moveToDelayed itself failed (a Redis error, or a poisoned retryAt
-          // getter). Fall through to the guarded path below rather than
-          // failing the job in BullMQ's own state.
+          console.error(`Error processing ${job.name} job:`, error);
+        } catch {
+          // Swallowed without logging: an adversarial thrown value (a
+          // poisoned custom-inspect symbol) is what made the log call throw.
         }
       }
-      try {
-        // Logged and acknowledged, never rethrown, so BullMQ never holds the
-        // job in its failure state. The outcomes something reads stay in
-        // Postgres where their owner writes them: parseSource records a
-        // source's failure, and the WebSub renewal above its own.
-        console.error(`Error processing ${job.name} job:`, error);
-      } catch {
-        // Swallowed without logging: an adversarial thrown value (a poisoned
-        // custom-inspect symbol) is what made the log call throw.
-      }
     }
+    // The one value that leaves the processor: BullMQ reads it as "moved
+    // to delayed", not as a failure.
+    if (delayed) throw new DelayedError();
   };
 
   private async setupScheduledTasks() {

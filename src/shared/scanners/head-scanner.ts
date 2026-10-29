@@ -3,8 +3,8 @@ import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 
 const getFeeds = function* (page: ScannerPage): Generator<FeedData> {
   for (const feed of page.feedLinks) {
-    if (!feed.href) continue;
-    const resolvedUrl = new URL(feed.href, page.baseUrl).toString();
+    const resolvedUrl = feed.href && URL.parse(feed.href, page.baseUrl)?.href;
+    if (!resolvedUrl) continue;
     yield { title: feed.title ?? resolvedUrl, url: resolvedUrl };
   }
 };

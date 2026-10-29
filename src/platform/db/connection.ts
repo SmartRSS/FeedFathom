@@ -6,29 +6,19 @@ import journal from "../../../drizzle/meta/_journal.json";
 
 export function createDrizzleConnection(
   databaseUrl: AppConfig["DATABASE_URL"],
-  client: SQL = new SQL(databaseUrl, {
+  {
+    max,
     // ponytail: bounded pool lifetimes so a dead connection (e.g. postgres
     // restart) gets recycled instead of wedging the pool forever; raise if
     // connection churn shows up as a bottleneck.
-    idleTimeout: 60,
-    maxLifetime: 1_800,
-  }),
-) {
-  return drizzle(client, { schema });
-}
-
-export function createPooledDrizzleConnection(
-  databaseUrl: AppConfig["DATABASE_URL"],
-  poolMax: number,
-) {
-  return createDrizzleConnection(
-    databaseUrl,
-    new SQL(databaseUrl, {
+    client = new SQL(databaseUrl, {
       idleTimeout: 60,
-      max: poolMax,
+      ...(max === undefined ? {} : { max }),
       maxLifetime: 1_800,
     }),
-  );
+  }: { client?: SQL; max?: number } = {},
+) {
+  return drizzle(client, { schema });
 }
 
 // A worker can outrace the migrator on a cold start: Compose orders starts,

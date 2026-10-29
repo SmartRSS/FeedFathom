@@ -11,20 +11,8 @@
  * the budget runs out rather than after its current read returns.
  */
 export class HttpDeadlineError extends Error {
-  constructor() {
-    super("HTTP request exceeded its 30 second deadline");
-  }
-}
-
-// Same reason as isHttpDeferredError: what reaches a catch block is whatever
-// was thrown, and `instanceof` can itself throw on a poisoned prototype.
-export function isHttpDeadlineError(
-  error: unknown,
-): error is HttpDeadlineError {
-  try {
-    return error instanceof HttpDeadlineError;
-  } catch {
-    return false;
+  constructor(milliseconds: number) {
+    super(`HTTP request exceeded its ${milliseconds} ms deadline`);
   }
 }
 
@@ -35,13 +23,15 @@ export class RequestDeadline {
   // budget instead of guessing at a window of its own.
   readonly endsAt: number;
   private readonly expired: Promise<never>;
+  private readonly milliseconds: number;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(milliseconds: number) {
+    this.milliseconds = milliseconds;
     this.endsAt = Date.now() + milliseconds;
     this.expired = new Promise((_, reject) => {
       this.timer = setTimeout(() => {
-        const error = new HttpDeadlineError();
+        const error = new HttpDeadlineError(this.milliseconds);
         this.controller.abort(error);
         reject(error);
       }, milliseconds);
@@ -60,18 +50,25 @@ export class RequestDeadline {
 
   assertActive(): void {
     if (Date.now() >= this.endsAt || this.controller.signal.aborted) {
-      const error = new HttpDeadlineError();
+      const error = new HttpDeadlineError(this.milliseconds);
       if (!this.controller.signal.aborted) this.controller.abort(error);
       throw error;
     }
   }
 
+  // Clears its own timer, so a sleep cut short by the deadline does not keep
+  // a timer alive past the request.
   async sleep(milliseconds: number): Promise<void> {
-    await this.run(
-      new Promise((resolve) => {
-        setTimeout(resolve, milliseconds);
-      }),
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await this.run(
+        new Promise((resolve) => {
+          timer = setTimeout(resolve, milliseconds);
+        }),
+      );
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   dispose(): void {

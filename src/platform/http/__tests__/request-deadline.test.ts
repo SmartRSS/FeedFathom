@@ -9,7 +9,12 @@ describe("RequestDeadline", () => {
   test("aborts its controller when the budget runs out", async () => {
     const deadline = new RequestDeadline(10);
     expect(deadline.controller.signal.aborted).toBe(false);
-    await expect(deadline.run(never)).rejects.toBeInstanceOf(HttpDeadlineError);
+    await expect(deadline.run(never)).rejects.toThrow(
+      new HttpDeadlineError(10),
+    );
+    expect(String(deadline.controller.signal.reason)).toContain(
+      "exceeded its 10 ms deadline",
+    );
     expect(deadline.controller.signal.aborted).toBe(true);
     deadline.dispose();
   });

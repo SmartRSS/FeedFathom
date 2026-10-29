@@ -11,8 +11,7 @@ export async function userFor(
   { usersDataService }: SessionServices,
 ) {
   if (typeof sid !== "string" || !sid) return null;
-  const user = await usersDataService.getUserBySid(sid);
-  return user?.status === "active" ? user : null;
+  return (await usersDataService.getUserBySid(sid)) ?? null;
 }
 
 // The shape route handlers see as `user` once createAuthPlugin has run --
@@ -30,17 +29,18 @@ function sessionPlugin(
 ) {
   return new Elysia().derive("plugin", async ({ cookie, request, status }) => {
     const sid = cookie["sid"]?.value;
-    const user =
-      typeof sid === "string" && sid
-        ? await usersDataService.authenticate(
-            sid,
-            request.headers.get("user-agent"),
-          )
-        : undefined;
+    if (typeof sid !== "string" || !sid)
+      return status(401, { error: "Unauthorized" });
+    const user = await usersDataService.authenticate(
+      sid,
+      request.headers.get("user-agent"),
+    );
     if (!user) return status(401, { error: "Unauthorized" });
     if (requireAdmin && !user.isAdmin)
       return status(403, { error: "Unauthorized" });
-    return { user };
+    // The sid rides along so a route that names the current session (the
+    // sessions list, the events stream's recheck) does not re-read the cookie.
+    return { sid, user };
   });
 }
 

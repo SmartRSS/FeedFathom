@@ -1,5 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
-import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
@@ -7,7 +7,7 @@ import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
 import type { OpmlImportService } from "#features/feeds/opml-import-service.ts";
-import type { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
+import type { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
@@ -135,10 +135,7 @@ function createDependencies(): Dependencies {
       // Resolves through getUserBySid, so a test names the signed-in user
       // once and both the read-only lookup and the auth plugin see it.
       async authenticate(sid) {
-        const user = await usersDataService.getUserBySid(sid);
-        return user?.status === "active"
-          ? { ...user, status: "active" }
-          : undefined;
+        return await usersDataService.getUserBySid(sid);
       },
       async createSession() {
         return "test-session";
@@ -352,7 +349,7 @@ test("each authenticated request refreshes the session row", async () => {
   };
   const app = await appFor(dependencies);
 
-  await get(app, "/api/options", {
+  await get(app, "/api/options/sessions", {
     auth: true,
     headers: { "user-agent": "Mozilla/5.0 TestClient" },
   });
@@ -361,7 +358,7 @@ test("each authenticated request refreshes the session row", async () => {
   // A request without a cookie has no row to refresh -- the plugin answers
   // 401 without reaching the database.
   authenticatedWith.length = 0;
-  const unauthorized = await get(app, "/api/options", {
+  const unauthorized = await get(app, "/api/options/sessions", {
     headers: { "user-agent": "Mozilla/5.0 TestClient" },
   });
   expect(unauthorized.status).toBe(401);
@@ -520,7 +517,7 @@ test.each([
   "/api/tree",
   "/api/events",
   "/api/folders",
-  "/api/options",
+  "/api/options/sessions",
 ])("rejects unauthenticated access to %s", async (path) => {
   const app = await appFor(createDependencies());
   const response = await get(app, path);
@@ -993,13 +990,13 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   expect(response.status).toBe(500);
 });
 
-// Our own 30 second budget running out is an upstream timeout, not the
+// Our own request deadline running out is an upstream timeout, not the
 // user's URL being wrong. find used to collapse it into "Invalid feed url".
 test("find reports our own expired deadline as a 504, not a bad url", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.httpClient.get = async () => {
-    throw new HttpDeadlineError();
+    throw new HttpDeadlineError(30_000);
   };
   const app = await appFor(dependencies);
 
@@ -1111,9 +1108,8 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
-  expect(successes[0]?.slice(0, 2)).toEqual([91, true]);
   // No freshness from the cached fetch, so successSource applies its poll floor.
-  expect(successes[0]?.[2]).toBeUndefined();
+  expect(successes[0]).toEqual([91, { cached: true, notBefore: undefined }]);
   expect(enqueues).toEqual([]);
 });
 
@@ -2133,24 +2129,6 @@ test("snoozes and unsnoozes one subscription without touching article state", as
     { pausedUntil: null, sourceId: 3 },
     { pausedUntil: new Date("2026-09-16T12:00:00.000Z"), sourceId: 9 },
   ]);
-});
-
-test("treats inactive sessions as unauthenticated everywhere", async () => {
-  const dependencies = createDependencies();
-  dependencies.usersDataService.getUserBySid = async () => ({
-    ...sessionUser,
-    status: "inactive",
-  });
-  const app = await appFor(dependencies);
-  const headers = { cookie: "sid=inactive" };
-
-  const session = await get(app, "/api/session", { headers });
-  const reader = await get(app, "/api/tree", { headers });
-
-  expect(session.status).toBe(200);
-  expect(await session.json()).toEqual({ user: null });
-  expect(reader.status).toBe(401);
-  expect(await reader.json()).toEqual({ error: "Unauthorized" });
 });
 
 test("rejects mismatched registration passwords before the handler", async () => {
@@ -3418,7 +3396,7 @@ test("leaves the per-user options routes open to any signed-in user", async () =
   });
   const app = await appFor(dependencies);
 
-  const response = await get(app, "/api/options", {
+  const response = await get(app, "/api/options/sessions", {
     headers: { cookie: "sid=reader" },
   });
 

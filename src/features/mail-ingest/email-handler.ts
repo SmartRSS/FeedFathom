@@ -1,15 +1,26 @@
 import { createHash } from "node:crypto";
-import { Buffer } from "node:buffer";
-import type { Readable } from "node:stream";
+import type { Buffer } from "node:buffer";
 import type { ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
+import { dateType } from "#shared/validation/typebox-policy.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
-import {
-  validateParsedMail,
-  validatedMailContent,
-  type ValidatedMail,
-} from "#features/mail-ingest/email-processor.ts";
+
+// The fields read off mailparser's result, checked rather than trusted: the
+// parser's types promise more than its runtime guarantees.
+const parsedMailCheck = Schema.Compile(
+  Type.Object(
+    {
+      date: Type.Optional(Type.Union([dateType, Type.Undefined()])),
+      html: Type.Union([Type.String(), Type.Literal(false)]),
+      subject: Type.Optional(Type.Union([Type.String(), Type.Undefined()])),
+      textAsHtml: Type.Optional(Type.Union([Type.String(), Type.Undefined()])),
+    },
+    { additionalProperties: true },
+  ),
+);
 
 export type TrustedMailEnvelope = {
   from: string;
@@ -34,17 +45,6 @@ const emailGuid = (
     : `email:${sourceId}:raw:${sha256(raw)}`;
 };
 
-const readEmail = async (input: Readable | Buffer): Promise<Buffer> => {
-  if (Buffer.isBuffer(input)) return input;
-  const chunks: Buffer[] = [];
-  for await (const value of input) {
-    const chunk: unknown = value;
-    if (chunk instanceof Uint8Array) chunks.push(Buffer.from(chunk));
-    else throw new Error("Email stream must emit raw bytes");
-  }
-  return Buffer.concat(chunks);
-};
-
 export class EmailHandler {
   constructor(
     private readonly sourcesDataService: Pick<
@@ -55,17 +55,18 @@ export class EmailHandler {
   ) {}
 
   public async processEmail(
-    input: Readable | Buffer,
+    raw: Buffer,
     envelope: TrustedMailEnvelope,
   ): Promise<void> {
-    const raw = await readEmail(input);
     const email = await simpleParser(raw);
-    const parsed = validateParsedMail(email);
+    if (!parsedMailCheck.Check(email)) {
+      throw new Error("Mail parser returned an invalid message projection");
+    }
     const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
     if (!source) throw new Error("No recipients known");
 
     const article = this.createArticleFromEmail(
-      parsed,
+      email,
       emailGuid(email, raw, source.id),
       source.id,
       envelope.from,
@@ -73,17 +74,13 @@ export class EmailHandler {
     await this.articleImporter.importArticles(source.id, [article], {
       alwaysRecount: true,
     });
-    await this.sourcesDataService.successSource(
-      source.id,
-      false,
-      undefined,
-      new Date(),
-      "email",
-    );
+    await this.sourcesDataService.successSource(source.id, {
+      trigger: "email",
+    });
   }
 
   private createArticleFromEmail(
-    email: ValidatedMail,
+    email: Pick<ParsedMail, "date" | "html" | "subject" | "textAsHtml">,
     guid: string,
     sourceId: number,
     senderAddress: string,
@@ -91,7 +88,10 @@ export class EmailHandler {
     const date = email.date ?? new Date();
     return {
       author: senderAddress,
-      content: validatedMailContent(email),
+      content:
+        typeof email.html === "string"
+          ? email.html
+          : (email.textAsHtml ?? "No content."),
       guid,
       lastSeenInFeedAt: new Date(),
       publishedAt: date,

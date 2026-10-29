@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { RedisClient } from "bun";
-import { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 const redis = new RedisClient(requireDisposableRedisUrl());
@@ -37,7 +37,8 @@ test("the 31st call is refused with a Retry-After of at most 60", async () => {
   }
 
   const error = await budget.consume(user).catch((caught: unknown) => caught);
-  if (!isHttpDeferredError(error)) throw new Error("expected a deferral");
+  if (!(error instanceof HttpDeferredError))
+    throw new Error("expected a deferral");
   const retryAfterSeconds = Math.ceil((error.retryAt - Date.now()) / 1000);
   expect(retryAfterSeconds).toBeGreaterThan(0);
   expect(retryAfterSeconds).toBeLessThanOrEqual(60);
@@ -67,7 +68,8 @@ test("two users' budgets are independent", async () => {
   }
 
   expect(
-    isHttpDeferredError(await budget.consume(first).catch((e: unknown) => e)),
+    (await budget.consume(first).catch((e: unknown) => e)) instanceof
+      HttpDeferredError,
   ).toBe(true);
   await expect(budget.consume(second)).resolves.toBeUndefined();
 });

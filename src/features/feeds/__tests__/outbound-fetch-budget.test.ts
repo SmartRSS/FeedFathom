@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { OutboundFetchBudget } from "#features/auth/outbound-fetch-budget.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
 // Enough of Redis for OutboundFetchBudget: one counter per key, with expiry
 // applied against a clock the test advances. Runs the class's script by what
@@ -35,7 +35,8 @@ test("the 31st call inside a minute is refused, with Retry-After at most 60", as
   }
 
   const error = await budget.consume(1).catch((caught: unknown) => caught);
-  if (!isHttpDeferredError(error)) throw new Error("expected a deferral");
+  if (!(error instanceof HttpDeferredError))
+    throw new Error("expected a deferral");
   const retryAfterSeconds = Math.ceil((error.retryAt - Date.now()) / 1000);
   expect(retryAfterSeconds).toBeGreaterThan(0);
   expect(retryAfterSeconds).toBeLessThanOrEqual(60);
@@ -50,7 +51,8 @@ test("a new window allows calls again", async () => {
     await budget.consume(2);
   }
   expect(
-    isHttpDeferredError(await budget.consume(2).catch((e: unknown) => e)),
+    (await budget.consume(2).catch((e: unknown) => e)) instanceof
+      HttpDeferredError,
   ).toBe(true);
 
   redis.advance(60);
@@ -66,7 +68,8 @@ test("two users' budgets are independent", async () => {
     await budget.consume(1);
   }
   expect(
-    isHttpDeferredError(await budget.consume(1).catch((e: unknown) => e)),
+    (await budget.consume(1).catch((e: unknown) => e)) instanceof
+      HttpDeferredError,
   ).toBe(true);
   await expect(budget.consume(2)).resolves.toBeUndefined();
 });

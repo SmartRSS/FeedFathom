@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Readable } from "node:stream";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import {
   mapFeedItemToArticle,
@@ -7,11 +8,19 @@ import {
 import {
   decodeFeedBody,
   detectFeedEncoding,
+  FeedParser,
   parseXmlFeed,
   validateParsedFeed,
 } from "#features/feeds/feed-parser.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
+import type { ArticleImporter } from "#features/feeds/article-import.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
 const item = {
   authors: [{ name: "Author" }],
@@ -514,4 +523,38 @@ Line two</media:description></media:group></entry>
       },
     ]);
   });
+});
+
+// The temporary-redirect cache only saves a hop next time; a Redis write
+// failing must not turn a fetched feed into a failed one.
+test("a failed redirect-cache write still returns the redirected feed", async () => {
+  const body = new TextEncoder().encode(
+    "<rss><channel><title>Moved</title><item><guid>a</guid><link>https://cdn.example/a</link></item></channel></rss>",
+  );
+  const parser = new FeedParser(
+    strictFake<ArticleImporter>({}),
+    new HttpClient(createFakeHttpRedis(), {
+      transport: async () => ({
+        body: Readable.from([body]),
+        destroy() {},
+        headers: new Headers({ "content-type": "application/rss+xml" }),
+        status: 200,
+        url: "https://cdn.example/feed.xml",
+      }),
+    }),
+    strictFake<SourcesDataService>({}),
+    strictFake<WebSubStateService>({}),
+    strictFake<RedirectMap>({
+      resolveUrl: async (url) => url,
+      setRedirect: async () => {
+        throw new Error("redis is down");
+      },
+    }),
+  );
+  using logged = spyOn(console, "error").mockImplementation(() => {});
+
+  const preview = await parser.preview("https://publisher.example/feed.xml");
+
+  expect(preview?.articles.map(({ guid }) => guid)).toEqual(["a"]);
+  expect(logged).toHaveBeenCalledTimes(1);
 });

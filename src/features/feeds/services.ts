@@ -6,13 +6,14 @@ import {
   bullmqQueue,
   bullmqRedis,
 } from "#platform/runtime.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
+import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
@@ -41,6 +42,9 @@ export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(
   bullmqRedis,
 );
 export const redirectMap = /* @__PURE__ */ new RedirectMap(redis);
+export const outboundFetchBudget = /* @__PURE__ */ new OutboundFetchBudget(
+  redis,
+);
 export const feedPreviewCache = /* @__PURE__ */ new FeedPreviewCache(redis);
 export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,

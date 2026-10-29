@@ -2,7 +2,7 @@ import { Queue } from "bullmq";
 import { RedisClient } from "bun";
 import Redis from "ioredis";
 import { config } from "#platform/config.ts";
-import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
+import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 
 // Once maxRetries runs out, Bun closes the client for good: every later
@@ -43,10 +43,9 @@ const bullmqRedis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 const bullmqQueue = new Queue("tasks", { connection: bullmqRedis });
-const drizzleConnection = createPooledDrizzleConnection(
-  config.DATABASE_URL,
-  config.DB_POOL_MAX,
-);
+const drizzleConnection = createDrizzleConnection(config.DATABASE_URL, {
+  max: config.DB_POOL_MAX,
+});
 const httpClient = new HttpClient(redis, {
   instance: config.FEED_FATHOM_DOMAIN,
   version: config.FEEDFATHOM_BUILD,

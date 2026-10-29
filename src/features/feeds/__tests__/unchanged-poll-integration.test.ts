@@ -12,7 +12,7 @@ import { UserSourcesDataService } from "#features/feeds/user-source-data-service
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
 // A poll of a feed that has not changed used to rewrite every article row to

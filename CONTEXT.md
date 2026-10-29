@@ -113,10 +113,6 @@ mapping could not. `find` is the example: it knows the URL it just failed to
 fetch came from the user, so that failure is a client error rather than a
 server one. It re-raises anything else.
 
-Guard a caught value with a helper such as `isHttpDeferredError` rather than a
-bare `instanceof` — what reaches an error hook is whatever was thrown, and
-`instanceof` can itself throw on a proxy with a poisoned `getPrototypeOf` trap.
-
 ## Outbound HTTP
 
 Every request the server makes to a feed, a hub or a favicon goes through

@@ -33,8 +33,11 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       INSERT INTO users (email, name, password, status)
       VALUES ('reader@example.test', 'reader', 'x', 'active') RETURNING id`;
     const [other] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password, status)
+      VALUES ('other@example.test', 'other', 'x', 'active') RETURNING id`;
+    const [dormant] = await client<{ id: number }[]>`
       INSERT INTO users (email, name, password)
-      VALUES ('other@example.test', 'other', 'x') RETURNING id`;
+      VALUES ('dormant@example.test', 'dormant', 'x') RETURNING id`;
     const userId = user!.id;
     const otherId = other!.id;
 
@@ -57,6 +60,13 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
              AS delta
       FROM sessions WHERE sid = ${browserSid}`;
     expect(window!.delta).toBe(365);
+
+    // An inactive account's session resolves to nobody, read-only or not.
+    const dormantSid = await issue(dormant!.id, "Dormant");
+    expect(await usersDataService.getUserBySid(dormantSid)).toBeUndefined();
+    expect(
+      await usersDataService.authenticate(dormantSid, "Dormant"),
+    ).toBeUndefined();
 
     // Expiry is enforced in the lookup itself: an aged-out sid resolves to
     // no user, which the auth plugin answers with a 401.

@@ -1,6 +1,12 @@
 import type { AppConfig } from "#platform/config.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
+// Activation and password-reset mail need both Mailjet credentials; without
+// them the routes behave as if those flows did not exist.
+export const mailConfigured = (
+  appConfig: Pick<AppConfig, "MAILJET_API_KEY" | "MAILJET_API_SECRET">,
+) => Boolean(appConfig.MAILJET_API_KEY && appConfig.MAILJET_API_SECRET);
+
 const mailjetEndpoint = "https://api.mailjet.com/v3.1/send";
 
 export class MailSender {

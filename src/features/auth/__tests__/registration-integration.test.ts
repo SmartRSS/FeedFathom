@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
+import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
@@ -15,7 +15,7 @@ const client = new SQL(databaseUrl);
 // A pool as wide as the race, so the registrations genuinely run on separate
 // connections and meet at the table lock rather than queueing client-side.
 const service = new UsersDataService(
-  createPooledDrizzleConnection(databaseUrl, 8),
+  createDrizzleConnection(databaseUrl, { max: 8 }),
 );
 
 async function resetDatabase() {

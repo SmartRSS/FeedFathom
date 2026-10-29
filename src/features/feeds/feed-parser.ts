@@ -5,9 +5,9 @@ import Schema from "typebox/schema";
 import { dateType } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
-import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import {
   inCapScope,
   mentionsCapNamespace,
@@ -238,15 +238,14 @@ export class FeedParser {
       );
       await this.articleImporter.importArticles(source.id, articlesToUpsert);
 
-      await this.sourcesDataService.successSource(
-        source.id,
+      await this.sourcesDataService.successSource(source.id, {
         cached,
-        freshUntil ? new Date(freshUntil) : undefined,
+        notBefore: freshUntil ? new Date(freshUntil) : undefined,
         observedAt,
-        source.trigger ?? "poll",
-      );
+        trigger: source.trigger ?? "poll",
+      });
     } catch (error_: unknown) {
-      if (isHttpDeferredError(error_)) {
+      if (error_ instanceof HttpDeferredError) {
         throw error_;
       }
       console.error(`parseSource failed for ${source.url}`, error_);
@@ -336,7 +335,10 @@ export class FeedParser {
       // A deferral and our own expired deadline both mean "we never got an
       // answer", which the error hook maps to a 429 and a 504. Collapsing
       // them into undefined would report our timeout as the user's bad URL.
-      if (isHttpDeferredError(error_) || isHttpDeadlineError(error_)) {
+      if (
+        error_ instanceof HttpDeferredError ||
+        error_ instanceof HttpDeadlineError
+      ) {
         throw error_;
       }
       return undefined;
@@ -377,7 +379,12 @@ export class FeedParser {
     const rememberRedirect = response.redirectedPermanently
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
-      : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
+      : // The cache only saves a hop on the next fetch; failing to write it
+        // must not cost this fetch's articles.
+        (from: string, to: string) =>
+          this.redirectMap.setRedirect(from, to).catch((error: unknown) => {
+            console.error(`Could not cache redirect ${from} -> ${to}:`, error);
+          });
     // Only remember original -> final when this fetch actually redirected.
     // fetchedUrl is already pre-substituted from the cache, so refreshing on a
     // non-redirect would rewrite a stale mapping forever once the origin's

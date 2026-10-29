@@ -195,9 +195,12 @@ export async function migrateDatabase(
         parseConcurrentIndexes(pending),
       );
       await predropIndexesConcurrently(reserved, parseConcurrentDrops(pending));
-      await migrate(createDrizzleConnection(databaseUrl, reserved), {
-        migrationsFolder,
-      });
+      await migrate(
+        createDrizzleConnection(databaseUrl, { client: reserved }),
+        {
+          migrationsFolder,
+        },
+      );
       console.log("Migrations complete");
     } finally {
       try {
