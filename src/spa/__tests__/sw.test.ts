@@ -406,6 +406,81 @@ test("a tree preloaded before a sign-in is not served after it", async () => {
   expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
 });
 
+// The keys the worker must never prune: an offline-downloaded body, the
+// queue's owner and the favicon purge marker.
+const keepers = [
+  "/sw-offline-article?article=1",
+  "/sw-queue-account",
+  "/sw-favicon-headers-purged",
+];
+
+test("a deploy's assets, lazy chunks included, are dropped once a newer shell is served", async () => {
+  let bundle = "old";
+  const sw = loadServiceWorker((path) => {
+    if (path === "/") return new Response(shellHtml(`index-${bundle}`));
+    // A lazy chunk is named by the entry script, not the HTML.
+    if (path.startsWith("/assets/index-"))
+      return new Response(`m(["assets/options-${bundle}.js"])`);
+    return path === "/api/tree"
+      ? Response.json({ tree: [] })
+      : new Response("asset");
+  });
+  const assets = () =>
+    [...sw.entries.keys()].filter((key) => key.startsWith("/assets/"));
+  await sw.navigate("/").background;
+  await sw.dispatch(new Request(`${ORIGIN}/assets/options-old.js`)).response;
+  for (const key of keepers) sw.entries.set(key, new Response("{}"));
+  bundle = "new";
+  await sw.navigate("/").background;
+  await sw.dispatch(new Request(`${ORIGIN}/assets/options-new.js`)).response;
+  // Tabs still on the shell served before the deploy can load its chunks.
+  expect(assets()).toHaveLength(4);
+  await sw.navigate("/").background;
+  expect(assets().toSorted()).toEqual([
+    "/assets/index-new.js",
+    "/assets/options-new.js",
+  ]);
+  for (const key of keepers) expect(sw.entries.has(key)).toBe(true);
+  expect(await sw.entries.get("/")?.text()).toBe(shellHtml("index-new"));
+});
+
+test("a tree load drops the favicons it no longer names", async () => {
+  let current = tree;
+  const sw = loadServiceWorker((path) =>
+    path === "/api/tree" ? Response.json(current) : network(path),
+  );
+  await sw.loadTree();
+  await Promise.all(
+    tree.tree.map(
+      (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
+    ),
+  );
+  for (const key of keepers) sw.entries.set(key, new Response("{}"));
+  current = { tree: [{ favicon: "/api/favicon/2?v=new", type: "source" }] };
+  await sw.loadTree();
+  await settle();
+  await sw.dispatch(new Request(`${ORIGIN}/api/favicon/2?v=new`)).response;
+  expect(
+    [...sw.entries.keys()].filter((key) => key.startsWith("/api/favicon/")),
+  ).toEqual(["/api/favicon/2?v=new"]);
+  for (const key of keepers) expect(sw.entries.has(key)).toBe(true);
+});
+
+test("each API path keeps only its 20 newest query strings", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  for (let id = 1; id <= 30; id++) {
+    // oxlint-disable-next-line no-await-in-loop -- lookups made one by one
+    await sw.dispatch(new Request(`${ORIGIN}/api/find?url=${id}`)).response;
+    // oxlint-disable-next-line no-await-in-loop -- let each trim finish
+    await settle();
+  }
+  const finds = [...sw.entries.keys()].filter((key) =>
+    key.startsWith("/api/find?"),
+  );
+  expect(finds).toHaveLength(20);
+  expect(finds[0]).toBe("/api/find?url=11");
+});
+
 const articleNetwork = (path: string) =>
   Response.json({ path, servedAt: performance.now() });
 

@@ -407,7 +407,10 @@ async function networkFirst(request, cacheName, network = fetch(request)) {
   try {
     const response = await network;
     if (response.ok) {
-      cache.put(request, response.clone());
+      const { pathname, search } = new URL(request.url);
+      cache
+        .put(request, response.clone())
+        .then(() => search && trimPath(cache, pathname, QUERY_CACHE_LIMIT));
       void flushQueue();
     }
     return response;
@@ -443,16 +446,18 @@ const ARTICLE_FRESH_MS = 60 * 1000;
 // Nothing else evicts an opened article before CACHE_VERSION changes.
 const ARTICLE_CACHE_LIMIT = 200;
 
+// Each query string is an entry of its own -- a lookup per URL for
+// /api/find and /api/preview -- so every path keeps only its newest few.
+const QUERY_CACHE_LIMIT = 20;
+
 // cache.keys() lists entries in insertion order, and a put replaces an
 // entry at the end, so the oldest fetches come first.
-async function trimArticles(cache) {
-  const articles = (await cache.keys()).filter(
-    (request) => new URL(request.url).pathname === "/api/article",
+async function trimPath(cache, pathname, limit) {
+  const entries = (await cache.keys()).filter(
+    (request) => new URL(request.url).pathname === pathname,
   );
   await Promise.all(
-    articles
-      .slice(0, -ARTICLE_CACHE_LIMIT)
-      .map((request) => cache.delete(request)),
+    entries.slice(0, -limit).map((request) => cache.delete(request)),
   );
 }
 
@@ -469,7 +474,7 @@ async function recentArticleFirst(request, cacheName) {
     const response = await fetch(request);
     if (response.ok) {
       putWithFetchedAt(cache, request, response.clone()).then(() =>
-        trimArticles(cache),
+        trimPath(cache, "/api/article", ARTICLE_CACHE_LIMIT),
       );
       void flushQueue();
     }
@@ -481,7 +486,7 @@ async function recentArticleFirst(request, cacheName) {
 }
 
 // Unread bodies downloaded for offline reading (#992). Their keys sit apart
-// from /api/article, so trimArticles leaves them alone and recentArticleFirst
+// from /api/article, so trimPath leaves them alone and recentArticleFirst
 // serves them without a round trip. They live in the API cache, so a sign-in
 // or logout empties them with the rest of the account's data. The page owns
 // the setting: each sync posts the sources with something unread, and none
@@ -740,6 +745,34 @@ async function articleList(request) {
 // instead of firing a second round trip.
 let treePreload;
 
+function treeFaviconUrls(node) {
+  if (node.type === "source") return node.favicon ? [node.favicon] : [];
+  return (node.children ?? []).flatMap(treeFaviconUrls);
+}
+
+// A favicon's URL changes with the icon (?v=), and a removed source leaves
+// its icon behind: only the icons the latest tree names stay cached.
+async function pruneFavicons(response) {
+  const { tree } = await response.json();
+  if (!Array.isArray(tree)) return;
+  const named = new Set(tree.flatMap(treeFaviconUrls));
+  const cache = await caches.open(API_CACHE);
+  const stale = (await cache.keys())
+    .map((request) => new URL(request.url))
+    .filter(
+      (url) =>
+        url.pathname.startsWith("/api/favicon/") &&
+        !named.has(url.pathname + url.search),
+    );
+  await Promise.all(stale.map((url) => cache.delete(url.pathname + url.search)));
+}
+
+async function freshTree(request, preload) {
+  const response = await networkFirst(request, API_CACHE, preload);
+  if (response.ok) pruneFavicons(response.clone()).catch(() => {});
+  return response;
+}
+
 // Boot paints from this while its real /api/tree request is in flight
 // (#989), so a cached tree shows at once on a slow connection. It never goes
 // to the network -- the real request already has -- so a miss is a bare 504
@@ -765,6 +798,26 @@ async function completeCachedShell(cache) {
   return assets.every(Boolean) ? { assetUrls, response: cached } : undefined;
 }
 
+// Hash-named assets would otherwise pile up, a set per deploy. What the
+// served shell can load stays: the assets its HTML names, and the lazy chunks
+// its scripts name in turn (as "assets/<file>"). A newer shell's assets are
+// stored after this runs, so the cache holds the served deploy and the next.
+async function pruneShell(cache, assetUrls) {
+  const keep = new Set(assetUrls);
+  for (const url of assetUrls.filter((asset) => asset.endsWith(".js"))) {
+    // eslint-disable-next-line no-await-in-loop -- a handful of entry scripts
+    const script = await cache.match(url);
+    if (!script) return; // its chunks can't be told from a past deploy's
+    // eslint-disable-next-line no-await-in-loop -- a handful of entry scripts
+    for (const [chunk] of (await script.text()).matchAll(/assets\/[\w.-]+/g))
+      keep.add(`/${chunk}`);
+  }
+  const stale = (await cache.keys())
+    .map((request) => new URL(request.url).pathname)
+    .filter((path) => path.startsWith("/assets/") && !keep.has(path));
+  await Promise.all(stale.map((path) => cache.delete(path)));
+}
+
 async function notifyShellUpdated() {
   const clients = await self.clients.matchAll({ type: "window" });
   for (const client of clients) client.postMessage({ type: "shell-updated" });
@@ -780,6 +833,7 @@ async function shell(event, path) {
   const network = fetch("/", SHELL_REQUEST_INIT);
   const revalidated = network.then(async (response) => {
     if (!response.ok) return;
+    if (cached) await pruneShell(cache, cached.assetUrls);
     const assetUrls = await putShell(cache, response.clone());
     if (cached && assetUrls.join() !== cached.assetUrls.join())
       await notifyShellUpdated();
@@ -835,7 +889,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname === "/api/tree") {
-    event.respondWith(networkFirst(request, API_CACHE, treePreload));
+    event.respondWith(freshTree(request, treePreload));
     treePreload = undefined;
     return;
   }
