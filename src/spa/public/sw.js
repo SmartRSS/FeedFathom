@@ -83,10 +83,27 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key)),
         ),
       )
+      .then(() => purgeHeaderlessFavicons())
       .then(() => self.clients.claim())
       .then(() => flushQueue()),
   );
 });
+
+// Favicons cached before the route sent its CSP and nosniff headers are
+// dropped once, keeping the rest of API_CACHE (offline articles survive). The
+// marker records that the purge ran.
+const FAVICON_PURGE_MARKER = "/sw-favicon-headers-purged";
+async function purgeHeaderlessFavicons() {
+  const cache = await caches.open(API_CACHE);
+  if (await cache.match(FAVICON_PURGE_MARKER)) return;
+  const keys = await cache.keys();
+  await Promise.all(
+    keys
+      .filter((key) => new URL(key.url).pathname.startsWith("/api/favicon/"))
+      .map((key) => cache.delete(key)),
+  );
+  await cache.put(FAVICON_PURGE_MARKER, new Response(""));
+}
 
 self.addEventListener("sync", (event) => {
   if (event.tag === "replay-mutations") event.waitUntil(flushQueue());
@@ -358,11 +375,11 @@ async function queueableMutation(request, route) {
   }
 }
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request, cacheName, init) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
+  const response = await fetch(request, init);
   if (response.ok) cache.put(request, response.clone());
   return response;
 }
@@ -887,9 +904,11 @@ self.addEventListener("fetch", (event) => {
 
   // Content-addressed (tree.ts appends a fingerprint of sources.favicon as
   // ?v=): the same icon always lives at the same URL, so a cached copy is
-  // never stale and needs no background revalidation.
+  // never stale and needs no background revalidation. A miss skips the HTTP
+  // cache: copies stored there before favicons carried their CSP must not be
+  // copied into this cache.
   if (url.pathname.startsWith("/api/favicon/")) {
-    event.respondWith(cacheFirst(request, API_CACHE));
+    event.respondWith(cacheFirst(request, API_CACHE, { cache: "no-cache" }));
     return;
   }
   if (url.pathname === "/api/tree") {
