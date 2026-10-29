@@ -11,8 +11,9 @@ export async function getFaviconHandler({
   const dataUrl = Number.isInteger(sourceId)
     ? await faviconStore.getFavicon(sourceId)
     : null;
-  // Parameters (`image/png; charset=x`) are dropped; anything but image/* is
-  // refused so stored bytes never render as a document in the app origin.
+  // Parameters (`image/png; charset=x`) are dropped and anything but image/* is
+  // refused. The CSP sandbox below is what keeps an SVG opened directly from
+  // running script in the app origin; the type filter alone does not.
   const match = dataUrl
     ? /^data:(image\/[^;,]+)(?:;[^,]*)?;base64,(.+)$/i.exec(dataUrl)
     : null;
@@ -25,7 +26,7 @@ export async function getFaviconHandler({
       "Cache-Control": "private, max-age=31536000, immutable",
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-      "Content-Type": match[1]?.trim() ?? "application/octet-stream",
+      "Content-Type": match[1]?.trim() ?? "",
       "X-Content-Type-Options": "nosniff",
     },
   });

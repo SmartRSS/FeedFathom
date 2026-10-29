@@ -3,7 +3,7 @@
 // cached copy past what Cache-Control suggests. CACHE_VERSION is separate --
 // bump it only to force-purge every cached entry when the caching scheme
 // itself changes.
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 const SHELL_REQUEST_INIT = {
@@ -358,11 +358,11 @@ async function queueableMutation(request, route) {
   }
 }
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request, cacheName, init) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
+  const response = await fetch(request, init);
   if (response.ok) cache.put(request, response.clone());
   return response;
 }
@@ -887,9 +887,11 @@ self.addEventListener("fetch", (event) => {
 
   // Content-addressed (tree.ts appends a fingerprint of sources.favicon as
   // ?v=): the same icon always lives at the same URL, so a cached copy is
-  // never stale and needs no background revalidation.
+  // never stale and needs no background revalidation. A miss skips the HTTP
+  // cache: copies stored there before favicons carried their CSP must not be
+  // copied into this cache.
   if (url.pathname.startsWith("/api/favicon/")) {
-    event.respondWith(cacheFirst(request, API_CACHE));
+    event.respondWith(cacheFirst(request, API_CACHE, { cache: "no-cache" }));
     return;
   }
   if (url.pathname === "/api/tree") {
