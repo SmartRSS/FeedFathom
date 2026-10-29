@@ -63,13 +63,18 @@ export class SourcesDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  public async addSource(payload: {
-    homeUrl: string;
-    kind?: "email" | "feed" | undefined;
-    url: string;
-  }): Promise<Source> {
+  // `db` lets a caller's transaction, such as the OPML import's, add it.
+  public async addSource(
+    payload: {
+      homeUrl: string;
+      kind?: "email" | "feed" | undefined;
+      url: string;
+    },
+    db: Pick<BunSQLDatabase<typeof schema>, "insert" | "select"> = this
+      .drizzleConnection,
+  ): Promise<Source> {
     const inserted = (
-      await this.drizzleConnection
+      await db
         .insert(sources)
         .values(payload)
         .onConflictDoNothing({ target: sources.url })
@@ -77,7 +82,9 @@ export class SourcesDataService {
     ).at(0);
     if (inserted) return inserted;
 
-    const existing = await this.findSourceByUrl(payload.url);
+    const existing = (
+      await db.select().from(sources).where(eq(sources.url, payload.url))
+    ).at(0);
     if (!existing) throw new Error("Source conflict resolved without a row");
     return existing;
   }

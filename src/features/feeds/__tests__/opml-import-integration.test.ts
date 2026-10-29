@@ -3,6 +3,7 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
+import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
@@ -15,11 +16,15 @@ test("repeat OPML imports restore missing subscriptions and preserve existing st
   const client = new SQL(databaseUrl);
   const connection = createDrizzleConnection(databaseUrl);
   const queued: number[] = [];
-  const importer = new OpmlImportService(connection, {
-    async enqueueSource(source) {
-      queued.push(source.id);
+  const importer = new OpmlImportService(
+    connection,
+    {
+      async enqueueSource(source) {
+        queued.push(source.id);
+      },
     },
-  });
+    new SourcesDataService(connection),
+  );
   const tree = [
     {
       children: [

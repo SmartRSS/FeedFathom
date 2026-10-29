@@ -50,6 +50,7 @@ export const opmlParser = /* @__PURE__ */ new OpmlParser();
 export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,
   sourceEnqueuer,
+  sourcesDataService,
 );
 export const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(
   redis,
