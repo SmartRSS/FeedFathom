@@ -1,7 +1,7 @@
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 import { isListFeedsMessage } from "#shared/extension-types.ts";
-import { getInstanceUrl, getMailDomain } from "./instance.ts";
-import { buildNewsletterAddress, resolveFeedOpenUrl } from "./url-helpers.ts";
+import { getInstanceUrl } from "./instance.ts";
+import { buildNewsletterUrl, resolveFeedOpenUrl } from "./url-helpers.ts";
 
 // Stands in for the desktop right-click "Subscribe" menu on browsers with no
 // contextMenus API (Firefox for Android): background-event.ts sets this as
@@ -83,12 +83,8 @@ void (async () => {
         return;
       }
 
-      const address = buildNewsletterAddress(
-        instance,
-        globalThis.crypto.randomUUID(),
-        await getMailDomain(instance),
-      );
-      if (address) openAndClose(resolveFeedOpenUrl(instance, address));
+      const url = buildNewsletterUrl(instance);
+      if (url) openAndClose(url);
     })();
   });
 

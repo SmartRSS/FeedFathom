@@ -97,11 +97,7 @@
       "error",
       { "allow": ["src/platform/db/schema.ts"] }
     ],
-    "feedfathom/route-deps-narrowed": "error",
     "feedfathom/schema-compile-module-scope": "error",
-    // oxc/no-barrel-file only counts `export * from` (default threshold 100),
-    // of which this repo has none, so it can never fire. feedfathom/no-barrel-file
-    // supersedes it and catches the named-re-export form too.
     "oxc/no-const-enum": "error",
     "prefer-arrow-callback": "error",
     "prefer-const": "error",

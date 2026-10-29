@@ -49,6 +49,7 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
+  initialNewsletter?: boolean;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
@@ -135,7 +136,10 @@ export function FeedDiscovery(props: {
       void (async () => {
         try {
           const session = await api("/session", sessionResponse);
-          if (!disposed) setMailDomain(session.mailDomain ?? "");
+          if (disposed) return;
+          setMailDomain(session.mailDomain ?? "");
+          if (props.initialNewsletter && session.mailDomain && !feedUrl())
+            mintNewsletterAddress(session.mailDomain);
         } catch {}
       })();
   });
@@ -217,8 +221,22 @@ export function FeedDiscovery(props: {
     props.focusPane("reader");
   }
 
+  // The address goes into the URL as ?feedUrl= (the form old extensions
+  // opened), so a reload or a discarded tab coming back shows the address the
+  // user already copied instead of minting a new one.
+  function mintNewsletterAddress(domain: string) {
+    const address = newsletterAddress(domain);
+    setFeedUrl(address);
+    if (location.pathname === "/preview")
+      history.replaceState(
+        history.state,
+        "",
+        `/preview?feedUrl=${encodeURIComponent(address)}`,
+      );
+  }
+
   async function useNewsletterAddress() {
-    setFeedUrl(newsletterAddress(mailDomain()));
+    mintNewsletterAddress(mailDomain());
     setArticles([]);
     setSelectedIndex(undefined);
     await copyAddress();

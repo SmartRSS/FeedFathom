@@ -131,6 +131,7 @@ export async function installApiFixture(
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
     longArticle?: boolean;
+    mailDomain?: string;
     manyArticles?: boolean;
     multipleArticles?: boolean;
     passwordResetEnabled?: boolean;
@@ -171,7 +172,10 @@ export async function installApiFixture(
 
     if (method === "GET" && url.pathname === "/api/session") {
       if (options.sessionFailure) return respond({ user: { id: "malformed" } });
-      return respond({ user: state.authenticated ? user : null });
+      return respond({
+        ...(options.mailDomain ? { mailDomain: options.mailDomain } : {}),
+        user: state.authenticated ? user : null,
+      });
     }
 
     // The login view reads this to decide whether to offer a reset link, so

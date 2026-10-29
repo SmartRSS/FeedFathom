@@ -75,8 +75,6 @@ const readerMessage = (event: MessageEvent<unknown>) => {
   let scanGeneration = 0;
   let scanTimeoutRef: null | Timer = null;
   let visibilityTimeoutRef: null | Timer = null;
-  let mutationObserver: MutationObserver | null = null;
-  let disposed = false;
 
   const updateAvailableSourcesList = () => {
     if (visibilityTimeoutRef) clearTimeout(visibilityTimeoutRef);
@@ -103,11 +101,7 @@ const readerMessage = (event: MessageEvent<unknown>) => {
   const scanPage = async (href: string, generation: number) => {
     try {
       const feeds = await scanDocument(href);
-      if (
-        disposed ||
-        generation !== scanGeneration ||
-        href !== document.location.href
-      )
+      if (generation !== scanGeneration || href !== document.location.href)
         return;
       latestFeeds = feeds;
       updateAvailableSourcesList();
@@ -132,8 +126,10 @@ const readerMessage = (event: MessageEvent<unknown>) => {
   const setupMutationObserver = () => {
     const body = document.body;
     if (!body) return;
-    mutationObserver = new MutationObserver(rescanIfHrefChanged);
-    mutationObserver.observe(body, { childList: true, subtree: true });
+    new MutationObserver(rescanIfHrefChanged).observe(body, {
+      childList: true,
+      subtree: true,
+    });
   };
 
   const init = () => {
@@ -143,29 +139,10 @@ const readerMessage = (event: MessageEvent<unknown>) => {
     void scanPage(currentHref, generation);
   };
 
-  const cleanup = () => {
-    disposed = true;
-    scanGeneration++;
-    window.removeEventListener("message", readerMessage);
-    window.removeEventListener("pagehide", updateAvailableSourcesList);
-    window.removeEventListener("popstate", rescanIfHrefChanged);
-    window.removeEventListener("hashchange", rescanIfHrefChanged);
-    window.removeEventListener("unload", cleanup);
-    document.removeEventListener(
-      "visibilitychange",
-      updateAvailableSourcesList,
-    );
-    document.removeEventListener("DOMContentLoaded", init);
-    if (scanTimeoutRef) clearTimeout(scanTimeoutRef);
-    if (visibilityTimeoutRef) clearTimeout(visibilityTimeoutRef);
-    mutationObserver?.disconnect();
-  };
-
   window.addEventListener("message", readerMessage);
   window.addEventListener("pagehide", updateAvailableSourcesList);
   window.addEventListener("popstate", rescanIfHrefChanged);
   window.addEventListener("hashchange", rescanIfHrefChanged);
-  window.addEventListener("unload", cleanup);
   document.addEventListener("visibilitychange", updateAvailableSourcesList);
 
   if (document.readyState === "loading")

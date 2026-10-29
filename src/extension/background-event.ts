@@ -7,9 +7,9 @@ import {
 } from "#shared/extension-types.ts";
 import { badgeColor, formatBadgeCount, getBadgeEnabled } from "./badge.ts";
 import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
-import { getInstanceUrl, getMailDomain } from "./instance.ts";
+import { getInstanceUrl } from "./instance.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
-import { buildNewsletterAddress, resolveFeedOpenUrl } from "./url-helpers.ts";
+import { buildNewsletterUrl, resolveFeedOpenUrl } from "./url-helpers.ts";
 
 // Firefox for Android has no contextMenus API at all: touching it throws
 // synchronously, which would otherwise abort this whole script (including
@@ -153,15 +153,8 @@ if (hasContextMenus) {
           return;
         }
 
-        const address = buildNewsletterAddress(
-          instance,
-          globalThis.crypto.randomUUID(),
-          await getMailDomain(instance),
-        );
-        if (address)
-          void chrome.tabs.create({
-            url: resolveFeedOpenUrl(instance, address),
-          });
+        const url = buildNewsletterUrl(instance);
+        if (url) void chrome.tabs.create({ url });
         return;
       }
 
