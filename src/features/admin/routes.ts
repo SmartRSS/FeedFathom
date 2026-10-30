@@ -51,22 +51,18 @@ const userOptionsRoutes = (services: AdminRouteServices) => {
             { error: "Current password is incorrect." },
             400,
           );
-          // Keyed by user, not address; see ThrottleScope.
+          // Keyed by user, not address; see ThrottleScope. The caller is
+          // signed in, so saying it was throttled reveals nothing about
+          // which accounts exist.
           const key = `user:${user.id}`;
-          if (await authThrottle.blocked("password-change", key, user.email))
-            return incorrect;
+          if (!(await authThrottle.attempt("password-change", key, user.email)))
+            return json({ error: "Too many attempts. Try again later." }, 429);
           const account = await usersDataService.findUser(user.email);
           if (
             !account ||
             !(await password.verify(body.oldPassword, account.password))
-          ) {
-            await authThrottle.recordFailure(
-              "password-change",
-              key,
-              user.email,
-            );
+          )
             return incorrect;
-          }
           const updated = await usersDataService.updatePassword(
             account.id,
             account.password,
@@ -74,7 +70,7 @@ const userOptionsRoutes = (services: AdminRouteServices) => {
             sid,
           );
           if (!updated) return incorrect;
-          await authThrottle.clearFailures("password-change", key, user.email);
+          await authThrottle.succeeded("password-change", key, user.email);
           return json({ success: true });
         },
       )

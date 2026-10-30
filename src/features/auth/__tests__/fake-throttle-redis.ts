@@ -1,6 +1,7 @@
 // Enough of Redis for AuthThrottle's counting, without expiry. EVAL runs the
-// throttle's two scripts by what they count rather than by interpreting Lua;
-// the window, its expiry and the TTL repair are held to the real scripts in
+// throttle's scripts by what they do rather than by interpreting Lua; each
+// call completes before it yields, as a script on a real server is atomic.
+// The window, its expiry and the TTL repair are held to the real scripts in
 // auth-throttle-integration.test.ts against a real server.
 export function createFakeThrottleRedis() {
   const counts = new Map<string, number>();
@@ -10,15 +11,14 @@ export function createFakeThrottleRedis() {
       for (const key of keys) if (counts.delete(key)) removed++;
       return removed;
     },
-    async send(_command: "EVAL", [script = "", , ...rest]: string[]) {
-      const keys = rest.slice(0, -1);
-      if (script.includes("INCR")) {
-        const [key = ""] = keys;
-        const value = (counts.get(key) ?? 0) + 1;
-        counts.set(key, value);
-        return value;
+    async send(_command: "EVAL", [script = "", , key = ""]: string[]) {
+      const value = counts.get(key) ?? 0;
+      if (script.includes("DECR")) {
+        if (value > 0) counts.set(key, value - 1);
+        return 0;
       }
-      return keys.map((key) => counts.get(key)?.toString() ?? null);
+      counts.set(key, value + 1);
+      return [value + 1, -1];
     },
   };
 }

@@ -60,18 +60,23 @@ export function createRegisterRoute({
   usersDataService,
 }: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
   Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig }) {
-  // If delivery fails, withdraw the stored token so the next registration
-  // attempt for this address is treated as an expired link and sends a fresh
-  // one, rather than waiting out a link nobody received. The failure is
-  // logged, not answered: only an address the caller named reaches a send,
-  // and a 500 for some addresses and not others says which ones exist.
-  const sendActivation = async (email: string, token: string) => {
-    try {
-      await mailSender.sendActivationEmail(email, token);
-    } catch (error) {
-      await usersDataService.withdrawActivationToken(token);
-      console.error("Activation email failed to send:", error);
-    }
+  // Not awaited, on every path, for the reason the reset route gives: only an
+  // address the caller named reaches a send, so waiting on Mailjet would time
+  // one kind of account apart from another. If delivery fails, withdraw the
+  // stored token so the next registration attempt for this address is
+  // treated as an expired link and sends a fresh one, rather than waiting out
+  // a link nobody received. The failure is logged, not answered, for the same
+  // reason.
+  const sendActivation = (email: string, token: string) => {
+    void mailSender
+      .sendActivationEmail(email, token)
+      .catch(async (error: unknown) => {
+        console.error("Activation email failed to send:", error);
+        await usersDataService.withdrawActivationToken(token);
+      })
+      .catch((error: unknown) => {
+        console.error("Activation token withdrawal failed:", error);
+      });
   };
 
   const allowedEmailPolicy = Type.String(
@@ -115,7 +120,7 @@ export function createRegisterRoute({
         }
         if (isDisposableEmail(request.email)) return json({ success: true });
 
-        // Throttle before any mail or password hashing, with or without email
+        // Counted before any mail or password hashing, with or without email
         // activation: each attempt costs a hash either way. Exempt first-user
         // setup to avoid locking out the operator.
         if (userCount > 0) {
@@ -124,11 +129,14 @@ export function createRegisterRoute({
             server,
             config.TRUSTED_PROXY_HEADER,
           );
-          // Same generic body as a disposable address or an existing account,
-          // so being throttled is not itself an answer about who exists.
-          if (await authThrottle.blocked("register", address, request.email))
-            return json({ success: true });
-          await authThrottle.recordFailure("register", address, request.email);
+          // A distinct answer is safe here: both counters count this
+          // address's attempts whether or not the account exists, so being
+          // refused says nothing about who has one.
+          if (!(await authThrottle.attempt("register", address, request.email)))
+            return json(
+              { error: "Too many attempts. Try again later.", success: false },
+              429,
+            );
         }
 
         // Hashed before the lookup so an existing address costs what a new
@@ -159,7 +167,7 @@ export function createRegisterRoute({
                     activationTokenExpiresAt,
                   )
                 )
-                  await sendActivation(existing.email, activationToken);
+                  sendActivation(existing.email, activationToken);
               }
             } else {
               const resetToken = randomUUID();
@@ -168,7 +176,7 @@ export function createRegisterRoute({
                 digestToken(resetToken),
                 new Date(Date.now() + resetLifetimeMs),
               );
-              await mailSender
+              void mailSender
                 .sendAccountExistsEmail(existing.email, resetToken)
                 .catch((cause: unknown) => {
                   console.error("Account-exists email failed to send:", cause);
@@ -200,8 +208,7 @@ export function createRegisterRoute({
         // Lost a same-address race: the same answer an existing account gets.
         if (outcome === "exists") return json({ success: true });
         // Mail only once the row holding its token is committed.
-        if (activationToken)
-          await sendActivation(request.email, activationToken);
+        if (activationToken) sendActivation(request.email, activationToken);
         return json({ success: true });
       },
     );

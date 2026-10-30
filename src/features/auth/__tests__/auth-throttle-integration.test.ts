@@ -23,17 +23,18 @@ afterAll(() => {
   redis.close();
 });
 
-test("every counter a burst of concurrent failures creates carries the window", async () => {
+test("every counter a burst of concurrent attempts creates carries the window", async () => {
   const { account, address, source } = scopeKeys();
 
-  await Promise.all(
-    Array.from({ length: 25 }, () =>
-      throttle.recordFailure("login", address, email),
-    ),
+  const allowed = await Promise.all(
+    Array.from({ length: 25 }, () => throttle.attempt("login", address, email)),
   );
 
+  // Atomic INCR: exactly the limit get through, however many race.
+  expect(allowed.filter(Boolean)).toHaveLength(10);
   expect(await redis.get(account)).toBe("25");
-  expect(await redis.get(source)).toBe("25");
+  // Only the attempts the account counter let through reach the address one.
+  expect(await redis.get(source)).toBe("10");
   for (const ttl of await Promise.all([
     redis.ttl(account),
     redis.ttl(source),
@@ -43,16 +44,14 @@ test("every counter a burst of concurrent failures creates carries the window", 
   }
 });
 
-test("later failures keep the window the first one opened", async () => {
+test("later attempts keep the window the first one opened", async () => {
   const { account, address } = scopeKeys();
-  await throttle.recordFailure("login", address, email);
+  await throttle.attempt("login", address, email);
   // Stands in for most of the window having passed.
   await redis.expire(account, 5);
 
   await Promise.all(
-    Array.from({ length: 5 }, () =>
-      throttle.recordFailure("login", address, email),
-    ),
+    Array.from({ length: 5 }, () => throttle.attempt("login", address, email)),
   );
 
   expect(await redis.get(account)).toBe("6");
@@ -61,45 +60,56 @@ test("later failures keep the window the first one opened", async () => {
 
 test("counters left without expiry recover a bounded lifetime", async () => {
   const { account, address, source } = scopeKeys();
-  await redis.set(account, "10");
+  await redis.set(account, "3");
   await redis.set(source, "50");
 
-  // A blocked request returns before counting, so the read repairs both.
-  expect(await throttle.blocked("login", address, email)).toBe(true);
+  // Over the address limit, so refused -- but counted, and so repaired.
+  expect(await throttle.attempt("login", address, email)).toBe(false);
+  expect(await redis.get(account)).toBe("4");
   expect(await redis.ttl(account)).toBe(window);
   expect(await redis.ttl(source)).toBe(window);
-
-  // Counting repairs one that the read never saw at its limit.
-  const other = scopeKeys();
-  await redis.set(other.account, "3");
-  await throttle.recordFailure("login", other.address, email);
-  expect(await redis.get(other.account)).toBe("4");
-  expect(await redis.ttl(other.account)).toBe(window);
 });
 
-test("reading creates no counter", async () => {
+test("a success clears the account and refunds one attempt without creating a key", async () => {
   const { account, address, source } = scopeKeys();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
+    await throttle.attempt("login", address, email);
+  }
 
-  expect(await throttle.blocked("login", address, email)).toBe(false);
+  await throttle.succeeded("login", address, email);
   expect(await redis.exists(account)).toBe(false);
+  expect(await redis.get(source)).toBe("2");
+  expect(await redis.ttl(source)).toBeGreaterThan(0);
+
+  // A refund after the window ran out must not leave a -1 with no expiry.
+  await redis.del(source);
+  await throttle.succeeded("login", address, email);
   expect(await redis.exists(source)).toBe(false);
 });
 
-test("counters stop blocking after the window and success clears only the account", async () => {
-  const { account, address, source } = scopeKeys();
+test("a password change counts on the account counter alone", async () => {
+  const address = `user:${crypto.randomUUID()}`;
   for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- Each failure builds on the last.
-    await throttle.recordFailure("login", address, email);
+    // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
+    expect(await throttle.attempt("password-change", address, email)).toBe(
+      true,
+    );
   }
-  expect(await throttle.blocked("login", address, email)).toBe(true);
+  expect(await throttle.attempt("password-change", address, email)).toBe(false);
+  expect(await redis.exists(`password-change-source:${address}`)).toBe(false);
 
-  await throttle.clearFailures("login", address, email);
-  expect(await redis.exists(account)).toBe(false);
-  expect(await redis.get(source)).toBe("10");
+  await throttle.succeeded("password-change", address, email);
+  expect(await redis.exists(`password-change-fail:${address}:${email}`)).toBe(
+    false,
+  );
+});
 
+test("counters stop refusing after the window", async () => {
+  const { address, source } = scopeKeys();
   await redis.set(source, "50");
   await redis.send("PEXPIRE", [source, "50"]);
-  expect(await throttle.blocked("login", address, email)).toBe(true);
+  expect(await throttle.attempt("login", address, email)).toBe(false);
   await Bun.sleep(100);
-  expect(await throttle.blocked("login", address, email)).toBe(false);
+  expect(await throttle.attempt("login", address, email)).toBe(true);
 });

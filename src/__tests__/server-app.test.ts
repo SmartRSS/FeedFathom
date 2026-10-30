@@ -1856,14 +1856,12 @@ test("login refuses when the verified password was replaced before issuance", as
   dependencies.usersDataService.createSession = async () => undefined;
   const throttled: string[] = [];
   dependencies.authThrottle = strictFake<AuthThrottle>({
-    async blocked() {
-      return false;
+    async attempt() {
+      throttled.push("attempt");
+      return true;
     },
-    async clearFailures() {
-      throttled.push("clear");
-    },
-    async recordFailure() {
-      throttled.push("failure");
+    async succeeded() {
+      throttled.push("succeeded");
     },
   });
   const app = await appFor(dependencies);
@@ -1878,7 +1876,8 @@ test("login refuses when the verified password was replaced before issuance", as
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ error: "Wrong login data" });
   expect(response.headers.get("set-cookie")).toBeNull();
-  expect(throttled).toEqual(["failure"]);
+  // Counted and never taken back: it stays a failure.
+  expect(throttled).toEqual(["attempt"]);
 });
 
 // Equal-time hashing on a miss closes the enumeration oracle but buys little
@@ -1917,6 +1916,67 @@ test("stops guessing at one account from one address", async () => {
   // well, so hammering an address cannot shut its owner out from elsewhere.
   const elsewhere = await attempt("password", "198.51.100.4");
   expect(elsewhere.status).toBe(200);
+});
+
+// What stays counted is failures: the right password takes its own attempt
+// back, so a user who mistyped nine times starts the next window fresh.
+test("a successful login clears the guesses counted against it", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async () => account;
+  let verifyCalls = 0;
+  dependencies.password.verify = async (value) => {
+    verifyCalls++;
+    return value === "password";
+  };
+  const app = await appFor(dependencies);
+  const attempt = (password: string) =>
+    post(
+      app,
+      "/api/login",
+      { email: account.email, password },
+      { headers: { "x-forwarded-for": "203.0.113.7" } },
+    );
+
+  for (let guess = 0; guess < 9; guess++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await attempt(`typo-${guess}`);
+  }
+  expect((await attempt("password")).status).toBe(200);
+  for (let guess = 0; guess < 10; guess++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await attempt(`typo-again-${guess}`);
+  }
+  expect(verifyCalls).toBe(20);
+});
+
+// A check before the password and a failure recorded after it let a burst all
+// pass the check before any was counted; counting first is what holds.
+test("a parallel burst of guesses reaches the password check at most the limit", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async () => account;
+  let verifyCalls = 0;
+  dependencies.password.verify = async () => {
+    verifyCalls++;
+    await Bun.sleep(1);
+    return false;
+  };
+  const app = await appFor(dependencies);
+
+  const responses = await Promise.all(
+    Array.from({ length: 200 }, (_, guess) =>
+      post(
+        app,
+        "/api/login",
+        { email: account.email, password: `guess-${guess}` },
+        { headers: { "x-forwarded-for": "203.0.113.7" } },
+      ),
+    ),
+  );
+
+  expect(responses.every((response) => response.status === 401)).toBe(true);
+  expect(verifyCalls).toBe(10);
 });
 
 test("marks articles read and recomputes the badge from the store", async () => {
@@ -2222,13 +2282,47 @@ test("stops guessing the current password from one session", async () => {
   }
   expect(verifyCalls).toBe(10);
 
-  // Even the right password, from a fresh address, is refused unchecked.
+  // Even the right password, from a fresh address, is refused unchecked. The
+  // caller is signed in, so the refusal can say what it is.
   const blocked = await change("old-password", "198.51.100.4");
-  expect(blocked.status).toBe(400);
+  expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({
-    error: "Current password is incorrect.",
+    error: "Too many attempts. Try again later.",
   });
   expect(verifyCalls).toBe(10);
+});
+
+test("a successful password change clears the session's guess count", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.usersDataService.findUser = async () => account;
+  let verifyCalls = 0;
+  dependencies.password.verify = async (value) => {
+    verifyCalls++;
+    return value === "old-password";
+  };
+  dependencies.usersDataService.updatePassword = async () => true;
+  const app = await appFor(dependencies);
+  const change = (oldPassword: string) =>
+    post(
+      app,
+      "/api/options/password",
+      { oldPassword, password1: "new-password", password2: "new-password" },
+      { auth: true },
+    );
+
+  for (let attempt = 0; attempt < 9; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await change(`typo-${attempt}`);
+  }
+  expect((await change("old-password")).status).toBe(200);
+
+  // A fresh budget: ten more mistakes all reach the check.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    expect((await change(`typo-again-${attempt}`)).status).toBe(400);
+  }
+  expect(verifyCalls).toBe(20);
 });
 
 test("validates admin sort and URL policies before service calls", async () => {
@@ -2721,12 +2815,14 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   }
   expect(mailCalls).toBe(10);
 
-  // The same generic success the route already gives a disposable address or
-  // an existing account, so the throttle is not itself an answer about who
-  // exists -- but no mail leaves.
+  // Counted per address whether or not the account exists, so saying so
+  // answers nothing about who has one -- and no mail leaves.
   const blocked = await register("stranger@example.com", "203.0.113.7");
-  expect(blocked.status).toBe(200);
-  expect(await blocked.json()).toEqual({ success: true });
+  expect(blocked.status).toBe(429);
+  expect(await blocked.json()).toEqual({
+    error: "Too many attempts. Try again later.",
+    success: false,
+  });
   expect(mailCalls).toBe(10);
 
   // Keyed on the address too, so spending one address's budget cannot stop
@@ -2769,9 +2865,9 @@ test("throttles registration when email activation is off", async () => {
   }
   expect(hashCalls).toBe(10);
 
+  // Not the success it would otherwise claim: no account was made.
   const blocked = await register();
-  expect(blocked.status).toBe(200);
-  expect(await blocked.json()).toEqual({ success: true });
+  expect(blocked.status).toBe(429);
   expect(hashCalls).toBe(10);
 });
 
@@ -2804,6 +2900,55 @@ test("a failed account-exists notice still answers generic success", async () =>
     logged.mockRestore();
   }
 });
+
+// Only an address the caller named reaches a send, so waiting on Mailjet
+// would time a pending or active account apart from a new one. A mail that
+// never settles must not hold any of the three answers.
+test.each([
+  ["a new address", undefined],
+  [
+    "an inactive account with an expired link",
+    { ...account, activationTokenExpiresAt: null, status: "inactive" as const },
+  ],
+  ["an active account", account],
+] as const)(
+  "registering %s answers without waiting on the mail",
+  async (_label, existing) => {
+    const dependencies = createDependencies();
+    dependencies.config.ENABLE_REGISTRATION = true;
+    dependencies.config.MAILJET_API_KEY = "mailjet-key";
+    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    dependencies.usersDataService.findUser = async () => existing;
+    dependencies.usersDataService.createUser = async () => "created";
+    dependencies.usersDataService.refreshActivationToken = async () => true;
+    dependencies.usersDataService.startPasswordReset = async () => {};
+    const sends: string[] = [];
+    const never = new Promise<never>(() => {});
+    dependencies.mailSender.sendActivationEmail = async () => {
+      sends.push("activation");
+      return await never;
+    };
+    dependencies.mailSender.sendAccountExistsEmail = async () => {
+      sends.push("account-exists");
+      return await never;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await Promise.race([
+      post(app, "/api/register", {
+        email: account.email,
+        password: "password",
+        passwordConfirm: "password",
+        username: "Someone",
+      }),
+      Bun.sleep(500).then(() => "still waiting" as const),
+    ]);
+
+    if (response === "still waiting") throw new Error("awaited the mail");
+    expect(response.status).toBe(200);
+    expect(sends).toHaveLength(1);
+  },
+);
 
 test("answers a disposable address with generic success and no account", async () => {
   const dependencies = createDependencies();
