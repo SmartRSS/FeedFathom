@@ -14,7 +14,9 @@ const migrationJournal = Type.Object({
 // A plain `CREATE INDEX` takes a SHARE lock that blocks writes and is held
 // until the migration transaction ends. Writing `CREATE INDEX IF NOT EXISTS`
 // opts in here: this pass builds the index CONCURRENTLY first, so the
-// in-transaction statement finds it already there.
+// in-transaction statement finds it already there. An index this pass cannot
+// build yet, because a pending migration creates what it depends on, is left
+// for that migration to build in-transaction, the blocking way.
 //
 // The statements are read back out of the migration files, so an index is
 // written down once and a new migration opts in by how it is written, not by
@@ -86,11 +88,19 @@ async function pendingStatements(
   return pending.join("\n");
 }
 
-const isUndefinedColumn = (error: unknown) =>
+// Class 42 (syntax error or access rule violation) is what a statement that
+// depends on a pending migration raises: a missing column, table, function,
+// operator class or extension. The migration reruns the same statement inside
+// its transaction, so a real mistake still fails there. Every other class stays
+// fatal: a data error, deadlock, cancel or lost connection is not a reason to
+// fall back to the write-blocking build, and the invalid index it may leave is
+// dropped and rebuilt by the next run.
+const dependsOnPendingMigration = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
   "errno" in error &&
-  error.errno === "42703";
+  typeof error.errno === "string" &&
+  error.errno.startsWith("42");
 
 async function prebuildIndexesConcurrently(
   client: ReservedSQL,
@@ -135,13 +145,17 @@ async function prebuildIndexesConcurrently(
       await client.unsafe(`DROP INDEX CONCURRENTLY "public"."${index.name}"`);
     }
     if (!state?.valid) {
-      // A column that a pending migration adds or renames isn't there yet
-      // (undefined_column, 42703), so the index is left for its own
-      // migration to build in-transaction, the blocking way. The failure
-      // comes before PostgreSQL records any index, so nothing is left behind.
       // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
-      await client.unsafe(index.create).catch((error: unknown) => {
-        if (!isUndefinedColumn(error)) throw error;
+      await client.unsafe(index.create).catch(async (error: unknown) => {
+        if (!dependsOnPendingMigration(error)) throw error;
+        // Most such failures come before PostgreSQL records the index, but
+        // one raised while building it (an expression calling a function
+        // whose body names a missing column) leaves an INVALID index that the
+        // migration's IF NOT EXISTS would keep. No valid index of this name
+        // existed, so dropping whatever is there loses nothing.
+        await client.unsafe(
+          `DROP INDEX CONCURRENTLY IF EXISTS "public"."${index.name}"`,
+        );
       });
     }
   }
