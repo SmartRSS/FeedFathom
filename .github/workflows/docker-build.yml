@@ -763,6 +763,15 @@ jobs:
             deploy/stack.yml
           sparse-checkout-cone-mode: false
 
+      # The script comes from this workflow's commit, not deploy_tag: a
+      # dispatch can redeploy a commit older than the script itself.
+      - name: Checkout deploy script
+        uses: actions/checkout@v7
+        with:
+          path: pipeline
+          sparse-checkout: deploy/deploy.sh
+          sparse-checkout-cone-mode: false
+
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.10.0
         with:
@@ -842,158 +851,7 @@ jobs:
 
       - name: Deploy Swarm stack
         if: steps.ancestry.outputs.skip != 'true'
-        run: |
-          set -euo pipefail
-          SSH_DEST="${SSH_USER}@${SSH_HOST}"
-          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
-          printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
-          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "bash -s -- $DEPLOY_PATH_Q" <<'REMOTE'
-          set -Eeuo pipefail
-          cd "$1"
-          chmod 600 deployment.env
-          set -a
-          source ./deployment.env
-          set +a
-
-          [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
-          [[ "$FEEDFATHOM_TAG" =~ ^[0-9a-f]{40}$ ]]
-          if ! command -v timeout >/dev/null || ! timeout -k 1s 1s true >/dev/null 2>&1; then
-            printf '%s\n' 'A timeout command supporting -k is required' >&2
-            exit 1
-          fi
-
-          SERVER_IMAGE="${IMAGE_PREFIX}/feedfathom-server:${FEEDFATHOM_TAG}"
-          WORKER_IMAGE="${IMAGE_PREFIX}/feedfathom-worker:${FEEDFATHOM_TAG}"
-          MIGRATOR_IMAGE="${IMAGE_PREFIX}/feedfathom-migrator:${FEEDFATHOM_TAG}"
-          MIGRATION_SERVICE="${STACK_NAME}_migration"
-          MIGRATION_CREATED=false
-
-          remove_migration() {
-            if [[ "$MIGRATION_CREATED" == true ]]; then
-              # The completed job service can already be gone by the time we
-              # get here (observed in production: gone before this cleanup
-              # ran, despite wait_for_migration already having confirmed it
-              # reached "complete" -- harmless, since its one task had
-              # already finished). Removal is just tidiness at this point,
-              # not something worth failing an otherwise-successful deploy
-              # over.
-              docker service rm "$MIGRATION_SERVICE" || true
-              MIGRATION_CREATED=false
-            fi
-          }
-
-          diagnose() {
-            rc=$?
-            trap - ERR
-            printf '%s\n' 'Deployment failed; collecting Swarm state' >&2
-            docker stack services "$STACK_NAME" || true
-            docker stack ps --no-trunc "$STACK_NAME" || true
-            docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker" || true
-            if docker service inspect "$MIGRATION_SERVICE" >/dev/null 2>&1; then
-              docker service ps --no-trunc "$MIGRATION_SERVICE" || true
-              docker service logs "$MIGRATION_SERVICE" || true
-            fi
-            if [[ "$MIGRATION_CREATED" == true ]]; then
-              docker service rm "$MIGRATION_SERVICE" || true
-            fi
-            exit "$rc"
-          }
-          trap diagnose ERR
-
-          wait_for_migration() {
-            local deadline=$((SECONDS + 600))
-            local state
-            local -a tasks
-            while ((SECONDS < deadline)); do
-              mapfile -t tasks < <(docker service ps --no-trunc --format '{{.ID}}' "$MIGRATION_SERVICE")
-              if ((${#tasks[@]} > 1)); then
-                printf '%s\n' 'Migration job created more than one task' >&2
-                return 1
-              fi
-              if ((${#tasks[@]} == 1)); then
-                state=$(docker inspect --format '{{.Status.State}}' "${tasks[0]}")
-                case "$state" in
-                  complete) return 0 ;;
-                  failed|rejected|orphaned|remove|shutdown)
-                    printf 'Migration task stopped in state: %s\n' "$state" >&2
-                    return 1
-                    ;;
-                esac
-              fi
-              sleep 1
-            done
-            printf '%s\n' 'Migration job timed out' >&2
-            return 1
-          }
-
-          # compose.yml owns the port; the protected environment still names
-          # the variable SERVER_HOST_PORT, so map it across rather than
-          # asking every deployment to be reconfigured.
-          export FEEDFATHOM_PORT="${SERVER_HOST_PORT:-3458}"
-
-          docker stack config -c compose.yml -c stack.yml >/dev/null
-          # Only the migrator is pulled on the manager, and only to pin the
-          # service to an immutable digest. The server and worker images are
-          # pulled by whichever nodes run them -- --with-registry-auth hands
-          # the GHCR credentials through -- so fetching them here too just
-          # serialised hundreds of MB onto the deploy's critical path.
-          docker pull "$MIGRATOR_IMAGE"
-          MIGRATOR_REPOSITORY="${MIGRATOR_IMAGE%:*}"
-          MIGRATOR_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$MIGRATOR_IMAGE")
-          [[ "$MIGRATOR_DIGEST" == "$MIGRATOR_REPOSITORY"@sha256:* ]]
-          [[ "${MIGRATOR_DIGEST#*@sha256:}" =~ ^[0-9a-f]{64}$ ]]
-
-          docker service create \
-            --detach=true \
-            --env "DATABASE_URL=$DATABASE_URL" \
-            --max-concurrent 1 \
-            --mode replicated-job \
-            --name "$MIGRATION_SERVICE" \
-            --network "${STACK_NAME}_backend" \
-            --replicas 1 \
-            --restart-condition none \
-            --with-registry-auth \
-            "$MIGRATOR_DIGEST" >/dev/null
-          MIGRATION_CREATED=true
-          wait_for_migration
-
-          # --quiet suppresses the per-task progress rendering, which is
-          # meant to redraw one line in place and instead emits a fresh line
-          # many times a second under CI's non-TTY stdout ("overall
-          # progress: N out of M tasks", "verify: Waiting 30 seconds..."),
-          # burying everything else in the log. It does not change the
-          # waiting behaviour -- that is --detach=false -- and failures
-          # still report fully via the ERR trap's diagnose() dump plus the
-          # image-convergence and public-root checks below.
-          timeout -k 15s 600s docker stack deploy --quiet --detach=false --with-registry-auth --prune -c compose.yml -c stack.yml "$STACK_NAME"
-
-          for specification in \
-            "${STACK_NAME}_server|$SERVER_IMAGE" \
-            "${STACK_NAME}_worker|$WORKER_IMAGE"
-          do
-            IFS='|' read -r service expected <<< "$specification"
-            actual=$(docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' "$service")
-            if [[ "$actual" != "$expected" && "$actual" != "${expected}@"* ]]; then
-              printf '%s converged to %s, expected %s\n' "$service" "$actual" "$expected" >&2
-              false
-            fi
-          done
-
-          docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker"
-          docker stack services "$STACK_NAME"
-          # wantsSpaShellFallback (server-app.ts) only serves the SPA shell
-          # for requests whose Accept header contains text/html -- curl's
-          # default Accept: */* doesn't match that, and gets a real 404
-          # instead of the app, even though production is genuinely healthy
-          # for real browsers. Send the header real navigations send.
-          SPA_HTML=$(curl --fail-with-body --location --header 'Accept: text/html' --retry 10 --retry-delay 3 --retry-all-errors --connect-timeout 5 --max-time 10 --show-error "http://${FEED_FATHOM_DOMAIN}/")
-          if ! grep -Fq 'id="app"' <<< "$SPA_HTML"; then
-            printf '%s\n' 'Public root did not contain the expected SPA app marker' >&2
-            false
-          fi
-          remove_migration
-          trap - ERR
-          REMOTE
+        run: pipeline/deploy/deploy.sh
 
   deploy_email_worker:
     name: Deploy Cloudflare email Worker

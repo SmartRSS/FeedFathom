@@ -330,11 +330,12 @@ build target:
 bun run quality
 ```
 
-The PostgreSQL integration tests (`*-integration.test.ts`) are a separate destructive check and require a clearly disposable database URL whose database name contains `test`, `migration_test`, or `disposable`:
+The PostgreSQL and Redis integration tests (`*-integration.test.ts`) are a separate destructive check and require a clearly disposable database URL whose database name contains `test`, `migration_test`, or `disposable`:
 
 ```bash
 MIGRATION_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test \
-  bun run test:migrations
+REDIS_TEST_URL=redis://127.0.0.1:6379/15 \
+  bun run test:integration
 ```
 
 CI supplies one ephemeral PostgreSQL database as both `DATABASE_URL` and `MIGRATION_TEST_DATABASE_URL`, runs normal quality first, and then runs this migration check.

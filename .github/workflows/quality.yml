@@ -32,6 +32,11 @@ jobs:
       - name: Run lint
         run: bun run lint
 
+      # The deploy script only runs on a main release; lint it here so a
+      # broken edit fails on staging instead of mid-deploy.
+      - name: Check deploy script
+        run: shellcheck deploy/deploy.sh
+
   compile:
     name: Compile every deployable target
     runs-on: ubuntu-latest
@@ -100,11 +105,8 @@ jobs:
             bun run test:unit
           fi
 
-      - name: Test database migrations
-        run: bun run test:migrations
-
-      - name: Test queue refresh merging
-        run: bun run test:queue
+      - name: Run integration tests
+        run: bun run test:integration
 
   browser:
     name: Browser tests
