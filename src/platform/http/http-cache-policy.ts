@@ -15,7 +15,11 @@ const cachedResponseSchema = Type.Object(
     body: Type.String(),
     expiresAt: Type.Number(),
     headers: Type.Array(Type.Tuple([Type.String(), Type.String()])),
-    status: Type.Number(),
+    // Every caller reads only a 200, so only a 200 is stored. A stored 304
+    // has no body to serve and would be refreshed by every later 304, so an
+    // entry with any other status -- one written before this check -- fails
+    // the read and is deleted (#1078).
+    status: Type.Literal(200),
     url: Type.Intersect([Type.String(), webUrlPolicy]),
   },
   exact,
@@ -128,7 +132,8 @@ export function cacheable(
   body: Buffer,
   requestedUrl: string,
 ): CachedResponse | undefined {
-  if (!sharedCacheAllowed(response.headers)) return undefined;
+  if (response.status !== 200 || !sharedCacheAllowed(response.headers))
+    return undefined;
   const receivedAt = Date.now();
   const expiry = expiresAt(response.headers, receivedAt);
   const hasValidator =
@@ -139,7 +144,7 @@ export function cacheable(
     body: body.toString("base64"),
     expiresAt: expiry ?? receivedAt,
     headers: [...response.headers],
-    status: response.status,
+    status: 200,
     url: response.url || requestedUrl,
   };
 }
