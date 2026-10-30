@@ -3,6 +3,7 @@ import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType } from "#shared/validation/typebox-policy.ts";
+import { decodeBody, detectEncoding } from "#shared/util/decode-body.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -69,39 +70,28 @@ const feedProjection = Type.Object(
 const feedProjectionCheck = Schema.Compile(feedProjection);
 const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
 
-// The <?xml ...?> prolog is guaranteed ASCII-compatible up to the encoding
-// declaration itself, so it's always safe to decode as windows-1252 (a
-// superset of ASCII with no invalid byte sequences) just to go looking for it.
 export function detectFeedEncoding(
   buffer: ArrayBuffer,
   contentType: string | null,
 ): string {
-  const bytes = new Uint8Array(buffer);
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return "utf-8";
-  }
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
-
-  const charset = /charset=([^;]+)/i.exec(contentType ?? "")?.[1]?.trim();
-  if (charset) return charset.replace(/^"(.*)"$/, "$1");
-
-  const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
-  return xmlEncodingPattern.exec(prolog)?.[1] ?? "utf-8";
+  return detectEncoding(
+    new Uint8Array(buffer),
+    contentType,
+    xmlEncodingPattern,
+    200,
+  );
 }
 
 export function decodeFeedBody(
   buffer: ArrayBuffer,
   contentType: string | null,
 ): string {
-  try {
-    return new TextDecoder(detectFeedEncoding(buffer, contentType)).decode(
-      buffer,
-    );
-  } catch {
-    // Unrecognized label; UTF-8 is the right default for almost every feed.
-    return new TextDecoder("utf-8").decode(buffer);
-  }
+  return decodeBody(
+    new Uint8Array(buffer),
+    contentType,
+    xmlEncodingPattern,
+    200,
+  );
 }
 
 export function validateParsedFeed(value: unknown): void {

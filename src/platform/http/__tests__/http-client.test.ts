@@ -175,6 +175,44 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   expect(sentHeaders).toHaveLength(1);
 });
 
+// Some CDNs answer an unconditional request with a 304. With nothing stored
+// there is no body to serve, and storing the 304 would have every later
+// revalidation refresh it, sticking the feed (#1078).
+test("a 304 with nothing cached fails, stores nothing, and the next request is unconditional", async () => {
+  const sentHeaders: Headers[] = [];
+  const store = redis();
+  const responses = [
+    nativeResponse("", {
+      headers: { "cache-control": "max-age=0", etag: '"v1"' },
+      status: 304,
+    }),
+    nativeResponse("feed", { headers: { etag: '"v2"' } }),
+  ];
+  const client = new HttpClient(store, {
+    intervalMs: shortIntervals,
+    transport: async (_url, headers) => {
+      sentHeaders.push(new Headers(headers));
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected HTTP request");
+      return response;
+    },
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await expect(client.get(url)).rejects.toBeInstanceOf(HttpPolicyError);
+  expect(
+    [...store.values.keys()].filter((key) => key.startsWith("http-cache:")),
+  ).toEqual([]);
+
+  const next = await client.get(url);
+  expect(next.status).toBe(200);
+  expect(next.data).toBe("feed");
+  expect(sentHeaders.map((headers) => headers.get("if-none-match"))).toEqual([
+    null,
+    null,
+  ]);
+});
+
 test("a response's rate-limit headers block the host for later requests", async () => {
   const reset = Math.floor(Date.now() / 1_000) + 60;
   const client = new HttpClient(redis(), {
