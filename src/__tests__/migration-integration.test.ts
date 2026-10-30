@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -132,11 +132,16 @@ test("gates startup on this build's newest migration, tolerating a newer databas
   }
 });
 
+// An INVALID index is one an interrupted build left behind, which neither
+// answers as present nor as absent, so it fails the test outright.
 async function indexExists(client: SQL, name: string) {
   const [row] = await client<
-    { exists: boolean }[]
-  >`SELECT to_regclass(${`public.${name}`}) IS NOT NULL AS "exists"`;
-  return row?.exists === true;
+    { valid: boolean }[]
+  >`SELECT pg_index.indisvalid AS "valid"
+    FROM pg_index
+    WHERE pg_index.indexrelid = to_regclass(${`public.${name}`})`;
+  if (row && !row.valid) throw new Error(`Index ${name} is INVALID`);
+  return row !== undefined;
 }
 
 // A copy of the migrations folder whose journal stops before `tag`, standing
@@ -306,6 +311,133 @@ test("a duplicate sid fails the session index migration and applies none of it",
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
+// A migrations folder of its own, written as drizzle-kit would, so a pending
+// migration can do what no real one does yet. `migrateTo` journals only the
+// first `count` entries, so a later, longer call stands in for an upgrade.
+async function scratchMigrations(statements: readonly string[]) {
+  const folder = await mkdtemp(join(tmpdir(), "feedfathom-migrations-"));
+  const entries = statements.map((_, idx) => ({
+    breakpoints: true,
+    idx,
+    tag: `${String(idx).padStart(4, "0")}_scratch`,
+    version: "7",
+    when: 1_000 + idx,
+  }));
+  await Promise.all(
+    entries.map(async (entry, idx) =>
+      writeFile(join(folder, `${entry.tag}.sql`), statements[idx] ?? ""),
+    ),
+  );
+  const migrateTo = async (databaseUrl: string, count: number) => {
+    await mkdir(join(folder, "meta"), { recursive: true });
+    await writeFile(
+      join(folder, "meta", "_journal.json"),
+      JSON.stringify({
+        dialect: "postgresql",
+        entries: entries.slice(0, count),
+        version: "7",
+      }),
+    );
+    await migrateDatabase(databaseUrl, folder);
+  };
+  return { folder, migrateTo };
+}
+
+// Applied before every case below: `widget_y` reads a column that only a
+// pending migration adds, which PostgreSQL finds out only once it evaluates
+// the function while building an index on it. The index build runs with a
+// search_path of pg_catalog alone, hence the qualified name.
+const scratchBaseline = `CREATE TABLE "widgets" ("id" integer, "old" integer, "label" text);--> statement-breakpoint
+CREATE TABLE "widget_settings" ("id" integer);--> statement-breakpoint
+CREATE FUNCTION "widget_y"("n" integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN (SELECT "y" FROM "public"."widget_settings" LIMIT 1); END $$;`;
+
+// The prebuild runs before any pending migration applies, so an index on
+// something one of them introduces has nothing to build on yet. It has to
+// wait for its own migration rather than stop every one from applying.
+test.each([
+  [
+    "a column a pending migration adds",
+    'ALTER TABLE "widgets" ADD COLUMN "x" integer;--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_x_idx" ON "widgets" USING btree ("x");',
+    "widgets_x_idx",
+  ],
+  [
+    "a column a pending migration renames",
+    'ALTER TABLE "widgets" RENAME COLUMN "old" TO "x";--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_x_idx" ON "widgets" USING btree ("x");',
+    "widgets_x_idx",
+  ],
+  [
+    "a table a pending migration creates",
+    'CREATE TABLE "gadgets" ("x" integer);--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "gadgets_x_idx" ON "gadgets" USING btree ("x");',
+    "gadgets_x_idx",
+  ],
+  [
+    "an operator class a pending migration's extension provides",
+    'CREATE EXTENSION IF NOT EXISTS "pg_trgm";--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_label_trgm_idx" ON "widgets" USING gin ("label" gin_trgm_ops);',
+    "widgets_label_trgm_idx",
+  ],
+  [
+    "a function a pending migration creates",
+    'CREATE FUNCTION "widget_key"("n" integer) RETURNS integer LANGUAGE sql IMMUTABLE AS \'SELECT n * 2\';--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_key_idx" ON "widgets" USING btree (widget_key("id"));',
+    "widgets_key_idx",
+  ],
+  [
+    "a column only the build finds missing",
+    'ALTER TABLE "widget_settings" ADD COLUMN "y" integer;--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_y_idx" ON "widgets" USING btree (widget_y("id"));',
+    "widgets_y_idx",
+  ],
+])("an index on %s is built by its migration", async (_, pending, name) => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const { folder, migrateTo } = await scratchMigrations([
+    scratchBaseline,
+    pending,
+  ]);
+
+  try {
+    await resetDatabase(client);
+    await migrateTo(databaseUrl, 1);
+    await client`INSERT INTO "widgets" ("id", "old") VALUES (1, 1)`;
+
+    await migrateTo(databaseUrl, 2);
+    expect(await indexExists(client, name)).toBe(true);
+  } finally {
+    await client.close();
+    await rm(folder, { force: true, recursive: true });
+  }
+});
+
+// A data error is not something a pending migration fixes, so it stops the
+// deploy rather than falling back to the write-blocking build. The INVALID
+// index the failed build leaves is dropped and rebuilt by the next run.
+test("a failed prebuild stops the deploy and the next run rebuilds its index", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const { folder, migrateTo } = await scratchMigrations([
+    `${scratchBaseline}--> statement-breakpoint\nCREATE FUNCTION "widget_inverse"("n" integer) RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT 1 / n';`,
+    'CREATE INDEX IF NOT EXISTS "widgets_inverse_idx" ON "widgets" USING btree (widget_inverse("id"));',
+  ]);
+
+  try {
+    await resetDatabase(client);
+    await migrateTo(databaseUrl, 1);
+    await client`INSERT INTO "widgets" ("id") VALUES (0)`;
+
+    await expect(migrateTo(databaseUrl, 2)).rejects.toMatchObject({
+      errno: "22012",
+    });
+    await expect(indexExists(client, "widgets_inverse_idx")).rejects.toThrow(
+      "INVALID",
+    );
+
+    await client`UPDATE "widgets" SET "id" = 1`;
+    await migrateTo(databaseUrl, 2);
+    expect(await indexExists(client, "widgets_inverse_idx")).toBe(true);
+  } finally {
+    await client.close();
+    await rm(folder, { force: true, recursive: true });
   }
 });
 

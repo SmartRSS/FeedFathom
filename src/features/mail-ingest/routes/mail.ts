@@ -51,18 +51,11 @@ export function createMailRoute({ config, emailHandler }: MailRouteServices) {
         return json({ error: "Raw email exceeds 5 MiB" }, 413);
       }
 
-      try {
-        await emailHandler.processEmail(raw, {
-          from: decoded.from,
-          to: decoded.to,
-        });
-        return json({ ok: true });
-      } catch (cause) {
-        return json(
-          { error: cause instanceof Error ? cause.message : "Unknown error" },
-          500,
-        );
-      }
+      await emailHandler.processEmail(raw, {
+        from: decoded.from,
+        to: decoded.to,
+      });
+      return json({ ok: true });
     },
   );
 }

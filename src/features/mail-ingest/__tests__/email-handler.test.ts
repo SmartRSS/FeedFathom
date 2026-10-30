@@ -3,7 +3,10 @@ import { simpleParser, type ParsedMail } from "mailparser";
 import type { Source } from "#platform/db/schemas/sources.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
-import { EmailHandler } from "#features/mail-ingest/email-handler.ts";
+import {
+  EmailHandler,
+  MailRejectedError,
+} from "#features/mail-ingest/email-handler.ts";
 
 const source: Source = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),
@@ -78,7 +81,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
       from: "trusted-sender@example.com",
       to: "unknown-recipient@example.com",
     }),
-  ).rejects.toThrow("No recipients known");
+  ).rejects.toThrow(new MailRejectedError("No recipients known"));
 
   expect(lookups).toEqual([
     "trusted-recipient@example.com",
@@ -177,8 +180,12 @@ test("refuses a parse result that breaks the fields it reads", async () => {
     return parsed;
   });
 
-  await expect(deliver(["Subject: Broken", "", "x"])).rejects.toThrow(
-    "Mail parser returned an invalid message projection",
+  const error = await deliver(["Subject: Broken", "", "x"]).catch(
+    (cause: unknown) => cause,
   );
+  expect(error).toEqual(
+    new Error("Mail parser returned an invalid message projection"),
+  );
+  expect(error).not.toBeInstanceOf(MailRejectedError);
   expect(batches).toEqual([]);
 });
