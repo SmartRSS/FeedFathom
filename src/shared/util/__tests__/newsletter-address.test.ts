@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Value } from "typebox/value";
 import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
 import {
+  isMintedNewsletterAddress,
   isNewsletterAddress,
   newsletterAddress,
   newsletterMailDomain,
@@ -41,6 +42,23 @@ describe("isNewsletterAddress", () => {
     ["a second @", "0123456789abcdef@mail.example@other.example"],
   ])("refuses %s", (_, address) => {
     expect(isNewsletterAddress(address, "mail.example")).toBe(false);
+  });
+});
+
+describe("isMintedNewsletterAddress", () => {
+  test.each([
+    ["the SPA's format", "0123456789abcdef@mail.example"],
+    ["an older extension's format", `${crypto.randomUUID()}@MAIL.example`],
+  ])("accepts %s", (_, address) => {
+    expect(isMintedNewsletterAddress(address, "mail.example")).toBe(true);
+  });
+
+  test.each([
+    ["a domain-validation mailbox", "postmaster@mail.example"],
+    ["an undashed UUID", `${"0".repeat(32)}@mail.example`],
+    ["a UUID on another domain", `${crypto.randomUUID()}@other.example`],
+  ])("refuses %s", (_, address) => {
+    expect(isMintedNewsletterAddress(address, "mail.example")).toBe(false);
   });
 });
 

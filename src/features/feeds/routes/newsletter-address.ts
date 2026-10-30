@@ -12,8 +12,9 @@ import {
 // Creates the email source for an address the SPA just minted, before any
 // subscription to it, so mail that arrives ahead of Subscribe is stored
 // rather than bounced as an unknown recipient (#1116). Nobody sees that mail
-// until this user subscribes; the orphan cleanup removes an address nobody
-// subscribed to once it is a day old.
+// until this user subscribes. Once the address is a day old, the orphan
+// cleanup deletes its mail while nobody subscribes, and keeps the address
+// itself for this user.
 export async function postNewsletterAddressHandler(
   {
     body,

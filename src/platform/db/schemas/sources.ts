@@ -7,6 +7,7 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { users } from "#platform/db/schemas/users.ts";
 
 export const sources = pgTable(
@@ -46,10 +47,12 @@ export const sources = pgTable(
     recentFailures: integer("recent_failures").notNull().default(0),
     // The account a newsletter address belongs to, set when the source is
     // created by reserving or subscribing to it, so no other account can
-    // subscribe and read its mail (#1116). NULL for feeds and for email
-    // sources that predate it, which the first subscriber claims.
+    // subscribe and read its mail (#1116). Migration 0013 gave each older
+    // email source its earliest subscriber. NULL for feeds. The orphan
+    // cleanup keeps an owned source, so the address is never free to take
+    // while its owner exists; the cascade removes it with the owner.
     reservedBy: integer("reserved_by").references(() => users.id, {
-      onDelete: "set null",
+      onDelete: "cascade",
     }),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -85,6 +88,11 @@ export const sources = pgTable(
     index("last_attempt_idx").on(table.lastAttempt),
     index("sources_not_before_idx").on(table.notBefore),
     index("recent_failures_idx").on(table.recentFailures),
+    // Partial: only email sources are owned, and the user cascade looks
+    // sources up by owner.
+    index("sources_reserved_by_idx")
+      .on(table.reservedBy)
+      .where(sql`${table.reservedBy} IS NOT NULL`),
     unique("sources_url_unique").on(table.url),
     unique("sources_websub_callback_token_unique").on(
       table.websubCallbackToken,

@@ -9,6 +9,10 @@ import {
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
 import {
+  isMintedNewsletterAddress,
+  newsletterMailDomain,
+} from "#shared/util/newsletter-address.ts";
+import {
   type FeedPreview,
   mapFeedToPreviewArticles,
 } from "#features/feeds/feed-mapper.ts";
@@ -82,16 +86,25 @@ export async function postSubscribeHandler(
     initializationSnapshot: importablePreview
       ? serializeFeedPreview(importablePreview)
       : null,
-    kind: isEmail ? "email" : "feed",
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
+    ...(isEmail
+      ? {
+          kind: "email",
+          minted: isMintedNewsletterAddress(
+            sourceUrl.value,
+            newsletterMailDomain(config) ?? "",
+          ),
+        }
+      : { kind: "feed" }),
   });
   if (!subscription) return json({ error: "Invalid folder" }, 400);
-  // Another account's newsletter address. Answered as any unacceptable
-  // target is, so a refusal says nothing about whose it is.
-  if (subscription === "refused")
-    return json({ error: "Invalid request." }, 400);
+  // Another account's newsletter address, or one this instance does not
+  // mint. Answered exactly as a malformed target is (the validation error
+  // server-app.ts maps), so a refusal says nothing about whether the address
+  // exists or whose it is.
+  if (subscription === "refused") return json({ error: "Refine Error" }, 422);
   if (subscription.initialized === true)
     return json({ sourceId: subscription.source.id });
 

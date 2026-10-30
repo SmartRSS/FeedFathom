@@ -673,6 +673,29 @@ test("rejects invalid subscription policies before cache or database calls", asy
   expect(databaseCalls).toBe(0);
 });
 
+// A refused address, another account's or one subscribe may not create, must
+// say no more about it than a malformed target does.
+test("answers a refused newsletter address exactly as a malformed target", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.config.MAIL_ENABLED = true;
+  dependencies.config.MAIL_DOMAIN = "mail.example";
+  dependencies.userSourcesDataService.addSourceToUser = async () => "refused";
+  const app = await appFor(dependencies);
+  const answer = async (sourceUrl: string) => {
+    const response = await subscribe(app, {
+      sourceFolder: null,
+      sourceName: "Newsletter",
+      sourceUrl,
+    });
+    return { body: await response.text(), status: response.status };
+  };
+
+  expect(await answer("postmaster@mail.example")).toEqual(
+    await answer("postmaster@"),
+  );
+});
+
 test("returns sanitized transient preview articles and rejects parser failures", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);

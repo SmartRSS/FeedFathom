@@ -1,4 +1,4 @@
-import { and, eq, exists, isNull, lt, ne, not, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
@@ -27,7 +27,8 @@ export class UserSourcesDataService {
   /**
    * Subscribes the user, creating the source if needed. Returns undefined for
    * a folder the user does not own, and "refused" for a newsletter address
-   * that belongs to another account (see sources.reservedBy).
+   * that belongs to another account (see sources.reservedBy) or that only
+   * `minted` lets a subscription create.
    */
   public async addSourceToUser(
     userId: number,
@@ -35,6 +36,10 @@ export class UserSourcesDataService {
       homeUrl: string;
       initializationSnapshot?: null | string;
       kind?: "email" | "feed" | undefined;
+      // An email address in a format this instance mints, on its mail
+      // domain. Any other address can only be subscribed to if its source
+      // already exists.
+      minted?: boolean;
       name: string;
       parentId: null | number;
       url: string;
@@ -61,13 +66,21 @@ export class UserSourcesDataService {
     sourcePayload: Parameters<UserSourcesDataService["addSourceToUser"]>[1],
   ): Promise<"refused" | SubscriptionResult> {
     const isEmail = sourcePayload.kind === "email";
-    const source = await this.sourcesDataService.addSource({
-      homeUrl: sourcePayload.homeUrl,
-      kind: sourcePayload.kind,
-      url: sourcePayload.url,
-      ...(isEmail && { reservedBy: userId }),
-    });
-    if (source.kind === "email" && !(await this.ownsAddress(userId, source.id)))
+    const source =
+      isEmail && !sourcePayload.minted
+        ? await this.sourcesDataService.findSourceByUrl(sourcePayload.url)
+        : await this.sourcesDataService.addSource({
+            homeUrl: sourcePayload.homeUrl,
+            kind: sourcePayload.kind,
+            url: sourcePayload.url,
+            ...(isEmail && { reservedBy: userId }),
+          });
+    if (!source) return "refused";
+    if (
+      source.kind === "email" &&
+      source.reservedBy !== userId &&
+      !(await this.isSubscribed(userId, source.id))
+    )
       return "refused";
 
     // created_at is where a subscription starts seeing articles. A newsletter
@@ -76,8 +89,8 @@ export class UserSourcesDataService {
     // depends on -- has to be readable to the account that reserved it, so
     // that account's subscription sees the source from its creation. That
     // also keeps the retention rule for articles from before the first
-    // subscription off it. A claimed legacy address does not qualify: its
-    // earlier mail was someone else's.
+    // subscription off it. Another subscriber of an older shared address
+    // does not qualify: its earlier mail is the owner's.
     const backdated = source.kind === "email" && source.reservedBy === userId;
     const inserted = (
       await this.drizzleConnection
@@ -127,41 +140,18 @@ export class UserSourcesDataService {
     };
   }
 
-  // A newsletter address belongs to one account: the one that reserved or
-  // first subscribed to it. An email source from before reservedBy existed
-  // is claimed by its next subscriber, unless another account already
-  // subscribes to it. The claim is a single UPDATE, so two first subscribers
-  // cannot both win.
-  private async ownsAddress(userId: number, sourceId: number) {
-    const othersSubscribe = exists(
-      this.drizzleConnection
-        .select({ id: userSources.id })
-        .from(userSources)
-        .where(
-          and(
-            eq(userSources.sourceId, sourceId),
-            ne(userSources.userId, userId),
-          ),
-        ),
-    );
-    await this.drizzleConnection
-      .update(sources)
-      .set({ reservedBy: userId })
+  // A newsletter address belongs to one account. An email source from
+  // before ownership can have other subscribers too (see migration 0013):
+  // they keep their subscription, so subscribing again is not refused.
+  private async isSubscribed(userId: number, sourceId: number) {
+    const rows = await this.drizzleConnection
+      .select({ id: userSources.id })
+      .from(userSources)
       .where(
-        and(
-          eq(sources.id, sourceId),
-          isNull(sources.reservedBy),
-          not(othersSubscribe),
-        ),
-      );
-    const [owner] = await this.drizzleConnection
-      .select({
-        othersSubscribe: othersSubscribe.mapWith(Boolean),
-        reservedBy: sources.reservedBy,
-      })
-      .from(sources)
-      .where(eq(sources.id, sourceId));
-    return owner?.reservedBy === userId && !owner.othersSubscribe;
+        and(eq(userSources.sourceId, sourceId), eq(userSources.userId, userId)),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   /**

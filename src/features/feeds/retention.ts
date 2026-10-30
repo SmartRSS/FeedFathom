@@ -5,6 +5,7 @@ import {
   gt,
   inArray,
   isNotNull,
+  isNull,
   lt,
   lte,
   min,
@@ -86,9 +87,29 @@ export async function cleanupOrphanedData(
   // set before every rule below evaluates it, so no rule needs to special-case
   // expired users.
   if (userExpiryDays > 0) {
-    await drizzleConnection
-      .delete(users)
-      .where(lt(users.lastSeenAt, daysAgo(userExpiryDays)));
+    // One cutoff for both statements, so no user expires between them.
+    const cutoff = new Date(Date.now() - userExpiryDays * 86_400_000);
+    // An owned source goes with its owner (the reserved_by cascade). An
+    // email source from before ownership can have other subscribers (see
+    // migration 0013), and the cascade would take their subscription too:
+    // it passes to the earliest of them instead.
+    await drizzleConnection.execute(sql`
+      UPDATE sources s SET reserved_by = (
+        SELECT us.user_id FROM user_sources us
+        JOIN users u ON u.id = us.user_id
+        WHERE us.source_id = s.id AND u.last_seen_at >= ${cutoff}
+        ORDER BY us.created_at, us.id
+        LIMIT 1
+      )
+      FROM users owner
+      WHERE owner.id = s.reserved_by AND owner.last_seen_at < ${cutoff}
+        AND EXISTS (
+          SELECT 1 FROM user_sources us
+          JOIN users u ON u.id = us.user_id
+          WHERE us.source_id = s.id AND u.last_seen_at >= ${cutoff}
+        )
+    `);
+    await drizzleConnection.delete(users).where(lt(users.lastSeenAt, cutoff));
   }
 
   // Expired sessions are dead weight, not data: enforcement lives in the
@@ -106,26 +127,35 @@ export async function cleanupOrphanedData(
   //
   // A source younger than a day is kept even so. A newsletter address is
   // reserved as a source before anyone subscribes (#1116), and this is the
-  // grace it has to be subscribed in; past it, the source goes with any mail
-  // it took in. The grace applies to every kind rather than email alone: it
-  // costs an abandoned new feed a day of polling, and it also covers the gap
-  // between addSourceToUser creating a source and subscribing to it.
+  // grace it has to be subscribed in. The grace applies to every kind rather
+  // than email alone: it costs an abandoned new feed a day of polling, and it
+  // also covers the gap between addSourceToUser creating a source and
+  // subscribing to it.
+  const subscriberless = and(
+    lt(sources.createdAt, sql`NOW() - INTERVAL '1 day'`),
+    exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
+    notExists(
+      drizzleConnection
+        .select({ id: userSources.id })
+        .from(userSources)
+        .where(eq(userSources.sourceId, sources.id)),
+    ),
+  );
   await drizzleConnection
     .delete(sources)
-    .where(
-      and(
-        lt(sources.createdAt, sql`NOW() - INTERVAL '1 day'`),
-        exists(
-          drizzleConnection.select({ id: userSources.id }).from(userSources),
-        ),
-        notExists(
-          drizzleConnection
-            .select({ id: userSources.id })
-            .from(userSources)
-            .where(eq(userSources.sourceId, sources.id)),
-        ),
-      ),
-    );
+    .where(and(subscriberless, isNull(sources.reservedBy)));
+  // An owned newsletter address stays, as a tombstone: deleted, it would be
+  // free for any account to create and receive its owner's mail. Only its
+  // mail goes, so nothing but the row accumulates. It goes with its owner.
+  await drizzleConnection.delete(articles).where(
+    inArray(
+      articles.sourceId,
+      drizzleConnection
+        .select({ id: sources.id })
+        .from(sources)
+        .where(and(subscriberless, isNotNull(sources.reservedBy))),
+    ),
+  );
 
   const earliestSubs = drizzleConnection
     .select({
