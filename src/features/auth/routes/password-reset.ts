@@ -49,11 +49,10 @@ export function createPasswordResetRoute({
         // log in with the password they then set.
         if (
           !mailEnabled ||
-          (await authThrottle.blocked("password-reset", address, email))
+          !(await authThrottle.attempt("password-reset", address, email))
         ) {
           return accepted;
         }
-        await authThrottle.recordFailure("password-reset", address, email);
 
         const user = await usersDataService.findUser(email);
         if (user?.status !== "active") return accepted;

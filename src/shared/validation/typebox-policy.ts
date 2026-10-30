@@ -75,8 +75,18 @@ export const normalizedWebUrl = Type.Codec(
   .Decode((value) => value.trim())
   .Encode((value) => value);
 
+// RFC 5321 caps a forward path at 256 octets, brackets included, so no
+// deliverable address is longer than 254. The cap matters beyond mail: the
+// address is part of the auth throttle's Redis keys, and an unbounded one lets
+// each request park up to the body limit in Redis.
+const maxEmailAddressLength = 254;
+
 export const normalizedEmailAddress = Type.Codec(
-  Type.Refine(nonblankString, isEmailAddress),
+  Type.Refine(
+    nonblankString,
+    (value) =>
+      isEmailAddress(value) && value.trim().length <= maxEmailAddressLength,
+  ),
 )
   .Decode((value) => value.trim())
   .Encode((value) => value);

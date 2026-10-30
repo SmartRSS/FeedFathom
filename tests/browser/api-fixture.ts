@@ -236,6 +236,13 @@ export async function installApiFixture(
       return respond({ sessions });
     }
 
+    // A change signs out every other session, as the server's does.
+    if (method === "POST" && url.pathname === "/api/options/password") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      state.revokedOtherSessions = true;
+      return respond({ success: true });
+    }
+
     if (method === "DELETE" && url.pathname === "/api/options/sessions") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       state.revokedOtherSessions = true;

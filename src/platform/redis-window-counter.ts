@@ -1,15 +1,28 @@
 // A fixed-window counter: the TTL is set when the counter first appears and
 // the whole count expires together, which costs one key per window instead of
-// one per hit. INCR and EXPIRE run as one script, so no interruption can leave
+// one per hit. INCR and EXPIRE run in one script, so no interruption can leave
 // a counter that never expires; TTL -1 (a key without an expiry, written
 // before that held) gets a fresh window.
-const countScript = `
-local count = redis.call('INCR', KEYS[1])
-local ttl = redis.call('TTL', KEYS[1])
-if ttl == -1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-  ttl = tonumber(ARGV[1])
+//
+// `windowCountLua` defines `countInWindow(key, seconds)` for a caller's own
+// script to call, so a script that gates one counter on another keeps the
+// same counting rule rather than a copy of it.
+export const windowCountLua = `
+local function repairWindow(key, seconds)
+  local ttl = redis.call('TTL', key)
+  if ttl == -1 then
+    redis.call('EXPIRE', key, seconds)
+    return seconds
+  end
+  return ttl
 end
+local function countInWindow(key, seconds)
+  local count = redis.call('INCR', key)
+  return count, repairWindow(key, seconds)
+end`;
+
+const countScript = `${windowCountLua}
+local count, ttl = countInWindow(KEYS[1], tonumber(ARGV[1]))
 return {count, ttl}`;
 
 export type CounterRedis = {

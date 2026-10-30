@@ -392,17 +392,28 @@ export class UsersDataService {
    * verification and this UPDATE stays authoritative instead of being
    * overwritten by a password its holder may no longer control (#977).
    * False means the password changed underneath the caller.
+   *
+   * Every session but currentSid goes with the write, as with a reset: one
+   * opened by whoever knew the old password does not outlive it. The current
+   * one stays, so the caller who changed it is not signed out (ADR 0005).
    */
   public async updatePassword(
     userId: number,
     currentHash: string,
     passwordHash: string,
+    currentSid: string,
   ): Promise<boolean> {
-    const updated = await this.drizzleConnection
-      .update(users)
-      .set({ password: passwordHash })
-      .where(and(eq(users.id, userId), eq(users.password, currentHash)))
-      .returning({ id: users.id });
-    return updated.length > 0;
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      const updated = await transaction
+        .update(users)
+        .set({ password: passwordHash })
+        .where(and(eq(users.id, userId), eq(users.password, currentHash)))
+        .returning({ id: users.id });
+      if (!updated.length) return false;
+      await transaction
+        .delete(sessions)
+        .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
+      return true;
+    });
   }
 }
