@@ -5,10 +5,10 @@
 # itself to the manager, which runs the rest with --remote.
 if [[ "${1:-}" != --remote ]]; then
   set -euo pipefail
-  # shellcheck disable=SC2153 # SSH_HOST and DEPLOY_PATH come from the job env.
+  # shellcheck disable=SC2153 # SSH_HOST comes from the job env.
   SSH_DEST="${SSH_USER}@${SSH_HOST}"
   SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
-  # shellcheck disable=SC2153
+  # shellcheck disable=SC2153 # DEPLOY_PATH comes from the job env.
   printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
   # shellcheck disable=SC2029 # DEPLOY_PATH_Q is meant to expand here, quoted.
   ssh "${SSH_OPTS[@]}" "$SSH_DEST" "bash -s -- --remote $DEPLOY_PATH_Q" < "${BASH_SOURCE[0]}"

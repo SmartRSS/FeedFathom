@@ -32,6 +32,11 @@ jobs:
       - name: Run lint
         run: bun run lint
 
+      # The deploy script only runs on a main release; lint it here so a
+      # broken edit fails on staging instead of mid-deploy.
+      - name: Check deploy script
+        run: shellcheck deploy/deploy.sh
+
   compile:
     name: Compile every deployable target
     runs-on: ubuntu-latest
