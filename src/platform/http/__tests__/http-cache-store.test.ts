@@ -56,6 +56,8 @@ test("deletes malformed cached response projections before use", async () => {
     { ...valid, expiresAt: null },
     { ...valid, headers: [["missing-value"]] },
     { ...valid, status: null },
+    // A body-less 304 stored before only 200s were (#1078).
+    { ...valid, body: "", status: 304 },
     { ...valid, url: "file:///tmp/feed" },
     { ...valid, extra: true },
   ];
