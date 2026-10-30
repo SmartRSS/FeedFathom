@@ -2185,11 +2185,50 @@ test("refuses a password change whose verified password was replaced", async () 
     { auth: true },
   );
 
-  expect(updates).toEqual([[account.id, account.password, "replacement-hash"]]);
+  expect(updates).toEqual([
+    [account.id, account.password, "replacement-hash", "test"],
+  ]);
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
     error: "Current password is incorrect.",
   });
+});
+
+// A stolen session must not be a way to grind the account's real password.
+// Counted per user, so changing address does not reset the budget.
+test("stops guessing the current password from one session", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  authenticated(dependencies);
+  dependencies.usersDataService.findUser = async () => account;
+  let verifyCalls = 0;
+  dependencies.password.verify = async (value, hash) => {
+    verifyCalls++;
+    return hash === account.password && value === "old-password";
+  };
+  dependencies.usersDataService.updatePassword = async () => true;
+  const app = await appFor(dependencies);
+  const change = (oldPassword: string, address: string) =>
+    post(
+      app,
+      "/api/options/password",
+      { oldPassword, password1: "new-password", password2: "new-password" },
+      { auth: true, headers: { "x-forwarded-for": address } },
+    );
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await change(`guess-${attempt}`, `203.0.113.${attempt}`);
+  }
+  expect(verifyCalls).toBe(10);
+
+  // Even the right password, from a fresh address, is refused unchecked.
+  const blocked = await change("old-password", "198.51.100.4");
+  expect(blocked.status).toBe(400);
+  expect(await blocked.json()).toEqual({
+    error: "Current password is incorrect.",
+  });
+  expect(verifyCalls).toBe(10);
 });
 
 test("validates admin sort and URL policies before service calls", async () => {

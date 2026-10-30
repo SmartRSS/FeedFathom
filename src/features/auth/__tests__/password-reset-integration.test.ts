@@ -159,6 +159,7 @@ test("a password change authorised by the replaced password writes nothing", asy
       userId,
       "old-password-hash",
       "stale-change-hash",
+      "current-sid",
     ),
   ).toBe(false);
   const [row] = await client<{ password: string }[]>`
@@ -170,9 +171,32 @@ test("a password change authorised by the replaced password writes nothing", asy
       userId,
       "reset-password-hash",
       "changed-password-hash",
+      "current-sid",
     ),
   ).toBe(true);
   const [after] = await client<{ password: string }[]>`
     SELECT password FROM users WHERE id = ${userId}`;
   expect(after!.password).toBe("changed-password-hash");
+});
+
+// A change revokes what the old password opened, but not the session that
+// made it: the SPA keeps working where the user just typed the new password.
+// The login racing it on the old hash gets no session either way (#843).
+test("a password change signs out every other session and keeps the current one", async () => {
+  const { signIn, userId } = await setUp();
+  const current = (await signIn()) ?? "";
+  const other = (await signIn()) ?? "";
+
+  expect(
+    await usersDataService.updatePassword(
+      userId,
+      "old-password-hash",
+      "changed-password-hash",
+      current,
+    ),
+  ).toBe(true);
+
+  expect((await usersDataService.getUserBySid(current))?.id).toBe(userId);
+  expect(await usersDataService.getUserBySid(other)).toBeUndefined();
+  expect(await signIn()).toBeUndefined();
 });

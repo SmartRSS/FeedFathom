@@ -50,10 +50,11 @@ as the login form is. The scopes stay separate because a user whose first reset
 mail went to spam and who asked again a few times must still be able to log in
 with the password that reset then set.
 
-`POST /api/register` is bounded under a third scope, but only on the branch
-that sends activation mail — the abuse is the send, not the account, and who
-may hold one is already settled by `ENABLE_REGISTRATION` and `ALLOWED_EMAILS`.
-The count does not start until a user exists: a fresh install accepts
+`POST /api/register` is bounded under a third scope. Who may hold an account
+is already settled by `ENABLE_REGISTRATION` and `ALLOWED_EMAILS`; the abuse is
+the activation mail and the password hash each attempt costs, an existing
+address included, so it pays the same as a new one (#1076). The count does
+not start until a user exists: a fresh install accepts
 registration regardless of that setting and answers identically whether or not
 it worked, so counting there would let the first operator lock themselves out
 of their own instance with no way to tell that is what happened.
@@ -92,3 +93,8 @@ deployment would ship without one.
   account from their own address for the rest of that window, with no message
   explaining why — the same 401 as a wrong password. Telling them would be the
   enumeration signal.
+- `POST /api/options/password` is bounded under a fourth scope keyed by the
+  user, not the address (#1076). Only a session holder reaches it, and one who
+  stole the session can change address at will; the lockout objection above
+  does not apply, because only the account's own sessions can spend the budget
+  and it blocks only the change form, never login.

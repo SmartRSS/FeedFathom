@@ -20,7 +20,17 @@ import { countInWindow } from "#platform/redis-window-counter.ts";
 // The scope keeps each endpoint's budget its own. Sharing them would mean a
 // user who re-requested a password reset a few times -- because the first mail
 // went to spam -- could not then log in with the password they had just set.
-export type ThrottleScope = "login" | "password-reset" | "register";
+//
+// The password change is counted per user rather than per address: only a
+// session holder reaches it, and one who stole the session can change address
+// at will. Keying on the account is safe there because only that account's
+// own sessions can spend the budget, and spending it blocks only the change
+// form, never login.
+export type ThrottleScope =
+  | "login"
+  | "password-change"
+  | "password-reset"
+  | "register";
 
 const windowSeconds = 15 * 60;
 const accountFailureLimit = 10;

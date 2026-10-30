@@ -1095,6 +1095,23 @@ test("signs out all other sessions at once", async ({ page }) => {
   await expect(page.getByText("This browser")).toBeVisible();
 });
 
+test("a password change keeps this session and drops the others from the list", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  await page.getByLabel("Current password").fill("old-password");
+  await page.getByLabel("New password", { exact: true }).fill("new-password");
+  await page.getByLabel("Confirm new password").fill("new-password");
+  await page.getByRole("button", { name: "Change password" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Password changed.");
+  await expect(page.getByText("Phone")).toHaveCount(0);
+  await expect(page.getByText("This browser")).toBeVisible();
+});
+
 // The unit test covers the guard; this covers the part that can silently stop
 // working -- the settings reaching the stylesheet at all. A renamed data
 // attribute or a dropped effect leaves both selects working and the reader
