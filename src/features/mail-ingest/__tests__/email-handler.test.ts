@@ -19,6 +19,7 @@ const source: Source = {
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
+  reservedBy: null,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "trusted-recipient@example.com",
   websubCallbackToken: null,
@@ -37,7 +38,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
   const published: [number, number][] = [];
   const handler = new EmailHandler(
     {
-      async findSourceByUrl(address) {
+      async findMailRecipient(address) {
         lookups.push(address);
         return address === source.url ? source : undefined;
       },
@@ -105,7 +106,7 @@ type Batch = Parameters<ArticlesDataService["batchUpsertArticles"]>[0];
 function recordingHandler(parse?: (raw: Buffer) => Promise<ParsedMail>) {
   const batches: Batch[] = [];
   const handler = new EmailHandler(
-    { findSourceByUrl: async () => source, async successSource() {} },
+    { findMailRecipient: async () => source, async successSource() {} },
     new ArticleImporter(
       {
         async batchUpsertArticles(articles) {

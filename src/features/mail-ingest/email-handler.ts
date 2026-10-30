@@ -57,7 +57,7 @@ export class EmailHandler {
   constructor(
     private readonly sourcesDataService: Pick<
       SourcesDataService,
-      "findSourceByUrl" | "successSource"
+      "findMailRecipient" | "successSource"
     >,
     private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
     // A seam for the projection check below, which no real message reaches.
@@ -73,7 +73,7 @@ export class EmailHandler {
       // Our own invariant over mailparser's shape, not the sender's fault.
       throw new Error("Mail parser returned an invalid message projection");
     }
-    const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
+    const source = await this.sourcesDataService.findMailRecipient(envelope.to);
     if (!source) throw new MailRejectedError("No recipients known");
 
     const article = this.createArticleFromEmail(

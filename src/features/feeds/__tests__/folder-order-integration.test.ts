@@ -82,6 +82,7 @@ test("a subscription goes only into the root or one of the user's own folders", 
     expect(await subscribe(foreign.id)).toBeUndefined();
     const subscription = await subscribe(own.id);
     expect(subscription).toBeDefined();
+    if (subscription === "refused") throw new Error("A feed has no owner");
     const move = (parentId: null | number) =>
       userSourcesDataService.updateUserSource(
         owner!.id,

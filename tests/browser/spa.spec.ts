@@ -2090,20 +2090,104 @@ for (const theme of ["smart", "high-contrast"]) {
 
 // The extension's newsletter action opens this URL rather than minting an
 // address of its own, so new addresses all come in the SPA's format. The
-// address lands in the URL: a reload must not replace one already copied.
+// address lands in the URL: a reload must not replace one already copied,
+// and reserves it again, which is a no-op once it is reserved.
 test("mints a newsletter address when opened with ?newsletter", async ({
   page,
 }) => {
-  await openApp(page, { mailDomain: "mail.example" }, "/preview?newsletter");
+  const state = await openApp(
+    page,
+    { mailDomain: "mail.example" },
+    "/preview?newsletter",
+  );
 
   const feedUrl = page.getByLabel("Feed URL");
   await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
   const minted = await feedUrl.inputValue();
+  await expect.poll(() => state.reservedAddresses).toEqual([minted]);
   await expect(page).toHaveURL(
     `/preview?feedUrl=${encodeURIComponent(minted)}`,
   );
   await page.reload();
   await expect(feedUrl).toHaveValue(minted);
+  await expect.poll(() => state.reservedAddresses).toEqual([minted, minted]);
+});
+
+// Mail to an unreserved address bounces, so the user has to know, and a
+// reload gets the reservation another try.
+test("says so when a generated address could not be reserved", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+  state.failReservations = true;
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(
+    page.getByText(
+      "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
+    ),
+  ).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  expect(state.deliverNewsletter(address)).toBe(false);
+
+  state.failReservations = false;
+  await page.reload();
+  await expect(page.getByLabel("Feed URL")).toHaveValue(address);
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+  await expect(page.getByText(/^Address not reserved/u)).toHaveCount(0);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+  ]);
+  failures.length = 0;
+});
+
+// The address is copied before Subscribe, so a newsletter can mail it first:
+// its confirmation must be accepted then, and readable once subscribed.
+test("keeps mail sent to a generated address before Subscribe", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(page.getByText("Address copied.")).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Confirm your subscription" }),
+  ).toBeVisible();
+  expect(state.subscriptionBodies).toEqual([
+    { sourceFolder: null, sourceName: "Letters", sourceUrl: address },
+  ]);
+});
+
+test("explains a refused address instead of the server's error", async ({
+  page,
+}) => {
+  await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByLabel("Feed URL").fill("me@mail.example");
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByText(
+      "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
+    ),
+  ).toBeVisible();
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)",
+  ]);
+  failures.length = 0;
 });
 
 test("validates Website URLs before discovery", async ({ page }) => {

@@ -203,9 +203,9 @@ test("drops orphaned sources, expired users and sessions, but never every source
     await client`CREATE SCHEMA "public"`;
     await migrateDatabase(databaseUrl, migrationsFolder);
     const [kept, orphan] = await client<{ id: number }[]>`
-      INSERT INTO sources (url, home_url) VALUES
-        ('https://kept.test/feed', 'https://kept.test'),
-        ('https://orphan.test/feed', 'https://orphan.test')
+      INSERT INTO sources (url, home_url, created_at) VALUES
+        ('https://kept.test/feed', 'https://kept.test', NOW() - INTERVAL '2 days'),
+        ('https://orphan.test/feed', 'https://orphan.test', NOW() - INTERVAL '2 days')
       RETURNING id`;
 
     await cleanupOrphanedData(drizzleConnection, 365, 365, 730);

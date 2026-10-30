@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Value } from "typebox/value";
-import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
-import {
-  newsletterAddress,
-  websiteValidationMessage,
-  withScheme,
-} from "../discovery-behavior.ts";
+import { websiteValidationMessage, withScheme } from "../discovery-behavior.ts";
 
 describe("withScheme", () => {
   test("prefixes a bare host", () => {
@@ -47,21 +41,5 @@ describe("websiteValidationMessage", () => {
   test("rejects a value that is not a URL at all", () => {
     expect(websiteValidationMessage("")).not.toBe("");
     expect(websiteValidationMessage("http://")).not.toBe("");
-  });
-});
-
-describe("newsletterAddress", () => {
-  // The address goes straight into /subscribe, which rejects anything the
-  // shared email policy does not accept.
-  test("mints an address the subscribe contract accepts", () => {
-    const address = newsletterAddress("example.com");
-    expect(Value.Check(emailAddressPolicy, address)).toBe(true);
-    expect(address.endsWith("@example.com")).toBe(true);
-  });
-
-  test("does not repeat itself", () => {
-    expect(newsletterAddress("example.com")).not.toBe(
-      newsletterAddress("example.com"),
-    );
   });
 });

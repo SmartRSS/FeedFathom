@@ -34,6 +34,7 @@ const source = {
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
+  reservedBy: null,
   subscriberCount: 3,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "https://example.com/feed",

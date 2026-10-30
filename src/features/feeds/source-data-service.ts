@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   getTableColumns,
   gt,
   isNull,
@@ -18,6 +19,7 @@ import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
+import { subscriberlessGraceEnd } from "#features/feeds/retention.ts";
 import {
   clampToPollFloor,
   pollFloorMs,
@@ -43,12 +45,18 @@ const sourceSortColumns = {
   url: sources.url,
 } satisfies Record<Static<typeof sourceSortSchema>, unknown>;
 
-const isUniqueViolation = (error: unknown, depth = 0): boolean => {
+// 23505 is a unique violation, 23503 a foreign key one. Drizzle wraps the
+// driver's error, so the SQLSTATE can sit a few causes down.
+export const hasSqlState = (
+  error: unknown,
+  state: "23503" | "23505",
+  depth = 0,
+): boolean => {
   if (typeof error !== "object" || error === null || depth > 3) return false;
   const code = "code" in error ? error.code : undefined;
   const errno = "errno" in error ? error.errno : undefined;
-  if (code === "23505" || errno === "23505") return true;
-  return "cause" in error && isUniqueViolation(error.cause, depth + 1);
+  if (code === state || errno === state) return true;
+  return "cause" in error && hasSqlState(error.cause, state, depth + 1);
 };
 
 export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
@@ -70,6 +78,7 @@ export class SourcesDataService {
     payload: {
       homeUrl: string;
       kind?: "email" | "feed" | undefined;
+      reservedBy?: number;
       url: string;
     },
     db: Pick<BunSQLDatabase<typeof schema>, "insert" | "select"> = this
@@ -111,6 +120,32 @@ export class SourcesDataService {
         .select()
         .from(sources)
         .where(eq(sources.url, url))
+    ).at(0);
+  }
+
+  // The source mail to `url` is delivered to. One without a subscriber takes
+  // mail only within the reservation grace; past it, it is an address its
+  // owner left (a tombstone, see cleanupOrphanedData), and the sender should
+  // get a bounce rather than mail nobody reads.
+  public async findMailRecipient(url: string): Promise<Source | undefined> {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(sources)
+        .where(
+          and(
+            eq(sources.url, url),
+            or(
+              gt(sources.createdAt, subscriberlessGraceEnd),
+              exists(
+                this.drizzleConnection
+                  .select({ id: userSources.id })
+                  .from(userSources)
+                  .where(eq(userSources.sourceId, sources.id)),
+              ),
+            ),
+          ),
+        )
     ).at(0);
   }
 
@@ -234,7 +269,7 @@ export class SourcesDataService {
         .returning({ id: sources.id });
       return updated.length > 0 ? "updated" : "not-found";
     } catch (error) {
-      if (isUniqueViolation(error)) return "conflict";
+      if (hasSqlState(error, "23505")) return "conflict";
       throw error;
     }
   }

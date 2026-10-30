@@ -277,6 +277,73 @@ test("upgrading a populated baseline database keeps every row and its state", as
   }
 });
 
+// Before 0013 any account could subscribe to any address, so one email source
+// can have several subscribers. The earliest becomes its owner (ties broken
+// by subscription id); one without subscribers, and every feed, has none.
+test("upgrading gives each email source its earliest subscriber as owner", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const olderMigrationsFolder =
+    await migrationsFolderBefore("0013_unusual_ulik");
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, olderMigrationsFolder);
+    const users = await client<{ id: number }[]>`INSERT INTO "users"
+      ("email", "name", "password")
+      VALUES ('a@example.com', 'a', 'x'), ('b@example.com', 'b', 'x'), ('c@example.com', 'c', 'x')
+      RETURNING "id"`;
+    const [a, b, c] = users.map(({ id }) => id);
+    const sources = await client<
+      { id: number; url: string }[]
+    >`INSERT INTO "sources"
+      ("url", "home_url", "kind")
+      VALUES
+        ('shared@mail.example', 'http://localhost', 'email'),
+        ('tied@mail.example', 'http://localhost', 'email'),
+        ('orphan@mail.example', 'http://localhost', 'email'),
+        ('https://example.com/feed', 'https://example.com', 'feed')
+      RETURNING "id", "url"`;
+    const [shared, tied, , feed] = sources.map(({ id }) => id);
+    // b subscribed to the shared address first, though a's row is older.
+    await client`INSERT INTO "user_sources" ("name", "source_id", "user_id", "created_at")
+      VALUES
+        ('x', ${shared}, ${a}, '2026-02-01'),
+        ('x', ${shared}, ${b}, '2026-01-01'),
+        ('x', ${feed}, ${a}, '2026-01-01')`;
+    // c's row has the lower id but is stored, and so scanned, after a's.
+    await client`INSERT INTO "user_sources" ("id", "name", "source_id", "user_id", "created_at")
+      VALUES
+        (20, 'x', ${tied}, ${a}, '2026-01-01'),
+        (10, 'x', ${tied}, ${c}, '2026-01-01')`;
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+
+    const owners = await client<{ owner: null | number; url: string }[]>`
+      SELECT "url", "reserved_by" AS "owner" FROM "sources" ORDER BY "id"`;
+    expect([...owners]).toEqual([
+      { owner: b!, url: "shared@mail.example" },
+      { owner: c!, url: "tied@mail.example" },
+      { owner: null, url: "orphan@mail.example" },
+      { owner: null, url: "https://example.com/feed" },
+    ]);
+    const [{ count } = { count: -1 }] = await client<{ count: number }[]>`
+      SELECT count(*)::int AS "count" FROM "user_sources"`;
+    expect(count).toBe(5);
+    expect(await indexExists(client, "sources_reserved_by_idx")).toBe(true);
+    // SET NULL, so code rolled back to before 0013 deleting an owner leaves
+    // a shared source to its other subscribers.
+    const [{ onDelete } = { onDelete: "" }] = await client<
+      { onDelete: string }[]
+    >`SELECT confdeltype AS "onDelete" FROM pg_constraint
+      WHERE conname = 'sources_reserved_by_users_id_fk'`;
+    expect(onDelete).toBe("n");
+  } finally {
+    await client.close();
+    await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
 // sid is a random UUID per login, so duplicates should never exist. If one
 // does, the unique index build must fail the whole migration transaction
 // rather than leave the user_id index applied without it.
