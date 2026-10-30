@@ -68,8 +68,16 @@ test("accepts only its own window's answer to the request it sent", async () => 
   const forged = { ...fetched(request.id), html: "<p>Forged</p>" };
   deliver(forged, { origin: "https://evil.example", source: windowObject });
   deliver(forged, { origin, source: strictFake<Window>({}, "otherFrame") });
-  deliver({ ...forged, id: "another-id" });
-  deliver({ ...forged, action: "capabilities", available: true });
+  deliver({ ...forged, id: crypto.randomUUID() });
+  deliver({
+    action: "capabilities",
+    available: true,
+    channel: readerBridgeChannel,
+    id: request.id,
+    ok: true,
+    type: "response",
+    version: readerBridgeVersion,
+  });
   deliver(fetched(request.id));
 
   expect(await pending).toEqual({
@@ -100,7 +108,7 @@ test("an extension error is surfaced by code, and dispose ends what is pending",
 
   const abandoned = bridge.fetch("https://article.example/other");
   bridge.dispose();
-  await expect(abandoned).rejects.toThrow(
+  expect(await abandoned.catch((error: Error) => error.message)).toBe(
     "The Reader extension is unavailable.",
   );
 });

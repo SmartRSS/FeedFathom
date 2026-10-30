@@ -276,6 +276,14 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     );
+  // A DELETE the worker queues while offline, answered by its response.
+  const remove = (path: string, body: object) =>
+    dispatch(
+      new Request(`${ORIGIN}${path}`, {
+        body: JSON.stringify(body),
+        method: "DELETE",
+      }),
+    ).response;
   const activate = async () => {
     const pending: Promise<unknown>[] = [];
     onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
@@ -293,6 +301,7 @@ const loadServiceWorker = (
     messages,
     navigate,
     queue,
+    remove,
     removeSource,
     requests,
   };
@@ -799,6 +808,25 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 
+// #974: a download started before a sign-in belongs to the account that
+// was signed in then, so it must not land in the new account's cache.
+test("a download answered after a sign-in is not stored", async () => {
+  let answer: (() => void) | undefined;
+  const sw = loadServiceWorker((path, method) => {
+    if (method === "POST") return Response.json({ sid: "s" });
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(articleNetwork(path));
+    });
+  });
+  const sync = sw.keepOffline([2]);
+  await settle();
+  await sw.login();
+  answer?.();
+  await sync;
+  expect([...sw.entries.keys()]).toEqual([]);
+  expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
+});
+
 // GET /api/session as the given account, or signed out with null.
 const session = (id: number | null) =>
   Response.json({ user: id === null ? null : { id } });
@@ -1077,15 +1105,8 @@ test.each([
     await sw.loadArticle(1);
     await settle();
     online = false;
-    const remove = (path: string, body: object) =>
-      sw.dispatch(
-        new Request(`${ORIGIN}${path}`, {
-          body: JSON.stringify(body),
-          method: "DELETE",
-        }),
-      ).response;
-    await remove("/api/source", { removeSourceId: 1 });
-    await remove("/api/articles", { removedArticleIdList: [7] });
+    await sw.remove("/api/source", { removeSourceId: 1 });
+    await sw.remove("/api/articles", { removedArticleIdList: [7] });
     online = true;
     await sw.loadArticle(2);
     await settle();
@@ -1124,16 +1145,9 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
     }
     return new Response(null, { status: sourceExists ? 400 : 200 });
   });
-  const remove = (path: string, body: object) =>
-    sw.dispatch(
-      new Request(`${ORIGIN}${path}`, {
-        body: JSON.stringify(body),
-        method: "DELETE",
-      }),
-    ).response;
   sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
-  await remove("/api/source", { removeSourceId: 1 });
-  await remove("/api/folders", { removeFolderId: 2 });
+  await sw.remove("/api/source", { removeSourceId: 1 });
+  await sw.remove("/api/folders", { removeFolderId: 2 });
   online = true;
   await sw.loadTree();
   await settle();
@@ -1170,19 +1184,12 @@ test("a flush that starts during another doesn't replay its entries twice", asyn
       throw new TypeError("Failed to fetch");
     return new Response(null);
   });
-  const remove = (path: string, body: object) =>
-    sw.dispatch(
-      new Request(`${ORIGIN}${path}`, {
-        body: JSON.stringify(body),
-        method: "DELETE",
-      }),
-    ).response;
   sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
-  await remove("/api/source", { removeSourceId: 1 });
+  await sw.remove("/api/source", { removeSourceId: 1 });
   online = true;
   await sw.loadTree();
   await settle();
-  await remove("/api/folders", { removeFolderId: 2 });
+  await sw.remove("/api/folders", { removeFolderId: 2 });
   foldersDown = false;
   await sw.loadTree();
   await settle();

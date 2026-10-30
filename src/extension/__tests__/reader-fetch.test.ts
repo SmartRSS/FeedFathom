@@ -115,6 +115,17 @@ describe("Reader bridge protocol", () => {
     };
     expect(isReaderResponse(response)).toBe(true);
     expect(isReaderResponse({ ...response, extra: true })).toBe(false);
+    expect(
+      isReaderResponse({
+        action: "fetch",
+        channel: readerBridgeChannel,
+        error: "UNKNOWN",
+        id: validRequest.id,
+        ok: false,
+        type: "response",
+        version: readerBridgeVersion,
+      }),
+    ).toBe(false);
     expect(isReaderResponseForRequest(response, validRequest)).toBe(true);
     expect(
       isReaderResponseForRequest(

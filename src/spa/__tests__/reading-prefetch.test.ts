@@ -1,12 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   neighbours,
   offlineUnread,
   prefetchNext,
   unreadSourceIds,
 } from "../reading-prefetch.ts";
-
-afterEach(() => prefetchNext.set(false));
 
 // Both download in the background, so neither may start without consent.
 // Persistence is storedToggle's, covered in preferences.test.ts.
