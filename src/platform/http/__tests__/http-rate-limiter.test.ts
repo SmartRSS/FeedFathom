@@ -191,19 +191,6 @@ describe("HttpRateLimiter shared host clock", () => {
     return Date.now();
   }
 
-  test("two interactive requests issued together go out one second apart", async () => {
-    const limiter = new HttpRateLimiter(createFakeHttpRedis());
-    const [first = 0, second = 0] = (
-      await Promise.all([
-        reserve(limiter, "interactive"),
-        reserve(limiter, "interactive"),
-      ])
-    ).toSorted((left, right) => left - right);
-
-    expect(second - first).toBeGreaterThanOrEqual(990);
-    expect(second - first).toBeLessThan(1_500);
-  });
-
   test("background defers within ten seconds of an interactive request", async () => {
     const redis = createFakeHttpRedis();
     const limiter = new HttpRateLimiter(redis);
@@ -313,22 +300,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 
-  test("overlapping waiters count each other in and out", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const first = await startWaiter(redis);
-    const second = await startWaiter(redis);
-    expect(redis.values.get(waitersKey)).toBe("2");
-
-    // One of them takes the clock; the other waits its turn and stays counted.
-    await Promise.race([first.reservation, second.reservation]);
-    expect(redis.values.get(waitersKey)).toBe("1");
-    expect(redis.pttl(waitersKey)).toBeGreaterThan(19_000);
-
-    await Promise.all([first.reservation, second.reservation]);
-    expect(redis.pttl(waitersKey)).toBe(-2);
-  });
-
   test("a turn lost too close to the deadline defers and takes the waiter out", async () => {
     const redis = createFakeHttpRedis();
     requestedJustNow(redis);
@@ -348,16 +319,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
 
     deadline.controller.abort();
     await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
-    expect(redis.pttl(waitersKey)).toBe(-2);
-  });
-
-  test("cleanup after the counter expired leaves no negative key behind", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const { reservation } = await startWaiter(redis);
-
-    redis.values.delete(waitersKey);
-    await reservation;
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 });

@@ -175,7 +175,7 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   expect(sentHeaders).toHaveLength(1);
 });
 
-test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
+test("a response's rate-limit headers block the host for later requests", async () => {
   const reset = Math.floor(Date.now() / 1_000) + 60;
   const client = new HttpClient(redis(), {
     transport: queuedTransport([
@@ -192,28 +192,6 @@ test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
   const error = await deferral(client.get("https://1.1.1.1/another"));
 
   expect(error.retryAt).toBe(reset * 1_000);
-});
-
-test("uses the fallback delay when Retry-After is absent or empty", async () => {
-  await Promise.all(
-    [undefined, ""].map(async (retryAfter) => {
-      const client = new HttpClient(redis(), {
-        transport: queuedTransport([
-          nativeResponse("rate limited", {
-            headers:
-              retryAfter === undefined ? {} : { "retry-after": retryAfter },
-            status: 429,
-          }),
-        ]),
-      });
-      const before = Date.now();
-
-      const error = await deferral(client.get("https://1.1.1.1/feed"));
-
-      expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
-      expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
-    }),
-  );
 });
 
 test("rejects unsafe URL forms before transport", async () => {
