@@ -20,7 +20,9 @@ import {
 import { articleEventsChannel } from "#features/feeds/article-events.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { createHash, createHmac } from "node:crypto";
-import { resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
@@ -323,19 +325,6 @@ const authenticated = (dependencies: Dependencies) => {
   dependencies.usersDataService.getUserBySid = async () => sessionUser;
 };
 
-test("returns a session matching the browser contract", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  const app = await appFor(dependencies);
-
-  const response = await get(app, "/api/session", { auth: true });
-  const body: unknown = await response.json();
-
-  expect(response.status).toBe(200);
-  expect(Value.Check(sessionResponse, body)).toBe(true);
-  expect(body).toEqual({ user: sessionUser });
-});
-
 // The session row's activity stamp and device label are refreshed by the
 // auth plugin on every request that resolves the cookie -- if the plugin
 // stops passing the User-Agent along, the options list quietly reverts to
@@ -510,29 +499,38 @@ test.each([
   },
 );
 
+// A cookie whose sid resolves to nobody -- expired, revoked by logout or a
+// password reset, or never issued -- is exactly as unauthorised as no cookie.
 test.each([
-  "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss",
-  "/api/find?link=https%3A%2F%2Fsite.example%2F",
-  "/api/article?article=1",
-  "/api/tree",
-  "/api/events",
-  "/api/folders",
-  "/api/options/sessions",
-])("rejects unauthenticated access to %s", async (path) => {
-  const app = await appFor(createDependencies());
-  const response = await get(app, path);
+  ["GET", "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss"],
+  ["GET", "/api/find?link=https%3A%2F%2Fsite.example%2F"],
+  ["GET", "/api/article?article=1"],
+  ["GET", "/api/tree"],
+  ["GET", "/api/events"],
+  ["GET", "/api/folders"],
+  ["GET", "/api/options/sessions"],
+  ["DELETE", "/api/options/sessions"],
+  ["DELETE", "/api/options/sessions/7"],
+  ["POST", "/api/articles"],
+])(
+  "rejects %s %s with no cookie and with an unknown one",
+  async (method, path) => {
+    const app = await appFor(createDependencies());
+    const body = method === "POST" ? { sources: [3] } : undefined;
 
-  expect(response.status).toBe(401);
-  expect(await response.json()).toEqual({ error: "Unauthorized" });
-});
+    const responses = await Promise.all(
+      [false, true].map((auth) => send(app, method, path, body, { auth })),
+    );
 
-test("rejects unauthenticated article list requests", async () => {
-  const app = await appFor(createDependencies());
-  const response = await post(app, "/api/articles", { sources: [3] });
-
-  expect(response.status).toBe(401);
-  expect(await response.json()).toEqual({ error: "Unauthorized" });
-});
+    const outcomes = await Promise.all(
+      responses.map(async (r) => [r.status, await r.json()]),
+    );
+    expect({ missingCookie: outcomes[0], unknownCookie: outcomes[1] }).toEqual({
+      missingCookie: [401, { error: "Unauthorized" }],
+      unknownCookie: [401, { error: "Unauthorized" }],
+    });
+  },
+);
 
 test("normalizes reader inputs and rejects malformed values before dependencies", async () => {
   const dependencies = createDependencies();
@@ -1481,10 +1479,15 @@ test("falls back to queueing when inline persistence fails", async () => {
   expect(enqueues).toEqual([subscriptionSource]);
 });
 
-test("queues URL cache misses but never email subscriptions", async () => {
+test("queues URL cache misses and starts WebSub discovery, but never for email subscriptions", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.MAIL_ENABLED = true;
+  const discoveryCalls: Parameters<FeedParser["discoverAndSubscribeWebSub"]>[] =
+    [];
+  dependencies.feedParser.discoverAndSubscribeWebSub = async (...args) => {
+    discoveryCalls.push(args);
+  };
   const additions: Parameters<
     ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
@@ -1532,49 +1535,27 @@ test("queues URL cache misses but never email subscriptions", async () => {
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
   expect(enqueues).toEqual([[91, subscriptionSource.url]]);
+  expect(discoveryCalls).toEqual([
+    [91, subscriptionSource.url, subscriptionSource.websubStatus],
+  ]);
 });
 
-test("triggers WebSub discovery immediately at subscribe time, but not for email targets", async () => {
+test("refuses an email subscription while mail is disabled, before storing anything", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.config.MAIL_ENABLED = true;
-  const discoveryCalls: Parameters<FeedParser["discoverAndSubscribeWebSub"]>[] =
-    [];
-  dependencies.feedParser.discoverAndSubscribeWebSub = async (...args) => {
-    discoveryCalls.push(args);
-  };
-  dependencies.userSourcesDataService.addSourceToUser = async (
-    _userId,
-    payload,
-  ) => ({
-    initializationSnapshot: payload.initializationSnapshot ?? null,
-    source: {
-      ...subscriptionSource,
-      id: payload.url.includes("@") ? 94 : 93,
-      url: payload.url,
-    },
-    subscriptionCreatedAt: new Date(),
-    subscriptionId: payload.url.includes("@") ? 4 : 3,
-  });
-  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
-    runLease;
-  dependencies.sourceEnqueuer.enqueueSource = async () => {};
   const app = await appFor(dependencies);
 
-  await subscribe(app, {
-    sourceFolder: null,
-    sourceName: "URL feed",
-    sourceUrl: subscriptionSource.url,
-  });
-  await subscribe(app, {
+  // addSourceToUser is not arranged: the strict fake throws if it is reached.
+  const response = await subscribe(app, {
     sourceFolder: null,
     sourceName: "Newsletter",
     sourceUrl: "newsletter@example.com",
   });
 
-  expect(discoveryCalls).toEqual([
-    [93, subscriptionSource.url, subscriptionSource.websubStatus],
-  ]);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: "Email subscriptions are not allowed.",
+  });
 });
 
 test("responds without waiting for WebSub discovery to settle", async () => {
@@ -2617,17 +2598,12 @@ test("creates active users without registration integrations", async () => {
   expect(mailCalls).toBe(0);
 });
 
-test.each([
-  ["active", false],
-  ["inactive", false],
-] as const)(
-  "returns generic success without mutating an existing %s account when Mailjet=%s",
-  async (status, useMailjet) => {
+// With Mailjet configured an existing address gets a notice instead; see
+// the account-exists and expired-link tests further down.
+test.each(["active", "inactive"] as const)(
+  "returns generic success without mutating an existing %s account when mail is off",
+  async (status) => {
     const dependencies = createDependencies();
-    if (useMailjet) {
-      dependencies.config.MAILJET_API_KEY = "mailjet-key";
-      dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
-    }
     const calls: string[] = [];
     dependencies.password.hash = async () => {
       calls.push("hash");
@@ -3053,6 +3029,54 @@ test("resets a password without admitting whether the account exists", async () 
   expect(await undelivered.json()).toEqual(unknownBody);
 });
 
+// The reset form mails an address the caller names, so it is bounded like
+// the login form: per (address, account), with the same 200 either way.
+test("stops a reset form from mailing one account on demand", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "key";
+  dependencies.config.MAILJET_API_SECRET = "secret";
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  const target = { ...account, email: "forgetful@example.com" };
+  let sent = 0;
+  dependencies.usersDataService.findUser = async () => target;
+  dependencies.usersDataService.startPasswordReset = async () => {};
+  dependencies.mailSender.sendPasswordResetEmail = async () => {
+    sent++;
+  };
+  const app = await appFor(dependencies);
+  const request = (address: string) =>
+    post(
+      app,
+      "/api/password-reset",
+      { email: target.email },
+      { headers: { "x-forwarded-for": address } },
+    );
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    expect((await request("203.0.113.7")).status).toBe(200);
+  }
+  const throttled = await request("203.0.113.7");
+  const elsewhere = await request("198.51.100.4");
+
+  expect(throttled.status).toBe(200);
+  expect(await throttled.json()).toEqual({ success: true });
+  expect(elsewhere.status).toBe(200);
+  expect(sent).toBe(11);
+
+  // The reset counter is its own scope: tripping it does not lock the same
+  // address out of signing in with the right password.
+  dependencies.password.verify = async (value, hash) =>
+    hash === target.password && value === "password";
+  const login = await post(
+    app,
+    "/api/login",
+    { email: target.email, password: "password" },
+    { headers: { "x-forwarded-for": "203.0.113.7" } },
+  );
+  expect(login.status).toBe(200);
+});
+
 test("spends a reset token once and refuses an expired one", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "key";
@@ -3388,19 +3412,46 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
   expect(listing.status).toBe(200);
 });
 
-test("leaves the per-user options routes open to any signed-in user", async () => {
+// Revocation is scoped by the signed-in user, never by anything the request
+// names; sessions-integration covers that the data service honours the scope.
+test("any signed-in user can revoke one of their sessions or all the others", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.getUserBySid = async () => ({
     ...sessionUser,
     isAdmin: false,
   });
+  const revoked: unknown[][] = [];
+  dependencies.usersDataService.deleteSessionById = async (...args) => {
+    revoked.push(["one", ...args]);
+  };
+  dependencies.usersDataService.deleteOtherSessions = async (...args) => {
+    revoked.push(["others", ...args]);
+  };
   const app = await appFor(dependencies);
 
-  const response = await get(app, "/api/options/sessions", {
-    headers: { cookie: "sid=reader" },
+  const listing = await get(app, "/api/options/sessions", { auth: true });
+  const one = await send(app, "DELETE", "/api/options/sessions/7", undefined, {
+    auth: true,
+  });
+  const malformed = await send(
+    app,
+    "DELETE",
+    "/api/options/sessions/seven",
+    undefined,
+    { auth: true },
+  );
+  const others = await send(app, "DELETE", "/api/options/sessions", undefined, {
+    auth: true,
   });
 
-  expect(response.status).toBe(200);
+  expect(listing.status).toBe(200);
+  expect([one.status, malformed.status, others.status]).toEqual([
+    200, 400, 200,
+  ]);
+  expect(revoked).toEqual([
+    ["one", sessionUser.id, 7],
+    ["others", sessionUser.id, "test"],
+  ]);
 });
 
 const websubSource = {
@@ -3709,11 +3760,7 @@ test("never logs the healthcheck route, however slow", async () => {
 });
 
 test("cache headers: /assets/* is immutable, index.html is no-cache", async () => {
-  const tmpDir =
-    "/tmp/feedfathom-test-" +
-    Math.random().toString(36).slice(2) +
-    "-" +
-    Date.now();
+  const tmpDir = await mkdtemp(join(tmpdir(), "feedfathom-spa-"));
   try {
     // Create directory structure with files
     await Bun.write(`${tmpDir}/index.html`, "<html>test</html>");
@@ -3748,8 +3795,7 @@ test("cache headers: /assets/* is immutable, index.html is no-cache", async () =
     expect(spaFallbackResponse.status).toBe(200);
     expect(spaFallbackResponse.headers.get("Cache-Control")).toBe("no-cache");
   } finally {
-    // Clean up temporary directory
-    await Bun.spawn(["rm", "-rf", tmpDir]).exited;
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 

@@ -52,13 +52,15 @@ export class EmailHandler {
       "findSourceByUrl" | "successSource"
     >,
     private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
+    // A seam for the projection check below, which no real message reaches.
+    private readonly parse: (raw: Buffer) => Promise<ParsedMail> = simpleParser,
   ) {}
 
   public async processEmail(
     raw: Buffer,
     envelope: TrustedMailEnvelope,
   ): Promise<void> {
-    const email = await simpleParser(raw);
+    const email = await this.parse(raw);
     if (!parsedMailCheck.Check(email)) {
       throw new Error("Mail parser returned an invalid message projection");
     }
