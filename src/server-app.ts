@@ -21,6 +21,7 @@ import {
   createMailRoute,
   type MailRouteServices,
 } from "#features/mail-ingest/routes/mail.ts";
+import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
 import {
   createInternalRoutes,
   healthcheckPath,
@@ -192,6 +193,11 @@ export async function createServerApp(
     // client is meant to come back, and deferredResponse says when.
     if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
+    }
+    // The sender's fault, not ours: the mail relay bounces it instead of
+    // retrying, and spam to unknown addresses stays out of the error log.
+    if (error instanceof MailRejectedError) {
+      return Response.json({ error: error.message }, { status: 422 });
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));

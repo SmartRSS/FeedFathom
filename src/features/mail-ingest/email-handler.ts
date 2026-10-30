@@ -27,6 +27,13 @@ export type TrustedMailEnvelope = {
   to: string;
 };
 
+// The message itself is unacceptable: the same bytes to the same address would
+// fail again, so the relay is told to bounce it rather than retry. The error
+// hook maps it to 422.
+export class MailRejectedError extends Error {
+  override name = "MailRejectedError";
+}
+
 const sha256 = (value: Buffer | string): string =>
   createHash("sha256").update(value).digest("hex");
 
@@ -62,10 +69,12 @@ export class EmailHandler {
   ): Promise<void> {
     const email = await this.parse(raw);
     if (!parsedMailCheck.Check(email)) {
-      throw new Error("Mail parser returned an invalid message projection");
+      throw new MailRejectedError(
+        "Mail parser returned an invalid message projection",
+      );
     }
     const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
-    if (!source) throw new Error("No recipients known");
+    if (!source) throw new MailRejectedError("No recipients known");
 
     const article = this.createArticleFromEmail(
       email,

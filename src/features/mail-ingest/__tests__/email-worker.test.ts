@@ -25,6 +25,9 @@ const message = (
   from: "sender@example.com",
   raw,
   rawSize: new TextEncoder().encode(raw).byteLength,
+  setReject() {
+    throw new Error("Message was rejected");
+  },
   to: "newsletter@example.com",
   ...overrides,
 });
@@ -167,6 +170,9 @@ describe("Cloudflare email worker", () => {
         return raw;
       },
       rawSize: maxRawEmailBytes + 1,
+      setReject() {
+        throw new Error("Message was rejected");
+      },
       to: "newsletter@example.com",
     };
 
@@ -211,6 +217,57 @@ describe("Cloudflare email worker", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.length).toBeLessThan(1_250);
   });
+
+  test.each([
+    [
+      422,
+      Response.json({ error: "No recipients known" }),
+      "No recipients known",
+    ],
+    [
+      413,
+      Response.json({ error: "Raw email exceeds 5 MiB" }),
+      "Raw email exceeds 5 MiB",
+    ],
+    [422, new Response("<html>proxy page</html>"), "Message rejected"],
+  ])(
+    "rejects the message, without throwing or logging, on %p",
+    async (status, body, reason) => {
+      const errors: string[] = [];
+      const reasons: string[] = [];
+      const worker = createEmailWorker(
+        async () => new Response(body.body, { status }),
+        logger(errors),
+      );
+
+      await worker.email(
+        message({ setReject: (value) => reasons.push(value) }),
+        environment(),
+      );
+
+      expect(reasons).toEqual([reason]);
+      expect(errors).toEqual([]);
+    },
+  );
+
+  test.each([401, 404, 500, 503])(
+    "throws rather than rejecting on %p, so Cloudflare retries",
+    async (status) => {
+      const reasons: string[] = [];
+      const worker = createEmailWorker(
+        async () => Response.json({ error: "x" }, { status }),
+        logger([]),
+      );
+
+      await expect(
+        worker.email(
+          message({ setReject: (value) => reasons.push(value) }),
+          environment(),
+        ),
+      ).rejects.toThrow(`Mail relay failed with status ${status}`);
+      expect(reasons).toEqual([]);
+    },
+  );
 
   test("logs and propagates network failures", async () => {
     const failure = new Error("network unavailable");

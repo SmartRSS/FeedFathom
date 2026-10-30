@@ -28,6 +28,9 @@ export type IncomingEmailMessage = {
   from: unknown;
   raw: BodyInit | null;
   rawSize: unknown;
+  // Cloudflare's ForwardableEmailMessage: rejects the message permanently, so
+  // the sending server bounces it rather than retrying.
+  setReject(reason: string): void;
   to: unknown;
 };
 
@@ -48,6 +51,27 @@ function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
     "MAIL_RELAY_SECRET" in value &&
     isNonblankString(value.MAIL_RELAY_SECRET)
   );
+}
+
+// The statuses /api/mail returns for a message that is the sender's fault.
+// Every other failure is thrown, so Cloudflare retries it.
+const rejectedStatuses = new Set([413, 422]);
+
+function rejectionReason(diagnostic: string): string {
+  try {
+    const body: unknown = JSON.parse(diagnostic);
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      isNonblankString(body.error)
+    ) {
+      return body.error.slice(0, 200);
+    }
+  } catch {
+    // Not the JSON body /api/mail sends; fall through to the generic reason.
+  }
+  return "Message rejected";
 }
 
 function mailEnvelope(message: IncomingEmailMessage): MailEnvelope {
@@ -146,6 +170,12 @@ export function createEmailWorker(
           },
           method: "POST",
         });
+        if (rejectedStatuses.has(response.status)) {
+          message.setReject(
+            rejectionReason(await readResponseDiagnostic(response)),
+          );
+          return;
+        }
         if (!response.ok) {
           const diagnostic = await readResponseDiagnostic(response);
           throw new Error(

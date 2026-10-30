@@ -1,7 +1,10 @@
 import type { AppConfig } from "#platform/config.ts";
 import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { EmailHandler } from "#features/mail-ingest/email-handler.ts";
+import {
+  type EmailHandler,
+  MailRejectedError,
+} from "#features/mail-ingest/email-handler.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
@@ -2476,6 +2479,41 @@ test("enforces the raw MIME byte limit before EmailHandler", async () => {
   expect(notBase64.status).toBe(422);
   expect(sizes).toEqual([maxRawEmailBytes]);
 });
+
+test.each([
+  [
+    "an unknown recipient",
+    new MailRejectedError("No recipients known"),
+    422,
+    "No recipients known",
+  ],
+  [
+    "a storage failure",
+    new Error("connection terminated"),
+    500,
+    "Internal Server Error",
+  ],
+])(
+  "answers %s with its status, so the relay bounces only the sender's faults",
+  async (_kind, failure, status, error) => {
+    const dependencies = createDependencies();
+    dependencies.config.MAIL_ENABLED = true;
+    dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
+    dependencies.emailHandler.processEmail = async () => {
+      throw failure;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await relayMail(app, {
+      from: "sender@example.com",
+      raw: relayed("Subject: Test\r\n\r\nBody"),
+      to: "unknown@example.com",
+    });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error });
+  },
+);
 
 // The relay carries base64 precisely so that an 8-bit body in a legacy
 // charset arrives byte for byte; routing it as UTF-8 text replaced every
