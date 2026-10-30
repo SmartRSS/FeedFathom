@@ -91,6 +91,21 @@ const subscribedArticle = {
   url: "https://articles.example/subscribed",
 };
 
+// The confirmation mail a newsletter sends to a minted address, which can
+// arrive before the user subscribes to it (#1116).
+const newsletterArticle = {
+  author: "editor@letters.example",
+  content: "<p>Confirm your subscription</p>",
+  guid: "article-21",
+  id: 21,
+  lastSeenInFeedAt: "2026-07-22T12:00:00.000Z",
+  publishedAt: "2026-07-22T11:00:00.000Z",
+  sourceId: 21,
+  title: "Confirm your subscription",
+  updatedAt: null,
+  url: "/article/article-21",
+};
+
 const summary = (item: typeof article, read = false) => ({
   author: item.author,
   group: "Today",
@@ -105,6 +120,12 @@ const summary = (item: typeof article, read = false) => ({
 type ApiFixtureState = {
   articleRequests: number;
   authenticated: boolean;
+  // Mail to a newsletter address, answered as the server would: accepted
+  // only once the address has been reserved.
+  deliverNewsletter: (to: string) => boolean;
+  newsletterDelivered: boolean;
+  newsletterSubscription: string | undefined;
+  reservedAddresses: string[];
   // One entry per PATCH /api/articles: the articleIdList it carried, so the
   // mark-as-read policy tests can count requests and check batching (#714).
   readMarks: number[][];
@@ -147,13 +168,20 @@ export async function installApiFixture(
   const state: ApiFixtureState = {
     articleRequests: 0,
     authenticated: options.authenticated ?? true,
+    deliverNewsletter: (to) => {
+      state.newsletterDelivered = state.reservedAddresses.includes(to);
+      return state.newsletterDelivered;
+    },
     findRequests: 0,
+    newsletterDelivered: false,
+    newsletterSubscription: undefined,
     readArticleIds: new Set<number>(),
     readMarks: [],
     releaseSlowPreview: () => slowPreview.resolve(),
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
+    reservedAddresses: [],
     revokedOtherSessions: false,
     revokedSessionIds: [],
     subscribed: false,
@@ -288,6 +316,20 @@ export async function installApiFixture(
                   ...(state.subscribed && !state.removedSourceIds.includes(9)
                     ? [subscribedSource]
                     : []),
+                  ...(state.newsletterSubscription
+                    ? [
+                        {
+                          favicon: null,
+                          homeUrl: "http://127.0.0.1",
+                          kind: "email",
+                          name: "Letters",
+                          type: "source",
+                          uid: "21",
+                          unreadCount: state.newsletterDelivered ? 1 : 0,
+                          xmlUrl: state.newsletterSubscription,
+                        },
+                      ]
+                    : []),
                 ],
                 name: state.updatedFolder?.name ?? "Reading",
                 type: "folder",
@@ -314,8 +356,13 @@ export async function installApiFixture(
       }
       const sources = request.postDataJSON().sources;
       expect(
-        sources.every((sourceId: number) => [3, 9].includes(sourceId)),
+        sources.every((sourceId: number) => [3, 9, 21].includes(sourceId)),
       ).toBe(true);
+      if (sources.length === 1 && sources[0] === 21) {
+        return respond(
+          state.newsletterDelivered ? [summary(newsletterArticle)] : [],
+        );
+      }
       if (sources.length === 1 && sources[0] === 9) {
         return respond([summary(subscribedArticle)]);
       }
@@ -369,8 +416,9 @@ export async function installApiFixture(
         const item = manyArticles[numeric - 100]!;
         return respond({ ...item, content: longContent });
       }
-      expect(["11", "12", "13", "19"]).toContain(id);
+      expect(["11", "12", "13", "19", "21"]).toContain(id);
       if (id === "19") return respond(subscribedArticle);
+      if (id === "21") return respond(newsletterArticle);
       if (id === "12") return respond(secondArticle);
       if (id === "13") return respond(thirdArticle);
       return respond(
@@ -486,8 +534,18 @@ export async function installApiFixture(
       });
     }
 
+    if (method === "POST" && url.pathname === "/api/newsletter-address") {
+      state.reservedAddresses.push(request.postDataJSON().address);
+      return respond({ success: true });
+    }
+
     if (method === "POST" && url.pathname === "/api/subscribe") {
       const body = request.postDataJSON();
+      if (state.reservedAddresses.includes(body.sourceUrl)) {
+        state.subscriptionBodies.push(body);
+        state.newsletterSubscription = body.sourceUrl;
+        return respond({ sourceId: 21 });
+      }
       expect(body).toEqual({
         sourceFolder: 7,
         sourceName: "Tech Preview",

@@ -2094,16 +2094,47 @@ for (const theme of ["smart", "high-contrast"]) {
 test("mints a newsletter address when opened with ?newsletter", async ({
   page,
 }) => {
-  await openApp(page, { mailDomain: "mail.example" }, "/preview?newsletter");
+  const state = await openApp(
+    page,
+    { mailDomain: "mail.example" },
+    "/preview?newsletter",
+  );
 
   const feedUrl = page.getByLabel("Feed URL");
   await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
   const minted = await feedUrl.inputValue();
+  await expect.poll(() => state.reservedAddresses).toEqual([minted]);
   await expect(page).toHaveURL(
     `/preview?feedUrl=${encodeURIComponent(minted)}`,
   );
   await page.reload();
   await expect(feedUrl).toHaveValue(minted);
+  expect(state.reservedAddresses).toEqual([minted]);
+});
+
+// The address is copied before Subscribe, so a newsletter can mail it first:
+// its confirmation must be accepted then, and readable once subscribed.
+test("keeps mail sent to a generated address before Subscribe", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(page.getByText("Address copied.")).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Confirm your subscription" }),
+  ).toBeVisible();
+  expect(state.subscriptionBodies).toEqual([
+    { sourceFolder: null, sourceName: "Letters", sourceUrl: address },
+  ]);
 });
 
 test("validates Website URLs before discovery", async ({ page }) => {

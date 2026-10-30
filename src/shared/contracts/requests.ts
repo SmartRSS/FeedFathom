@@ -116,6 +116,12 @@ export const snoozeSourceRequest = Type.Object({
   pausedUntil: Type.Union([jsonDatePolicy, Type.Null()]),
   sourceId: id,
 });
+// Reserves a minted newsletter address before Subscribe (#1116), so mail sent
+// to it in between is stored instead of bounced. The format and domain are
+// checked by the handler, which knows the instance's mail domain.
+export const newsletterAddressRequest = Type.Object({
+  address: normalizedMailRecipient,
+});
 export const subscribeRequest = Type.Object({
   sourceFolder: Type.Union([id, Type.Null()]),
   sourceName: normalizedNonblankString,

@@ -45,11 +45,18 @@ export class UserSourcesDataService {
       url: sourcePayload.url,
     });
 
+    // created_at is where a subscription starts seeing articles. A newsletter
+    // address is reserved before anyone subscribes (#1116), and the mail it
+    // takes in meanwhile -- typically the confirmation the subscription
+    // depends on -- has to be readable, so an email subscription sees the
+    // source from its creation. That also keeps the retention rule for
+    // articles from before the first subscription off it.
+    const isEmail = source.kind === "email";
     const inserted = (
       await this.drizzleConnection
         .insert(userSources)
         .values({
-          createdAt: new Date(),
+          createdAt: isEmail ? source.createdAt : new Date(),
           initializationSnapshot: sourcePayload.initializationSnapshot ?? null,
           initializedAt: null,
           name: sourcePayload.name,
@@ -79,6 +86,10 @@ export class UserSourcesDataService {
 
     if (!userSource)
       throw new Error("Subscription conflict resolved without a row");
+    // The mail already stored counts as unread from the start; a feed's
+    // articles are counted when its first import lands.
+    if (inserted && isEmail)
+      await this.recomputeUnreadCounts([source.id], userId);
 
     return {
       initializationSnapshot: userSource.initializationSnapshot,

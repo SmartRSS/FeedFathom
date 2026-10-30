@@ -103,10 +103,18 @@ export async function cleanupOrphanedData(
   // removed, catastrophic if the table is empty for any transient reason.
   // This can't tell those apart, so guard on the whole table existing, in the
   // same statement to leave no check-then-delete race.
+  //
+  // A source younger than a day is kept even so. A newsletter address is
+  // reserved as a source before anyone subscribes (#1116), and this is the
+  // grace it has to be subscribed in; past it, the source goes with any mail
+  // it took in. The grace applies to every kind rather than email alone: it
+  // costs an abandoned new feed a day of polling, and it also covers the gap
+  // between addSourceToUser creating a source and subscribing to it.
   await drizzleConnection
     .delete(sources)
     .where(
       and(
+        lt(sources.createdAt, sql`NOW() - INTERVAL '1 day'`),
         exists(
           drizzleConnection.select({ id: userSources.id }).from(userSources),
         ),

@@ -4,6 +4,7 @@ import {
   articlesRequest,
   createFolderRequest,
   findQuery,
+  newsletterAddressRequest,
   previewQuery,
   readArticlesRequest,
   removeArticlesRequest,
@@ -18,6 +19,7 @@ import { createAuthPlugin } from "#features/auth/session-plugin.ts";
 import { getFaviconHandler } from "#features/feeds/routes/favicon.ts";
 import { getFindHandler } from "#features/feeds/routes/find.ts";
 import { getPreviewHandler } from "#features/feeds/routes/preview.ts";
+import { postNewsletterAddressHandler } from "#features/feeds/routes/newsletter-address.ts";
 import { postSubscribeHandler } from "#features/feeds/routes/subscribe.ts";
 import {
   deleteArticlesHandler,
@@ -41,6 +43,7 @@ export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
   Parameters<typeof getPreviewHandler>[1] &
   Parameters<typeof getFindHandler>[1] &
   Parameters<typeof postSubscribeHandler>[1] &
+  Parameters<typeof postNewsletterAddressHandler>[1] &
   Pick<
     typeof feeds,
     "articlesDataService" | "foldersDataService" | "userSourcesDataService"
@@ -168,6 +171,11 @@ export const createReaderRoutes = (services: ReaderRouteServices) => {
       )
       .post("/api/subscribe", { body: subscribeRequest }, (ctx) =>
         postSubscribeHandler(ctx, services),
+      )
+      .post(
+        "/api/newsletter-address",
+        { body: newsletterAddressRequest },
+        (ctx) => postNewsletterAddressHandler(ctx, services),
       )
   );
 };

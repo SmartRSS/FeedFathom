@@ -5,6 +5,7 @@ import {
   previewResponse,
   sessionResponse,
   subscriptionResponse,
+  successResponse,
   updatedSourceResponse,
   type Folder,
   type FoundFeed,
@@ -13,11 +14,8 @@ import {
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, messageOf } from "./api.ts";
-import {
-  newsletterAddress,
-  websiteValidationMessage,
-  withScheme,
-} from "./discovery-behavior.ts";
+import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
+import { newsletterAddress } from "#shared/util/newsletter-address.ts";
 import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
@@ -233,6 +231,23 @@ export function FeedDiscovery(props: {
         "",
         `/preview?feedUrl=${encodeURIComponent(address)}`,
       );
+    void reserveNewsletterAddress(address);
+  }
+
+  // The address is in the user's hands from now on, and mail sent to it
+  // before its source exists bounces for good, which can end the newsletter
+  // subscription before it starts (#1116). So the source is created now,
+  // not on Subscribe.
+  async function reserveNewsletterAddress(address: string) {
+    try {
+      await api("/newsletter-address", successResponse, {
+        body: JSON.stringify({ address }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+    } catch (cause) {
+      if (!disposed) reportError(cause, "Could not reserve the address.");
+    }
   }
 
   async function useNewsletterAddress() {
