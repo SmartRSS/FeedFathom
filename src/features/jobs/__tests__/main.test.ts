@@ -1,50 +1,27 @@
 import type { AppConfig } from "#platform/config.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import type { HubPoster } from "#features/feeds/websub.ts";
-import type { JobFailuresDataService } from "#features/admin/job-failure-data-service.ts";
-import { expect, mock, test } from "bun:test";
-import { DelayedError, type Queue } from "bullmq";
+import { expect, setSystemTime, spyOn, test } from "bun:test";
+import { Readable } from "node:stream";
+import { DelayedError } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import type { MainWorkerJob } from "#features/jobs/main.ts";
-
-type QueueOptions = {
-  jobId?: string;
-  priority?: number;
-  removeOnComplete?: { count: number };
-  removeOnFail?: { count: number };
-};
-
-type QueueJob = {
-  data: unknown;
-  name: string;
-  opts?: QueueOptions;
-};
-
-type MainWorkerQueue = {
-  upsertJobScheduler?(
-    ...args: Parameters<Queue["upsertJobScheduler"]>
-  ): Promise<unknown>;
-  add(name: string, data: unknown, options?: QueueOptions): Promise<unknown>;
-  addBulk(jobs: QueueJob[]): Promise<unknown>;
-};
-
-type WorkerControls = {
-  close(): Promise<unknown>;
-  onFailed(
-    listener: (job: { id?: string } | undefined, error: unknown) => void,
-  ): void;
-};
-
-type MainWorkerFactory = (
-  processor: (job: MainWorkerJob) => Promise<void>,
-  options: { concurrency: number; lockDuration: number },
-) => WorkerControls;
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import {
+  FaviconRefresher,
+  faviconDeferralHorizonMs,
+} from "#features/feeds/favicon-refresher.ts";
+import { imageDimensions } from "#features/feeds/favicon-selection.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import {
+  MainWorker,
+  type MainWorkerJob,
+  type MainWorkerServices,
+} from "#features/jobs/main.ts";
 
 const source = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),
@@ -57,6 +34,7 @@ const source = {
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
+  reservedBy: null,
   subscriberCount: 3,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "https://example.com/feed",
@@ -69,254 +47,149 @@ const source = {
   websubTopicUrl: null,
 };
 
-const config = {
-  CLEANUP_INTERVAL: 20,
-  GATHER_JOBS_INTERVAL: 30,
-  LOCK_DURATION: 40,
-  WORKER_CONCURRENCY: 2,
-};
-
-const idleSources = {
-  async findSourceById() {
-    return source;
+const config = strictFake<AppConfig>(
+  {
+    ARTICLE_STALE_AFTER_DAYS: 365,
+    CLEANUP_INTERVAL: 20,
+    GATHER_JOBS_INTERVAL: 30,
+    LOCK_DURATION: 40,
+    USER_DORMANT_AFTER_DAYS: 365,
+    USER_EXPIRY_DAYS: 730,
+    WORKER_CONCURRENCY: 2,
   },
-  async getRecentlySuccessfulSources() {
-    return [];
-  },
-  async getSourcesToProcess() {
-    return [];
-  },
-  async getWebSubSubscriptionsNeedingRenewal() {
-    return [];
-  },
-  async markWebSubFailed() {},
-};
+  "config",
+);
 
-const idleParser = {
-  async parseSource() {},
-};
-
-const idleFaviconRefresher = {
-  async refreshFavicon() {},
-};
-
-const idleCleanupOrphanedData = async () => [];
-
-const idleUserSources = {
-  async recomputeUnreadCounts() {},
-};
-
-const idleSourceEnqueuer = {
-  async enqueueSource() {},
-  async takePendingRefresh() {
-    return null;
-  },
-};
-
-const idleHubPoster = {
-  async post() {
-    return { status: 202 };
-  },
-};
-
-const idleJobFailures = {
-  async record() {},
-};
-
-const noopWorkerFactory: MainWorkerFactory = () => ({
+const idleJobWorker: ReturnType<MainWorkerServices["createWorker"]> = {
   async close() {},
-  onFailed() {},
-});
+  on() {},
+  async waitUntilReady() {},
+};
 
-const parseJob = (data: unknown): MainWorkerJob => ({
+const idleSources = () =>
+  strictFake<SourcesDataService>(
+    {
+      async findSourceById() {
+        return source;
+      },
+      async getSourcesDueFaviconRefresh() {
+        return [];
+      },
+      async getSourcesToProcess() {
+        return [];
+      },
+    },
+    "sourcesDataService",
+  );
+
+const idleSourceEnqueuer = () =>
+  strictFake<SourceEnqueuer>(
+    {
+      async takePendingRefresh() {
+        return null;
+      },
+    },
+    "sourceEnqueuer",
+  );
+
+// Initializes a MainWorker over idle services, with the test's replacements
+// on top, and hands back the job processor it gave its BullMQ worker.
+async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
+  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  const worker = new MainWorker({
+    bullmqQueue: {
+      async add() {},
+      async addBulk() {},
+      async upsertJobScheduler() {},
+    },
+    cleanupOrphanedData: async () => [],
+    config,
+    faviconRefresher: strictFake<FaviconRefresher>({}, "faviconRefresher"),
+    feedParser: strictFake<FeedParser>(
+      { async parseSource() {} },
+      "feedParser",
+    ),
+    hubPoster: strictFake({}, "hubPoster"),
+    sourceEnqueuer: idleSourceEnqueuer(),
+    sourcesDataService: idleSources(),
+    userSourcesDataService: strictFake<UserSourcesDataService>(
+      { async recomputeUnreadCounts() {} },
+      "userSourcesDataService",
+    ),
+    websubStateService: strictFake<WebSubStateService>(
+      {},
+      "websubStateService",
+    ),
+    ...overrides,
+    createWorker(value, options) {
+      processor = value;
+      return (overrides.createWorker ?? (() => idleJobWorker))(value, options);
+    },
+  });
+  await worker.initialize();
+  if (!processor) throw new Error("Worker processor was not captured");
+  return { process: processor, worker };
+}
+
+const job = (
+  name: string,
+  data: unknown,
+  overrides: Partial<MainWorkerJob> = {},
+): MainWorkerJob => ({
   data,
   async moveToDelayed() {},
-  name: JobName.ParseSource,
+  name,
   async updateData() {},
+  ...overrides,
 });
 
-type MainWorkerConfig = Pick<
-  AppConfig,
-  | "CLEANUP_INTERVAL"
-  | "FEED_FATHOM_DOMAIN"
-  | "GATHER_JOBS_INTERVAL"
-  | "LOCK_DURATION"
-  | "WORKER_CONCURRENCY"
->;
+const parseJob = (overrides: Partial<MainWorkerJob> = {}) =>
+  job(JobName.ParseSource, { id: source.id, url: source.url }, overrides);
 
-type MainWorkerSources = Pick<
-  SourcesDataService,
-  "findSourceById" | "getRecentlySuccessfulSources" | "getSourcesToProcess"
->;
-
-type MainWorkerWebSubState = Pick<
-  WebSubStateService,
-  "getWebSubSubscriptionsNeedingRenewal" | "markWebSubFailed"
->;
-
-type MainWorkerUserSources = Pick<
-  UserSourcesDataService,
-  "recomputeUnreadCounts"
->;
-
-const actualBullmq = { ...(await import("bullmq")) };
-async function mockWorkerServices(
-  appConfig: MainWorkerConfig,
-  bullmqQueue: MainWorkerQueue,
-  feedParser: Pick<FeedParser, "parseSource">,
-  faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
-  sourcesDataService: MainWorkerSources,
-  websubStateService: MainWorkerWebSubState,
-  userSourcesDataService: MainWorkerUserSources,
-  cleanupOrphanedData: () => Promise<number[]>,
-  jobFailuresDataService: Pick<JobFailuresDataService, "record">,
-  createWorker: MainWorkerFactory,
-  hubPoster: HubPoster,
-  sourceEnqueuer: Pick<
-    SourceEnqueuer,
-    "enqueueSource" | "takePendingRefresh"
-  > = idleSourceEnqueuer,
-) {
-  await mock.module("#platform/config.ts", () => ({ config: appConfig }));
-  await mock.module("#platform/runtime.ts", () => ({
-    bullmqQueue: { async upsertJobScheduler() {}, ...bullmqQueue },
-    bullmqRedis: {},
-    drizzleConnection: {},
-    httpClient: hubPoster,
-  }));
-  await mock.module("#features/feeds/services.ts", () => ({
-    feedParser,
-    sourceEnqueuer,
-    sourcesDataService,
-    userSourcesDataService,
-    websubStateService,
-  }));
-  await mock.module("#features/jobs/services.ts", () => ({
-    faviconRefresher,
-    jobFailuresDataService,
-  }));
-  await mock.module("#features/feeds/retention.ts", () => ({
-    cleanupOrphanedData,
-  }));
-  await mock.module("bullmq", () => ({
-    ...actualBullmq,
-    Worker: class {
-      private readonly controls: WorkerControls;
-      constructor(
-        _name: string,
-        processor: Parameters<MainWorkerFactory>[0],
-        options: Parameters<MainWorkerFactory>[1],
-      ) {
-        this.controls = createWorker(processor, {
-          concurrency: options.concurrency,
-          lockDuration: options.lockDuration,
-        });
-      }
-      close() {
-        return this.controls.close();
-      }
-      on(_event: string, listener: Parameters<WorkerControls["onFailed"]>[0]) {
-        this.controls.onFailed(listener);
-      }
-      async waitUntilReady() {}
+const deferredParser = (retryAt = Date.now() + 60_000) =>
+  strictFake<FeedParser>({
+    async parseSource() {
+      throw new HttpDeferredError(retryAt);
     },
-  }));
-}
-await mockWorkerServices(
-  config,
-  { async add() {}, async addBulk() {} },
-  idleParser,
-  idleFaviconRefresher,
-  idleSources,
-  idleSources,
-  idleUserSources,
-  idleCleanupOrphanedData,
-  idleJobFailures,
-  noopWorkerFactory,
-  idleHubPoster,
-);
-const { MainWorker } = await import("#features/jobs/main.ts");
-async function createMainWorker(
-  appConfig: MainWorkerConfig,
-  bullmqQueue: MainWorkerQueue,
-  feedParser: Pick<FeedParser, "parseSource">,
-  faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">,
-  sourcesDataService: MainWorkerSources,
-  websubStateService: MainWorkerWebSubState,
-  cleanupOrphanedData: () => Promise<number[]>,
-  jobFailuresDataService: Pick<JobFailuresDataService, "record">,
-  createWorker: MainWorkerFactory,
-  hubPoster: HubPoster,
-  sourceEnqueuer: Pick<
-    SourceEnqueuer,
-    "enqueueSource" | "takePendingRefresh"
-  > = idleSourceEnqueuer,
-  userSourcesDataService: MainWorkerUserSources = idleUserSources,
-) {
-  await mockWorkerServices(
-    appConfig,
-    bullmqQueue,
-    feedParser,
-    faviconRefresher,
-    sourcesDataService,
-    websubStateService,
-    userSourcesDataService,
-    cleanupOrphanedData,
-    jobFailuresDataService,
-    createWorker,
-    hubPoster,
-    sourceEnqueuer,
-  );
-  return new MainWorker();
-}
+  });
 
 test("initializes scheduled jobs and closes the worker on cleanup", async () => {
   let closeCalls = 0;
   const repeatIntervals = new Map<string, number>();
   const templates: unknown[] = [];
-  let workerOptions: Parameters<MainWorkerFactory>[1] | undefined;
-  const queue: MainWorkerQueue = {
-    async add() {},
-    async addBulk() {},
-    async upsertJobScheduler(name, options, template) {
-      repeatIntervals.set(name, options.every!);
-      templates.push(template?.opts);
-    },
-  };
-  const createWorker: MainWorkerFactory = (_processor, options) => {
-    workerOptions = options;
-    return {
-      ...noopWorkerFactory(_processor, options),
-      async close() {
-        closeCalls++;
+  let workerOptions: unknown;
+  const { worker } = await startWorker({
+    bullmqQueue: {
+      async add() {},
+      async addBulk() {},
+      async upsertJobScheduler(name, options, template) {
+        repeatIntervals.set(name, options.every);
+        templates.push(template.opts);
       },
-    };
-  };
-  const worker = await createMainWorker(
-    config,
-    queue,
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
+    },
+    createWorker(_processor, options) {
+      workerOptions = options;
+      return {
+        ...idleJobWorker,
+        async close() {
+          closeCalls++;
+        },
+      };
+    },
+  });
 
-  await worker.initialize();
-
-  expect(repeatIntervals.get(JobName.Cleanup)).toBe(20_000);
-  expect(repeatIntervals.get(JobName.GatherJobs)).toBe(30_000);
-  expect(repeatIntervals.get(JobName.GatherFaviconJobs)).toBe(86_400_000);
+  expect(Object.fromEntries(repeatIntervals)).toEqual({
+    [JobName.Cleanup]: 20_000,
+    [JobName.GatherFaviconJobs]: 86_400_000,
+    [JobName.GatherJobs]: 30_000,
+    [JobName.WebSubRenewal]: 86_400_000,
+  });
   for (const opts of templates) {
     expect(opts).toEqual({
       removeOnComplete: { count: 0 },
       removeOnFail: { count: 0 },
     });
   }
-  expect(repeatIntervals.get(JobName.WebSubRenewal)).toBe(86_400_000);
   expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
   expect(closeCalls).toBe(0);
   await worker.cleanup();
@@ -324,38 +197,22 @@ test("initializes scheduled jobs and closes the worker on cleanup", async () => 
 });
 
 test("captured processor parses the queued source", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   let parsedSource: unknown;
-  const queue: MainWorkerQueue = {
-    async add() {},
-    async addBulk() {},
-  };
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    queue,
-    {
+  const { process } = await startWorker({
+    feedParser: strictFake<FeedParser>({
       async parseSource(value) {
         parsedSource = value;
       },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-  await processor({
-    ...parseJob({ id: source.id, skipCache: true, url: source.url }),
+    }),
   });
+
+  await process(
+    job(JobName.ParseSource, {
+      id: source.id,
+      skipCache: true,
+      url: source.url,
+    }),
+  );
 
   expect(parsedSource).toEqual({
     ...source,
@@ -365,41 +222,20 @@ test("captured processor parses the queued source", async () => {
 });
 
 test("moves deferred validated jobs with their BullMQ token", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   const delays: [number, string | undefined][] = [];
   const retryAt = Date.now() + 60_000;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
-      async parseSource() {
-        throw new HttpDeferredError(retryAt);
-      },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  const processing = processor({
-    data: { id: source.id, url: source.url },
-    async moveToDelayed(timestamp, token) {
-      delays.push([timestamp, token]);
-    },
-    name: JobName.ParseSource,
-    token: "worker-token",
-    async updateData() {},
+  const { process } = await startWorker({
+    feedParser: deferredParser(retryAt),
   });
+
+  const processing = process(
+    parseJob({
+      async moveToDelayed(timestamp, token) {
+        delays.push([timestamp, token]);
+      },
+      token: "worker-token",
+    }),
+  );
 
   await expect(processing).rejects.toBeInstanceOf(DelayedError);
   expect(delays).toEqual([[retryAt, "worker-token"]]);
@@ -411,32 +247,18 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
 // still active until this processor returns, so that add would be deduped
 // against this very job and the refresh would wait for the next poll.
 test("folds requests that arrived mid-run into one more parse", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const followedUp: Parameters<SourceEnqueuer["enqueueSource"]>[] = [];
   let pending: { skipCache: boolean } | null = { skipCache: true };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
+  const { process } = await startWorker({
+    feedParser: strictFake<FeedParser>({
       async parseSource(input) {
         parsed.push([input.skipCache, input.trigger]);
       },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-    {
-      async enqueueSource(enqueued, trigger, skipCache) {
-        followedUp.push([enqueued, trigger, skipCache]);
+    }),
+    sourceEnqueuer: strictFake<SourceEnqueuer>({
+      async enqueueSource(...args) {
+        followedUp.push(args);
       },
       // getdel: the take is the consume, so a second call sees nothing.
       async takePendingRefresh(sourceId) {
@@ -445,17 +267,10 @@ test("folds requests that arrived mid-run into one more parse", async () => {
         pending = null;
         return taken;
       },
-    },
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await processor({
-    data: { id: source.id, url: source.url },
-    async moveToDelayed() {},
-    name: JobName.ParseSource,
-    async updateData() {},
+    }),
   });
+
+  await process(parseJob());
 
   expect(parsed).toEqual([
     [undefined, "poll"],
@@ -468,45 +283,18 @@ test("folds requests that arrived mid-run into one more parse", async () => {
 // recorded requests stay on the marker for that run to act on -- consuming
 // them here would answer the add the retry itself will make.
 test("a deferred parse leaves pending refreshes to its retry", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
   let taken = 0;
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
-      async parseSource() {
-        throw new HttpDeferredError(Date.now() + 60_000);
-      },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-    {
-      async enqueueSource() {},
+  const { process } = await startWorker({
+    feedParser: deferredParser(),
+    sourceEnqueuer: strictFake<SourceEnqueuer>({
       async takePendingRefresh() {
         taken += 1;
         return null;
       },
-    },
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  const processing = processor({
-    data: { id: source.id, url: source.url },
-    async moveToDelayed() {},
-    name: JobName.ParseSource,
-    async updateData() {},
+    }),
   });
-  await expect(processing).rejects.toBeInstanceOf(DelayedError);
+
+  await expect(process(parseJob())).rejects.toBeInstanceOf(DelayedError);
   expect(taken).toBe(0);
 });
 
@@ -515,63 +303,50 @@ test("a deferred parse leaves pending refreshes to its retry", async () => {
 // intent into the job, or the retry parses the original request and a
 // requested cache bypass is lost (#847).
 test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const outcomes = ["ok", "defer", "defer", "ok"];
   let pending: { skipCache: boolean } | null = { skipCache: true };
   let taken = 0;
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
+  const { process } = await startWorker({
+    feedParser: strictFake<FeedParser>({
       async parseSource(input) {
         parsed.push([input.skipCache, input.trigger]);
         if (outcomes.shift() === "defer") {
           throw new HttpDeferredError(Date.now() + 60_000);
         }
       },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-    {
-      async enqueueSource() {},
+    }),
+    sourceEnqueuer: strictFake<SourceEnqueuer>({
       async takePendingRefresh() {
         taken += 1;
         const value = pending;
         pending = null;
         return value;
       },
+    }),
+  });
+
+  // The order is the point: data written after the move would retry the
+  // original request.
+  const events: string[] = [];
+  const deferrable: MainWorkerJob = job(
+    JobName.ParseSource,
+    { id: source.id, skipCache: false, url: source.url },
+    {
+      async moveToDelayed() {
+        events.push("delay");
+      },
+      async updateData(data) {
+        events.push("update");
+        deferrable.data = data;
+      },
     },
   );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  const events: string[] = [];
-  const job: MainWorkerJob = {
-    data: { id: source.id, skipCache: false, url: source.url },
-    async moveToDelayed() {
-      events.push("delay");
-    },
-    name: JobName.ParseSource,
-    async updateData(data) {
-      events.push("update");
-      job.data = data;
-    },
-  };
 
   // The original request parses, the follow-up for the bypass defers.
-  await expect(processor(job)).rejects.toBeInstanceOf(DelayedError);
+  await expect(process(deferrable)).rejects.toBeInstanceOf(DelayedError);
   expect(events).toEqual(["update", "delay"]);
-  expect(job.data).toEqual({
+  expect(deferrable.data).toEqual({
     id: source.id,
     skipCache: true,
     trigger: "manual",
@@ -579,11 +354,11 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
   });
 
   // Deferred again before finishing: the persisted bypass stays as it is.
-  await expect(processor(job)).rejects.toBeInstanceOf(DelayedError);
+  await expect(process(deferrable)).rejects.toBeInstanceOf(DelayedError);
   expect(events).toEqual(["update", "delay", "delay"]);
 
   // The retry fulfils the bypass once, with no further follow-up owed.
-  await processor(job);
+  await process(deferrable);
   expect(parsed).toEqual([
     [false, "poll"],
     [true, "manual"],
@@ -595,511 +370,474 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
 });
 
 test("refreshes favicons only for validated job data", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const refreshed: { homeUrl: string; id: number }[] = [];
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    idleParser,
-    {
-      async refreshFavicon(value: { homeUrl: string; id: number }) {
+  const refreshed: { firstRunAt: number; homeUrl: string; id: number }[] = [];
+  const { process } = await startWorker({
+    faviconRefresher: strictFake<FaviconRefresher>({
+      async refreshFavicon(value) {
         refreshed.push(value);
       },
-    },
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await processor({
-    data: { homeUrl: source.homeUrl, id: source.id },
-    async moveToDelayed() {},
-    name: JobName.RefreshFavicon,
-    async updateData() {},
+    }),
   });
 
-  expect(refreshed).toEqual([{ homeUrl: source.homeUrl, id: source.id }]);
+  await process(
+    job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: source.id }),
+  );
+
+  expect(refreshed).toEqual([
+    { firstRunAt: expect.any(Number), homeUrl: source.homeUrl, id: source.id },
+  ]);
 });
 
-test("starts every favicon queue addition before awaiting completion", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  let blockFaviconAdds = false;
-  const started: string[] = [];
-  const allStarted = Promise.withResolvers<void>();
-  const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-  const priorities: (number | undefined)[] = [];
-  const queue: MainWorkerQueue = {
-    async add(_name, _data, options) {
-      if (!blockFaviconAdds) return;
-      started.push(options?.jobId ?? "");
-      priorities.push(options?.priority);
-      if (started.length === gates.length) allStarted.resolve();
-      await gates[started.length - 1]?.promise;
+// A favicon run queues every due source at once, at a priority below the
+// unprioritized ParseSource jobs, and finishes only once every add has.
+test("queues every due favicon refresh concurrently, below feed parsing", async () => {
+  const added = new Map<string, number | undefined>();
+  const bothStarted = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { process } = await startWorker({
+    bullmqQueue: {
+      async add(_name, _data, options) {
+        added.set(options?.jobId ?? "", options?.priority);
+        if (added.size === 2) bothStarted.resolve();
+        await release.promise;
+      },
+      async addBulk() {},
+      async upsertJobScheduler() {},
     },
-    async addBulk() {},
-  };
-  const sourcesWithFaviconTargets = {
-    ...idleSources,
-    async getRecentlySuccessfulSources() {
-      return [source, { ...source, id: 2 }];
-    },
-  };
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    queue,
-    idleParser,
-    idleFaviconRefresher,
-    sourcesWithFaviconTargets,
-    sourcesWithFaviconTargets,
-    idleCleanupOrphanedData,
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-  const processJob = processor;
-  blockFaviconAdds = true;
-
-  const processing = processJob({
-    data: {},
-    async moveToDelayed() {},
-    name: JobName.GatherFaviconJobs,
-    async updateData() {},
+    sourcesDataService: strictFake<SourcesDataService>({
+      async getSourcesDueFaviconRefresh() {
+        return [
+          { ...source, hasFavicon: false },
+          { ...source, hasFavicon: false, id: 2 },
+        ];
+      },
+      async getSourcesToProcess() {
+        return [];
+      },
+    }),
   });
-  await allStarted.promise;
-  expect(started).toEqual([
-    `${JobName.RefreshFavicon}-1`,
-    `${JobName.RefreshFavicon}-2`,
-  ]);
-  // RefreshFavicon jobs must carry an explicit (nonzero) priority so
-  // BullMQ never lets a favicon-refresh backlog crowd out ParseSource,
-  // which is added with no priority.
-  expect(priorities).toEqual([10, 10]);
 
   let finished = false;
-  void processing.then(() => {
+  const processing = process(job(JobName.GatherFaviconJobs, {})).then(() => {
     finished = true;
   });
-  gates[0]?.resolve();
-  await Promise.resolve();
+  // Both adds are in flight before either resolves.
+  await bothStarted.promise;
+  expect(Object.fromEntries(added)).toEqual({
+    [`${JobName.RefreshFavicon}-1`]: 10,
+    [`${JobName.RefreshFavicon}-2`]: 10,
+  });
   expect(finished).toBe(false);
 
-  gates[1]?.resolve();
+  release.resolve();
   await processing;
   expect(finished).toBe(true);
 });
 
-test("rejects malformed and unknown jobs before downstream calls", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const downstreamCalls: string[] = [];
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
+// A fake PNG header: enough for imageDimensions, and stored as-is because
+// Bun.Image cannot decode it.
+function fakePng(size: number) {
+  const png = Buffer.alloc(24);
+  png.write("\x89PNG", 0, "latin1");
+  png.writeUInt32BE(size, 16);
+  png.writeUInt32BE(size, 20);
+  return png;
+}
+
+// What each provider answers on a normal day, with its real cache lifetime:
+// gstatic the 64 px target, favicon.im 32 px behind a redirect to its own
+// subdomain, DuckDuckGo 16 px.
+function providerAnswer(
+  url: string,
+): [number, Record<string, string>, Buffer?] {
+  const { hostname } = new URL(url);
+  if (hostname === "favicon.im") {
+    return [302, { location: url.replace("//favicon.im", "//a.favicon.im") }];
+  }
+  const [size, maxAge] =
+    hostname === "t3.gstatic.com"
+      ? [64, 7 * 86_400]
+      : hostname === "a.favicon.im"
+        ? [32, 8 * 86_400]
+        : [16, 30 * 86_400];
+  return [
+    200,
+    {
+      "cache-control": `public, max-age=${maxAge}`,
+      "content-type": "image/png",
+    },
+    fakePng(size),
+  ];
+}
+
+// Plays a daily favicon gather through the real MainWorker, refresher, HTTP
+// client, cache and limiter in virtual time, one job at a time. Each job
+// starts up to 2 s after BullMQ hands it out, and every request takes
+// 50-300 ms, both from a seeded generator so a failure replays exactly.
+async function simulateFaviconGather(
+  sourceCount: number,
+  {
+    answer = providerAnswer,
+    redis = createFakeHttpRedis(),
+    startAt = Date.parse("2026-10-30T00:00:00.000Z"),
+  } = {},
+) {
+  let seed = 1_087;
+  const random = () => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+    return seed / 2 ** 31;
   };
-  const worker = await createMainWorker(
-    config,
-    {
-      async add() {
-        downstreamCalls.push("queue.add");
-      },
-      async addBulk() {
-        downstreamCalls.push("queue.addBulk");
-      },
+  const client = new HttpClient(redis, {
+    deadlineMs: 2_000,
+    transport: async (url) => {
+      setSystemTime(Date.now() + 50 + Math.round(random() * 250));
+      const [status, headers, data = Buffer.alloc(0)] = answer(url);
+      const body = Readable.from([data]);
+      return {
+        body,
+        destroy: () => body.destroy(),
+        headers: new Headers(headers),
+        status,
+        url,
+      };
     },
-    {
-      async parseSource() {
-        downstreamCalls.push("parseSource");
+  });
+  const updated = new Map<number, number | undefined>();
+  // Each queued refresh and when BullMQ would next hand it to the worker.
+  const queued: { data: unknown; runAt: number }[] = [];
+  const { process } = await startWorker({
+    bullmqQueue: {
+      async add(_name, data, options) {
+        queued.push({ data, runAt: Date.now() + (options?.delay ?? 0) });
       },
+      async addBulk() {},
+      async upsertJobScheduler() {},
     },
-    {
-      async refreshFavicon() {
-        downstreamCalls.push("refreshFavicon");
+    faviconRefresher: new FaviconRefresher(
+      client,
+      {
+        async updateFavicon(id, favicon) {
+          updated.set(id, imageDimensions(favicon)?.width);
+        },
       },
-    },
-    {
-      async findSourceById() {
-        downstreamCalls.push("findSourceById");
-        return source;
-      },
-      async getRecentlySuccessfulSources() {
-        downstreamCalls.push("getRecentlySuccessfulSources");
-        return [];
+      redis,
+    ),
+    sourcesDataService: strictFake<SourcesDataService>({
+      async getSourcesDueFaviconRefresh() {
+        return Array.from({ length: sourceCount }, (_, index) => ({
+          hasFavicon: false,
+          homeUrl: `https://site${index + 1}.example/`,
+          id: index + 1,
+        }));
       },
       async getSourcesToProcess() {
-        downstreamCalls.push("getSourcesToProcess");
         return [];
       },
-    },
-    {
-      async getWebSubSubscriptionsNeedingRenewal() {
-        downstreamCalls.push("getWebSubSubscriptionsNeedingRenewal");
-        return [];
-      },
-      async markWebSubFailed() {
-        downstreamCalls.push("markWebSubFailed");
-      },
-    },
-    async () => {
-      downstreamCalls.push("cleanup");
-      return [];
-    },
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
+    }),
+  });
+
+  setSystemTime(startAt);
+  let runs = 0;
+  try {
+    await process(job(JobName.GatherFaviconJobs, {}));
+    /* eslint-disable no-await-in-loop -- Jobs run one at a time in virtual time. */
+    for (;;) {
+      queued.sort((a, b) => a.runAt - b.runAt);
+      const next = queued.shift();
+      // A refresh still queued at the next daily gather is one too many.
+      if (!next || next.runAt > startAt + 86_400_000) break;
+      setSystemTime(
+        Math.max(next.runAt + Math.round(random() * 2_000), Date.now()),
+      );
+      runs++;
+      let { data } = next;
+      await process(
+        job(JobName.RefreshFavicon, data, {
+          async moveToDelayed(timestamp) {
+            queued.push({ data, runAt: timestamp });
+          },
+          async updateData(value) {
+            data = value;
+          },
+        }),
+      ).catch((error: unknown) => {
+        if (!(error instanceof DelayedError)) throw error;
+      });
+    }
+    /* eslint-enable no-await-in-loop */
+    return { finishedAt: Date.now(), pending: queued.length, runs, updated };
+  } finally {
+    setSystemTime();
+  }
+}
+
+// Every refresh asks the same provider hosts, and the limiter lets each take
+// one background request per interval. Deferred jobs must queue for slots of
+// their own: woken together, each slot would go to one job and re-defer all
+// the others, about N²/6 runs (#1087).
+test("a cold favicon run takes about two runs per source, and a warm one one", async () => {
+  const redis = createFakeHttpRedis();
+  const cold = await simulateFaviconGather(1_000, { redis });
+  expect(cold.updated.size).toBe(1_000);
+  expect([...cold.updated.values()].every((size) => size === 64)).toBe(true);
+  expect(cold.runs).toBeLessThanOrEqual(2_000);
+
+  const warm = await simulateFaviconGather(1_000, {
+    redis,
+    startAt: Date.parse("2026-10-31T00:00:00.000Z"),
+  });
+  expect(warm.updated.size).toBe(1_000);
+  expect(warm.runs).toBe(1_000);
+});
+
+test("a provider that never stops deferring holds icons back only until the horizon", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { finishedAt, runs, updated } = await simulateFaviconGather(100, {
+    answer: (url) =>
+      url.includes("gstatic")
+        ? [429, { "retry-after": "60" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(updated.size).toBe(100);
+  expect([...updated.values()].every((size) => size === 32)).toBe(true);
+  expect(finishedAt).toBeLessThan(
+    startAt + faviconDeferralHorizonMs + 3_600_000,
   );
-  await worker.initialize();
+  expect(runs).toBeLessThanOrEqual(1_000);
+});
+
+// The origin's Retry-After is shorter than the limiter's own interval, so
+// only telling pacing apart by type keeps it from deferring forever.
+test("a provider that always answers 429 with a short Retry-After lets every refresh complete", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { finishedAt, pending, updated } = await simulateFaviconGather(100, {
+    answer: (url) =>
+      url.includes("gstatic")
+        ? [429, { "retry-after": "5" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(pending).toBe(0);
+  expect(finishedAt).toBeLessThan(
+    startAt + faviconDeferralHorizonMs + 3_600_000,
+  );
+  expect(updated.size).toBe(100);
+  expect([...updated.values()].every((size) => size === 32)).toBe(true);
+});
+
+// Late in a cold run, most jobs have waited hours in the pacing queue. The
+// horizon counts from the block, so a five-minute one is still waited out.
+test("a short provider block late in a cold run does not downgrade icons", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  let blocked = false;
+  const { pending, updated } = await simulateFaviconGather(1_000, {
+    answer: (url) => {
+      if (
+        url.includes("gstatic") &&
+        !blocked &&
+        Date.now() > startAt + 3 * 3_600_000
+      ) {
+        blocked = true;
+        return [429, {}];
+      }
+      return providerAnswer(url);
+    },
+    startAt,
+  });
+
+  expect(pending).toBe(0);
+  expect(updated.size).toBe(1_000);
+  expect([...updated.values()].every((size) => size === 64)).toBe(true);
+});
+
+test("an hour-long provider block queues the refreshes instead of waking them together", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { runs, updated } = await simulateFaviconGather(500, {
+    answer: (url) =>
+      url.includes("gstatic") && Date.now() < startAt + 3_600_000
+        ? [429, { "retry-after": "3600" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(updated.size).toBe(500);
+  expect([...updated.values()].every((size) => size === 64)).toBe(true);
+  expect(runs).toBeLessThanOrEqual(1_000);
+});
+
+test("rejects malformed and unknown jobs before downstream calls", async () => {
+  const downstreamCalls: string[] = [];
+  const record =
+    <T>(name: string, value: T) =>
+    async () => {
+      downstreamCalls.push(name);
+      return value;
+    };
+  const { process } = await startWorker({
+    bullmqQueue: {
+      add: record("queue.add", undefined),
+      addBulk: record("queue.addBulk", undefined),
+      async upsertJobScheduler() {},
+    },
+    cleanupOrphanedData: record("cleanup", []),
+    faviconRefresher: strictFake<FaviconRefresher>({
+      refreshFavicon: record("refreshFavicon", undefined),
+    }),
+    feedParser: strictFake<FeedParser>({
+      parseSource: record("parseSource", undefined),
+    }),
+    sourcesDataService: strictFake<SourcesDataService>({
+      findSourceById: record("findSourceById", source),
+      getSourcesDueFaviconRefresh: record("getSourcesDueFaviconRefresh", []),
+      getSourcesToProcess: record("getSourcesToProcess", []),
+    }),
+    websubStateService: strictFake<WebSubStateService>({
+      getWebSubSubscriptionsNeedingRenewal: record(
+        "getWebSubSubscriptionsNeedingRenewal",
+        [],
+      ),
+      markWebSubFailed: record("markWebSubFailed", undefined),
+    }),
+  });
   downstreamCalls.length = 0;
-  if (!processor) throw new Error("Worker processor was not captured");
-  const processJob = processor;
-  const malformedJobs: { data: unknown; name: string }[] = [
-    { data: { unexpected: true }, name: JobName.Cleanup },
-    { data: null, name: JobName.GatherFaviconJobs },
-    { data: [], name: JobName.GatherJobs },
-    {
-      data: { id: source.id, url: "not a web URL" },
-      name: JobName.ParseSource,
-    },
-    {
-      data: { homeUrl: source.homeUrl, id: 1.5 },
-      name: JobName.RefreshFavicon,
-    },
-    { data: {}, name: "unknown" },
-  ];
 
   await Promise.all(
-    malformedJobs.map(async (malformed) => {
-      await processJob({
-        ...malformed,
-        async moveToDelayed() {},
-        async updateData() {},
-      });
-    }),
+    [
+      job(JobName.Cleanup, { unexpected: true }),
+      job(JobName.GatherFaviconJobs, null),
+      job(JobName.GatherJobs, []),
+      job(JobName.ParseSource, { id: source.id, url: "not a web URL" }),
+      job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: 1.5 }),
+      job("unknown", {}),
+    ].map(process),
   );
 
   expect(downstreamCalls).toEqual([]);
 });
 
-test("records a durable failure for non-ParseSource job errors", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const recorded: [string, string][] = [];
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    async () => {
-      throw new Error("cleanup exploded");
-    },
-    {
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
-      },
-    },
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await processor({
-    data: {},
-    async moveToDelayed() {},
-    name: JobName.Cleanup,
-    async updateData() {},
-  });
-
-  expect(recorded).toEqual([[JobName.Cleanup, "cleanup exploded"]]);
-});
-
 // The prune bypasses the services that own the unread badge, so the worker
 // has to hand every source cleanup reports to the recompute itself (#812).
 test("cleanup recounts the unread totals of every pruned source", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   const recounted: number[][] = [];
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    async () => [7, 9],
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-    idleSourceEnqueuer,
-    {
+  const { process } = await startWorker({
+    cleanupOrphanedData: async () => [7, 9],
+    userSourcesDataService: strictFake<UserSourcesDataService>({
       async recomputeUnreadCounts(sourceIds) {
         recounted.push(sourceIds);
       },
-    },
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await processor({
-    data: {},
-    async moveToDelayed() {},
-    name: JobName.Cleanup,
-    async updateData() {},
+    }),
   });
+
+  await process(job(JobName.Cleanup, {}));
 
   expect(recounted).toEqual([[7, 9]]);
 });
 
-test("a failure while recording a job failure doesn't itself fail the job", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    async () => {
-      throw new Error("cleanup exploded");
-    },
-    {
-      async record() {
-        throw new Error("database unavailable");
-      },
-    },
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  // Must resolve, not reject -- BullMQ should always see the job as
-  // acknowledged, even if persisting the failure record itself fails.
-  await expect(
-    processor({
-      data: {},
-      async moveToDelayed() {},
-      name: JobName.Cleanup,
-      async updateData() {},
-    }),
-  ).resolves.toBeUndefined();
-});
-
-test("a poisoned error whose message getter throws doesn't fail the job either", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  class PoisonedError extends Error {
-    override get message(): string {
-      throw new Error("message getter exploded");
-    }
+class PoisonedError extends Error {
+  override get message(): string {
+    throw new Error("message getter exploded");
   }
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    idleParser,
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    async () => {
-      throw new PoisonedError();
-    },
-    idleJobFailures,
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
+}
 
-  await expect(
-    processor({
-      data: {},
-      async moveToDelayed() {},
-      name: JobName.Cleanup,
-      async updateData() {},
-    }),
-  ).resolves.toBeUndefined();
+// Deliberately malformed: a real HttpDeferredError with a throwing getter,
+// to prove the code under test survives a poisoned retryAt read. There's no
+// type-safe way to construct that.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
+  retryAt: {
+    get() {
+      throw new Error("poisoned retryAt getter");
+    },
+  },
+}) as HttpDeferredError;
+
+// BullMQ must always see the job as acknowledged: whatever was thrown, and
+// however the deferral or the log call went wrong, the processor resolves --
+// and logs what the job originally threw, which proves each case reached the
+// path it names rather than failing earlier on an unexpected call.
+const failure = new Error("cleanup exploded");
+const poisonedError = new PoisonedError();
+const deferral = new HttpDeferredError(Date.now() + 60_000);
+const throwsDeferral = strictFake<FeedParser>({
+  async parseSource() {
+    throw deferral;
+  },
 });
-
-test("an HttpDeferredError with a poisoned retryAt getter doesn't fail the job", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const recorded: [string, string][] = [];
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  // Deliberately malformed: a real HttpDeferredError with a throwing getter,
-  // to prove the code under test survives a poisoned retryAt read. There's
-  // no type-safe way to construct that.
-  const poisoned = Object.create(HttpDeferredError.prototype, {
-    retryAt: {
-      get() {
-        throw new Error("poisoned retryAt getter");
-      },
-    },
-  });
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  const evilDeferredError = poisoned as HttpDeferredError;
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
+test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
+  [
+    "a plain job error",
     {
-      async parseSource() {
-        throw evilDeferredError;
+      async cleanupOrphanedData() {
+        throw failure;
       },
     },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
+    job(JobName.Cleanup, {}),
+    failure,
+  ],
+  [
+    "a poisoned error whose message getter throws",
     {
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
+      async cleanupOrphanedData() {
+        throw poisonedError;
       },
     },
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await expect(
-    processor({
-      data: { id: source.id, url: source.url },
+    job(JobName.Cleanup, {}),
+    poisonedError,
+  ],
+  [
+    "an HttpDeferredError with a poisoned retryAt getter",
+    {
+      feedParser: strictFake<FeedParser>({
+        async parseSource() {
+          throw poisonedDeferral;
+        },
+      }),
+    },
+    parseJob({
       async moveToDelayed() {
         throw new Error("should never be called with a poisoned retryAt");
       },
-      name: JobName.ParseSource,
-      token: "worker-token",
-      async updateData() {},
     }),
-  ).resolves.toBeUndefined();
-  expect(recorded).toEqual([[JobName.ParseSource, ""]]);
-});
-
-test("a moveToDelayed rejection (e.g. a real BullMQ/Redis failure) doesn't fail the job", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const recorded: [string, string][] = [];
-  const retryAt = Date.now() + 60_000;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
-      async parseSource() {
-        throw new HttpDeferredError(retryAt);
-      },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    {
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
-      },
-    },
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  await expect(
-    processor({
-      data: { id: source.id, url: source.url },
+    poisonedDeferral,
+  ],
+  [
+    "a moveToDelayed rejection (e.g. a real BullMQ/Redis failure)",
+    { feedParser: throwsDeferral },
+    parseJob({
       async moveToDelayed() {
         throw new Error("Redis connection lost");
       },
-      name: JobName.ParseSource,
-      token: "worker-token",
-      async updateData() {},
     }),
-  ).resolves.toBeUndefined();
-  expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
-  expect(recorded[0]?.[1]).toStartWith("Request deferred until ");
-});
-
-test("a moveToDelayed rejection with a poisoned prototype doesn't fail the job", async () => {
-  let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
-  const recorded: [string, string][] = [];
-  const retryAt = Date.now() + 60_000;
-  const createWorker: MainWorkerFactory = (value, options) => {
-    processor = value;
-    return noopWorkerFactory(value, options);
-  };
-  const worker = await createMainWorker(
-    config,
-    { async add() {}, async addBulk() {} },
-    {
-      async parseSource() {
-        throw new HttpDeferredError(retryAt);
-      },
-    },
-    idleFaviconRefresher,
-    idleSources,
-    idleSources,
-    idleCleanupOrphanedData,
-    {
-      async record(jobType, errorMessage) {
-        recorded.push([jobType, errorMessage]);
-      },
-    },
-    createWorker,
-    idleHubPoster,
-  );
-  await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-
-  const poisonedMoveError = new Proxy(
-    {},
-    {
-      getPrototypeOf() {
-        throw new Error("poisoned getPrototypeOf trap");
-      },
-    },
-  );
-
-  await expect(
-    processor({
-      data: { id: source.id, url: source.url },
+    deferral,
+  ],
+  [
+    "a moveToDelayed rejection with a poisoned prototype",
+    { feedParser: throwsDeferral },
+    parseJob({
       async moveToDelayed() {
-        throw poisonedMoveError;
+        throw new Proxy(
+          {},
+          {
+            getPrototypeOf() {
+              throw new Error("poisoned getPrototypeOf trap");
+            },
+          },
+        );
       },
-      name: JobName.ParseSource,
-      token: "worker-token",
-      async updateData() {},
     }),
-  ).resolves.toBeUndefined();
-  expect(recorded[0]?.[0]).toBe(JobName.ParseSource);
+    deferral,
+  ],
+])("%s doesn't fail the job", async (_name, services, failing, thrown) => {
+  const { process } = await startWorker(services);
+  using logged = spyOn(console, "error").mockImplementation(() => {});
+  await expect(process(failing)).resolves.toBeUndefined();
+  expect(logged.mock.calls).toHaveLength(1);
+  expect(logged.mock.calls[0]?.[0]).toBe(
+    `Error processing ${failing.name} job:`,
+  );
+  // toBe, not toEqual: comparing a poisoned value would read its getters.
+  expect(logged.mock.calls[0]?.[1]).toBe(thrown);
 });

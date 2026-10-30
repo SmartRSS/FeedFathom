@@ -5,7 +5,7 @@
  * the guard is the only thing between a mistyped variable and someone's real
  * database. It lives here rather than being repeated per test file for the
  * same reason any check does: four copies drift, and one of them read a
- * different environment variable entirely, so `test:migrations` needed two
+ * different environment variable entirely, so the integration run needed two
  * names set to the same value to run at all.
  */
 export function requireDisposableDatabaseUrl(): string {

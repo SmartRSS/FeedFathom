@@ -118,7 +118,8 @@ because it is unauthenticated, not because it is auth. It moved to
 
 **`feeds → auth` and `jobs → admin` are real edges** the sketch omitted: the
 feed routes take an `AuthedUser`, and the worker records job failures through
-the admin feature's data service.
+the admin feature's data service. (The `jobs → admin` edge went away with the
+write-only `job_failures` table, #1073.)
 
 The landed DAG is in `CONTEXT.md` and in the rule's options. It is acyclic.
 

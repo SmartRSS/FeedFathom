@@ -24,14 +24,18 @@ Four layers. Each may depend only **downward**.
 | `src/features/*` | One feature's routes, data services and domain logic, together | `platform`, `shared`, declared sibling features |
 | `src/spa/`, `src/extension/` | Client applications with their own build targets | `shared` |
 
-Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`) and
-`src/server-app.ts` sit at the `src/` root and may import any layer.
+Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`),
+`src/server-app.ts` and `src/worker-app.ts` sit at the `src/` root and may
+import any layer.
 
 `src/platform/runtime.ts` constructs the shared connections, queue and HTTP
 client once per process. Each feature's `services.ts` constructs its service
-instances from those resources. Routes and jobs import the instances they use
-directly. Importing those modules starts the runtime, so unit tests mock them
-before importing routes or jobs. Constructors marked `@__PURE__` only store
+instances from those resources. Only the entrypoints import those instances:
+`server.ts` passes them to `createServerApp` and `worker.ts` to `MainWorker`,
+and each route group and handler takes the services it declares as an
+argument. Routes and jobs import the service modules for their types alone, so
+a unit test passes `strictFake` doubles (`src/shared/__tests__/strict-fake.ts`)
+instead of mocking modules. Constructors marked `@__PURE__` only store
 their arguments; the marker lets the bundler remove unused service instances.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
@@ -58,7 +62,7 @@ feeds       → auth
 reader      → feeds, auth
 admin       → feeds, auth
 mail-ingest → feeds
-jobs        → feeds, admin
+jobs        → feeds
 ```
 
 Any edge not on that list is a lint error. The list must also stay acyclic,
@@ -67,8 +71,8 @@ keeping the edges in a config file: adding one is a deliberate act that shows
 up in the diff, instead of arriving as a quiet new import.
 
 - **`auth`** — sessions, registration, activation, password change and reset,
-  the throttle over the three endpoints that guess or send mail, the users
-  data service, and the mail sender that carries activation and reset mail. The session plugin lives here rather than
+  the throttle over the four endpoints that check a password or send mail,
+  the users data service, and the mail sender that carries activation and reset mail. The session plugin lives here rather than
   in `platform`: session verification is domain logic about users, not
   infrastructure, and the admin variant of it is the same derive with one more
   test rather than a second plugin.
@@ -80,11 +84,10 @@ up in the diff, instead of arriving as a quiet new import.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
-- **`admin`** — the admin and options routes and the job-failures data service.
-  Two route groups rather than one, because `/api/options` is per-user and
-  `/api/admin` is not: the admin group carries `createAdminPlugin`, so the
-  authorisation check is a property of the group instead of something each
-  handler has to restate.
+- **`admin`** — the admin and options routes. Two route groups rather than
+  one, because `/api/options` is per-user and `/api/admin` is not: the admin
+  group carries `createAdminPlugin`, so the authorisation check is a property
+  of the group instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.
@@ -104,16 +107,13 @@ specifiers keep their `.ts` suffix.
 
 An error type with a canonical HTTP representation is mapped once, in the
 composition root's error hook, next to the types already mapped there —
-`NotFound`, `ValidationError`, `DecodeError` and `HttpDeferredError`.
+`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError` and
+`MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
 mapping could not. `find` is the example: it knows the URL it just failed to
 fetch came from the user, so that failure is a client error rather than a
 server one. It re-raises anything else.
-
-Guard a caught value with a helper such as `isHttpDeferredError` rather than a
-bare `instanceof` — what reaches an error hook is whatever was thrown, and
-`instanceof` can itself throw on a proxy with a poisoned `getPrototypeOf` trap.
 
 ## Outbound HTTP
 
@@ -154,16 +154,18 @@ large file and would change for several unrelated reasons.
 ## Tests
 
 `test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with
-an isolated module registry per test file. Route and worker tests replace
-shared modules with `mock.module`; running the full suite without isolation
-lets those mocks leak into other files. Cases within one file run sequentially.
+an isolated module registry per test file. No test uses `mock.module`: Bun's
+module mocks are process-wide, so without `--parallel` they leak into every
+file loaded afterwards. Route, job and startup tests pass their services in
+instead, the startup test through `runWorker` in `src/worker-app.ts`, so the
+suite also passes in one process. Cases within one file run sequentially.
 
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).
 
 A co-located test that needs a real PostgreSQL is named
 `foo-integration.test.ts`. `test:unit` skips every `*-integration.test.ts`
-wherever it lives and `test:migrations` names them explicitly, so `bun run
+wherever it lives and `test:integration` runs exactly those, so `bun run
 test:unit` stays runnable with nothing but the repo checked out. Needing a
 database is not a reason to move a test away from its module.
 

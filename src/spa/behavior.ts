@@ -144,7 +144,7 @@ export type Route =
   | { name: "login" | "register"; next: string }
   | { name: "admin" | "dashboard" | "options" | "passwordReset" }
   | { name: "passwordResetConfirm"; token: string }
-  | { feedUrl?: string; name: "preview" };
+  | { feedUrl?: string; name: "preview"; newsletter?: true };
 
 export function resolveRoute(path: string): Route {
   const url = new URL(path, "http://localhost");
@@ -166,6 +166,10 @@ export function resolveRoute(path: string): Route {
     case "/password-reset":
       return { name: "passwordReset" };
     case "/preview": {
+      // ?newsletter is how the extension asks for a minted address: the SPA
+      // knows the mail domain, so the address format lives in one place.
+      if (url.searchParams.has("newsletter"))
+        return { name: "preview", newsletter: true };
       const feedUrl = url.searchParams.get("feedUrl");
       return feedUrl ? { feedUrl, name: "preview" } : { name: "preview" };
     }

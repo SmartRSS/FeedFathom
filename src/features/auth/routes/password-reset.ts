@@ -1,10 +1,7 @@
-import { password } from "#platform/runtime.ts";
-import {
-  authThrottle,
-  mailSender,
-  usersDataService,
-} from "#features/auth/services.ts";
-import { config } from "#platform/config.ts";
+import type * as runtime from "#platform/runtime.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
+import { mailConfigured } from "#features/auth/mail-sender.ts";
 import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import {
@@ -13,17 +10,22 @@ import {
 } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
-import { digestToken } from "#shared/util/token-digest.ts";
+import { digestToken } from "#features/auth/token-digest.ts";
 
 const tokenLifetimeMs = 60 * 60 * 1_000;
 
-export function createPasswordResetRoute() {
+export function createPasswordResetRoute({
+  authThrottle,
+  config,
+  mailSender,
+  password,
+  usersDataService,
+}: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
+  Pick<typeof runtime, "password"> & { config: AppConfig }) {
   // Gated on outgoing mail the same way public registration is: with no way
   // to deliver a link there is no flow, and the routes answer as they would
   // for an account that does not exist rather than admitting the difference.
-  const mailConfigured = Boolean(
-    config.MAILJET_API_KEY && config.MAILJET_API_SECRET,
-  );
+  const mailEnabled = mailConfigured(config);
 
   return new Elysia()
     .post(
@@ -46,12 +48,11 @@ export function createPasswordResetRoute() {
         // went to spam and who asked again a few times must still be able to
         // log in with the password they then set.
         if (
-          !mailConfigured ||
-          (await authThrottle.blocked("password-reset", address, email))
+          !mailEnabled ||
+          !(await authThrottle.attempt("password-reset", address, email))
         ) {
           return accepted;
         }
-        await authThrottle.recordFailure("password-reset", address, email);
 
         const user = await usersDataService.findUser(email);
         if (user?.status !== "active") return accepted;
@@ -85,7 +86,7 @@ export function createPasswordResetRoute() {
           { error: "This reset link is no longer valid." },
           400,
         );
-        if (!mailConfigured) return invalid;
+        if (!mailEnabled) return invalid;
 
         const user = await usersDataService.findUserByPasswordResetToken(
           digestToken(parsed.token),

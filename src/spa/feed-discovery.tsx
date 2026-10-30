@@ -5,6 +5,7 @@ import {
   previewResponse,
   sessionResponse,
   subscriptionResponse,
+  successResponse,
   updatedSourceResponse,
   type Folder,
   type FoundFeed,
@@ -12,15 +13,12 @@ import {
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api } from "./api.ts";
-import { createSupersessionGuard } from "./supersession.ts";
+import { api, ApiError, messageOf } from "./api.ts";
+import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
-  clickSelectsArticle,
-  initialPreviewSelection,
+  isNewsletterAddress,
   newsletterAddress,
-  websiteValidationMessage,
-  withScheme,
-} from "./discovery-behavior.ts";
+} from "#shared/util/newsletter-address.ts";
 import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
@@ -52,6 +50,7 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
+  initialNewsletter?: boolean;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
@@ -73,19 +72,26 @@ export function FeedDiscovery(props: {
   const [mailDomain, setMailDomain] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setMessage(cause instanceof Error ? cause.message : fallback);
+    setMessage(messageOf(cause, fallback));
   };
   const selectedArticle = () => {
     const index = selectedIndex();
     return index === undefined ? undefined : articles()[index];
   };
-  const requests = createSupersessionGuard();
+  // Finding and previewing share one controller: starting either abandons
+  // whichever is still in flight.
+  let requests = new AbortController();
+  const startRequest = () => {
+    requests.abort();
+    requests = new AbortController();
+    return requests.signal;
+  };
   let disposed = false;
   let websiteInput!: HTMLInputElement;
   let form!: HTMLFormElement;
   onCleanup(() => {
     disposed = true;
-    requests.start();
+    requests.abort();
   });
 
   onMount(() => {
@@ -121,9 +127,7 @@ export function FeedDiscovery(props: {
         if (props.editing) setFolderId(props.editing.parentUid ?? "");
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
-        setStartupMessage(
-          cause instanceof Error ? cause.message : "Could not load folders.",
-        );
+        setStartupMessage(messageOf(cause, "Could not load folders."));
       }
     })();
     // Separate from the folders load: mail being unavailable only costs the
@@ -133,7 +137,16 @@ export function FeedDiscovery(props: {
       void (async () => {
         try {
           const session = await api("/session", sessionResponse);
-          if (!disposed) setMailDomain(session.mailDomain ?? "");
+          if (disposed) return;
+          const domain = session.mailDomain;
+          setMailDomain(domain ?? "");
+          if (!domain) return;
+          if (props.initialNewsletter && !feedUrl())
+            void mintNewsletterAddress(domain).then(reportUnreserved);
+          // A reload of a minted address: reserving is idempotent, and this
+          // recovers one whose first reservation failed.
+          else if (isNewsletterAddress(feedUrl(), domain))
+            void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
         } catch {}
       })();
   });
@@ -148,21 +161,22 @@ export function FeedDiscovery(props: {
     const normalizedLink = withScheme(link());
     if (normalizedLink !== link()) setLink(normalizedLink);
     if (!websiteIsValid()) return;
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Finding feeds…");
     try {
       const found = await api(
         `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "No feeds found");
+      if (!signal.aborted) reportError(cause, "No feeds found");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
@@ -170,7 +184,7 @@ export function FeedDiscovery(props: {
   }
 
   async function preview(url = feedUrl()) {
-    const request = requests.start();
+    const signal = startRequest();
     setLoading(true);
     setProgress("Loading preview…");
     setArticles([]);
@@ -181,21 +195,23 @@ export function FeedDiscovery(props: {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
+        { signal },
       );
-      if (!requests.isCurrent(request)) return;
+      if (signal.aborted) return;
       setFeedUrl(result.feedUrl);
       setLink(result.link ?? "");
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      setSelectedIndex(initialPreviewSelection(result.articles.length));
+      // A preview lands on its first article, or on nothing when it is empty.
+      setSelectedIndex(result.articles.length ? 0 : undefined);
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (requests.isCurrent(request)) reportError(cause, "Preview failed");
+      if (!signal.aborted) reportError(cause, "Preview failed");
     } finally {
-      if (requests.isCurrent(request)) {
+      if (!signal.aborted) {
         setLoading(false);
         setProgress("");
       }
@@ -203,17 +219,63 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    if (!clickSelectsArticle(event)) return;
+    // A modified click is the browser's gesture for "open this elsewhere",
+    // so the pane must not swallow it by selecting instead.
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+      return;
     event.preventDefault();
     setSelectedIndex(index);
     props.focusPane("reader");
   }
 
+  // The address goes into the URL as ?feedUrl= (the form old extensions
+  // opened), so a reload or a discarded tab coming back shows the address the
+  // user already copied instead of minting a new one.
+  function mintNewsletterAddress(domain: string) {
+    const address = newsletterAddress(domain);
+    setFeedUrl(address);
+    if (location.pathname === "/preview")
+      history.replaceState(
+        history.state,
+        "",
+        `/preview?feedUrl=${encodeURIComponent(address)}`,
+      );
+    return reserveNewsletterAddress(address);
+  }
+
+  // The address is in the user's hands from now on, and mail sent to it
+  // before its source exists bounces for good, which can end the newsletter
+  // subscription before it starts (#1116). So the source is created now,
+  // not on Subscribe. False when that failed and nothing has reported it.
+  async function reserveNewsletterAddress(address: string) {
+    try {
+      await api("/newsletter-address", successResponse, {
+        body: JSON.stringify({ address }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return true;
+    } catch (cause) {
+      return disposed || props.handleUnauthorized(cause);
+    }
+  }
+
+  // Subscribe still creates the source, so the address is not lost, only
+  // its mail until then.
+  function reportUnreserved(reserved: boolean) {
+    if (!reserved)
+      setMessage(
+        "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
+      );
+  }
+
   async function useNewsletterAddress() {
-    setFeedUrl(newsletterAddress(mailDomain()));
+    const reserved = mintNewsletterAddress(mailDomain());
     setArticles([]);
     setSelectedIndex(undefined);
     await copyAddress();
+    // After the copy's own message, which would otherwise hide this one.
+    reportUnreserved(await reserved);
   }
 
   async function copyAddress() {
@@ -252,6 +314,14 @@ export function FeedDiscovery(props: {
           });
       await props.saved(result.sourceId);
     } catch (cause) {
+      // The server's answer to a malformed target and to an address this
+      // account may not subscribe to, alike (addresses are minted only).
+      if (!editing && cause instanceof ApiError && cause.status === 422) {
+        setMessage(
+          "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
+        );
+        return;
+      }
       reportError(
         cause,
         editing ? "Could not save changes" : "Could not subscribe",

@@ -33,8 +33,11 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       INSERT INTO users (email, name, password, status)
       VALUES ('reader@example.test', 'reader', 'x', 'active') RETURNING id`;
     const [other] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password, status)
+      VALUES ('other@example.test', 'other', 'x', 'active') RETURNING id`;
+    const [dormant] = await client<{ id: number }[]>`
       INSERT INTO users (email, name, password)
-      VALUES ('other@example.test', 'other', 'x') RETURNING id`;
+      VALUES ('dormant@example.test', 'dormant', 'x') RETURNING id`;
     const userId = user!.id;
     const otherId = other!.id;
 
@@ -57,6 +60,13 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
              AS delta
       FROM sessions WHERE sid = ${browserSid}`;
     expect(window!.delta).toBe(365);
+
+    // An inactive account's session resolves to nobody, read-only or not.
+    const dormantSid = await issue(dormant!.id, "Dormant");
+    expect(await usersDataService.getUserBySid(dormantSid)).toBeUndefined();
+    expect(
+      await usersDataService.authenticate(dormantSid, "Dormant"),
+    ).toBeUndefined();
 
     // Expiry is enforced in the lookup itself: an aged-out sid resolves to
     // no user, which the auth plugin answers with a 401.
@@ -199,9 +209,15 @@ test("authenticate stamps an active session at most once per guard window", asyn
       UPDATE sessions SET expires_at = NOW() + INTERVAL '1 day'
       WHERE sid = ${sid}`;
 
-    // Past both windows, one request stamps both rows; the next writes
-    // nothing.
+    // Past both windows, the read-only lookup behind GET /api/session and the
+    // events stream still resolves the user and writes nothing: polling the
+    // session is not activity.
     const stale = await versions();
+    expect((await usersDataService.getUserBySid(sid))?.id).toBe(userId);
+    expect(await versions()).toEqual(stale);
+
+    // One request through the auth plugin stamps both rows; the next writes
+    // nothing.
     expect(await usersDataService.authenticate(sid, "Browser")).toEqual({
       email: "stamped@example.test",
       id: userId,

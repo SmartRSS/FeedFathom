@@ -1,19 +1,41 @@
 import { createHash } from "node:crypto";
 import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
-import { createPublicAuthRoutes } from "#features/auth/routes.ts";
-import { createWebSubRoutes } from "#features/feeds/routes/websub.ts";
-import { createReaderRoutes } from "#features/reader/routes.ts";
-import { createAdminOptionsRoutes } from "#features/admin/routes.ts";
-import { createMailRoute } from "#features/mail-ingest/routes/mail.ts";
-import { config } from "#platform/config.ts";
+import {
+  type AuthRouteServices,
+  createPublicAuthRoutes,
+} from "#features/auth/routes.ts";
+import {
+  createWebSubRoutes,
+  type WebSubRouteServices,
+} from "#features/feeds/routes/websub.ts";
+import {
+  createReaderRoutes,
+  type ReaderRouteServices,
+} from "#features/reader/routes.ts";
+import {
+  type AdminRouteServices,
+  createAdminOptionsRoutes,
+} from "#features/admin/routes.ts";
+import {
+  createMailRoute,
+  type MailRouteServices,
+} from "#features/mail-ingest/routes/mail.ts";
+import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
 import {
   createInternalRoutes,
   healthcheckPath,
 } from "#platform/http/internal-routes.ts";
 import { deferredResponse } from "#platform/http/deferred-response.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+
+// Everything the routes reach, built once per process by the entrypoint.
+export type ServerServices = AuthRouteServices &
+  ReaderRouteServices &
+  AdminRouteServices &
+  WebSubRouteServices &
+  MailRouteServices;
 
 export type ServerAppOptions = {
   production?: boolean;
@@ -63,6 +85,7 @@ function errorStatus(error: unknown): number | undefined {
 // route pattern (e.g. `/api/favicon/:id`), never the raw path with its query
 // string, so the log can't leak article URLs or search terms.
 function logSlowRequest(
+  slowRequestMs: number,
   request: Request,
   route: string | undefined,
   path: string,
@@ -74,7 +97,7 @@ function logSlowRequest(
   const routePattern = route ?? path;
   if (routePattern === healthcheckPath) return;
   const durationMs = Math.round(performance.now() - startedAt);
-  if (durationMs < config.SLOW_REQUEST_MS) return;
+  if (durationMs < slowRequestMs) return;
   console.log(`${request.method} ${routePattern} ${status} ${durationMs}`);
 }
 
@@ -82,18 +105,25 @@ function logSlowRequest(
 // frames from anywhere, so there is deliberately no default-src for those to
 // fall back to. The shell's inline scripts are allowed by hash, and
 // Turnstile's script origin only while a site key turns the captcha on.
-function contentSecurityPolicy(shell: string): string {
+function contentSecurityPolicy(
+  shell: string,
+  turnstileSiteKey: string | undefined,
+): string {
   const scriptSources = ["'self'"];
   for (const [, script = ""] of shell.matchAll(/<script>([\s\S]*?)<\/script>/g))
     scriptSources.push(
       `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
     );
-  if (config.TURNSTILE_SITE_KEY?.trim())
+  if (turnstileSiteKey?.trim())
     scriptSources.push("https://challenges.cloudflare.com");
   return `script-src ${scriptSources.join(" ")}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`;
 }
 
-export async function createServerApp(options: ServerAppOptions = {}) {
+export async function createServerApp(
+  services: ServerServices,
+  options: ServerAppOptions = {},
+) {
+  const { config } = services;
   const production = options.production ?? false;
   const spaDirectory = options.spaDirectory ?? "spa";
   const shellFile = Bun.file(`${spaDirectory}/index.html`);
@@ -103,6 +133,7 @@ export async function createServerApp(options: ServerAppOptions = {}) {
       ? {
           "Content-Security-Policy": contentSecurityPolicy(
             await shellFile.text(),
+            config.TURNSTILE_SITE_KEY,
           ),
         }
       : {}),
@@ -160,17 +191,26 @@ export async function createServerApp(options: ServerAppOptions = {}) {
     // Deferral is not a failure: the origin is rate limited, or this
     // instance's own politeness interval for the host has not elapsed. The
     // client is meant to come back, and deferredResponse says when.
-    if (isHttpDeferredError(error)) {
+    if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
+    }
+    // The sender's fault, not ours: the mail relay bounces it, and spam to
+    // unknown addresses stays out of the error log. `rejected` is the relay's
+    // signal; a plain 422 (a schema failure) is retried.
+    if (error instanceof MailRejectedError) {
+      return Response.json(
+        { error: error.message, rejected: true },
+        { status: 422 },
+      );
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
       return Response.json({ error: "Invalid request." }, { status: 400 });
     }
-    // Our own 30 second budget ran out. That is an upstream timeout, not a
+    // Our own request budget ran out. That is an upstream timeout, not a
     // malformed request, and the handlers that fetch a user-supplied URL
     // re-raise it rather than blaming the URL.
-    if (isHttpDeadlineError(error)) {
+    if (error instanceof HttpDeadlineError) {
       console.error(`Deadline exceeded on ${path}`);
       return Response.json(
         { error: "Upstream request timed out." },
@@ -195,11 +235,12 @@ export async function createServerApp(options: ServerAppOptions = {}) {
             : typeof set.status === "number"
               ? set.status
               : 200;
-        logSlowRequest(request, route, path, status);
+        logSlowRequest(config.SLOW_REQUEST_MS, request, route, path, status);
       })
       .onError(({ error, request, route, path }) => {
         const response = buildErrorResponse(error, request, path);
         logSlowRequest(
+          config.SLOW_REQUEST_MS,
           request,
           route,
           path,
@@ -209,11 +250,11 @@ export async function createServerApp(options: ServerAppOptions = {}) {
       })
       // Hooks only reach routes registered after them, so the routes come last.
       .use(createInternalRoutes())
-      .use(createPublicAuthRoutes(production))
-      .use(createReaderRoutes())
-      .use(createAdminOptionsRoutes())
-      .use(createWebSubRoutes())
-      .use(createMailRoute())
+      .use(createPublicAuthRoutes(production, services))
+      .use(createReaderRoutes(services))
+      .use(createAdminOptionsRoutes(services))
+      .use(createWebSubRoutes(services))
+      .use(createMailRoute(services))
       .use(spaRoutes)
   );
 }

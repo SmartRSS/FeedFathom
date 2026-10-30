@@ -1,13 +1,22 @@
-import { password } from "#platform/runtime.ts";
-import { authThrottle, usersDataService } from "#features/auth/services.ts";
-import { config } from "#platform/config.ts";
+import type * as runtime from "#platform/runtime.ts";
+import type * as auth from "#features/auth/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import { Elysia } from "elysia";
 import { loginRequest } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
-export function createLoginRoute(secureCookies: boolean) {
+export function createLoginRoute(
+  secureCookies: boolean,
+  {
+    authThrottle,
+    config,
+    password,
+    usersDataService,
+  }: Pick<typeof auth, "authThrottle" | "usersDataService"> &
+    Pick<typeof runtime, "password"> & { config: AppConfig },
+) {
   return new Elysia().post(
     "/api/login",
     { body: loginRequest },
@@ -22,7 +31,9 @@ export function createLoginRoute(secureCookies: boolean) {
       // exists and someone is guessing at it" for free.
       const wrongLoginData = json({ error: "Wrong login data" }, 401);
 
-      if (await authThrottle.blocked("login", address, parsed.email)) {
+      // Counted before the password is checked, so a burst of parallel
+      // guesses cannot all pass; a success takes its attempt back below.
+      if (!(await authThrottle.attempt("login", address, parsed.email))) {
         return wrongLoginData;
       }
 
@@ -33,7 +44,6 @@ export function createLoginRoute(secureCookies: boolean) {
         user.status !== "active"
       ) {
         if (!user) await password.hash(parsed.password);
-        await authThrottle.recordFailure("login", address, parsed.email);
         return wrongLoginData;
       }
 
@@ -46,11 +56,8 @@ export function createLoginRoute(secureCookies: boolean) {
         user.password,
         request.headers.get("user-agent"),
       );
-      if (!sid) {
-        await authThrottle.recordFailure("login", address, parsed.email);
-        return wrongLoginData;
-      }
-      await authThrottle.clearFailures("login", address, parsed.email);
+      if (!sid) return wrongLoginData;
+      await authThrottle.succeeded("login", address, parsed.email);
       return json({ sid }, 200, {
         "set-cookie": sessionHeader(sid, secureCookies),
       });

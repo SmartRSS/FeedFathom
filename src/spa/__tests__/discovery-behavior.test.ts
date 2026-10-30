@@ -1,13 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Value } from "typebox/value";
-import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
-import {
-  clickSelectsArticle,
-  initialPreviewSelection,
-  newsletterAddress,
-  websiteValidationMessage,
-  withScheme,
-} from "../discovery-behavior.ts";
+import { websiteValidationMessage, withScheme } from "../discovery-behavior.ts";
 
 describe("withScheme", () => {
   test("prefixes a bare host", () => {
@@ -49,59 +41,5 @@ describe("websiteValidationMessage", () => {
   test("rejects a value that is not a URL at all", () => {
     expect(websiteValidationMessage("")).not.toBe("");
     expect(websiteValidationMessage("http://")).not.toBe("");
-  });
-});
-
-describe("initialPreviewSelection", () => {
-  test("lands on the first article", () => {
-    expect(initialPreviewSelection(3)).toBe(0);
-  });
-
-  test("selects nothing when the feed is empty", () => {
-    expect(initialPreviewSelection(0)).toBeUndefined();
-  });
-});
-
-describe("clickSelectsArticle", () => {
-  test("a plain click selects", () => {
-    expect(clickSelectsArticle({})).toBe(true);
-    expect(
-      clickSelectsArticle({
-        altKey: false,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: false,
-      }),
-    ).toBe(true);
-  });
-
-  // The browser's own gesture for "open this elsewhere" must not be swallowed.
-  test("any modifier suppresses selection", () => {
-    expect(clickSelectsArticle({ ctrlKey: true })).toBe(false);
-    expect(clickSelectsArticle({ metaKey: true })).toBe(false);
-    expect(clickSelectsArticle({ shiftKey: true })).toBe(false);
-    expect(clickSelectsArticle({ altKey: true })).toBe(false);
-  });
-
-  // Regression: an earlier draft used ?? instead of ||, so an explicitly
-  // false leading modifier short-circuited and hid a pressed later one.
-  test("a pressed modifier still counts behind an explicitly false one", () => {
-    expect(clickSelectsArticle({ ctrlKey: false, metaKey: true })).toBe(false);
-  });
-});
-
-describe("newsletterAddress", () => {
-  // The address goes straight into /subscribe, which rejects anything the
-  // shared email policy does not accept.
-  test("mints an address the subscribe contract accepts", () => {
-    const address = newsletterAddress("example.com");
-    expect(Value.Check(emailAddressPolicy, address)).toBe(true);
-    expect(address.endsWith("@example.com")).toBe(true);
-  });
-
-  test("does not repeat itself", () => {
-    expect(newsletterAddress("example.com")).not.toBe(
-      newsletterAddress("example.com"),
-    );
   });
 });

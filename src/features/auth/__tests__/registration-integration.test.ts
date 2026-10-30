@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { createPooledDrizzleConnection } from "#platform/db/connection.ts";
+import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
@@ -15,7 +15,7 @@ const client = new SQL(databaseUrl);
 // A pool as wide as the race, so the registrations genuinely run on separate
 // connections and meet at the table lock rather than queueing client-side.
 const service = new UsersDataService(
-  createPooledDrizzleConnection(databaseUrl, 8),
+  createDrizzleConnection(databaseUrl, { max: 8 }),
 );
 
 async function resetDatabase() {
@@ -63,7 +63,10 @@ test("enabled registration admits everyone and one administrator", async () => {
   expect(counts).toEqual({ admins: 1, total: 8 });
 });
 
-test("withdrawing an activation token leaves a newer one alone", async () => {
+// A delivery that failed after the row committed withdraws the token, which
+// leaves the account where the register route's expired-link recovery picks
+// it up: still inactive, with no live link to wait out.
+test("withdrawing an activation token leaves a newer one alone and the account recoverable", async () => {
   await resetDatabase();
   await service.createUser(
     {
@@ -84,12 +87,10 @@ test("withdrawing an activation token leaves a newer one alone", async () => {
   ).toBe("newer-token");
 
   await service.withdrawActivationToken("newer-token");
-  expect(
-    (
-      await client<{ token: null | string }[]>`
-      SELECT activation_token AS token FROM users`
-    )[0]?.token,
-  ).toBeNull();
+  const user = await service.findUser(account(0).email);
+  expect(user?.activationToken).toBeNull();
+  expect(user?.activationTokenExpiresAt).toBeNull();
+  expect(user?.status).toBe("inactive");
 });
 
 // The route's lookup cannot see an account committed after it, so the insert
@@ -129,28 +130,6 @@ test.each([false, true])(
     ]);
   },
 );
-
-// A delivery that failed after the row committed withdraws the token, which
-// leaves the account where the register route's expired-link recovery picks
-// it up: still inactive, with no live link to wait out.
-test("a withdrawn activation token leaves the account recoverable", async () => {
-  await resetDatabase();
-  await service.createUser(
-    {
-      ...account(0),
-      activationToken: "undelivered-token",
-      activationTokenExpiresAt: new Date(Date.now() + 60_000),
-      status: "inactive",
-    },
-    true,
-  );
-
-  await service.withdrawActivationToken("undelivered-token");
-
-  const user = await service.findUser(account(0).email);
-  expect(user?.status).toBe("inactive");
-  expect(user?.activationTokenExpiresAt).toBeNull();
-});
 
 async function pendingAccount(expiresAt: Date) {
   await resetDatabase();

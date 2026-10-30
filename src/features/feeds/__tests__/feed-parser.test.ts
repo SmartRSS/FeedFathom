@@ -1,18 +1,26 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Readable } from "node:stream";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { parseFeed } from "@rowanmanning/feed-parser";
 import {
   mapFeedItemToArticle,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   decodeFeedBody,
   detectFeedEncoding,
+  FeedParser,
   parseXmlFeed,
   validateParsedFeed,
 } from "#features/feeds/feed-parser.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
+import type { ArticleImporter } from "#features/feeds/article-import.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
+import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
 const item = {
   authors: [{ name: "Author" }],
@@ -39,10 +47,6 @@ describe("external feed parser projection", () => {
     ).toThrow("XML entity declarations are not allowed");
   });
 
-  test("accepts the fields consumed by feed mapping", () => {
-    expect(() => validateParsedFeed(feed)).not.toThrow();
-  });
-
   test("rejects malformed consumed fields without modeling unrelated parser data", () => {
     expect(() =>
       validateParsedFeed({ ...feed, items: [{ ...item, authors: "Author" }] }),
@@ -60,25 +64,11 @@ describe("external feed parser projection", () => {
 });
 
 describe("feed body encoding detection", () => {
-  test("prefers a UTF-8 BOM over everything else", () => {
-    const buffer = new Uint8Array([0xef, 0xbb, 0xbf, 0x3c, 0x3f]).buffer;
-    expect(detectFeedEncoding(buffer, "text/xml; charset=windows-1252")).toBe(
-      "utf-8",
-    );
-  });
-
   test("prefers UTF-16 BOMs over the Content-Type header", () => {
     const le = new Uint8Array([0xff, 0xfe, 0x3c, 0x00]).buffer;
     const be = new Uint8Array([0xfe, 0xff, 0x00, 0x3c]).buffer;
     expect(detectFeedEncoding(le, "text/xml; charset=utf-8")).toBe("utf-16le");
     expect(detectFeedEncoding(be, "text/xml; charset=utf-8")).toBe("utf-16be");
-  });
-
-  test("falls back to the Content-Type charset when there's no BOM", () => {
-    const buffer = new TextEncoder().encode("<rss></rss>").buffer;
-    expect(detectFeedEncoding(buffer, "text/xml; charset=iso-8859-1")).toBe(
-      "iso-8859-1",
-    );
   });
 
   test.each([
@@ -90,23 +80,9 @@ describe("feed body encoding detection", () => {
     expect(decodeFeedBody(bytes.buffer, contentType)).toBe("café");
   });
 
-  test("falls back to the XML prolog's declared encoding", () => {
-    const buffer = new TextEncoder().encode(
-      '<?xml version="1.0" encoding="ISO-8859-1"?><rss></rss>',
-    ).buffer;
-    expect(detectFeedEncoding(buffer, null)).toBe("ISO-8859-1");
-  });
-
   test("defaults to UTF-8 when nothing says otherwise", () => {
     const buffer = new TextEncoder().encode("<rss></rss>").buffer;
     expect(detectFeedEncoding(buffer, null)).toBe("utf-8");
-  });
-
-  test("decodes a Latin-1 body correctly instead of mojibake-ing it", () => {
-    const xml =
-      '<?xml version="1.0" encoding="ISO-8859-1"?><title>Caf\xe9</title>';
-    const bytes = Uint8Array.from(xml, (char) => char.charCodeAt(0));
-    expect(decodeFeedBody(bytes.buffer, null)).toContain("Café");
   });
 
   test("falls back to UTF-8 instead of throwing on a bogus encoding label", () => {
@@ -157,6 +133,7 @@ describe("decoded feed titles from encoded bytes", () => {
     ["ISO-8859-2", zazolc, "Zażółć"],
     ["Shift_JIS", nihongo, "日本語"],
     ["windows-1252", cafe, "Café €5"],
+    ["ISO-8859-1", [0x43, 0x61, 0x66, 0xe9], "Café"],
   ])(
     "decodes %s from the XML prolog when there is no HTTP charset",
     (label, title, expected) => {
@@ -166,19 +143,18 @@ describe("decoded feed titles from encoded bytes", () => {
     },
   );
 
-  test("HTTP charset wins when the prolog names another encoding", () => {
-    const head = '<?xml version="1.0" encoding="ISO-8859-2"?>';
-    expect(titleOf(rss(cafe, head), "text/xml; charset=windows-1252")).toBe(
-      "Café €5",
-    );
-  });
-
-  test("HTTP charset wins over a Shift_JIS prolog", () => {
-    const head = '<?xml version="1.0" encoding="Shift_JIS"?>';
-    expect(titleOf(rss(zazolc, head), "text/xml; charset=ISO-8859-2")).toBe(
-      "Zażółć",
-    );
-  });
+  test.each([
+    ["ISO-8859-2", "windows-1252", cafe, "Café €5"],
+    ["Shift_JIS", "ISO-8859-2", zazolc, "Zażółć"],
+  ])(
+    "HTTP charset wins over a %s prolog",
+    (prolog, charset, title, expected) => {
+      const head = `<?xml version="1.0" encoding="${prolog}"?>`;
+      expect(titleOf(rss(title, head), `text/xml; charset=${charset}`)).toBe(
+        expected,
+      );
+    },
+  );
 
   test("UTF-8 BOM beats an HTTP charset and a prolog that both disagree", () => {
     const head = '<?xml version="1.0" encoding="Shift_JIS"?>';
@@ -211,12 +187,9 @@ const entriesOf = (text: string) => text.match(/<entry>.*?<\/entry>/gsu) ?? [];
 const withEntries = (text: string, entries: string[]) =>
   text.replace(/<entry>.*<\/entry>/su, entries.join("\n"));
 const articlesOf = (text: string) =>
-  mapFeedToPreview(
-    parseXmlFeed(text),
-    "https://rss.naad-adna.pelmorex.com/",
-    (content) => content,
-    Date.parse("2026-10-06T08:06:42Z"),
-  ).articles;
+  mapFeedToPreview(parseXmlFeed(text), "https://rss.naad-adna.pelmorex.com/", {
+    now: Date.parse("2026-10-06T08:06:42Z"),
+  }).articles;
 const guidsOf = (text: string) => articlesOf(text).map(({ guid }) => guid);
 const capFeedGuids = (lang: string) =>
   guidsOf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
@@ -232,9 +205,10 @@ test("resolves relative entry links against a redirected feed URL", async () => 
   const preview = mapFeedToPreview(
     parsedFixtureFeed,
     "https://publisher.example/old/feed.xml",
-    rewriteLinks,
-    Date.parse("2026-10-14T00:00:00Z"),
-    "https://cdn.example/new/path/feed.xml",
+    {
+      baseUrl: "https://cdn.example/new/path/feed.xml",
+      now: Date.parse("2026-10-14T00:00:00Z"),
+    },
   );
 
   expect(preview.articles[0]?.url).toBe(
@@ -380,7 +354,7 @@ describe("feed dates", () => {
     parsed: Parameters<typeof mapFeedToPreview>[0],
   ) =>
     expect(
-      mapFeedToPreview(parsed, "https://example.com/", rewriteLinks, ingestedAt)
+      mapFeedToPreview(parsed, "https://example.com/", { now: ingestedAt })
         .articles.map(({ guid, publishedAt, title }) => [
           guid,
           publishedAt.toISOString(),
@@ -423,13 +397,11 @@ describe("feed dates", () => {
   });
 });
 
-const enclosuresOf = (parsed: ReturnType<typeof parseJsonFeed>) =>
-  mapFeedItemToArticle(
-    parsed.items[0]!,
-    parsed,
-    { id: 1, url: "https://example.com/feed" },
-    (content) => content,
-  ).enclosures;
+const enclosuresOf = (parsed: Parameters<typeof mapFeedItemToArticle>[1]) =>
+  mapFeedItemToArticle(parsed.items[0]!, parsed, {
+    id: 1,
+    url: "https://example.com/feed",
+  }).enclosures;
 
 describe("enclosures", () => {
   test("keeps YouTube's media:group video and thumbnail", () => {
@@ -519,4 +491,38 @@ Line two</media:description></media:group></entry>
       },
     ]);
   });
+});
+
+// The temporary-redirect cache only saves a hop next time; a Redis write
+// failing must not turn a fetched feed into a failed one.
+test("a failed redirect-cache write still returns the redirected feed", async () => {
+  const body = new TextEncoder().encode(
+    "<rss><channel><title>Moved</title><item><guid>a</guid><link>https://cdn.example/a</link></item></channel></rss>",
+  );
+  const parser = new FeedParser(
+    strictFake<ArticleImporter>({}),
+    new HttpClient(createFakeHttpRedis(), {
+      transport: async () => ({
+        body: Readable.from([body]),
+        destroy() {},
+        headers: new Headers({ "content-type": "application/rss+xml" }),
+        status: 200,
+        url: "https://cdn.example/feed.xml",
+      }),
+    }),
+    strictFake<SourcesDataService>({}),
+    strictFake<WebSubStateService>({}),
+    strictFake<RedirectMap>({
+      resolveUrl: async (url) => url,
+      setRedirect: async () => {
+        throw new Error("redis is down");
+      },
+    }),
+  );
+  using logged = spyOn(console, "error").mockImplementation(() => {});
+
+  const preview = await parser.preview("https://publisher.example/feed.xml");
+
+  expect(preview?.articles.map(({ guid }) => guid)).toEqual(["a"]);
+  expect(logged).toHaveBeenCalledTimes(1);
 });

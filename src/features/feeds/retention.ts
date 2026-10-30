@@ -9,6 +9,7 @@ import {
   lte,
   min,
   ne,
+  not,
   notExists,
   sql,
 } from "drizzle-orm";
@@ -60,6 +61,10 @@ export const lastSeenBumpThrottleHours = 1;
 // any "read the newsletter eventually" window.
 const emailRetentionDays = 90;
 
+// How long a source may go without a subscriber: a newsletter address is
+// reserved before anyone subscribes (#1116), and takes mail meanwhile.
+export const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
 /**
@@ -86,9 +91,29 @@ export async function cleanupOrphanedData(
   // set before every rule below evaluates it, so no rule needs to special-case
   // expired users.
   if (userExpiryDays > 0) {
-    await drizzleConnection
-      .delete(users)
-      .where(lt(users.lastSeenAt, daysAgo(userExpiryDays)));
+    // One cutoff for both statements, so no user expires between them.
+    const cutoff = new Date(Date.now() - userExpiryDays * 86_400_000);
+    // An email source from before ownership can have other subscribers (see
+    // migration 0013): it passes to the earliest of them, so the address
+    // stays owned. An owner's unshared source loses its owner instead (the
+    // reserved_by SET NULL) and goes in the orphan delete below.
+    await drizzleConnection.execute(sql`
+      UPDATE sources s SET reserved_by = (
+        SELECT us.user_id FROM user_sources us
+        JOIN users u ON u.id = us.user_id
+        WHERE us.source_id = s.id AND u.last_seen_at >= ${cutoff}
+        ORDER BY us.created_at, us.id
+        LIMIT 1
+      )
+      FROM users owner
+      WHERE owner.id = s.reserved_by AND owner.last_seen_at < ${cutoff}
+        AND EXISTS (
+          SELECT 1 FROM user_sources us
+          JOIN users u ON u.id = us.user_id
+          WHERE us.source_id = s.id AND u.last_seen_at >= ${cutoff}
+        )
+    `);
+    await drizzleConnection.delete(users).where(lt(users.lastSeenAt, cutoff));
   }
 
   // Expired sessions are dead weight, not data: enforcement lives in the
@@ -103,19 +128,45 @@ export async function cleanupOrphanedData(
   // removed, catastrophic if the table is empty for any transient reason.
   // This can't tell those apart, so guard on the whole table existing, in the
   // same statement to leave no check-then-delete race.
+  //
+  // A source younger than a day is kept even so. A newsletter address is
+  // reserved as a source before anyone subscribes (#1116), and this is the
+  // grace it has to be subscribed in. The grace applies to every kind rather
+  // than email alone: it costs an abandoned new feed a day of polling, and it
+  // also covers the gap between addSourceToUser creating a source and
+  // subscribing to it.
+  const subscriberless = and(
+    lt(sources.createdAt, subscriberlessGraceEnd),
+    exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
+    notExists(
+      drizzleConnection
+        .select({ id: userSources.id })
+        .from(userSources)
+        .where(eq(userSources.sourceId, sources.id)),
+    ),
+  );
+
+  // An owned newsletter address that has had mail stays, as a tombstone:
+  // deleted, it would be free for any account to create and receive its
+  // owner's mail. One that never had any goes, or every Generate click would
+  // leave a row behind for good. Email delivery is the only writer of an
+  // email source's last_success.
+  const tombstone = sql`(${sources.reservedBy} IS NOT NULL AND ${sources.lastSuccess} IS NOT NULL)`;
   await drizzleConnection
     .delete(sources)
+    .where(and(subscriberless, not(tombstone)));
+  // A tombstone bounces new mail (see findMailRecipient), but keeps what its
+  // owner left behind on unsubscribing, which an owner subscribing again
+  // would see. That goes, so nothing but the row accumulates.
+  await drizzleConnection
+    .delete(articles)
     .where(
-      and(
-        exists(
-          drizzleConnection.select({ id: userSources.id }).from(userSources),
-        ),
-        notExists(
-          drizzleConnection
-            .select({ id: userSources.id })
-            .from(userSources)
-            .where(eq(userSources.sourceId, sources.id)),
-        ),
+      inArray(
+        articles.sourceId,
+        drizzleConnection
+          .select({ id: sources.id })
+          .from(sources)
+          .where(and(subscriberless, tombstone)),
       ),
     );
 
@@ -159,10 +210,7 @@ export async function cleanupOrphanedData(
   // prune and a re-inserted article stays removed. The buffer stays because
   // re-fetching content is waste, not because being wrong is destructive.
   //
-  // Email sources are excluded from the rule below; they prune separately on
-  // flat delivery age (see emailRetentionDays) because they have no feed to
-  // be absent from, and each delivery stamps last_success, which would make
-  // every earlier newsletter look dropped if read as an absence.
+  // Email sources are excluded; they prune separately below.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)

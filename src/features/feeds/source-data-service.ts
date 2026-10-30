@@ -1,108 +1,62 @@
-import { type Static, Type } from "typebox";
-import Schema from "typebox/schema";
-import { eq, getTableColumns, gt, sql } from "drizzle-orm";
+import type { Static } from "typebox";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  getTableColumns,
+  gt,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { dateType } from "#shared/validation/typebox-policy.ts";
 import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
+import { subscriberlessGraceEnd } from "#features/feeds/retention.ts";
 import {
   clampToPollFloor,
   pollFloorMs,
 } from "#features/feeds/source-schedule-policy.ts";
 
-export interface SourceWithSubscriberCount {
-  id: number;
-  url: string;
-  homeUrl: string;
-  createdAt: Date;
-  lastAttempt: Date | null;
-  lastFetchTrigger: "email" | "manual" | "poll" | "websub-push" | null;
-  lastSuccess: Date | null;
-  recentFailures: number;
-  subscriberCount: number;
-  recentFailureDetails: string;
-  websubStatus: "failed" | "none" | "pending" | "verified";
-}
-
 // Bound each gathering pass when an outage makes many sources due at once.
 // notBefore staggers normal arrivals; the cap does not scale with backlog size.
 const gatherBatchLimit = 500;
-const exact = { additionalProperties: false } as const;
-type SourceSort = Static<typeof sourceSortSchema>;
-// The whole defence for the interpolation in listAllSources: an unrecognised
-// key falls back to a literal spelled out here, so nothing caller-supplied
-// reaches the SQL text.
-const sourceSortSql = new Map([
-  ["createdAt", "s.created_at"],
-  ["lastAttempt", "s.last_attempt"],
-  ["lastSuccess", "s.last_success"],
-  ["recentFailures", "s.recent_failures"],
-  ["subscriberCount", '"subscriberCount"'],
-  ["url", "s.url"],
-]);
-const sourceOrderSql = new Map([
-  ["asc", "ASC"],
-  ["desc", "DESC"],
-]);
-const sourceListRowsSchema = Type.Array(
-  Type.Object(
-    {
-      createdAt: dateType,
-      homeUrl: Type.String(),
-      id: Type.Integer(),
-      lastAttempt: Type.Union([dateType, Type.Null()]),
-      lastFetchTrigger: Type.Union([
-        Type.Literal("email"),
-        Type.Literal("manual"),
-        Type.Literal("poll"),
-        Type.Literal("websub-push"),
-        Type.Null(),
-      ]),
-      lastSuccess: Type.Union([dateType, Type.Null()]),
-      recentFailureDetails: Type.String(),
-      recentFailures: Type.Integer(),
-      subscriberCount: Type.Integer({ minimum: 0 }),
-      url: Type.String(),
-      websubStatus: Type.Union([
-        Type.Literal("none"),
-        Type.Literal("pending"),
-        Type.Literal("verified"),
-        Type.Literal("failed"),
-      ]),
-    },
-    exact,
-  ),
-);
-const sourceListRowsCheck = Schema.Compile(sourceListRowsSchema);
-const sourcesToProcessRowsSchema = Type.Array(
-  Type.Object({ id: Type.Integer(), url: Type.String() }, exact),
-);
-const sourcesToProcessRowsCheck = Schema.Compile(sourcesToProcessRowsSchema);
+// A correlated subquery keeps each caller to one round trip. The outer id is
+// qualified by hand: drizzle drops the table name from columns in a
+// single-table select, and a bare "id" here would mean user_sources.id.
+const subscriberCount = sql<number>`(
+  SELECT COUNT(*)::int
+  FROM ${userSources}
+  WHERE ${userSources.sourceId} = ${sources}.${sql.identifier(sources.id.name)}
+)`;
+const sourceSortColumns = {
+  createdAt: sources.createdAt,
+  lastAttempt: sources.lastAttempt,
+  lastSuccess: sources.lastSuccess,
+  recentFailures: sources.recentFailures,
+  subscriberCount,
+  url: sources.url,
+} satisfies Record<Static<typeof sourceSortSchema>, unknown>;
 
-export function parseSourceListRows(
-  value: unknown,
-): SourceWithSubscriberCount[] {
-  if (!sourceListRowsCheck.Check(value)) {
-    throw new Error("Database returned invalid source list rows");
-  }
-  return value;
-}
-
-export function resolveSourceListOrder(sortBy: string, order: string) {
-  return {
-    order: sourceOrderSql.get(order) ?? "ASC",
-    sort: sourceSortSql.get(sortBy) ?? "s.created_at",
-  };
-}
-
-const isUniqueViolation = (error: unknown, depth = 0): boolean => {
+// 23505 is a unique violation, 23503 a foreign key one. Drizzle wraps the
+// driver's error, so the SQLSTATE can sit a few causes down.
+export const hasSqlState = (
+  error: unknown,
+  state: "23503" | "23505",
+  depth = 0,
+): boolean => {
   if (typeof error !== "object" || error === null || depth > 3) return false;
   const code = "code" in error ? error.code : undefined;
   const errno = "errno" in error ? error.errno : undefined;
-  if (code === "23505" || errno === "23505") return true;
-  return "cause" in error && isUniqueViolation(error.cause, depth + 1);
+  if (code === state || errno === state) return true;
+  return "cause" in error && hasSqlState(error.cause, state, depth + 1);
 };
 
 export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
@@ -110,21 +64,28 @@ export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 /**
  * Sources repository: CRUD on the sources table plus the poll-schedule
  * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
- * the fetch pipeline. WebSub lease state lives in WebSubStateService, favicon
- * storage in FaviconStore, and ParseSource enqueueing in SourceEnqueuer.
+ * the fetch pipeline, and the favicon data URL written by the favicon refresher
+ * and read back by the /api/favicon route. WebSub lease state lives in
+ * WebSubStateService, and ParseSource enqueueing in SourceEnqueuer.
  */
 export class SourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  public async addSource(payload: {
-    homeUrl: string;
-    kind?: "email" | "feed" | undefined;
-    url: string;
-  }): Promise<Source> {
+  // `db` lets a caller's transaction, such as the OPML import's, add it.
+  public async addSource(
+    payload: {
+      homeUrl: string;
+      kind?: "email" | "feed" | undefined;
+      reservedBy?: number;
+      url: string;
+    },
+    db: Pick<BunSQLDatabase<typeof schema>, "insert" | "select"> = this
+      .drizzleConnection,
+  ): Promise<Source> {
     const inserted = (
-      await this.drizzleConnection
+      await db
         .insert(sources)
         .values(payload)
         .onConflictDoNothing({ target: sources.url })
@@ -132,27 +93,21 @@ export class SourcesDataService {
     ).at(0);
     if (inserted) return inserted;
 
-    const existing = await this.findSourceByUrl(payload.url);
+    const existing = (
+      await db.select().from(sources).where(eq(sources.url, payload.url))
+    ).at(0);
     if (!existing) throw new Error("Source conflict resolved without a row");
     return existing;
   }
 
   // subscriberCount rides along for the ParseSource job's User-Agent (see
-  // buildUserAgent). A correlated subquery keeps the hot polling path to one
-  // round trip.
+  // buildUserAgent).
   public async findSourceById(
     sourceId: number,
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
     return (
       await this.drizzleConnection
-        .select({
-          ...getTableColumns(sources),
-          subscriberCount: sql<number>`(
-            SELECT COUNT(*)::int
-            FROM ${userSources}
-            WHERE ${userSources.sourceId} = ${sources.id}
-          )`,
-        })
+        .select({ ...getTableColumns(sources), subscriberCount })
         .from(sources)
         .where(eq(sources.id, sourceId))
         .limit(1)
@@ -168,14 +123,77 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  public async getRecentlySuccessfulSources() {
+  // The source mail to `url` is delivered to. One without a subscriber takes
+  // mail only within the reservation grace; past it, it is an address its
+  // owner left (a tombstone, see cleanupOrphanedData), and the sender should
+  // get a bounce rather than mail nobody reads.
+  public async findMailRecipient(url: string): Promise<Source | undefined> {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(sources)
+        .where(
+          and(
+            eq(sources.url, url),
+            or(
+              gt(sources.createdAt, subscriberlessGraceEnd),
+              exists(
+                this.drizzleConnection
+                  .select({ id: userSources.id })
+                  .from(userSources)
+                  .where(eq(userSources.sourceId, sources.id)),
+              ),
+            ),
+          ),
+        )
+    ).at(0);
+  }
+
+  // Every feed fetched in the past day, missing icon or not: the window
+  // covers GatherFaviconJobs' daily run (an hour of slack for a daily poll
+  // landing just late), so each live source gets a job per run, mostly
+  // answered from the HTTP cache, and a dead one stops costing provider
+  // requests. Email sources are skipped: their homeUrl is the app's own
+  // origin, whose icon would replace the mail glyph.
+  public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
+        hasFavicon: sql<boolean>`${sources.favicon} IS NOT NULL`,
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
       .from(sources)
-      .where(gt(sources.lastSuccess, sql`NOW() - INTERVAL '5 minutes'`));
+      .where(
+        and(
+          gt(sources.lastSuccess, sql`NOW() - INTERVAL '25 hours'`),
+          ne(sources.kind, "email"),
+        ),
+      )
+      // Sources still without an icon first: on a cold run they are the ones
+      // a person sees as missing.
+      .orderBy(sql`${sources.favicon} IS NOT NULL`, asc(sources.id));
+  }
+
+  public async updateFavicon(
+    sourceId: number,
+    favicon: Buffer,
+    contentType: string,
+  ) {
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        favicon: `data:${contentType};base64,${favicon.toString("base64")}`,
+      })
+      .where(eq(sources.id, sourceId));
+  }
+
+  public async getFavicon(sourceId: number) {
+    const [row] = await this.drizzleConnection
+      .select({ favicon: sources.favicon })
+      .from(sources)
+      .where(eq(sources.id, sourceId))
+      .limit(1);
+    return row?.favicon ?? null;
   }
 
   // "email" has no endpoint to poll. "feed" is gated purely by notBefore,
@@ -185,74 +203,52 @@ export class SourcesDataService {
   // value from a normal fetch would otherwise pull the next check inside a
   // day and undo the reduced cadence.
   public async getSourcesToProcess() {
-    const result: unknown = await this.drizzleConnection.execute(sql`
-      WITH "due_sources" AS (
-        SELECT ${sources.id} AS "id", ${sources.url} AS "url", ${sources.lastAttempt} AS "last_attempt"
-        FROM ${sources}
-        WHERE (
-          (
-            ${sources.kind} = 'feed'
-            AND ${sources.notBefore} <= NOW()
-          )
-          OR (
-            ${sources.kind} = 'websub'
-            AND (
-              ${sources.lastAttempt} IS NULL
-              OR ${sources.lastAttempt} < NOW() - INTERVAL '1 day'
-            )
-          )
-        )
+    return await this.drizzleConnection
+      .select({ id: sources.id, url: sources.url })
+      .from(sources)
+      .where(
+        or(
+          and(eq(sources.kind, "feed"), lte(sources.notBefore, sql`NOW()`)),
+          and(
+            eq(sources.kind, "websub"),
+            or(
+              isNull(sources.lastAttempt),
+              lt(sources.lastAttempt, sql`NOW() - INTERVAL '1 day'`),
+            ),
+          ),
+        ),
       )
-      SELECT "id", "url"
-      FROM "due_sources"
-      ORDER BY "last_attempt" ASC NULLS FIRST
-      LIMIT ${gatherBatchLimit}
-    `);
-    if (!sourcesToProcessRowsCheck.Check(result)) {
-      throw new Error("Database returned invalid source processing rows");
-    }
-    return result;
+      .orderBy(sql`${sources.lastAttempt} ASC NULLS FIRST`)
+      .limit(gatherBatchLimit);
   }
 
   public async listAllSources(
-    sortBy: SourceSort,
+    sortBy: Static<typeof sourceSortSchema>,
     order: "asc" | "desc",
-  ): Promise<SourceWithSubscriberCount[]> {
-    const resolved = resolveSourceListOrder(sortBy, order);
-
-    const query = `
-        WITH subscriber_counts AS (
-            SELECT
-                us.source_id,
-                COUNT(us.user_id)::int AS count
-            FROM user_sources AS us
-            GROUP BY us.source_id
-        )
-        SELECT
-            s.id,
-            s.url,
-            s.home_url as "homeUrl",
-            s.created_at as "createdAt",
-            s.last_attempt as "lastAttempt",
-            s.last_fetch_trigger as "lastFetchTrigger",
-            s.last_success as "lastSuccess",
-            COALESCE(s.recent_failures, 0) as "recentFailures",
-            COALESCE(sc.count, 0) AS "subscriberCount",
-            s.recent_failure_details as "recentFailureDetails",
-            s.websub_status as "websubStatus"
-        FROM sources AS s
-        LEFT JOIN subscriber_counts AS sc ON sc.source_id = s.id
-        -- id breaks the tie: every column the admin table can sort by holds
-        -- duplicates (recent_failures is 0 for almost every row), and without
-        -- a unique last key the tied rows reshuffle between two loads of the
-        -- same sort, which reads as the table changing on its own.
-        ORDER BY ${resolved.sort} ${resolved.order}, s.id ASC
-    `;
-
-    const result: unknown = await this.drizzleConnection.execute(
-      sql.raw(query),
-    );
-    return parseSourceListRows(result);
+  ) {
+    return await this.drizzleConnection
+      .select({
+        createdAt: sources.createdAt,
+        homeUrl: sources.homeUrl,
+        id: sources.id,
+        lastAttempt: sources.lastAttempt,
+        lastFetchTrigger: sources.lastFetchTrigger,
+        lastSuccess: sources.lastSuccess,
+        recentFailureDetails: sources.recentFailureDetails,
+        recentFailures: sources.recentFailures,
+        subscriberCount,
+        url: sources.url,
+        websubStatus: sources.websubStatus,
+      })
+      .from(sources)
+      // id breaks the tie: every column the admin table can sort by holds
+      // duplicates (recent_failures is 0 for almost every row), and without
+      // a unique last key the tied rows reshuffle between two loads of the
+      // same sort, which reads as the table changing on its own.
+      .orderBy(
+        (order === "desc" ? desc : asc)(sourceSortColumns[sortBy]),
+        asc(sources.id),
+      );
   }
 
   // Cascades via FK to articles and user_sources. Admin-level, distinct from
@@ -273,21 +269,29 @@ export class SourcesDataService {
         .returning({ id: sources.id });
       return updated.length > 0 ? "updated" : "not-found";
     } catch (error) {
-      if (isUniqueViolation(error)) return "conflict";
+      if (hasSqlState(error, "23505")) return "conflict";
       throw error;
     }
   }
 
   public async successSource(
     sourceId: number,
-    cached = false,
-    notBefore = new Date(Date.now() + pollFloorMs),
-    // parseSource passes its own observedAt so this matches the
-    // last_seen_in_feed_at written for the same fetch's articles exactly;
-    // otherwise the two differ by this call's latency and cleanupOrphanedData
-    // cannot tell "not in this fetch" from "just fetched".
-    observedAt = new Date(),
-    trigger: "email" | "manual" | "poll" | "websub-push" = "poll",
+    {
+      cached = false,
+      notBefore = new Date(Date.now() + pollFloorMs),
+      // parseSource passes its own observedAt so this matches the
+      // last_seen_in_feed_at written for the same fetch's articles exactly;
+      // otherwise the two differ by this call's latency and
+      // cleanupOrphanedData cannot tell "not in this fetch" from "just
+      // fetched".
+      observedAt = new Date(),
+      trigger = "poll",
+    }: {
+      cached?: boolean;
+      notBefore?: Date | undefined;
+      observedAt?: Date;
+      trigger?: "email" | "manual" | "poll" | "websub-push";
+    } = {},
   ) {
     const clampedNotBefore = clampToPollFloor(notBefore, Date.now());
     await this.drizzleConnection

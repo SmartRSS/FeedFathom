@@ -8,15 +8,6 @@ export class HttpDeferredError extends Error {
   }
 }
 
-// `instanceof` can itself throw (e.g. a Proxy with a poisoned
-// getPrototypeOf trap), so callers that can't trust their caught value
-// should go through this guard instead of a bare `instanceof` check.
-export function isHttpDeferredError(
-  error: unknown,
-): error is HttpDeferredError {
-  try {
-    return error instanceof HttpDeferredError;
-  } catch {
-    return false;
-  }
-}
+// The limiter's own politeness interval, as opposed to a block the origin
+// asked for: it always clears within one interval, whatever the origin says.
+export class HttpPacedError extends HttpDeferredError {}

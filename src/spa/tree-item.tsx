@@ -2,38 +2,18 @@ import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import {
-  folderOpenFromStored,
-  folderOpenStorageKey,
-  folderOpenToStored,
   isSnoozedNode,
   treeNodeKey,
   unreadCount,
 } from "./dashboard-behavior.ts";
 import { Icon } from "./icon.tsx";
+import { storedPreference } from "./preferences.ts";
 import feedRaw from "./assets/icons/System/rss-fill.svg?raw";
 import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
 import arrowDownRaw from "./assets/icons/Arrows/chevron-down-fill.svg?raw";
 import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
 import folderOpenedRaw from "./assets/icons/Document/folder-open-fill.svg?raw";
-
-// localStorage throws in a private-browsing context and when the origin has
-// no storage access; a folder falling back to open is the safe outcome.
-function storedFolderOpen(uid: string) {
-  try {
-    return folderOpenFromStored(
-      localStorage.getItem(folderOpenStorageKey(uid)),
-    );
-  } catch {
-    return true;
-  }
-}
-
-function storeFolderOpen(uid: string, open: boolean) {
-  try {
-    localStorage.setItem(folderOpenStorageKey(uid), folderOpenToStored(open));
-  } catch {}
-}
 
 // Reads visible row order straight from the DOM instead of tracking it in
 // state -- closed folders' children simply aren't rendered, so a plain
@@ -88,7 +68,14 @@ export function TreeItem(props: {
   const longPress = longPressHandlers((x, y) =>
     props.onContext(x, y, props.node),
   );
-  const [open, setOpen] = createSignal(storedFolderOpen(props.node.uid));
+  // Persisted per folder. Only "closed" collapses one: an absent, older or
+  // corrupted entry reads as open, so a bad entry can never hide feeds.
+  const folderState = storedPreference(
+    `folder:${props.node.uid}`,
+    ["open", "closed"],
+    "open",
+  );
+  const open = () => folderState.get() === "open";
   // The nested <ul role="group"> below is a DOM *sibling* of this row's
   // treeitem (a button can't contain a list), and the presentational <li>
   // around them both re-parents it onto the tree root -- leaving the group
@@ -110,9 +97,7 @@ export function TreeItem(props: {
   const favicon = () =>
     props.node.type === "source" ? props.node.favicon : null;
   function toggle() {
-    const next = !open();
-    setOpen(next);
-    storeFolderOpen(props.node.uid, next);
+    folderState.set(open() ? "closed" : "open");
   }
   function openFolder() {
     if (!open()) toggle();

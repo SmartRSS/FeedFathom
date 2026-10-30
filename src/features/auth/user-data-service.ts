@@ -23,8 +23,13 @@ const authenticatedRowsCheck = Schema.Compile(
 );
 
 // Exported so an integration test can EXPLAIN the statement the auth plugin
-// actually runs rather than a copy of it.
-export function authenticateStatement(sid: string, userAgent: null | string) {
+// actually runs rather than a copy of it. With touch false it only reads, for
+// the lookups that must not count as activity.
+export function authenticateStatement(
+  sid: string,
+  userAgent: null | string,
+  touch = true,
+) {
   return sql`
     WITH "resolved" AS (
       SELECT "users"."id", "users"."email", "users"."name",
@@ -39,7 +44,8 @@ export function authenticateStatement(sid: string, userAgent: null | string) {
       UPDATE "sessions"
       SET "last_used_at" = NOW(),
           "user_agent" = COALESCE(${userAgent}, "user_agent")
-      WHERE "sid" = ${sid}
+      WHERE ${touch}
+        AND "sid" = ${sid}
         AND EXISTS (SELECT 1 FROM "resolved")
         AND (
           "last_used_at" < NOW() - INTERVAL '1 minute'
@@ -49,7 +55,8 @@ export function authenticateStatement(sid: string, userAgent: null | string) {
     "touch_user" AS (
       UPDATE "users"
       SET "last_seen_at" = NOW()
-      WHERE "id" = (SELECT "id" FROM "resolved")
+      WHERE ${touch}
+        AND "id" = (SELECT "id" FROM "resolved")
         AND "last_seen_at" < NOW() - INTERVAL '1 day'
     )
     SELECT "id", "email", "name", "is_admin" AS "isAdmin", "status"
@@ -224,7 +231,7 @@ export class UsersDataService {
   }
 
   public async activateUser(userId: number) {
-    return await this.drizzleConnection
+    await this.drizzleConnection
       .update(users)
       .set({
         activationToken: null,
@@ -235,32 +242,19 @@ export class UsersDataService {
       .execute();
   }
 
-  // The expiry predicate lives here rather than in a caller-side check, so
-  // an expired sid resolves to no user at all. authenticate applies the same
-  // predicate for the routes behind the auth plugin; this read-only lookup
-  // serves GET /api/session, which must not count as activity.
+  // The read-only lookup behind GET /api/session and the events stream's
+  // session recheck, which must not count as activity. The same statement as
+  // authenticate, so an expired sid or an inactive user resolves to nothing
+  // in both.
   public async getUserBySid(sid: string) {
-    return (
-      await this.drizzleConnection
-        .select({
-          email: users.email,
-          id: users.id,
-          isAdmin: users.isAdmin,
-          name: users.name,
-          status: users.status,
-        })
-        .from(users)
-        .where(and(eq(sessions.sid, sid), gt(sessions.expiresAt, sql`NOW()`)))
-        .leftJoin(sessions, eq(sessions.userId, users.id))
-        .limit(1)
-    ).at(0);
+    return await this.authenticate(sid, null, false);
   }
 
   /**
-   * The auth plugin's whole round-trip: resolves the sid the way getUserBySid
-   * does, and stamps activity in the same statement. PostgreSQL runs a
-   * data-modifying CTE even when the final SELECT never reads it, so both
-   * writes happen without a second round-trip.
+   * The auth plugin's whole round-trip: resolves the sid and stamps activity
+   * in the same statement. PostgreSQL runs a data-modifying CTE even when the
+   * final SELECT never reads it, so both writes happen without a second
+   * round-trip.
    *
    * Each write guards itself, so most requests write nothing: the session row
    * only when it is more than a minute stale or the User-Agent changed, the
@@ -268,9 +262,13 @@ export class UsersDataService {
    * known agent with the UNKNOWN sentinel. An unknown, expired or inactive
    * sid resolves to no user and writes nothing.
    */
-  public async authenticate(sid: string, userAgent: null | string) {
+  public async authenticate(
+    sid: string,
+    userAgent: null | string,
+    touch = true,
+  ) {
     const rows: unknown = await this.drizzleConnection.execute(
-      authenticateStatement(sid, userAgent),
+      authenticateStatement(sid, userAgent, touch),
     );
     if (!authenticatedRowsCheck.Check(rows)) {
       throw new Error("Database returned an invalid authenticated user row");
@@ -281,7 +279,7 @@ export class UsersDataService {
   // One row per active session of the user's, most recently active first,
   // with the requesting session flagged so the options page can label it
   // and keep the revoke buttons off it. The same expiry predicate
-  // getUserBySid enforces applies here: a session that no longer resolves
+  // authenticate enforces applies here: a session that no longer resolves
   // must not be listed as active -- the retention pass only prunes the
   // dead rows on its own schedule, not before every listing. Ordered by
   // activity rather than creation because the migration that introduced
@@ -394,17 +392,28 @@ export class UsersDataService {
    * verification and this UPDATE stays authoritative instead of being
    * overwritten by a password its holder may no longer control (#977).
    * False means the password changed underneath the caller.
+   *
+   * Every session but currentSid goes with the write, as with a reset: one
+   * opened by whoever knew the old password does not outlive it. The current
+   * one stays, so the caller who changed it is not signed out (ADR 0005).
    */
   public async updatePassword(
     userId: number,
     currentHash: string,
     passwordHash: string,
+    currentSid: string,
   ): Promise<boolean> {
-    const updated = await this.drizzleConnection
-      .update(users)
-      .set({ password: passwordHash })
-      .where(and(eq(users.id, userId), eq(users.password, currentHash)))
-      .returning({ id: users.id });
-    return updated.length > 0;
+    return await this.drizzleConnection.transaction(async (transaction) => {
+      const updated = await transaction
+        .update(users)
+        .set({ password: passwordHash })
+        .where(and(eq(users.id, userId), eq(users.password, currentHash)))
+        .returning({ id: users.id });
+      if (!updated.length) return false;
+      await transaction
+        .delete(sessions)
+        .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
+      return true;
+    });
   }
 }

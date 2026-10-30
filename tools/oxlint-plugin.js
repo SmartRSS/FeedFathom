@@ -52,46 +52,6 @@ const schemaCompileModuleScope = defineRule({
   },
 });
 
-/** A bare service type forces every test double for the route to implement the
- * whole interface. `Pick<Service, "method">` keeps the fakes small. */
-const routeDepsNarrowed = defineRule({
-  meta: {
-    docs: {
-      description:
-        "Require `*RouteDependencies` fields to narrow services structurally instead of naming a whole service type.",
-    },
-    messages: {
-      bare: '`{{field}}` takes the whole `{{service}}`. Narrow it to the methods this route uses -- `Pick<{{service}}, "someMethod">` -- so test doubles stay small.',
-    },
-    type: "suggestion",
-  },
-  createOnce(context) {
-    return {
-      TSTypeAliasDeclaration(node) {
-        if (!node.id.name.endsWith("RouteDependencies")) return;
-        if (node.typeAnnotation.type !== "TSTypeLiteral") return;
-        for (const member of node.typeAnnotation.members) {
-          if (member.type !== "TSPropertySignature") continue;
-          const annotation = member.typeAnnotation?.typeAnnotation;
-          if (annotation?.type !== "TSTypeReference") continue;
-          if (annotation.typeName.type !== "Identifier") continue;
-          const service = annotation.typeName.name;
-          if (!/(?:DataService|Service)$/u.test(service)) continue;
-          // `Pick`/`Omit` carry type arguments; a bare reference has none.
-          if (annotation.typeArguments) continue;
-          const field =
-            member.key.type === "Identifier" ? member.key.name : "field";
-          context.report({
-            data: { field, service },
-            messageId: "bare",
-            node: member,
-          });
-        }
-      },
-    };
-  },
-});
-
 /**
  * @param {unknown} options
  * @returns {string[]}
@@ -395,7 +355,6 @@ export default definePlugin({
   rules: {
     "layer-boundaries": layerBoundaries,
     "no-barrel-file": noBarrelFile,
-    "route-deps-narrowed": routeDepsNarrowed,
     "schema-compile-module-scope": schemaCompileModuleScope,
   },
 });

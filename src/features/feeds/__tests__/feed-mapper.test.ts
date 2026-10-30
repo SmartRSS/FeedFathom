@@ -6,14 +6,9 @@ import {
   previewContentBytesLimit,
   type Source,
 } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 type FeedInput = Parameters<typeof mapFeedItemToArticle>[1];
 type FeedItemInput = Parameters<typeof mapFeedItemToArticle>[0];
-
-const mockRewriteLinks = (content: string): string => {
-  return content;
-};
 
 const createMockFeed = (override: Partial<FeedInput> = {}): FeedInput => ({
   description: null,
@@ -63,12 +58,7 @@ describe("mapFeedItemToArticle", () => {
       url: "https://example.com/article",
     });
 
-    const result = mapFeedItemToArticle(
-      mockItem,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
+    const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource);
 
     expect(result).toEqual({
       author: "John Doe",
@@ -85,13 +75,9 @@ describe("mapFeedItemToArticle", () => {
 
   test("should use fallbacks for missing fields", () => {
     const mockItem = createMockFeedItem();
-    const result = mapFeedItemToArticle(
-      mockItem,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-      fixedDate.getTime(),
-    );
+    const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource, {
+      now: fixedDate.getTime(),
+    });
 
     expect(result).toEqual({
       author: "Feed Title",
@@ -110,13 +96,9 @@ describe("mapFeedItemToArticle", () => {
     const mockItem = createMockFeedItem();
     const emptyFeed = createMockFeed();
 
-    const result = mapFeedItemToArticle(
-      mockItem,
-      emptyFeed,
-      mockSource,
-      mockRewriteLinks,
-      fixedDate.getTime(),
-    );
+    const result = mapFeedItemToArticle(mockItem, emptyFeed, mockSource, {
+      now: fixedDate.getTime(),
+    });
 
     expect(result).toEqual({
       author: "https://example.com/feed.xml",
@@ -137,12 +119,7 @@ describe("mapFeedItemToArticle", () => {
       authors: [{ name: null }, { name: "Second Author" }],
     });
 
-    const result = mapFeedItemToArticle(
-      mockItem,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
+    const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource);
 
     expect(result.author).toBe("Feed Title");
   });
@@ -154,12 +131,7 @@ describe("mapFeedItemToArticle", () => {
       updated: null,
     });
 
-    const result = mapFeedItemToArticle(
-      mockItem,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
+    const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource);
 
     // updated should fall back to published
     expect(result.updatedAt).toEqual(publishedDate);
@@ -176,25 +148,14 @@ describe("mapFeedItemToArticle", () => {
     const mockItem1 = createMockFeedItem(content);
     const mockItem2 = createMockFeedItem(content);
 
-    const result1 = mapFeedItemToArticle(
-      mockItem1,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
-    const result2 = mapFeedItemToArticle(
-      mockItem2,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
+    const result1 = mapFeedItemToArticle(mockItem1, mockFeed, mockSource);
+    const result2 = mapFeedItemToArticle(mockItem2, mockFeed, mockSource);
 
     expect(result1.guid).toBe(result2.guid);
     const changed = mapFeedItemToArticle(
       createMockFeedItem({ ...content, content: "Different content" }),
       mockFeed,
       mockSource,
-      mockRewriteLinks,
     );
     expect(changed.guid).not.toBe(result1.guid);
   });
@@ -205,12 +166,7 @@ describe("mapFeedItemToArticle", () => {
       description: "fallback description",
     });
 
-    const result = mapFeedItemToArticle(
-      mockItem,
-      mockFeed,
-      mockSource,
-      mockRewriteLinks,
-    );
+    const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource);
 
     expect(result.content).toBe("fallback description");
   });
@@ -224,11 +180,7 @@ describe("mapFeedToPreview", () => {
       url: "https://example.com",
     });
 
-    const result = mapFeedToPreview(
-      mockFeed,
-      "https://example.com/feed.xml",
-      mockRewriteLinks,
-    );
+    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml");
 
     expect(result).toEqual({
       articles: [],
@@ -247,11 +199,7 @@ describe("mapFeedToPreview", () => {
       url: null,
     });
 
-    const result = mapFeedToPreview(
-      mockFeed,
-      "https://example.com/feed.xml",
-      mockRewriteLinks,
-    );
+    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml");
 
     expect(result).toEqual({
       articles: [],
@@ -280,17 +228,14 @@ describe("mapFeedToPreview", () => {
       url: "https://example.com",
     });
 
-    const result = mapFeedToPreview(
-      mockFeed,
-      "https://example.com/feed.xml",
-      (content, baseUrl) => `${content} from ${baseUrl}`,
-      publishedAt.getTime(),
-    );
+    const result = mapFeedToPreview(mockFeed, "https://example.com/feed.xml", {
+      now: publishedAt.getTime(),
+    });
 
     expect(result.articles).toEqual([
       {
         author: "Author",
-        content: "Article content from https://example.com/",
+        content: "Article content",
         enclosures: [],
         guid: expect.any(String),
         publishedAt,
@@ -347,26 +292,14 @@ describe("content link base", () => {
       feed.items[0] ?? createMockFeedItem(),
       feed,
       { id: 1, url: sourceUrl },
-      rewriteLinks,
     );
-    const preview = mapFeedToPreview(feed, sourceUrl, rewriteLinks);
+    const preview = mapFeedToPreview(feed, sourceUrl);
 
     expect(article.content).toBe(rewritten(base));
     expect(preview.articles[0]?.content).toBe(rewritten(base));
     expect(preview.articles[0]?.url).toBe(article.url);
   });
 });
-
-const countingRewrite = () => {
-  const calls: string[] = [];
-  return {
-    calls,
-    rewrite: (content: string) => {
-      calls.push(content);
-      return content;
-    },
-  };
-};
 
 const itemsWith = (count: number, content: string) =>
   Array.from({ length: count }, (_, index) =>
@@ -376,23 +309,41 @@ const itemsWith = (count: number, content: string) =>
 describe("mapFeedToPreview bounds", () => {
   const sourceUrl = "https://example.com/feed.xml";
   test("keeps only the article limit of a large feed and flags the rest", () => {
-    const { calls, rewrite } = countingRewrite();
     const feed = createMockFeed({ items: itemsWith(1_000, "<p>Body</p>") });
-    const preview = mapFeedToPreview(feed, sourceUrl, rewrite);
+    const preview = mapFeedToPreview(feed, sourceUrl);
 
     expect(preview.articles).toHaveLength(previewArticleLimit);
     expect(preview.articles[0]?.guid).toBe("item-0");
     expect(preview.truncated).toBe(true);
-    expect(calls).toHaveLength(previewArticleLimit);
     // Kept unmapped, so subscribe can import the rest without a refetch.
     expect(preview.feed).toBe(feed);
+  });
+
+  // #1031: bounding after mapping would give the same output while still
+  // rewriting every item's links on the server's event loop. Only mapping
+  // reads an item's url (the bound reads its body), so the reads count the
+  // items that were mapped.
+  test("maps only the items it keeps", () => {
+    let mapped = 0;
+    const items = itemsWith(1_000, "<p>Body</p>").map((item) =>
+      Object.defineProperty(item, "url", {
+        get: () => {
+          mapped++;
+          return null;
+        },
+      }),
+    );
+
+    mapFeedToPreview(createMockFeed({ items }), sourceUrl);
+
+    expect(mapped).toBeGreaterThan(0);
+    expect(mapped).toBeLessThanOrEqual(previewArticleLimit * 2);
   });
 
   test("leaves a small feed untouched", () => {
     const preview = mapFeedToPreview(
       createMockFeed({ items: itemsWith(3, "<p>Body</p>") }),
       sourceUrl,
-      mockRewriteLinks,
     );
 
     expect(preview.articles.map((article) => article.guid)).toEqual([
@@ -405,17 +356,14 @@ describe("mapFeedToPreview bounds", () => {
   });
 
   test("stops before the content byte limit", () => {
-    const { calls, rewrite } = countingRewrite();
     const body = "x".repeat(Math.floor(previewContentBytesLimit / 3) + 1);
     const preview = mapFeedToPreview(
       createMockFeed({ items: itemsWith(10, body) }),
       sourceUrl,
-      rewrite,
     );
 
     expect(preview.articles).toHaveLength(2);
     expect(preview.truncated).toBe(true);
-    expect(calls).toHaveLength(2);
   });
 
   test("counts multi-byte content by its UTF-8 size", () => {
@@ -425,7 +373,6 @@ describe("mapFeedToPreview bounds", () => {
     const preview = mapFeedToPreview(
       createMockFeed({ items: itemsWith(3, body) }),
       sourceUrl,
-      mockRewriteLinks,
     );
 
     expect(preview.articles).toHaveLength(1);
@@ -438,7 +385,6 @@ describe("mapFeedToPreview bounds", () => {
         items: itemsWith(2, "x".repeat(previewContentBytesLimit + 1)),
       }),
       sourceUrl,
-      mockRewriteLinks,
     );
 
     expect(preview.articles).toHaveLength(1);

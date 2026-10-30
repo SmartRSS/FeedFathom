@@ -1,13 +1,17 @@
 import { Elysia } from "elysia";
-import { usersDataService } from "#features/auth/services.ts";
+import type * as auth from "#features/auth/services.ts";
+
+type SessionServices = Pick<typeof auth, "usersDataService">;
 
 // The read-only lookup for GET /api/session, which answers "who is this?"
 // without counting as activity. Routes behind the plugin go through
 // authenticate instead, which resolves and stamps in one statement.
-export async function userFor(sid: unknown) {
+export async function userFor(
+  sid: unknown,
+  { usersDataService }: SessionServices,
+) {
   if (typeof sid !== "string" || !sid) return null;
-  const user = await usersDataService.getUserBySid(sid);
-  return user?.status === "active" ? user : null;
+  return (await usersDataService.getUserBySid(sid)) ?? null;
 }
 
 // The shape route handlers see as `user` once createAuthPlugin has run --
@@ -19,25 +23,29 @@ export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
  * single parent composes it via `.use()` (e.g. reader.ts), but doesn't leak
  * further up into unrelated sibling route groups composed in server-app.ts.
  */
-function sessionPlugin(requireAdmin: boolean) {
+function sessionPlugin(
+  requireAdmin: boolean,
+  { usersDataService }: SessionServices,
+) {
   return new Elysia().derive("plugin", async ({ cookie, request, status }) => {
     const sid = cookie["sid"]?.value;
-    const user =
-      typeof sid === "string" && sid
-        ? await usersDataService.authenticate(
-            sid,
-            request.headers.get("user-agent"),
-          )
-        : undefined;
+    if (typeof sid !== "string" || !sid)
+      return status(401, { error: "Unauthorized" });
+    const user = await usersDataService.authenticate(
+      sid,
+      request.headers.get("user-agent"),
+    );
     if (!user) return status(401, { error: "Unauthorized" });
     if (requireAdmin && !user.isAdmin)
       return status(403, { error: "Unauthorized" });
-    return { user };
+    // The sid rides along so a route that names the current session (the
+    // sessions list, the events stream's recheck) does not re-read the cookie.
+    return { sid, user };
   });
 }
 
-export function createAuthPlugin() {
-  return sessionPlugin(false);
+export function createAuthPlugin(services: SessionServices) {
+  return sessionPlugin(false, services);
 }
 
 /**
@@ -47,6 +55,6 @@ export function createAuthPlugin() {
  * plugin-scoped derive reaches routes, not later hooks on the same instance,
  * so a separate admin derive would find no `user` to look at.
  */
-export function createAdminPlugin() {
-  return sessionPlugin(true);
+export function createAdminPlugin(services: SessionServices) {
+  return sessionPlugin(true, services);
 }

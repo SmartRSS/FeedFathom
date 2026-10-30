@@ -110,7 +110,7 @@ Any reverse proxy works. The requirements are TLS termination, forwarding to the
 
 NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. That does not break the application, but a subscription's stored home link falls back to the upstream address instead of the public host name.
 
-Failed logins, password resets and activation mail are throttled per client address, and behind a proxy every request arrives from the proxy. Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
+Failed logins, password resets and registrations are throttled per client address, and behind a proxy every request arrives from the proxy. (Password changes are throttled per signed-in user instead, so the header does not matter for them.) Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
 
 ```bash
 TRUSTED_PROXY_HEADER=X-Forwarded-For
@@ -330,11 +330,12 @@ build target:
 bun run quality
 ```
 
-The PostgreSQL integration tests (`*-integration.test.ts`) are a separate destructive check and require a clearly disposable database URL whose database name contains `test`, `migration_test`, or `disposable`:
+The PostgreSQL and Redis integration tests (`*-integration.test.ts`) are a separate destructive check and require a clearly disposable database URL whose database name contains `test`, `migration_test`, or `disposable`:
 
 ```bash
 MIGRATION_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/feedfathom_migration_test \
-  bun run test:migrations
+REDIS_TEST_URL=redis://127.0.0.1:6379/15 \
+  bun run test:integration
 ```
 
 CI supplies one ephemeral PostgreSQL database as both `DATABASE_URL` and `MIGRATION_TEST_DATABASE_URL`, runs normal quality first, and then runs this migration check.

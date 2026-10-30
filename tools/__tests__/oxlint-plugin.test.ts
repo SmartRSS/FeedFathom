@@ -26,7 +26,6 @@ const config = {
       "error",
       { allow: ["src/platform/db/schema.ts"] },
     ],
-    "feedfathom/route-deps-narrowed": "error",
     "feedfathom/schema-compile-module-scope": "error",
   },
 } as const;
@@ -117,33 +116,6 @@ test("schema-compile-module-scope allows module scope", async () => {
   ).toEqual([]);
   expect(
     await lint("e.ts", "function f() { return Other.Compile(s); }"),
-  ).toEqual([]);
-}, 20_000);
-
-test("route-deps-narrowed flags a whole service type", async () => {
-  expect(
-    await lint(
-      "f.ts",
-      "export type TreeRouteDependencies = { usersDataService: UsersDataService };",
-    ),
-  ).toHaveLength(1);
-}, 20_000);
-
-test("route-deps-narrowed allows narrowed and non-service fields", async () => {
-  expect(
-    await lint(
-      "g.ts",
-      'export type TreeRouteDependencies = { usersDataService: Pick<UsersDataService, "getUserBySid"> };',
-    ),
-  ).toEqual([]);
-  expect(
-    await lint(
-      "h.ts",
-      "export type TreeRouteDependencies = { httpClient: { get(url: string): Promise<string> } };",
-    ),
-  ).toEqual([]);
-  expect(
-    await lint("i.ts", "export type Other = { svc: UsersDataService };"),
   ).toEqual([]);
 }, 20_000);
 

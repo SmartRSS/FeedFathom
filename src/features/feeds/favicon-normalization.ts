@@ -6,6 +6,7 @@
 import {
   imageDimensions,
   isBetterFavicon,
+  isIco,
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 
@@ -48,14 +49,6 @@ export async function normalizeFavicon(
     // A favicon must never be lost to a failed normalization.
     return original;
   }
-}
-
-function isIco(buffer: Buffer): boolean {
-  return (
-    buffer.length >= 22 &&
-    buffer.readUInt16LE(0) === 0 &&
-    buffer.readUInt16LE(2) === 1
-  );
 }
 
 // Picks one frame of an ICO with the size rule (exactly 64, else the smallest

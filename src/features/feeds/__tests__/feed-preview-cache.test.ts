@@ -39,9 +39,11 @@ const preview: FeedPreview = {
     {
       author: "Author",
       content: "Content",
+      enclosures: [],
       guid: "article-guid",
       publishedAt,
       title: "Article",
+      updatedAt: null,
       url: "https://example.com/article",
     },
   ],
@@ -77,100 +79,75 @@ describe("FeedPreviewCache", () => {
     ).toBeInstanceOf(Date);
   });
 
-  test("keeps the truncated flag of a bounded preview", async () => {
-    const cache = new FeedPreviewCache(new FakeRedis());
+  test("revives a preview cached before enclosures and updatedAt", async () => {
+    const redis = new FakeRedis();
+    const cache = new FeedPreviewCache(redis);
+    await cache.save(7, feedUrl, preview);
+    const key = redis.setCalls[0]?.[0];
+    if (!key) throw new Error("Preview was not cached");
+    const {
+      enclosures: _enclosures,
+      updatedAt: _updatedAt,
+      ...legacy
+    } = previewWire.articles[0]!;
+    redis.values.set(
+      key,
+      JSON.stringify({ ...previewWire, articles: [legacy] }),
+    );
 
-    await cache.save(7, feedUrl, { ...preview, truncated: true });
-
-    expect((await cache.get(7, feedUrl))?.truncated).toBe(true);
+    expect((await cache.get(7, feedUrl))?.articles).toEqual([
+      { ...preview.articles[0]!, enclosures: [], updatedAt: publishedAt },
+    ]);
   });
 
-  test("keeps the full parsed feed behind a truncated preview", async () => {
+  // Subscribe imports a truncated preview from this entry alone, without a
+  // refetch, so everything it reads must survive: the final URL links resolve
+  // against, the flag, and the full parsed feed -- authors, CAP fields it
+  // renders and filters by, and item languages that tell shared ids apart.
+  test("a truncated preview round-trips everything subscribe imports", async () => {
     const cache = new FeedPreviewCache(new FakeRedis());
+    const item = {
+      authors: [{ name: "Author" }, { name: null }],
+      content: "<p>Body</p>",
+      description: null,
+      id: "item-1",
+      published: publishedAt,
+      title: "Article",
+      updated: null,
+      url: "https://example.com/article",
+    };
+    const cap = {
+      areaDesc: "Central coastal zone",
+      certainty: "Likely",
+      event: "Yellow Wind warning",
+      expires: "2026-10-06T09:00:00+00:00",
+      msgType: "Alert",
+      onset: "2026-10-05T23:00:00+00:00",
+      severity: "Moderate",
+      status: "Actual",
+      urgency: "Expected",
+    };
     const feed = {
       description: null,
       items: [
-        {
-          authors: [{ name: "Author" }, { name: null }],
-          content: "<p>Body</p>",
-          description: null,
-          id: "item-1",
-          published: publishedAt,
-          title: "Article",
-          updated: null,
-          url: "https://example.com/article",
-        },
+        item,
+        { ...item, authors: [], cap, id: "alert", url: null },
+        { ...item, id: "shared", language: "en-CA" },
+        { ...item, id: "shared", language: "fr-CA" },
       ],
       title: "Feed",
       url: "https://example.com",
     };
-
-    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
-
-    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
-  });
-
-  test("keeps CAP alert fields so subscribe still renders and filters them", async () => {
-    const cache = new FeedPreviewCache(new FakeRedis());
-    const feed = {
-      description: null,
-      items: [
-        {
-          authors: [],
-          cap: {
-            areaDesc: "Central coastal zone",
-            certainty: "Likely",
-            event: "Yellow Wind warning",
-            expires: "2026-10-06T09:00:00+00:00",
-            msgType: "Alert",
-            onset: "2026-10-05T23:00:00+00:00",
-            severity: "Moderate",
-            status: "Actual",
-            urgency: "Expected",
-          },
-          content: null,
-          description: null,
-          id: "item-1",
-          published: publishedAt,
-          title: "Alert",
-          updated: null,
-          url: null,
-        },
-      ],
-      title: "Feed",
-      url: null,
+    const saved = {
+      ...preview,
+      feed,
+      finalUrl: "https://cdn.example/feed.xml",
+      truncated: true,
     };
 
-    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
+    await cache.save(7, feedUrl, saved);
 
-    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
-  });
-
-  test("keeps item languages so subscribe tells shared ids apart", async () => {
-    const cache = new FeedPreviewCache(new FakeRedis());
-    const item = {
-      authors: [],
-      content: null,
-      description: null,
-      id: "alert",
-      published: publishedAt,
-      title: "Alert",
-      updated: null,
-      url: null,
-    };
-    const feed = {
-      description: null,
-      items: [
-        { ...item, language: "en-CA" },
-        { ...item, language: "fr-CA" },
-      ],
-      title: "Feed",
-      url: null,
-    };
-
-    await cache.save(7, feedUrl, { ...preview, feed, truncated: true });
-
-    expect((await cache.get(7, feedUrl))?.feed).toEqual(feed);
+    expect(await cache.get(7, feedUrl)).toEqual(saved);
   });
 
   test("isolates previews by user and exact URL", async () => {

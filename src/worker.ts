@@ -1,76 +1,41 @@
-import { close, drizzleConnection } from "#platform/runtime.ts";
-import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
+import { Worker } from "bullmq";
+import { config } from "#platform/config.ts";
+import {
+  bullmqQueue,
+  bullmqRedis,
+  close,
+  drizzleConnection,
+  httpClient,
+} from "#platform/runtime.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import {
+  feedParser,
+  sourceEnqueuer,
+  sourcesDataService,
+  userSourcesDataService,
+  websubStateService,
+} from "#features/feeds/services.ts";
+import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { faviconRefresher } from "#features/jobs/services.ts";
 import { MainWorker } from "#features/jobs/main.ts";
+import { runWorker } from "./worker-app.ts";
 
-async function runWorker() {
-  const mainWorker = new MainWorker();
-  let shutdownPromise: Promise<void> | undefined;
-  const shutdown = () => {
-    shutdownPromise ??= (async () => {
-      try {
-        await mainWorker.cleanup();
-        await close();
-        console.log("Worker closed gracefully");
-        process.exit(0);
-      } catch (error) {
-        console.error("Failed to close worker gracefully:", error);
-        process.exit(1);
-      }
-    })();
-    return shutdownPromise;
-  };
-
-  process.on("SIGTERM", () => {
-    void shutdown();
-  });
-  process.on("SIGINT", () => {
-    void shutdown();
-  });
-
-  let consuming = false;
-
-  // The port opens before startup finishes so a probe gets a definitive
-  // answer rather than a refused connection -- but the answer is 503 until
-  // the BullMQ worker is consuming jobs. That needs the schema this build was
-  // compiled against and a reachable Redis. Reporting "ok" any earlier let
-  // `up --wait` and Swarm's start-first rollout stop the old workers in
-  // favour of new ones still blocked on startup, and feed polling stopped
-  // with every check green.
-  //
-  // The healthcheck's start_period is what keeps that not-ready window from
-  // reading as a crash loop, so it has to cover a normal migration; see the
-  // budget and its consequences in compose.yml. A migration too slow for
-  // that budget is rolled out by hand.
-  Bun.serve({
-    async fetch(request, server) {
-      const url = new URL(request.url);
-      const ip = server.requestIP(request)?.address ?? "";
-
-      if (!isLoopbackAddress(ip)) {
-        return Response.json({ error: "Unauthorized" }, { status: 403 });
-      }
-
-      if (url.pathname === "/healthcheck") {
-        return consuming
-          ? Response.json({ status: "ok" })
-          : Response.json({ status: "starting" }, { status: 503 });
-      }
-
-      return new Response("Not Found", { status: 404 });
-    },
-    port: 3000,
-  });
-
-  await waitForMigration(drizzleConnection.$client);
-
-  try {
-    await mainWorker.initialize();
-  } catch (error) {
-    console.error("Failed to initialize worker:", error);
-    throw new Error("Worker initialization failed", { cause: error });
-  }
-  consuming = true;
-}
-
-await runWorker();
+await runWorker({
+  close,
+  mainWorker: new MainWorker({
+    bullmqQueue,
+    cleanupOrphanedData: (...days) =>
+      cleanupOrphanedData(drizzleConnection, ...days),
+    config,
+    createWorker: (processor, options) =>
+      new Worker("tasks", processor, { ...options, connection: bullmqRedis }),
+    faviconRefresher,
+    feedParser,
+    hubPoster: httpClient,
+    sourceEnqueuer,
+    sourcesDataService,
+    userSourcesDataService,
+    websubStateService,
+  }),
+  waitForMigration: () => waitForMigration(drizzleConnection.$client),
+});

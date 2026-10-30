@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
+import { users } from "#platform/db/schemas/users.ts";
+import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
@@ -26,7 +28,7 @@ test("successSource clamps notBefore to the 5-minute floor even for a shorter ca
     "https://source-scheduling.test/short-cache",
   );
   const before = Date.now();
-  await sourcesDataService.successSource(source.id, false, new Date());
+  await sourcesDataService.successSource(source.id, { notBefore: new Date() });
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBeGreaterThanOrEqual(
@@ -39,7 +41,7 @@ test("successSource honors a cache lifetime longer than the floor", async () => 
     "https://source-scheduling.test/long-cache",
   );
   const notBefore = new Date(Date.now() + 60 * 60_000);
-  await sourcesDataService.successSource(source.id, false, notBefore);
+  await sourcesDataService.successSource(source.id, { notBefore });
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBe(notBefore.getTime());
@@ -70,14 +72,99 @@ test("getSourcesToProcess only returns feed sources whose notBefore has passed",
   const notYetDue = await addFeedSource(
     "https://source-scheduling.test/not-due",
   );
-  await sourcesDataService.successSource(
-    notYetDue.id,
-    false,
-    new Date(Date.now() + 60 * 60_000),
-  );
+  await sourcesDataService.successSource(notYetDue.id, {
+    notBefore: new Date(Date.now() + 60 * 60_000),
+  });
 
   const result = await sourcesDataService.getSourcesToProcess();
   const ids = result.map((row) => row.id);
   expect(ids).toContain(due.id);
   expect(ids).not.toContain(notYetDue.id);
+});
+
+// The subscriber count once compared user_sources.source_id with
+// user_sources.id, because drizzle left the outer sources.id unqualified.
+test("findSourceById and listAllSources count a source's subscribers", async () => {
+  const source = await addFeedSource(
+    `https://source-scheduling.test/${Bun.randomUUIDv7()}`,
+  );
+  const subscribers = await drizzleConnection
+    .insert(users)
+    .values(
+      ["a", "b"].map((name) => ({
+        email: `${name}-${Bun.randomUUIDv7()}@source-scheduling.test`,
+        name,
+        password: "x",
+      })),
+    )
+    .returning({ id: users.id });
+  await drizzleConnection.insert(userSources).values(
+    subscribers.map(({ id }) => ({
+      name: "sub",
+      parentId: null,
+      sourceId: source.id,
+      userId: id,
+    })),
+  );
+
+  expect(
+    (await sourcesDataService.findSourceById(source.id))?.subscriberCount,
+  ).toBe(2);
+  const listed = await sourcesDataService.listAllSources(
+    "subscriberCount",
+    "desc",
+  );
+  expect(listed.find(({ id }) => id === source.id)?.subscriberCount).toBe(2);
+});
+
+test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily run", async () => {
+  const hoursAgo = await addFeedSource("https://source-scheduling.test/hours");
+  await sourcesDataService.successSource(hoursAgo.id, {
+    observedAt: new Date(Date.now() - 6 * 60 * 60_000),
+  });
+  const daysAgo = await addFeedSource("https://source-scheduling.test/days");
+  await sourcesDataService.successSource(daysAgo.id, {
+    observedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000),
+  });
+  const neverFetched = await addFeedSource(
+    "https://source-scheduling.test/never",
+  );
+  const email = await sourcesDataService.addSource({
+    homeUrl: "https://source-scheduling.test",
+    kind: "email",
+    url: "newsletter@source-scheduling.test",
+  });
+  await sourcesDataService.successSource(email.id);
+
+  const dueIds = new Set(
+    (await sourcesDataService.getSourcesDueFaviconRefresh()).map(
+      (source) => source.id,
+    ),
+  );
+  expect(dueIds.has(hoursAgo.id)).toBe(true);
+  expect(dueIds.has(daysAgo.id)).toBe(false);
+  expect(dueIds.has(neverFetched.id)).toBe(false);
+  expect(dueIds.has(email.id)).toBe(false);
+});
+
+test("getSourcesDueFaviconRefresh lists sources without an icon first", async () => {
+  const withIcon = await addFeedSource("https://source-scheduling.test/icon");
+  await sourcesDataService.successSource(withIcon.id);
+  await sourcesDataService.updateFavicon(
+    withIcon.id,
+    Buffer.from("icon"),
+    "image/png",
+  );
+  const withoutIcon = await addFeedSource(
+    "https://source-scheduling.test/no-icon",
+  );
+  await sourcesDataService.successSource(withoutIcon.id);
+
+  const due = (await sourcesDataService.getSourcesDueFaviconRefresh()).filter(
+    ({ id }) => id === withIcon.id || id === withoutIcon.id,
+  );
+  expect(due).toEqual([
+    { hasFavicon: false, homeUrl: withoutIcon.homeUrl, id: withoutIcon.id },
+    { hasFavicon: true, homeUrl: withIcon.homeUrl, id: withIcon.id },
+  ]);
 });

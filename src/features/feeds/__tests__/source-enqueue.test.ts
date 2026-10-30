@@ -14,15 +14,11 @@ import {
 const fakeRedis = (initial: Record<string, string> = {}) => {
   const store = new Map(Object.entries(initial));
   const sets: [string, string, string | undefined][] = [];
-  const dels: string[] = [];
-  const evaluations: unknown[][] = [];
   const redis: SourceParseRedis = {
-    async eval(...args) {
-      evaluations.push(args);
+    async eval() {
       return 1;
     },
     async getdel(key) {
-      dels.push(key);
       const value = store.get(key) ?? null;
       store.delete(key);
       return value;
@@ -34,7 +30,7 @@ const fakeRedis = (initial: Record<string, string> = {}) => {
       return "OK";
     },
   };
-  return { dels, evaluations, redis, sets };
+  return { redis, sets };
 };
 
 const holderFor = (state: string): SourceParseJobHandle => ({
@@ -88,57 +84,29 @@ describe("SourceEnqueuer", () => {
     expect(sets).toEqual([]);
   });
 
-  test("records a request that lands on a running job instead of adding", async () => {
-    const { queue, adds } = fakeQueue(holderFor("active"));
-    const { redis, sets } = fakeRedis();
-    const enqueuer = new SourceEnqueuer(queue, redis);
+  // A request landing on a running job is answered by one follow-up once the
+  // job finishes; a cache bypass wins over a plain refresh in either order.
+  // Merging into a waiting or delayed job runs against real Redis in
+  // source-enqueue-integration.test.ts.
+  test.each([
+    [[false], { skipCache: false }],
+    [[false, true], { skipCache: true }],
+    [[true, false], { skipCache: true }],
+  ])(
+    "requests %p on a running job leave the follow-up %p",
+    async (skipCaches, followUp) => {
+      const { queue, adds } = fakeQueue(holderFor("active"));
+      const enqueuer = new SourceEnqueuer(queue, fakeRedis().redis);
 
-    await enqueuer.enqueueSource(source, "websub-push", false);
-
-    expect(adds).toEqual([]);
-    expect(sets).toEqual([[pendingKey, "0", "NX"]]);
-  });
-
-  test("a cache bypass dominates whatever is already pending", async () => {
-    const { queue } = fakeQueue(holderFor("active"));
-    const { redis, sets } = fakeRedis({ [pendingKey]: "0" });
-    const enqueuer = new SourceEnqueuer(queue, redis);
-
-    await enqueuer.enqueueSource(source);
-
-    expect(sets).toEqual([[pendingKey, "1", undefined]]);
-  });
-
-  for (const state of ["waiting", "delayed"]) {
-    test(`merges a ${state} refresh atomically without adding another job`, async () => {
-      const { queue, adds } = fakeQueue(holderFor(state));
-      const { redis, dels, evaluations } = fakeRedis();
-      const enqueuer = new SourceEnqueuer(queue, redis);
-
-      await enqueuer.enqueueSource(source);
+      for (const skipCache of skipCaches) {
+        // eslint-disable-next-line no-await-in-loop -- Arrival order is the case.
+        await enqueuer.enqueueSource(source, "websub-push", skipCache);
+      }
 
       expect(adds).toEqual([]);
-      expect(dels).toEqual([]);
-      expect(evaluations).toEqual([
-        [
-          expect.any(String),
-          5,
-          `bull:tasks:${jobId}`,
-          pendingKey,
-          "bull:tasks:wait",
-          "bull:tasks:paused",
-          "bull:tasks:delayed",
-          jobId,
-          JSON.stringify({
-            id: 3,
-            skipCache: true,
-            trigger: "manual",
-            url: source.url,
-          }),
-        ],
-      ]);
-    });
-  }
+      expect(await enqueuer.takePendingRefresh(source.id)).toEqual(followUp);
+    },
+  );
 
   test("adds a refresh if the queued job disappeared before merging", async () => {
     const { queue, adds } = fakeQueue(holderFor("waiting"));

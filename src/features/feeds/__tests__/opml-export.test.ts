@@ -1,9 +1,7 @@
 import { expect, test } from "bun:test";
 import type { OpmlNode } from "#shared/types/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
-import { OpmlParser } from "#features/feeds/opml-parser.ts";
-
-const parser = new OpmlParser();
+import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 // An export is only worth anything if it goes back in, here or anywhere else,
 // so the parser this repo already has is the oracle.
@@ -30,7 +28,7 @@ test("a tree survives the round trip through OPML", () => {
     },
   ];
 
-  expect(parser.parseOpml(buildOpml("Subscriptions", tree))).toEqual(tree);
+  expect(parseOpml(buildOpml("Subscriptions", tree))).toEqual(tree);
 });
 
 // An ampersand or an angle bracket in a title is the ordinary case, not the
@@ -48,7 +46,7 @@ test("escapes markup in titles rather than emitting it", () => {
 
   expect(opml).toContain("&lt;script&gt;");
   expect(opml).not.toContain("<script>");
-  expect(parser.parseOpml(opml)).toHaveLength(1);
+  expect(parseOpml(opml)).toHaveLength(1);
 });
 
 // Bun.XML.stringify throws on these rather than escaping them, so an export
@@ -63,7 +61,7 @@ test("drops a lone surrogate without dropping a real astral character", () => {
     },
   ]);
 
-  expect(parser.parseOpml(opml)).toEqual([
+  expect(parseOpml(opml)).toEqual([
     {
       homeUrl: "https://x.test",
       name: "Half pair, whole 😀",
@@ -86,7 +84,7 @@ test("drops control characters a title picked up from a feed", () => {
     },
   ]);
 
-  expect(parser.parseOpml(opml)).toEqual([
+  expect(parseOpml(opml)).toEqual([
     {
       homeUrl: "https://x.test",
       name: "Bell and null",

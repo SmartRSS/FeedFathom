@@ -395,24 +395,39 @@ export class ArticlesDataService {
   }
 
   /**
-   * Marks articles read or unread for one user.
-   *
-   * Shares `removeUserArticles`'s authorization: article ids are a guessable
-   * serial primary key, so the caller's list is filtered down to articles
-   * whose source this user is actually subscribed to before anything is
-   * written. `deleted_at` is left alone -- read and removed are different
-   * states, and a removal outranks either of them.
+   * Marks articles read or unread for one user. `deleted_at` is left alone --
+   * read and removed are different states, and a removal outranks either.
    */
   public async setUserArticlesRead(
     articleIdList: number[],
     userId: number,
     read: boolean,
   ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
+    return await this.markUserArticles(articleIdList, userId, {
+      readAt: read ? new Date() : null,
+    });
+  }
+
+  public async removeUserArticles(
+    articleIdList: number[],
+    userId: number,
+  ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
+    return await this.markUserArticles(articleIdList, userId, {
+      deletedAt: new Date(),
+    });
+  }
+
+  // Writes one user_articles column for the articles this user may see:
+  // article ids are a guessable serial primary key, so the caller's list is
+  // filtered down to articles whose source the user is subscribed to first.
+  private async markUserArticles(
+    articleIdList: number[],
+    userId: number,
+    mark: { deletedAt: Date } | { readAt: Date | null },
+  ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
     if (articleIdList.length === 0) {
       return { articleIds: [], sourceIds: [] };
     }
-
-    const readAt = read ? new Date() : null;
 
     return await this.drizzleConnection.transaction(async (trx) => {
       const authorizedArticles = await trx
@@ -432,15 +447,15 @@ export class ArticlesDataService {
       await trx
         .insert(userArticles)
         .values(
-          authorizedArticles.map((row) => ({
-            guid: row.guid,
-            readAt,
-            sourceId: row.sourceId,
-            userId,
-          })),
+          authorizedArticles.map((row) =>
+            Object.assign(
+              { guid: row.guid, sourceId: row.sourceId, userId },
+              mark,
+            ),
+          ),
         )
         .onConflictDoUpdate({
-          set: { readAt },
+          set: mark,
           target: [
             userArticles.userId,
             userArticles.sourceId,
@@ -452,63 +467,6 @@ export class ArticlesDataService {
         articleIds: authorizedArticles.map((row) => row.id),
         sourceIds: [...new Set(authorizedArticles.map((row) => row.sourceId))],
       };
-    });
-  }
-
-  public async removeUserArticles(
-    articleIdList: number[],
-    userId: number,
-  ): Promise<{ articleIds: number[]; sourceIds: number[] }> {
-    if (articleIdList.length === 0) {
-      return { articleIds: [], sourceIds: [] };
-    }
-
-    const now = new Date();
-
-    return await this.drizzleConnection.transaction(async (trx) => {
-      // Only allow soft-deleting articles whose source the user is actually
-      // subscribed to; article IDs are a guessable serial PK so we can't
-      // trust the caller-supplied list as-is.
-      const authorizedArticles = await trx
-        .selectDistinct({
-          guid: articles.guid,
-          id: articles.id,
-          sourceId: articles.sourceId,
-        })
-        .from(articles)
-        .innerJoin(userSources, userArticleAccessJoin(userId))
-        .where(inArray(articles.id, articleIdList));
-
-      if (authorizedArticles.length === 0) {
-        return { articleIds: [], sourceIds: [] };
-      }
-
-      const articleIds = authorizedArticles.map((row) => row.id);
-      const values = authorizedArticles.map((row) => {
-        return {
-          deletedAt: now,
-          guid: row.guid,
-          sourceId: row.sourceId,
-          userId,
-        };
-      });
-
-      await trx
-        .insert(userArticles)
-        .values(values)
-        .onConflictDoUpdate({
-          set: { deletedAt: now },
-          target: [
-            userArticles.userId,
-            userArticles.sourceId,
-            userArticles.guid,
-          ],
-        });
-
-      const sourceIds = [
-        ...new Set(authorizedArticles.map((row) => row.sourceId)),
-      ];
-      return { articleIds, sourceIds };
     });
   }
 }

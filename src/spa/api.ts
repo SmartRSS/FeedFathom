@@ -28,6 +28,11 @@ export class ApiError extends Error {
 export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
+// An Error carries its own message for the user; anything else thrown does
+// not, so the caller names what failed.
+export const messageOf = (cause: unknown, fallback: string) =>
+  cause instanceof Error ? cause.message : fallback;
+
 const invalidResponse = (
   path: string,
   message: string,
@@ -110,6 +115,10 @@ export async function api<T extends TSchema>(
     throw invalidResponse(path, "malformed error payload", response.status);
   }
 
+  // A deploy that adds a response field reaches pages still running the
+  // previous bundle -- the worker serves its cached shell first -- so fields
+  // this bundle does not know are dropped rather than rejected.
+  Value.Clean(schema, payload);
   if (!Value.Check(schema, payload)) {
     const issue = Value.Errors(schema, payload)[0];
     throw invalidResponse(

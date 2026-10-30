@@ -1,52 +1,73 @@
-import {
-  articlesDataService,
-  feedParser,
-  feedPreviewCache,
-  sourceEnqueuer,
-  sourcesDataService,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
-import { config } from "#platform/config.ts";
+import type * as feeds from "#features/feeds/services.ts";
+import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { outboundFetchBudget } from "#features/auth/services.ts";
 import { json } from "#platform/http/json.ts";
 import {
   deserializeFeedPreview,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
 import {
+  isMintedNewsletterAddress,
+  newsletterMailDomain,
+} from "#shared/util/newsletter-address.ts";
+import {
   type FeedPreview,
   mapFeedToPreviewArticles,
 } from "#features/feeds/feed-mapper.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
 // is mapped in full here, once, so subscribe imports every article without a
 // refetch. Without that feed, the caller queues the source for the worker.
+// finalUrl is dropped too: only mapping needs it, and a replica still on the
+// previous release rejects a stored snapshot that carries it.
 function completePreview({
   feed,
+  finalUrl,
   ...preview
 }: FeedPreview): FeedPreview | undefined {
   if (!preview.truncated) return preview;
   if (!feed) return undefined;
   return {
     ...preview,
-    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, rewriteLinks),
+    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, {
+      baseUrl: finalUrl,
+    }),
     truncated: false,
   };
 }
 
-export async function postSubscribeHandler({
-  body,
-  request,
-  user,
-}: {
-  body: StaticDecode<typeof subscribeRequest>;
-  request: Request;
-  user: AuthedUser;
-}) {
+export async function postSubscribeHandler(
+  {
+    body,
+    request,
+    user,
+  }: {
+    body: StaticDecode<typeof subscribeRequest>;
+    request: Request;
+    user: AuthedUser;
+  },
+  {
+    articleImporter,
+    config,
+    feedParser,
+    feedPreviewCache,
+    outboundFetchBudget,
+    sourceEnqueuer,
+    sourcesDataService,
+    userSourcesDataService,
+  }: Pick<
+    typeof feeds,
+    | "articleImporter"
+    | "feedParser"
+    | "feedPreviewCache"
+    | "outboundFetchBudget"
+    | "sourceEnqueuer"
+    | "sourcesDataService"
+    | "userSourcesDataService"
+  > & { config: AppConfig },
+) {
   // Counted before any outbound work, including a cache hit: the budget is
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
@@ -65,24 +86,35 @@ export async function postSubscribeHandler({
     initializationSnapshot: importablePreview
       ? serializeFeedPreview(importablePreview)
       : null,
-    kind: isEmail ? "email" : "feed",
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
+    ...(isEmail
+      ? {
+          kind: "email",
+          minted: isMintedNewsletterAddress(
+            sourceUrl.value,
+            newsletterMailDomain(config) ?? "",
+          ),
+        }
+      : { kind: "feed" }),
   });
   if (!subscription) return json({ error: "Invalid folder" }, 400);
+  // Another account's newsletter address, or one this instance does not
+  // mint. Answered exactly as a malformed target is (the validation error
+  // server-app.ts maps), so a refusal says nothing about whether the address
+  // exists or whose it is.
+  if (subscription === "refused") return json({ error: "Refine Error" }, 422);
   if (subscription.initialized === true)
     return json({ sourceId: subscription.source.id });
 
   const preview =
     subscription.initializationSnapshot === null
       ? undefined
-      : subscription.initializationSnapshot === undefined
-        ? importablePreview
-        : deserializeFeedPreview(
-            subscription.initializationSnapshot,
-            sourceUrl.value,
-          );
+      : deserializeFeedPreview(
+          subscription.initializationSnapshot,
+          sourceUrl.value,
+        );
   if (subscription.initializationSnapshot && !preview) {
     throw new Error("Stored subscription snapshot is invalid");
   }
@@ -91,8 +123,10 @@ export async function postSubscribeHandler({
   // and its hub POST can take up to the request deadline.
   // discoverAndSubscribeWebSub catches its own errors, so nothing here
   // needs to observe how it settles. If the process exits before it
-  // finishes, the next parseSource poll re-discovers the hub, and
-  // claimWebSubSubscribeAttempt keeps that retry from double-subscribing.
+  // finishes, a later parseSource poll re-discovers the hub: the next one
+  // if the claim was never taken, otherwise once the pending source's daily
+  // retry comes due. claimWebSubSubscribeAttempt keeps that retry from
+  // double-subscribing.
   if (!isEmail) {
     void feedParser.discoverAndSubscribeWebSub(
       subscription.source.id,
@@ -117,56 +151,32 @@ export async function postSubscribeHandler({
           // discovery) -- inserting those already-parsed articles is a
           // plain DB upsert, no network fetch, so doing it inline keeps
           // subscribe fast without the async round-trip through the
-          // worker. Falls back to enqueueing if anything here fails.
+          // worker. Falls back to enqueueing if anything here fails,
+          // including an import that committed only some batches.
           try {
-            // batchUpsertArticles processes batches sequentially and a
-            // later batch can fail after earlier ones already
-            // committed -- recompute regardless of that outcome so
-            // committed articles aren't left counted as unread-stale,
-            // then let the original failure fall through to the
-            // enqueue fallback below.
-            let upsertError: unknown;
             // A retry imports from the stored snapshot, which can hold an
             // alert that has expired since.
             const now = Date.now();
-            try {
-              await articlesDataService.batchUpsertArticles(
-                preview.articles
-                  .filter(
-                    (article) =>
-                      article.expiresAt === undefined ||
-                      article.expiresAt > now,
-                  )
-                  .map((article) => ({
-                    author: article.author,
-                    content: article.content,
-                    enclosures: article.enclosures ?? [],
-                    guid: article.guid,
+            await articleImporter.importArticles(
+              subscription.source.id,
+              preview.articles
+                .filter(
+                  (article) =>
+                    article.expiresAt === undefined || article.expiresAt > now,
+                )
+                .map(({ expiresAt: _expiresAt, ...article }) =>
+                  Object.assign(article, {
                     lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                    publishedAt: article.publishedAt,
-                    sourceId: subscription.source.id,
-                    title: article.title,
-                    updatedAt:
-                      article.updatedAt === undefined
-                        ? article.publishedAt
-                        : article.updatedAt,
-                    url: article.url,
-                  })),
-              );
-            } catch (error) {
-              upsertError = error;
-            }
-            await userSourcesDataService.recomputeUnreadCounts([
-              subscription.source.id,
-            ]);
-            if (upsertError !== undefined) {
-              throw upsertError;
-            }
-            await sourcesDataService.successSource(
-              subscription.source.id,
-              true,
-              new Date(preview.freshUntil ?? Date.now() + 5 * 60_000),
+                  }),
+                ),
+              { alwaysRecount: true },
             );
+            await sourcesDataService.successSource(subscription.source.id, {
+              cached: true,
+              notBefore: preview.freshUntil
+                ? new Date(preview.freshUntil)
+                : undefined,
+            });
           } catch {
             await sourceEnqueuer.enqueueSource(subscription.source);
           }

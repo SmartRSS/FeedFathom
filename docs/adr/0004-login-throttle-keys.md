@@ -35,9 +35,30 @@ A throttled attempt returns the same `401 Wrong login data` as a wrong
 password. A distinguishable status would undo the equal-time hashing by
 answering "this account exists and someone is guessing at it" for free.
 
-A successful login clears the account counter and leaves the address counter
-alone. Clearing both would let an attacker holding one valid account refill the
-budget they are spending against every other account from that address.
+Each attempt is counted before the password is checked, with an atomic
+`INCR`, and refused once the count passes the limit. Checking the counters and
+recording a failure only after the password hash let a burst of parallel
+requests all pass the check before any of them was counted: two hundred at
+once reached the hash two hundred times against a limit of ten. `INCR` gives
+each concurrent request its own number, so no more than the limit get through.
+The whole gate is one Redis script. It reads the address counter first and
+refuses an address at its limit without touching the account counter, so a
+refused attempt creates no key: the email is part of the account key, and
+otherwise each refused request could park a key the size of its email in a
+Redis shared with the job queue. It also keeps a user behind a shared, locked
+address from running up an account lockout that outlasts the address one.
+Request schemas cap the email at the RFC 5321 254 characters for the same
+reason. The address counter is counted only once the account counter lets an
+attempt through, so a source grinding a locked account does not also spend its
+budget for every other account.
+
+A successful login then takes its own attempt back: it clears the account
+counter and refunds the address counter by one. What stays counted is
+failures, so the budget is the same as counting failures after the fact: ten
+wrong passwords and the next attempt is refused, and a right one before that
+starts over. The address counter gets back only the one attempt, not the lot.
+Clearing it would let an attacker holding one valid account refill the budget
+they are spending against every other account from that address.
 
 The address comes from the socket unless `TRUSTED_PROXY_HEADER` names a header
 to read it from. Behind a proxy every request arrives from the proxy, so the
@@ -50,10 +71,15 @@ as the login form is. The scopes stay separate because a user whose first reset
 mail went to spam and who asked again a few times must still be able to log in
 with the password that reset then set.
 
-`POST /api/register` is bounded under a third scope, but only on the branch
-that sends activation mail — the abuse is the send, not the account, and who
-may hold one is already settled by `ENABLE_REGISTRATION` and `ALLOWED_EMAILS`.
-The count does not start until a user exists: a fresh install accepts
+`POST /api/register` is bounded under a third scope. Who may hold an account
+is already settled by `ENABLE_REGISTRATION` and `ALLOWED_EMAILS`; the abuse is
+the activation mail and the password hash each attempt costs, an existing
+address included, so it pays the same as a new one (#1076). Every attempt counts
+and none is taken back. A throttled registration answers `429` rather than the
+generic success: both counters count the caller's own attempts whether or not
+the account exists, so the refusal says nothing about who has one, and with
+mail off a success would claim an account that was never made. The count does
+not start until a user exists: a fresh install accepts
 registration regardless of that setting and answers identically whether or not
 it worked, so counting there would let the first operator lock themselves out
 of their own instance with no way to tell that is what happened.
@@ -92,3 +118,14 @@ deployment would ship without one.
   account from their own address for the rest of that window, with no message
   explaining why — the same 401 as a wrong password. Telling them would be the
   enumeration signal.
+- `POST /api/options/password` is bounded under a fourth scope keyed by the
+  user, not the address, on the account counter alone (#1076). Only a session
+  holder reaches it, and one who stole the session can change address at will;
+  the lockout objection above does not apply, because only the account's own
+  sessions can spend the budget and it blocks only the change form, never
+  login. A success clears it, as at login. The caller is signed in, so a
+  throttled change answers `429 Too many attempts` instead of blaming the
+  password.
+- Registration does not wait for its mail either, on any path, for the same
+  reason as the reset route: a new address and an existing one each pay one
+  hash and their database work, and neither waits on Mailjet.

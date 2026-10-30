@@ -1,7 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { Type } from "typebox";
-import Schema from "typebox/schema";
-import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
+import { parseHttpUrl } from "#platform/http/http-native-transport.ts";
 
 const supportedSignatureAlgorithms = new Set([
   "sha1",
@@ -9,21 +7,6 @@ const supportedSignatureAlgorithms = new Set([
   "sha384",
   "sha512",
 ]);
-
-const jsonFeedHubsProjection = Type.Object(
-  {
-    hubs: Type.Optional(
-      Type.Array(
-        Type.Object(
-          { type: Type.String(), url: Type.String() },
-          { additionalProperties: true },
-        ),
-      ),
-    ),
-  },
-  { additionalProperties: true },
-);
-const jsonFeedHubsProjectionCheck = Schema.Compile(jsonFeedHubsProjection);
 
 export type WebSubDiscovery = { hubUrl: string; topicUrl: string };
 
@@ -57,29 +40,12 @@ function scanFeedBodyRels(xml: string): Map<string, string> {
   return rels;
 }
 
-// JSON Feed advertises hubs in a `hubs` array in the body instead of a Link
-// header or <link rel="hub">. A `hubs[].type` of "WebSub" means the same
-// thing; only the place to look differs.
-function jsonFeedHubUrl(text: string): string | undefined {
-  if (!text.trimStart().startsWith("{")) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (!jsonFeedHubsProjectionCheck.Check(parsed)) return undefined;
-    return parsed.hubs?.find((hub) => hub.type === "WebSub")?.url;
-  } catch {
-    return undefined;
-  }
-}
-
 // Both the hub and topic URLs come from the feed's own content or headers, so
-// they are attacker-influenced and need the same private-network guard as the
-// extension's arbitrary-URL reader fetch. Resolved against the feed's URL.
-function resolvePublicUrl(value: string, base: string): string | undefined {
+// they are attacker-influenced and get the same URL policy as every outbound
+// request. Resolved against the feed's URL.
+function resolvePublicUrl(value: string, base?: string): string | undefined {
   try {
-    const url = new URL(value, base);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-    if (isBlockedHostname(url.hostname)) return undefined;
-    return url.href;
+    return parseHttpUrl(new URL(value, base).href).href;
   } catch {
     return undefined;
   }
@@ -87,18 +53,19 @@ function resolvePublicUrl(value: string, base: string): string | undefined {
 
 /**
  * Headers take precedence per spec, though most feeds advertise only in the
- * body. Checking both costs nothing; the response was already fetched.
+ * body. Checking both costs nothing; the response was already fetched. A JSON
+ * Feed names its hub in a `hubs` array instead, which parseJsonFeed reads.
  */
 export function discoverWebSub(
   headers: Headers,
   bodyXml: string,
   feedUrl: string,
+  jsonFeedHubUrl?: string,
 ): WebSubDiscovery | undefined {
   const headerRels = parseLinkHeaderRels(headers.get("link") ?? "");
   const bodyRels = scanFeedBodyRels(bodyXml);
 
-  const hubUrl =
-    headerRels.get("hub") ?? bodyRels.get("hub") ?? jsonFeedHubUrl(bodyXml);
+  const hubUrl = headerRels.get("hub") ?? bodyRels.get("hub") ?? jsonFeedHubUrl;
   if (!hubUrl) return undefined;
   const topicUrl = headerRels.get("self") ?? bodyRels.get("self") ?? feedUrl;
 
@@ -125,43 +92,33 @@ export type HubPoster = {
  * a source verified.
  */
 export async function requestHubSubscription(params: {
-  callbackUrl: string;
+  callbackToken: string;
+  // The public host the hub calls back on.
+  domain: string;
   hubPoster: HubPoster;
   hubUrl: string;
-  leaseSeconds?: number;
-  mode: "subscribe" | "unsubscribe";
   secret: string;
   topicUrl: string;
 }): Promise<HubSubscriptionResult> {
-  let hub: URL;
-  try {
-    hub = new URL(params.hubUrl);
-  } catch {
-    return { error: "Invalid hub URL", ok: false };
-  }
-  if (hub.protocol !== "http:" && hub.protocol !== "https:")
-    return { error: "Hub URL must be http or https", ok: false };
-  if (isBlockedHostname(hub.hostname))
-    return { error: "Hub URL resolves to a private address", ok: false };
+  const hub = resolvePublicUrl(params.hubUrl);
+  if (!hub)
+    return { error: "Hub URL is not a public http or https URL", ok: false };
 
   const body = new URLSearchParams({
-    "hub.callback": params.callbackUrl,
-    "hub.mode": params.mode,
+    "hub.callback": `https://${params.domain}/api/websub/callback/${params.callbackToken}`,
+    "hub.mode": "subscribe",
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,
     // Deprecated since spec 0.4, but some hubs (WordPress.com's pushpress)
     // still reject the request with "hub.verify is empty" without it.
     "hub.verify": "async",
-    ...(params.leaseSeconds
-      ? { "hub.lease_seconds": String(params.leaseSeconds) }
-      : {}),
   });
 
   try {
     // post() does not follow redirects: the target is fully hub-controlled,
     // so following it is an SSRF surface, and a redirecting hub is unusual
     // enough to just fail.
-    const response = await params.hubPoster.post(hub.href, body);
+    const response = await params.hubPoster.post(hub, body);
     return response.status >= 200 && response.status < 300
       ? { ok: true }
       : { error: `Hub responded with ${response.status}`, ok: false };

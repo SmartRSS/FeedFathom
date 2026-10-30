@@ -78,6 +78,17 @@ function nativeResponse(
   };
 }
 
+// The HttpDeferredError a request was refused with.
+async function deferral(request: Promise<unknown>) {
+  const error = await request.then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+  if (!(error instanceof HttpDeferredError))
+    throw new Error("Expected the request to be deferred", { cause: error });
+  return error;
+}
+
 function queuedTransport(
   responses: NativeHttpResponse[],
   onRequest?: (url: string) => void,
@@ -164,7 +175,45 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   expect(sentHeaders).toHaveLength(1);
 });
 
-test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
+// Some CDNs answer an unconditional request with a 304. With nothing stored
+// there is no body to serve, and storing the 304 would have every later
+// revalidation refresh it, sticking the feed (#1078).
+test("a 304 with nothing cached fails, stores nothing, and the next request is unconditional", async () => {
+  const sentHeaders: Headers[] = [];
+  const store = redis();
+  const responses = [
+    nativeResponse("", {
+      headers: { "cache-control": "max-age=0", etag: '"v1"' },
+      status: 304,
+    }),
+    nativeResponse("feed", { headers: { etag: '"v2"' } }),
+  ];
+  const client = new HttpClient(store, {
+    intervalMs: shortIntervals,
+    transport: async (_url, headers) => {
+      sentHeaders.push(new Headers(headers));
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected HTTP request");
+      return response;
+    },
+  });
+  const url = "https://1.1.1.1/feed";
+
+  await expect(client.get(url)).rejects.toBeInstanceOf(HttpPolicyError);
+  expect(
+    [...store.values.keys()].filter((key) => key.startsWith("http-cache:")),
+  ).toEqual([]);
+
+  const next = await client.get(url);
+  expect(next.status).toBe(200);
+  expect(next.data).toBe("feed");
+  expect(sentHeaders.map((headers) => headers.get("if-none-match"))).toEqual([
+    null,
+    null,
+  ]);
+});
+
+test("a response's rate-limit headers block the host for later requests", async () => {
   const reset = Math.floor(Date.now() / 1_000) + 60;
   const client = new HttpClient(redis(), {
     transport: queuedTransport([
@@ -178,40 +227,37 @@ test("uses X-RateLimit-Reset as an absolute epoch timestamp", async () => {
   });
 
   await client.get("https://1.1.1.1/feed");
-  const error = await client
-    .get("https://1.1.1.1/another")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/another"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBe(reset * 1_000);
 });
 
-test("uses the fallback delay when Retry-After is absent or empty", async () => {
-  await Promise.all(
-    [undefined, ""].map(async (retryAfter) => {
-      const client = new HttpClient(redis(), {
-        transport: queuedTransport([
-          nativeResponse("rate limited", {
-            headers:
-              retryAfter === undefined ? {} : { "retry-after": retryAfter },
-            status: 429,
-          }),
-        ]),
-      });
-      const before = Date.now();
+test.each([
+  ["absent", {}],
+  ["empty", { "retry-after": "" }],
+])(
+  "a 429 with Retry-After %s defers five minutes and blocks the host",
+  async (_case, headers) => {
+    let requests = 0;
+    const store = redis();
+    const client = new HttpClient(store, {
+      transport: queuedTransport(
+        [nativeResponse("rate limited", { headers, status: 429 })],
+        () => requests++,
+      ),
+    });
+    const before = Date.now();
 
-      const error = await client
-        .get("https://1.1.1.1/feed")
-        .catch((caught: unknown) => caught);
+    const error = await deferral(client.get("https://1.1.1.1/feed"));
 
-      expect(error).toBeInstanceOf(HttpDeferredError);
-      if (!(error instanceof HttpDeferredError)) throw error;
-      expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
-      expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
-    }),
-  );
-});
+    expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
+    expect(requests).toBe(1);
+    expect(store.values.get("http-blocked:1.1.1.1")).toBe(
+      String(error.retryAt),
+    );
+  },
+);
 
 test("rejects unsafe URL forms before transport", async () => {
   let requests = 0;
@@ -445,12 +491,8 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
   });
   const before = Date.now();
 
-  const error = await client
-    .get("https://1.1.1.1/feed")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/feed"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
   expect(requests).toBe(1);
   expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
@@ -541,12 +583,8 @@ test("checks the redirect target against its own block", async () => {
       }),
   });
 
-  const error = await client
-    .get("https://1.1.1.1/a")
-    .catch((caught: unknown) => caught);
+  const error = await deferral(client.get("https://1.1.1.1/a"));
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
-  if (!(error instanceof HttpDeferredError)) throw error;
   expect(error.retryAt).toBe(retryAt);
 });
 

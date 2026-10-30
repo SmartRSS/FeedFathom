@@ -61,27 +61,4 @@ describe("context-menu callbacks", () => {
     operations.completeNext();
     await expect(pending).rejects.toThrow("duplicate id");
   });
-
-  test("supports remove, parent, then child ordering", async () => {
-    const operations = new ContextMenusFake();
-    const update = (async () => {
-      await removeAllContextMenus(operations, {});
-      await createContextMenu(menu("parent"), operations, {});
-      await createContextMenu(menu("child"), operations, {});
-    })();
-
-    expect(operations.calls).toEqual(["removeAll"]);
-    operations.completeNext();
-    await Promise.resolve();
-    expect(operations.calls).toEqual(["removeAll", "create:parent"]);
-    operations.completeNext();
-    await Promise.resolve();
-    expect(operations.calls).toEqual([
-      "removeAll",
-      "create:parent",
-      "create:child",
-    ]);
-    operations.completeNext();
-    await update;
-  });
 });

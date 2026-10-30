@@ -2,16 +2,17 @@ import { parseFeed } from "@rowanmanning/feed-parser";
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { dateType, webUrlPolicy } from "#shared/validation/typebox-policy.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
+import { decodeBody, detectEncoding } from "#shared/util/decode-body.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
-import { isHttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { isHttpDeadlineError } from "#platform/http/request-deadline.ts";
-import type { RedirectMap } from "#platform/http/redirect-map.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import {
-  attachCapAlerts,
-  declaresCapNamespace,
+  inCapScope,
   mentionsCapNamespace,
+  readCapAlert,
 } from "#features/feeds/cap-entry.ts";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import {
@@ -34,11 +35,9 @@ import type { WebSubStateService } from "#features/feeds/websub-state-service.ts
 import {
   discoverWebSub,
   requestHubSubscription,
+  type WebSubDiscovery,
 } from "#features/feeds/websub.ts";
-import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
+import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
@@ -69,58 +68,30 @@ const feedProjection = Type.Object(
   { additionalProperties: true },
 );
 const feedProjectionCheck = Schema.Compile(feedProjection);
-const feedResponseStatusProjection = Type.Object(
-  { status: Type.Number() },
-  { additionalProperties: true },
-);
-const feedResponseStatusProjectionCheck = Schema.Compile(
-  feedResponseStatusProjection,
-);
-const successfulFeedResponse = Type.Object(
-  {
-    cached: Type.Boolean(),
-    status: Type.Literal(200),
-    url: Type.Intersect([Type.String(), webUrlPolicy]),
-  },
-  { additionalProperties: true },
-);
-const successfulFeedResponseCheck = Schema.Compile(successfulFeedResponse);
-
 const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
 
-// The <?xml ...?> prolog is guaranteed ASCII-compatible up to the encoding
-// declaration itself, so it's always safe to decode as windows-1252 (a
-// superset of ASCII with no invalid byte sequences) just to go looking for it.
 export function detectFeedEncoding(
   buffer: ArrayBuffer,
   contentType: string | null,
 ): string {
-  const bytes = new Uint8Array(buffer);
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return "utf-8";
-  }
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
-
-  const charset = /charset=([^;]+)/i.exec(contentType ?? "")?.[1]?.trim();
-  if (charset) return charset.replace(/^"(.*)"$/, "$1");
-
-  const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
-  return xmlEncodingPattern.exec(prolog)?.[1] ?? "utf-8";
+  return detectEncoding(
+    new Uint8Array(buffer),
+    contentType,
+    xmlEncodingPattern,
+    200,
+  );
 }
 
 export function decodeFeedBody(
   buffer: ArrayBuffer,
   contentType: string | null,
 ): string {
-  try {
-    return new TextDecoder(detectFeedEncoding(buffer, contentType)).decode(
-      buffer,
-    );
-  } catch {
-    // Unrecognized label; UTF-8 is the right default for almost every feed.
-    return new TextDecoder("utf-8").decode(buffer);
-  }
+  return decodeBody(
+    new Uint8Array(buffer),
+    contentType,
+    xmlEncodingPattern,
+    200,
+  );
 }
 
 export function validateParsedFeed(value: unknown): void {
@@ -141,11 +112,6 @@ Object.defineProperty(Element.prototype, "textContentAsDate", {
 
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 
-// The CAP namespace is in scope when the entry or an ancestor declares it.
-const inCapScope = (element: XmlElement | null): boolean =>
-  element !== null &&
-  (declaresCapNamespace(element.attributes) || inCapScope(element.parent));
-
 const isMediaRss = (element: XmlElement) =>
   element.namespaceUri === "http://search.yahoo.com/mrss/" ||
   element.namespaceUri === "https://search.yahoo.com/mrss/";
@@ -159,8 +125,9 @@ const mediaDescription = (element: XmlElement) =>
 
 /**
  * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
- * `xml:lang`, else the `language=en-CA` category NAAD uses, else "", as
- * `language`; see generateArticleGuid. An entry with no body of its own,
+ * alert fields, if any, as `cap`, and its `xml:lang`, else the
+ * `language=en-CA` category NAAD uses, else "", as `language`; see
+ * generateArticleGuid. An entry with no body of its own,
  * such as every YouTube video, takes its Media RSS description instead.
  */
 export const parseXmlFeed = (text: string) => {
@@ -188,14 +155,15 @@ export const parseXmlFeed = (text: string) => {
         .find(({ term }) => term.startsWith("language="))
         ?.term.slice("language=".length) ??
       "";
-    Object.assign(item, { language });
+    const cap = readCapAlert(item.element);
+    Object.assign(item, cap ? { cap, language } : { language });
   }
   return feed;
 };
 
 export class FeedParser {
   constructor(
-    private readonly articlesDataService: ArticlesDataService,
+    private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
     private readonly httpClient: HttpClient,
     private readonly sourcesDataService: Pick<
       SourcesDataService,
@@ -208,14 +176,6 @@ export class FeedParser {
       | "recordWebSubDiscovery"
     >,
     private readonly redirectMap: RedirectMap,
-    private readonly userSourcesDataService: Pick<
-      UserSourcesDataService,
-      "recomputeUnreadCounts"
-    >,
-    private readonly articleEventPublisher: Pick<
-      ArticleEventPublisher,
-      "publish"
-    >,
     // Undefined skips WebSub (see maybeSubscribeToWebSub): without a public
     // domain there is no callback URL a hub could reach.
     private readonly feedFathomDomain?: string,
@@ -240,16 +200,16 @@ export class FeedParser {
         finalUrl,
         freshUntil,
         websub,
-      } = await this.parseUrl(
-        source.url,
-        "background",
-        source.skipCache,
-        source.subscriberCount,
-      );
+      } = await this.parseUrl(source.url, {
+        priority: "background",
+        skipCache: source.skipCache,
+        subscribers: source.subscriberCount,
+        websub:
+          Boolean(this.feedFathomDomain) &&
+          shouldAttemptWebSubSubscribe(source.websubStatus),
+      });
 
-      if (websub && shouldAttemptWebSubSubscribe(source.websubStatus)) {
-        await this.maybeSubscribeToWebSub(source.id, websub);
-      }
+      if (websub) await this.maybeSubscribeToWebSub(source.id, websub);
 
       const observedAt = new Date();
       const articlesToUpsert = currentFeedItems<FeedMapperItem>(
@@ -261,56 +221,21 @@ export class FeedParser {
             item,
             parsedFeed,
             { id: source.id, url: source.url },
-            rewriteLinks,
-            observedAt.getTime(),
-            finalUrl,
+            { baseUrl: finalUrl, now: observedAt.getTime() },
           ),
           { lastSeenInFeedAt: observedAt },
         ),
       );
-      // batchUpsertArticles commits batch by batch, so a later failure leaves
-      // earlier articles committed. Recompute either way, then re-raise.
-      // Otherwise recompute only when the upsert reports a row a badge could
-      // count differently: most polls change nothing, and the recount
-      // aggregates every retained article against every subscriber (#897).
-      let upsertError: unknown;
-      let changed = 0;
-      try {
-        changed =
-          await this.articlesDataService.batchUpsertArticles(articlesToUpsert);
-      } catch (error) {
-        upsertError = error;
-      }
-      try {
-        if (upsertError !== undefined || changed > 0) {
-          await this.userSourcesDataService.recomputeUnreadCounts([source.id]);
-        }
-      } catch (recomputeError) {
-        // The upsert failure is the root cause; don't let this replace it.
-        if (upsertError === undefined) {
-          throw recomputeError;
-        }
-        console.error(
-          "recomputeUnreadCounts failed after batchUpsertArticles error:",
-          recomputeError,
-        );
-      }
-      if (upsertError !== undefined) {
-        throw upsertError;
-      }
-      if (changed > 0) {
-        this.articleEventPublisher.publish(source.id, changed);
-      }
+      await this.articleImporter.importArticles(source.id, articlesToUpsert);
 
-      await this.sourcesDataService.successSource(
-        source.id,
+      await this.sourcesDataService.successSource(source.id, {
         cached,
-        new Date(freshUntil ?? Date.now() + 5 * 60_000),
+        notBefore: freshUntil ? new Date(freshUntil) : undefined,
         observedAt,
-        source.trigger ?? "poll",
-      );
+        trigger: source.trigger ?? "poll",
+      });
     } catch (error_: unknown) {
-      if (isHttpDeferredError(error_)) {
+      if (error_ instanceof HttpDeferredError) {
         throw error_;
       }
       console.error(`parseSource failed for ${source.url}`, error_);
@@ -318,23 +243,6 @@ export class FeedParser {
       const message = error_ instanceof Error ? error_.message : String(error_);
       await this.sourcesDataService.failSource(source.id, message);
     }
-  }
-
-  public async parseUrl(
-    url: string,
-    priority: "background" | "interactive" = "interactive",
-    skipCache = false,
-    // Left undefined by discovery and preview callers -- see buildUserAgent.
-    subscribers?: number,
-  ) {
-    const resolvedUrl = await this.redirectMap.resolveUrl(url);
-    return this.parseGenericFeed(
-      resolvedUrl,
-      url,
-      priority,
-      skipCache,
-      subscribers,
-    );
   }
 
   // Called from the subscribe route so discovery happens while adding the
@@ -345,9 +253,10 @@ export class FeedParser {
     url: string,
     websubStatus?: "failed" | "none" | "pending" | "verified",
   ): Promise<void> {
-    if (!shouldAttemptWebSubSubscribe(websubStatus)) return;
+    if (!this.feedFathomDomain || !shouldAttemptWebSubSubscribe(websubStatus))
+      return;
     try {
-      const { websub } = await this.parseUrl(url, "interactive");
+      const { websub } = await this.parseUrl(url);
       if (websub) await this.maybeSubscribeToWebSub(sourceId, websub);
     } catch (error) {
       // The article-fetch path running alongside this (cached-preview upsert
@@ -364,11 +273,10 @@ export class FeedParser {
   // polling the content over a failed subscribe attempt.
   private async maybeSubscribeToWebSub(
     sourceId: number,
-    websub: NonNullable<
-      Awaited<ReturnType<FeedParser["parseGenericFeed"]>>["websub"]
-    >,
+    websub: WebSubDiscovery,
   ): Promise<void> {
-    if (!this.feedFathomDomain) return;
+    const domain = this.feedFathomDomain;
+    if (!domain) return;
     try {
       if (
         !(await this.websubStateService.claimWebSubSubscribeAttempt(sourceId))
@@ -381,10 +289,10 @@ export class FeedParser {
           websub.topicUrl,
         );
       const result = await requestHubSubscription({
-        callbackUrl: `https://${this.feedFathomDomain}/api/websub/callback/${callbackToken}`,
+        callbackToken,
+        domain,
         hubPoster: this.httpClient,
         hubUrl: websub.hubUrl,
-        mode: "subscribe",
         secret,
         topicUrl: websub.topicUrl,
       });
@@ -408,49 +316,65 @@ export class FeedParser {
         feed: parsedFeed,
         finalUrl,
         freshUntil,
-      } = await this.parseUrl(sourceUrl);
+      } = await this.parseUrl(sourceUrl, { websub: false });
       return Object.assign(
-        mapFeedToPreview(
-          parsedFeed,
-          sourceUrl,
-          rewriteLinks,
-          Date.now(),
-          finalUrl,
-        ),
+        mapFeedToPreview(parsedFeed, sourceUrl, { baseUrl: finalUrl }),
         { freshUntil },
       );
     } catch (error_: unknown) {
       // A deferral and our own expired deadline both mean "we never got an
       // answer", which the error hook maps to a 429 and a 504. Collapsing
       // them into undefined would report our timeout as the user's bad URL.
-      if (isHttpDeferredError(error_) || isHttpDeadlineError(error_)) {
+      if (
+        error_ instanceof HttpDeferredError ||
+        error_ instanceof HttpDeadlineError
+      ) {
         throw error_;
       }
       return undefined;
     }
   }
 
-  private async parseGenericFeed(
-    fetchedUrl: string,
+  public async parseUrl(
     originalUrl: string,
-    priority: "background" | "interactive",
-    skipCache = false,
-    subscribers?: number,
+    {
+      priority = "interactive",
+      skipCache = false,
+      subscribers,
+      websub = true,
+    }: {
+      priority?: "background" | "interactive";
+      skipCache?: boolean | undefined;
+      // Left undefined by discovery and preview callers -- see buildUserAgent.
+      subscribers?: number | undefined;
+      // Whether to look for a WebSub hub; a preview never needs one.
+      websub?: boolean;
+    } = {},
   ) {
+    const fetchedUrl = await this.redirectMap.resolveUrl(originalUrl);
     const response = await this.httpClient.get(fetchedUrl, {
       priority,
       responseType: "arrayBuffer",
       skipCache,
       ...(subscribers === undefined ? {} : { subscribers }),
     });
-    this.validateFeedResponse(response, fetchedUrl);
-    const finalUrl = response.url || fetchedUrl;
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
+      );
+    }
+    const finalUrl = response.url;
     // 301/308 are permanent, so persist onto the subscribed source's URL;
     // 302/303/307 belong only in the short-lived Redis redirect cache.
     const rememberRedirect = response.redirectedPermanently
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
-      : (from: string, to: string) => this.redirectMap.setRedirect(from, to);
+      : // The cache only saves a hop on the next fetch; failing to write it
+        // must not cost this fetch's articles.
+        (from: string, to: string) =>
+          this.redirectMap.setRedirect(from, to).catch((error: unknown) => {
+            console.error(`Could not cache redirect ${from} -> ${to}:`, error);
+          });
     // Only remember original -> final when this fetch actually redirected.
     // fetchedUrl is already pre-substituted from the cache, so refreshing on a
     // non-redirect would rewrite a stale mapping forever once the origin's
@@ -463,35 +387,26 @@ export class FeedParser {
     }
     const contentType = response.headers.get("content-type");
     const text = decodeFeedBody(response.data, contentType);
-    const parsedFeed = isJsonFeedText(text)
-      ? parseJsonFeed(text)
-      : isMicroformatHtml(text, contentType)
+    const jsonFeed = isJsonFeedText(text) ? parseJsonFeed(text) : undefined;
+    const parsedFeed =
+      jsonFeed ??
+      (isMicroformatHtml(text, contentType)
         ? parseMicroformatFeed(text, finalUrl)
-        : parseXmlFeed(text);
+        : parseXmlFeed(text));
     validateParsedFeed(parsedFeed);
-    attachCapAlerts(text, parsedFeed.items);
     return {
       cached: response.cached,
       feed: parsedFeed,
       finalUrl,
       freshUntil: response.freshUntil,
-      websub: discoverWebSub(response.headers, text, finalUrl),
+      websub: websub
+        ? discoverWebSub(
+            response.headers,
+            text,
+            finalUrl,
+            jsonFeed?.websubHubUrl,
+          )
+        : undefined,
     };
-  }
-
-  private validateFeedResponse(response: unknown, fetchedUrl: string): void {
-    if (successfulFeedResponseCheck.Check(response)) return;
-
-    if (
-      feedResponseStatusProjectionCheck.Check(response) &&
-      response.status !== 200
-    ) {
-      throw new Error(
-        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
-      );
-    }
-    throw new Error(
-      `Failed to load data for ${fetchedUrl}, unexpected payload type`,
-    );
   }
 }

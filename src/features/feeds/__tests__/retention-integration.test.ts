@@ -3,7 +3,6 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
@@ -132,7 +131,6 @@ test("reports pruned sources so their unread totals can be recounted", async () 
   const drizzleConnection = createDrizzleConnection(databaseUrl);
   const userSourcesDataService = new UserSourcesDataService(
     drizzleConnection,
-    new FoldersDataService(drizzleConnection),
     new SourcesDataService(drizzleConnection),
   );
 
@@ -179,6 +177,71 @@ test("reports pruned sources so their unread totals can be recounted", async () 
     const [recounted] = await client<{ unread: number }[]>`
       SELECT unread_count AS unread FROM user_sources WHERE source_id = ${mailbox!.id}`;
     expect(recounted!.unread).toBe(1);
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
+
+// The orphan rule deletes every source when user_sources is empty, which is
+// right after the last unsubscribe and a catastrophe after a transient wipe
+// or a restore that has not reached user_sources yet. The guard keeps every
+// source until at least one subscription exists; then only the orphans go,
+// along with users past the expiry window and sessions past their own.
+test("drops orphaned sources, expired users and sessions, but never every source", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const sourceUrls = async () =>
+    (await client<{ url: string }[]>`SELECT url FROM sources ORDER BY url`).map(
+      (row) => row.url,
+    );
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+    const [kept, orphan] = await client<{ id: number }[]>`
+      INSERT INTO sources (url, home_url, created_at) VALUES
+        ('https://kept.test/feed', 'https://kept.test', NOW() - INTERVAL '2 days'),
+        ('https://orphan.test/feed', 'https://orphan.test', NOW() - INTERVAL '2 days')
+      RETURNING id`;
+
+    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+    expect(await sourceUrls()).toEqual([
+      "https://kept.test/feed",
+      "https://orphan.test/feed",
+    ]);
+
+    const [reader, expired] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password, last_seen_at) VALUES
+        ('reader@example.test', 'reader', 'x', NOW()),
+        ('gone@example.test', 'gone', 'x', NOW() - INTERVAL '731 days')
+      RETURNING id`;
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name) VALUES
+        (${reader!.id}, ${kept!.id}, 'sub'),
+        (${expired!.id}, ${orphan!.id}, 'sub')`;
+    await client`
+      INSERT INTO sessions (sid, user_agent, user_id, expires_at) VALUES
+        ('live', 'a', ${reader!.id}, NOW() + INTERVAL '1 day'),
+        ('dead', 'a', ${reader!.id}, NOW() - INTERVAL '1 second')`;
+
+    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+
+    // The expired user's subscription went with them, orphaning its source.
+    expect(await sourceUrls()).toEqual(["https://kept.test/feed"]);
+    expect(
+      (await client<{ email: string }[]>`SELECT email FROM users`).map(
+        (row) => row.email,
+      ),
+    ).toEqual(["reader@example.test"]);
+    expect(
+      (await client<{ sid: string }[]>`SELECT sid FROM sessions`).map(
+        (row) => row.sid,
+      ),
+    ).toEqual(["live"]);
   } finally {
     await drizzleConnection.$client.close();
     await client.close();

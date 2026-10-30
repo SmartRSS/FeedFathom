@@ -1,9 +1,4 @@
-import {
-  foldersDataService,
-  opmlImportService,
-  opmlParser,
-  userSourcesDataService,
-} from "#features/feeds/services.ts";
+import type * as feeds from "#features/feeds/services.ts";
 import { createHash } from "node:crypto";
 import { t } from "elysia";
 import { type Static, Type } from "typebox";
@@ -13,29 +8,33 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
-import type { OpmlParser } from "#features/feeds/opml-parser.ts";
+import { groupByFolder } from "#features/feeds/folder-tree.ts";
+import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });
 
-export async function postOptionsOpmlHandler({
-  body,
-  user,
-}: {
-  body: Static<typeof opmlRequest>;
-  user: AuthedUser;
-}) {
+export async function postOptionsOpmlHandler(
+  {
+    body,
+    user,
+  }: {
+    body: Static<typeof opmlRequest>;
+    user: AuthedUser;
+  },
+  { opmlImportService }: Pick<typeof feeds, "opmlImportService">,
+) {
   if (body.opml.size > maximumOpmlBytes)
     return json({ error: "File is too large", success: false }, 413);
 
   const bytes = new Uint8Array(await body.opml.arrayBuffer());
   let content: string;
-  let tree: ReturnType<OpmlParser["parseOpml"]>;
+  let tree: OpmlNode[];
   try {
     content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     if (!Value.Check(plainTextPolicy, content))
       return json({ error: "Invalid file", success: false }, 400);
-    tree = opmlParser.parseOpml(content);
+    tree = parseOpml(content);
   } catch {
     return json({ error: "Invalid OPML", success: false }, 400);
   }
@@ -63,27 +62,21 @@ function subscriptionTree(
     url: null | string;
   }[],
 ): OpmlNode[] {
-  const foldered = new Map<number, OpmlSource[]>();
-  const roots: OpmlNode[] = [];
-  for (const source of sources) {
-    if (source.kind === "email" || !source.url?.startsWith("http")) continue;
-    const outline: OpmlSource = {
+  const { children, roots } = groupByFolder(
+    sources.filter(
+      (source) => source.kind !== "email" && source.url?.startsWith("http"),
+    ),
+    (source): OpmlSource => ({
       homeUrl: source.homeUrl ?? "",
       name: source.name,
       type: "source",
-      xmlUrl: source.url,
-    };
-    if (source.parentId === null) roots.push(outline);
-    else {
-      const siblings = foldered.get(source.parentId) ?? [];
-      siblings.push(outline);
-      foldered.set(source.parentId, siblings);
-    }
-  }
+      xmlUrl: source.url ?? "",
+    }),
+  );
   // Stable ordering keeps exports comparable even if query order changes.
   return [
     ...folders.toSorted(byName).map((folder) => ({
-      children: (foldered.get(folder.id) ?? []).toSorted(byName),
+      children: (children.get(folder.id) ?? []).toSorted(byName),
       name: folder.name,
       type: "folder" as const,
     })),
@@ -91,7 +84,13 @@ function subscriptionTree(
   ];
 }
 
-export async function getOptionsOpmlHandler({ user }: { user: AuthedUser }) {
+export async function getOptionsOpmlHandler(
+  { user }: { user: AuthedUser },
+  {
+    foldersDataService,
+    userSourcesDataService,
+  }: Pick<typeof feeds, "foldersDataService" | "userSourcesDataService">,
+) {
   const [folders, sources] = await Promise.all([
     foldersDataService.getUserFolders(user.id),
     userSourcesDataService.getUserSources(user.id),

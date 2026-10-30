@@ -4,15 +4,15 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
-import { RedirectMap } from "#platform/http/redirect-map.ts";
+import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
 // A poll of a feed that has not changed used to rewrite every article row to
@@ -34,7 +34,6 @@ const articlesDataService = new ArticlesDataService(drizzleConnection);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 const userSourcesDataService = new UserSourcesDataService(
   drizzleConnection,
-  new FoldersDataService(drizzleConnection),
   sourcesDataService,
 );
 
@@ -89,7 +88,20 @@ async function parse(body: string) {
     set: async () => "OK",
   };
   const parser = new FeedParser(
-    articlesDataService,
+    new ArticleImporter(
+      articlesDataService,
+      {
+        recomputeUnreadCounts: async (sourceIds, userId) => {
+          recounts++;
+          await userSourcesDataService.recomputeUnreadCounts(sourceIds, userId);
+        },
+      },
+      {
+        publish: (id, count) => {
+          published.push([id, count]);
+        },
+      },
+    ),
     new HttpClient(createFakeHttpRedis(), {
       transport: async () => ({
         body: Readable.from([body]),
@@ -108,17 +120,6 @@ async function parse(body: string) {
       },
     },
     new RedirectMap(redirectRedis),
-    {
-      recomputeUnreadCounts: async (sourceIds, userId) => {
-        recounts++;
-        await userSourcesDataService.recomputeUnreadCounts(sourceIds, userId);
-      },
-    },
-    {
-      publish: (id, count) => {
-        published.push([id, count]);
-      },
-    },
   );
   await parser.parseSource({ id: sourceId, url: feedUrl });
 }

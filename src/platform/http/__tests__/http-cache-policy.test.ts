@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   cacheable,
+  type CachedResponse,
   currentAge,
   deltaSeconds,
   expiresAt,
@@ -16,175 +17,102 @@ function headers(entries: Record<string, string>): Headers {
   return new Headers(entries);
 }
 
-describe("deltaSeconds", () => {
-  test("accepts a bare non-negative integer", () => {
-    expect(deltaSeconds("60")).toBe(60);
-    expect(deltaSeconds("0")).toBe(0);
-    expect(deltaSeconds("  60 ")).toBe(60);
-  });
-
-  // Some origins quote Age.
-  test("accepts a quoted integer", () => {
-    expect(deltaSeconds('"60"')).toBe(60);
-  });
-
-  // Absent rather than zero, so a malformed value falls through to the next
-  // rule instead of pinning freshness to now.
-  test("rejects anything that is not a plain integer", () => {
-    expect(deltaSeconds("60.5")).toBeUndefined();
-    expect(deltaSeconds("-60")).toBeUndefined();
-    expect(deltaSeconds("soon")).toBeUndefined();
-    expect(deltaSeconds("")).toBeUndefined();
-    expect(deltaSeconds("60 ,")).toBeUndefined();
-  });
-
-  test("rejects an integer beyond safe precision", () => {
-    expect(deltaSeconds("9".repeat(20))).toBeUndefined();
-  });
+// Some origins quote Age. Anything that is not a plain integer is absent
+// rather than zero, so a malformed value falls through to the next rule
+// instead of pinning freshness to now.
+test.each<[string, number | undefined]>([
+  ["60", 60],
+  ["0", 0],
+  ["  60 ", 60],
+  ['"60"', 60],
+  ["60.5", undefined],
+  ["-60", undefined],
+  ["soon", undefined],
+  ["", undefined],
+  ["60 ,", undefined],
+  ["9".repeat(20), undefined],
+])("deltaSeconds(%p) is %p", (value, expected) => {
+  expect(deltaSeconds(value)).toBe(expected);
 });
 
-describe("sharedCacheAllowed", () => {
-  test("allows an ordinary response", () => {
-    expect(sharedCacheAllowed(headers({}))).toBe(true);
-    expect(sharedCacheAllowed(headers({ "cache-control": "max-age=60" }))).toBe(
-      true,
-    );
-  });
-
-  // Each of these marks a response as belonging to one requester; replaying it
-  // to another user of the instance would be a data leak.
-  test("refuses no-store", () => {
-    expect(sharedCacheAllowed(headers({ "cache-control": "no-store" }))).toBe(
-      false,
-    );
-  });
-
-  test("refuses private", () => {
-    expect(
-      sharedCacheAllowed(headers({ "cache-control": "max-age=60, private" })),
-    ).toBe(false);
-  });
-
-  test("refuses a response that varies on everything", () => {
-    expect(sharedCacheAllowed(headers({ vary: "*" }))).toBe(false);
-    expect(sharedCacheAllowed(headers({ vary: " * " }))).toBe(false);
-    expect(sharedCacheAllowed(headers({ vary: "accept-encoding" }))).toBe(true);
-  });
-
-  test("refuses a response carrying a cookie", () => {
-    expect(sharedCacheAllowed(headers({ "set-cookie": "sid=1" }))).toBe(false);
-  });
-
-  test("matches directives case-insensitively", () => {
-    expect(sharedCacheAllowed(headers({ "cache-control": "No-Store" }))).toBe(
-      false,
-    );
-  });
+// Each refusal marks a response as belonging to one requester; replaying it to
+// another user of the instance would be a data leak.
+test.each<[Record<string, string>, boolean]>([
+  [{}, true],
+  [{ "cache-control": "max-age=60" }, true],
+  [{ "cache-control": "no-store" }, false],
+  [{ "cache-control": "max-age=60, private" }, false],
+  [{ vary: "*" }, false],
+  [{ vary: " * " }, false],
+  [{ vary: "accept-encoding" }, true],
+  [{ "set-cookie": "sid=1" }, false],
+  [{ "cache-control": "No-Store" }, false],
+])("sharedCacheAllowed(%p) is %p", (entries, expected) => {
+  expect(sharedCacheAllowed(headers(entries))).toBe(expected);
 });
 
-describe("currentAge", () => {
-  test("is zero for a response dated now", () => {
-    expect(currentAge(headers({ date: httpDate(at) }), at)).toBe(0);
-  });
-
-  test("uses the gap since the response's Date", () => {
-    expect(currentAge(headers({ date: httpDate(at - 30 * second) }), at)).toBe(
-      30 * second,
-    );
-  });
-
-  // Taking the greater of the two means a lying intermediary can shorten our
-  // freshness but never extend it.
-  test("takes the greater of apparent age and a reported Age", () => {
-    const withBoth = headers({ age: "90", date: httpDate(at - 30 * second) });
-    expect(currentAge(withBoth, at)).toBe(90 * second);
-  });
-
-  test("ignores a Date in the future rather than going negative", () => {
-    expect(currentAge(headers({ date: httpDate(at + 60 * second) }), at)).toBe(
-      0,
-    );
-  });
-
-  test("treats an unparseable Date as no information", () => {
-    expect(currentAge(headers({ date: "whenever" }), at)).toBe(0);
-  });
+// The greater of apparent age and a reported Age, so a lying intermediary can
+// shorten our freshness but never extend it.
+test.each<[string, Record<string, string>, number]>([
+  ["a response dated now", { date: httpDate(at) }, 0],
+  ["the gap since Date", { date: httpDate(at - 30 * second) }, 30 * second],
+  [
+    "a reported Age above the apparent age",
+    { age: "90", date: httpDate(at - 30 * second) },
+    90 * second,
+  ],
+  ["a Date in the future", { date: httpDate(at + 60 * second) }, 0],
+  ["an unparseable Date", { date: "whenever" }, 0],
+])("currentAge for %s", (_name, entries, expected) => {
+  expect(currentAge(headers(entries), at)).toBe(expected);
 });
 
-describe("expiresAt", () => {
-  test("has no opinion when nothing says", () => {
-    expect(expiresAt(headers({}), at)).toBeUndefined();
-  });
-
-  test("honours max-age", () => {
-    expect(expiresAt(headers({ "cache-control": "max-age=60" }), at)).toBe(
-      at + 60 * second,
-    );
-  });
-
-  // This is a shared cache, so the shared directive wins.
-  test("prefers s-maxage over max-age", () => {
-    expect(
-      expiresAt(headers({ "cache-control": "max-age=60, s-maxage=600" }), at),
-    ).toBe(at + 600 * second);
-  });
-
-  test("expires immediately on no-cache", () => {
-    expect(
-      expiresAt(headers({ "cache-control": "no-cache, max-age=600" }), at),
-    ).toBe(at);
-  });
-
-  // Ambiguous or malformed input is treated as stale rather than guessed at.
-  test("expires immediately on a repeated max-age", () => {
-    expect(
-      expiresAt(headers({ "cache-control": "max-age=60, max-age=600" }), at),
-    ).toBe(at);
-  });
-
-  test("expires immediately on an unparseable max-age", () => {
-    expect(expiresAt(headers({ "cache-control": "max-age=abc" }), at)).toBe(at);
-  });
-
-  // A response that spent its whole lifetime in an intermediary arrives stale.
-  test("subtracts the age the response already carries", () => {
-    const stale = headers({ age: "40", "cache-control": "max-age=60" });
-    expect(expiresAt(stale, at)).toBe(at + 20 * second);
-  });
-
-  test("clamps to now when the age exceeds the lifetime", () => {
-    const spent = headers({ age: "600", "cache-control": "max-age=60" });
-    expect(expiresAt(spent, at)).toBe(at);
-  });
-
-  test("falls back to Expires relative to Date", () => {
-    const withExpires = headers({
-      date: httpDate(at),
-      expires: httpDate(at + 300 * second),
-    });
-    expect(expiresAt(withExpires, at)).toBe(at + 300 * second);
-  });
-
-  test("treats an Expires already past as stale", () => {
-    const past = headers({
-      date: httpDate(at),
-      expires: httpDate(at - 300 * second),
-    });
-    expect(expiresAt(past, at)).toBe(at);
-  });
-
-  test("ignores an unparseable Expires", () => {
-    expect(expiresAt(headers({ expires: "soon" }), at)).toBeUndefined();
-  });
-
-  test("max-age outranks Expires", () => {
-    const both = headers({
+// This is a shared cache, so s-maxage wins. Ambiguous or malformed input is
+// treated as stale rather than guessed at, and a response that spent its whole
+// lifetime in an intermediary arrives stale.
+test.each<[string, Record<string, string>, number | undefined]>([
+  ["nothing that says", {}, undefined],
+  ["max-age", { "cache-control": "max-age=60" }, at + 60 * second],
+  [
+    "s-maxage over max-age",
+    { "cache-control": "max-age=60, s-maxage=600" },
+    at + 600 * second,
+  ],
+  ["no-cache", { "cache-control": "no-cache, max-age=600" }, at],
+  ["a repeated max-age", { "cache-control": "max-age=60, max-age=600" }, at],
+  ["an unparseable max-age", { "cache-control": "max-age=abc" }, at],
+  [
+    "an Age already carried",
+    { age: "40", "cache-control": "max-age=60" },
+    at + 20 * second,
+  ],
+  [
+    "an Age beyond the lifetime",
+    { age: "600", "cache-control": "max-age=60" },
+    at,
+  ],
+  [
+    "Expires relative to Date",
+    { date: httpDate(at), expires: httpDate(at + 300 * second) },
+    at + 300 * second,
+  ],
+  [
+    "an Expires already past",
+    { date: httpDate(at), expires: httpDate(at - 300 * second) },
+    at,
+  ],
+  ["an unparseable Expires", { expires: "soon" }, undefined],
+  [
+    "max-age over Expires",
+    {
       "cache-control": "max-age=60",
       date: httpDate(at),
       expires: httpDate(at + 86_400 * second),
-    });
-    expect(expiresAt(both, at)).toBe(at + 60 * second);
-  });
+    },
+    at + 60 * second,
+  ],
+])("expiresAt with %s", (_name, entries, expected) => {
+  expect(expiresAt(headers(entries), at)).toBe(expected);
 });
 
 function nativeResponse(init: {
@@ -213,46 +141,42 @@ describe("cacheable", () => {
     expect(entry?.status).toBe(200);
   });
 
-  test("refuses a response that may not be shared", () => {
+  // An already-stale response is still worth storing with a validator: the
+  // next fetch becomes a conditional request that can return 304.
+  test.each([
+    ["one that may not be shared", { "cache-control": "no-store" }, false],
+    [
+      "a stale one with nothing to revalidate against",
+      { "cache-control": "max-age=0" },
+      false,
+    ],
+    [
+      "a stale one carrying an etag",
+      { "cache-control": "max-age=0", etag: '"v1"' },
+      true,
+    ],
+    ["one carrying last-modified", { "last-modified": httpDate(at) }, true],
+  ])("stores %s: %p", (_case, fields, stored) => {
     const entry = cacheable(
-      nativeResponse({ headers: headers({ "cache-control": "no-store" }) }),
+      nativeResponse({ headers: headers(fields) }),
       body,
       url,
     );
-    expect(entry).toBeUndefined();
+    expect(entry !== undefined).toBe(stored);
   });
 
-  test("refuses a stale response with nothing to revalidate against", () => {
-    const entry = cacheable(
-      nativeResponse({ headers: headers({ "cache-control": "max-age=0" }) }),
-      body,
-      url,
-    );
-    expect(entry).toBeUndefined();
-  });
-
-  // Worth storing even though it is already stale: the validator turns the
-  // next fetch into a conditional request that can return 304.
-  test("stores an already-stale response carrying a validator", () => {
+  // Every caller reads only a 200. A stored 304 has no body to serve and
+  // every later 304 would refresh it, sticking the feed (#1078).
+  test.each([304, 404, 503])("never stores a %d", (status) => {
     const entry = cacheable(
       nativeResponse({
-        headers: headers({ "cache-control": "max-age=0", etag: '"v1"' }),
+        headers: headers({ "cache-control": "max-age=60", etag: '"v1"' }),
+        status,
       }),
       body,
       url,
     );
-    expect(entry).toBeDefined();
-  });
-
-  test("accepts last-modified as a validator too", () => {
-    const entry = cacheable(
-      nativeResponse({
-        headers: headers({ "last-modified": httpDate(at) }),
-      }),
-      body,
-      url,
-    );
-    expect(entry).toBeDefined();
+    expect(entry).toBeUndefined();
   });
 
   // The post-redirect URL is what a later request must revalidate against.
@@ -277,14 +201,14 @@ describe("cacheable", () => {
 });
 
 describe("refresh", () => {
-  const stored = {
+  const stored: CachedResponse = {
     body: "aGk=",
     expiresAt: at,
     headers: [
       ["etag", '"v1"'],
       ["date", httpDate(at - 600 * second)],
       ["age", "600"],
-    ] as [string, string][],
+    ],
     status: 200,
     url: "https://example.test/feed",
   };

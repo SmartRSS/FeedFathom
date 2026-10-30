@@ -6,6 +6,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
+import type * as Dialogs from "../../src/spa/dialog.tsx";
 import { installApiFixture } from "./api-fixture.ts";
 
 // The real service worker (see src/spa/public/sw.js) takes /api/* fetches
@@ -154,9 +155,38 @@ const fulfillPagedArticle = async (route: Route) => {
 const articleOptions = (page: Page) =>
   page.locator(".article-list").getByRole("option");
 
+const sourceRow = (page: Page, name = "Tech News") =>
+  page.locator("button.source").filter({ hasText: name });
+
 const selectSource = async (page: Page, name = "Tech News") => {
-  await page.locator("button.source").filter({ hasText: name }).click();
+  await sourceRow(page, name).click();
 };
+
+// The fixture's signed-in API, then the app at `path`.
+const openApp = async (
+  page: Page,
+  options?: Parameters<typeof installApiFixture>[1],
+  path = "/",
+) => {
+  const state = await installApiFixture(page, options);
+  await page.goto(path);
+  return state;
+};
+
+// Resolves once the browser has delivered the intersection changes pending
+// now: a fresh observer's first callback runs in the same notification as,
+// and after, those of every older observer on the page.
+const intersectionsDelivered = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const probe = new IntersectionObserver(() => {
+          probe.disconnect();
+          resolve();
+        });
+        probe.observe(document.body);
+      }),
+  );
 
 test.beforeEach(async ({ page }) => {
   guardBrowser(page);
@@ -169,14 +199,9 @@ test.afterEach(async ({ page }) => {
 test("shows an all-caught-up empty state for a feed with no unread", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
-  await page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .first()
-    .click();
+  await sourceRow(page).first().click();
   // The fixture's article list for the source is nonempty; right after the
   // list renders, remove the single article and the fallback appears.
   await page.getByRole("button", { name: "delete articles" }).click();
@@ -192,18 +217,14 @@ test("shows an all-caught-up empty state for a feed with no unread", async ({
 test("opens a keyboard-dismissable context menu on tree rows", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   // The virtual Today row heads the tree but is a view, not a feed: no
   // menu for it.
   await page.locator("button.source").first().click({ button: "right" });
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  const row = page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .first();
+  const row = sourceRow(page).first();
   await row.click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
   await expect(
@@ -217,13 +238,9 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
 test("Tab closes the context menu and moves focus on from its row", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
-  const row = page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .first();
+  const row = sourceRow(page).first();
   await row.click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
 
@@ -239,9 +256,7 @@ test("keeps the context menu inside a narrow viewport", async ({ page }) => {
 
   // Long-press near a screen edge is the common case on touch, so open
   // the menu from a point a few pixels from the right edge of a row.
-  await page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
+  await sourceRow(page)
     .first()
     .evaluate((row) => {
       const rect = row.getBoundingClientRect();
@@ -265,19 +280,6 @@ test("keeps the context menu inside a narrow viewport", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("boots Solid and renders the authenticated nested tree", async ({
-  page,
-}) => {
-  await installApiFixture(page);
-  await page.goto("/");
-
-  await expect(page.locator("#app")).not.toBeEmpty();
-  await expect(page.getByText("Reading", { exact: true })).toBeVisible();
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
-});
-
 // #989: the first render never waits on favicons. A cold load of a large
 // tree must not hold the sidebar until the last icon settles; icons still
 // loading show their own placeholder, then swap in.
@@ -286,7 +288,6 @@ test("renders the tree while its favicons are still loading", async ({
 }) => {
   await installApiFixture(page);
   const rowCount = 50;
-  let treeServedAt = 0;
   await page.route("**/api/tree", async (route) => {
     await route.fulfill({
       json: {
@@ -302,19 +303,20 @@ test("renders the tree while its favicons are still loading", async ({
         })),
       },
     });
-    treeServedAt = Date.now();
   });
   const held: Route[] = [];
   await page.route("**/api/favicon/**", (route) => {
     held.push(route);
   });
+  // No page timer fires, so a tree that rendered only after some favicon
+  // deadline gave up would stay a skeleton.
+  await page.clock.install({ time: 0 });
+  await page.clock.pauseAt(1000);
   await page.goto("/");
 
-  // The icons never answer, so waiting for them would never finish.
-  await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
-    timeout: 3000,
-  });
-  expect(Date.now() - treeServedAt).toBeLessThan(3000);
+  // The icons never answer, so a tree that waited for them would never
+  // leave its skeleton.
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0);
   const icons = page.locator("button.source img.node-icon");
   await expect(icons).toHaveCount(rowCount);
   await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(
@@ -346,9 +348,7 @@ test("fetches the tree once on a dashboard load, and not on sign-in routes", asy
   });
 
   await page.goto("/");
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   expect(treeRequests).toHaveLength(1);
 
   treeRequests.length = 0;
@@ -414,8 +414,7 @@ test("offers first-run guidance while the tree is empty", async ({ page }) => {
 test("right-aligns folder and source unread counts to the same edge", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   const folderCount = page.locator(".source.folder .unread-count").first();
   const sourceCount = page
@@ -450,8 +449,7 @@ test("surfaces folder creation failures without refreshing the tree", async ({
 // The in-app prompt dialog (#698) replacing native prompt(): a successful
 // create drives the same API call the native dialog used to.
 test("creates a folder through the in-app prompt", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await page.getByRole("button", { name: "add folder" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -475,8 +473,7 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 test("cancelling the delete confirmation keeps the source", async ({
   page,
 }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await selectSource(page);
 
   await page.getByRole("button", { name: "delete source" }).click();
@@ -488,9 +485,7 @@ test("cancelling the delete confirmation keeps the source", async ({
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await expect(dialog).toHaveCount(0);
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   await expect(
     page.getByRole("button", { name: "delete source" }),
   ).toBeFocused();
@@ -506,16 +501,25 @@ test("keeps folder state usable when localStorage throws", async ({ page }) => {
       throw new Error("storage blocked");
     };
   });
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   await page.locator(".chevron").first().click();
+  await expect(sourceRow(page)).toBeHidden();
+});
+
+test("a collapsed folder stays collapsed across a reload", async ({ page }) => {
+  await openApp(page);
+  const source = sourceRow(page);
+  await expect(source).toBeVisible();
+  await page.locator(".chevron").first().click();
+  await expect(source).toBeHidden();
+
+  await page.reload();
   await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeHidden();
+    page.locator("button.source").filter({ hasText: "Reading" }),
+  ).toBeVisible();
+  await expect(source).toBeHidden();
 });
 
 test("preserves an unauthenticated deep link through login", async ({
@@ -553,8 +557,7 @@ test("preserves an unauthenticated deep link through login", async ({
 // but this aria-owns keeps the two connected -- lose it and the nesting
 // silently flattens in the accessibility tree while looking identical.
 test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   const folder = page.locator(".source.folder").first();
   await expect(folder).toHaveAttribute("aria-expanded", "true");
@@ -566,8 +569,7 @@ test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
 test("narrows the tree to what matches, and says so when nothing does", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   const filter = page.getByLabel("Filter feeds");
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
@@ -593,8 +595,7 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
 test("searches across subscriptions and says when nothing matches", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   const search = page.getByLabel("Search articles");
   await search.fill("subscribed");
@@ -804,8 +805,7 @@ test("pages the Today view with the view, not its node uid", async ({
 test("marks an article read, moving it between the filters", async ({
   page,
 }) => {
-  const state = await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  const state = await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
 
@@ -851,8 +851,7 @@ test("marks an article read, moving it between the filters", async ({
 test("announces mark-read and delete results once per action", async ({
   page,
 }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
   const status = page.locator(".dashboard > [role='status']");
@@ -928,6 +927,8 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
 // Manual is the default policy: scrolling changes nothing, and no observer
 // work happens at all.
 test("default policy never marks read on scroll", async ({ page }) => {
+  // The dwell and the flush run on timers, so the clock can run them out.
+  await page.clock.install();
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.setViewportSize({ height: 320, width: 1280 });
   await page.goto("/");
@@ -938,8 +939,11 @@ test("default policy never marks read on scroll", async ({ page }) => {
   await articleOptions(page)
     .last()
     .evaluate((row) => row.scrollIntoView());
-  await page.waitForTimeout(1500);
+  await intersectionsDelivered(page);
+  await page.clock.runFor(10_000);
 
+  // A flush marks its rows read in the list before its request goes out.
+  await expect(page.locator(".article-list .article.read")).toHaveCount(0);
   expect(state.readMarks).toEqual([]);
   expect(state.readArticleIds.size).toBe(0);
 });
@@ -947,8 +951,7 @@ test("default policy never marks read on scroll", async ({ page }) => {
 test("the options page offers and persists the read-mark policy", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/options");
+  await openApp(page, {}, "/options");
 
   const policy = page.getByRole("combobox", {
     name: "When articles get marked read",
@@ -968,32 +971,6 @@ test("the options page offers and persists the read-mark policy", async ({
   await expect(
     page.getByRole("combobox", { name: "When articles get marked read" }),
   ).toHaveValue("on-scroll-past");
-});
-
-test("the options page offers and persists the reader typography steps", async ({
-  page,
-}) => {
-  await installApiFixture(page);
-  await page.goto("/options");
-
-  const size = page.getByRole("combobox", { name: "Text size" });
-  const width = page.getByRole("combobox", { name: "Line width" });
-  await expect(size).toHaveValue("medium");
-  await expect(width).toHaveValue("medium");
-  // One stored vocabulary for both; the width select only labels its ends
-  // differently, so a value here that reads "small" is the narrow column.
-  await expect(width.locator("option[value=small]")).toHaveText("Narrow");
-  await expect(width.locator("option[value=large]")).toHaveText("Wide");
-
-  await size.selectOption("large");
-  await width.selectOption("small");
-  await page.reload();
-  await expect(page.getByRole("combobox", { name: "Text size" })).toHaveValue(
-    "large",
-  );
-  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
-    "small",
-  );
 });
 
 // The options route is the one page the document itself scrolls: once the
@@ -1058,8 +1035,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
 // already covers it -- and every other session can be revoked singly or
 // all at once, with the list shrinking to prove the revoke landed.
 test("lists active sessions and signs out another one", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/options");
+  const state = await openApp(page, {}, "/options");
   await page.getByRole("link", { name: "Account & security" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
   await expect(page.getByText("This session")).toBeVisible();
@@ -1082,9 +1058,32 @@ test("lists active sessions and signs out another one", async ({ page }) => {
   await expect(page.getByText("Phone")).toHaveCount(0);
 });
 
+// A session revoked from another device, or expired, while the options page
+// is open: the next request there sends the reader to sign in, with options
+// as the page to return to, not into an inline error.
+test("an expired session on the options page routes to login, returning to options", async ({
+  page,
+}) => {
+  const state = await openApp(page, {}, "/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  state.authenticated = false;
+  await page
+    .getByRole("button", { name: "Sign out all other sessions" })
+    .click();
+
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/options");
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+  ]);
+  failures.length = 0;
+});
+
 test("signs out all other sessions at once", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/options");
+  const state = await openApp(page, {}, "/options");
   await page.getByRole("link", { name: "Account & security" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
 
@@ -1096,6 +1095,105 @@ test("signs out all other sessions at once", async ({ page }) => {
   await expect(page.getByText("This browser")).toBeVisible();
 });
 
+test("a password change keeps this session and drops the others from the list", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  await page.getByLabel("Current password").fill("old-password");
+  await page.getByLabel("New password", { exact: true }).fill("new-password");
+  await page.getByLabel("Confirm new password").fill("new-password");
+  await page.getByRole("button", { name: "Change password" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Password changed.");
+  await expect(page.getByText("Phone")).toHaveCount(0);
+  await expect(page.getByText("This browser")).toBeVisible();
+});
+
+// The caller is signed in, so a throttled change can say so instead of
+// blaming the password the user typed.
+test("a throttled password change says to try again later", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options");
+  await page.route("**/api/options/password", (route) =>
+    route.fulfill({
+      json: { error: "Too many attempts. Try again later." },
+      status: 429,
+    }),
+  );
+  await page.getByRole("link", { name: "Account & security" }).click();
+
+  await page.getByLabel("Current password").fill("old-password");
+  await page.getByLabel("New password", { exact: true }).fill("new-password");
+  await page.getByLabel("Confirm new password").fill("new-password");
+  await page.getByRole("button", { name: "Change password" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "Too many attempts. Try again later.",
+  );
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+  ]);
+  failures.length = 0;
+});
+
+const openRegistration = async (
+  page: Page,
+  answer: { json: object; status: number },
+) => {
+  await installApiFixture(page, { authenticated: false });
+  await page.route("**/api/register", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: {
+            passwordResetEnabled: true,
+            registrationStatus: "ENABLED",
+            turnstileSiteKey: null,
+          },
+        })
+      : route.fulfill(answer),
+  );
+  await page.goto("/register");
+  await page.getByLabel("Name").fill("Reader");
+  await page.getByLabel("Email").fill("reader@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("password");
+  await page.getByLabel("Confirm password").fill("password");
+  await page.getByRole("button", { name: "Register" }).click();
+};
+
+test("registration success says what to do if no email arrives", async ({
+  page,
+}) => {
+  await openRegistration(page, { json: { success: true }, status: 200 });
+
+  await expect(
+    page.getByRole("heading", { name: "Registration successful" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("register again with the same address"),
+  ).toBeVisible();
+});
+
+test("a throttled registration says to try again later", async ({ page }) => {
+  await openRegistration(page, {
+    json: { error: "Too many attempts. Try again later.", success: false },
+    status: 429,
+  });
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "Too many attempts. Try again later.",
+  );
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+  ]);
+  failures.length = 0;
+});
+
 // The unit test covers the guard; this covers the part that can silently stop
 // working -- the settings reaching the stylesheet at all. A renamed data
 // attribute or a dropped effect leaves both selects working and the reader
@@ -1103,8 +1201,7 @@ test("signs out all other sessions at once", async ({ page }) => {
 test("the reader steps change the rendered column, not just storage", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
   await expect(page.locator(".reader h1")).toBeVisible();
 
@@ -1121,7 +1218,12 @@ test("the reader steps change the rendered column, not just storage", async ({
   const medium = await columnOf();
 
   await page.goto("/options");
-  await page.getByRole("combobox", { name: "Text size" }).selectOption("large");
+  const size = page.getByRole("combobox", { name: "Text size" });
+  await expect(size).toHaveValue("medium");
+  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
+    "medium",
+  );
+  await size.selectOption("large");
   await page.goto("/");
   await selectSource(page);
   await expect(page.locator(".reader h1")).toBeVisible();
@@ -1147,8 +1249,7 @@ test("the reader steps change the rendered column, not just storage", async ({
 // Weight survives both, which is what the tree already relies on for a source
 // with unread articles.
 test("tells read from unread by weight, not only colour", async ({ page }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
 
   const weightOf = (index: number) =>
@@ -1177,8 +1278,7 @@ test("tells read from unread by weight, not only colour", async ({ page }) => {
 // rest carry -1. A filter that removed the row holding it would leave none,
 // and Tab would step straight past the whole tree.
 test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   const tabStops = page.locator('[role="treeitem"][tabindex="0"]');
   await expect(tabStops).toHaveCount(1);
 
@@ -1194,8 +1294,7 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
 test("tree arrows stop at the ends and Home and End jump to them", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   const rows = page.locator(".sources-pane .source");
   await page.locator('[role="treeitem"][tabindex="0"]').focus();
   await expect(rows.first()).toBeFocused();
@@ -1265,9 +1364,8 @@ test("moving tree focus works out the tab stop once, not per row", async ({
 // remount, or focus drops to <body> and every favicon flashes its skeleton.
 test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   await page.clock.install();
-  await installApiFixture(page);
-  await page.goto("/");
-  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  await openApp(page);
+  const row = sourceRow(page);
   await expect(row.locator(".unread-count")).toHaveText("2");
   await row.focus();
   const folder = await page
@@ -1315,8 +1413,7 @@ test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
 test("offers a password reset link only where mail can deliver one", async ({
   page,
 }) => {
-  await installApiFixture(page, { authenticated: false });
-  await page.goto("/login");
+  await openApp(page, { authenticated: false }, "/login");
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Forgot your password?" }),
@@ -1365,32 +1462,23 @@ test("opening the activation link activates nothing until the button says so", a
   expect(activations).toEqual(["POST"]);
 });
 
-test("retitles the document on route changes", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
-
-  // The dashboard badges the title with the fixture's total unread count;
-  // leaving the dashboard unmounts it and drops the badge again.
-  await expect(page).toHaveTitle("(2) FeedFathom");
-  await page.getByRole("button", { name: "options" }).first().click();
-  await expect(page).toHaveTitle("Options · FeedFathom");
-});
-
 // #765: Hide in the New-article signal options must remove the "(N) "
 // prefix, immediately and for good -- the title effect reads the setting
 // signal directly, so no reload or dashboard visit may bring it back.
 test("hides the tab-title unread count when the setting is Hide", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await expect(page).toHaveTitle("(2) FeedFathom");
 
   await page.getByRole("button", { name: "options" }).first().click();
+  // Leaving the dashboard drops the badge on its own, before the setting
+  // changes anything.
+  await expect(page).toHaveTitle("Options · FeedFathom");
   await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
-    .selectOption("off");
+    .selectOption("false");
   // The effect reruns wherever the app is, not only over the dashboard.
   await expect(page).toHaveTitle("Options · FeedFathom");
 
@@ -1402,14 +1490,26 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("FeedFathom");
 });
 
+// Before #714 the only choice was a boolean under its own key.
+test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("markReadOnOpen", "true"),
+  );
+  await openApp(page, {}, "/options");
+  await expect(
+    page.getByRole("combobox", { name: "When articles get marked read" }),
+  ).toHaveValue("on-open");
+});
+
 // Each search box is one row of a pane with little height to spare, so each
 // can be hidden -- and hiding one must drop what it held, or a filter nobody
 // can see keeps narrowing the tree.
 test("hides the feed filter and article search boxes independently", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await page.getByLabel("Filter feeds").fill("nothing matches this");
   await expect(page.getByText("No feeds match that.")).toBeVisible();
 
@@ -1417,7 +1517,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Feed filter box in the sidebar" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
 
   await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
@@ -1428,7 +1528,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Reading" }).click();
   await page
     .getByRole("combobox", { name: "Article search box" })
-    .selectOption("off");
+    .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 
@@ -1439,10 +1539,46 @@ test("hides the feed filter and article search boxes independently", async ({
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 });
 
-// The prefetch setting's Off used to read as on like every string-"off"
-// signal consumed bare (#765's root cause), so the requests it was
-// supposed to save went out anyway. These two pin both sides of the
-// toggle around the same open.
+// These two pin both sides of the prefetch toggle around the same open.
+// They store the "on"/"off" strings toggles used before they were booleans,
+// so they also cover reading those.
+// Records each /api/article fetch in the page as it starts, so a check needs
+// no wait for Playwright's own request events.
+const recordArticleRequests = (page: Page) =>
+  page.addInitScript(() => {
+    const fetchPage = window.fetch.bind(window);
+    Object.defineProperty(window, "fetch", {
+      value: (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+          location.href,
+        );
+        if (url.pathname === "/api/article")
+          sessionStorage.setItem(
+            "articleRequests",
+            `${sessionStorage.getItem("articleRequests") ?? ""} ${url.searchParams.get("article")}`,
+          );
+        return fetchPage(input, init);
+      },
+    });
+  });
+
+// The article ids fetched so far, read in an idle callback: a prefetch is
+// queued in one, so a prefetch queued before this read has run by then.
+const recordedArticleRequests = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<string[]>((resolve) =>
+        requestIdleCallback(() =>
+          resolve(
+            (sessionStorage.getItem("articleRequests") ?? "")
+              .split(" ")
+              .filter(Boolean),
+          ),
+        ),
+      ),
+  );
+
 const requestedArticleIds = (page: Page) => {
   const ids: string[] = [];
   page.on("request", (request) => {
@@ -1476,22 +1612,36 @@ test("skips the next-article prefetch when the setting is Off", async ({
   await page.addInitScript(() => {
     localStorage.setItem("prefetchNext", "off");
   });
-  await installApiFixture(page, { multipleArticles: true });
-  const ids = requestedArticleIds(page);
-  await page.goto("/");
+  await recordArticleRequests(page);
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await page.getByRole("combobox", { name: "Show" }).selectOption("all");
   await expect(articleOptions(page)).toHaveCount(3);
 
   await articleOptions(page).first().click();
-  await expect.poll(() => ids.length).toBeGreaterThanOrEqual(1);
-  // A beat for a wrongly-scheduled prefetch to fire; the only article
-  // fetched may be the one that was opened (which row that is depends on
-  // the fixture's list order, so only the count is pinned here -- the On
-  // case above pins that a second id really does get fetched).
-  await page.waitForTimeout(1_000);
-  expect(new Set(ids).size).toBe(1);
-  expect(["11", "12", "13"]).toContain(ids[0]);
+  await expect(page.locator(".reader")).toContainText("Feed article content");
+  // The only article fetched is the one opened (which row that is depends on
+  // the fixture's list order, so only the count is pinned here -- the On case
+  // above pins that a second id really does get fetched).
+  const requested = await recordedArticleRequests(page);
+  expect(new Set(requested).size).toBe(1);
+  expect(["11", "12", "13"]).toContain(requested[0]);
+});
+
+test("skips the next-article prefetch under Save Data", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("prefetchNext", "true");
+    Object.defineProperty(navigator, "connection", {
+      value: { saveData: true },
+    });
+  });
+  await recordArticleRequests(page);
+  await openApp(page, { multipleArticles: true });
+  await selectSource(page);
+  // Loading the list opens its first row, which is when a prefetch would be
+  // queued.
+  await expect(page.locator(".reader")).toContainText("Feed article content");
+  expect(new Set(await recordedArticleRequests(page))).toEqual(new Set(["11"]));
 });
 
 test("a press starts the article fetch even with prefetch Off", async ({
@@ -1500,32 +1650,29 @@ test("a press starts the article fetch even with prefetch Off", async ({
   await page.addInitScript(() => {
     localStorage.setItem("prefetchNext", "off");
   });
-  await installApiFixture(page, { multipleArticles: true });
-  const ids = requestedArticleIds(page);
-  await page.goto("/");
+  await recordArticleRequests(page);
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await page.getByRole("combobox", { name: "Show" }).selectOption("all");
   await expect(articleOptions(page)).toHaveCount(3);
 
-  // Settle first: loading the list may open an article of its own.
-  await page.waitForTimeout(1_000);
-  const before = ids.length;
+  // Settle first: loading the list opens an article of its own.
+  await expect(page.locator(".reader")).toContainText("Feed article content");
+  const before = (await recordedArticleRequests(page)).length;
   // pointerdown alone, no click: the fetch must not wait for the release.
   await articleOptions(page)
     .last()
     .dispatchEvent("pointerdown", { button: 0, pointerType: "mouse" });
-  await expect.poll(() => ids.length).toBe(before + 1);
+  expect(await recordedArticleRequests(page)).toHaveLength(before + 1);
   // A right press never opens the article, so it fetches nothing.
   await articleOptions(page)
     .nth(1)
     .dispatchEvent("pointerdown", { button: 2, pointerType: "mouse" });
-  await page.waitForTimeout(500);
-  expect(ids.length).toBe(before + 1);
+  expect(await recordedArticleRequests(page)).toHaveLength(before + 1);
 });
 
 test("shows the current account and logs out", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/options");
+  const state = await openApp(page, {}, "/options");
   await page.getByRole("link", { name: "Account & security" }).click();
 
   await expect(page.getByText("Reader (reader@example.com)")).toBeVisible();
@@ -1540,8 +1687,7 @@ test("shows the current account and logs out", async ({ page }) => {
 test("surfaces a malformed Options session without crashing", async ({
   page,
 }) => {
-  await installApiFixture(page, { sessionFailure: true });
-  await page.goto("/options");
+  await openApp(page, { sessionFailure: true }, "/options");
 
   await expect(page.getByRole("alert")).toContainText(
     "Invalid response from /api/session",
@@ -1550,8 +1696,7 @@ test("surfaces a malformed Options session without crashing", async ({
 });
 
 test("loads articles and content from a selected source", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   const deleteButton = page.getByRole("button", { name: "delete articles" });
   await expect(deleteButton).toBeDisabled();
   await selectSource(page);
@@ -1568,8 +1713,7 @@ test("loads articles and content from a selected source", async ({ page }) => {
 test("select all preserves scroll and moves focus so Delete works immediately", async ({
   page,
 }) => {
-  const state = await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  const state = await openApp(page, { multipleArticles: true });
   await page.addStyleTag({ content: ".article-list { max-height: 40px; }" });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
@@ -1603,28 +1747,10 @@ test("select all preserves scroll and moves focus so Delete works immediately", 
     .toEqual([11, 12, 13]);
 });
 
-test("select all then clicking Delete removes every article", async ({
-  page,
-}) => {
-  const state = await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-  await selectSource(page);
-  await expect(articleOptions(page)).toHaveCount(3);
-
-  await page.getByRole("button", { name: "select all" }).click();
-  await page.getByRole("button", { name: "delete articles" }).click();
-
-  await expect(articleOptions(page)).toHaveCount(0);
-  await expect
-    .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
-    .toEqual([11, 12, 13]);
-});
-
 test("selecting a single article then pressing Delete removes only it", async ({
   page,
 }) => {
-  const state = await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  const state = await openApp(page, { multipleArticles: true });
   await selectSource(page);
 
   await page.getByRole("option", { name: /Second article/ }).click();
@@ -1645,8 +1771,7 @@ test("selecting a single article then pressing Delete removes only it", async ({
 test("each article delete names the input that triggered it", async ({
   page,
 }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await page.getByRole("option", { name: /First article/ }).click();
 
@@ -1691,8 +1816,7 @@ test("source properties reuses the discovery panel with feed/website locked", as
   // Editing reuses the exact same left-pane form the "add source" flow
   // uses (see feed-discovery.tsx), just with feed/home URL disabled and
   // the website-search/preview steps hidden -- not a separate dialog.
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
 
   await page.getByRole("button", { name: "source properties" }).click();
@@ -1711,8 +1835,7 @@ test("source properties reuses the discovery panel with feed/website locked", as
 test("the discovery panel takes focus on open and Escape hands it back", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   // Opening the panel unmounts the toolbar button that was focused; without
   // an explicit hand-off a keyboard user lands on <body>.
@@ -1735,8 +1858,7 @@ test("the discovery panel takes focus on open and Escape hands it back", async (
 test("renaming a source through the edit panel updates the tree", async ({
   page,
 }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await selectSource(page);
   await page.getByRole("button", { name: "source properties" }).click();
 
@@ -1750,8 +1872,7 @@ test("renaming a source through the edit panel updates the tree", async ({
 });
 
 test("cancelling the edit panel discards changes", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await selectSource(page);
   await page.getByRole("button", { name: "source properties" }).click();
 
@@ -1759,17 +1880,14 @@ test("cancelling the edit panel discards changes", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel" }).click();
 
   await expect(page.getByRole("heading", { name: "Edit feed" })).toHaveCount(0);
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   expect(state.updatedSource).toBeUndefined();
 });
 
 test("deletes a source after confirmation and refreshes the tree", async ({
   page,
 }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await selectSource(page);
 
   await page.getByRole("button", { name: "delete source" }).click();
@@ -1778,17 +1896,14 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   await dialog.getByRole("button", { name: "OK" }).click();
 
   await expect(dialog).toHaveCount(0);
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toHaveCount(0);
+  await expect(sourceRow(page)).toHaveCount(0);
   expect(state.removedSourceIds).toEqual([3]);
 });
 
 test("renaming a folder through properties updates the tree", async ({
   page,
 }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await page
     .locator("button.source.folder")
     .filter({ hasText: "Reading" })
@@ -1809,8 +1924,7 @@ test("renaming a folder through properties updates the tree", async ({
 });
 
 test("blocks deleting a non-empty folder", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await page
     .locator("button.source.folder")
     .filter({ hasText: "Reading" })
@@ -1822,33 +1936,7 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
   // confirm in-app, so absence is directly assertable).
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Folder is not empty");
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
-});
-
-test("every toolbar icon renders and is clickable", async ({ page }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
-  await selectSource(page);
-
-  const toolbarButtons = [
-    "add source",
-    "add folder",
-    "source properties",
-    "delete source",
-    "select all",
-    "delete articles",
-  ];
-  for (const name of toolbarButtons) {
-    const button = page.getByRole("button", { exact: true, name }).first();
-    // Trial clicks and visibility checks are UI-ordered assertions; a
-    // parallel batch would interleave Playwright's actionability waits.
-    // oxlint-disable-next-line eslint/no-await-in-loop
-    await button.click({ trial: true });
-    // oxlint-disable-next-line eslint/no-await-in-loop
-    await expect(button.locator("svg")).toBeVisible();
-  }
+  await expect(sourceRow(page)).toBeVisible();
 });
 
 test("shows the generic RSS icon for a source with no favicon", async ({
@@ -1857,13 +1945,9 @@ test("shows the generic RSS icon for a source with no favicon", async ({
   // Regression test for the favicon <Show>/faviconFailed restructuring:
   // the fixture's source carries favicon: null, so this exercises the
   // Icon-swap fallback branch (not the real <img>) on every render.
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
-  const nodeIcon = page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .locator(".node-icon");
+  const nodeIcon = sourceRow(page).locator(".node-icon");
   await expect(nodeIcon.locator("svg")).toBeVisible();
   await expect(nodeIcon.locator("img")).toHaveCount(0);
 });
@@ -1871,8 +1955,7 @@ test("shows the generic RSS icon for a source with no favicon", async ({
 test("uses three desktop panes and mobile history navigation", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   await expect(page.locator(".sources-pane")).toBeVisible();
   await expect(page.locator(".articles-pane")).toBeVisible();
@@ -1920,8 +2003,7 @@ test("cross-fades mobile pane switches unless motion is reduced", async ({
   });
   const transitions = () =>
     page.evaluate(() => Number(Reflect.get(window, "viewTransitions")));
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
   await selectSource(page);
   await expect(page.locator(".articles-pane")).toBeVisible();
@@ -1952,14 +2034,11 @@ test("a double tap on a feed leaves one history entry to go back", async ({
   await page.goto("/");
 
   // Both clicks in one task, so the second certainly beats the transition.
-  await page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .evaluate((button) => {
-      if (!(button instanceof HTMLElement)) return;
-      button.click();
-      button.click();
-    });
+  await sourceRow(page).evaluate((button) => {
+    if (!(button instanceof HTMLElement)) return;
+    button.click();
+    button.click();
+  });
   await expect(page.locator(".articles-pane")).toBeVisible();
   await page
     .locator(".articles-pane")
@@ -2009,9 +2088,110 @@ for (const theme of ["smart", "high-contrast"]) {
   });
 }
 
+// The extension's newsletter action opens this URL rather than minting an
+// address of its own, so new addresses all come in the SPA's format. The
+// address lands in the URL: a reload must not replace one already copied,
+// and reserves it again, which is a no-op once it is reserved.
+test("mints a newsletter address when opened with ?newsletter", async ({
+  page,
+}) => {
+  const state = await openApp(
+    page,
+    { mailDomain: "mail.example" },
+    "/preview?newsletter",
+  );
+
+  const feedUrl = page.getByLabel("Feed URL");
+  await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
+  const minted = await feedUrl.inputValue();
+  await expect.poll(() => state.reservedAddresses).toEqual([minted]);
+  await expect(page).toHaveURL(
+    `/preview?feedUrl=${encodeURIComponent(minted)}`,
+  );
+  await page.reload();
+  await expect(feedUrl).toHaveValue(minted);
+  await expect.poll(() => state.reservedAddresses).toEqual([minted, minted]);
+});
+
+// Mail to an unreserved address bounces, so the user has to know, and a
+// reload gets the reservation another try.
+test("says so when a generated address could not be reserved", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+  state.failReservations = true;
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(
+    page.getByText(
+      "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
+    ),
+  ).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  expect(state.deliverNewsletter(address)).toBe(false);
+
+  state.failReservations = false;
+  await page.reload();
+  await expect(page.getByLabel("Feed URL")).toHaveValue(address);
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+  await expect(page.getByText(/^Address not reserved/u)).toHaveCount(0);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+  ]);
+  failures.length = 0;
+});
+
+// The address is copied before Subscribe, so a newsletter can mail it first:
+// its confirmation must be accepted then, and readable once subscribed.
+test("keeps mail sent to a generated address before Subscribe", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(page.getByText("Address copied.")).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Confirm your subscription" }),
+  ).toBeVisible();
+  expect(state.subscriptionBodies).toEqual([
+    { sourceFolder: null, sourceName: "Letters", sourceUrl: address },
+  ]);
+});
+
+test("explains a refused address instead of the server's error", async ({
+  page,
+}) => {
+  await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByLabel("Feed URL").fill("me@mail.example");
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByText(
+      "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
+    ),
+  ).toBeVisible();
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)",
+  ]);
+  failures.length = 0;
+});
+
 test("validates Website URLs before discovery", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/preview");
+  const state = await openApp(page, {}, "/preview");
   const website = page.getByLabel("Website");
 
   await website.fill("ftp://preview.example/");
@@ -2034,8 +2214,7 @@ test("validates Website URLs before discovery", async ({ page }) => {
 test("marks a found feed that advertises WebSub, and only that one", async ({
   page,
 }) => {
-  await installApiFixture(page, { websubFeed: true });
-  await page.goto("/preview");
+  await openApp(page, { websubFeed: true }, "/preview");
   await page.getByLabel("Website").fill("https://preview.example/");
   await page.getByRole("button", { name: "Find feeds" }).click();
 
@@ -2048,16 +2227,25 @@ test("marks a found feed that advertises WebSub, and only that one", async ({
 });
 
 test("keeps the newest discovery preview response", async ({ page }) => {
-  await installApiFixture(page, { discoveryRace: true });
-  await page.goto("/preview");
+  const state = await openApp(page, { discoveryRace: true }, "/preview");
   await page.getByLabel("Website").fill("https://preview.example/");
   await page.getByRole("button", { name: "Find feeds" }).click();
 
+  const slowPreview = page.waitForRequest((request) =>
+    request.url().includes("slow.xml"),
+  );
   await page.getByRole("button", { name: /Slow feed/ }).click();
   await page.getByRole("button", { name: /Fast feed/ }).click();
 
   await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
-  await page.waitForTimeout(250);
+  // Only now may the older preview answer. Answered or aborted by the app,
+  // it settles after the newer one and is dropped before the page next goes
+  // idle.
+  state.releaseSlowPreview();
+  await (await (await slowPreview).response())?.finished();
+  await page.evaluate(
+    () => new Promise((resolve) => requestIdleCallback(resolve)),
+  );
   await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
   await expect(
     page.getByRole("heading", { name: "Fast feed article" }),
@@ -2076,8 +2264,11 @@ test("keeps preview usable when folder startup fails", async ({ page }) => {
 });
 
 test("previews and subscribes with the exact payload", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+  const state = await openApp(
+    page,
+    {},
+    "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
+  );
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
   await expect(page.getByLabel("Folder")).toContainText("Reading");
@@ -2105,8 +2296,11 @@ test("previews and subscribes with the exact payload", async ({ page }) => {
 });
 
 test("notes when a preview shows only part of the feed", async ({ page }) => {
-  await installApiFixture(page, { previewTruncated: true });
-  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+  await openApp(
+    page,
+    { previewTruncated: true },
+    "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
+  );
 
   await expect(
     page.getByRole("heading", { name: "Preview article" }),
@@ -2121,8 +2315,11 @@ test("notes when a preview shows only part of the feed", async ({ page }) => {
 });
 
 test("lists the discovery preview articles as a list", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml");
+  await openApp(
+    page,
+    {},
+    "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
+  );
 
   const articles = page.getByRole("region", { name: "Preview articles" });
   await expect(articles.getByRole("list")).toHaveCount(1);
@@ -2132,21 +2329,42 @@ test("lists the discovery preview articles as a list", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("exposes Reader modes only when the bridge is available", async ({
-  context,
+// A preview opens on its first article. A modified click on one is the
+// browser's gesture for "open this elsewhere", so the pane leaves it be.
+test("a preview opens its first article and leaves modified clicks alone", async ({
   page,
 }) => {
-  await installReaderResponder(context, true);
-  await installApiFixture(page);
-  await page.goto("/");
-  await selectSource(page);
-
-  const modes = page.getByRole("combobox", { name: "Article display mode" });
-  await expect(modes).toContainText("Reader (plain text)");
-  await modes.selectOption("READABILITY");
+  // Runs after the app's delegated handler: records whether it took the
+  // click, then keeps the browser from opening anything.
+  await page.addInitScript(() =>
+    window.addEventListener("click", (event) => {
+      sessionStorage.setItem("clickTaken", String(event.defaultPrevented));
+      event.preventDefault();
+    }),
+  );
+  await openApp(
+    page,
+    {},
+    "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
+  );
+  const link = page
+    .getByRole("region", { name: "Preview articles" })
+    .getByRole("link", { name: /article/ });
+  await expect(link).toHaveAttribute("aria-current", "true");
   await expect(
-    page.getByText("Reader bridge content.", { exact: false }),
-  ).toBeVisible();
+    page.getByRole("article", { name: "Preview reader" }),
+  ).toContainText("Preview article content");
+
+  const clickTaken = async (
+    modifiers: ("Alt" | "ControlOrMeta" | "Shift")[],
+  ) => {
+    await link.click({ modifiers });
+    return await page.evaluate(() => sessionStorage.getItem("clickTaken"));
+  };
+  expect(await clickTaken([])).toBe("true");
+  expect(await clickTaken(["Alt"])).toBe("false");
+  expect(await clickTaken(["ControlOrMeta"])).toBe("false");
+  expect(await clickTaken(["Shift"])).toBe("false");
 });
 
 test("gives extracted images the app's own loading defaults", async ({
@@ -2154,8 +2372,7 @@ test("gives extracted images the app's own loading defaults", async ({
   page,
 }) => {
   await installReaderResponder(context, true);
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
 
   await page
@@ -2180,9 +2397,12 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     await page.goto("/");
     await selectSource(page);
 
-    await page
-      .getByRole("combobox", { name: "Article display mode" })
-      .selectOption(mode);
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await expect(modes).toContainText("Reader (plain text)");
+    await modes.selectOption(mode);
+    await expect(
+      page.getByText("Reader bridge content.", { exact: false }),
+    ).toBeVisible();
     // The rendered copy started loading after any earlier one, so once it
     // has failed, a handler that survived any step has already run.
     await expect
@@ -2197,23 +2417,6 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     ).toBeUndefined();
   });
 }
-
-test("extracts article content with the alternate extractor", async ({
-  context,
-  page,
-}) => {
-  await installReaderResponder(context, true);
-  await installApiFixture(page);
-  await page.goto("/");
-  await selectSource(page);
-
-  await page
-    .getByRole("combobox", { name: "Article display mode" })
-    .selectOption("ARTICLE_EXTRACTOR");
-  await expect(
-    page.getByText("Reader bridge content.", { exact: false }),
-  ).toBeVisible();
-});
 
 for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
   test(`falls back to Feed mode on an element-heavy page in ${mode}`, async ({
@@ -2241,8 +2444,7 @@ test("keeps Feed mode when the Reader bridge is unavailable", async ({
   page,
 }) => {
   await installReaderResponder(page.context(), false);
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
 
   await expect(
@@ -2252,8 +2454,7 @@ test("keeps Feed mode when the Reader bridge is unavailable", async ({
 });
 
 test("redirects expired protected requests to login", async ({ page }) => {
-  const state = await installApiFixture(page);
-  await page.goto("/");
+  const state = await openApp(page);
   await expect(page.getByText("Reading", { exact: true })).toBeVisible();
 
   state.authenticated = false;
@@ -2271,8 +2472,7 @@ test("redirects expired protected requests to login", async ({ page }) => {
 test("surfaces tree failures without masquerading as logout", async ({
   page,
 }) => {
-  await installApiFixture(page, { treeFailure: true });
-  await page.goto("/");
+  await openApp(page, { treeFailure: true });
 
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(page.getByRole("alert")).toContainText(
@@ -2302,9 +2502,7 @@ test("a superseded tree request settles on its replacement", async ({
   held[1]!();
   held[0]!();
 
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
@@ -2312,8 +2510,7 @@ test("a superseded tree request settles on its replacement", async ({
 // which already opens the article in the reader pane; ? opens the cheat sheet
 // hosted in the shared DialogHost.
 test("j and k move the selection like the arrow keys", async ({ page }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
 
@@ -2374,14 +2571,9 @@ test("o moves focus between the article list and the reader pane", async ({
 // with copy link address, save, and whatever the reader's extensions add. Tree
 // rows are buttons with no platform menu to lose, so they keep the app's.
 test("leaves the article context menu to the browser", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
 
-  await page
-    .locator("button.source")
-    .filter({ hasText: "Tech News" })
-    .first()
-    .click({ button: "right" });
+  await sourceRow(page).first().click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -2427,8 +2619,7 @@ test.describe("touch devices", () => {
 // The filter is a dropdown among icon buttons, so it says what it does rather
 // than leaving "Unread" to read as a status.
 test("labels the article filter visibly", async ({ page }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
   await expect(page.locator(".article-filter-field")).toContainText("Show");
   await expect(page.getByRole("combobox", { name: "Show" })).toHaveValue(
@@ -2439,8 +2630,7 @@ test("labels the article filter visibly", async ({ page }) => {
 test("? opens the shortcut help dialog and Escape closes it", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/");
+  await openApp(page);
   await selectSource(page);
   await articleOptions(page).first().focus();
 
@@ -2467,11 +2657,42 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   ).toBe("option");
 });
 
+// The dialog host shows one request at a time. A second one replaces the
+// first, which must then settle as cancelled rather than leave its caller
+// waiting forever. The page imports the app's own module instance from the
+// dev server, as no control can open a dialog over an open one.
+test("a second dialog request cancels the one still pending", async ({
+  page,
+}) => {
+  await openApp(page);
+  // Boot focuses the first tree row; wait for that before moving focus.
+  await expect(page.locator(".sources-pane .source").first()).toBeFocused();
+  const opener = page.getByRole("button", { name: "add folder" });
+  await opener.focus();
+
+  const first = await page.evaluate(async (url) => {
+    const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
+    const pending = confirmDialog("First?");
+    // Let the first dialog open and take focus, so the second replaces an
+    // open dialog and must keep the first one's focus-return target.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    void promptDialog("Second", "kept");
+    return await pending;
+  }, "/dialog.tsx");
+  expect(first).toBe(false);
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAccessibleName("Second");
+  await expect(dialog.getByRole("textbox")).toHaveValue("kept");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
 test("the options page can open the shortcut help dialog without a keyboard", async ({
   page,
 }) => {
-  await installApiFixture(page);
-  await page.goto("/options");
+  await openApp(page, {}, "/options");
 
   await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
   const dialog = page.getByRole("dialog");
@@ -2486,8 +2707,7 @@ test("the options page can open the shortcut help dialog without a keyboard", as
 test("typing j in the feed filter does not move the selection", async ({
   page,
 }) => {
-  await installApiFixture(page, { multipleArticles: true });
-  await page.goto("/");
+  await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
   await articleOptions(page).first().focus();
@@ -2581,6 +2801,8 @@ test.describe("session restoration", () => {
   test("with the preference off, no snapshot is written and nothing restores", async ({
     page,
   }) => {
+    // The scroll recorder writes behind a timer, which the clock runs out.
+    await page.clock.install();
     await installApiFixture(page, { longArticle: true });
     await page.addInitScript(() => {
       localStorage.setItem("rememberReadingPosition", "off");
@@ -2590,10 +2812,17 @@ test.describe("session restoration", () => {
     await selectSource(page);
     await expect(page.locator(".reader h1")).toHaveText("First article");
     const reader = page.locator(".reader");
-    await reader.evaluate((element) => {
-      element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
-    });
-    await page.waitForTimeout(700);
+    // Resolves from a listener added after the app's, so the app's own
+    // scroll handler has run by then.
+    await reader.evaluate(
+      (element) =>
+        new Promise<void>((resolve) => {
+          element.addEventListener("scroll", () => resolve(), { once: true });
+          element.scrollTop =
+            (element.scrollHeight - element.clientHeight) * 0.5;
+        }),
+    );
+    await page.clock.runFor(1_000);
 
     await page.reload();
     await selectSource(page);
@@ -2926,6 +3155,37 @@ test("switching feeds does not wait on the old feed's next page", async ({
   expect(pageRequests).toEqual([[3], [9]]);
 });
 
+// A delete that fails after the reader moved to another feed must not put
+// the old feed's rows back over the new feed's list.
+test("a failed delete leaves the feed switched to since alone", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  await routeTwoSourceTree(page, state);
+  let failDelete: (() => void) | undefined;
+  await page.route("**/api/articles", async (route) => {
+    if (route.request().method() !== "DELETE") return await route.fallback();
+    await new Promise<void>((release) => (failDelete = release));
+    // Malformed rather than a 500, which the console guard would flag.
+    await route.fulfill({ json: { removed: "malformed" } });
+  });
+  await page.goto("/");
+  await selectSource(page);
+  await page.getByRole("option", { name: /Second article/ }).click();
+  await page.keyboard.press("Delete");
+  await expect(articleOptions(page)).toHaveCount(2);
+  await expect.poll(() => failDelete).toBeDefined();
+
+  await selectSource(page, "Tech Preview");
+  await expect(
+    page.getByRole("option", { name: /Subscribed article/ }),
+  ).toBeVisible();
+  failDelete!();
+  await expect(page.getByRole("alert")).toContainText("Invalid response");
+  await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
+  await expectSelectedRow(page, /Tech Preview/);
+});
+
 test("tree context menu actions target the clicked row", async ({ page }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
@@ -3009,9 +3269,7 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await installApiFixture(page);
   const tree = await treeHolds(page, (request) => request === 2);
   await page.goto("/");
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
 
   await page.clock.runFor(30_000);
   await expect.poll(() => tree.released.length).toBe(1);
@@ -3022,9 +3280,7 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
 
   await page.getByRole("link", { name: "Home" }).click();
   await expect.poll(() => tree.requests()).toBe(3);
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   // The remounted dashboard polls on its own backoff, 30s then 60s, once each.
   await page.clock.runFor(30_000);
   await expect.poll(() => tree.requests()).toBe(4);
@@ -3051,7 +3307,7 @@ test("an article event refreshes the tree ahead of the poll", async ({
     });
   });
   await page.goto("/");
-  const row = page.locator("button.source").filter({ hasText: "Tech News" });
+  const row = sourceRow(page);
   await expect(row.locator(".unread-count")).toHaveText("2");
 
   let treeRequests = 0;
@@ -3109,9 +3365,7 @@ test("a stream that keeps dropping leaves the fallback poll on time", async ({
     });
   });
   await page.goto("/");
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   expect(state.treeRequests).toBe(1);
 
   // EventSource reconnects on real time, the poll on the installed clock.
@@ -3200,12 +3454,30 @@ const reloadWithHeldTree = async (
     await (response ? route.fulfill(response) : route.fallback());
   });
   await page.reload();
-  await expect(
-    page.locator("button.source").filter({ hasText: "Tech News" }),
-  ).toBeVisible();
+  await expect(sourceRow(page)).toBeVisible();
   await expect(page.locator(".tree.skeleton")).toHaveCount(0);
   return release;
 };
+
+// Playwright blocks worker registration here, so this page is as uncontrolled
+// as one after a hard reload: its logout never reaches the worker, and the
+// page itself must drop the account's cached data.
+test("logging out from an uncontrolled page drops the API cache", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options#account");
+  await page.evaluate(async () => {
+    const cache = await caches.open("api-test");
+    await cache.put("/sw-queue-account", new Response("1"));
+  });
+  await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(
+    await page.evaluate(async () =>
+      (await caches.keys()).filter((key) => key.startsWith("api-")),
+    ),
+  ).toEqual([]);
+});
 
 // The article bodies the worker holds for offline reading (#992).
 const downloaded = (page: Page) =>
@@ -3281,9 +3553,7 @@ test.describe("under a controlling service worker", () => {
         );
     });
     await page.reload();
-    await expect(
-      page.locator("button.source").filter({ hasText: "Tech News" }),
-    ).toBeVisible();
+    await expect(sourceRow(page)).toBeVisible();
     // The cache-only request (#989) is answered by the worker alone.
     expect({ fromPage: fromPage.toSorted(), fromWorker }).toEqual({
       fromPage: ["/api/tree", "/api/tree?cached"],
@@ -3397,7 +3667,7 @@ test.describe("under a controlling service worker", () => {
       .getByRole("combobox", {
         name: "Download unread articles for offline reading",
       })
-      .selectOption("off");
+      .selectOption("false");
     await expect.poll(() => downloaded(page)).toEqual([]);
 
     // The init script switches it back on.

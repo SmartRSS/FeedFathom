@@ -27,7 +27,8 @@ export type WebSubStatus = "failed" | "none" | "pending" | "verified";
  *
  * "pending" is retried, not just "none": subscribing again is idempotent from
  * the hub's perspective, so retrying self-heals a verification the hub
- * silently dropped without needing a separate timeout and retry scheme.
+ * silently dropped. claimWebSubSubscribeAttempt spaces those retries a day
+ * apart, and they reuse the pending callback token.
  * "verified" is live and "failed" was refused, so neither is retried here.
  */
 export function shouldAttemptWebSubSubscribe(

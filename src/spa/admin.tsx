@@ -5,7 +5,7 @@ import {
   removedIdResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
-import { api } from "./api.ts";
+import { api, messageOf } from "./api.ts";
 import { confirmDialog, promptDialog } from "./dialog.tsx";
 
 type AdminSource = Static<typeof adminSourcesResponse>[number];
@@ -66,7 +66,7 @@ export function Admin(props: {
       );
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(cause instanceof Error ? cause.message : "Unauthorized");
+      setMessage(messageOf(cause, "Unauthorized"));
     }
   }
   onMount(load);
@@ -99,9 +99,7 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(
-        cause instanceof Error ? cause.message : "Could not update URL.",
-      );
+      setMessage(messageOf(cause, "Could not update URL."));
     }
   }
 
@@ -122,9 +120,7 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(
-        cause instanceof Error ? cause.message : "Could not delete source.",
-      );
+      setMessage(messageOf(cause, "Could not delete source."));
     }
   }
 
