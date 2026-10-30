@@ -1,14 +1,17 @@
 import type { AppConfig } from "#platform/config.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
-import type { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import { expect, spyOn, test } from "bun:test";
+import { expect, setSystemTime, spyOn, test } from "bun:test";
+import { Readable } from "node:stream";
 import { DelayedError } from "bullmq";
 import { JobName } from "#shared/types/job-name-enum.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import {
   MainWorker,
@@ -419,6 +422,89 @@ test("queues every due favicon refresh concurrently, below feed parsing", async 
   release.resolve();
   await processing;
   expect(finished).toBe(true);
+});
+
+// Every refresh asks the same three provider hosts, and the limiter lets each
+// take one background request per interval. Played out in virtual time with
+// the real refresher and limiter, a cold run must not re-run every waiting
+// job each time one of them takes the slot (#1087).
+test("a cold favicon run of 50 sources runs each refresh once", async () => {
+  const sourceCount = 50;
+  const due = Array.from({ length: sourceCount }, (_, index) => ({
+    homeUrl: `https://site${index + 1}.example/`,
+    id: index + 1,
+  }));
+  const png = Buffer.alloc(24);
+  png.write("\x89PNG", 0, "latin1");
+  png.writeUInt32BE(64, 16);
+  png.writeUInt32BE(64, 20);
+  const client = new HttpClient(createFakeHttpRedis(), {
+    deadlineMs: 2_000,
+    transport: async (url) => {
+      const body = Readable.from([png]);
+      return {
+        body,
+        destroy: () => body.destroy(),
+        headers: new Headers({ "content-type": "image/png" }),
+        status: 200,
+        url,
+      };
+    },
+  });
+  const updated = new Set<number>();
+  // Each queued refresh and when BullMQ would next hand it to the worker.
+  const queued: { data: unknown; runAt: number }[] = [];
+  const { process } = await startWorker({
+    bullmqQueue: {
+      async add(_name, data, options) {
+        queued.push({ data, runAt: Date.now() + (options?.delay ?? 0) });
+      },
+      async addBulk() {},
+      async upsertJobScheduler() {},
+    },
+    faviconRefresher: new FaviconRefresher(client, {
+      async updateFavicon(id) {
+        updated.add(id);
+      },
+    }),
+    sourcesDataService: strictFake<SourcesDataService>({
+      async getSourcesDueFaviconRefresh() {
+        return due;
+      },
+      async getSourcesToProcess() {
+        return [];
+      },
+    }),
+  });
+
+  setSystemTime(Date.parse("2026-10-30T00:00:00.000Z"));
+  let runs = 0;
+  try {
+    await process(job(JobName.GatherFaviconJobs, {}));
+    /* eslint-disable no-await-in-loop -- Jobs run one at a time in virtual time. */
+    for (;;) {
+      queued.sort((a, b) => a.runAt - b.runAt);
+      const next = queued.shift();
+      if (!next) break;
+      setSystemTime(Math.max(next.runAt, Date.now()));
+      runs++;
+      await process(
+        job(JobName.RefreshFavicon, next.data, {
+          async moveToDelayed(timestamp) {
+            queued.push({ data: next.data, runAt: timestamp });
+          },
+        }),
+      ).catch((error: unknown) => {
+        if (!(error instanceof DelayedError)) throw error;
+      });
+    }
+    /* eslint-enable no-await-in-loop */
+  } finally {
+    setSystemTime();
+  }
+
+  expect(updated.size).toBe(sourceCount);
+  expect(runs).toBe(sourceCount);
 });
 
 test("rejects malformed and unknown jobs before downstream calls", async () => {

@@ -1,5 +1,6 @@
 import { type HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { defaultIntervals } from "#platform/http/http-rate-limiter.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import {
   imageDimensions,
@@ -24,7 +25,7 @@ export class FaviconRefresher {
     >,
   ) {}
 
-  private async bestFavicon(urls: string[]) {
+  private async bestFavicon(urls: string[], sourceId: number) {
     const results = await Promise.allSettled(
       urls.map((url) =>
         this.httpClient.get(url, {
@@ -34,16 +35,22 @@ export class FaviconRefresher {
       ),
     );
 
+    // A deferred provider is not a miss: it may hold the best icon, so no
+    // winner is picked from the rest until every provider has answered.
+    const deferrals = results.flatMap((result) =>
+      result.status === "rejected" && result.reason instanceof HttpDeferredError
+        ? [result.reason.retryAt]
+        : [],
+    );
+    if (deferrals.length > 0) {
+      throw new HttpDeferredError(
+        Math.max(...deferrals) + retryStaggerMs(sourceId),
+      );
+    }
+
     let best: { buffer: Buffer; contentType: string; size: number } | undefined;
-    // Infinity until a provider defers, so two passes merge with Math.min.
-    let earliestRetryAt = Infinity;
     for (const result of results) {
-      if (result.status === "rejected") {
-        if (result.reason instanceof HttpDeferredError) {
-          earliestRetryAt = Math.min(earliestRetryAt, result.reason.retryAt);
-        }
-        continue;
-      }
+      if (result.status === "rejected") continue;
 
       const response = result.value;
       if (response.status !== 200) continue;
@@ -64,7 +71,7 @@ export class FaviconRefresher {
       }
     }
 
-    return { best, earliestRetryAt };
+    return best;
   }
 
   public async refreshFavicon(source: { homeUrl: string; id: number }) {
@@ -84,34 +91,35 @@ export class FaviconRefresher {
     // own query string. favicon.im takes a bare domain in its path, and
     // without throw-error-on-404 it answers an unknown domain with a generic
     // SVG that would outrank every real icon below 64 px.
-    const primary = await this.bestFavicon([
-      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(source.homeUrl)}&size=${targetFaviconSize}`,
-      `https://favicon.im/${hostname}?throw-error-on-404=true`,
-      `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
-    ]);
-    const result = primary.best
-      ? primary
-      : await this.bestFavicon([
-          `https://unavatar.io/domain/${hostname}?size=${targetFaviconSize}`,
-        ]);
-
-    if (result.best) {
-      const favicon = await normalizeFavicon(
-        result.best.buffer,
-        result.best.contentType,
-      );
-      await this.sourcesDataService.updateFavicon(
+    // A deferral from either pass throws, so unavatar is only asked once
+    // every primary provider has really missed.
+    const best =
+      (await this.bestFavicon(
+        [
+          `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(source.homeUrl)}&size=${targetFaviconSize}`,
+          `https://favicon.im/${hostname}?throw-error-on-404=true`,
+          `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
+        ],
         source.id,
-        favicon.buffer,
-        favicon.contentType,
-      );
-      return;
-    }
+      )) ??
+      (await this.bestFavicon(
+        [`https://unavatar.io/domain/${hostname}?size=${targetFaviconSize}`],
+        source.id,
+      ));
+    if (!best) return;
 
-    // Nothing usable came back, but a rate-limited provider might have
-    // something once it's no longer throttled — retry later instead of
-    // treating this as a dead end.
-    const retryAt = Math.min(primary.earliestRetryAt, result.earliestRetryAt);
-    if (retryAt !== Infinity) throw new HttpDeferredError(retryAt);
+    const favicon = await normalizeFavicon(best.buffer, best.contentType);
+    await this.sourcesDataService.updateFavicon(
+      source.id,
+      favicon.buffer,
+      favicon.contentType,
+    );
   }
+}
+
+// Jobs deferred by one provider host share its retryAt; an offset taken from
+// the source id, within one background interval, keeps them from all waking
+// at the same instant to race for a single slot.
+function retryStaggerMs(sourceId: number) {
+  return (sourceId % 10) * (defaultIntervals.background / 10);
 }

@@ -11,6 +11,7 @@ import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { defaultIntervals } from "#platform/http/http-rate-limiter.ts";
 import {
   type HubPoster,
   requestHubSubscription,
@@ -182,9 +183,15 @@ export class MainWorker {
             await sourcesDataService.getSourcesDueFaviconRefresh();
 
           await Promise.all(
-            dueSources.map((source) => {
+            dueSources.map((source, index) => {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
               return bullmqQueue.add(JobName.RefreshFavicon, source, {
+                // Every refresh asks the same provider hosts, which take one
+                // background request per interval. Giving each job its own
+                // slot keeps a cold run at one run per source; started
+                // together, each slot would go to one job and re-defer all
+                // the others, about N²/2 runs (#1087).
+                delay: index * defaultIntervals.background,
                 // A refresh still delayed by a provider's Retry-After keeps
                 // this id, so the next day's add does not jump its backoff.
                 jobId,
