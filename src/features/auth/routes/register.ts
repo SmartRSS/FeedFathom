@@ -62,13 +62,15 @@ export function createRegisterRoute({
   Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig }) {
   // If delivery fails, withdraw the stored token so the next registration
   // attempt for this address is treated as an expired link and sends a fresh
-  // one, rather than waiting out a link nobody received.
+  // one, rather than waiting out a link nobody received. The failure is
+  // logged, not answered: only an address the caller named reaches a send,
+  // and a 500 for some addresses and not others says which ones exist.
   const sendActivation = async (email: string, token: string) => {
     try {
       await mailSender.sendActivationEmail(email, token);
     } catch (error) {
       await usersDataService.withdrawActivationToken(token);
-      throw error;
+      console.error("Activation email failed to send:", error);
     }
   };
 
@@ -113,9 +115,10 @@ export function createRegisterRoute({
         }
         if (isDisposableEmail(request.email)) return json({ success: true });
 
-        // With email activation enabled, throttle before any mail or password
-        // hashing. Exempt first-user setup to avoid locking out the operator.
-        if (useEmailActivation && userCount > 0) {
+        // Throttle before any mail or password hashing, with or without email
+        // activation: each attempt costs a hash either way. Exempt first-user
+        // setup to avoid locking out the operator.
+        if (userCount > 0) {
           const address = clientAddress(
             httpRequest,
             server,
@@ -128,6 +131,10 @@ export function createRegisterRoute({
           await authThrottle.recordFailure("register", address, request.email);
         }
 
+        // Hashed before the lookup so an existing address costs what a new
+        // one does; skipping it would answer "this account exists" by time,
+        // which login's dummy hash on a miss is there to withhold.
+        const passwordHash = await password.hash(request.password);
         const existing = await usersDataService.findUser(request.email);
         if (existing) {
           // Return generic success for existing accounts (#810). With mail
@@ -161,16 +168,16 @@ export function createRegisterRoute({
                 digestToken(resetToken),
                 new Date(Date.now() + resetLifetimeMs),
               );
-              await mailSender.sendAccountExistsEmail(
-                existing.email,
-                resetToken,
-              );
+              await mailSender
+                .sendAccountExistsEmail(existing.email, resetToken)
+                .catch((cause: unknown) => {
+                  console.error("Account-exists email failed to send:", cause);
+                });
             }
           }
           return json({ success: true });
         }
 
-        const passwordHash = await password.hash(request.password);
         const activationToken = useEmailActivation ? randomUUID() : null;
         const outcome = await usersDataService.createUser(
           {

@@ -2638,7 +2638,8 @@ test.each(["active", "inactive"] as const)(
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
-    expect(calls).toEqual([]);
+    // The hash a new address would pay for, so the two answer in equal time.
+    expect(calls).toEqual(["hash"]);
   },
 );
 
@@ -2693,6 +2694,76 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   // anyone else from signing up.
   await register("stranger@example.com", "198.51.100.4");
   expect(mailCalls).toBe(11);
+});
+
+// Without mail there is nothing to send, but every attempt still costs a
+// password hash, so the form is bounded the same way.
+test("throttles registration when email activation is off", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.ENABLE_REGISTRATION = true;
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  let hashCalls = 0;
+  dependencies.password.hash = async () => {
+    hashCalls++;
+    return "hashed-password";
+  };
+  dependencies.usersDataService.getUserCount = async () => 1;
+  dependencies.usersDataService.findUser = async () => undefined;
+  dependencies.usersDataService.createUser = async () => "created";
+  const app = await appFor(dependencies);
+  const register = () =>
+    post(
+      app,
+      "/api/register",
+      {
+        email: "stranger@example.com",
+        password: "password",
+        passwordConfirm: "password",
+        username: "Stranger",
+      },
+      { headers: { "x-forwarded-for": "203.0.113.7" } },
+    );
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
+    await register();
+  }
+  expect(hashCalls).toBe(10);
+
+  const blocked = await register();
+  expect(blocked.status).toBe(200);
+  expect(await blocked.json()).toEqual({ success: true });
+  expect(hashCalls).toBe(10);
+});
+
+// A failed account-exists notice answers like a sent one; the failure is
+// logged instead of returned.
+test("a failed account-exists notice still answers generic success", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAILJET_API_KEY = "mailjet-key";
+  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.usersDataService.startPasswordReset = async () => {};
+  dependencies.mailSender.sendAccountExistsEmail = async () => {
+    throw new Error("Mailjet unavailable");
+  };
+  const app = await appFor(dependencies);
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+
+  try {
+    const response = await post(app, "/api/register", {
+      email: account.email,
+      password: "password",
+      passwordConfirm: "password",
+      username: "Active user",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(logged).toHaveBeenCalledTimes(1);
+  } finally {
+    logged.mockRestore();
+  }
 });
 
 test("answers a disposable address with generic success and no account", async () => {
@@ -2883,15 +2954,23 @@ test("withdraws the stored activation token when delivery fails", async () => {
     events.push(token === stored ? "withdraw-stored" : "withdraw-other");
   };
   const app = await appFor(dependencies);
+  const logged = spyOn(console, "error").mockImplementation(() => {});
 
-  const response = await post(app, "/api/register", {
-    email: "inactive@example.com",
-    password: "password",
-    passwordConfirm: "password",
-    username: "Inactive user",
-  });
+  try {
+    const response = await post(app, "/api/register", {
+      email: "inactive@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Inactive user",
+    });
 
-  expect(response.status).toBe(500);
+    // Logged, not answered: an existing address whose send fails answers
+    // success, so a new one must too.
+    expect(response.status).toBe(200);
+    expect(logged).toHaveBeenCalledTimes(1);
+  } finally {
+    logged.mockRestore();
+  }
   expect(events).toEqual(["create", "send", "withdraw-stored"]);
 });
 
@@ -3308,7 +3387,17 @@ test("a failed replacement activation mail is retried on the next attempt", asyn
       username: "Pending user",
     });
 
-  expect((await register()).status).toBe(500);
+  // The same answer as a delivered mail: a 500 here and not for an unknown
+  // address would say which addresses hold accounts.
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const failed = await register();
+    expect(failed.status).toBe(200);
+    expect(await failed.json()).toEqual({ success: true });
+    expect(logged).toHaveBeenCalledTimes(1);
+  } finally {
+    logged.mockRestore();
+  }
   expect(row.token).toBeNull();
 
   mailUp = true;
