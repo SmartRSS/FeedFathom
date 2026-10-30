@@ -9,24 +9,18 @@ const okSession: FetchLike = (input) =>
   );
 
 describe("pingInstance", () => {
-  test("fetches /api/session on the canonical origin", async () => {
-    let requested = "";
-    const ok = await pingInstance("https://feeds.example.com/", (input) => {
-      requested = input.toString();
-      return okSession(input);
-    });
-    expect(ok).toBe(true);
-    expect(requested).toBe("https://feeds.example.com/api/session");
-  });
-
-  test("canonicalises the instance before building the URL", async () => {
-    let requested = "";
-    await pingInstance("https://EXAMPLE.com:443", (input) => {
-      requested = input.toString();
-      return okSession(input);
-    });
-    expect(requested).toBe("https://example.com/api/session");
-  });
+  test.each(["https://feeds.example.com/", "https://FEEDS.example.com:443"])(
+    "fetches /api/session on the canonical origin of %s",
+    async (instance) => {
+      let requested = "";
+      const ok = await pingInstance(instance, (input) => {
+        requested = input.toString();
+        return okSession(input);
+      });
+      expect(ok).toBe(true);
+      expect(requested).toBe("https://feeds.example.com/api/session");
+    },
+  );
 
   test("reports a non-2xx response as unreachable", async () => {
     const ok = await pingInstance("https://feeds.example.com", () =>

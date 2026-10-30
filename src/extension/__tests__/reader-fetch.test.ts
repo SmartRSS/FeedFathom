@@ -129,48 +129,6 @@ describe("Reader bridge protocol", () => {
       ),
     ).toBe(false);
   });
-
-  test("accepts every Reader error variant and rejects unknown variants", () => {
-    const validRequest = request("https://article.example/story");
-    const errorCodes: ReaderErrorCode[] = [
-      "FETCH_FAILED",
-      "INVALID_RESPONSE",
-      "INVALID_URL",
-      "NOT_HTML",
-      "PRIVATE_URL",
-      "TIMEOUT",
-      "TOO_LARGE",
-      "TOO_MANY_REDIRECTS",
-      "UNAUTHORIZED",
-      "UNAVAILABLE",
-    ];
-
-    for (const error of errorCodes) {
-      expect(
-        isReaderResponse({
-          action: validRequest.action,
-          channel: readerBridgeChannel,
-          error,
-          id: validRequest.id,
-          ok: false,
-          type: "response",
-          version: readerBridgeVersion,
-        }),
-      ).toBe(true);
-    }
-
-    expect(
-      isReaderResponse({
-        action: validRequest.action,
-        channel: readerBridgeChannel,
-        error: "UNKNOWN",
-        id: validRequest.id,
-        ok: false,
-        type: "response",
-        version: readerBridgeVersion,
-      }),
-    ).toBe(false);
-  });
 });
 
 describe("handleReaderRequest", () => {

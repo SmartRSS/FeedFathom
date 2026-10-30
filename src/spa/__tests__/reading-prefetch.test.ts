@@ -8,12 +8,11 @@ import {
 
 afterEach(() => prefetchNext.set(false));
 
-test("the preference defaults to off and follows the last set value", () => {
+// Both download in the background, so neither may start without consent.
+// Persistence is storedToggle's, covered in preferences.test.ts.
+test("prefetching and offline reading both default to off", () => {
   expect(prefetchNext.get()).toBe(false);
-  prefetchNext.set(true);
-  expect(prefetchNext.get()).toBe(true);
-  prefetchNext.set(false);
-  expect(prefetchNext.get()).toBe(false);
+  expect(offlineUnread.get()).toBe(false);
 });
 
 test("neighbours returns the next then the previous article", () => {
@@ -23,10 +22,6 @@ test("neighbours returns the next then the previous article", () => {
   expect(neighbours(items, 2)).toEqual(["b"]);
   expect(neighbours(["a"], 0)).toEqual([]);
   expect(neighbours(items, undefined)).toEqual([]);
-});
-
-test("offline reading defaults to off", () => {
-  expect(offlineUnread.get()).toBe(false);
 });
 
 const source = (uid: string, unreadCount: number) => ({
