@@ -44,7 +44,9 @@ const mainWorkerJobData = Type.Union([
   }),
   Type.Object({
     data: Type.Object({
+      deferredSince: Type.Optional(Type.Integer({ minimum: 0 })),
       firstRunAt: Type.Optional(Type.Integer({ minimum: 0 })),
+      hasFavicon: Type.Optional(Type.Boolean()),
       homeUrl: sourceUrl,
       id: Type.Integer({ minimum: 1 }),
     }),
@@ -145,8 +147,8 @@ export class MainWorker {
     // Set once a follow-up parse owns intent taken off the pending marker. A
     // deferral from there on retries from job.data, so the intent has to be
     // written into it or the retry would parse the original request (#847).
-    // A favicon refresh writes when it first ran, which its horizon counts
-    // from.
+    // A favicon refresh writes when it first ran and what the refresher
+    // noted on it, which its horizon and backstop count from.
     let retryData: unknown;
     const {
       bullmqQueue,
@@ -247,9 +249,12 @@ export class MainWorker {
         }
 
         case JobName.RefreshFavicon: {
-          const firstRunAt = input.data.firstRunAt ?? Date.now();
-          retryData = { ...input.data, firstRunAt };
-          await faviconRefresher.refreshFavicon({ ...input.data, firstRunAt });
+          const data = {
+            ...input.data,
+            firstRunAt: input.data.firstRunAt ?? Date.now(),
+          };
+          retryData = data;
+          await faviconRefresher.refreshFavicon(data);
           break;
         }
 

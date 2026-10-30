@@ -405,7 +405,10 @@ test("queues every due favicon refresh concurrently, below feed parsing", async 
     },
     sourcesDataService: strictFake<SourcesDataService>({
       async getSourcesDueFaviconRefresh() {
-        return [source, { ...source, id: 2 }];
+        return [
+          { ...source, hasFavicon: false },
+          { ...source, hasFavicon: false, id: 2 },
+        ];
       },
       async getSourcesToProcess() {
         return [];
@@ -521,6 +524,7 @@ async function simulateFaviconGather(
     sourcesDataService: strictFake<SourcesDataService>({
       async getSourcesDueFaviconRefresh() {
         return Array.from({ length: sourceCount }, (_, index) => ({
+          hasFavicon: false,
           homeUrl: `https://site${index + 1}.example/`,
           id: index + 1,
         }));
@@ -560,7 +564,7 @@ async function simulateFaviconGather(
       });
     }
     /* eslint-enable no-await-in-loop */
-    return { finishedAt: Date.now(), runs, updated };
+    return { finishedAt: Date.now(), pending: queued.length, runs, updated };
   } finally {
     setSystemTime();
   }
@@ -601,6 +605,51 @@ test("a provider that never stops deferring holds icons back only until the hori
     startAt + faviconDeferralHorizonMs + 3_600_000,
   );
   expect(runs).toBeLessThanOrEqual(1_000);
+});
+
+// The origin's Retry-After is shorter than the limiter's own interval, so
+// only telling pacing apart by type keeps it from deferring forever.
+test("a provider that always answers 429 with a short Retry-After lets every refresh complete", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { finishedAt, pending, updated } = await simulateFaviconGather(100, {
+    answer: (url) =>
+      url.includes("gstatic")
+        ? [429, { "retry-after": "5" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(pending).toBe(0);
+  expect(finishedAt).toBeLessThan(
+    startAt + faviconDeferralHorizonMs + 3_600_000,
+  );
+  expect(updated.size).toBe(100);
+  expect([...updated.values()].every((size) => size === 32)).toBe(true);
+});
+
+// Late in a cold run, most jobs have waited hours in the pacing queue. The
+// horizon counts from the block, so a five-minute one is still waited out.
+test("a short provider block late in a cold run does not downgrade icons", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  let blocked = false;
+  const { pending, updated } = await simulateFaviconGather(1_000, {
+    answer: (url) => {
+      if (
+        url.includes("gstatic") &&
+        !blocked &&
+        Date.now() > startAt + 3 * 3_600_000
+      ) {
+        blocked = true;
+        return [429, {}];
+      }
+      return providerAnswer(url);
+    },
+    startAt,
+  });
+
+  expect(pending).toBe(0);
+  expect(updated.size).toBe(1_000);
+  expect([...updated.values()].every((size) => size === 64)).toBe(true);
 });
 
 test("an hour-long provider block queues the refreshes instead of waking them together", async () => {

@@ -123,6 +123,7 @@ export class SourcesDataService {
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
+        hasFavicon: sql<boolean>`${sources.favicon} IS NOT NULL`,
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
@@ -133,7 +134,9 @@ export class SourcesDataService {
           ne(sources.kind, "email"),
         ),
       )
-      .orderBy(asc(sources.id));
+      // Sources still without an icon first: on a cold run they are the ones
+      // a person sees as missing.
+      .orderBy(sql`${sources.favicon} IS NOT NULL`, asc(sources.id));
   }
 
   public async updateFavicon(

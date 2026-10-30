@@ -146,3 +146,25 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
   expect(dueIds.has(neverFetched.id)).toBe(false);
   expect(dueIds.has(email.id)).toBe(false);
 });
+
+test("getSourcesDueFaviconRefresh lists sources without an icon first", async () => {
+  const withIcon = await addFeedSource("https://source-scheduling.test/icon");
+  await sourcesDataService.successSource(withIcon.id);
+  await sourcesDataService.updateFavicon(
+    withIcon.id,
+    Buffer.from("icon"),
+    "image/png",
+  );
+  const withoutIcon = await addFeedSource(
+    "https://source-scheduling.test/no-icon",
+  );
+  await sourcesDataService.successSource(withoutIcon.id);
+
+  const due = (await sourcesDataService.getSourcesDueFaviconRefresh()).filter(
+    ({ id }) => id === withIcon.id || id === withoutIcon.id,
+  );
+  expect(due).toEqual([
+    { hasFavicon: false, homeUrl: withoutIcon.homeUrl, id: withoutIcon.id },
+    { hasFavicon: true, homeUrl: withIcon.homeUrl, id: withIcon.id },
+  ]);
+});

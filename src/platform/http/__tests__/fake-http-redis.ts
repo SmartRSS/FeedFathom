@@ -26,13 +26,8 @@ export function createFakeHttpRedis() {
     values.set(key, String(next));
     return next;
   };
-  const evaluate = ([
-    script = "",
-    ,
-    key = "",
-    arg = "",
-    ttl = "",
-  ]: string[]) => {
+  const evaluate = (args: string[]) => {
+    const [script = "", , key = "", arg = "", ttl = ""] = args;
     // The host clock: take it once ARGV[1] ms have passed since the last
     // request, or report how long is left.
     if (script.includes("TIME")) {
@@ -45,15 +40,20 @@ export function createFakeHttpRedis() {
       expiry.set(key, now + Number(ttl));
       return 0;
     }
-    // The favicon refresh queue: the later of ARGV[1] and one gap past the
-    // last slot handed out.
+    // The favicon refresh queues: the latest of ARGV[1] and one gap past
+    // the last slot of each key, recorded on every key.
     if (script.includes("PXAT")) {
+      const keyCount = Number(args[1]);
+      const keys = args.slice(2, 2 + keyCount);
+      const [retryAt = "", gap = ""] = args.slice(2 + keyCount);
       const slot = Math.max(
-        Number(arg),
-        Number(live(key) ?? "0") + Number(ttl),
+        Number(retryAt),
+        ...keys.map((slotKey) => Number(live(slotKey) ?? "0") + Number(gap)),
       );
-      values.set(key, String(slot));
-      expiry.set(key, slot + Number(ttl));
+      for (const slotKey of keys) {
+        values.set(slotKey, String(slot));
+        expiry.set(slotKey, slot + Number(gap));
+      }
       return slot;
     }
     if (script.includes("PEXPIRE")) {
