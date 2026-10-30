@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import {
   emailAddressPolicy,
   jsonDatePolicy,
+  normalizedEmailAddress,
   normalizedSubscriptionTarget,
   plainTextPolicy,
   webUrlPolicy,
@@ -19,6 +20,17 @@ test("checks URL, email, plain-text, and internal-address policies", () => {
   expect(Value.Check(plainTextPolicy, `bad${String.fromCharCode(0)}text`)).toBe(
     false,
   );
+});
+
+const addressOfLength = (length: number) =>
+  `${"a".repeat(length - "@example.com".length)}@example.com`;
+
+test("caps a normalized email address at the RFC 5321 254 characters", () => {
+  expect(Value.Check(normalizedEmailAddress, addressOfLength(254))).toBe(true);
+  expect(Value.Check(normalizedEmailAddress, ` ${addressOfLength(254)} `)).toBe(
+    true,
+  );
+  expect(Value.Check(normalizedEmailAddress, addressOfLength(255))).toBe(false);
 });
 
 test.each([

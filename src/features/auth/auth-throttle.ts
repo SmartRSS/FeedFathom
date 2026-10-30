@@ -1,6 +1,6 @@
 import {
   type CounterRedis,
-  countInWindow,
+  windowCountLua,
 } from "#platform/redis-window-counter.ts";
 
 // Attempts are counted in Redis and the count gates further ones.
@@ -19,9 +19,9 @@ import {
 // a counter that never expires, and any counter found without a TTL anyway
 // (one written before that held) is given a fresh window when next counted.
 //
-// An attempt is counted before it runs, not after it fails: INCR hands every
-// concurrent request its own number, so no more than the limit get through
-// however many arrive at once. A check followed by recording the failure
+// An attempt is counted before it runs, not after it fails: the whole gate is
+// one script, so every concurrent request sees the count the previous one
+// left and no more than the limit get through however many arrive at once. A check followed by recording the failure
 // after the password hash would let a parallel burst all pass the check. A
 // success then takes its own attempt back -- clearing the account counter and
 // refunding the address counter by one -- so what stays counted is failures,
@@ -46,6 +46,25 @@ const windowSeconds = 15 * 60;
 const accountFailureLimit = 10;
 const addressFailureLimit = 50;
 
+// Reads the address counter before touching anything else: an address at its
+// limit is refused without creating or growing the account key, so a refused
+// attempt costs the attacker nothing and the server no memory -- the email is
+// part of that key -- and a source locked out by address does not also run up
+// its users' account counters. Otherwise the account counter is counted, and
+// the address counter only once the account lets the attempt through, so a
+// source grinding a locked account does not spend its budget for every other.
+// KEYS[2] is absent for the password change, which counts the account alone.
+const attemptScript = `${windowCountLua}
+local window = tonumber(ARGV[1])
+if KEYS[2] then
+  local source = tonumber(redis.call('GET', KEYS[2]) or '0')
+  if source > 0 then repairWindow(KEYS[2], window) end
+  if source >= tonumber(ARGV[3]) then return 0 end
+end
+if countInWindow(KEYS[1], window) > tonumber(ARGV[2]) then return 0 end
+if KEYS[2] then countInWindow(KEYS[2], window) end
+return 1`;
+
 // Takes back one counted attempt. A key that expired meanwhile is left
 // absent rather than recreated at -1 without a TTL.
 const refundScript = `
@@ -64,28 +83,27 @@ export class AuthThrottle {
   /**
    * Counts one attempt and says whether it may run. Call it before the work
    * the throttle protects, and `succeeded` once that work proves the caller
-   * right; a refused attempt stays counted.
+   * right. An attempt the account counter refuses stays counted on it; one
+   * the address counter refuses is counted nowhere.
    */
   public async attempt(
     scope: ThrottleScope,
     address: string,
     email: string,
   ): Promise<boolean> {
-    const account = await countInWindow(
-      this.redis,
-      accountKey(scope, address, email),
-      windowSeconds,
-    );
-    if (account.count > accountFailureLimit) return false;
-    if (scope === "password-change") return true;
-    // Only once the account counter lets it through, so a source grinding a
-    // locked account does not also spend its budget for every other one.
-    const source = await countInWindow(
-      this.redis,
-      addressKey(scope, address),
-      windowSeconds,
-    );
-    return source.count <= addressFailureLimit;
+    const keys =
+      scope === "password-change"
+        ? [accountKey(scope, address, email)]
+        : [accountKey(scope, address, email), addressKey(scope, address)];
+    const allowed = await this.redis.send("EVAL", [
+      attemptScript,
+      keys.length.toString(),
+      ...keys,
+      windowSeconds.toString(),
+      accountFailureLimit.toString(),
+      addressFailureLimit.toString(),
+    ]);
+    return allowed === 1;
   }
 
   // The account counter clears; the address counter only gets this attempt

@@ -60,14 +60,45 @@ test("later attempts keep the window the first one opened", async () => {
 
 test("counters left without expiry recover a bounded lifetime", async () => {
   const { account, address, source } = scopeKeys();
-  await redis.set(account, "3");
   await redis.set(source, "50");
 
-  // Over the address limit, so refused -- but counted, and so repaired.
+  // Over the address limit, so refused -- and repaired without being counted.
   expect(await throttle.attempt("login", address, email)).toBe(false);
+  expect(await redis.get(source)).toBe("50");
+  expect(await redis.ttl(source)).toBe(window);
+
+  await redis.del(source);
+  await redis.set(account, "3");
+  await throttle.attempt("login", address, email);
   expect(await redis.get(account)).toBe("4");
   expect(await redis.ttl(account)).toBe(window);
-  expect(await redis.ttl(source)).toBe(window);
+});
+
+test("an address at its limit is refused without creating an account key", async () => {
+  const { address, source } = scopeKeys();
+  await Promise.all(
+    Array.from({ length: 50 }, (_, attempt) =>
+      throttle.attempt("login", address, `user${attempt}@example.test`),
+    ),
+  );
+  expect(await redis.get(source)).toBe("50");
+
+  const fresh = `never-tried-${crypto.randomUUID()}@example.test`;
+  expect(await throttle.attempt("login", address, fresh)).toBe(false);
+  expect(await redis.exists(`login-fail:${address}:${fresh}`)).toBe(false);
+  expect(await redis.get(source)).toBe("50");
+});
+
+test("the account counter does not grow while the address is locked", async () => {
+  const { account, address, source } = scopeKeys();
+  await throttle.attempt("login", address, email);
+  await redis.set(source, "50", "KEEPTTL");
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
+    expect(await throttle.attempt("login", address, email)).toBe(false);
+  }
+  expect(await redis.get(account)).toBe("1");
 });
 
 test("a success clears the account and refunds one attempt without creating a key", async () => {

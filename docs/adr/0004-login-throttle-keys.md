@@ -41,9 +41,16 @@ recording a failure only after the password hash let a burst of parallel
 requests all pass the check before any of them was counted: two hundred at
 once reached the hash two hundred times against a limit of ten. `INCR` gives
 each concurrent request its own number, so no more than the limit get through.
-The address counter is counted only once the account counter lets an attempt
-through, so a source grinding a locked account does not also spend its budget
-for every other account.
+The whole gate is one Redis script. It reads the address counter first and
+refuses an address at its limit without touching the account counter, so a
+refused attempt creates no key: the email is part of the account key, and
+otherwise each refused request could park a key the size of its email in a
+Redis shared with the job queue. It also keeps a user behind a shared, locked
+address from running up an account lockout that outlasts the address one.
+Request schemas cap the email at the RFC 5321 254 characters for the same
+reason. The address counter is counted only once the account counter lets an
+attempt through, so a source grinding a locked account does not also spend its
+budget for every other account.
 
 A successful login then takes its own attempt back: it clears the account
 counter and refunds the address counter by one. What stays counted is
