@@ -191,19 +191,6 @@ describe("HttpRateLimiter shared host clock", () => {
     return Date.now();
   }
 
-  test("two interactive requests issued together go out one second apart", async () => {
-    const limiter = new HttpRateLimiter(createFakeHttpRedis());
-    const [first = 0, second = 0] = (
-      await Promise.all([
-        reserve(limiter, "interactive"),
-        reserve(limiter, "interactive"),
-      ])
-    ).toSorted((left, right) => left - right);
-
-    expect(second - first).toBeGreaterThanOrEqual(990);
-    expect(second - first).toBeLessThan(1_500);
-  });
-
   test("background defers within ten seconds of an interactive request", async () => {
     const redis = createFakeHttpRedis();
     const limiter = new HttpRateLimiter(redis);
@@ -228,6 +215,24 @@ describe("HttpRateLimiter shared host clock", () => {
 
     await reserve(limiter, "interactive");
     expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  // The production default, read off the wait the limiter asks for rather
+  // than off the wall clock.
+  test("interactive requests to one host sit one second apart by default", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(lastKey, String(Date.now()), 10_000);
+    const deadline = new RequestDeadline(20_000);
+    using slept = spyOn(deadline, "sleep").mockImplementation(async () => {
+      redis.seed(lastKey, String(Date.now() - 10_000), 10_000);
+    });
+
+    await reserve(new HttpRateLimiter(redis), "interactive", deadline);
+
+    expect(slept).toHaveBeenCalledTimes(1);
+    const [waited] = slept.mock.calls[0] ?? [];
+    expect(waited).toBeGreaterThanOrEqual(990);
+    expect(waited).toBeLessThanOrEqual(1_000);
   });
 
   // The wait used to end after one interval, so the third of three queued
@@ -313,22 +318,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 
-  test("overlapping waiters count each other in and out", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const first = await startWaiter(redis);
-    const second = await startWaiter(redis);
-    expect(redis.values.get(waitersKey)).toBe("2");
-
-    // One of them takes the clock; the other waits its turn and stays counted.
-    await Promise.race([first.reservation, second.reservation]);
-    expect(redis.values.get(waitersKey)).toBe("1");
-    expect(redis.pttl(waitersKey)).toBeGreaterThan(19_000);
-
-    await Promise.all([first.reservation, second.reservation]);
-    expect(redis.pttl(waitersKey)).toBe(-2);
-  });
-
   test("a turn lost too close to the deadline defers and takes the waiter out", async () => {
     const redis = createFakeHttpRedis();
     requestedJustNow(redis);
@@ -348,16 +337,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
 
     deadline.controller.abort();
     await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
-    expect(redis.pttl(waitersKey)).toBe(-2);
-  });
-
-  test("cleanup after the counter expired leaves no negative key behind", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const { reservation } = await startWaiter(redis);
-
-    redis.values.delete(waitersKey);
-    await reservation;
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
 });

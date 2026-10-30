@@ -140,46 +140,28 @@ describe("cacheable", () => {
     expect(entry?.status).toBe(200);
   });
 
-  test("refuses a response that may not be shared", () => {
+  // An already-stale response is still worth storing with a validator: the
+  // next fetch becomes a conditional request that can return 304.
+  test.each([
+    ["one that may not be shared", { "cache-control": "no-store" }, false],
+    [
+      "a stale one with nothing to revalidate against",
+      { "cache-control": "max-age=0" },
+      false,
+    ],
+    [
+      "a stale one carrying an etag",
+      { "cache-control": "max-age=0", etag: '"v1"' },
+      true,
+    ],
+    ["one carrying last-modified", { "last-modified": httpDate(at) }, true],
+  ])("stores %s: %p", (_case, fields, stored) => {
     const entry = cacheable(
-      nativeResponse({ headers: headers({ "cache-control": "no-store" }) }),
+      nativeResponse({ headers: headers(fields) }),
       body,
       url,
     );
-    expect(entry).toBeUndefined();
-  });
-
-  test("refuses a stale response with nothing to revalidate against", () => {
-    const entry = cacheable(
-      nativeResponse({ headers: headers({ "cache-control": "max-age=0" }) }),
-      body,
-      url,
-    );
-    expect(entry).toBeUndefined();
-  });
-
-  // Worth storing even though it is already stale: the validator turns the
-  // next fetch into a conditional request that can return 304.
-  test("stores an already-stale response carrying a validator", () => {
-    const entry = cacheable(
-      nativeResponse({
-        headers: headers({ "cache-control": "max-age=0", etag: '"v1"' }),
-      }),
-      body,
-      url,
-    );
-    expect(entry).toBeDefined();
-  });
-
-  test("accepts last-modified as a validator too", () => {
-    const entry = cacheable(
-      nativeResponse({
-        headers: headers({ "last-modified": httpDate(at) }),
-      }),
-      body,
-      url,
-    );
-    expect(entry).toBeDefined();
+    expect(entry !== undefined).toBe(stored);
   });
 
   // The post-redirect URL is what a later request must revalidate against.

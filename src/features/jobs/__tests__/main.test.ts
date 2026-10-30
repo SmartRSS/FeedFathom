@@ -471,23 +471,6 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
   expect(downstreamCalls).toEqual([]);
 });
 
-test("logs a job error and acknowledges the job", async () => {
-  const failure = new Error("cleanup exploded");
-  const { process } = await startWorker({
-    async cleanupOrphanedData() {
-      throw failure;
-    },
-  });
-  using logged = spyOn(console, "error").mockImplementation(() => {});
-
-  await expect(process(job(JobName.Cleanup, {}))).resolves.toBeUndefined();
-
-  expect(logged).toHaveBeenCalledWith(
-    `Error processing ${JobName.Cleanup} job:`,
-    failure,
-  );
-});
-
 // The prune bypasses the services that own the unread badge, so the worker
 // has to hand every source cleanup reports to the recompute itself (#812).
 test("cleanup recounts the unread totals of every pruned source", async () => {
@@ -528,6 +511,7 @@ const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
 // however the deferral or the log call went wrong, the processor resolves --
 // and logs what the job originally threw, which proves each case reached the
 // path it names rather than failing earlier on an unexpected call.
+const failure = new Error("cleanup exploded");
 const poisonedError = new PoisonedError();
 const deferral = new HttpDeferredError(Date.now() + 60_000);
 const throwsDeferral = strictFake<FeedParser>({
@@ -536,6 +520,16 @@ const throwsDeferral = strictFake<FeedParser>({
   },
 });
 test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
+  [
+    "a plain job error",
+    {
+      async cleanupOrphanedData() {
+        throw failure;
+      },
+    },
+    job(JobName.Cleanup, {}),
+    failure,
+  ],
   [
     "a poisoned error whose message getter throws",
     {

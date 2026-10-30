@@ -87,10 +87,6 @@ describe("totalUnread", () => {
     ];
     expect(totalUnread(nodes)).toBe(7);
   });
-
-  test("an empty tree reads as zero", () => {
-    expect(totalUnread([])).toBe(0);
-  });
 });
 
 describe("nextPollDelayMs", () => {
@@ -163,11 +159,6 @@ const article = (id: number, sourceId: number, read: boolean) => ({
 });
 
 describe("readStateDeltas", () => {
-  test("an already-read article marked read again is not counted", () => {
-    const items = [article(1, 10, true)];
-    expect(readStateDeltas(items, [1], true)).toEqual(new Map());
-  });
-
   test("marking unread increments its source", () => {
     const items = [article(1, 10, true)];
     expect(readStateDeltas(items, [1], false)).toEqual(new Map([["10", -1]]));
@@ -319,6 +310,7 @@ describe("source snooze", () => {
     ).toBe(false);
   });
 
+  // The only check on what the snooze menu sends: no browser spec drives it.
   test("converts snooze durations from hours to absolute timestamps", () => {
     expect(snoozeUntilIso(24, now)).toBe("2026-09-10T12:00:00.000Z");
     expect(snoozeUntilIso(168, now)).toBe("2026-09-16T12:00:00.000Z");

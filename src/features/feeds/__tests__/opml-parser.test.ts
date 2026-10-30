@@ -1,55 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { parseOpml, processOutline } from "#features/feeds/opml-parser.ts";
+import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const TEST_CASES_DIR = "src/features/feeds/__tests__/opml-parser-cases";
 
 describe("OpmlParser", () => {
-  describe("processOutline", () => {
-    const inputDirectory = path.join(
-      TEST_CASES_DIR,
-      "inputs",
-      "process-outline",
-    );
-    const expectedDirectory = path.join(
-      TEST_CASES_DIR,
-      "expected",
-      "process-outline",
-    );
-
-    // Get all test case files
-    const testFiles = fs
-      .readdirSync(inputDirectory)
-      .filter((file) => {
-        return file.endsWith(".ts");
-      })
-      .map((file) => {
-        return file.replace(".ts", "");
-      });
-
-    for (const testFile of testFiles) {
-      test(`should handle ${testFile.replaceAll("-", " ")}`, async () => {
-        const { input } = await import(
-          path.join(process.cwd(), inputDirectory, `${testFile}.ts`)
-        );
-        if (testFile.includes("invalid")) {
-          // A malformed outline is skipped rather than aborting the whole
-          // import (see opml-parser.ts) -- processOutline's single-node
-          // wrapper then has nothing to return, so it falls back to its
-          // own "no result" error instead of a feed-URL-specific one.
-          expect(() => processOutline(input)).toThrow("Invalid OPML outline");
-          return;
-        }
-
-        const { expected } = await import(
-          path.join(process.cwd(), expectedDirectory, `${testFile}.ts`)
-        );
-        expect(processOutline(input)).toEqual(expected);
-      });
-    }
-  });
-
   describe("parseOpml", () => {
     test("parses recursively nested outlines with arbitrary XML data", () => {
       const result = parseOpml(`

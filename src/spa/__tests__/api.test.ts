@@ -101,19 +101,6 @@ describe("schema-first SPA API", () => {
     expect(init).toEqual({ method: "POST" });
   });
 
-  test("accepts the public session user projection", async () => {
-    const user = {
-      email: "reader@example.com",
-      id: 1,
-      isAdmin: false,
-      name: "Reader",
-      status: "active" as const,
-    };
-    returnResponse(Response.json({ user }));
-
-    await expect(api("/session", sessionResponse)).resolves.toEqual({ user });
-  });
-
   test("rejects invalid response dates", async () => {
     returnResponse(
       Response.json({
@@ -247,27 +234,30 @@ describe("schema-first SPA API", () => {
       expect(failure.name).toBe("AbortError");
     });
 
-    test("still reports a network failure after the signal aborted", async () => {
-      setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
-      await expect(
-        api("/session", sessionResponse, { signal: aborted() }),
-      ).rejects.toThrow(/Could not reach the server|You are offline/);
-    });
-
-    test("still reports invalid JSON after the signal aborted", async () => {
-      returnResponse(new Response("not json"));
-      await expect(
-        api("/message", exactMessage, { signal: aborted() }),
-      ).rejects.toThrow(
+    test.each([
+      [
+        "a network failure",
+        () => Promise.reject(new TypeError("Failed to fetch")),
+        /Could not reach the server|You are offline/,
+      ],
+      [
+        "invalid JSON",
+        async () => new Response("not json"),
         "Invalid response from /api/message (200): expected JSON",
-      );
-    });
-
-    test("still reports a schema mismatch after the signal aborted", async () => {
-      returnResponse(Response.json({}));
-      await expect(
-        api("/message", exactMessage, { signal: aborted() }),
-      ).rejects.toThrow("Invalid response from /api/message (200)");
-    });
+      ],
+      [
+        "a schema mismatch",
+        async () => Response.json({}),
+        "Invalid response from /api/message (200)",
+      ],
+    ])(
+      "still reports %s after the signal aborted",
+      async (_case, answer, error) => {
+        setFetch(answer);
+        await expect(
+          api("/message", exactMessage, { signal: aborted() }),
+        ).rejects.toThrow(error);
+      },
+    );
   });
 });

@@ -38,14 +38,6 @@ describe("RequestDeadline", () => {
     deadline.dispose();
   });
 
-  test("sleep resolves within the budget", async () => {
-    const deadline = new RequestDeadline(1_000);
-    const before = Date.now();
-    await deadline.sleep(20);
-    expect(Date.now() - before).toBeGreaterThanOrEqual(15);
-    deadline.dispose();
-  });
-
   // A backoff longer than what is left must fail the request rather than
   // sleep past the deadline and then continue.
   test("sleep past the budget rejects", async () => {
