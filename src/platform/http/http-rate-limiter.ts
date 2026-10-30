@@ -21,10 +21,10 @@ const waiterGraceMs = 1_000;
  */
 export type HostIntervals = { background: number; interactive: number };
 
-export const defaultIntervals: HostIntervals = {
+export const defaultIntervals: Readonly<HostIntervals> = Object.freeze({
   background: 10_000,
   interactive: 1_000,
-};
+});
 
 // Takes the host's clock if ARGV[1] ms have passed since its last request and
 // returns 0, or returns how many ms are still to go. Redis's own time, so

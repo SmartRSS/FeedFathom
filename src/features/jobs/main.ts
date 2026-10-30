@@ -11,7 +11,6 @@ import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { defaultIntervals } from "#platform/http/http-rate-limiter.ts";
 import {
   type HubPoster,
   requestHubSubscription,
@@ -45,6 +44,7 @@ const mainWorkerJobData = Type.Union([
   }),
   Type.Object({
     data: Type.Object({
+      firstRunAt: Type.Optional(Type.Integer({ minimum: 0 })),
       homeUrl: sourceUrl,
       id: Type.Integer({ minimum: 1 }),
     }),
@@ -145,6 +145,8 @@ export class MainWorker {
     // Set once a follow-up parse owns intent taken off the pending marker. A
     // deferral from there on retries from job.data, so the intent has to be
     // written into it or the retry would parse the original request (#847).
+    // A favicon refresh writes when it first ran, which its horizon counts
+    // from.
     let retryData: unknown;
     const {
       bullmqQueue,
@@ -183,15 +185,11 @@ export class MainWorker {
             await sourcesDataService.getSourcesDueFaviconRefresh();
 
           await Promise.all(
-            dueSources.map((source, index) => {
+            dueSources.map((source) => {
               const jobId = `${JobName.RefreshFavicon}-${source.id}`;
+              // No delay: most refreshes are answered from the HTTP cache.
+              // One that a provider defers queues for its own slot (#1087).
               return bullmqQueue.add(JobName.RefreshFavicon, source, {
-                // Every refresh asks the same provider hosts, which take one
-                // background request per interval. Giving each job its own
-                // slot keeps a cold run at one run per source; started
-                // together, each slot would go to one job and re-defer all
-                // the others, about N²/2 runs (#1087).
-                delay: index * defaultIntervals.background,
                 // A refresh still delayed by a provider's Retry-After keeps
                 // this id, so the next day's add does not jump its backoff.
                 jobId,
@@ -249,7 +247,9 @@ export class MainWorker {
         }
 
         case JobName.RefreshFavicon: {
-          await faviconRefresher.refreshFavicon(input.data);
+          const firstRunAt = input.data.firstRunAt ?? Date.now();
+          retryData = { ...input.data, firstRunAt };
+          await faviconRefresher.refreshFavicon({ ...input.data, firstRunAt });
           break;
         }
 

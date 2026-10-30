@@ -132,7 +132,8 @@ export class SourcesDataService {
           gt(sources.lastSuccess, sql`NOW() - INTERVAL '25 hours'`),
           ne(sources.kind, "email"),
         ),
-      );
+      )
+      .orderBy(asc(sources.id));
   }
 
   public async updateFavicon(

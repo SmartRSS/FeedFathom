@@ -11,7 +11,11 @@ import { JobName } from "#shared/types/job-name-enum.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
-import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
+import {
+  FaviconRefresher,
+  faviconDeferralHorizonMs,
+} from "#features/feeds/favicon-refresher.ts";
+import { imageDimensions } from "#features/feeds/favicon-selection.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import {
   MainWorker,
@@ -365,7 +369,7 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
 });
 
 test("refreshes favicons only for validated job data", async () => {
-  const refreshed: { homeUrl: string; id: number }[] = [];
+  const refreshed: { firstRunAt: number; homeUrl: string; id: number }[] = [];
   const { process } = await startWorker({
     faviconRefresher: strictFake<FaviconRefresher>({
       async refreshFavicon(value) {
@@ -378,7 +382,9 @@ test("refreshes favicons only for validated job data", async () => {
     job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: source.id }),
   );
 
-  expect(refreshed).toEqual([{ homeUrl: source.homeUrl, id: source.id }]);
+  expect(refreshed).toEqual([
+    { firstRunAt: expect.any(Number), homeUrl: source.homeUrl, id: source.id },
+  ]);
 });
 
 // A favicon run queues every due source at once, at a priority below the
@@ -424,34 +430,75 @@ test("queues every due favicon refresh concurrently, below feed parsing", async 
   expect(finished).toBe(true);
 });
 
-// Every refresh asks the same three provider hosts, and the limiter lets each
-// take one background request per interval. Played out in virtual time with
-// the real refresher and limiter, a cold run must not re-run every waiting
-// job each time one of them takes the slot (#1087).
-test("a cold favicon run of 50 sources runs each refresh once", async () => {
-  const sourceCount = 50;
-  const due = Array.from({ length: sourceCount }, (_, index) => ({
-    homeUrl: `https://site${index + 1}.example/`,
-    id: index + 1,
-  }));
+// A fake PNG header: enough for imageDimensions, and stored as-is because
+// Bun.Image cannot decode it.
+function fakePng(size: number) {
   const png = Buffer.alloc(24);
   png.write("\x89PNG", 0, "latin1");
-  png.writeUInt32BE(64, 16);
-  png.writeUInt32BE(64, 20);
-  const client = new HttpClient(createFakeHttpRedis(), {
+  png.writeUInt32BE(size, 16);
+  png.writeUInt32BE(size, 20);
+  return png;
+}
+
+// What each provider answers on a normal day, with its real cache lifetime:
+// gstatic the 64 px target, favicon.im 32 px behind a redirect to its own
+// subdomain, DuckDuckGo 16 px.
+function providerAnswer(
+  url: string,
+): [number, Record<string, string>, Buffer?] {
+  const { hostname } = new URL(url);
+  if (hostname === "favicon.im") {
+    return [302, { location: url.replace("//favicon.im", "//a.favicon.im") }];
+  }
+  const [size, maxAge] =
+    hostname === "t3.gstatic.com"
+      ? [64, 7 * 86_400]
+      : hostname === "a.favicon.im"
+        ? [32, 8 * 86_400]
+        : [16, 30 * 86_400];
+  return [
+    200,
+    {
+      "cache-control": `public, max-age=${maxAge}`,
+      "content-type": "image/png",
+    },
+    fakePng(size),
+  ];
+}
+
+// Plays a daily favicon gather through the real MainWorker, refresher, HTTP
+// client, cache and limiter in virtual time, one job at a time. Each job
+// starts up to 2 s after BullMQ hands it out, and every request takes
+// 50-300 ms, both from a seeded generator so a failure replays exactly.
+async function simulateFaviconGather(
+  sourceCount: number,
+  {
+    answer = providerAnswer,
+    redis = createFakeHttpRedis(),
+    startAt = Date.parse("2026-10-30T00:00:00.000Z"),
+  } = {},
+) {
+  let seed = 1_087;
+  const random = () => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+    return seed / 2 ** 31;
+  };
+  const client = new HttpClient(redis, {
     deadlineMs: 2_000,
     transport: async (url) => {
-      const body = Readable.from([png]);
+      setSystemTime(Date.now() + 50 + Math.round(random() * 250));
+      const [status, headers, data = Buffer.alloc(0)] = answer(url);
+      const body = Readable.from([data]);
       return {
         body,
         destroy: () => body.destroy(),
-        headers: new Headers({ "content-type": "image/png" }),
-        status: 200,
+        headers: new Headers(headers),
+        status,
         url,
       };
     },
   });
-  const updated = new Set<number>();
+  const updated = new Map<number, number | undefined>();
   // Each queued refresh and when BullMQ would next hand it to the worker.
   const queued: { data: unknown; runAt: number }[] = [];
   const { process } = await startWorker({
@@ -462,14 +509,21 @@ test("a cold favicon run of 50 sources runs each refresh once", async () => {
       async addBulk() {},
       async upsertJobScheduler() {},
     },
-    faviconRefresher: new FaviconRefresher(client, {
-      async updateFavicon(id) {
-        updated.add(id);
+    faviconRefresher: new FaviconRefresher(
+      client,
+      {
+        async updateFavicon(id, favicon) {
+          updated.set(id, imageDimensions(favicon)?.width);
+        },
       },
-    }),
+      redis,
+    ),
     sourcesDataService: strictFake<SourcesDataService>({
       async getSourcesDueFaviconRefresh() {
-        return due;
+        return Array.from({ length: sourceCount }, (_, index) => ({
+          homeUrl: `https://site${index + 1}.example/`,
+          id: index + 1,
+        }));
       },
       async getSourcesToProcess() {
         return [];
@@ -477,7 +531,7 @@ test("a cold favicon run of 50 sources runs each refresh once", async () => {
     }),
   });
 
-  setSystemTime(Date.parse("2026-10-30T00:00:00.000Z"));
+  setSystemTime(startAt);
   let runs = 0;
   try {
     await process(job(JobName.GatherFaviconJobs, {}));
@@ -485,13 +539,20 @@ test("a cold favicon run of 50 sources runs each refresh once", async () => {
     for (;;) {
       queued.sort((a, b) => a.runAt - b.runAt);
       const next = queued.shift();
-      if (!next) break;
-      setSystemTime(Math.max(next.runAt, Date.now()));
+      // A refresh still queued at the next daily gather is one too many.
+      if (!next || next.runAt > startAt + 86_400_000) break;
+      setSystemTime(
+        Math.max(next.runAt + Math.round(random() * 2_000), Date.now()),
+      );
       runs++;
+      let { data } = next;
       await process(
-        job(JobName.RefreshFavicon, next.data, {
+        job(JobName.RefreshFavicon, data, {
           async moveToDelayed(timestamp) {
-            queued.push({ data: next.data, runAt: timestamp });
+            queued.push({ data, runAt: timestamp });
+          },
+          async updateData(value) {
+            data = value;
           },
         }),
       ).catch((error: unknown) => {
@@ -499,12 +560,62 @@ test("a cold favicon run of 50 sources runs each refresh once", async () => {
       });
     }
     /* eslint-enable no-await-in-loop */
+    return { finishedAt: Date.now(), runs, updated };
   } finally {
     setSystemTime();
   }
+}
 
-  expect(updated.size).toBe(sourceCount);
-  expect(runs).toBe(sourceCount);
+// Every refresh asks the same provider hosts, and the limiter lets each take
+// one background request per interval. Deferred jobs must queue for slots of
+// their own: woken together, each slot would go to one job and re-defer all
+// the others, about N²/6 runs (#1087).
+test("a cold favicon run takes about two runs per source, and a warm one one", async () => {
+  const redis = createFakeHttpRedis();
+  const cold = await simulateFaviconGather(1_000, { redis });
+  expect(cold.updated.size).toBe(1_000);
+  expect([...cold.updated.values()].every((size) => size === 64)).toBe(true);
+  expect(cold.runs).toBeLessThanOrEqual(2_000);
+
+  const warm = await simulateFaviconGather(1_000, {
+    redis,
+    startAt: Date.parse("2026-10-31T00:00:00.000Z"),
+  });
+  expect(warm.updated.size).toBe(1_000);
+  expect(warm.runs).toBe(1_000);
+});
+
+test("a provider that never stops deferring holds icons back only until the horizon", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { finishedAt, runs, updated } = await simulateFaviconGather(100, {
+    answer: (url) =>
+      url.includes("gstatic")
+        ? [429, { "retry-after": "60" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(updated.size).toBe(100);
+  expect([...updated.values()].every((size) => size === 32)).toBe(true);
+  expect(finishedAt).toBeLessThan(
+    startAt + faviconDeferralHorizonMs + 3_600_000,
+  );
+  expect(runs).toBeLessThanOrEqual(1_000);
+});
+
+test("an hour-long provider block queues the refreshes instead of waking them together", async () => {
+  const startAt = Date.parse("2026-10-30T00:00:00.000Z");
+  const { runs, updated } = await simulateFaviconGather(500, {
+    answer: (url) =>
+      url.includes("gstatic") && Date.now() < startAt + 3_600_000
+        ? [429, { "retry-after": "3600" }]
+        : providerAnswer(url),
+    startAt,
+  });
+
+  expect(updated.size).toBe(500);
+  expect([...updated.values()].every((size) => size === 64)).toBe(true);
+  expect(runs).toBeLessThanOrEqual(1_000);
 });
 
 test("rejects malformed and unknown jobs before downstream calls", async () => {
