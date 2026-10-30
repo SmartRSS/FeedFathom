@@ -201,6 +201,77 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
   }
 });
 
+// Every later migration runs against a database with readers in it, and 0001
+// rewrites user_articles in place. A baseline-era instance with one of
+// everything must come out the far side with nothing lost: the read and
+// removed state re-keyed onto (source, guid), the session still signed in, the
+// article searchable and carrying the enclosures default.
+test("upgrading a populated baseline database keeps every row and its state", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const baselineFolder = await migrationsFolderBefore("0001_optimal_barracuda");
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, baselineFolder);
+    const [user] = await client<{ id: number }[]>`INSERT INTO "users"
+      ("email", "name", "password", "status")
+      VALUES ('kept@example.com', 'kept', 'x', 'active') RETURNING "id"`;
+    const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
+      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      RETURNING "id"`;
+    const [folder] = await client<{ id: number }[]>`INSERT INTO "user_folders"
+      ("name", "user_id") VALUES ('News', ${user?.id}) RETURNING "id"`;
+    await client`INSERT INTO "user_sources" ("name", "parent_id", "source_id", "user_id")
+      VALUES ('Feed', ${folder?.id}, ${source?.id}, ${user?.id})`;
+    const articles = await client<{ id: number }[]>`INSERT INTO "articles"
+      ("author", "content", "guid", "published_at", "source_id", "title", "url")
+      VALUES
+        ('a', 'zeppelin body', 'read-guid', NOW(), ${source?.id}, 'Read', 'https://example.com/1'),
+        ('a', 'body', 'removed-guid', NOW(), ${source?.id}, 'Removed', 'https://example.com/2')
+      RETURNING "id"`;
+    await client`INSERT INTO "user_articles" ("article_id", "read_at", "deleted_at", "user_id")
+      VALUES
+        (${articles[0]?.id}, NOW(), NULL, ${user?.id}),
+        (${articles[1]?.id}, NULL, NOW(), ${user?.id})`;
+    await client`INSERT INTO "sessions" ("sid", "user_agent", "user_id")
+      VALUES ('kept-sid', 'Browser', ${user?.id})`;
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+
+    const userArticles = await client<
+      { deleted: boolean; guid: string; read: boolean; sourceId: number }[]
+    >`SELECT "guid", "source_id" AS "sourceId",
+        "read_at" IS NOT NULL AS "read", "deleted_at" IS NOT NULL AS "deleted"
+      FROM "user_articles" ORDER BY "guid"`;
+    expect([...userArticles]).toEqual([
+      { deleted: false, guid: "read-guid", read: true, sourceId: source!.id },
+      {
+        deleted: true,
+        guid: "removed-guid",
+        read: false,
+        sourceId: source!.id,
+      },
+    ]);
+    const [counts] = await client<
+      { articles: number; folders: number; sessions: number; subs: number }[]
+    >`SELECT
+        (SELECT count(*)::int FROM "articles") AS "articles",
+        (SELECT count(*)::int FROM "user_folders") AS "folders",
+        (SELECT count(*)::int FROM "user_sources" WHERE "parent_id" = ${folder?.id}) AS "subs",
+        (SELECT count(*)::int FROM "sessions"
+          WHERE "sid" = 'kept-sid' AND "expires_at" > NOW()) AS "sessions"`;
+    expect(counts).toEqual({ articles: 2, folders: 1, sessions: 1, subs: 1 });
+    const searchable = await client<{ guid: string; enclosures: unknown }[]>`
+      SELECT "guid", "enclosures" FROM "articles"
+      WHERE "search_vector" @@ to_tsquery('english', 'zeppelin')`;
+    expect([...searchable]).toEqual([{ enclosures: [], guid: "read-guid" }]);
+  } finally {
+    await client.close();
+    await rm(baselineFolder, { force: true, recursive: true });
+  }
+});
+
 // sid is a random UUID per login, so duplicates should never exist. If one
 // does, the unique index build must fail the whole migration transaction
 // rather than leave the user_id index applied without it.

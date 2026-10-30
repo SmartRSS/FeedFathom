@@ -42,8 +42,8 @@ function v4Bmp(width: number, height: number, paint: Paint): Buffer {
   return Buffer.concat([header, pixels]);
 }
 
-function png(size: number, paint: Paint = noise): Promise<Buffer> {
-  return new Bun.Image(v4Bmp(size, size, paint)).png().buffer();
+function png(width: number, height = width): Promise<Buffer> {
+  return new Bun.Image(v4Bmp(width, height, noise)).png().buffer();
 }
 
 function jpeg(size: number): Promise<Buffer> {
@@ -205,16 +205,24 @@ describe("normalizeFavicon", () => {
     },
   );
 
-  test("downsizes an oversized PNG to 64px WebP", async () => {
-    const source = await png(180);
+  test.each([
+    [180, 180, 64, 64],
+    [180, 90, 64, 32],
+  ])(
+    "downsizes an oversized %dx%d PNG to a %dx%d WebP, keeping its aspect",
+    async (width, height, outWidth, outHeight) => {
+      const source = await png(width, height);
 
-    const result = await normalizeFavicon(source, "image/png");
+      const result = await normalizeFavicon(source, "image/png");
 
-    expect(resize).toHaveBeenCalledWith(64, 64, { fit: "inside" });
-    expect(result.contentType).toBe("image/webp");
-    expect(await dimensions(result.buffer)).toEqual({ height: 64, width: 64 });
-    expect(result.buffer.length).toBeLessThan(source.length);
-  });
+      expect(result.contentType).toBe("image/webp");
+      expect(await dimensions(result.buffer)).toEqual({
+        height: outHeight,
+        width: outWidth,
+      });
+      expect(result.buffer.length).toBeLessThan(source.length);
+    },
+  );
 
   test.each([
     ["PNG", "image/png", () => png(32)],

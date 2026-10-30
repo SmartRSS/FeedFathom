@@ -10,11 +10,3 @@ export type OpmlSource = {
   type: "source";
   xmlUrl: string;
 };
-/**
- * A parsed <outline> element. Bun's XML parser puts attributes on the element
- * itself under an "@" prefix, and collapses a lone child to a single object.
- */
-export type Outline = {
-  [key: string]: unknown;
-  outline?: Outline | Outline[];
-};

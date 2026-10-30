@@ -52,33 +52,19 @@ function jpeg(width: number, height: number): Buffer {
 }
 
 describe("imageDimensions", () => {
-  test("reads a PNG header", () => {
-    expect(imageDimensions(png(64, 32))).toEqual({ height: 32, width: 64 });
-  });
-
-  test("reads a GIF header", () => {
-    expect(imageDimensions(gif(48, 16))).toEqual({ height: 16, width: 48 });
-  });
-
-  test("reads a BMP header", () => {
-    expect(imageDimensions(bmp(64, 64))).toEqual({ height: 64, width: 64 });
-  });
-
-  test("reads a negative BMP height as a positive dimension", () => {
-    expect(imageDimensions(bmp(64, -64))).toEqual({ height: 64, width: 64 });
-  });
-
-  test("reads an ICO directory entry", () => {
-    expect(imageDimensions(ico(32, 32))).toEqual({ height: 32, width: 32 });
-  });
-
-  // ICO stores each dimension in one byte, where 0 means 256.
-  test("reads an ICO zero dimension as 256", () => {
-    expect(imageDimensions(ico(0, 0))).toEqual({ height: 256, width: 256 });
-  });
-
-  test("walks JPEG segments to the frame header", () => {
-    expect(imageDimensions(jpeg(96, 48))).toEqual({ height: 48, width: 96 });
+  test.each([
+    // A negative BMP height means top-down rows, not a negative size.
+    ["PNG", png(64, 32), { height: 32, width: 64 }],
+    ["GIF", gif(48, 16), { height: 16, width: 48 }],
+    ["BMP", bmp(64, 64), { height: 64, width: 64 }],
+    ["bottom-up BMP", bmp(64, -64), { height: 64, width: 64 }],
+    ["ICO", ico(32, 32), { height: 32, width: 32 }],
+    // ICO stores each dimension in one byte, where 0 means 256.
+    ["ICO 0x0", ico(0, 0), { height: 256, width: 256 }],
+    // Walks past APP0 to the frame header rather than a lucky first hit.
+    ["JPEG", jpeg(96, 48), { height: 48, width: 96 }],
+  ])("reads a %s header", (_format, image, dimensions) => {
+    expect(imageDimensions(image)).toEqual(dimensions);
   });
 
   // SVG is resolution-independent, so it always beats a raster candidate.

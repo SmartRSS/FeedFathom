@@ -136,21 +136,18 @@ describe("verifyHubSignature", () => {
     expect(verifyHubSignature(secret, signature, body)).toBe(true);
   });
 
-  test("rejects a tampered signature", () => {
-    expect(verifyHubSignature(secret, "sha256=deadbeef", body)).toBe(false);
-  });
-
-  test("rejects the right shape signed with the wrong secret", () => {
-    const signature = `sha256=${createHmac("sha256", "wrong").update(body).digest("hex")}`;
-    expect(verifyHubSignature(secret, signature, body)).toBe(false);
-  });
-
-  test("rejects a missing header", () => {
-    expect(verifyHubSignature(secret, null, body)).toBe(false);
-  });
-
-  test("rejects an unsupported algorithm", () => {
-    const signature = `md5=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  test.each([
+    ["a tampered signature", "sha256=deadbeef"],
+    [
+      "the right shape signed with the wrong secret",
+      `sha256=${createHmac("sha256", "wrong").update(body).digest("hex")}`,
+    ],
+    ["a missing header", null],
+    [
+      "an unsupported algorithm",
+      `md5=${createHmac("sha256", secret).update(body).digest("hex")}`,
+    ],
+  ])("rejects %s", (_case, signature) => {
     expect(verifyHubSignature(secret, signature, body)).toBe(false);
   });
 });

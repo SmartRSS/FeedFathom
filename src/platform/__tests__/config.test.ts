@@ -111,29 +111,19 @@ describe("loadConfig", () => {
     },
   );
 
-  test("allows blank Turnstile keys to disable Turnstile", () => {
+  test.each([
+    ["both blank (off)", "", ""],
+    ["both set", "secret", "site"],
+  ])("accepts Turnstile keys that are %s", (_case, secret, site) => {
     expect(
       loadConfig({
         DATABASE_URL: databaseUrl,
-        TURNSTILE_SECRET_KEY: "",
-        TURNSTILE_SITE_KEY: "",
+        TURNSTILE_SECRET_KEY: secret,
+        TURNSTILE_SITE_KEY: site,
       }),
     ).toMatchObject({
-      TURNSTILE_SECRET_KEY: "",
-      TURNSTILE_SITE_KEY: "",
-    });
-  });
-
-  test("accepts paired Turnstile keys", () => {
-    expect(
-      loadConfig({
-        DATABASE_URL: databaseUrl,
-        TURNSTILE_SECRET_KEY: "secret",
-        TURNSTILE_SITE_KEY: "site",
-      }),
-    ).toMatchObject({
-      TURNSTILE_SECRET_KEY: "secret",
-      TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: secret,
+      TURNSTILE_SITE_KEY: site,
     });
   });
 
