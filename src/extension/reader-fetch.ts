@@ -1,3 +1,4 @@
+import { decodeBody } from "#shared/util/decode-body.ts";
 import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 import {
   readerBridgeChannel,
@@ -13,6 +14,8 @@ const maximumBytes = 5 * 1024 * 1024;
 const maximumRedirects = 5;
 const timeoutMs = 15_000;
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+// Matches both <meta charset="x"> and the http-equiv Content-Type form.
+const metaCharsetPattern = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/i;
 
 export type ReaderFetch = (
   input: RequestInfo | URL,
@@ -76,9 +79,8 @@ const readBoundedHtml = async (
   if (!response.body) return { html: "" };
 
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  const chunks: Uint8Array[] = [];
   let bytes = 0;
-  let html = "";
   /* eslint-disable no-await-in-loop -- Stream chunks and cancellation are ordered. */
   while (true) {
     const chunk = await reader.read();
@@ -88,10 +90,23 @@ const readBoundedHtml = async (
       await reader.cancel();
       return { error: "TOO_LARGE" };
     }
-    html += decoder.decode(chunk.value, { stream: true });
+    chunks.push(chunk.value);
   }
   /* eslint-enable no-await-in-loop */
-  return { html: html + decoder.decode() };
+  const body = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return {
+    html: decodeBody(
+      body,
+      response.headers.get("content-type"),
+      metaCharsetPattern,
+      1024,
+    ),
+  };
 };
 
 const fetchArticle = async (
