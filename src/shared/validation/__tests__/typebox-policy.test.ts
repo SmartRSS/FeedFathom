@@ -28,7 +28,7 @@ test.each([
   ["2026-07-29T12:34:56Z", false],
   ["2026-07-29T14:34:56.789+02:00", false],
   ["2026-07-29", false],
-])("accepts only canonical JSON dates: %s", (value, accepted) => {
+])("canonical JSON date check on %s returns %p", (value, accepted) => {
   expect(Value.Check(jsonDatePolicy, value)).toBe(accepted);
 });
 

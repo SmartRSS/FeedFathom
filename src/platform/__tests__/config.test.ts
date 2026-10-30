@@ -112,23 +112,20 @@ describe("loadConfig", () => {
   );
 
   test.each([
-    ["", ""],
-    ["secret", "site"],
-  ])(
-    "accepts Turnstile keys that are both blank (off) or both set: %p",
-    (secret, site) => {
-      expect(
-        loadConfig({
-          DATABASE_URL: databaseUrl,
-          TURNSTILE_SECRET_KEY: secret,
-          TURNSTILE_SITE_KEY: site,
-        }),
-      ).toMatchObject({
+    ["both blank (off)", "", ""],
+    ["both set", "secret", "site"],
+  ])("accepts Turnstile keys that are %s", (_case, secret, site) => {
+    expect(
+      loadConfig({
+        DATABASE_URL: databaseUrl,
         TURNSTILE_SECRET_KEY: secret,
         TURNSTILE_SITE_KEY: site,
-      });
-    },
-  );
+      }),
+    ).toMatchObject({
+      TURNSTILE_SECRET_KEY: secret,
+      TURNSTILE_SITE_KEY: site,
+    });
+  });
 
   test.each([
     { TURNSTILE_SITE_KEY: "site" },

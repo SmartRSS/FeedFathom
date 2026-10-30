@@ -161,10 +161,12 @@ test("dedupes by Message-ID, and by the raw bytes when there is none", async () 
   await deliver(["Message-ID: one@example.com ", "Subject: A again", "", "y"]);
   await deliver(["Subject: B", "", "x"]);
   await deliver(["Subject: C", "", "x"]);
+  await deliver(["Subject: C", "", "x"]);
 
-  const [first, again, plainB, plainC] = guids();
+  const [first, again, plainB, plainC, plainCAgain] = guids();
   expect(again).toBe(first);
   expect(plainB).not.toBe(plainC);
+  expect(plainCAgain).toBe(plainC);
   expect(new Set(guids()).size).toBe(3);
 });
 

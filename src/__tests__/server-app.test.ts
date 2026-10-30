@@ -509,21 +509,28 @@ test.each([
   ["GET", "/api/events"],
   ["GET", "/api/folders"],
   ["GET", "/api/options/sessions"],
+  ["DELETE", "/api/options/sessions"],
+  ["DELETE", "/api/options/sessions/7"],
   ["POST", "/api/articles"],
-])("rejects unauthenticated access to %s %s", async (method, path) => {
-  const app = await appFor(createDependencies());
-  const body = method === "POST" ? { sources: [3] } : undefined;
+])(
+  "rejects %s %s with no cookie and with an unknown one",
+  async (method, path) => {
+    const app = await appFor(createDependencies());
+    const body = method === "POST" ? { sources: [3] } : undefined;
 
-  const responses = await Promise.all(
-    [false, true].map((auth) => send(app, method, path, body, { auth })),
-  );
+    const responses = await Promise.all(
+      [false, true].map((auth) => send(app, method, path, body, { auth })),
+    );
 
-  for (const response of responses) expect(response.status).toBe(401);
-  expect(await Promise.all(responses.map((r) => r.json()))).toEqual([
-    { error: "Unauthorized" },
-    { error: "Unauthorized" },
-  ]);
-});
+    const outcomes = await Promise.all(
+      responses.map(async (r) => [r.status, await r.json()]),
+    );
+    expect({ missingCookie: outcomes[0], unknownCookie: outcomes[1] }).toEqual({
+      missingCookie: [401, { error: "Unauthorized" }],
+      unknownCookie: [401, { error: "Unauthorized" }],
+    });
+  },
+);
 
 test("normalizes reader inputs and rejects malformed values before dependencies", async () => {
   const dependencies = createDependencies();
@@ -3056,6 +3063,18 @@ test("stops a reset form from mailing one account on demand", async () => {
   expect(await throttled.json()).toEqual({ success: true });
   expect(elsewhere.status).toBe(200);
   expect(sent).toBe(11);
+
+  // The reset counter is its own scope: tripping it does not lock the same
+  // address out of signing in with the right password.
+  dependencies.password.verify = async (value, hash) =>
+    hash === target.password && value === "password";
+  const login = await post(
+    app,
+    "/api/login",
+    { email: target.email, password: "password" },
+    { headers: { "x-forwarded-for": "203.0.113.7" } },
+  );
+  expect(login.status).toBe(200);
 });
 
 test("spends a reset token once and refuses an expired one", async () => {
@@ -3397,7 +3416,10 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
 // names; sessions-integration covers that the data service honours the scope.
 test("any signed-in user can revoke one of their sessions or all the others", async () => {
   const dependencies = createDependencies();
-  authenticated(dependencies);
+  dependencies.usersDataService.getUserBySid = async () => ({
+    ...sessionUser,
+    isAdmin: false,
+  });
   const revoked: unknown[][] = [];
   dependencies.usersDataService.deleteSessionById = async (...args) => {
     revoked.push(["one", ...args]);
