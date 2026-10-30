@@ -1112,6 +1112,88 @@ test("a password change keeps this session and drops the others from the list", 
   await expect(page.getByText("This browser")).toBeVisible();
 });
 
+// The caller is signed in, so a throttled change can say so instead of
+// blaming the password the user typed.
+test("a throttled password change says to try again later", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options");
+  await page.route("**/api/options/password", (route) =>
+    route.fulfill({
+      json: { error: "Too many attempts. Try again later." },
+      status: 429,
+    }),
+  );
+  await page.getByRole("link", { name: "Account & security" }).click();
+
+  await page.getByLabel("Current password").fill("old-password");
+  await page.getByLabel("New password", { exact: true }).fill("new-password");
+  await page.getByLabel("Confirm new password").fill("new-password");
+  await page.getByRole("button", { name: "Change password" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "Too many attempts. Try again later.",
+  );
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+  ]);
+  failures.length = 0;
+});
+
+const openRegistration = async (
+  page: Page,
+  answer: { json: object; status: number },
+) => {
+  await installApiFixture(page, { authenticated: false });
+  await page.route("**/api/register", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: {
+            passwordResetEnabled: true,
+            registrationStatus: "ENABLED",
+            turnstileSiteKey: null,
+          },
+        })
+      : route.fulfill(answer),
+  );
+  await page.goto("/register");
+  await page.getByLabel("Name").fill("Reader");
+  await page.getByLabel("Email").fill("reader@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("password");
+  await page.getByLabel("Confirm password").fill("password");
+  await page.getByRole("button", { name: "Register" }).click();
+};
+
+test("registration success says what to do if no email arrives", async ({
+  page,
+}) => {
+  await openRegistration(page, { json: { success: true }, status: 200 });
+
+  await expect(
+    page.getByRole("heading", { name: "Registration successful" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("register again with the same address"),
+  ).toBeVisible();
+});
+
+test("a throttled registration says to try again later", async ({ page }) => {
+  await openRegistration(page, {
+    json: { error: "Too many attempts. Try again later.", success: false },
+    status: 429,
+  });
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "Too many attempts. Try again later.",
+  );
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+  ]);
+  failures.length = 0;
+});
+
 // The unit test covers the guard; this covers the part that can silently stop
 // working -- the settings reaching the stylesheet at all. A renamed data
 // attribute or a dropped effect leaves both selects working and the reader
