@@ -7,3 +7,7 @@ export class HttpDeferredError extends Error {
     super(`Request deferred until ${new Date(retryAt).toISOString()}`);
   }
 }
+
+// The limiter's own politeness interval, as opposed to a block the origin
+// asked for: it always clears within one interval, whatever the origin says.
+export class HttpPacedError extends HttpDeferredError {}

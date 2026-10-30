@@ -4,7 +4,10 @@ import {
   rateLimitBlockUntil,
   retryAtFrom,
 } from "../http-rate-limiter.ts";
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import {
+  HttpDeferredError,
+  HttpPacedError,
+} from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import {
   HttpDeadlineError,
@@ -161,13 +164,12 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     const deadline = new RequestDeadline(20_000);
 
     try {
-      await expect(
-        new HttpRateLimiter(redis).reserve(
-          "feeds.example.com",
-          "background",
-          deadline,
-        ),
-      ).rejects.toBeInstanceOf(HttpDeferredError);
+      const error = await new HttpRateLimiter(redis)
+        .reserve("feeds.example.com", "background", deadline)
+        .catch((caught: unknown) => caught);
+      // A block the origin asked for, not the limiter's own pacing.
+      expect(error).toBeInstanceOf(HttpDeferredError);
+      expect(error).not.toBeInstanceOf(HttpPacedError);
     } finally {
       deadline.dispose();
     }
@@ -200,7 +202,8 @@ describe("HttpRateLimiter shared host clock", () => {
     const error = await reserve(limiter, "background").catch(
       (caught: unknown) => caught,
     );
-    expect(error).toBeInstanceOf(HttpDeferredError);
+    // The limiter's own pacing, which a caller can tell from a block.
+    expect(error).toBeInstanceOf(HttpPacedError);
     if (!(error instanceof HttpDeferredError)) throw error;
     expect(error.retryAt - Date.now()).toBeGreaterThan(900);
     expect(error.retryAt - Date.now()).toBeLessThanOrEqual(1_000);

@@ -1,8 +1,8 @@
 // Enough of Redis for the HTTP client, with millisecond expiry applied on
 // every read: the rate limiter's whole behaviour is about when a key stops
 // existing, and a reservation that never expires makes every retry look like
-// a violation. EVAL runs the four scripts the client sends by what each one
-// does rather than by interpreting Lua.
+// a violation. EVAL runs the scripts the client and the favicon refresher send
+// by what each one does rather than by interpreting Lua.
 export function createFakeHttpRedis() {
   const expiry = new Map<string, number>();
   const values = new Map<string, string>();
@@ -26,13 +26,8 @@ export function createFakeHttpRedis() {
     values.set(key, String(next));
     return next;
   };
-  const evaluate = ([
-    script = "",
-    ,
-    key = "",
-    arg = "",
-    ttl = "",
-  ]: string[]) => {
+  const evaluate = (args: string[]) => {
+    const [script = "", , key = "", arg = "", ttl = ""] = args;
     // The host clock: take it once ARGV[1] ms have passed since the last
     // request, or report how long is left.
     if (script.includes("TIME")) {
@@ -44,6 +39,22 @@ export function createFakeHttpRedis() {
       values.set(key, String(now));
       expiry.set(key, now + Number(ttl));
       return 0;
+    }
+    // The favicon refresh queues: the latest of ARGV[1] and one gap past
+    // the last slot of each key, recorded on every key.
+    if (script.includes("PXAT")) {
+      const keyCount = Number(args[1]);
+      const keys = args.slice(2, 2 + keyCount);
+      const [retryAt = "", gap = ""] = args.slice(2 + keyCount);
+      const slot = Math.max(
+        Number(retryAt),
+        ...keys.map((slotKey) => Number(live(slotKey) ?? "0") + Number(gap)),
+      );
+      for (const slotKey of keys) {
+        values.set(slotKey, String(slot));
+        expiry.set(slotKey, slot + Number(gap));
+      }
+      return slot;
     }
     if (script.includes("PEXPIRE")) {
       add(key, 1);

@@ -1,4 +1,7 @@
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import {
+  HttpDeferredError,
+  HttpPacedError,
+} from "#platform/http/http-deferred-error.ts";
 import type { RequestDeadline } from "#platform/http/request-deadline.ts";
 
 // Politeness and back-pressure toward one origin: how long this instance
@@ -21,10 +24,10 @@ const waiterGraceMs = 1_000;
  */
 export type HostIntervals = { background: number; interactive: number };
 
-const defaultIntervals: HostIntervals = {
+export const defaultIntervals: Readonly<HostIntervals> = Object.freeze({
   background: 10_000,
   interactive: 1_000,
-};
+});
 
 // Takes the host's clock if ARGV[1] ms have passed since its last request and
 // returns 0, or returns how many ms are still to go. Redis's own time, so
@@ -154,10 +157,10 @@ export class HttpRateLimiter {
         )) ?? "0",
       );
       if (waiters > 0) {
-        throw new HttpDeferredError(Date.now() + this.intervals.background);
+        throw new HttpPacedError(Date.now() + this.intervals.background);
       }
       const wait = await this.reserveGap(hostname, "background", deadline);
-      if (wait > 0) throw new HttpDeferredError(Date.now() + wait);
+      if (wait > 0) throw new HttpPacedError(Date.now() + wait);
       return;
     }
 
@@ -173,7 +176,7 @@ export class HttpRateLimiter {
         const wait = await this.reserveGap(hostname, "interactive", deadline);
         if (wait === 0) return;
         if (Date.now() + wait >= deadline.endsAt) {
-          throw new HttpDeferredError(Date.now() + wait);
+          throw new HttpPacedError(Date.now() + wait);
         }
         if (!waiting) {
           await deadline.run(
