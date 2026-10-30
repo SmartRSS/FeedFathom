@@ -19,6 +19,9 @@ test("the worker reports healthy only once its job worker is consuming", async (
     listening.resolve(server);
     return server;
   });
+  // runWorker registers SIGTERM/SIGINT handlers; left in place they would
+  // call this test's fakes if a later file's run were interrupted.
+  const onSpy = spyOn(process, "on").mockReturnValue(process);
 
   try {
     const started = runWorker({
@@ -50,6 +53,7 @@ test("the worker reports healthy only once its job worker is consuming", async (
     expect(await status()).toBe(200);
   } finally {
     serveSpy.mockRestore();
+    onSpy.mockRestore();
     await (await listening.promise).stop();
   }
 });
