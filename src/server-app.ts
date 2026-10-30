@@ -194,10 +194,14 @@ export async function createServerApp(
     if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
     }
-    // The sender's fault, not ours: the mail relay bounces it instead of
-    // retrying, and spam to unknown addresses stays out of the error log.
+    // The sender's fault, not ours: the mail relay bounces it, and spam to
+    // unknown addresses stays out of the error log. `rejected` is the relay's
+    // signal; a plain 422 (a schema failure) is retried.
     if (error instanceof MailRejectedError) {
-      return Response.json({ error: error.message }, { status: 422 });
+      return Response.json(
+        { error: error.message, rejected: true },
+        { status: 422 },
+      );
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));

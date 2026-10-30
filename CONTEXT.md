@@ -106,7 +106,8 @@ specifiers keep their `.ts` suffix.
 
 An error type with a canonical HTTP representation is mapped once, in the
 composition root's error hook, next to the types already mapped there —
-`NotFound`, `ValidationError`, `DecodeError` and `HttpDeferredError`.
+`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError` and
+`MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
 mapping could not. `find` is the example: it knows the URL it just failed to

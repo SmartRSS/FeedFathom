@@ -28,8 +28,9 @@ export type TrustedMailEnvelope = {
 };
 
 // The message itself is unacceptable: the same bytes to the same address would
-// fail again, so the relay is told to bounce it rather than retry. The error
-// hook maps it to 422.
+// fail again, so the relay bounces it. The error hook maps it to 422 with
+// `rejected: true`, the only answer the relay bounces on. Throw it only when
+// the sender is surely at fault -- a bounce can end a subscription.
 export class MailRejectedError extends Error {
   override name = "MailRejectedError";
 }
@@ -69,9 +70,8 @@ export class EmailHandler {
   ): Promise<void> {
     const email = await this.parse(raw);
     if (!parsedMailCheck.Check(email)) {
-      throw new MailRejectedError(
-        "Mail parser returned an invalid message projection",
-      );
+      // Our own invariant over mailparser's shape, not the sender's fault.
+      throw new Error("Mail parser returned an invalid message projection");
     }
     const source = await this.sourcesDataService.findSourceByUrl(envelope.to);
     if (!source) throw new MailRejectedError("No recipients known");

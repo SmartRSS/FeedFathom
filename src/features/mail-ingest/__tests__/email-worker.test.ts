@@ -155,14 +155,20 @@ describe("Cloudflare email worker", () => {
     expect(errors).toHaveLength(2);
   });
 
-  test("checks declared and encoded raw sizes before relaying", async () => {
+  // The size is the sender's fault, so this is the one bounce the worker
+  // decides without asking /api/mail.
+  test("rejects an oversized message by declared and encoded size, before relaying", async () => {
     let fetchCalls = 0;
     let rawReads = 0;
     const errors: string[] = [];
+    const reasons: string[] = [];
     const worker = createEmailWorker(async () => {
       fetchCalls++;
       return new Response(null, { status: 204 });
     }, logger(errors));
+    const setReject = (reason: string) => {
+      reasons.push(reason);
+    };
     const oversizedMessage: IncomingEmailMessage = {
       from: "sender@example.com",
       get raw() {
@@ -170,34 +176,30 @@ describe("Cloudflare email worker", () => {
         return raw;
       },
       rawSize: maxRawEmailBytes + 1,
-      setReject() {
-        throw new Error("Message was rejected");
-      },
+      setReject,
       to: "newsletter@example.com",
     };
 
-    await expect(worker.email(oversizedMessage, environment())).rejects.toThrow(
-      "Raw email exceeds 5 MiB",
-    );
+    await worker.email(oversizedMessage, environment());
     expect(rawReads).toBe(0);
 
-    await expect(
-      worker.email(
-        message({
-          raw: "é".repeat(maxRawEmailBytes / 2 + 1),
-          rawSize: maxRawEmailBytes,
-        }),
-        environment(),
-      ),
-    ).rejects.toThrow("Raw email exceeds 5 MiB");
+    await worker.email(
+      message({
+        raw: "é".repeat(maxRawEmailBytes / 2 + 1),
+        rawSize: maxRawEmailBytes,
+        setReject,
+      }),
+      environment(),
+    );
 
     await worker.email(
       message({ raw: "a".repeat(maxRawEmailBytes), rawSize: maxRawEmailBytes }),
       environment(),
     );
 
+    expect(reasons).toEqual(["Message exceeds 5 MiB", "Message exceeds 5 MiB"]);
     expect(fetchCalls).toBe(1);
-    expect(errors).toHaveLength(2);
+    expect(errors).toEqual([]);
   });
 
   test("throws and logs bounded diagnostics for non-success responses", async () => {
@@ -218,45 +220,48 @@ describe("Cloudflare email worker", () => {
     expect(errors[0]?.length).toBeLessThan(1_250);
   });
 
+  test("rejects with the server's reason on a 422 that says rejected, without logging", async () => {
+    const errors: string[] = [];
+    const reasons: string[] = [];
+    const worker = createEmailWorker(
+      async () =>
+        Response.json(
+          { error: "No recipients known", rejected: true },
+          { status: 422 },
+        ),
+      logger(errors),
+    );
+
+    await worker.email(
+      message({ setReject: (value) => reasons.push(value) }),
+      environment(),
+    );
+
+    expect(reasons).toEqual(["No recipients known"]);
+    expect(errors).toEqual([]);
+  });
+
+  // A bounce can end a subscription, so anything short of the explicit
+  // signal is a temporary failure: a reverse proxy's HTML 413, a schema 422
+  // from Worker/server version skew, or the right flag on the wrong status.
   test.each([
-    [
-      422,
-      Response.json({ error: "No recipients known" }),
-      "No recipients known",
-    ],
-    [
-      413,
-      Response.json({ error: "Raw email exceeds 5 MiB" }),
-      "Raw email exceeds 5 MiB",
-    ],
-    [422, new Response("<html>proxy page</html>"), "Message rejected"],
+    [413, new Response("<html>413 Request Entity Too Large</html>")],
+    [413, Response.json({ error: "Raw email exceeds 5 MiB" })],
+    [422, Response.json({ error: "Expected string" })],
+    [422, new Response("<html>proxy page</html>")],
+    [422, Response.json({ error: "x", rejected: "true" })],
+    [500, Response.json({ error: "x", rejected: true })],
+    [401, Response.json({ error: "x" })],
+    [404, Response.json({ error: "x" })],
+    [503, Response.json({ error: "x" })],
   ])(
-    "rejects the message, without throwing or logging, on %p",
-    async (status, body, reason) => {
+    "throws and logs the status, rather than rejecting, on %p without the rejection signal",
+    async (status, body) => {
       const errors: string[] = [];
       const reasons: string[] = [];
       const worker = createEmailWorker(
         async () => new Response(body.body, { status }),
         logger(errors),
-      );
-
-      await worker.email(
-        message({ setReject: (value) => reasons.push(value) }),
-        environment(),
-      );
-
-      expect(reasons).toEqual([reason]);
-      expect(errors).toEqual([]);
-    },
-  );
-
-  test.each([401, 404, 500, 503])(
-    "throws rather than rejecting on %p, so Cloudflare retries",
-    async (status) => {
-      const reasons: string[] = [];
-      const worker = createEmailWorker(
-        async () => Response.json({ error: "x" }, { status }),
-        logger([]),
       );
 
       await expect(
@@ -266,6 +271,8 @@ describe("Cloudflare email worker", () => {
         ),
       ).rejects.toThrow(`Mail relay failed with status ${status}`);
       expect(reasons).toEqual([]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain(`status ${status}`);
     },
   );
 

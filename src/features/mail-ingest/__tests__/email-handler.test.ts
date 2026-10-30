@@ -81,7 +81,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
       from: "trusted-sender@example.com",
       to: "unknown-recipient@example.com",
     }),
-  ).rejects.toBeInstanceOf(MailRejectedError);
+  ).rejects.toThrow(new MailRejectedError("No recipients known"));
 
   expect(lookups).toEqual([
     "trusted-recipient@example.com",
@@ -180,8 +180,12 @@ test("refuses a parse result that breaks the fields it reads", async () => {
     return parsed;
   });
 
-  await expect(deliver(["Subject: Broken", "", "x"])).rejects.toBeInstanceOf(
-    MailRejectedError,
+  const error = await deliver(["Subject: Broken", "", "x"]).catch(
+    (cause: unknown) => cause,
   );
+  expect(error).toEqual(
+    new Error("Mail parser returned an invalid message projection"),
+  );
+  expect(error).not.toBeInstanceOf(MailRejectedError);
   expect(batches).toEqual([]);
 });

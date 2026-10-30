@@ -28,8 +28,8 @@ export type IncomingEmailMessage = {
   from: unknown;
   raw: BodyInit | null;
   rawSize: unknown;
-  // Cloudflare's ForwardableEmailMessage: rejects the message permanently, so
-  // the sending server bounces it rather than retrying.
+  // Cloudflare's ForwardableEmailMessage: a permanent SMTP error, so the
+  // sending server bounces the message and may suppress the address.
   setReject(reason: string): void;
   to: unknown;
 };
@@ -37,6 +37,8 @@ export type IncomingEmailMessage = {
 // A URL's hostname keeps the brackets for an IPv6 literal, so `[::1]` is the
 // form to compare against.
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const oversizeReason = "Message exceeds 5 MiB";
 
 function isNonblankString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
@@ -53,25 +55,29 @@ function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
   );
 }
 
-// The statuses /api/mail returns for a message that is the sender's fault.
-// Every other failure is thrown, so Cloudflare retries it.
-const rejectedStatuses = new Set([413, 422]);
-
-function rejectionReason(diagnostic: string): string {
+// A bounce can make a newsletter platform drop the subscription, so the
+// worker rejects only on the explicit `rejected: true` that /api/mail sends
+// for a message that is the sender's fault. Anything else -- a proxy's HTML
+// 413, a schema 422 from version skew during a deploy -- is thrown: a
+// temporary failure the sending server may retry.
+function rejectionReason(diagnostic: string): string | undefined {
+  let body: unknown;
   try {
-    const body: unknown = JSON.parse(diagnostic);
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      isNonblankString(body.error)
-    ) {
-      return body.error.slice(0, 200);
-    }
+    body = JSON.parse(diagnostic);
   } catch {
-    // Not the JSON body /api/mail sends; fall through to the generic reason.
+    return undefined;
   }
-  return "Message rejected";
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("rejected" in body) ||
+    body.rejected !== true
+  ) {
+    return undefined;
+  }
+  return "error" in body && isNonblankString(body.error)
+    ? body.error.slice(0, 200)
+    : "Message rejected";
 }
 
 function mailEnvelope(message: IncomingEmailMessage): MailEnvelope {
@@ -147,15 +153,19 @@ export function createEmailWorker(
         }
         const endpoint = mailEndpoint(env.MAIL_ENDPOINT_DOMAIN);
         const envelope = mailEnvelope(message);
+        // The one rejection the worker decides alone: the size is the
+        // sender's, and /api/mail would refuse it too.
         if (envelope.rawSize > maxRawEmailBytes) {
-          throw new Error("Raw email exceeds 5 MiB");
+          message.setReject(oversizeReason);
+          return;
         }
 
         const bytes = new Uint8Array(
           await new Response(message.raw).arrayBuffer(),
         );
         if (bytes.byteLength > maxRawEmailBytes) {
-          throw new Error("Raw email exceeds 5 MiB");
+          message.setReject(oversizeReason);
+          return;
         }
 
         const response = await fetcher(endpoint, {
@@ -170,14 +180,14 @@ export function createEmailWorker(
           },
           method: "POST",
         });
-        if (rejectedStatuses.has(response.status)) {
-          message.setReject(
-            rejectionReason(await readResponseDiagnostic(response)),
-          );
-          return;
-        }
         if (!response.ok) {
           const diagnostic = await readResponseDiagnostic(response);
+          const reason =
+            response.status === 422 ? rejectionReason(diagnostic) : undefined;
+          if (reason !== undefined) {
+            message.setReject(reason);
+            return;
+          }
           throw new Error(
             `Mail relay failed with status ${response.status}${diagnostic ? `: ${diagnostic}` : ""}`,
           );

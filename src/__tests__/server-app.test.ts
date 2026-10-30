@@ -2485,17 +2485,17 @@ test.each([
     "an unknown recipient",
     new MailRejectedError("No recipients known"),
     422,
-    "No recipients known",
+    { error: "No recipients known", rejected: true },
   ],
   [
     "a storage failure",
     new Error("connection terminated"),
     500,
-    "Internal Server Error",
+    { error: "Internal Server Error" },
   ],
 ])(
   "answers %s with its status, so the relay bounces only the sender's faults",
-  async (_kind, failure, status, error) => {
+  async (_kind, failure, status, body) => {
     const dependencies = createDependencies();
     dependencies.config.MAIL_ENABLED = true;
     dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
@@ -2511,9 +2511,23 @@ test.each([
     });
 
     expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ error });
+    expect(await response.json()).toEqual(body);
   },
 );
+
+// A schema failure here mostly means Worker/server version skew mid-deploy, so
+// it must not carry the flag the relay bounces on.
+test("answers a malformed relay body with 422 but no rejection signal", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAIL_ENABLED = true;
+  dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
+  const app = await appFor(dependencies);
+
+  const response = await relayMail(app, { from: "sender@example.com" });
+
+  expect(response.status).toBe(422);
+  expect(await response.json()).not.toHaveProperty("rejected");
+});
 
 // The relay carries base64 precisely so that an 8-bit body in a legacy
 // charset arrives byte for byte; routing it as UTF-8 text replaced every
