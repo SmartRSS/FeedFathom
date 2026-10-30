@@ -13,7 +13,9 @@ const serve = (dataUrl: string) =>
     },
   );
 
-test("serves an image with a restrictive CSP and nosniff", async () => {
+// private: the route is behind the session cookie, so no shared cache may
+// keep a copy.
+test("serves an image with a restrictive CSP, nosniff and a private cache", async () => {
   const response = await serve("data:image/svg+xml;base64,PHN2Zy8+");
   if (!(response instanceof Response)) throw new Error("Expected a Response");
   expect(response.headers.get("content-type")).toBe("image/svg+xml");
@@ -21,6 +23,9 @@ test("serves an image with a restrictive CSP and nosniff", async () => {
     "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   );
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(response.headers.get("cache-control")).toBe(
+    "private, max-age=31536000, immutable",
+  );
   expect(await response.text()).toBe("<svg/>");
 });
 
