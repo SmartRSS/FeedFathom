@@ -514,11 +514,15 @@ test.each([
   const app = await appFor(createDependencies());
   const body = method === "POST" ? { sources: [3] } : undefined;
 
-  for (const auth of [false, true]) {
-    const response = await send(app, method, path, body, { auth });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: "Unauthorized" });
-  }
+  const responses = await Promise.all(
+    [false, true].map((auth) => send(app, method, path, body, { auth })),
+  );
+
+  for (const response of responses) expect(response.status).toBe(401);
+  expect(await Promise.all(responses.map((r) => r.json()))).toEqual([
+    { error: "Unauthorized" },
+    { error: "Unauthorized" },
+  ]);
 });
 
 test("normalizes reader inputs and rejects malformed values before dependencies", async () => {
