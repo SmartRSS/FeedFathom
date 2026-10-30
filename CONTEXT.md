@@ -24,8 +24,9 @@ Four layers. Each may depend only **downward**.
 | `src/features/*` | One feature's routes, data services and domain logic, together | `platform`, `shared`, declared sibling features |
 | `src/spa/`, `src/extension/` | Client applications with their own build targets | `shared` |
 
-Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`) and
-`src/server-app.ts` sit at the `src/` root and may import any layer.
+Entrypoints (`src/server.ts`, `src/worker.ts`, `src/migrator.ts`),
+`src/server-app.ts` and `src/worker-app.ts` sit at the `src/` root and may
+import any layer.
 
 `src/platform/runtime.ts` constructs the shared connections, queue and HTTP
 client once per process. Each feature's `services.ts` constructs its service
@@ -106,7 +107,8 @@ specifiers keep their `.ts` suffix.
 
 An error type with a canonical HTTP representation is mapped once, in the
 composition root's error hook, next to the types already mapped there —
-`NotFound`, `ValidationError`, `DecodeError` and `HttpDeferredError`.
+`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError` and
+`MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
 mapping could not. `find` is the example: it knows the URL it just failed to
@@ -152,11 +154,11 @@ large file and would change for several unrelated reasons.
 ## Tests
 
 `test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with
-an isolated module registry per test file. Route and worker tests pass their
-services in; only `src/__tests__/worker.test.ts`, which tests the entrypoint
-itself, replaces modules with `mock.module`, and running the suite without
-isolation lets those mocks leak into other files. Cases within one file run
-sequentially.
+an isolated module registry per test file. No test uses `mock.module`: Bun's
+module mocks are process-wide, so without `--parallel` they leak into every
+file loaded afterwards. Route, job and startup tests pass their services in
+instead, the startup test through `runWorker` in `src/worker-app.ts`, so the
+suite also passes in one process. Cases within one file run sequentially.
 
 Unit tests are co-located: `foo.test.ts` sits in a `__tests__/` subdirectory
 next to `foo.ts` (i.e. `__tests__/foo.test.ts`).

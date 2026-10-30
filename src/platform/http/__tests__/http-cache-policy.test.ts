@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   cacheable,
+  type CachedResponse,
   currentAge,
   deltaSeconds,
   expiresAt,
@@ -164,6 +165,20 @@ describe("cacheable", () => {
     expect(entry !== undefined).toBe(stored);
   });
 
+  // Every caller reads only a 200. A stored 304 has no body to serve and
+  // every later 304 would refresh it, sticking the feed (#1078).
+  test.each([304, 404, 503])("never stores a %d", (status) => {
+    const entry = cacheable(
+      nativeResponse({
+        headers: headers({ "cache-control": "max-age=60", etag: '"v1"' }),
+        status,
+      }),
+      body,
+      url,
+    );
+    expect(entry).toBeUndefined();
+  });
+
   // The post-redirect URL is what a later request must revalidate against.
   test("records the response's own url, falling back to the requested one", () => {
     const redirected = cacheable(
@@ -186,14 +201,14 @@ describe("cacheable", () => {
 });
 
 describe("refresh", () => {
-  const stored = {
+  const stored: CachedResponse = {
     body: "aGk=",
     expiresAt: at,
     headers: [
       ["etag", '"v1"'],
       ["date", httpDate(at - 600 * second)],
       ["age", "600"],
-    ] as [string, string][],
+    ],
     status: 200,
     url: "https://example.test/feed",
   };
