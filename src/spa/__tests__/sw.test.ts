@@ -276,6 +276,14 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     );
+  // A DELETE the worker queues while offline, answered by its response.
+  const remove = (path: string, body: object) =>
+    dispatch(
+      new Request(`${ORIGIN}${path}`, {
+        body: JSON.stringify(body),
+        method: "DELETE",
+      }),
+    ).response;
   const activate = async () => {
     const pending: Promise<unknown>[] = [];
     onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
@@ -293,6 +301,7 @@ const loadServiceWorker = (
     messages,
     navigate,
     queue,
+    remove,
     removeSource,
     requests,
   };
@@ -799,6 +808,8 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 
+// #974: a download started before a sign-in belongs to the account that
+// was signed in then, so it must not land in the new account's cache.
 test("a download answered after a sign-in is not stored", async () => {
   let answer: (() => void) | undefined;
   const sw = loadServiceWorker((path, method) => {
@@ -1071,6 +1082,51 @@ test("a replayed deletion carries its original trace and says it is a replay", a
   expect(Number(replay?.get("X-FeedFathom-Replay"))).toBeGreaterThan(0);
 });
 
+// The offline removal was answered with a synthetic success, so a replay the
+// server rejects for good is the only moment the page can learn it was lost:
+// the entry is dropped, the page is told, and later entries still go out. A
+// 401 is not final -- the same account may sign back in -- so it stays queued.
+test.each([
+  [403, true],
+  [404, true],
+  [401, false],
+])(
+  "a replay answered %p is dropped and reported: %p",
+  async (status, final) => {
+    let online = true;
+    const sw = loadServiceWorker((path, method) => {
+      if (!online) throw new TypeError("Failed to fetch");
+      if (path === "/api/session") return session(1);
+      if (method === "GET") return articleNetwork(path);
+      return path === "/api/source"
+        ? new Response(null, { status })
+        : new Response(null);
+    });
+    await sw.loadArticle(1);
+    await settle();
+    online = false;
+    await sw.remove("/api/source", { removeSourceId: 1 });
+    await sw.remove("/api/articles", { removedArticleIdList: [7] });
+    online = true;
+    await sw.loadArticle(2);
+    await settle();
+
+    expect(sw.messages).toEqual(
+      final
+        ? [
+            {
+              method: "DELETE",
+              status,
+              type: "queued-mutation-failed",
+              url: `${ORIGIN}/api/source`,
+            },
+          ]
+        : [],
+    );
+    expect(sw.queue.rows.size).toBe(final ? 0 : 2);
+  },
+);
+
 // The server refuses to remove a folder that still holds a source, so a
 // folder removal replayed past a failed source removal would be rejected and
 // dropped (#975).
@@ -1089,16 +1145,9 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
     }
     return new Response(null, { status: sourceExists ? 400 : 200 });
   });
-  const remove = (path: string, body: object) =>
-    sw.dispatch(
-      new Request(`${ORIGIN}${path}`, {
-        body: JSON.stringify(body),
-        method: "DELETE",
-      }),
-    ).response;
   sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
-  await remove("/api/source", { removeSourceId: 1 });
-  await remove("/api/folders", { removeFolderId: 2 });
+  await sw.remove("/api/source", { removeSourceId: 1 });
+  await sw.remove("/api/folders", { removeFolderId: 2 });
   online = true;
   await sw.loadTree();
   await settle();
@@ -1135,19 +1184,12 @@ test("a flush that starts during another doesn't replay its entries twice", asyn
       throw new TypeError("Failed to fetch");
     return new Response(null);
   });
-  const remove = (path: string, body: object) =>
-    sw.dispatch(
-      new Request(`${ORIGIN}${path}`, {
-        body: JSON.stringify(body),
-        method: "DELETE",
-      }),
-    ).response;
   sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
-  await remove("/api/source", { removeSourceId: 1 });
+  await sw.remove("/api/source", { removeSourceId: 1 });
   online = true;
   await sw.loadTree();
   await settle();
-  await remove("/api/folders", { removeFolderId: 2 });
+  await sw.remove("/api/folders", { removeFolderId: 2 });
   foldersDown = false;
   await sw.loadTree();
   await settle();

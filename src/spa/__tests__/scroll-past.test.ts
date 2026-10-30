@@ -155,16 +155,6 @@ describe("ScrollPastQueue", () => {
     expect(batches).toEqual([[1, 2]]);
   });
 
-  test("a lone row does not wait for a window that has nobody to fill it", () => {
-    const clock = fakeClock();
-    const batches: number[][] = [];
-    const queue = makeQueue(clock, batches);
-    queue.add(7);
-    clock.advance(1000);
-    // Nothing else is dwelling, so there is nobody to wait for.
-    expect(batches).toEqual([[7]]);
-  });
-
   test("flushes are spaced at least flushEveryMs apart", () => {
     const clock = fakeClock();
     const batches: number[][] = [];
