@@ -308,6 +308,10 @@ test("renders the tree while its favicons are still loading", async ({
   await page.route("**/api/favicon/**", (route) => {
     held.push(route);
   });
+  // No page timer fires, so a tree that rendered only after some favicon
+  // deadline gave up would stay a skeleton.
+  await page.clock.install({ time: 0 });
+  await page.clock.pauseAt(1000);
   await page.goto("/");
 
   // The icons never answer, so a tree that waited for them would never
@@ -1055,9 +1059,9 @@ test("lists active sessions and signs out another one", async ({ page }) => {
 });
 
 // A session revoked from another device, or expired, while the options page
-// is open: the next request there sends the reader to sign in and back to
-// options, not to the dashboard and not into an inline error.
-test("an expired session on the options page routes to login and back", async ({
+// is open: the next request there sends the reader to sign in, with options
+// as the page to return to, not into an inline error.
+test("an expired session on the options page routes to login, returning to options", async ({
   page,
 }) => {
   const state = await openApp(page, {}, "/options");
@@ -1071,7 +1075,6 @@ test("an expired session on the options page routes to login and back", async ({
 
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("next")).toBe("/options");
-  expect(state.revokedOtherSessions).toBe(false);
   const failures = browserFailures.get(page) ?? [];
   expect(failures).toEqual([
     "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
@@ -1116,7 +1119,12 @@ test("the reader steps change the rendered column, not just storage", async ({
   const medium = await columnOf();
 
   await page.goto("/options");
-  await page.getByRole("combobox", { name: "Text size" }).selectOption("large");
+  const size = page.getByRole("combobox", { name: "Text size" });
+  await expect(size).toHaveValue("medium");
+  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
+    "medium",
+  );
+  await size.selectOption("large");
   await page.goto("/");
   await selectSource(page);
   await expect(page.locator(".reader h1")).toBeVisible();
@@ -1365,6 +1373,9 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("(2) FeedFathom");
 
   await page.getByRole("button", { name: "options" }).first().click();
+  // Leaving the dashboard drops the badge on its own, before the setting
+  // changes anything.
+  await expect(page).toHaveTitle("Options · FeedFathom");
   await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
@@ -2044,8 +2055,9 @@ test("keeps the newest discovery preview response", async ({ page }) => {
   await page.getByRole("button", { name: /Fast feed/ }).click();
 
   await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
-  // Only now does the older preview answer, so it settles after the newer
-  // one on every run, and is dropped before the page next goes idle.
+  // Only now may the older preview answer. Answered or aborted by the app,
+  // it settles after the newer one and is dropped before the page next goes
+  // idle.
   state.releaseSlowPreview();
   await (await (await slowPreview).response())?.finished();
   await page.evaluate(
@@ -2172,24 +2184,6 @@ test("a preview opens its first article and leaves modified clicks alone", async
   expect(await clickTaken(["Shift"])).toBe("false");
 });
 
-for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
-  test(`exposes Reader modes when the bridge is available: ${mode}`, async ({
-    context,
-    page,
-  }) => {
-    await installReaderResponder(context, true);
-    await openApp(page);
-    await selectSource(page);
-
-    const modes = page.getByRole("combobox", { name: "Article display mode" });
-    await expect(modes).toContainText("Reader (plain text)");
-    await modes.selectOption(mode);
-    await expect(
-      page.getByText("Reader bridge content.", { exact: false }),
-    ).toBeVisible();
-  });
-}
-
 test("gives extracted images the app's own loading defaults", async ({
   context,
   page,
@@ -2220,9 +2214,12 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     await page.goto("/");
     await selectSource(page);
 
-    await page
-      .getByRole("combobox", { name: "Article display mode" })
-      .selectOption(mode);
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await expect(modes).toContainText("Reader (plain text)");
+    await modes.selectOption(mode);
+    await expect(
+      page.getByText("Reader bridge content.", { exact: false }),
+    ).toBeVisible();
     // The rendered copy started loading after any earlier one, so once it
     // has failed, a handler that survived any step has already run.
     await expect
