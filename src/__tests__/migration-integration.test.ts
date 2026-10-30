@@ -331,6 +331,13 @@ test("upgrading gives each email source its earliest subscriber as owner", async
       SELECT count(*)::int AS "count" FROM "user_sources"`;
     expect(count).toBe(5);
     expect(await indexExists(client, "sources_reserved_by_idx")).toBe(true);
+    // SET NULL, so code rolled back to before 0013 deleting an owner leaves
+    // a shared source to its other subscribers.
+    const [{ onDelete } = { onDelete: "" }] = await client<
+      { onDelete: string }[]
+    >`SELECT confdeltype AS "onDelete" FROM pg_constraint
+      WHERE conname = 'sources_reserved_by_users_id_fk'`;
+    expect(onDelete).toBe("n");
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });

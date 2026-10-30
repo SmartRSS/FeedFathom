@@ -5,11 +5,11 @@ import {
   gt,
   inArray,
   isNotNull,
-  isNull,
   lt,
   lte,
   min,
   ne,
+  not,
   notExists,
   sql,
 } from "drizzle-orm";
@@ -61,6 +61,10 @@ export const lastSeenBumpThrottleHours = 1;
 // any "read the newsletter eventually" window.
 const emailRetentionDays = 90;
 
+// How long a source may go without a subscriber: a newsletter address is
+// reserved before anyone subscribes (#1116), and takes mail meanwhile.
+export const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
 /**
@@ -89,10 +93,10 @@ export async function cleanupOrphanedData(
   if (userExpiryDays > 0) {
     // One cutoff for both statements, so no user expires between them.
     const cutoff = new Date(Date.now() - userExpiryDays * 86_400_000);
-    // An owned source goes with its owner (the reserved_by cascade). An
-    // email source from before ownership can have other subscribers (see
-    // migration 0013), and the cascade would take their subscription too:
-    // it passes to the earliest of them instead.
+    // An email source from before ownership can have other subscribers (see
+    // migration 0013): it passes to the earliest of them, so the address
+    // stays owned. An owner's unshared source loses its owner instead (the
+    // reserved_by SET NULL) and goes in the orphan delete below.
     await drizzleConnection.execute(sql`
       UPDATE sources s SET reserved_by = (
         SELECT us.user_id FROM user_sources us
@@ -132,7 +136,7 @@ export async function cleanupOrphanedData(
   // also covers the gap between addSourceToUser creating a source and
   // subscribing to it.
   const subscriberless = and(
-    lt(sources.createdAt, sql`NOW() - INTERVAL '1 day'`),
+    lt(sources.createdAt, subscriberlessGraceEnd),
     exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
     notExists(
       drizzleConnection
@@ -141,21 +145,30 @@ export async function cleanupOrphanedData(
         .where(eq(userSources.sourceId, sources.id)),
     ),
   );
+
+  // An owned newsletter address that has had mail stays, as a tombstone:
+  // deleted, it would be free for any account to create and receive its
+  // owner's mail. One that never had any goes, or every Generate click would
+  // leave a row behind for good. Email delivery is the only writer of an
+  // email source's last_success.
+  const tombstone = sql`(${sources.reservedBy} IS NOT NULL AND ${sources.lastSuccess} IS NOT NULL)`;
   await drizzleConnection
     .delete(sources)
-    .where(and(subscriberless, isNull(sources.reservedBy)));
-  // An owned newsletter address stays, as a tombstone: deleted, it would be
-  // free for any account to create and receive its owner's mail. Only its
-  // mail goes, so nothing but the row accumulates. It goes with its owner.
-  await drizzleConnection.delete(articles).where(
-    inArray(
-      articles.sourceId,
-      drizzleConnection
-        .select({ id: sources.id })
-        .from(sources)
-        .where(and(subscriberless, isNotNull(sources.reservedBy))),
-    ),
-  );
+    .where(and(subscriberless, not(tombstone)));
+  // A tombstone bounces new mail (see findMailRecipient), but keeps what its
+  // owner left behind on unsubscribing, which an owner subscribing again
+  // would see. That goes, so nothing but the row accumulates.
+  await drizzleConnection
+    .delete(articles)
+    .where(
+      inArray(
+        articles.sourceId,
+        drizzleConnection
+          .select({ id: sources.id })
+          .from(sources)
+          .where(and(subscriberless, tombstone)),
+      ),
+    );
 
   const earliestSubs = drizzleConnection
     .select({

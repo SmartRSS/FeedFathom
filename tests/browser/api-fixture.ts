@@ -551,6 +551,9 @@ export async function installApiFixture(
         state.newsletterSubscription = body.sourceUrl;
         return respond({ sourceId: 21 });
       }
+      // Addresses are minted only: the server refuses one typed by hand.
+      if (body.sourceUrl.endsWith("@mail.example"))
+        return respond({ error: "Refine Error" }, 422);
       expect(body).toEqual({
         sourceFolder: 7,
         sourceName: "Tech Preview",

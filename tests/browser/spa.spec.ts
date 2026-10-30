@@ -2169,6 +2169,27 @@ test("keeps mail sent to a generated address before Subscribe", async ({
   ]);
 });
 
+test("explains a refused address instead of the server's error", async ({
+  page,
+}) => {
+  await openApp(page, { mailDomain: "mail.example" }, "/preview");
+
+  await page.getByLabel("Feed URL").fill("me@mail.example");
+  await page.getByLabel("Title").fill("Letters");
+  await page.getByRole("button", { name: "Subscribe" }).click();
+
+  await expect(
+    page.getByText(
+      "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
+    ),
+  ).toBeVisible();
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)",
+  ]);
+  failures.length = 0;
+});
+
 test("validates Website URLs before discovery", async ({ page }) => {
   const state = await openApp(page, {}, "/preview");
   const website = page.getByLabel("Website");

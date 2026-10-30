@@ -15,7 +15,10 @@ import { cleanupOrphanedData } from "#features/feeds/retention.ts";
 import { postNewsletterAddressHandler } from "#features/feeds/routes/newsletter-address.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import { EmailHandler } from "#features/mail-ingest/email-handler.ts";
+import {
+  EmailHandler,
+  MailRejectedError,
+} from "#features/mail-ingest/email-handler.ts";
 import {
   createReaderRoutes,
   type ReaderRouteServices,
@@ -237,9 +240,13 @@ test("an address its owner unsubscribed from stays the owner's after cleanup", a
   await subscribe(`${crypto.randomUUID()}@${mailDomain}`, other);
   expect((await subscribe(address)).status).toBe(200);
   const source = (await sourceRows()).find(({ url }) => url === address);
+  await deliver(address, "Weekly issue");
   await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE id = ${source!.id}`;
   await userSourcesDataService.removeSourceFromUser(account.id, source!.id);
-  await deliver(address, "Sent after leaving");
+  // Nobody reads it any more, so the sender gets a bounce.
+  await expect(deliver(address, "Sent after leaving")).rejects.toThrow(
+    MailRejectedError,
+  );
 
   await cleanup();
   expect(await articleTitles(source!.id)).toEqual([]);
@@ -249,6 +256,24 @@ test("an address its owner unsubscribed from stays the owner's after cleanup", a
   expect((await subscribe(address)).status).toBe(200);
   await deliver(address, "Welcome back");
   expect(await listedTitles(source!.id)).toEqual(["Welcome back"]);
+});
+
+// Every Generate click reserves an address, so one that never had mail must
+// not outlive the grace, or the rows would only accumulate.
+test("an address that never had mail is deleted after the grace", async () => {
+  await subscribe(`${crypto.randomUUID()}@${mailDomain}`, other);
+  const subscribedOnce = `fedcba9876543210@${mailDomain}`;
+  await post("/newsletter-address", { address });
+  expect((await subscribe(subscribedOnce)).status).toBe(200);
+  const [left] = await client<{ id: number }[]>`
+    SELECT id FROM sources WHERE url = ${subscribedOnce}`;
+  await userSourcesDataService.removeSourceFromUser(account.id, left!.id);
+  await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours'`;
+
+  await cleanup();
+  const urls = (await sourceRows()).map(({ url }) => url);
+  expect(urls).not.toContain(address);
+  expect(urls).not.toContain(subscribedOnce);
 });
 
 test("a feed's articles from before its first subscription are neither listed nor kept", async () => {
@@ -342,6 +367,9 @@ test("an older shared address passes to its next subscriber when its owner expir
     VALUES (${account.id}, ${legacy!.id}, 'Letters'), (${other.id}, ${legacy!.id}, 'Letters')`;
   const owned = `fedcba9876543210@${mailDomain}`;
   expect((await subscribe(owned)).status).toBe(200);
+  // Had mail, so only losing its owner makes it an orphan.
+  await deliver(owned, "Weekly issue");
+  await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE url = ${owned}`;
   await client`UPDATE users SET last_seen_at = NOW() - INTERVAL '10 days' WHERE id = ${account.id}`;
 
   await cleanupOrphanedData(drizzleConnection, 0, 0, 5);
@@ -351,6 +379,25 @@ test("an older shared address passes to its next subscriber when its owner expir
   const [{ owner } = { owner: -1 }] = await client<{ owner: number }[]>`
     SELECT reserved_by AS owner FROM sources WHERE id = ${legacy!.id}`;
   expect(owner).toBe(other.id);
+});
+
+// A rollback to code without the handoff above deletes the owner outright.
+// The other subscriber's subscription and mail must survive that.
+test("an older shared address keeps its other subscriber when its owner is deleted", async () => {
+  const [legacy] = await client<{ id: number }[]>`
+    INSERT INTO sources (url, home_url, kind, reserved_by)
+    VALUES (${address}, 'http://localhost', 'email', ${account.id})
+    RETURNING id`;
+  await client`
+    INSERT INTO user_sources (user_id, source_id, name)
+    VALUES (${account.id}, ${legacy!.id}, 'Letters'), (${other.id}, ${legacy!.id}, 'Letters')`;
+  await deliver(address, "Weekly issue");
+
+  await client`DELETE FROM users WHERE id = ${account.id}`;
+  await cleanup();
+
+  expect(await subscribers(legacy!.id)).toEqual([other.id]);
+  expect(await listedTitles(legacy!.id, other)).toEqual(["Weekly issue"]);
 });
 
 test("an email source without an owner is subscribable only by its subscribers", async () => {

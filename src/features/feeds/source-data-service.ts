@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   getTableColumns,
   gt,
   isNull,
@@ -18,6 +19,7 @@ import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
+import { subscriberlessGraceEnd } from "#features/feeds/retention.ts";
 import {
   clampToPollFloor,
   pollFloorMs,
@@ -118,6 +120,32 @@ export class SourcesDataService {
         .select()
         .from(sources)
         .where(eq(sources.url, url))
+    ).at(0);
+  }
+
+  // The source mail to `url` is delivered to. One without a subscriber takes
+  // mail only within the reservation grace; past it, it is an address its
+  // owner left (a tombstone, see cleanupOrphanedData), and the sender should
+  // get a bounce rather than mail nobody reads.
+  public async findMailRecipient(url: string): Promise<Source | undefined> {
+    return (
+      await this.drizzleConnection
+        .select()
+        .from(sources)
+        .where(
+          and(
+            eq(sources.url, url),
+            or(
+              gt(sources.createdAt, subscriberlessGraceEnd),
+              exists(
+                this.drizzleConnection
+                  .select({ id: userSources.id })
+                  .from(userSources)
+                  .where(eq(userSources.sourceId, sources.id)),
+              ),
+            ),
+          ),
+        )
     ).at(0);
   }
 

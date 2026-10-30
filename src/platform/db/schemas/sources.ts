@@ -49,10 +49,13 @@ export const sources = pgTable(
     // created by reserving or subscribing to it, so no other account can
     // subscribe and read its mail (#1116). Migration 0013 gave each older
     // email source its earliest subscriber. NULL for feeds. The orphan
-    // cleanup keeps an owned source, so the address is never free to take
-    // while its owner exists; the cascade removes it with the owner.
+    // cleanup keeps an owned source that has had mail, so the address is not
+    // free to take while its owner exists. SET NULL, not CASCADE: an older
+    // email source can have other subscribers, and a cascade would delete
+    // their subscription and mail with the owner. Unowned and unsubscribed,
+    // the source then goes in the orphan cleanup.
     reservedBy: integer("reserved_by").references(() => users.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

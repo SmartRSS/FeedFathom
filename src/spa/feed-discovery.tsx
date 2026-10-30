@@ -13,7 +13,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api, messageOf } from "./api.ts";
+import { api, ApiError, messageOf } from "./api.ts";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
   isNewsletterAddress,
@@ -314,6 +314,14 @@ export function FeedDiscovery(props: {
           });
       await props.saved(result.sourceId);
     } catch (cause) {
+      // The server's answer to a malformed target and to an address this
+      // account may not subscribe to, alike (addresses are minted only).
+      if (!editing && cause instanceof ApiError && cause.status === 422) {
+        setMessage(
+          "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
+        );
+        return;
+      }
       reportError(
         cause,
         editing ? "Could not save changes" : "Could not subscribe",
