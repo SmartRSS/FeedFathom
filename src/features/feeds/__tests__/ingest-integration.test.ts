@@ -226,7 +226,11 @@ ${[
   ["drill", "Test", future],
 ]
   .map(
-    ([id, status, expires]) => `<entry><id>urn:${id}</id><title>${id} alert</title>
+    ([
+      id,
+      status,
+      expires,
+    ]) => `<entry><id>urn:${id}</id><title>${id} alert</title>
 <link rel="alternate" href="https://1.1.1.1/${id}"/><updated>${published}</updated>
 <summary>Flooding</summary><cap:event>Flood Warning</cap:event><cap:status>${status}</cap:status>
 <cap:expires>${expires}</cap:expires></entry>`,
@@ -234,7 +238,9 @@ ${[
   .join("")}</feed>`,
     [
       {
-        content: expect.stringContaining("<dt>Event</dt><dd>Flood Warning</dd>"),
+        content: expect.stringContaining(
+          "<dt>Event</dt><dd>Flood Warning</dd>",
+        ),
         title: "live alert",
         url: "https://1.1.1.1/live",
       },

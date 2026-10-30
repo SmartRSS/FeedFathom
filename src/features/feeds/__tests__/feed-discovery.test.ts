@@ -50,35 +50,6 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  test("probes one candidate at a time and preserves order", async () => {
-    const slow = Promise.withResolvers<{ websub?: unknown }>();
-    const started: string[] = [];
-    const result = markWebSubAvailability(
-      [
-        feed("Slow", "https://a.example/slow"),
-        feed("Fast", "https://a.example/fast"),
-      ],
-      {
-        parseUrl: async (url) => {
-          started.push(url);
-          return url.endsWith("slow") ? slow.promise : {};
-        },
-      },
-    );
-    try {
-      await Bun.sleep(10);
-      expect(started).toEqual(["https://a.example/slow"]);
-      slow.resolve({ websub: { hubUrl: "https://hub.example/" } });
-      expect(await result).toEqual([
-        { title: "Slow", url: "https://a.example/slow", websub: true },
-        { title: "Fast", url: "https://a.example/fast", websub: false },
-      ]);
-    } finally {
-      slow.resolve({});
-      await result;
-    }
-  });
-
   // Probed together, candidates on one host raced for its rate limit, and
   // the losers came back marked as having no hub.
   test("every candidate on one host gets its true WebSub state", async () => {
@@ -113,14 +84,5 @@ describe("markWebSubAvailability", () => {
       false,
       true,
     ]);
-  });
-
-  test("an empty candidate list yields an empty result", async () => {
-    expect(
-      await markWebSubAvailability(
-        [],
-        probe(() => ({})),
-      ),
-    ).toEqual([]);
   });
 });

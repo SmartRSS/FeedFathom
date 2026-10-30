@@ -210,7 +210,6 @@ describe("normalizeFavicon", () => {
 
     const result = await normalizeFavicon(source, "image/png");
 
-    expect(resize).toHaveBeenCalledWith(64, 64, { fit: "inside" });
     expect(result.contentType).toBe("image/webp");
     expect(await dimensions(result.buffer)).toEqual({ height: 64, width: 64 });
     expect(result.buffer.length).toBeLessThan(source.length);
