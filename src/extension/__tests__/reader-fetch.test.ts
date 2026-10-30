@@ -429,4 +429,39 @@ describe("reader page charset", () => {
       await readerHtml(page(zazolcUtf8), "text/html; charset=not-a-charset"),
     ).toContain("<h1>Zażółć</h1>");
   });
+
+  // HTML's prescan, not the feed rules: an unknown header label is ignored,
+  // and comments and unknown meta labels don't stop the search.
+  test.each([
+    ["an unknown header label", "<meta charset=windows-1251>", "charset=None"],
+    [
+      "a commented-out meta",
+      "<!-- <meta charset=utf-8> --><meta charset=windows-1251>",
+      "",
+    ],
+    [
+      "an unknown first meta",
+      "<meta charset=bogus><meta charset=windows-1251>",
+      "",
+    ],
+  ])("sniffs the meta past %s", async (_name, head, parameter) => {
+    const contentType = parameter ? `text/html; ${parameter}` : "text/html";
+    expect(await readerHtml(page(privet, head), contentType)).toContain(
+      "<h1>Привет</h1>",
+    );
+  });
+
+  // A meta read as ASCII can't truly be UTF-16, and x-user-defined means
+  // windows-1252 there (the HTML spec's prescan rules).
+  test.each([
+    ["utf-16", zazolcUtf8, "<h1>Zażółć</h1>"],
+    ["x-user-defined", [0x63, 0x61, 0x66, 0xe9], "<h1>café</h1>"],
+  ])(
+    "reads a meta that declares %s as the spec says",
+    async (label, title, expected) => {
+      expect(
+        await readerHtml(page(title, `<meta charset="${label}">`), "text/html"),
+      ).toContain(expected);
+    },
+  );
 });

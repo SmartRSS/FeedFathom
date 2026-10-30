@@ -1,4 +1,4 @@
-import { decodeBody } from "#shared/util/decode-body.ts";
+import { bomEncoding, headerCharset } from "#shared/util/decode-body.ts";
 import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
 import {
   readerBridgeChannel,
@@ -15,7 +15,40 @@ const maximumRedirects = 5;
 const timeoutMs = 15_000;
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 // Matches both <meta charset="x"> and the http-equiv Content-Type form.
-const metaCharsetPattern = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/i;
+const metaCharsetPattern = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/giu;
+
+// The encoding a label names, or undefined for one TextDecoder doesn't know
+// (including the "replacement" labels, which it refuses).
+const knownEncoding = (label: string | undefined) => {
+  if (!label) return undefined;
+  try {
+    return new TextDecoder(label).encoding;
+  } catch {
+    return undefined;
+  }
+};
+
+// HTML's rules rather than a feed's: a header label the browser doesn't know
+// is ignored, and the meta prescan skips comments and unknown labels. A meta
+// tag read as ASCII can't truly mean UTF-16, and x-user-defined means
+// windows-1252 there, as the HTML spec prescribes. ponytail: a regex over
+// the first 1024 bytes, not the full prescan; a "charset=" inside another
+// attribute's value still matches.
+const htmlEncoding = (bytes: Uint8Array, contentType: string | null) => {
+  const transport =
+    bomEncoding(bytes) ?? knownEncoding(headerCharset(contentType));
+  if (transport) return transport;
+  const prefix = new TextDecoder("windows-1252")
+    .decode(bytes.subarray(0, 1024))
+    .replace(/<!--[\s\S]*?-->/gu, "");
+  for (const [, label] of prefix.matchAll(metaCharsetPattern)) {
+    const encoding = knownEncoding(label);
+    if (encoding?.startsWith("utf-16")) return "utf-8";
+    if (encoding === "x-user-defined") return "windows-1252";
+    if (encoding) return encoding;
+  }
+  return "utf-8";
+};
 
 export type ReaderFetch = (
   input: RequestInfo | URL,
@@ -99,13 +132,9 @@ const readBoundedHtml = async (
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  const contentType = response.headers.get("content-type");
   return {
-    html: decodeBody(
-      body,
-      response.headers.get("content-type"),
-      metaCharsetPattern,
-      1024,
-    ),
+    html: new TextDecoder(htmlEncoding(body, contentType)).decode(body),
   };
 };
 
