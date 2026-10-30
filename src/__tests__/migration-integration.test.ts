@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -306,6 +306,75 @@ test("a duplicate sid fails the session index migration and applies none of it",
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
+// A migrations folder of its own, written as drizzle-kit would, so a pending
+// migration can do what no real one does yet. `migrateTo` journals only the
+// first `count` entries, so a later, longer call stands in for an upgrade.
+async function scratchMigrations(statements: readonly string[]) {
+  const folder = await mkdtemp(join(tmpdir(), "feedfathom-migrations-"));
+  const entries = statements.map((_, idx) => ({
+    breakpoints: true,
+    idx,
+    tag: `${String(idx).padStart(4, "0")}_scratch`,
+    version: "7",
+    when: 1_000 + idx,
+  }));
+  await Promise.all(
+    entries.map(async (entry, idx) =>
+      writeFile(join(folder, `${entry.tag}.sql`), statements[idx] ?? ""),
+    ),
+  );
+  const migrateTo = async (databaseUrl: string, count: number) => {
+    await mkdir(join(folder, "meta"), { recursive: true });
+    await writeFile(
+      join(folder, "meta", "_journal.json"),
+      JSON.stringify({
+        dialect: "postgresql",
+        entries: entries.slice(0, count),
+        version: "7",
+      }),
+    );
+    await migrateDatabase(databaseUrl, folder);
+  };
+  return { folder, migrateTo };
+}
+
+// The prebuild runs before any pending migration applies, so an index on a
+// column or table that one of them introduces has nothing to build on yet. It
+// has to wait for its own migration rather than stop every one from applying.
+test.each([
+  [
+    "a column a pending migration adds",
+    'ALTER TABLE "widgets" ADD COLUMN "x" integer;--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_x_idx" ON "widgets" USING btree ("x");',
+  ],
+  [
+    "a column a pending migration renames",
+    'ALTER TABLE "widgets" RENAME COLUMN "old" TO "x";--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_x_idx" ON "widgets" USING btree ("x");',
+  ],
+  [
+    "a table a pending migration creates",
+    'CREATE TABLE "gadgets" ("x" integer);--> statement-breakpoint\nCREATE INDEX IF NOT EXISTS "widgets_x_idx" ON "gadgets" USING btree ("x");',
+  ],
+])("an index on %s is built by its migration", async (_, pending) => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const { folder, migrateTo } = await scratchMigrations([
+    'CREATE TABLE "widgets" ("id" integer, "old" integer);',
+    pending,
+  ]);
+
+  try {
+    await resetDatabase(client);
+    await migrateTo(databaseUrl, 1);
+    await client`INSERT INTO "widgets" ("id", "old") VALUES (1, 1)`;
+
+    await migrateTo(databaseUrl, 2);
+    expect(await indexExists(client, "widgets_x_idx")).toBe(true);
+  } finally {
+    await client.close();
+    await rm(folder, { force: true, recursive: true });
   }
 });
 

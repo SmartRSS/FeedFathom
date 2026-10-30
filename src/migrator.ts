@@ -86,6 +86,12 @@ async function pendingStatements(
   return pending.join("\n");
 }
 
+const isUndefinedColumn = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "errno" in error &&
+  error.errno === "42703";
+
 async function prebuildIndexesConcurrently(
   client: ReservedSQL,
   indexes: readonly PendingIndex[],
@@ -129,8 +135,14 @@ async function prebuildIndexesConcurrently(
       await client.unsafe(`DROP INDEX CONCURRENTLY "public"."${index.name}"`);
     }
     if (!state?.valid) {
+      // A column that a pending migration adds or renames isn't there yet
+      // (undefined_column, 42703), so the index is left for its own
+      // migration to build in-transaction, the blocking way. The failure
+      // comes before PostgreSQL records any index, so nothing is left behind.
       // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
-      await client.unsafe(index.create);
+      await client.unsafe(index.create).catch((error: unknown) => {
+        if (!isUndefinedColumn(error)) throw error;
+      });
     }
   }
 }
