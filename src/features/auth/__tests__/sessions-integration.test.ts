@@ -209,9 +209,15 @@ test("authenticate stamps an active session at most once per guard window", asyn
       UPDATE sessions SET expires_at = NOW() + INTERVAL '1 day'
       WHERE sid = ${sid}`;
 
-    // Past both windows, one request stamps both rows; the next writes
-    // nothing.
+    // Past both windows, the read-only lookup behind GET /api/session and the
+    // events stream still resolves the user and writes nothing: polling the
+    // session is not activity.
     const stale = await versions();
+    expect((await usersDataService.getUserBySid(sid))?.id).toBe(userId);
+    expect(await versions()).toEqual(stale);
+
+    // One request through the auth plugin stamps both rows; the next writes
+    // nothing.
     expect(await usersDataService.authenticate(sid, "Browser")).toEqual({
       email: "stamped@example.test",
       id: userId,
