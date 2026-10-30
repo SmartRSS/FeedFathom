@@ -17,8 +17,7 @@ const cachedResponseSchema = Type.Object(
     headers: Type.Array(Type.Tuple([Type.String(), Type.String()])),
     // Every caller reads only a 200, so only a 200 is stored. A stored 304
     // has no body to serve and would be refreshed by every later 304, so an
-    // entry with any other status -- one written before this check -- fails
-    // the read and is deleted (#1078).
+    // entry with any other status fails the read and is deleted (#1078).
     status: Type.Literal(200),
     url: Type.Intersect([Type.String(), webUrlPolicy]),
   },

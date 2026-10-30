@@ -302,9 +302,8 @@ export class HttpClient {
       return result;
     }
     if (response.status === notModifiedStatus) {
-      // A 304 to a request that carried no validators: there is no stored
-      // body to serve, so this is the origin failing, not an empty success
-      // (#1078).
+      // A 304 with nothing cached: there is no stored body to serve, so this
+      // is the origin failing, not an empty success (#1078).
       response.destroy();
       throw new HttpPolicyError("Origin answered 304 with nothing cached");
     }
