@@ -133,6 +133,7 @@ describe("decoded feed titles from encoded bytes", () => {
     ["ISO-8859-2", zazolc, "Zażółć"],
     ["Shift_JIS", nihongo, "日本語"],
     ["windows-1252", cafe, "Café €5"],
+    ["ISO-8859-1", [0x43, 0x61, 0x66, 0xe9], "Café"],
   ])(
     "decodes %s from the XML prolog when there is no HTTP charset",
     (label, title, expected) => {

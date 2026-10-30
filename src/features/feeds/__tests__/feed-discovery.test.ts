@@ -15,20 +15,15 @@ const probe = (
 });
 
 describe("markWebSubAvailability", () => {
-  test("leaves a candidate without a hub unmarked", async () => {
+  test("leaves a candidate unmarked when its parse has no hub", async () => {
     const result = await markWebSubAvailability(
-      [feed("Plain", "https://a.example/feed")],
-      probe(() => ({ websub: undefined })),
+      [
+        feed("Undefined", "https://a.example/undefined"),
+        feed("Absent", "https://a.example/absent"),
+      ],
+      probe((url) => (url.endsWith("undefined") ? { websub: undefined } : {})),
     );
-    expect(result[0]?.websub).toBe(false);
-  });
-
-  test("treats a parse with no websub field at all as unmarked", async () => {
-    const result = await markWebSubAvailability(
-      [feed("Plain", "https://a.example/feed")],
-      probe(() => ({})),
-    );
-    expect(result[0]?.websub).toBe(false);
+    expect(result.map((candidate) => candidate.websub)).toEqual([false, false]);
   });
 
   // One bad candidate must not take the rest of the list with it, which is
@@ -50,8 +45,37 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  // Probed together, candidates on one host raced for its rate limit, and
-  // the losers came back marked as having no hub.
+  // #909: probed together, candidates on one host queue on its rate limit
+  // and the ones whose turn misses the deadline read as having no hub.
+  test("probes one candidate at a time and preserves order", async () => {
+    let inFlight = 0;
+    let mostInFlight = 0;
+    const result = await markWebSubAvailability(
+      [
+        feed("One", "https://a.example/one"),
+        feed("Plain", "https://a.example/plain"),
+        feed("Three", "https://a.example/three"),
+      ],
+      {
+        parseUrl: async (url) => {
+          inFlight++;
+          mostInFlight = Math.max(mostInFlight, inFlight);
+          await Promise.resolve();
+          inFlight--;
+          return url.endsWith("plain") ? {} : { websub: {} };
+        },
+      },
+    );
+    expect(mostInFlight).toBe(1);
+    expect(result).toEqual([
+      { title: "One", url: "https://a.example/one", websub: true },
+      { title: "Plain", url: "https://a.example/plain", websub: false },
+      { title: "Three", url: "https://a.example/three", websub: true },
+    ]);
+  });
+
+  // The same contract over a real client and host interval: each sequential
+  // probe gets its slot inside its own deadline.
   test("every candidate on one host gets its true WebSub state", async () => {
     const client = new HttpClient(createFakeHttpRedis(), {
       deadlineMs: 2_000,

@@ -217,6 +217,24 @@ describe("HttpRateLimiter shared host clock", () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
+  // The production default, read off the wait the limiter asks for rather
+  // than off the wall clock.
+  test("interactive requests to one host sit one second apart by default", async () => {
+    const redis = createFakeHttpRedis();
+    redis.seed(lastKey, String(Date.now()), 10_000);
+    const deadline = new RequestDeadline(20_000);
+    using slept = spyOn(deadline, "sleep").mockImplementation(async () => {
+      redis.seed(lastKey, String(Date.now() - 10_000), 10_000);
+    });
+
+    await reserve(new HttpRateLimiter(redis), "interactive", deadline);
+
+    expect(slept).toHaveBeenCalledTimes(1);
+    const [waited] = slept.mock.calls[0] ?? [];
+    expect(waited).toBeGreaterThanOrEqual(990);
+    expect(waited).toBeLessThanOrEqual(1_000);
+  });
+
   // The wait used to end after one interval, so the third of three queued
   // requests deferred even with most of its deadline left.
   test("queued interactive requests are served in turn within their deadline", async () => {

@@ -5,8 +5,9 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { RequestDeadline } from "#platform/http/request-deadline.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
-// The Lua scripts against a real server; http-rate-limiter.test.ts covers the
-// same behaviour through the fake that stands in for them.
+// The Lua scripts against a real server: the only place interval spacing and
+// overlapping interactive waiters run on Redis's own TIME and key expiry.
+// http-rate-limiter.test.ts covers the rest through the fake.
 const redis = new RedisClient(requireDisposableRedisUrl());
 const intervals = { background: 10_000, interactive: 500 };
 

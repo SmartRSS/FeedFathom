@@ -194,6 +194,33 @@ test("a response's rate-limit headers block the host for later requests", async 
   expect(error.retryAt).toBe(reset * 1_000);
 });
 
+test.each([
+  ["absent", {}],
+  ["empty", { "retry-after": "" }],
+])(
+  "a 429 with Retry-After %s defers five minutes and blocks the host",
+  async (_case, headers) => {
+    let requests = 0;
+    const store = redis();
+    const client = new HttpClient(store, {
+      transport: queuedTransport(
+        [nativeResponse("rate limited", { headers, status: 429 })],
+        () => requests++,
+      ),
+    });
+    const before = Date.now();
+
+    const error = await deferral(client.get("https://1.1.1.1/feed"));
+
+    expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
+    expect(requests).toBe(1);
+    expect(store.values.get("http-blocked:1.1.1.1")).toBe(
+      String(error.retryAt),
+    );
+  },
+);
+
 test("rejects unsafe URL forms before transport", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {

@@ -14,13 +14,15 @@ const client = new SQL(databaseUrl);
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 
-// Inserted in this order, so ids ascend down the list. Every column has a tie
-// somewhere, which only the id tie-break settles.
+// Inserted in this order, so ids ascend down the list. The three timestamps
+// order the rows differently from each other, so a sort key wired to the
+// wrong column fails; every column but url has a tie, which only the id
+// tie-break settles.
 const rows = [
-  ["https://b.test/", "2026-01-02", 0, 2],
-  ["https://a.test/", "2026-01-01", 3, 0],
-  ["https://c.test/", "2026-01-02", 0, 1],
-  ["https://a.test/2", "2026-01-03", 3, 2],
+  ["https://b.test/", "2026-01-02", "2026-01-01", "2026-01-03", 0, 2],
+  ["https://a.test/", "2026-01-01", "2026-01-03", "2026-01-02", 3, 0],
+  ["https://c.test/", "2026-01-02", "2026-01-01", "2026-01-01", 0, 1],
+  ["https://a.test/2", "2026-01-03", "2026-01-02", "2026-01-03", 3, 2],
 ] as const;
 
 beforeAll(async () => {
@@ -34,13 +36,20 @@ beforeAll(async () => {
   const [other] = await client<{ id: number }[]>`
     INSERT INTO users (email, name, password)
     VALUES ('other@example.test', 'other', 'x') RETURNING id`;
-  for (const [url, day, failures, subscribers] of rows) {
+  for (const [
+    url,
+    created,
+    attempted,
+    succeeded,
+    failures,
+    subscribers,
+  ] of rows) {
     // eslint-disable-next-line no-await-in-loop -- Insertion order sets the ids.
     const [source] = await client<{ id: number }[]>`
       INSERT INTO sources (url, home_url, created_at, last_attempt,
         last_success, recent_failures)
-      VALUES (${url}, ${url}, ${day}::timestamptz, ${day}::timestamptz,
-        ${day}::timestamptz, ${failures})
+      VALUES (${url}, ${url}, ${created}::timestamptz,
+        ${attempted}::timestamptz, ${succeeded}::timestamptz, ${failures})
       RETURNING id`;
     for (const subscriber of [user, other].slice(0, subscribers)) {
       // eslint-disable-next-line no-await-in-loop -- Two rows at most.
@@ -61,8 +70,10 @@ afterAll(async () => {
 test.each([
   ["createdAt", "asc", [1, 0, 2, 3]],
   ["createdAt", "desc", [3, 0, 2, 1]],
-  ["lastAttempt", "asc", [1, 0, 2, 3]],
-  ["lastSuccess", "desc", [3, 0, 2, 1]],
+  ["lastAttempt", "asc", [0, 2, 3, 1]],
+  ["lastAttempt", "desc", [1, 3, 0, 2]],
+  ["lastSuccess", "asc", [2, 1, 0, 3]],
+  ["lastSuccess", "desc", [0, 3, 1, 2]],
   ["recentFailures", "asc", [0, 2, 1, 3]],
   ["recentFailures", "desc", [1, 3, 0, 2]],
   ["subscriberCount", "asc", [1, 2, 0, 3]],
