@@ -31,7 +31,9 @@ export function createLoginRoute(
       // exists and someone is guessing at it" for free.
       const wrongLoginData = json({ error: "Wrong login data" }, 401);
 
-      if (await authThrottle.blocked("login", address, parsed.email)) {
+      // Counted before the password is checked, so a burst of parallel
+      // guesses cannot all pass; a success takes its attempt back below.
+      if (!(await authThrottle.attempt("login", address, parsed.email))) {
         return wrongLoginData;
       }
 
@@ -42,7 +44,6 @@ export function createLoginRoute(
         user.status !== "active"
       ) {
         if (!user) await password.hash(parsed.password);
-        await authThrottle.recordFailure("login", address, parsed.email);
         return wrongLoginData;
       }
 
@@ -55,11 +56,8 @@ export function createLoginRoute(
         user.password,
         request.headers.get("user-agent"),
       );
-      if (!sid) {
-        await authThrottle.recordFailure("login", address, parsed.email);
-        return wrongLoginData;
-      }
-      await authThrottle.clearFailures("login", address, parsed.email);
+      if (!sid) return wrongLoginData;
+      await authThrottle.succeeded("login", address, parsed.email);
       return json({ sid }, 200, {
         "set-cookie": sessionHeader(sid, secureCookies),
       });

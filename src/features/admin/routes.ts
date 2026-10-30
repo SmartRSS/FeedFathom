@@ -20,7 +20,10 @@ import type * as runtime from "#platform/runtime.ts";
 import type * as auth from "#features/auth/services.ts";
 import type * as feeds from "#features/feeds/services.ts";
 
-export type AdminRouteServices = Pick<typeof auth, "usersDataService"> &
+export type AdminRouteServices = Pick<
+  typeof auth,
+  "authThrottle" | "usersDataService"
+> &
   Pick<
     typeof feeds,
     | "foldersDataService"
@@ -36,27 +39,38 @@ export type AdminRouteServices = Pick<typeof auth, "usersDataService"> &
 // group instead of something each handler has to remember: a route added to
 // the second instance cannot be reached without it.
 const userOptionsRoutes = (services: AdminRouteServices) => {
-  const { password, usersDataService } = services;
+  const { authThrottle, password, usersDataService } = services;
   return (
     new Elysia()
       .use(createAuthPlugin(services))
       .post(
         "/api/options/password",
         { body: passwordRequest },
-        async ({ body, user }) => {
+        async ({ body, sid, user }) => {
+          const incorrect = json(
+            { error: "Current password is incorrect." },
+            400,
+          );
+          // Keyed by user, not address; see ThrottleScope. The caller is
+          // signed in, so saying it was throttled reveals nothing about
+          // which accounts exist.
+          const key = `user:${user.id}`;
+          if (!(await authThrottle.attempt("password-change", key, user.email)))
+            return json({ error: "Too many attempts. Try again later." }, 429);
           const account = await usersDataService.findUser(user.email);
           if (
             !account ||
             !(await password.verify(body.oldPassword, account.password))
           )
-            return json({ error: "Current password is incorrect." }, 400);
+            return incorrect;
           const updated = await usersDataService.updatePassword(
             account.id,
             account.password,
             await password.hash(body.password1),
+            sid,
           );
-          if (!updated)
-            return json({ error: "Current password is incorrect." }, 400);
+          if (!updated) return incorrect;
+          await authThrottle.succeeded("password-change", key, user.email);
           return json({ success: true });
         },
       )

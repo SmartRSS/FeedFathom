@@ -241,6 +241,8 @@ export function Options(props: {
       });
       setPasswordFailed(false);
       setPasswordMessage("Password changed.");
+      // The change signed out every other session; show the list as it is.
+      void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setPasswordFailed(true);

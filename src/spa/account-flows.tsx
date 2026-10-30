@@ -218,6 +218,10 @@ export function Register(props: { navigate(to: string): void; next: string }) {
               Your account has been created. If activation is required, check
               your email before logging in.
             </p>
+            <p>
+              No email? Check your spam folder. If it failed to send or the link
+              expired, register again with the same address for a new one.
+            </p>
             <LoginLink navigate={props.navigate} next={props.next} />
           </section>
         </Match>
