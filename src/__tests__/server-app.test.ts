@@ -3475,6 +3475,7 @@ test("WebSub callback verification requires no session and echoes the challenge"
     verifiedLease = lease;
   };
   const app = await appFor(dependencies);
+  const before = Date.now();
 
   const response = await get(
     app,
@@ -3489,7 +3490,9 @@ test("WebSub callback verification requires no session and echoes the challenge"
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("abc123");
   expect(verifiedId).toBe(websubSource.id);
-  expect(verifiedLease?.getTime()).toBeGreaterThan(Date.now());
+  // hub.lease_seconds is seconds; the lease is stored as an instant.
+  expect(verifiedLease?.getTime()).toBeGreaterThanOrEqual(before + 600_000);
+  expect(verifiedLease?.getTime()).toBeLessThanOrEqual(Date.now() + 600_000);
 });
 
 test("WebSub callback verification 404s for an unknown token or mismatched topic", async () => {

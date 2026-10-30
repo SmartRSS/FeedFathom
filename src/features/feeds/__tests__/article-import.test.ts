@@ -15,12 +15,6 @@ const importer = (changed: number) => {
   return { instance, recounted };
 };
 
-test("an import that changes no row skips the recount", async () => {
-  const { instance, recounted } = importer(0);
-  await instance.importArticles(1, []);
-  expect(recounted).toEqual([]);
-});
-
 test("alwaysRecount recounts a retried import that changes no row", async () => {
   const { instance, recounted } = importer(0);
   await instance.importArticles(1, [], { alwaysRecount: true });

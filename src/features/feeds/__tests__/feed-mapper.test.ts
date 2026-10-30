@@ -319,6 +319,27 @@ describe("mapFeedToPreview bounds", () => {
     expect(preview.feed).toBe(feed);
   });
 
+  // #1031: bounding after mapping would give the same output while still
+  // rewriting every item's links on the server's event loop. Only mapping
+  // reads an item's url (the bound reads its body), so the reads count the
+  // items that were mapped.
+  test("maps only the items it keeps", () => {
+    let mapped = 0;
+    const items = itemsWith(1_000, "<p>Body</p>").map((item) =>
+      Object.defineProperty(item, "url", {
+        get: () => {
+          mapped++;
+          return null;
+        },
+      }),
+    );
+
+    mapFeedToPreview(createMockFeed({ items }), sourceUrl);
+
+    expect(mapped).toBeGreaterThan(0);
+    expect(mapped).toBeLessThanOrEqual(previewArticleLimit * 2);
+  });
+
   test("leaves a small feed untouched", () => {
     const preview = mapFeedToPreview(
       createMockFeed({ items: itemsWith(3, "<p>Body</p>") }),

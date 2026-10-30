@@ -1,8 +1,4 @@
-import type {
-  OpmlFolder,
-  OpmlNode,
-  OpmlSource,
-} from "#shared/types/opml-types.ts";
+import type { OpmlFolder, OpmlNode } from "#shared/types/opml-types.ts";
 import {
   attribute,
   childElements,
@@ -41,12 +37,6 @@ export function parseOpml(opml: string): OpmlNode[] {
   // valid OPML file with no subscriptions, not a malformed one.
   if (!isXmlElement(body)) return [];
   return processOutlines(childElements(body, "outline"));
-}
-
-export function processOutline(outline: unknown): OpmlFolder | OpmlSource {
-  const [result] = processOutlines([outline]);
-  if (!result) throw new Error("Invalid OPML outline");
-  return result;
 }
 
 function processOutlines(outlines: unknown[]): OpmlNode[] {
