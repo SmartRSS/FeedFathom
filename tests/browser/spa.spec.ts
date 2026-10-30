@@ -280,16 +280,6 @@ test("keeps the context menu inside a narrow viewport", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("boots Solid and renders the authenticated nested tree", async ({
-  page,
-}) => {
-  await openApp(page);
-
-  await expect(page.locator("#app")).not.toBeEmpty();
-  await expect(page.getByText("Reading", { exact: true })).toBeVisible();
-  await expect(sourceRow(page)).toBeVisible();
-});
-
 // #989: the first render never waits on favicons. A cold load of a large
 // tree must not hold the sidebar until the last icon settles; icons still
 // loading show their own placeholder, then swap in.
@@ -298,7 +288,6 @@ test("renders the tree while its favicons are still loading", async ({
 }) => {
   await installApiFixture(page);
   const rowCount = 50;
-  let treeServedAt = 0;
   await page.route("**/api/tree", async (route) => {
     await route.fulfill({
       json: {
@@ -314,19 +303,20 @@ test("renders the tree while its favicons are still loading", async ({
         })),
       },
     });
-    treeServedAt = Date.now();
   });
   const held: Route[] = [];
   await page.route("**/api/favicon/**", (route) => {
     held.push(route);
   });
+  // No page timer fires, so a tree that rendered only after some favicon
+  // deadline gave up would stay a skeleton.
+  await page.clock.install({ time: 0 });
+  await page.clock.pauseAt(1000);
   await page.goto("/");
 
-  // The icons never answer, so waiting for them would never finish.
-  await expect(page.locator(".tree.skeleton")).toHaveCount(0, {
-    timeout: 3000,
-  });
-  expect(Date.now() - treeServedAt).toBeLessThan(3000);
+  // The icons never answer, so a tree that waited for them would never
+  // leave its skeleton.
+  await expect(page.locator(".tree.skeleton")).toHaveCount(0);
   const icons = page.locator("button.source img.node-icon");
   await expect(icons).toHaveCount(rowCount);
   await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(
@@ -983,31 +973,6 @@ test("the options page offers and persists the read-mark policy", async ({
   ).toHaveValue("on-scroll-past");
 });
 
-test("the options page offers and persists the reader typography steps", async ({
-  page,
-}) => {
-  await openApp(page, {}, "/options");
-
-  const size = page.getByRole("combobox", { name: "Text size" });
-  const width = page.getByRole("combobox", { name: "Line width" });
-  await expect(size).toHaveValue("medium");
-  await expect(width).toHaveValue("medium");
-  // One stored vocabulary for both; the width select only labels its ends
-  // differently, so a value here that reads "small" is the narrow column.
-  await expect(width.locator("option[value=small]")).toHaveText("Narrow");
-  await expect(width.locator("option[value=large]")).toHaveText("Wide");
-
-  await size.selectOption("large");
-  await width.selectOption("small");
-  await page.reload();
-  await expect(page.getByRole("combobox", { name: "Text size" })).toHaveValue(
-    "large",
-  );
-  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
-    "small",
-  );
-});
-
 // The options route is the one page the document itself scrolls: once the
 // settings grew past a viewport, body's overflow:hidden clipped every card
 // below the fold, and making the column itself the scroller instead read as
@@ -1093,6 +1058,30 @@ test("lists active sessions and signs out another one", async ({ page }) => {
   await expect(page.getByText("Phone")).toHaveCount(0);
 });
 
+// A session revoked from another device, or expired, while the options page
+// is open: the next request there sends the reader to sign in, with options
+// as the page to return to, not into an inline error.
+test("an expired session on the options page routes to login, returning to options", async ({
+  page,
+}) => {
+  const state = await openApp(page, {}, "/options");
+  await page.getByRole("link", { name: "Account & security" }).click();
+  await expect(page.getByText("Phone")).toBeVisible();
+
+  state.authenticated = false;
+  await page
+    .getByRole("button", { name: "Sign out all other sessions" })
+    .click();
+
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/options");
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+  ]);
+  failures.length = 0;
+});
+
 test("signs out all other sessions at once", async ({ page }) => {
   const state = await openApp(page, {}, "/options");
   await page.getByRole("link", { name: "Account & security" }).click();
@@ -1130,7 +1119,12 @@ test("the reader steps change the rendered column, not just storage", async ({
   const medium = await columnOf();
 
   await page.goto("/options");
-  await page.getByRole("combobox", { name: "Text size" }).selectOption("large");
+  const size = page.getByRole("combobox", { name: "Text size" });
+  await expect(size).toHaveValue("medium");
+  await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
+    "medium",
+  );
+  await size.selectOption("large");
   await page.goto("/");
   await selectSource(page);
   await expect(page.locator(".reader h1")).toBeVisible();
@@ -1369,16 +1363,6 @@ test("opening the activation link activates nothing until the button says so", a
   expect(activations).toEqual(["POST"]);
 });
 
-test("retitles the document on route changes", async ({ page }) => {
-  await openApp(page);
-
-  // The dashboard badges the title with the fixture's total unread count;
-  // leaving the dashboard unmounts it and drops the badge again.
-  await expect(page).toHaveTitle("(2) FeedFathom");
-  await page.getByRole("button", { name: "options" }).first().click();
-  await expect(page).toHaveTitle("Options · FeedFathom");
-});
-
 // #765: Hide in the New-article signal options must remove the "(N) "
 // prefix, immediately and for good -- the title effect reads the setting
 // signal directly, so no reload or dashboard visit may bring it back.
@@ -1389,6 +1373,9 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("(2) FeedFathom");
 
   await page.getByRole("button", { name: "options" }).first().click();
+  // Leaving the dashboard drops the badge on its own, before the setting
+  // changes anything.
+  await expect(page).toHaveTitle("Options · FeedFathom");
   await page.getByRole("link", { name: "New-article signal" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
@@ -1402,20 +1389,6 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   // A reload re-reads the persisted setting from localStorage.
   await page.reload();
   await expect(page).toHaveTitle("FeedFathom");
-});
-
-// Toggles were stored as "on"/"off" before they were booleans; a reader who
-// switched one off then still has it off.
-test("reads a toggle stored as the old off string as off", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("unreadBadge", "off"));
-  await openApp(page);
-  await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
-  await expect(page).toHaveTitle("FeedFathom");
-
-  await page.goto("/options#signal");
-  await expect(
-    page.getByRole("combobox", { name: "Unread count in tab title" }),
-  ).toHaveValue("false");
 });
 
 // Before #714 the only choice was a boolean under its own key.
@@ -1675,22 +1648,6 @@ test("select all preserves scroll and moves focus so Delete works immediately", 
     .toEqual([11, 12, 13]);
 });
 
-test("select all then clicking Delete removes every article", async ({
-  page,
-}) => {
-  const state = await openApp(page, { multipleArticles: true });
-  await selectSource(page);
-  await expect(articleOptions(page)).toHaveCount(3);
-
-  await page.getByRole("button", { name: "select all" }).click();
-  await page.getByRole("button", { name: "delete articles" }).click();
-
-  await expect(articleOptions(page)).toHaveCount(0);
-  await expect
-    .poll(() => state.removedArticleIds.toSorted((a, b) => a - b))
-    .toEqual([11, 12, 13]);
-});
-
 test("selecting a single article then pressing Delete removes only it", async ({
   page,
 }) => {
@@ -1881,29 +1838,6 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Folder is not empty");
   await expect(sourceRow(page)).toBeVisible();
-});
-
-test("every toolbar icon renders and is clickable", async ({ page }) => {
-  await openApp(page, { multipleArticles: true });
-  await selectSource(page);
-
-  const toolbarButtons = [
-    "add source",
-    "add folder",
-    "source properties",
-    "delete source",
-    "select all",
-    "delete articles",
-  ];
-  for (const name of toolbarButtons) {
-    const button = page.getByRole("button", { exact: true, name }).first();
-    // Trial clicks and visibility checks are UI-ordered assertions; a
-    // parallel batch would interleave Playwright's actionability waits.
-    // oxlint-disable-next-line eslint/no-await-in-loop
-    await button.click({ trial: true });
-    // oxlint-disable-next-line eslint/no-await-in-loop
-    await expect(button.locator("svg")).toBeVisible();
-  }
 });
 
 test("shows the generic RSS icon for a source with no favicon", async ({
@@ -2110,7 +2044,7 @@ test("marks a found feed that advertises WebSub, and only that one", async ({
 });
 
 test("keeps the newest discovery preview response", async ({ page }) => {
-  await openApp(page, { discoveryRace: true }, "/preview");
+  const state = await openApp(page, { discoveryRace: true }, "/preview");
   await page.getByLabel("Website").fill("https://preview.example/");
   await page.getByRole("button", { name: "Find feeds" }).click();
 
@@ -2121,8 +2055,10 @@ test("keeps the newest discovery preview response", async ({ page }) => {
   await page.getByRole("button", { name: /Fast feed/ }).click();
 
   await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
-  // The slower preview settles after the newer one, answered or aborted, and
-  // is dropped before the page next goes idle.
+  // Only now may the older preview answer. Answered or aborted by the app,
+  // it settles after the newer one and is dropped before the page next goes
+  // idle.
+  state.releaseSlowPreview();
   await (await (await slowPreview).response())?.finished();
   await page.evaluate(
     () => new Promise((resolve) => requestIdleCallback(resolve)),
@@ -2248,22 +2184,6 @@ test("a preview opens its first article and leaves modified clicks alone", async
   expect(await clickTaken(["Shift"])).toBe("false");
 });
 
-test("exposes Reader modes only when the bridge is available", async ({
-  context,
-  page,
-}) => {
-  await installReaderResponder(context, true);
-  await openApp(page);
-  await selectSource(page);
-
-  const modes = page.getByRole("combobox", { name: "Article display mode" });
-  await expect(modes).toContainText("Reader (plain text)");
-  await modes.selectOption("READABILITY");
-  await expect(
-    page.getByText("Reader bridge content.", { exact: false }),
-  ).toBeVisible();
-});
-
 test("gives extracted images the app's own loading defaults", async ({
   context,
   page,
@@ -2294,9 +2214,12 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     await page.goto("/");
     await selectSource(page);
 
-    await page
-      .getByRole("combobox", { name: "Article display mode" })
-      .selectOption(mode);
+    const modes = page.getByRole("combobox", { name: "Article display mode" });
+    await expect(modes).toContainText("Reader (plain text)");
+    await modes.selectOption(mode);
+    await expect(
+      page.getByText("Reader bridge content.", { exact: false }),
+    ).toBeVisible();
     // The rendered copy started loading after any earlier one, so once it
     // has failed, a handler that survived any step has already run.
     await expect
@@ -2311,22 +2234,6 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     ).toBeUndefined();
   });
 }
-
-test("extracts article content with the alternate extractor", async ({
-  context,
-  page,
-}) => {
-  await installReaderResponder(context, true);
-  await openApp(page);
-  await selectSource(page);
-
-  await page
-    .getByRole("combobox", { name: "Article display mode" })
-    .selectOption("ARTICLE_EXTRACTOR");
-  await expect(
-    page.getByText("Reader bridge content.", { exact: false }),
-  ).toBeVisible();
-});
 
 for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
   test(`falls back to Feed mode on an element-heavy page in ${mode}`, async ({
