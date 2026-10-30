@@ -43,12 +43,18 @@ const sourceSortColumns = {
   url: sources.url,
 } satisfies Record<Static<typeof sourceSortSchema>, unknown>;
 
-const isUniqueViolation = (error: unknown, depth = 0): boolean => {
+// 23505 is a unique violation, 23503 a foreign key one. Drizzle wraps the
+// driver's error, so the SQLSTATE can sit a few causes down.
+export const hasSqlState = (
+  error: unknown,
+  state: "23503" | "23505",
+  depth = 0,
+): boolean => {
   if (typeof error !== "object" || error === null || depth > 3) return false;
   const code = "code" in error ? error.code : undefined;
   const errno = "errno" in error ? error.errno : undefined;
-  if (code === "23505" || errno === "23505") return true;
-  return "cause" in error && isUniqueViolation(error.cause, depth + 1);
+  if (code === state || errno === state) return true;
+  return "cause" in error && hasSqlState(error.cause, state, depth + 1);
 };
 
 export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
@@ -70,6 +76,7 @@ export class SourcesDataService {
     payload: {
       homeUrl: string;
       kind?: "email" | "feed" | undefined;
+      reservedBy?: number;
       url: string;
     },
     db: Pick<BunSQLDatabase<typeof schema>, "insert" | "select"> = this
@@ -234,7 +241,7 @@ export class SourcesDataService {
         .returning({ id: sources.id });
       return updated.length > 0 ? "updated" : "not-found";
     } catch (error) {
-      if (isUniqueViolation(error)) return "conflict";
+      if (hasSqlState(error, "23505")) return "conflict";
       throw error;
     }
   }

@@ -19,6 +19,7 @@ const source: Source = {
   lastSuccess: null,
   recentFailureDetails: "",
   recentFailures: 0,
+  reservedBy: null,
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
   url: "trusted-recipient@example.com",
   websubCallbackToken: null,

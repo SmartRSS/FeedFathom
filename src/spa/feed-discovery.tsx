@@ -15,7 +15,10 @@ import type { DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, messageOf } from "./api.ts";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
-import { newsletterAddress } from "#shared/util/newsletter-address.ts";
+import {
+  isNewsletterAddress,
+  newsletterAddress,
+} from "#shared/util/newsletter-address.ts";
 import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
@@ -135,9 +138,15 @@ export function FeedDiscovery(props: {
         try {
           const session = await api("/session", sessionResponse);
           if (disposed) return;
-          setMailDomain(session.mailDomain ?? "");
-          if (props.initialNewsletter && session.mailDomain && !feedUrl())
-            mintNewsletterAddress(session.mailDomain);
+          const domain = session.mailDomain;
+          setMailDomain(domain ?? "");
+          if (!domain) return;
+          if (props.initialNewsletter && !feedUrl())
+            void mintNewsletterAddress(domain).then(reportUnreserved);
+          // A reload of a minted address: reserving is idempotent, and this
+          // recovers one whose first reservation failed.
+          else if (isNewsletterAddress(feedUrl(), domain))
+            void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
         } catch {}
       })();
   });
@@ -231,13 +240,13 @@ export function FeedDiscovery(props: {
         "",
         `/preview?feedUrl=${encodeURIComponent(address)}`,
       );
-    void reserveNewsletterAddress(address);
+    return reserveNewsletterAddress(address);
   }
 
   // The address is in the user's hands from now on, and mail sent to it
   // before its source exists bounces for good, which can end the newsletter
   // subscription before it starts (#1116). So the source is created now,
-  // not on Subscribe.
+  // not on Subscribe. False when that failed and nothing has reported it.
   async function reserveNewsletterAddress(address: string) {
     try {
       await api("/newsletter-address", successResponse, {
@@ -245,16 +254,28 @@ export function FeedDiscovery(props: {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
+      return true;
     } catch (cause) {
-      if (!disposed) reportError(cause, "Could not reserve the address.");
+      return disposed || props.handleUnauthorized(cause);
     }
   }
 
+  // Subscribe still creates the source, so the address is not lost, only
+  // its mail until then.
+  function reportUnreserved(reserved: boolean) {
+    if (!reserved)
+      setMessage(
+        "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
+      );
+  }
+
   async function useNewsletterAddress() {
-    mintNewsletterAddress(mailDomain());
+    const reserved = mintNewsletterAddress(mailDomain());
     setArticles([]);
     setSelectedIndex(undefined);
     await copyAddress();
+    // After the copy's own message, which would otherwise hide this one.
+    reportUnreserved(await reserved);
   }
 
   async function copyAddress() {

@@ -7,6 +7,7 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { users } from "#platform/db/schemas/users.ts";
 
 export const sources = pgTable(
   "sources",
@@ -43,6 +44,13 @@ export const sources = pgTable(
       .notNull()
       .default(""),
     recentFailures: integer("recent_failures").notNull().default(0),
+    // The account a newsletter address belongs to, set when the source is
+    // created by reserving or subscribing to it, so no other account can
+    // subscribe and read its mail (#1116). NULL for feeds and for email
+    // sources that predate it, which the first subscriber claims.
+    reservedBy: integer("reserved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

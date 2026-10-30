@@ -2090,7 +2090,8 @@ for (const theme of ["smart", "high-contrast"]) {
 
 // The extension's newsletter action opens this URL rather than minting an
 // address of its own, so new addresses all come in the SPA's format. The
-// address lands in the URL: a reload must not replace one already copied.
+// address lands in the URL: a reload must not replace one already copied,
+// and reserves it again, which is a no-op once it is reserved.
 test("mints a newsletter address when opened with ?newsletter", async ({
   page,
 }) => {
@@ -2109,7 +2110,38 @@ test("mints a newsletter address when opened with ?newsletter", async ({
   );
   await page.reload();
   await expect(feedUrl).toHaveValue(minted);
-  expect(state.reservedAddresses).toEqual([minted]);
+  await expect.poll(() => state.reservedAddresses).toEqual([minted, minted]);
+});
+
+// Mail to an unreserved address bounces, so the user has to know, and a
+// reload gets the reservation another try.
+test("says so when a generated address could not be reserved", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const state = await openApp(page, { mailDomain: "mail.example" }, "/preview");
+  state.failReservations = true;
+
+  await page.getByRole("button", { name: "Generate email address" }).click();
+  await expect(
+    page.getByText(
+      "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
+    ),
+  ).toBeVisible();
+  const address = await page.getByLabel("Feed URL").inputValue();
+  expect(state.deliverNewsletter(address)).toBe(false);
+
+  state.failReservations = false;
+  await page.reload();
+  await expect(page.getByLabel("Feed URL")).toHaveValue(address);
+  await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
+  await expect(page.getByText(/^Address not reserved/u)).toHaveCount(0);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+  ]);
+  failures.length = 0;
 });
 
 // The address is copied before Subscribe, so a newsletter can mail it first:

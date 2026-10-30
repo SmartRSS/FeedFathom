@@ -88,6 +88,10 @@ export async function postSubscribeHandler(
     url: sourceUrl.value,
   });
   if (!subscription) return json({ error: "Invalid folder" }, 400);
+  // Another account's newsletter address. Answered as any unacceptable
+  // target is, so a refusal says nothing about whose it is.
+  if (subscription === "refused")
+    return json({ error: "Invalid request." }, 400);
   if (subscription.initialized === true)
     return json({ sourceId: subscription.source.id });
 

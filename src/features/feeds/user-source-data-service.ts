@@ -1,10 +1,13 @@
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, exists, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
-import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
+import {
+  hasSqlState,
+  type SourcesDataService,
+} from "#features/feeds/source-data-service.ts";
 import { unreadCondition } from "#features/feeds/article-read-state.ts";
 
 type SubscriptionResult = {
@@ -21,6 +24,11 @@ export class UserSourcesDataService {
     private readonly sourcesDataService: SourcesDataService,
   ) {}
 
+  /**
+   * Subscribes the user, creating the source if needed. Returns undefined for
+   * a folder the user does not own, and "refused" for a newsletter address
+   * that belongs to another account (see sources.reservedBy).
+   */
   public async addSourceToUser(
     userId: number,
     sourcePayload: {
@@ -31,32 +39,51 @@ export class UserSourcesDataService {
       parentId: null | number;
       url: string;
     },
-  ): Promise<SubscriptionResult | undefined> {
+  ): Promise<"refused" | SubscriptionResult | undefined> {
     if (!(await this.ownsFolder(userId, sourcePayload.parentId))) {
       console.error(
         `Subscription refused: folder ${sourcePayload.parentId} is not one of user ${userId}'s`,
       );
       return undefined;
     }
+    try {
+      return await this.subscribe(userId, sourcePayload);
+    } catch (error) {
+      // addSource can return an orphan the cleanup deletes before the
+      // subscription row lands. Once more creates the source afresh.
+      if (!hasSqlState(error, "23503")) throw error;
+      return await this.subscribe(userId, sourcePayload);
+    }
+  }
 
+  private async subscribe(
+    userId: number,
+    sourcePayload: Parameters<UserSourcesDataService["addSourceToUser"]>[1],
+  ): Promise<"refused" | SubscriptionResult> {
+    const isEmail = sourcePayload.kind === "email";
     const source = await this.sourcesDataService.addSource({
       homeUrl: sourcePayload.homeUrl,
       kind: sourcePayload.kind,
       url: sourcePayload.url,
+      ...(isEmail && { reservedBy: userId }),
     });
+    if (source.kind === "email" && !(await this.ownsAddress(userId, source.id)))
+      return "refused";
 
     // created_at is where a subscription starts seeing articles. A newsletter
     // address is reserved before anyone subscribes (#1116), and the mail it
     // takes in meanwhile -- typically the confirmation the subscription
-    // depends on -- has to be readable, so an email subscription sees the
-    // source from its creation. That also keeps the retention rule for
-    // articles from before the first subscription off it.
-    const isEmail = source.kind === "email";
+    // depends on -- has to be readable to the account that reserved it, so
+    // that account's subscription sees the source from its creation. That
+    // also keeps the retention rule for articles from before the first
+    // subscription off it. A claimed legacy address does not qualify: its
+    // earlier mail was someone else's.
+    const backdated = source.kind === "email" && source.reservedBy === userId;
     const inserted = (
       await this.drizzleConnection
         .insert(userSources)
         .values({
-          createdAt: isEmail ? source.createdAt : new Date(),
+          createdAt: backdated ? source.createdAt : new Date(),
           initializationSnapshot: sourcePayload.initializationSnapshot ?? null,
           initializedAt: null,
           name: sourcePayload.name,
@@ -88,7 +115,7 @@ export class UserSourcesDataService {
       throw new Error("Subscription conflict resolved without a row");
     // The mail already stored counts as unread from the start; a feed's
     // articles are counted when its first import lands.
-    if (inserted && isEmail)
+    if (inserted && backdated)
       await this.recomputeUnreadCounts([source.id], userId);
 
     return {
@@ -98,6 +125,43 @@ export class UserSourcesDataService {
       subscriptionCreatedAt: userSource.createdAt,
       subscriptionId: userSource.id,
     };
+  }
+
+  // A newsletter address belongs to one account: the one that reserved or
+  // first subscribed to it. An email source from before reservedBy existed
+  // is claimed by its next subscriber, unless another account already
+  // subscribes to it. The claim is a single UPDATE, so two first subscribers
+  // cannot both win.
+  private async ownsAddress(userId: number, sourceId: number) {
+    const othersSubscribe = exists(
+      this.drizzleConnection
+        .select({ id: userSources.id })
+        .from(userSources)
+        .where(
+          and(
+            eq(userSources.sourceId, sourceId),
+            ne(userSources.userId, userId),
+          ),
+        ),
+    );
+    await this.drizzleConnection
+      .update(sources)
+      .set({ reservedBy: userId })
+      .where(
+        and(
+          eq(sources.id, sourceId),
+          isNull(sources.reservedBy),
+          not(othersSubscribe),
+        ),
+      );
+    const [owner] = await this.drizzleConnection
+      .select({
+        othersSubscribe: othersSubscribe.mapWith(Boolean),
+        reservedBy: sources.reservedBy,
+      })
+      .from(sources)
+      .where(eq(sources.id, sourceId));
+    return owner?.reservedBy === userId && !owner.othersSubscribe;
   }
 
   /**

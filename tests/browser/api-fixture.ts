@@ -123,6 +123,8 @@ type ApiFixtureState = {
   // Mail to a newsletter address, answered as the server would: accepted
   // only once the address has been reserved.
   deliverNewsletter: (to: string) => boolean;
+  // While set, POST /api/newsletter-address fails as an outage would.
+  failReservations: boolean;
   newsletterDelivered: boolean;
   newsletterSubscription: string | undefined;
   reservedAddresses: string[];
@@ -172,6 +174,7 @@ export async function installApiFixture(
       state.newsletterDelivered = state.reservedAddresses.includes(to);
       return state.newsletterDelivered;
     },
+    failReservations: false,
     findRequests: 0,
     newsletterDelivered: false,
     newsletterSubscription: undefined,
@@ -535,6 +538,8 @@ export async function installApiFixture(
     }
 
     if (method === "POST" && url.pathname === "/api/newsletter-address") {
+      if (state.failReservations)
+        return respond({ error: "Internal server error" }, 500);
       state.reservedAddresses.push(request.postDataJSON().address);
       return respond({ success: true });
     }

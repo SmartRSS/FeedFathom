@@ -1,7 +1,8 @@
 // A newsletter subscription is a source whose URL is an address the mail
 // ingest routes back here. The SPA mints it without a round trip, so it only
-// has to be unguessable and unique; the server checks the same format before
-// reserving one, so a client cannot create email sources of its own choosing.
+// has to be unguessable and unique. The reservation endpoint accepts only this
+// format; subscribe accepts any address, and either way the address then
+// belongs to the account that created its source.
 
 // The host addresses are minted at, or undefined unless this deployment
 // ingests mail. FEED_FATHOM_DOMAIN is only a fallback for the single-domain

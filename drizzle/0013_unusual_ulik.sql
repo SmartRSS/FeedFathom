@@ -1,0 +1,2 @@
+ALTER TABLE "sources" ADD COLUMN "reserved_by" integer;--> statement-breakpoint
+ALTER TABLE "sources" ADD CONSTRAINT "sources_reserved_by_users_id_fk" FOREIGN KEY ("reserved_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
