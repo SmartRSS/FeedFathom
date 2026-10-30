@@ -110,6 +110,8 @@ type ApiFixtureState = {
   readMarks: number[][];
   readArticleIds: Set<number>;
   findRequests: number;
+  // With discoveryRace, the slow.xml preview is held until this is called.
+  releaseSlowPreview: () => void;
   removedArticleIds: number[];
   removedFolderIds: number[];
   removedSourceIds: number[];
@@ -141,12 +143,14 @@ export async function installApiFixture(
     websubFeed?: boolean;
   } = {},
 ): Promise<ApiFixtureState> {
+  const slowPreview = Promise.withResolvers<void>();
   const state: ApiFixtureState = {
     articleRequests: 0,
     authenticated: options.authenticated ?? true,
     findRequests: 0,
     readArticleIds: new Set<number>(),
     readMarks: [],
+    releaseSlowPreview: () => slowPreview.resolve(),
     removedArticleIds: [],
     removedFolderIds: [],
     removedSourceIds: [],
@@ -449,7 +453,7 @@ export async function installApiFixture(
     if (method === "GET" && url.pathname === "/api/preview") {
       const feedUrl = url.searchParams.get("feedUrl");
       if (options.discoveryRace && feedUrl?.endsWith("/slow.xml"))
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await slowPreview.promise;
       else if (!options.discoveryRace)
         expect(feedUrl).toBe("https://preview.example/feed.xml");
       const title = options.discoveryRace
