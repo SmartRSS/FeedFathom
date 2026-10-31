@@ -10,7 +10,15 @@ const heartbeatMs = 25_000;
 // ponytail: subscriptions and the session are re-read on this interval, so
 // a new subscription's events or a revoked session take up to a minute to
 // apply here. Push a per-user invalidation through the hub if that matters.
-const refreshMs = 60_000;
+export const refreshMs = 60_000;
+
+// Runs `tick` every `ms` until the returned stop is called. A test passes its
+// own to fire the ticks by hand and await each one.
+type Every = (ms: number, tick: () => Promise<void> | void) => () => void;
+const every: Every = (ms, tick) => {
+  const id = setInterval(() => void tick(), ms);
+  return () => clearInterval(id);
+};
 
 /**
  * GET /api/events (#991): a Server-Sent Events stream of article events for
@@ -32,6 +40,7 @@ export async function getEventsHandler(
   services: Pick<typeof auth, "usersDataService"> &
     Pick<typeof feeds, "userSourcesDataService"> &
     Pick<typeof reader, "articleEventHub">,
+  schedule = every,
 ) {
   const { articleEventHub, userSourcesDataService } = services;
   let sourceIds = new Set(
@@ -60,30 +69,30 @@ export async function getEventsHandler(
             send(`data: ${JSON.stringify(event)}\n\n`);
         },
       });
-      const heartbeat = setInterval(() => send(": heartbeat\n\n"), heartbeatMs);
-      const refresh = setInterval(() => {
-        void (async () => {
-          try {
-            const current = await userFor(sid, services);
-            if (closed) return;
-            if (current?.id !== user.id) {
-              // The reconnect meets the session check and stops there.
-              end();
-              return;
-            }
-            const ids = await userSourcesDataService.getUserSourceIds(user.id);
-            sourceIds = new Set(ids);
-          } catch (error) {
-            console.error("Refreshing an event stream failed:", error);
+      const stopHeartbeat = schedule(heartbeatMs, () =>
+        send(": heartbeat\n\n"),
+      );
+      const stopRefresh = schedule(refreshMs, async () => {
+        try {
+          const current = await userFor(sid, services);
+          if (closed) return;
+          if (current?.id !== user.id) {
+            // The reconnect meets the session check and stops there.
+            end();
+            return;
           }
-        })();
-      }, refreshMs);
+          const ids = await userSourcesDataService.getUserSourceIds(user.id);
+          sourceIds = new Set(ids);
+        } catch (error) {
+          console.error("Refreshing an event stream failed:", error);
+        }
+      });
       stop = () => {
         if (closed) return;
         closed = true;
         unlisten();
-        clearInterval(heartbeat);
-        clearInterval(refresh);
+        stopHeartbeat();
+        stopRefresh();
       };
       // An abort during the source lookup above fired before this listener.
       if (request.signal.aborted) {
