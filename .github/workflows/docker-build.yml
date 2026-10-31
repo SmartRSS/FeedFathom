@@ -966,6 +966,56 @@ jobs:
               ' > /dev/null
           printf 'Uploaded %s.\n' "$CONTENT_HASH"
 
+  close_released_issues:
+    name: Close issues released to production
+    # staging-issues.yml labels an issue on-staging when a PR closing it merges
+    # into staging. This closes it once production runs a commit containing
+    # every merged PR that references it. A deploy that stood down for a newer
+    # commit still counts: that commit contains this one. The explicit result
+    # check is needed for the same skipped-ancestor reason as
+    # deploy_email_worker's.
+    needs: deploy
+    if: "!cancelled() && needs.deploy.result == 'success'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Close each on-staging issue whose PRs are all deployed
+        run: |
+          set -euo pipefail
+          owner=${GH_REPO%/*} name=${GH_REPO#*/}
+          for n in $(gh issue list --label on-staging --state open --limit 200 --json number --jq '.[].number'); do
+            merges=$(gh api graphql -F owner="$owner" -F name="$name" -F n="$n" -f query='
+              query($owner: String!, $name: String!, $n: Int!) {
+                repository(owner: $owner, name: $name) { issue(number: $n) {
+                  timelineItems(itemTypes: [CROSS_REFERENCED_EVENT], first: 100) { nodes {
+                    ... on CrossReferencedEvent { source { ... on PullRequest { mergeCommit { oid } } } }
+                  } }
+                } }
+              }' --jq '.data.repository.issue.timelineItems.nodes[].source.mergeCommit.oid // empty')
+            if [[ -z "$merges" ]]; then
+              echo "::warning::#$n is on-staging but no merged PR references it; close it by hand."
+              continue
+            fi
+            pending=0
+            for oid in $merges; do
+              status=$(gh api "repos/$GH_REPO/compare/$oid...$GITHUB_SHA" --jq .status) || status=unknown
+              [[ "$status" == ahead || "$status" == identical ]] || pending=1
+            done
+            if (( pending )); then
+              echo "#$n has a merged PR not yet in $GITHUB_SHA; leaving it open."
+              continue
+            fi
+            gh issue close "$n" --reason completed --comment "Released to production in \`${GITHUB_SHA:0:8}\`."
+            gh issue edit "$n" --remove-label on-staging
+          done
+
   pages:
     name: Publish docs site with signed extension
     # await_turn as well as the extension: without it an older run could
