@@ -2570,7 +2570,6 @@ for (const { name, prepare, ready, refusals, send } of expiringMutations) {
 // the session expiring while the reader looks on, from whichever route the
 // dashboard is showing. `booted` is the last of the route's boot requests
 // to land, so the session expires only once they are all answered.
-// Quarantined: the poll swallows the 401 and stays put (#1122).
 for (const { booted, path } of [
   { booted: (page: Page) => sourceRow(page), path: "/" },
   {
@@ -2579,7 +2578,7 @@ for (const { booted, path } of [
     path: "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
   },
 ]) {
-  test.fixme(`a tree poll's 401 routes to sign-in, returning to ${path}`, async ({
+  test(`a tree poll's 401 routes to sign-in, returning to ${path}`, async ({
     page,
   }) => {
     await page.clock.install();
@@ -2600,8 +2599,6 @@ for (const { booted, path } of [
 
 // #1103: the three admin requests, each behind its own handleUnauthorized.
 const expiringAdminRequests: {
-  // Quarantined until the app bug it names is fixed.
-  fixme?: string;
   name: string;
   ready?: (page: Page) => Promise<void>;
   send: (page: Page) => Promise<void>;
@@ -2611,8 +2608,6 @@ const expiringAdminRequests: {
     send: (page) => page.getByRole("button", { name: "URL" }).click(),
   },
   {
-    // The prompt's late close event cancels the confirm after it (#1123).
-    fixme: "#1123",
     name: "replacing a source URL",
     ready: async (page) => {
       await page.getByRole("button", { name: "Edit" }).click();
@@ -2631,8 +2626,8 @@ const expiringAdminRequests: {
     send: confirm,
   },
 ];
-for (const { fixme, name, ready, send } of expiringAdminRequests) {
-  (fixme ? test.fixme : test)(
+for (const { name, ready, send } of expiringAdminRequests) {
+  test(
     `a 401 from ${name} on the admin page routes to sign-in`,
     async ({ page }) => {
       const state = await openApp(page, {}, "/admin");
