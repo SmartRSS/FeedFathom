@@ -2627,19 +2627,18 @@ const expiringAdminRequests: {
   },
 ];
 for (const { name, ready, send } of expiringAdminRequests) {
-  test(
-    `a 401 from ${name} on the admin page routes to sign-in`,
-    async ({ page }) => {
-      const state = await openApp(page, {}, "/admin");
-      await expect(
-        page.getByRole("link", { name: "https://news.example/feed.xml" }),
-      ).toBeVisible();
-      await ready?.(page);
-      state.authenticated = false;
-      await send(page);
-      await expectSignIn(page, "/admin");
-    },
-  );
+  test(`a 401 from ${name} on the admin page routes to sign-in`, async ({
+    page,
+  }) => {
+    const state = await openApp(page, {}, "/admin");
+    await expect(
+      page.getByRole("link", { name: "https://news.example/feed.xml" }),
+    ).toBeVisible();
+    await ready?.(page);
+    state.authenticated = false;
+    await send(page);
+    await expectSignIn(page, "/admin");
+  });
 }
 
 test("surfaces tree failures without masquerading as logout", async ({
