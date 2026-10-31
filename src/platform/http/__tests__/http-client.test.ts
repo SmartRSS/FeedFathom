@@ -662,6 +662,32 @@ test("post reserves the host, sends the body, and does not follow redirects", as
   }
 });
 
+// A hub URL comes from the feed, so the subscribe POST is held to the same
+// private-network guard as get(), whatever requestHubSubscription checks first.
+test.each([
+  ["a hostname with a private DNS answer", "https://hub.example/"],
+  ["a private literal", "https://10.0.0.1/"],
+])("post refuses %s before dispatch", async (_name, url) => {
+  let dispatches = 0;
+  const transport = createNativeHttpTransport({
+    async dispatch() {
+      dispatches++;
+      return nativeResponse("", { status: 202 });
+    },
+    async lookup() {
+      return [{ address: "192.168.1.10", family: 4 }];
+    },
+  });
+
+  await expect(
+    new HttpClient(redis(), { transport }).post(
+      url,
+      new URLSearchParams({ "hub.mode": "subscribe" }),
+    ),
+  ).rejects.toBeInstanceOf(HttpPolicyError);
+  expect(dispatches).toBe(0);
+});
+
 test("post honours a hub's Retry-After instead of discarding it", async () => {
   const store = redis();
   const client = new HttpClient(store, {
