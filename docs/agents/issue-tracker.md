@@ -20,3 +20,11 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Run `gh issue view <number> --comments`.
+
+## Fixes merged into staging
+
+GitHub closes an issue from `Closes #N` only when the PR merges into `main`, and fixes merge into `staging`. Automation fills that gap:
+
+- In a PR into `staging`, write `Closes #N` (or `Fixes`/`Resolves`) when the PR completes the issue, and `Refs #N` when it is partial work.
+- When the PR merges, `staging-issues.yml` adds the `on-staging` label to every issue it closes. Do not add or remove the label by hand.
+- After a production deploy, the Release Pipeline closes each `on-staging` issue once every merged PR that references it is in the deployed commit.

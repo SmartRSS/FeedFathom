@@ -180,16 +180,26 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
     await appPage.goto(`${new URL(baseURL).origin}/extension-menu-initial`);
     await waitForFeedTitle(optionsPage, "Initial");
 
-    await appPage.evaluate(() => {
-      const link = document.querySelector("link[rel=alternate]");
-      if (!(link instanceof HTMLLinkElement))
-        throw new Error("feed link missing");
-      history.pushState({}, "", "/extension-menu-stale");
-      link.title = "Stale";
-      link.href = "/stale.xml";
-      document.body.append(document.createElement("div"));
-    });
-    await appPage.waitForTimeout(100);
+    // Resolved once the content script has seen the stale route, so the
+    // latest one replaces a scan it already scheduled. The probe is the
+    // newest observer, so its callback runs after the content script's.
+    await appPage.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const link = document.querySelector("link[rel=alternate]");
+          if (!(link instanceof HTMLLinkElement))
+            throw new Error("feed link missing");
+          const probe = new MutationObserver(() => {
+            probe.disconnect();
+            resolve();
+          });
+          probe.observe(document.body, { childList: true });
+          history.pushState({}, "", "/extension-menu-stale");
+          link.title = "Stale";
+          link.href = "/stale.xml";
+          document.body.append(document.createElement("div"));
+        }),
+    );
     await appPage.evaluate(() => {
       const link = document.querySelector("link[rel=alternate]");
       if (!(link instanceof HTMLLinkElement))
@@ -222,38 +232,39 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
     const settledCount = Array.isArray(afterVisibility)
       ? afterVisibility.length
       : 0;
-    await appPage.evaluate(() =>
-      document.body.append(document.createElement("div")),
+    // A mutation that keeps the route sends nothing. Any report it caused
+    // would come from a timer the content script set while handling it, and
+    // a page timer set after that handler, for the longest of its debounces
+    // (scanDebounceMs), runs after every such timer. The visibility report
+    // sent after that arrives behind any stray one, so it is the last.
+    await appPage.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const probe = new MutationObserver(() => {
+            probe.disconnect();
+            setTimeout(() => {
+              document.dispatchEvent(new Event("visibilitychange"));
+              resolve();
+            }, 1_500);
+          });
+          probe.observe(document.body, { childList: true });
+          document.body.append(document.createElement("div"));
+        }),
     );
-    await appPage.waitForTimeout(2_000);
-    expect(await feedMessages(optionsPage)).toHaveLength(settledCount);
+    await optionsPage.waitForFunction((count) => {
+      const messages = Reflect.get(globalThis, "feedMessages");
+      return Array.isArray(messages) && messages.length > count;
+    }, settledCount);
+    expect(await feedMessages(optionsPage)).toHaveLength(settledCount + 1);
   } finally {
     await context.close();
     await rm(profile, { recursive: true });
   }
 });
 
-// KNOWN ISSUE (quarantined): appPage.goto() below hangs to the full test
-// timeout consistently in CI, never locally, and is unaffected by an
-// explicit per-call timeout override -- Playwright's own goto() timeout
-// option had no effect, meaning whatever's stuck is below the level any
-// JS-side fix here can reach (consistent with a frozen CDP connection,
-// not application code). Already ruled out: service-worker interference
-// (both a page-level route fallback and stubbing
-// navigator.serviceWorker.register directly), the default "load" wait
-// event vs "domcontentloaded", and cross-file worker parallelism
-// (workers: 1 in playwright.config.ts made no difference and was
-// reverted). The two other tests in this file that also use
-// launchPersistentContext + a loaded extension pass reliably in CI, so
-// it isn't extension-loading in general -- something specific to this
-// test's flow (mid-test origin switch + reload?) still needs a
-// different diagnostic approach than push-and-wait against real CI
-// (CDP-level tracing, or reproducing directly on a runner) to pin down.
-// The route fallback below is a real, confirmed fix for a *different*,
-// already-diagnosed bug (the app's own service worker intercepting
-// same-origin fetches outside page.route()'s reach) and should stay
-// once this is unblocked.
-test.fixme("uses the real extension bridge only on its configured origin", async ({
+// The Reader display mode is offered only where the extension answers the
+// page's capability probe: its configured instance, and no other origin.
+test("uses the real extension bridge only on its configured origin", async ({
   baseURL,
 }) => {
   if (!baseURL) throw new Error("Playwright baseURL is required");
@@ -279,24 +290,24 @@ test.fixme("uses the real extension bridge only on its configured origin", async
     appPage.on("console", (message) => {
       if (message.type() === "error") browserFailures.push(message.text());
     });
-    await installApiFixture(appPage);
-    // The app's own service worker registers and can end up controlling
-    // appPage, intercepting same-origin fetches (including /api/tree)
-    // from *inside* the worker's own execution context -- outside what
-    // page.route() covers, since that only intercepts requests the page
-    // itself initiates. context.route() also covers service-worker-
-    // originated requests, so this catches whatever the page-level mock
-    // in installApiFixture doesn't.
-    await context.route("**/api/**", (route) =>
-      route.fulfill({ body: "[]", contentType: "application/json" }),
-    );
+    // On the context, so it also answers the app's own service worker.
+    await installApiFixture(context);
+    const openArticle = async () => {
+      await appPage
+        .locator("button.source")
+        .filter({ hasText: "Tech News" })
+        .click();
+      await expect(appPage.getByText("Feed article content")).toBeVisible();
+    };
+    const modes = appPage.getByRole("combobox", {
+      name: "Article display mode",
+    });
 
     const origin = new URL(baseURL).origin;
     await setInstance(optionsPage, extensionId, origin);
     await appPage.goto(origin);
-    await expect(appPage.getByRole("combobox")).toContainText(
-      "Reader (plain text)",
-    );
+    await openArticle();
+    await expect(modes).toContainText("Reader (plain text)");
     const allowed = await probeCapabilities(appPage);
     expect(allowed).toEqual({
       action: "capabilities",
@@ -323,7 +334,8 @@ test.fixme("uses the real extension bridge only on its configured origin", async
       type: "response",
       version: 1,
     });
-    await expect(appPage.getByRole("combobox")).toHaveCount(0);
+    await openArticle();
+    await expect(modes).toHaveCount(0);
     expect(browserFailures).toEqual([]);
   } finally {
     await context.close();

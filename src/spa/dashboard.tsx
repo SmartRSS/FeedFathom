@@ -502,9 +502,11 @@ export function Dashboard(props: {
         setNewArticlesCount((count) => Math.max(count, arrived));
       }
       lastSeenUnread = total;
-    } catch {
-      // Background polling stays silent: the next cycle retries, and the
-      // ordinary error surfaces already cover the user-visible paths.
+    } catch (cause) {
+      // An expired session goes to sign-in like every other tree load (#1122).
+      // Anything else stays silent: the next cycle retries, and the ordinary
+      // error surfaces already cover the user-visible paths.
+      props.handleUnauthorized(cause);
     } finally {
       polling = false;
       pollCycles += 1;

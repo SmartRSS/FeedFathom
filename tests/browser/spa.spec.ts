@@ -2469,6 +2469,178 @@ test("redirects expired protected requests to login", async ({ page }) => {
   failures.length = 0;
 });
 
+// The sign-in page a 401 lands on, with `next` the route it came from. The
+// `refusals` 401s are expected, so they are cleared from the console guard.
+const expectSignIn = async (page: Page, next: string, refusals = 1) => {
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe(next);
+  const failures = browserFailures.get(page) ?? [];
+  await expect
+    .poll(() => failures)
+    .toEqual(
+      Array.from(
+        { length: refusals },
+        () =>
+          "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      ),
+    );
+  failures.length = 0;
+};
+
+// #1103: each mutation reports its failure through reportError, which must
+// read a 401 as an expired session. `ready` brings the page to the click
+// that sends the request; the session expires between the two. A failed
+// article change then reloads the list or the tree, a second 401.
+const confirm = (page: Page) =>
+  page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+const expiringMutations: {
+  name: string;
+  prepare?: (state: Awaited<ReturnType<typeof installApiFixture>>) => void;
+  ready: (page: Page) => Promise<void>;
+  refusals?: number;
+  send: (page: Page) => Promise<void>;
+}[] = [
+  {
+    name: "marking an article read",
+    ready: async (page) => {
+      await selectSource(page);
+      await articleOptions(page).first().click();
+    },
+    refusals: 2,
+    send: (page) => page.getByRole("button", { name: "Mark read" }).click(),
+  },
+  {
+    name: "deleting an article",
+    ready: async (page) => {
+      await selectSource(page);
+      await articleOptions(page).first().click();
+    },
+    refusals: 2,
+    send: (page) => page.keyboard.press("Delete"),
+  },
+  {
+    name: "renaming a source",
+    ready: async (page) => {
+      await selectSource(page);
+      await page.getByRole("button", { name: "source properties" }).click();
+      await page.getByLabel("Title").fill("Renamed Feed");
+    },
+    send: (page) => page.getByRole("button", { name: "Save" }).click(),
+  },
+  {
+    name: "deleting a source",
+    ready: async (page) => {
+      await selectSource(page);
+      await page.getByRole("button", { name: "delete source" }).click();
+    },
+    send: confirm,
+  },
+  {
+    name: "renaming a folder",
+    ready: async (page) => {
+      await selectSource(page, "Reading");
+      await page.getByRole("button", { name: "source properties" }).click();
+      await page.getByRole("dialog").getByRole("textbox").fill("Archive");
+    },
+    send: confirm,
+  },
+  {
+    name: "deleting an empty folder",
+    prepare: (state) => state.removedSourceIds.push(3),
+    ready: async (page) => {
+      await selectSource(page, "Reading");
+      await page.getByRole("button", { name: "delete source" }).click();
+    },
+    send: confirm,
+  },
+];
+for (const { name, prepare, ready, refusals, send } of expiringMutations) {
+  test(`a 401 from ${name} routes to sign-in`, async ({ page }) => {
+    const state = await installApiFixture(page);
+    prepare?.(state);
+    await page.goto("/");
+    await ready(page);
+    state.authenticated = false;
+    await send(page);
+    await expectSignIn(page, "/", refusals);
+  });
+}
+
+// #1103: the timer poll reloads the tree in the background; a 401 there is
+// the session expiring while the reader looks on, from whichever route the
+// dashboard is showing. `booted` is the last of the route's boot requests
+// to land, so the session expires only once they are all answered.
+for (const { booted, path } of [
+  { booted: (page: Page) => sourceRow(page), path: "/" },
+  {
+    booted: (page: Page) =>
+      page.getByLabel("Folder").getByRole("option", { name: "Reading" }),
+    path: "/preview?feedUrl=https%3A%2F%2Fpreview.example%2Ffeed.xml",
+  },
+]) {
+  test(`a tree poll's 401 routes to sign-in, returning to ${path}`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const state = await openApp(page, {}, path);
+    await expect(booted(page)).toBeAttached();
+    state.authenticated = false;
+    // Nothing on the page shows the poll being armed after the boot tree,
+    // so the clock steps until it goes out.
+    await expect
+      .poll(async () => {
+        await page.clock.runFor(30_000);
+        return state.treeRequests;
+      })
+      .toBe(2);
+    await expectSignIn(page, path);
+  });
+}
+
+// #1103: the three admin requests, each behind its own handleUnauthorized.
+const expiringAdminRequests: {
+  name: string;
+  ready?: (page: Page) => Promise<void>;
+  send: (page: Page) => Promise<void>;
+}[] = [
+  {
+    name: "re-sorting the source list",
+    send: (page) => page.getByRole("button", { name: "URL" }).click(),
+  },
+  {
+    name: "replacing a source URL",
+    ready: async (page) => {
+      await page.getByRole("button", { name: "Edit" }).click();
+      await page
+        .getByRole("dialog")
+        .getByRole("textbox")
+        .fill("https://news.example/moved.xml");
+      await confirm(page);
+      await expect(page.getByRole("dialog")).toContainText("Change");
+    },
+    send: confirm,
+  },
+  {
+    name: "removing a source",
+    ready: (page) => page.getByRole("button", { name: "Remove" }).click(),
+    send: confirm,
+  },
+];
+for (const { name, ready, send } of expiringAdminRequests) {
+  test(`a 401 from ${name} on the admin page routes to sign-in`, async ({
+    page,
+  }) => {
+    const state = await openApp(page, {}, "/admin");
+    await expect(
+      page.getByRole("link", { name: "https://news.example/feed.xml" }),
+    ).toBeVisible();
+    await ready?.(page);
+    state.authenticated = false;
+    await send(page);
+    await expectSignIn(page, "/admin");
+  });
+}
+
 test("surfaces tree failures without masquerading as logout", async ({
   page,
 }) => {
@@ -3498,7 +3670,7 @@ const downloadUnread = async (page: Page) => {
   await context.addInitScript(() =>
     localStorage.setItem("offlineUnread", "on"),
   );
-  await installApiFixture(context, { multipleArticles: true });
+  const state = await installApiFixture(context, { multipleArticles: true });
   await context.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
     const publishedAt = new Date().toJSON();
@@ -3521,6 +3693,41 @@ const downloadUnread = async (page: Page) => {
   // No reload: the first sync is skipped until the worker takes control,
   // and controllerchange retries it.
   await expect.poll(() => downloaded(page)).toHaveLength(3);
+  return state;
+};
+
+const disconnected = (route: Route) => route.abort("internetdisconnected");
+
+// #1104: a removal the worker cannot send is queued and answered with the
+// ids it echoes, so the row leaves the list as if online. The downloaded
+// bodies open the next row with no request; the route stands in for the
+// network, which setOffline cuts only for the page. Any request once back
+// online may start the replay, so `server` sets up its answer before then.
+const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
+  const context = page.context();
+  const state = await downloadUnread(page);
+  // The worker learns whose removals it queues from a request it serves.
+  await page.reload();
+  await page.waitForFunction(async () =>
+    Boolean(await caches.match("/sw-queue-account")),
+  );
+  await selectSource(page);
+  await articleOptions(page).filter({ hasText: "Second article" }).click();
+  await context.route("**/api/**", disconnected);
+  await context.setOffline(true);
+  await page.keyboard.press("Delete");
+  await expect(articleOptions(page)).toHaveCount(2);
+  await expect(
+    articleOptions(page).filter({ hasText: "Second article" }),
+  ).toHaveCount(0);
+  expect(state.removedArticleIds).toEqual([]);
+  await server?.();
+  await context.unroute("**/api/**", disconnected);
+  await context.setOffline(false);
+  // Any request the worker serves flushes the queue. The page's own may
+  // already have, and the alert a refusal raises can cover the toolbar.
+  await page.evaluate(() => fetch("/api/tree"));
+  return state;
 };
 
 test.describe("under a controlling service worker", () => {
@@ -3687,5 +3894,31 @@ test.describe("under a controlling service worker", () => {
     release({ json: { error: "Unauthorized" }, status: 401 });
     await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
     (browserFailures.get(page) ?? []).length = 0;
+  });
+
+  test("an offline removal answers at once and replays back online", async ({
+    page,
+  }) => {
+    const state = await removeOffline(page);
+    await expect.poll(() => state.removedArticleIds).toEqual([12]);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("a replay the server refuses tells the reader the removal was lost", async ({
+    page,
+  }) => {
+    const state = await removeOffline(page, () =>
+      page
+        .context()
+        .route("**/api/articles", (route) =>
+          route.request().method() === "DELETE"
+            ? route.fulfill({ json: { error: "Not found" }, status: 404 })
+            : route.fallback(),
+        ),
+    );
+    await expect(page.getByRole("alert")).toContainText(
+      "A change made while offline could not be applied and was discarded.",
+    );
+    expect(state.removedArticleIds).toEqual([]);
   });
 });
