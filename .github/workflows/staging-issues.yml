@@ -1,0 +1,41 @@
+name: Label issues fixed on staging
+
+# GitHub acts on "Closes #N" only for PRs into the default branch, so a fix
+# merged into staging leaves its issue open with nothing marking it done. This
+# labels those issues on-staging; the Release Pipeline closes them once a
+# production deploy contains the PR. "Refs #N" marks partial work and is
+# deliberately ignored.
+
+on:
+  pull_request:
+    branches:
+      - staging
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: Label issues the merged PR closes
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # Through the environment, not interpolated, so the body cannot inject shell.
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Add on-staging to each closed issue
+        run: |
+          set -euo pipefail
+          numbers=$(printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" \
+            | grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+' \
+            | grep -oE '[0-9]+$' | sort -un || true)
+          for n in $numbers; do
+            gh issue edit "$n" --add-label on-staging
+          done
