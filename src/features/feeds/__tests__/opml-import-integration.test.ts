@@ -98,3 +98,118 @@ test("repeat OPML imports restore missing subscriptions and preserve existing st
     await client.close();
   }
 });
+
+const feed = (name: string) => ({
+  homeUrl: "",
+  name,
+  type: "source" as const,
+  xmlUrl: `https://${name}.test/feed`,
+});
+
+// Folders are one level deep (user_folders has no parent) and a user's folder
+// is found by name, so a nested OPML folder lands in the top-level folder of
+// the same name rather than a second one beside it. A feed already subscribed
+// keeps its folder and name: the import only adds what is missing.
+test("importing a different tree merges same-named folders and leaves existing subscriptions alone", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const connection = createDrizzleConnection(databaseUrl);
+  const queued: string[] = [];
+  const importer = new OpmlImportService(
+    connection,
+    {
+      async enqueueSource(source) {
+        queued.push(source.url);
+      },
+    },
+    new SourcesDataService(connection),
+  );
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+    const [user] = await client<
+      { id: number }[]
+    >`INSERT INTO users (email, name, password) VALUES ('import@example.test', 'import', 'x') RETURNING id`;
+    const userId = user!.id;
+    // Built by hand, named unlike the OPML: "news" filed under News, "misc"
+    // under Misc, "loose" in no folder.
+    const [news, misc] = await client<{ id: number }[]>`
+      INSERT INTO user_folders (user_id, name) VALUES
+        (${userId}, 'News'), (${userId}, 'Misc')
+      RETURNING id`;
+    for (const [name, folderId] of [
+      ["news", news!.id],
+      ["misc", misc!.id],
+      ["loose", null],
+    ] as const) {
+      // eslint-disable-next-line no-await-in-loop -- three fixture rows.
+      await client`
+        WITH source AS (
+          INSERT INTO sources (url, home_url)
+          VALUES (${feed(name).xmlUrl}, ${`https://${name}.test`})
+          RETURNING id
+        )
+        INSERT INTO user_sources (user_id, source_id, name, parent_id)
+        SELECT ${userId}, id, ${`My ${name}`}, ${folderId} FROM source`;
+    }
+    const existing = await client<
+      { source_id: number }[]
+    >`SELECT * FROM user_sources ORDER BY source_id`;
+
+    await importer.insertTree(
+      userId,
+      [
+        {
+          children: [
+            {
+              children: [feed("news"), feed("fresh")],
+              name: "News",
+              type: "folder",
+            },
+            feed("misc"),
+            feed("loose"),
+            feed("tech"),
+          ],
+          name: "Tech",
+          type: "folder",
+        },
+      ],
+      "b".repeat(64),
+    );
+
+    expect(
+      (
+        await client<
+          { name: string }[]
+        >`SELECT name FROM user_folders ORDER BY name`
+      ).map((row) => row.name),
+    ).toEqual(["Misc", "News", "Tech"]);
+    expect(
+      await client`SELECT * FROM user_sources WHERE source_id IN ${client(existing.map((row) => row.source_id))} ORDER BY source_id`,
+    ).toEqual(existing);
+    expect([
+      ...(await client<{ folder: string; name: string }[]>`
+        SELECT s.name, f.name AS folder FROM user_sources s
+        JOIN user_folders f ON f.id = s.parent_id
+        WHERE s.name IN ('fresh', 'tech') ORDER BY s.name`),
+    ]).toEqual([
+      { folder: "News", name: "fresh" },
+      { folder: "Tech", name: "tech" },
+    ]);
+    const [fresh] = await client<
+      { parent_id: number }[]
+    >`SELECT parent_id FROM user_sources WHERE name = 'fresh'`;
+    expect(fresh!.parent_id).toBe(news!.id);
+    expect(await client`SELECT * FROM user_sources`).toHaveLength(5);
+    expect(await client`SELECT * FROM sources`).toHaveLength(5);
+    expect(queued.toSorted()).toEqual([
+      "https://fresh.test/feed",
+      "https://tech.test/feed",
+    ]);
+  } finally {
+    await connection.$client.close();
+    await client.close();
+  }
+});

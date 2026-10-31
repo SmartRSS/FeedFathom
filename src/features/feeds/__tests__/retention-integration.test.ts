@@ -247,3 +247,80 @@ test("drops orphaned sources, expired users and sessions, but never every source
     await client.close();
   }
 });
+
+// What a source carries from before anyone subscribed is what no subscriber
+// can ever see, and the cutoff is the earliest subscription alone: a later
+// subscriber joining must not delete what an earlier one can still read.
+test("prunes articles last seen before a source's earliest subscription", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const drizzleConnection = createDrizzleConnection(databaseUrl);
+  const userSourcesDataService = new UserSourcesDataService(
+    drizzleConnection,
+    new SourcesDataService(drizzleConnection),
+  );
+
+  try {
+    await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
+    await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
+    await client`CREATE SCHEMA "public"`;
+    await migrateDatabase(databaseUrl, migrationsFolder);
+
+    const [early, late] = await client<{ id: number }[]>`
+      INSERT INTO users (email, name, password) VALUES
+        ('early@example.test', 'early', 'x'),
+        ('late@example.test', 'late', 'x')
+      RETURNING id`;
+    // Never fetched, so the gone-from-feed rule cannot claim anything here.
+    const [feed, untouched] = await client<{ id: number }[]>`
+      INSERT INTO sources (url, home_url) VALUES
+        ('https://feed.test/feed', 'https://feed.test'),
+        ('https://untouched.test/feed', 'https://untouched.test')
+      RETURNING id`;
+    await client`
+      INSERT INTO user_sources (user_id, source_id, name, unread_count, created_at) VALUES
+        (${early!.id}, ${feed!.id}, 'sub', 3, NOW() - INTERVAL '30 days'),
+        (${late!.id}, ${feed!.id}, 'sub', 3, NOW() - INTERVAL '2 days'),
+        (${early!.id}, ${untouched!.id}, 'sub', 0, NOW() - INTERVAL '30 days')`;
+    for (const [sourceId, guid, lastSeen] of [
+      [feed!.id, "before-anyone", "40 days"],
+      [feed!.id, "between-subscriptions", "10 days"],
+      [feed!.id, "recent", "1 day"],
+      [untouched!.id, "after-subscription", "10 days"],
+    ] as const) {
+      // eslint-disable-next-line no-await-in-loop -- four fixture rows.
+      await client`
+        INSERT INTO articles (source_id, guid, author, title, url, content, published_at, last_seen_in_feed_at)
+        VALUES (${sourceId}, ${guid}, 'a', 't', '', 'body', NOW(),
+                NOW() - CAST(${lastSeen} AS interval))`;
+    }
+
+    // Every other rule off, so only the earliest-subscription cutoff acts.
+    const prunedSourceIds = await cleanupOrphanedData(
+      drizzleConnection,
+      0,
+      0,
+      0,
+    );
+    expect(prunedSourceIds).toEqual([feed!.id]);
+    expect(
+      (
+        await client<{ guid: string }[]>`SELECT guid FROM articles ORDER BY id`
+      ).map((row) => row.guid),
+    ).toEqual(["between-subscriptions", "recent", "after-subscription"]);
+
+    // Each subscriber counts only what was seen since they joined.
+    await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
+    expect([
+      ...(await client<{ unread: number; user_id: number }[]>`
+        SELECT user_id, unread_count AS unread FROM user_sources
+        WHERE source_id = ${feed!.id} ORDER BY user_id`),
+    ]).toEqual([
+      { unread: 2, user_id: early!.id },
+      { unread: 1, user_id: late!.id },
+    ]);
+  } finally {
+    await drizzleConnection.$client.close();
+    await client.close();
+  }
+});
