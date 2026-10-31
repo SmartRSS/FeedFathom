@@ -232,7 +232,10 @@ export function DialogHost() {
           onClose={() => {
             // Any close not already routed through finish() (e.g. a stray
             // form submission) still must not leave the promise pending.
-            cancel();
+            // close fires a task after finish(), so a follow-on request may
+            // have reopened the dialog by then; that one is not cancelled
+            // (#1123).
+            if (!dialogRef?.open) cancel();
           }}
           ref={dialogRef}
         >
