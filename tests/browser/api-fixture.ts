@@ -303,6 +303,7 @@ export async function installApiFixture(
 
     if (method === "GET" && url.pathname === "/api/tree") {
       state.treeRequests++;
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       if (options.treeFailure) return respond({ tree: "malformed" });
       const currentSource = state.updatedSource
         ? { ...source, name: state.updatedSource.name }
@@ -390,6 +391,7 @@ export async function installApiFixture(
     }
 
     if (method === "PATCH" && url.pathname === "/api/articles") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { articleIdList, read } = request.postDataJSON();
       expect(articleIdList.length > 0).toBe(true);
       state.readMarks.push(articleIdList);
@@ -401,6 +403,7 @@ export async function installApiFixture(
     }
 
     if (method === "DELETE" && url.pathname === "/api/articles") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { removedArticleIdList } = request.postDataJSON();
       expect(removedArticleIdList.length > 0).toBe(true);
       state.removedArticleIds.push(...removedArticleIdList);
@@ -442,12 +445,14 @@ export async function installApiFixture(
     }
 
     if (method === "DELETE" && url.pathname === "/api/source") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { removeSourceId } = request.postDataJSON();
       state.removedSourceIds.push(removeSourceId);
       return respond(removeSourceId);
     }
 
     if (method === "PATCH" && url.pathname === "/api/source") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { sourceFolder, sourceId, sourceName } = request.postDataJSON();
       expect(sourceId).toBe(3);
       state.updatedSource = { name: sourceName, parentId: sourceFolder };
@@ -455,6 +460,7 @@ export async function installApiFixture(
     }
 
     if (method === "PATCH" && url.pathname === "/api/folders") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { folderId, folderName } = request.postDataJSON();
       expect(folderId).toBe(7);
       state.updatedFolder = { name: folderName };
@@ -462,6 +468,7 @@ export async function installApiFixture(
     }
 
     if (method === "DELETE" && url.pathname === "/api/folders") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       const { removeFolderId } = request.postDataJSON();
       state.removedFolderIds.push(removeFolderId);
       return respond(removeFolderId);
@@ -562,6 +569,31 @@ export async function installApiFixture(
       state.subscriptionBodies.push(body);
       state.subscribed = true;
       return respond({ sourceId: 9 });
+    }
+
+    // The admin page's source list, with the two changes it can make. Only
+    // the 401 matters to the specs, so the changes are acknowledged, not kept.
+    if (url.pathname === "/api/admin") {
+      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (method === "GET")
+        return respond([
+          {
+            createdAt: "2026-07-01T00:00:00.000Z",
+            homeUrl: source.homeUrl,
+            id: 3,
+            lastAttempt: null,
+            lastFetchTrigger: null,
+            lastSuccess: null,
+            recentFailureDetails: "",
+            recentFailures: 0,
+            subscriberCount: 1,
+            url: source.xmlUrl,
+            websubStatus: "none",
+          },
+        ]);
+      if (method === "POST") return respond({ success: true });
+      if (method === "DELETE")
+        return respond(request.postDataJSON().removeSourceId);
     }
 
     throw new Error(
