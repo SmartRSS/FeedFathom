@@ -5,7 +5,7 @@ import {
   type EmailHandler,
   MailRejectedError,
 } from "#features/mail-ingest/email-handler.ts";
-import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import type { MailSender } from "#features/auth/mail-sender.ts";
@@ -30,7 +30,10 @@ import { expect, spyOn, test } from "bun:test";
 import { Value } from "typebox/value";
 import { sessionResponse } from "#shared/contracts/responses.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import { HttpClient } from "#platform/http/http-client.ts";
+import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { createNativeHttpTransport } from "#platform/http/http-native-transport.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import {
   deserializeFeedPreview,
@@ -596,43 +599,21 @@ test("normalizes reader inputs and rejects malformed values before dependencies"
   expect(folders).toEqual([[42, "Reading"]]);
 });
 
-test("routes the Today view to every subscribed source with a 24h window", async () => {
+// today-window-integration covers what the Today view lists; this only pins
+// that a view the contract does not name never reaches the data service.
+test("rejects an unknown article view", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const calls: Parameters<ArticlesDataService["getUserArticlesForSources"]>[] =
-    [];
-  dependencies.articlesDataService.getUserArticlesForSources = async (
-    ...args
-  ) => {
-    calls.push(args);
-    return [];
-  };
   const app = await appFor(dependencies);
 
-  const today = await post(
-    app,
-    "/api/articles",
-    { sources: [], view: "today" },
-    { auth: true },
-  );
-  const unknownView = await post(
+  const response = await post(
     app,
     "/api/articles",
     { sources: [3], view: "week" },
     { auth: true },
   );
 
-  expect(today.status).toBe(200);
-  expect(unknownView.status).toBe(422);
-  expect(calls).toEqual([
-    [
-      [],
-      42,
-      undefined,
-      undefined,
-      { allSubscribed: true, publishedWithinHours: 24 },
-    ],
-  ]);
+  expect(response.status).toBe(422);
 });
 
 test("rejects invalid subscription policies before cache or database calls", async () => {
@@ -813,6 +794,73 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   expect(findRetryAfter).toBeLessThanOrEqual(300);
 });
 
+// The real budget throws HttpDeferredError once a user is over it. Each of
+// the three routes has to ask before anything else, so a spent budget means
+// no fetch, no cache read and no database write.
+test.each([
+  {
+    name: "preview",
+    request: (app: App) =>
+      get(app, "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss", {
+        auth: true,
+      }),
+  },
+  {
+    name: "find",
+    request: (app: App) =>
+      get(app, "/api/find?link=https%3A%2F%2Fsite.example%2F", { auth: true }),
+  },
+  {
+    name: "subscribe",
+    request: (app: App) =>
+      subscribe(app, {
+        sourceFolder: null,
+        sourceName: "Feed",
+        sourceUrl: "https://feed.example/rss",
+      }),
+  },
+])(
+  "$name refuses once the outbound fetch budget is spent",
+  async ({ request }) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    const budgetUsers: number[] = [];
+    dependencies.outboundFetchBudget.consume = async (userId) => {
+      budgetUsers.push(userId);
+      throw new HttpDeferredError(Date.now() + 30_000);
+    };
+    const reached: string[] = [];
+    dependencies.httpClient.get = async () => {
+      reached.push("httpClient.get");
+      throw new Error("fetched");
+    };
+    dependencies.feedParser.preview = async () => {
+      reached.push("feedParser.preview");
+      return undefined;
+    };
+    dependencies.feedParser.parseUrl = async () => {
+      reached.push("feedParser.parseUrl");
+      throw new Error("fetched");
+    };
+    dependencies.feedPreviewCache.get = async () => {
+      reached.push("feedPreviewCache.get");
+      return undefined;
+    };
+    dependencies.userSourcesDataService.addSourceToUser = async () => {
+      reached.push("addSourceToUser");
+      return undefined;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await request(app);
+
+    expect(response.status).toBe(429);
+    expect(Number(response.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(budgetUsers).toEqual([42]);
+    expect(reached).toEqual([]);
+  },
+);
+
 // The discovery fan-out reads only `websub` off a parse, but the real
 // parseUrl signature returns the whole parsed feed, so a double has to supply
 // it. That asymmetry is the case for giving discovery its own dependency.
@@ -970,6 +1018,65 @@ test("find falls back to an OpenRSS suggestion for a page with no feeds", async 
       websub: false,
     },
   ]);
+});
+
+// The routes above fake the HTTP client, so they cannot show that a user's
+// URL is held to the client's private-network guard. Here the client is real
+// and only DNS is stubbed: a public-looking host that resolves privately.
+const privatelyResolvingClient = (dispatched: string[]) =>
+  new HttpClient(createFakeHttpRedis(), {
+    transport: createNativeHttpTransport({
+      async dispatch(request) {
+        dispatched.push(request.url);
+        throw new Error("dispatched");
+      },
+      async lookup() {
+        return [{ address: "10.0.0.1", family: 4 }];
+      },
+    }),
+  });
+
+test("find refuses a URL that resolves to a private address", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const dispatched: string[] = [];
+  dependencies.httpClient = privatelyResolvingClient(dispatched);
+  const app = await appFor(dependencies);
+
+  const response = await get(
+    app,
+    "/api/find?link=https%3A%2F%2Fintranet.example%2F",
+    { auth: true },
+  );
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "Invalid feed url" });
+  expect(dispatched).toEqual([]);
+});
+
+test("preview refuses a feed that resolves to a private address", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const dispatched: string[] = [];
+  dependencies.redirectMap.resolveUrl = async (url) => url;
+  dependencies.feedParser = new FeedParser(
+    dependencies.articleImporter,
+    privatelyResolvingClient(dispatched),
+    dependencies.sourcesDataService,
+    dependencies.websubStateService,
+    dependencies.redirectMap,
+  );
+  const app = await appFor(dependencies);
+
+  const response = await get(
+    app,
+    "/api/preview?feedUrl=https%3A%2F%2Fintranet.example%2Frss",
+    { auth: true },
+  );
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "Invalid feed url" });
+  expect(dispatched).toEqual([]);
 });
 
 // The deferred mapping is about to move from these handlers into the central
@@ -3759,6 +3866,101 @@ test("allows admin sessions and rejects non-admin sessions", async () => {
     adminOnlyRequests.map(() => 401),
   );
   expect(listing.status).toBe(200);
+});
+
+const signedInAsAdmin = (dependencies: Dependencies) => {
+  dependencies.usersDataService.getUserBySid = async () => ({
+    ...sessionUser,
+    isAdmin: true,
+  });
+};
+
+test.each([
+  ["updated", 200, { success: true }],
+  ["conflict", 409, { error: "Source URL already exists" }],
+  ["not-found", 404, { error: "Source URL not found" }],
+] as const)(
+  "replacing a source URL that comes back %s answers %d",
+  async (result, status, body) => {
+    const dependencies = createDependencies();
+    signedInAsAdmin(dependencies);
+    const replacements: [string, string][] = [];
+    dependencies.sourcesDataService.updateSourceUrl = async (
+      oldUrl,
+      newUrl,
+    ) => {
+      replacements.push([oldUrl, newUrl]);
+      return result;
+    };
+    const app = await appFor(dependencies);
+
+    const response = await post(
+      app,
+      "/api/admin",
+      { newUrl: "https://b.test/", oldUrl: "https://a.test/" },
+      { auth: true },
+    );
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(body);
+    expect(replacements).toEqual([["https://a.test/", "https://b.test/"]]);
+  },
+);
+
+test("an admin deletes the source a request names", async () => {
+  const dependencies = createDependencies();
+  signedInAsAdmin(dependencies);
+  const deleted: number[] = [];
+  dependencies.sourcesDataService.deleteSource = async (sourceId) => {
+    deleted.push(sourceId);
+  };
+  const app = await appFor(dependencies);
+
+  const response = await send(
+    app,
+    "DELETE",
+    "/api/admin",
+    { removeSourceId: 7 },
+    { auth: true },
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toBe(7);
+  expect(deleted).toEqual([7]);
+});
+
+test("an admin lists the redirect map and removes one entry", async () => {
+  const dependencies = createDependencies();
+  signedInAsAdmin(dependencies);
+  const redirects: Record<string, string> = {
+    "https://a.test/": "https://b.test/",
+    "https://c.test/": "https://d.test/",
+  };
+  dependencies.redirectMap.getAllRedirects = async () => ({ ...redirects });
+  dependencies.redirectMap.removeRedirect = async (oldUrl) => {
+    delete redirects[oldUrl];
+  };
+  const app = await appFor(dependencies);
+
+  const before = await get(app, "/api/admin/redirects", { auth: true });
+  const removal = await send(
+    app,
+    "DELETE",
+    "/api/admin/redirects",
+    { oldUrl: "https://a.test/" },
+    { auth: true },
+  );
+  const after = await get(app, "/api/admin/redirects", { auth: true });
+
+  expect(before.status).toBe(200);
+  expect(await before.json()).toEqual({
+    "https://a.test/": "https://b.test/",
+    "https://c.test/": "https://d.test/",
+  });
+  expect(removal.status).toBe(200);
+  expect(await removal.json()).toEqual({ success: true });
+  expect(after.status).toBe(200);
+  expect(await after.json()).toEqual({ "https://c.test/": "https://d.test/" });
 });
 
 // Revocation is scoped by the signed-in user, never by anything the request
