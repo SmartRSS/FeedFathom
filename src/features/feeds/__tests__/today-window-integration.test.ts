@@ -16,9 +16,8 @@ const migrationsFolder = fileURLToPath(
 test("the Today view spans every subscription and only the last 24 hours", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
-  const articlesDataService = new ArticlesDataService(
-    createDrizzleConnection(databaseUrl),
-  );
+  const connection = createDrizzleConnection(databaseUrl);
+  const articlesDataService = new ArticlesDataService(connection);
 
   try {
     await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
@@ -61,6 +60,7 @@ test("the Today view spans every subscription and only the last 24 hours", async
       "https://two.test 23h",
     ]);
   } finally {
+    await connection.$client.close();
     await client.end();
   }
 });
