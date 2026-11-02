@@ -82,6 +82,43 @@ const unreachable = (cause: unknown): Error =>
     { cause },
   );
 
+// Cloudflare now and then holds a request for seconds to a minute before it
+// reaches the origin, which answers in milliseconds; a copy sent meanwhile
+// usually takes another path. A GET still waiting after this long races a
+// second copy, the first answer wins, and the other is aborted. Only a GET:
+// repeating a write could apply it twice.
+const raceGetAfterMs = 1000;
+
+function raceGet(url: string, init?: RequestInit): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const controllers: AbortController[] = [];
+    let pending = 0;
+    const send = () => {
+      const controller = new AbortController();
+      controllers.push(controller);
+      pending++;
+      const signal = init?.signal
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal;
+      fetch(url, { ...init, signal }).then(
+        (response) => {
+          clearTimeout(timer);
+          for (const other of controllers)
+            if (other !== controller) other.abort();
+          resolve(response);
+        },
+        (cause: unknown) => {
+          if (--pending > 0) return;
+          clearTimeout(timer);
+          reject(cause);
+        },
+      );
+    };
+    const timer = setTimeout(send, raceGetAfterMs);
+    send();
+  });
+}
+
 export async function api<T extends TSchema>(
   path: string,
   schema: T,
@@ -89,7 +126,10 @@ export async function api<T extends TSchema>(
 ): Promise<StaticDecode<T>> {
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, init);
+    response =
+      (init?.method ?? "GET") === "GET"
+        ? await raceGet(`/api${path}`, init)
+        : await fetch(`/api${path}`, init);
   } catch (cause) {
     if (isCancellation(cause, init?.signal)) throw cause;
     throw unreachable(cause);

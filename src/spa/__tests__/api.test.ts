@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { Type } from "typebox";
 import {
   folderResponse,
@@ -200,6 +200,83 @@ describe("schema-first SPA API", () => {
     await expect(api("/message", exactMessage)).rejects.toThrow(
       "Invalid response from /api/message (400): malformed error payload",
     );
+  });
+
+  // An edge proxy sometimes holds a request for seconds before passing it on;
+  // a second copy sent meanwhile usually takes another path and answers.
+  describe("racing a slow GET", () => {
+    type Attempt = {
+      answer(response: Response): void;
+      init: Parameters<typeof fetch>[1];
+    };
+    const pendingFetches = () => {
+      const attempts: Attempt[] = [];
+      setFetch(
+        (_input, init) =>
+          new Promise((resolve, reject) => {
+            attempts.push({ answer: resolve, init });
+            init?.signal?.addEventListener("abort", () =>
+              reject(init.signal?.reason),
+            );
+          }),
+      );
+      return attempts;
+    };
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test("starts a second request after a second and takes the first answer", async () => {
+      jest.useFakeTimers();
+      const attempts = pendingFetches();
+      const result = api("/message", exactMessage);
+      jest.advanceTimersByTime(999);
+      expect(attempts).toHaveLength(1);
+      jest.advanceTimersByTime(1);
+      expect(attempts).toHaveLength(2);
+
+      attempts[1]?.answer(Response.json({ message: "second" }));
+
+      await expect(result).resolves.toEqual({ message: "second" });
+      expect(attempts[0]?.init?.signal?.aborted).toBe(true);
+      expect(attempts[1]?.init?.signal?.aborted).toBe(false);
+    });
+
+    test("sends one request when the answer comes within a second", async () => {
+      jest.useFakeTimers();
+      const attempts = pendingFetches();
+      const result = api("/message", exactMessage);
+      attempts[0]?.answer(Response.json({ message: "first" }));
+      await expect(result).resolves.toEqual({ message: "first" });
+      jest.advanceTimersByTime(5000);
+      expect(attempts).toHaveLength(1);
+    });
+
+    test("never repeats a request that is not a GET", () => {
+      jest.useFakeTimers();
+      const attempts = pendingFetches();
+      void api("/message", exactMessage, { method: "DELETE" }).catch(() => {});
+      jest.advanceTimersByTime(5000);
+      expect(attempts).toHaveLength(1);
+    });
+
+    test("a caller's abort cancels every copy and stays unwrapped", async () => {
+      jest.useFakeTimers();
+      const attempts = pendingFetches();
+      const controller = new AbortController();
+      const result = api("/message", exactMessage, {
+        signal: controller.signal,
+      }).catch((cause: unknown) => cause);
+      jest.advanceTimersByTime(1000);
+      controller.abort();
+
+      expect(await result).toBe(controller.signal.reason);
+      expect(attempts.map(({ init }) => init?.signal?.aborted)).toEqual([
+        true,
+        true,
+      ]);
+    });
   });
 
   describe("cancellation", () => {
