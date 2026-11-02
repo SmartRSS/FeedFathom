@@ -3549,7 +3549,9 @@ test("a stream that keeps dropping leaves the fallback poll on time", async ({
     // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
     await page.clock.runFor(3_000);
   }
-  await expect.poll(() => state.treeRequests).toBe(2);
+  // A poll still in flight when the clock jumps 3s has, by the page's clock,
+  // waited past a second, so it races a second copy of its GET (see api.ts).
+  await expect.poll(() => state.treeRequests).toBeGreaterThanOrEqual(2);
 });
 
 // #927: arrowing through the list opens each row it passes. The page cancels
