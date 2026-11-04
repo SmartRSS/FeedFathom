@@ -2113,11 +2113,11 @@ textarea[aria-invalid="true"]:focus {
     padding: var(--space-2) var(--space-3);
   }
   /* Three touch-size panes (a landscape tablet): the reader stays the
-     widest pane, and the list keeps at least 21rem for its 1rem titles,
-     since a fixed row height rules out wrapping them. The narrower layers
-     below override this. */
+     widest pane, the feed pane keeps 15rem for its names, and the list at
+     least 21rem for its 1rem titles, since a fixed row height rules out
+     wrapping them. The narrower layers below override this. */
   .dashboard {
-    grid-template-columns: minmax(12rem, 22%) minmax(21rem, 30%) minmax(0, 1fr);
+    grid-template-columns: minmax(15rem, 26%) minmax(21rem, 30%) minmax(0, 1fr);
   }
   .context-menu button,
   .admin-table th button,
