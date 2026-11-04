@@ -1,29 +1,57 @@
 import { expect, test } from "bun:test";
-import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
+import {
+  classifyFetchFailure,
+  describeFetchFailure,
+} from "#shared/util/fetch-failure.ts";
 
-test("names the HTTP status the server answered with", () => {
-  expect(
-    describeFetchFailure(
-      "Failed to load data for https://example.com/feed.xml, received status 404",
-    ),
-  ).toBe("The server answered 404 (not found).");
-  expect(
-    describeFetchFailure("Failed to load data for x, received status 418"),
-  ).toBe("The server answered 418.");
+const status = (code: number) =>
+  `Failed to load data for https://example.com/feed.xml, received status ${code}`;
+
+// One row per cause a reader is told about: the reasons are the fetcher's own
+// words, as sources.recent_failure_details stores them.
+test.each([
+  [
+    "feed gone",
+    [status(404), status(410)],
+    "This feed seems to have moved or been removed.",
+    true,
+  ],
+  [
+    "site not found",
+    ["getaddrinfo ENOTFOUND feed.example", "getaddrinfo EAI_AGAIN x"],
+    "This site can't be found.",
+    true,
+  ],
+  [
+    "not a feed",
+    ["", "XML Parse error: Expected the root element", "Not a feed"],
+    "This address doesn't serve a feed.",
+    true,
+  ],
+  [
+    "site down",
+    [
+      status(500),
+      status(503),
+      status(403),
+      status(429),
+      "connect ECONNREFUSED 1.2.3.4:443",
+      "The request timed out",
+      "unable to verify the first certificate",
+    ],
+    "This site isn't responding right now.",
+    false,
+  ],
+])("%s", (_cause, reasons, sentence, editable) => {
+  for (const reason of reasons) {
+    expect(classifyFetchFailure(reason)).toMatchObject({ editable, sentence });
+    expect(describeFetchFailure(reason)).toBe(sentence);
+  }
 });
 
-test("tells an unknown host from one that does not answer", () => {
-  expect(describeFetchFailure("getaddrinfo ENOTFOUND feed.example")).toBe(
-    "The server could not be found.",
-  );
-  expect(describeFetchFailure("connect ECONNREFUSED 1.2.3.4:443")).toBe(
-    "The server could not be reached.",
-  );
-});
-
-test("falls back to a plain sentence for anything else", () => {
-  for (const reason of ["", "XML Parse error: Expected the root element"])
-    expect(describeFetchFailure(reason)).toBe(
-      "The address did not return a readable feed.",
-    );
+test("keeps the HTTP status for the details, and only that", () => {
+  expect(classifyFetchFailure(status(410)).status).toBe(410);
+  expect(
+    classifyFetchFailure("getaddrinfo ENOTFOUND x").status,
+  ).toBeUndefined();
 });

@@ -762,7 +762,7 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toEqual({
-    error: "The server answered 404 (not found).",
+    error: "This feed seems to have moved or been removed.",
   });
 });
 
@@ -1078,7 +1078,7 @@ test("preview refuses a feed that resolves to a private address", async () => {
 
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
-    error: "The address did not return a readable feed.",
+    error: "This address doesn't serve a feed.",
   });
   expect(dispatched).toEqual([]);
 });

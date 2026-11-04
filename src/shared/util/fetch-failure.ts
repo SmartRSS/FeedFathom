@@ -1,28 +1,41 @@
 // The fetcher stores and reports failures in its own words ("Failed to load
-// data for <url>, received status 404", "getaddrinfo ENOTFOUND"). This puts
-// one into a sentence a reader can act on. The URL stays out: wherever the
-// sentence shows, the feed is already named.
-const statusNames: Record<number, string> = {
-  401: "login required",
-  403: "forbidden",
-  404: "not found",
-  410: "gone",
-  429: "too many requests",
-  500: "server error",
-  502: "bad gateway",
-  503: "unavailable",
-  504: "gateway timeout",
-};
-
-export function describeFetchFailure(reason: string): string {
-  const status = /received status (\d{3})/u.exec(reason)?.[1];
-  if (status) {
-    const name = statusNames[Number(status)];
-    return `The server answered ${status}${name ? ` (${name})` : ""}.`;
-  }
-  if (/ENOTFOUND|EAI_AGAIN/u.test(reason))
-    return "The server could not be found.";
-  if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|timed out/iu.test(reason))
-    return "The server could not be reached.";
-  return "The address did not return a readable feed.";
+// data for <url>, received status 404", "getaddrinfo ENOTFOUND"). This sorts
+// one into the few causes a reader can tell apart and act on, each with a
+// plain sentence. The URL and the status stay out of the sentence: wherever
+// it shows, the feed is already named, and the status is for an admin's
+// details. `editable` marks the causes a new address can fix.
+export interface FetchFailure {
+  editable: boolean;
+  sentence: string;
+  status: number | undefined;
 }
+
+const gone = "This feed seems to have moved or been removed.";
+const down = "This site isn't responding right now.";
+
+export function classifyFetchFailure(reason: string): FetchFailure {
+  const status =
+    Number(/received status (\d{3})/u.exec(reason)?.[1]) || undefined;
+  if (status === 404 || status === 410)
+    return { editable: true, sentence: gone, status };
+  // Any other refusal -- an error page, a block, a rate limit -- is the site's
+  // own trouble, and the address may well be right.
+  if (status) return { editable: false, sentence: down, status };
+  if (/ENOTFOUND|EAI_AGAIN/u.test(reason))
+    return { editable: true, sentence: "This site can't be found.", status };
+  if (
+    /ECONN|ETIMEDOUT|EHOSTUNREACH|timed out|socket|certificate|CERT_|TLS|SSL/iu.test(
+      reason,
+    )
+  )
+    return { editable: false, sentence: down, status };
+  // It answered, with something that isn't a feed.
+  return {
+    editable: true,
+    sentence: "This address doesn't serve a feed.",
+    status,
+  };
+}
+
+export const describeFetchFailure = (reason: string) =>
+  classifyFetchFailure(reason).sentence;
