@@ -203,6 +203,22 @@
        the dark canvas, clears 4.5:1 for text and 3:1 for an edge. Two
        tokens a hair apart read as a mistake. */
     --control-border: 1px solid var(--grey-50);
+    /* Status chips: a deep tone of each hue behind a light one, instead of
+       the light pastels, which were the brightest things on a dark page.
+       Text on each is above 8.5:1. */
+    --status-success-fg: #8fe0a8;
+    --status-success-bg: #12361f;
+    --status-warning-fg: #f2d27a;
+    --status-warning-bg: #3d3010;
+    --status-error-fg: #ffb3b8;
+    --status-error-bg: #4a1a1d;
+  }
+  /* The new-articles banner is the inverse of the page in light; in dark
+     that made it a white slab. It is a raised surface here instead. */
+  :root[data-theme="auto"] .update-banner {
+    background: var(--surface);
+    color: var(--grey-90);
+    border: var(--border);
   }
 }
 /* Tones between dark surface and text. Without color-mix() the hairlines
