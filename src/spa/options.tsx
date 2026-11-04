@@ -389,9 +389,8 @@ export function Options(props: {
               <p>
                 Manual only, by default. This reader is built around deleting an
                 article once you are done with it, so nothing is marked read
-                behind your back unless you ask for it. Automatic marking uses
-                the same read-state path as the button, so filtered lists still
-                update the same way.
+                behind your back unless you ask for it. Automatic marking works
+                the same as Mark read.
               </p>
             </section>
             <section class="options-card">

@@ -2348,7 +2348,7 @@ export function Dashboard(props: {
             {(failing) => (
               <div class="feed-notice">
                 <p>
-                  Not updated since {formatDay(failing().lastSuccess)} ·{" "}
+                  Not updated since {formatDay(failing().lastSuccess)}.{" "}
                   {failingCause()?.sentence}
                 </p>
                 <div class="feed-notice-actions">

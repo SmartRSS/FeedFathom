@@ -506,7 +506,7 @@ export function FeedDiscovery(props: {
               value={folderId()}
               onChange={(event) => setFolderId(event.currentTarget.value)}
             >
-              <option value="">No parent</option>
+              <option value="">No folder</option>
               <For each={folders()}>
                 {(item) => <option value={item.id}>{item.name}</option>}
               </For>
