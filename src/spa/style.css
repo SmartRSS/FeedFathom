@@ -837,8 +837,11 @@ html[data-route="options"] body {
 .admin-table td:first-child {
   white-space: normal;
 }
+/* At least a 24px target under a mouse; touch raises it below. */
 .admin-table td:first-child a {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-height: max(1.5rem, 24px);
   min-width: 12rem;
   max-width: 20rem;
   overflow-wrap: anywhere;
