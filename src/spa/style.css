@@ -647,6 +647,23 @@ html[data-route="options"] body {
   text-align: center;
   text-decoration: none;
 }
+/* Narrower than the five tabs need, they sit in two even rows, three and
+   two, instead of wrapping wherever they run out and leaving one alone. */
+@media (max-width: 40rem) {
+  .options-nav {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  /* nav.options-nav: above the touch rule that starts standalone links
+     at their own width. */
+  nav.options-nav a {
+    grid-column: span 2;
+    justify-self: stretch;
+  }
+  nav.options-nav a:nth-last-child(-n + 2) {
+    grid-column: span 3;
+  }
+}
 .options-nav a[aria-current="true"] {
   color: var(--selected-fg);
   background: var(--selected-bg);
