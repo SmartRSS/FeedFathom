@@ -2032,24 +2032,37 @@ export function Dashboard(props: {
           <Show
             when={!treeLoading()}
             fallback={
-              <ul class="tree skeleton" aria-hidden="true">
-                <For each={[...Array(50).keys()]}>
-                  {(index) => (
-                    <li>
-                      <div class="source">
-                        <span class="node-icon skeleton-row" />
-                        <span class="skeleton-text">
-                          {
-                            TREE_SKELETON_NAMES[
-                              index % TREE_SKELETON_NAMES.length
-                            ]
-                          }
-                        </span>
-                      </div>
-                    </li>
-                  )}
-                </For>
-              </ul>
+              <>
+                {/* The filter row the loaded tree will have, so nothing
+                    moves when it arrives. */}
+                <Show when={feedFilterBox.get()}>
+                  <input
+                    aria-label="Filter feeds"
+                    class="tree-filter"
+                    disabled
+                    placeholder="Filter feeds"
+                    type="search"
+                  />
+                </Show>
+                <ul class="tree skeleton" aria-hidden="true">
+                  <For each={[...Array(50).keys()]}>
+                    {(index) => (
+                      <li>
+                        <div class="source">
+                          <span class="node-icon skeleton-row" />
+                          <span class="skeleton-text">
+                            {
+                              TREE_SKELETON_NAMES[
+                                index % TREE_SKELETON_NAMES.length
+                              ]
+                            }
+                          </span>
+                        </div>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </>
             }
           >
             {/* First-run guidance (#723): only ever visible while the tree
