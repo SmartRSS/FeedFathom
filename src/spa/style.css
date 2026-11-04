@@ -632,10 +632,15 @@ html[data-route="options"] body {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+/* Tabs grow to fill each wrapped row, so a narrow screen never leaves one
+   alone on a row of its own. */
 .options-nav a {
+  flex: 1 1 auto;
+  justify-content: center;
   padding: var(--space-2) var(--space-3);
   border: var(--border);
   border-radius: var(--radius);
+  text-align: center;
   text-decoration: none;
 }
 .options-nav a[aria-current="true"] {
