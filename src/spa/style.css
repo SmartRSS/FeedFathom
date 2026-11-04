@@ -1583,6 +1583,12 @@ img.skeleton-row {
   .context-menu button,
   .admin-table th button,
   .admin-table-actions button {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+  .admin-table td:first-child a {
+    display: flex;
+    align-items: center;
     min-height: var(--touch);
   }
   /* Tabs and the standalone links (Home, Register instead, Login, the
@@ -1665,8 +1671,6 @@ img.skeleton-row {
   }
   .admin-table td:first-child a {
     max-width: none;
-    padding-block: var(--space-3);
-    white-space: nowrap;
   }
   .admin-table td.admin-table-actions {
     display: flex;
