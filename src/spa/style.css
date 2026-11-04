@@ -1052,10 +1052,9 @@ a {
   flex-shrink: 0;
   margin: var(--space-2);
 }
-/* "No feeds match that." stands alone: the empty tree beside it would push
-   it down the pane. */
-p.tree-empty + .tree,
-.tree-empty[role="alert"] + .tree {
+/* "No feeds match that." and the load failure stand alone: the empty tree
+   beside them would push them down the pane. */
+.sources-pane .article-list-empty + .tree {
   display: none;
 }
 .tree-empty {
@@ -1270,8 +1269,10 @@ button.source {
   align-items: flex-start;
 }
 .tree-empty-heading {
+  font-weight: 700;
+}
+.tree-empty p {
   margin: 0;
-  font-weight: 600;
 }
 /* A nested list matches .tree too, so it would otherwise inherit that
    rule's scroll-container treatment and reserve a scrollbar gutter of its

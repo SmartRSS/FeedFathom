@@ -2087,15 +2087,23 @@ export function Dashboard(props: {
                 />
               </Show>
               <Show when={treeFailed() && !tree().length}>
-                <div class="tree-empty" role="alert">
-                  <p class="tree-empty-heading">Feeds couldn't load.</p>
-                  <p>{treeFailed()}</p>
-                  <button
-                    type="button"
-                    onClick={() => void refreshCurrentView()}
-                  >
-                    Retry
-                  </button>
+                {/* The same look as the list's failing-feed state: one look
+                    for "couldn't load" wherever it appears. */}
+                <div
+                  class="article-list-empty article-list-failing"
+                  role="alert"
+                >
+                  <p>Feeds couldn't load.</p>
+                  <p class="article-list-failing-reason">{treeFailed()}</p>
+                  <div class="form-actions">
+                    <button
+                      class="button-primary"
+                      type="button"
+                      onClick={() => void refreshCurrentView()}
+                    >
+                      Retry
+                    </button>
+                  </div>
                 </div>
               </Show>
               <Show
@@ -2103,9 +2111,9 @@ export function Dashboard(props: {
                   !treeFailed() && treeFilter().trim() && !visibleTree().length
                 }
               >
-                <p class="tree-empty" role="status">
-                  No feeds match that.
-                </p>
+                <div class="article-list-empty" role="status">
+                  <p>No feeds match that.</p>
+                </div>
               </Show>
               <ul
                 aria-busy={treeLoading()}
