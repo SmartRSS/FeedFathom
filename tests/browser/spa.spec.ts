@@ -984,7 +984,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
   await installApiFixture(page);
   await page.setViewportSize({ height: 500, width: 800 });
   await page.goto("/options");
-  await expect(page.locator(".options-page h1")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
 
   await expect
     .poll(async () =>

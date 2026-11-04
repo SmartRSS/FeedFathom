@@ -547,14 +547,32 @@ main {
 .account-form input {
   width: 100%;
 }
-/* Page titles. */
+/* Page titles: a step of the type scale, smaller in the single-pane
+   layer (below). Options and Admin carry theirs in a toolbar instead. */
 .account-form h1,
-.account-result h1,
-.options-page h1,
-.admin-page h1 {
+.account-result h1 {
   margin: 0;
-  font-size: clamp(var(--fs-xl), 4vw, var(--fs-2xl));
+  font-size: var(--fs-2xl);
   line-height: var(--lh-tight);
+}
+/* The page bar of Options and Admin: the panes' toolbar, edge to edge. */
+.page-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.toolbar-link {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--toolbar-button);
+  height: var(--toolbar-button);
+  color: inherit;
+}
+.toolbar-link .icon {
+  width: max(1.25rem, 20px);
+  height: max(1.25rem, 20px);
 }
 
 .options-page {
@@ -562,7 +580,9 @@ main {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   align-content: start;
-  width: min(100%, 32rem);
+  /* Wide enough for the five section tabs on one row from a 640px
+     screen up. */
+  width: min(100%, 40rem);
   margin: 2rem auto;
 }
 /* The options route is the one page the document itself scrolls: #app is a
@@ -688,14 +708,21 @@ html[data-route="options"] body {
   text-decoration: none;
 }
 
+/* A column: the page bar, a message when there is one, and the table,
+   which takes the rest and scrolls. */
 .admin-page {
-  display: grid;
-  grid-template-rows: auto auto auto 1fr;
-  gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
   height: 100%;
   min-height: 0;
 }
+.admin-page > .page-toolbar {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+}
 .admin-table-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   border: var(--border);
   border-radius: var(--radius);
@@ -2006,14 +2033,12 @@ input[aria-invalid="true"] {
     align-items: center;
     min-height: var(--touch);
   }
-  /* Tabs and the standalone links (Home, Register instead, Login, the
-     reader's Original) are targets too. */
+  /* Tabs and the standalone links (Register instead, Login, the reader's
+     Original) are targets too. */
   .reader-meta a,
   .options-nav a,
   .account-form > a,
-  .account-result > a,
-  .options-page > a,
-  .admin-page > a {
+  .account-result > a {
     display: inline-flex;
     align-items: center;
     justify-self: start;

@@ -8,6 +8,7 @@ import {
 import { api, messageOf } from "./api.ts";
 import { confirmDialog, promptDialog } from "./dialog.tsx";
 import { formatDate } from "./format-date.ts";
+import { PageToolbar } from "./page-toolbar.tsx";
 
 // A timestamp in the reader's chosen date format, the exact value on hover.
 function Timestamp(props: { iso: string | null }) {
@@ -143,17 +144,30 @@ export function Admin(props: {
 
   return (
     <main class="admin-page">
-      <h1>Admin</h1>
-      <a
-        href="/"
-        onClick={(event) => {
-          event.preventDefault();
-          props.navigate("/");
-        }}
-      >
-        Home
-      </a>
+      <PageToolbar navigate={props.navigate} title="Admin" />
       <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
+      {/* Where the table stacks, its header row has no columns to head:
+          one control sorts instead (style.css shows one or the other). */}
+      <label class="admin-sort">
+        Sort by
+        <select
+          value={`${sortBy()}:${order()}`}
+          onChange={(event) => sortByChoice(event.currentTarget.value)}
+        >
+          <For each={ADMIN_COLUMNS}>
+            {(column) => (
+              <>
+                <option value={`${column.sort}:asc`}>
+                  {column.label}, ascending
+                </option>
+                <option value={`${column.sort}:desc`}>
+                  {column.label}, descending
+                </option>
+              </>
+            )}
+          </For>
+        </select>
+      </label>
       <div
         aria-label="Feed sources"
         class="admin-table-scroll"
