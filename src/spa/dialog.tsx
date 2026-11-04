@@ -237,6 +237,8 @@ export function DialogHost() {
       {(current) => (
         <dialog
           class="app-dialog"
+          // The shortcut sheet is a table, wider than a form dialog.
+          classList={{ "app-dialog-wide": current().kind === "help" }}
           // The dialog's accessible name is its visible title (#817); a
           // confirm's message describes it.
           aria-describedby={

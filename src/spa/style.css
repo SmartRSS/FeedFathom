@@ -1254,8 +1254,13 @@ a {
    by the UA when open via showModal(); it only needs its own surface styling.
    The form width keeps the box modest; max-width keeps it on a phone
    screen whatever its content measures. */
+/* One width for every form dialog, whatever its content, and a wider step
+   for the shortcut sheet; both stay inside a phone's screen. */
 dialog.app-dialog {
-  max-width: calc(100vw - 2 * var(--space-4));
+  --dialog-w: 24rem;
+
+  width: min(var(--dialog-w), 100vw - 2 * var(--space-4));
+  max-width: none;
   padding: var(--space-4);
   background: var(--white);
   color: var(--grey-90);
@@ -1272,11 +1277,13 @@ dialog.app-dialog {
 dialog.app-dialog::backdrop {
   background: rgb(0 0 0 / 40%);
 }
+dialog.app-dialog.app-dialog-wide {
+  --dialog-w: 32rem;
+}
 dialog.app-dialog form {
   display: flex;
   flex-flow: column;
   gap: var(--space-4);
-  max-width: 24rem;
 }
 dialog.app-dialog label {
   display: flex;
