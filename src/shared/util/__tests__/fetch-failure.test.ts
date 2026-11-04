@@ -29,12 +29,17 @@ test.each([
     true,
   ],
   [
+    "site refusing",
+    [status(401), status(403), status(429)],
+    "This site is refusing FeedFathom's requests.",
+    false,
+  ],
+  [
     "site down",
     [
       status(500),
       status(503),
-      status(403),
-      status(429),
+      status(400),
       "connect ECONNREFUSED 1.2.3.4:443",
       "The request timed out",
       "unable to verify the first certificate",

@@ -18,8 +18,16 @@ export function classifyFetchFailure(reason: string): FetchFailure {
     Number(/received status (\d{3})/u.exec(reason)?.[1]) || undefined;
   if (status === 404 || status === 410)
     return { editable: true, sentence: gone, status };
-  // Any other refusal -- an error page, a block, a rate limit -- is the site's
-  // own trouble, and the address may well be right.
+  // A site that wants a login, blocks the fetcher or rate-limits it: the
+  // address is right, so a new one won't help.
+  if (status === 401 || status === 403 || status === 429)
+    return {
+      editable: false,
+      sentence: "This site is refusing FeedFathom's requests.",
+      status,
+    };
+  // Any other error status is the site's own trouble, and the address may
+  // well be right.
   if (status) return { editable: false, sentence: down, status };
   if (/ENOTFOUND|EAI_AGAIN/u.test(reason))
     return { editable: true, sentence: "This site can't be found.", status };
