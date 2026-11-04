@@ -1930,24 +1930,43 @@ img.skeleton-row {
 .reader :is(h3, h4, h5, h6) {
   font-size: var(--fs-md);
 }
-/* Feed · author · time, with the way to the original at the end. */
+/* Their spacing from the scale rather than the browser's em margins:
+   more above than below, so a heading leads into its own section. */
+.reader :is(h2, h3, h4, h5, h6) {
+  margin-block: var(--space-6) var(--space-2);
+}
+/* Feed, author and time wrap in the first column; Original ends the first
+   line in the second, however the first wraps. */
 .reader-meta {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 0 var(--space-2);
+  gap: 0 var(--space-4);
   margin: var(--space-1) 0 var(--space-6);
   color: var(--muted);
   font-size: var(--fs-sm);
 }
-/* The dot trails an item, so a wrapped line never starts with one. */
-.reader-meta > :not(a):has(+ :not(a))::after {
-  content: "·";
-  margin-inline-start: var(--space-2);
-  color: var(--muted);
+/* Each item leads with its dot, and the run is shifted back by one dot's
+   width inside a clipped box: the first item of every line, wrapped or
+   not, has its dot cut off, so no line starts or ends with one. */
+.reader-meta-items {
+  --meta-dot: var(--space-4);
+
+  display: block;
+  overflow: clip;
 }
-.reader-meta a {
-  margin-inline-start: auto;
+.reader-meta-items > span {
+  display: block;
+  margin-inline-start: calc(-1 * var(--meta-dot));
+}
+.reader-meta-items > span > * {
+  display: inline-block;
+}
+.reader-meta-items > span > *::before {
+  display: inline-block;
+  width: var(--meta-dot);
+  content: "·";
+  text-align: center;
 }
 .reader img,
 .reader video {
@@ -2328,18 +2347,6 @@ textarea[aria-invalid="true"]:focus {
   }
   .pane-title {
     display: block;
-  }
-  /* The reader's feed, author, time and Original stack, one per line, so a
-     wrapped line never ends on a separator dot. */
-  .reader-meta {
-    flex-direction: column;
-    align-items: start;
-  }
-  .reader-meta > :not(a):has(+ :not(a))::after {
-    content: none;
-  }
-  .reader-meta a {
-    margin-inline-start: 0;
   }
   .dashboard > .discovery-wide {
     grid-column: auto;

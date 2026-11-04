@@ -17,13 +17,17 @@ export function ReaderHeader(props: {
     <header class="reader-header">
       <h1>{props.title}</h1>
       <p class="reader-meta">
-        <Show when={props.feed}>{(name) => <span>{name()}</span>}</Show>
-        <Show when={props.author && props.author !== props.feed}>
-          <span>{props.author}</span>
-        </Show>
-        <time datetime={props.publishedAt}>
-          {formatDate(props.publishedAt)}
-        </time>
+        <span class="reader-meta-items">
+          <span>
+            <Show when={props.feed}>{(name) => <span>{name()}</span>}</Show>
+            <Show when={props.author && props.author !== props.feed}>
+              <span>{props.author}</span>
+            </Show>
+            <time datetime={props.publishedAt}>
+              {formatDate(props.publishedAt)}
+            </time>
+          </span>
+        </span>
         <Show when={props.url}>{(url) => <a href={url()}>Original</a>}</Show>
       </p>
     </header>
