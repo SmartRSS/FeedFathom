@@ -102,8 +102,16 @@ export type PaneSwitchHost = {
     | undefined;
 };
 
+// When the dashboard shows one pane at a time: a phone, and a portrait
+// tablet, whose width cannot fit three panes of touch-size rows. A landscape
+// tablet keeps all three. style.css cannot import this, so each of its
+// copies carries a comment pointing here, and a unit test fails if any copy
+// differs.
+export const SINGLE_PANE_QUERY =
+  "(max-width: 768px), (orientation: portrait) and (max-width: 1100px)";
+
 // Applies a pane switch, cross-faded where it reads as one (#990). Only the
-// phone layout shows one pane at a time; on a wider screen every pane stays
+// single-pane layout shows one pane at a time; on a wider screen every pane stays
 // put and a fade would only dim the whole page. A browser that already
 // animated the navigation itself (a swipe back) gets no second animation.
 // Returns when an animated switch has been applied; an instant one already
@@ -116,7 +124,7 @@ export function switchPane(
   if (
     !host.startViewTransition ||
     browserAnimated ||
-    !host.matches("(max-width: 768px)") ||
+    !host.matches(SINGLE_PANE_QUERY) ||
     host.matches("(prefers-reduced-motion: reduce)")
   ) {
     update();

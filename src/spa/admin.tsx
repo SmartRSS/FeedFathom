@@ -186,14 +186,16 @@ export function Admin(props: {
                       {source.url}
                     </a>
                   </td>
-                  <td>{source.subscriberCount}</td>
-                  <td title={source.recentFailureDetails}>
+                  {/* data-label captions each value where the single-pane
+                      layout stacks a row instead of showing the header. */}
+                  <td data-label="Subscribers">{source.subscriberCount}</td>
+                  <td data-label="Failures" title={source.recentFailureDetails}>
                     {source.recentFailures}
                   </td>
-                  <td>{source.lastAttempt ?? "—"}</td>
-                  <td>{source.lastSuccess ?? "—"}</td>
-                  <td>{source.createdAt}</td>
-                  <td>
+                  <td data-label="Last attempt">{source.lastAttempt ?? "—"}</td>
+                  <td data-label="Last success">{source.lastSuccess ?? "—"}</td>
+                  <td data-label="Created">{source.createdAt}</td>
+                  <td data-label="WebSub">
                     <span
                       class="websub-status"
                       classList={{
@@ -203,7 +205,7 @@ export function Admin(props: {
                       {WEBSUB_STATUS_LABELS[source.websubStatus]}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Last via">
                     {source.lastFetchTrigger
                       ? FETCH_TRIGGER_LABELS[source.lastFetchTrigger]
                       : "—"}

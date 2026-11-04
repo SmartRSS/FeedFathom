@@ -1572,7 +1572,7 @@ export function Dashboard(props: {
   // prefetches on its own.
   function scheduleHoverPrefetch(id: number) {
     clearTimeout(hoverPrefetchTimer);
-    if (!matchMedia("(pointer: fine)").matches) return;
+    if (!matchMedia("(pointer: fine) and (hover: hover)").matches) return;
     hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
   async function open(article: ArticleSummary, selection = listController) {

@@ -42,12 +42,20 @@
   --control-radius: var(--radius);
   /* Stronger than --border: a field's edge is its only outline and needs
      3:1 against the page (WCAG 1.4.11). Row and pane hairlines stay on the
-     quieter --border. */
-  --control-border: 1px solid color-mix(in srgb, CanvasText 45%, Canvas);
+     quieter --border. --grey-50 is the fallback; the color-mix() below
+     follows the light or dark canvas where it is supported. */
+  --control-border: 1px solid var(--grey-50);
   /* A text button's fill. The UA's ButtonFace in light schemes; the dark
      block below swaps in a tone between surface and text, because dark
      ButtonFace (#6b6b6b) was the brightest surface on the page. */
   --button-face: ButtonFace;
+  /* A read-only or disabled field's fill: each theme's own panel colour.
+     Under auto+dark that is Field, brighter than the editable fields, so
+     the dark block swaps in a recessed tone. */
+  --field-recessed: var(--grey-10);
+  /* A toolbar icon button. On :root, not .toolbar, so the update banner can
+     clear a bottom toolbar of this height. */
+  --toolbar-button: 1.75rem;
   /* A tree row. Dense under a mouse, a full touch target under a finger. */
   --row-h: 1.25rem;
   --error: #b00020;
@@ -64,13 +72,12 @@
 /* "auto" (the default): CSS system-color keywords, resolved live by the
    browser to the OS's actual current accent/selection color -- not a
    value this app picks, whatever the user's real OS theme says right
-   now. Highlight/HighlightText have been supported since CSS2; the
-   newer AccentColor/AccentColorText are more semantically exact (the
-   OS's chosen accent color specifically, not just "the selection
-   color") so they're declared second, overriding Highlight/HighlightText
-   wherever a browser recognizes them -- an unrecognized keyword makes
-   only that one declaration invalid, leaving the earlier one in effect,
-   so this degrades safely instead of breaking. Every icon in the app is
+   now. A custom property is never validated when it is declared, so
+   listing a newer keyword after an older one is no fallback: the last
+   declaration always wins, and an unsupported keyword only fails where a
+   property uses the variable, which then paints nothing. So the base rule
+   holds values every browser can paint, and each newer value sits behind
+   an @supports test of that exact value. Every icon in the app is
    inlined SVG using currentColor directly (see dashboard.tsx / .chevron
    svg, .node-icon svg, .icon svg below) rather than a baked-in fill, so
    they need no separate override here -- they already track whatever
@@ -82,19 +89,23 @@
      supports both, so an OS/browser dark preference would otherwise be
      ignored entirely by every System Color in this file. */
   color-scheme: light dark;
-  --selected-bg: Highlight;
-  --selected-bg: AccentColor;
-  --selected-fg: HighlightText;
-  --selected-fg: AccentColorText;
+  --selected-bg: var(--blue-60);
+  --selected-fg: #fff;
 }
-/* Chromium resolves AccentColor to #0075ff with white text whatever the OS
-   says, which is 4.21:1 and fails AA for the 13px row text. Where relative
-   colours exist, keep the accent's hue but cap its lightness so white text
-   always clears 4.5:1, whatever accent (light or dark) the OS hands over. */
-@supports (color: oklch(from red l c h)) {
+/* The OS accent, where the browser knows it. The bare AccentColor and
+   AccentColorText pair is not used: Chromium resolves it to #0075ff with
+   white text, 4.21:1, which fails AA for row text. Instead the accent's hue
+   is kept and its lightness capped, so white text always clears 4.5:1,
+   whatever accent the OS hands over. Tested on AccentColor itself: a
+   browser can support relative colours and still not know the keyword. */
+@supports (color: oklch(from AccentColor l c h)) {
   :root[data-theme="auto"] {
     --selected-bg: oklch(from AccentColor min(l, 0.5) c h);
-    --selected-fg: #fff;
+  }
+}
+@supports (color: color-mix(in srgb, CanvasText 45%, Canvas)) {
+  :root {
+    --control-border: 1px solid color-mix(in srgb, CanvasText 45%, Canvas);
   }
 }
 /* Only under an OS/browser dark color scheme: surfaces and text follow
@@ -112,13 +123,24 @@
     --grey-20: Field;
     /* ButtonBorder resolves to pure white in Chromium's dark scheme, which
        drew every row and pane edge far louder than the light grid. */
-    --grey-30: color-mix(in srgb, CanvasText 22%, Canvas);
+    --grey-30: GrayText;
     --grey-40: GrayText;
     --grey-50: GrayText;
     --white: Canvas;
     --blue: LinkText;
     --error: #ff6b6b;
-    --button-face: color-mix(in srgb, CanvasText 14%, Canvas);
+    --field-recessed: Canvas;
+  }
+}
+/* Tones between dark surface and text. Without color-mix() the hairlines
+   stay GrayText and buttons keep the UA's ButtonFace. */
+@supports (color: color-mix(in srgb, CanvasText 22%, Canvas)) {
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --grey-30: color-mix(in srgb, CanvasText 22%, Canvas);
+      --button-face: color-mix(in srgb, CanvasText 14%, Canvas);
+      --field-recessed: color-mix(in srgb, CanvasText 5%, Canvas);
+    }
   }
 }
 
@@ -142,6 +164,9 @@
    flat approximation of the surface/border/font/radius already carries
    most of the period feel. */
 :root[data-theme="classic"] {
+  /* Fields take the theme's own border grey, 3.95:1 on its white fields,
+     rather than the shared mixed tone. */
+  --control-border: 1px solid var(--grey-30);
   --selected-bg: #000080;
   --selected-fg: #fff;
   --grey-10: #c0c0c0;
@@ -401,9 +426,13 @@ html[data-route="options"] #app {
   border: var(--border);
   border-radius: var(--radius);
 }
-@media (width > 768px) {
+.options-mobile-layout {
+  display: none;
+}
+/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/behavior.ts. */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
   .options-mobile-layout {
-    display: none;
+    display: grid;
   }
 }
 .options-card h2 {
@@ -569,7 +598,8 @@ label {
   border-radius: var(--control-radius);
 }
 /* A field the user cannot edit gets a fill and a dashed edge, so it does
-   not read as one waiting for input. */
+   not read as one waiting for input. Its text stays at full contrast:
+   these hold URLs people read and copy. */
 :where(
   input:not([type="checkbox"], [type="radio"], [type="file"]):is(
       :disabled,
@@ -578,7 +608,8 @@ label {
   select:disabled,
   textarea:is(:disabled, :read-only)
 ) {
-  background: var(--grey-10);
+  color: var(--grey-90);
+  background: var(--field-recessed);
   border-style: dashed;
 }
 /* Text buttons paint with --button-face and the UA's ButtonText, which every
@@ -709,8 +740,6 @@ a {
 }
 
 .toolbar {
-  --toolbar-button: 1.75rem;
-
   flex-shrink: 0;
   min-height: calc(var(--toolbar-button) + 2 * var(--space-1));
   display: flex;
@@ -889,7 +918,7 @@ dialog.app-dialog .app-dialog-actions {
 }
 /* The keyboard cheat sheet (#709) rides in the same DialogHost dialog: same
    surface, border and text tokens as the form variant, so every theme and
-   the 768px breakpoint come along for free. The list scrolls rather than
+   the single-pane layout come along for free. The list scrolls rather than
    growing the dialog past a phone screen. */
 dialog.app-dialog .app-dialog-title {
   margin: 0;
@@ -1440,9 +1469,6 @@ img.skeleton-row {
   margin: 0;
   font-size: var(--fs-lg);
 }
-.feed-discovery-form input:disabled {
-  color: var(--muted);
-}
 .empty-pane {
   margin: 0;
   padding: var(--space-4);
@@ -1517,13 +1543,15 @@ img.skeleton-row {
 /* A mouse gets the dense lists a list-heavy reader wants: the small type
    step and tight rows, about 19 articles on a 900px-tall screen. Touch keeps
    the 1rem rows above. */
-@media (pointer: fine) {
+@media (pointer: fine) and (hover: hover) {
   .source,
   .article {
     font-size: var(--fs-sm);
   }
+  /* 24px rows: the smallest target size WCAG 2.5.8 allows for rows
+     stacked without a gap. */
   .source {
-    line-height: 1.25rem;
+    line-height: 1.5rem;
   }
   .article {
     --title-h: 1.125rem;
@@ -1534,17 +1562,18 @@ img.skeleton-row {
   }
 }
 /* Touch sizing follows the input, not the width: a tablet is as much a
-   finger target as a phone. Targets are floored in px so they stay usable
-   when the user scales text down. */
-@media (pointer: coarse) {
+   finger target as a phone. hover: none catches touch browsers that report
+   their primary pointer as fine (Firefox on Android does when a mouse is
+   attached). Targets are floored in px so they stay usable when the user
+   scales text down. */
+@media (pointer: coarse), (hover: none) {
   :root {
     --touch: max(2.75rem, 44px);
     --control-h: var(--touch);
     --row-h: var(--touch);
+    --toolbar-button: var(--touch);
   }
   .toolbar {
-    --toolbar-button: var(--touch);
-
     gap: 0;
     padding: 0 var(--space-1);
   }
@@ -1556,8 +1585,9 @@ img.skeleton-row {
   .admin-table-actions button {
     min-height: var(--touch);
   }
-  /* Tabs and the standalone links (Home, Register instead, Login) are
-     targets too. */
+  /* Tabs and the standalone links (Home, Register instead, Login, the
+     reader's Original) are targets too. */
+  .reader > a,
   .options-nav a,
   .account-form > a,
   .account-result > a,
@@ -1570,17 +1600,83 @@ img.skeleton-row {
     min-height: var(--touch);
   }
 }
-/* A tablet-width window: the feed pane keeps room for its names, and the
-   list pane for four touch-size buttons and the filter. */
+/* A landscape tablet, or a desktop window this narrow, keeps three panes:
+   the feed pane keeps room for its names, and the list pane for four
+   touch-size buttons and the filter. A portrait tablet falls under the
+   single-pane layer below, which overrides these columns. */
 @media (769px <= width <= 1100px) {
   .dashboard {
     grid-template-columns: minmax(15rem, 30%) minmax(17rem, 30%) minmax(0, 1fr);
   }
 }
-/* The phone layer changes layout only. Type keeps the desktop scale on the
-   user's own root size, because no fixed upscale suits both a browser at
-   its default and one the user has scaled down. */
-@media (max-width: 768px) {
+/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/behavior.ts): a
+   phone, or a portrait tablet, shows one pane at a time. It changes layout
+   only. Type keeps the desktop scale on the user's own root size, because
+   no fixed upscale suits both a browser at its default and one the user
+   has scaled down. */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  /* With the toolbars at the bottom, the banner sits above them instead of
+     covering Refresh, the filter and Options. */
+  /* The admin table stacks: one block per source, each value captioned
+     from its data-label. The header stays as a row of sort buttons. */
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table thead {
+    display: block;
+  }
+  .admin-table {
+    white-space: normal;
+  }
+  .admin-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--border);
+  }
+  .admin-table th {
+    padding: 0;
+    border: 0;
+  }
+  .admin-table th:not([aria-sort]) {
+    display: none;
+  }
+  .admin-table tbody tr {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--border);
+  }
+  .admin-table td,
+  .admin-table td:nth-child(2),
+  .admin-table td:nth-child(3) {
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    text-align: left;
+    border: 0;
+  }
+  .admin-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+  }
+  .admin-table td:first-child {
+    display: block;
+  }
+  .admin-table td:first-child a {
+    max-width: none;
+    padding-block: var(--space-3);
+    white-space: nowrap;
+  }
+  .admin-table td.admin-table-actions {
+    display: flex;
+  }
+  html[data-mobile-list-anchor="true"] .update-banner {
+    bottom: calc(
+      env(safe-area-inset-bottom) + var(--toolbar-button) + 2 * var(--space-1) +
+        var(--space-2)
+    );
+  }
   .article-filter-label {
     position: absolute;
     width: 1px;
@@ -1600,8 +1696,12 @@ img.skeleton-row {
   .options-card {
     padding: var(--space-4);
   }
+  /* A narrow gutter, but still the reader's measure: a phone zoomed out
+     lays out 600-650px wide, where full-width lines run past 80
+     characters. */
   .reader {
-    padding: var(--space-4);
+    padding: var(--space-4)
+      max(var(--space-4), (100% - var(--reader-measure)) / 2);
   }
   .dashboard {
     grid-template-columns: minmax(0, 1fr);

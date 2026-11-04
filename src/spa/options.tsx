@@ -461,8 +461,8 @@ export function Options(props: {
               ]}
             />
           </section>
-          {/* Only where the mobile layout exists: style.css hides it past the
-              same 768px breakpoint the mobile rules use. */}
+          {/* Only where the mobile layout exists: style.css shows it under the
+              single-pane query (SINGLE_PANE_QUERY in behavior.ts). */}
           <section class="options-card options-mobile-layout">
             <h2>Mobile layout</h2>
             <PreferenceSelect

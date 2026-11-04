@@ -7,6 +7,7 @@ import {
   resolveRoute,
   safeNextPath,
   soleSelectedIndex,
+  SINGLE_PANE_QUERY,
   switchPane,
   transitionArticleSelection,
   withDashboardPane,
@@ -69,7 +70,7 @@ const switchOnce = (
   );
   return ran;
 };
-const narrow = "(max-width: 768px)";
+const narrow = SINGLE_PANE_QUERY;
 const reduce = "(prefers-reduced-motion: reduce)";
 
 describe("switchPane", () => {
