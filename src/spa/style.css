@@ -1914,8 +1914,17 @@ img.skeleton-row {
   margin-top: calc(-1 * var(--space-2));
   font-size: var(--fs-sm);
 }
-input[aria-invalid="true"] {
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
   border-color: var(--error);
+}
+/* Focus must not hide the error: the ring takes the error colour too. */
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus {
+  outline: 2px solid var(--error);
+  outline-offset: 1px;
 }
 /* A pane with nothing to show says so the way the article list does:
    centred and muted. */
