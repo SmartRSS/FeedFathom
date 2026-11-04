@@ -2363,7 +2363,16 @@ export function Dashboard(props: {
                 <Show
                   when={selectedNode()}
                   fallback={
-                    <Show when={authenticated()}>
+                    <Show
+                      when={authenticated()}
+                      fallback={
+                        <Show when={treeFailed()}>
+                          <div class="article-list-empty" role="status">
+                            <p>Nothing to list until the feeds load.</p>
+                          </div>
+                        </Show>
+                      }
+                    >
                       <div class="article-list-empty" role="status">
                         <p>Select a feed to read.</p>
                       </div>
@@ -2519,7 +2528,9 @@ export function Dashboard(props: {
                     <Show
                       when={selected()}
                       fallback={
-                        <p class="empty-pane">Select an article to read.</p>
+                        <Show when={!treeFailed()}>
+                          <p class="empty-pane">Select an article to read.</p>
+                        </Show>
                       }
                     >
                       <p>Reader content unavailable.</p>

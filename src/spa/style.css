@@ -1892,14 +1892,13 @@ img.skeleton-row {
 input[aria-invalid="true"] {
   border-color: var(--error);
 }
+/* A pane with nothing to show says so the way the article list does:
+   centred and muted. */
 .empty-pane {
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-8) var(--space-4);
   color: var(--muted);
-}
-/* The reader already pads its content. */
-.reader > .empty-pane {
-  padding: 0;
+  text-align: center;
 }
 .toolbar strong,
 .toolbar .toolbar-title {
