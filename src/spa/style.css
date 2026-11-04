@@ -9,7 +9,9 @@
   --grey-50: #737373;
   --grey-90: #0c0c0d;
   --white: #fff;
-  --border: 1px solid var(--grey-30);
+  /* The hairline's width on its own, for heights that must count it. */
+  --border-w: 1px;
+  --border: var(--border-w) solid var(--grey-30);
   --blue: var(--blue-60);
   --muted: var(--grey-50);
   /* Kept as their own tokens rather than reusing --blue-60 so selection
@@ -96,9 +98,12 @@
      clear a bottom toolbar of this height. */
   --toolbar-button: 1.75rem;
   /* A toolbar holds icon buttons and the list filter, which is a field like
-     any other: it is as tall as the taller of the two, plus a half step. */
+     any other: it is as tall as the taller of the two, plus a half step
+     and its own bottom border, so every pane's toolbar is the same height
+     whatever it holds. */
   --toolbar-h: calc(
-    max(var(--toolbar-button), var(--control-h)) + 2 * var(--space-half)
+    max(var(--toolbar-button), var(--control-h)) + 2 * var(--space-half) +
+      var(--border-w)
   );
   /* A tree row. Dense under a mouse, a full touch target under a finger. */
   --row-h: 1.25rem;
@@ -399,7 +404,8 @@
   --grey-40: #1a1a1a;
   --grey-50: #000;
   --grey-90: #000;
-  --border: 2px solid #000;
+  --border-w: 2px;
+  --border: var(--border-w) solid #000;
   --control-border: var(--border);
   --selected-bg: #37006e;
   --selected-fg: #fff;
@@ -1059,7 +1065,7 @@ a {
 .toolbar select {
   flex: none;
   height: var(--control-h);
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-2);
   font-size: var(--fs-md);
 }
 .toolbar button.only-mobile {
