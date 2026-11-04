@@ -81,8 +81,10 @@ export class SourcesDataService {
       reservedBy?: number;
       url: string;
     },
-    db: Pick<BunSQLDatabase<typeof schema>, "insert" | "select"> = this
-      .drizzleConnection,
+    db: Pick<
+      BunSQLDatabase<typeof schema>,
+      "insert" | "select"
+    > = this.drizzleConnection,
   ): Promise<Source> {
     const inserted = (
       await db
