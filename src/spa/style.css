@@ -60,6 +60,8 @@
      Under auto+dark that is Field, brighter than the editable fields, so
      the dark block swaps in a recessed tone. */
   --field-recessed: var(--grey-10);
+  /* Toolbars and pane headings: the panel tone, set apart from the page. */
+  --surface: var(--grey-10);
   /* How fields and buttons are drawn. The shared values below are this
      app's own look; each named theme replaces them with the look of the
      desktop it imitates, so the shared rules only ever read these. */
@@ -140,6 +142,9 @@
      near-identical ButtonText and ButtonFace. */
   --button-fg: var(--grey-90);
   --button-face: var(--grey-10);
+  /* #f9f9fa sat too close to the white page for a toolbar to read as a
+     surface; the next grey step does. */
+  --surface: var(--grey-20);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
@@ -206,6 +211,7 @@
       /* Panels, toolbars and buttons share one raised tone; --grey-20 sits
          below it, so the loading shimmer that runs between the two shows. */
       --grey-10: color-mix(in srgb, CanvasText 14%, Canvas);
+      --surface: var(--grey-10);
       --grey-20: color-mix(in srgb, CanvasText 8%, Canvas);
       --button-face: var(--grey-10);
       --field-recessed: color-mix(in srgb, CanvasText 5%, Canvas);
@@ -720,7 +726,7 @@ html[data-route="options"] body {
 .admin-table thead {
   position: sticky;
   top: 0;
-  background: var(--grey-10);
+  background: var(--surface);
 }
 .admin-table th button {
   box-shadow: none;
@@ -1004,7 +1010,7 @@ a {
   gap: var(--space-1);
   padding: var(--space-half) var(--space-2);
   border-bottom: var(--border);
-  background: var(--grey-10);
+  background: var(--surface);
 }
 .toolbar > span {
   flex: 1;
@@ -1072,14 +1078,11 @@ a {
   margin: 0;
   flex: 1;
   overflow: auto;
-  /* Without this, an overlay-style scrollbar (macOS, or Windows/Linux in
-     overlay mode) doesn't reserve layout space -- it renders on top of
-     the last few pixels of content instead, which is what made the
-     selection/focus rect look like it ran under (and slightly past) the
-     scrollbar. Reserving space makes rows stop short of it instead.
-     Chromium/Firefox only as of writing; Safari ignores the property and
-     is back to the old (overlay, no reserved gutter) behavior there. */
-  scrollbar-gutter: stable;
+  /* No reserved gutter: a short tree's rows, and their selection, reach
+     the pane edge. A classic scrollbar takes its column only while the
+     tree overflows; an overlay scrollbar never reserves space, stable or
+     not. */
+  scrollbar-gutter: auto;
   /* scrollbar-gutter alone only fixes browsers that support it; styling
      the scrollbar itself directly removes the OS/browser variability
      that scrollbar-gutter can't reach (Safari, or an OS scrollbar
@@ -1098,6 +1101,12 @@ a {
 }
 .tree::-webkit-scrollbar-track {
   background: transparent;
+}
+/* Where a scrollbar does show, nothing inside the tree can paint under it,
+   so its track takes the panel tone: the column reads as a scrollbar beside
+   a selected row instead of a gap in the selection. */
+:root[data-theme="auto"] .tree {
+  scrollbar-color: var(--grey-40) var(--surface);
 }
 /* Custom context menu (#721). Fixed under the pointer, above every pane.
    Uses the app's own surface/text tokens rather than an inverted native
@@ -1640,7 +1649,7 @@ img.skeleton-row {
   padding: var(--space-1) var(--space-3);
   overflow: hidden;
   border-bottom: var(--border);
-  background: var(--grey-10);
+  background: var(--surface);
   font-size: var(--fs-sm);
   font-weight: 700;
   text-overflow: ellipsis;
