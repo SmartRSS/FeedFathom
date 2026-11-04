@@ -150,6 +150,9 @@
   --button-fg: var(--grey-90);
   --surface: var(--grey-20);
   --button-face: var(--surface);
+  /* Read-only fields: #f9f9fa barely differed from the white page, so only
+     the dashed edge said "read-only"; the surface grey does too. */
+  --field-recessed: var(--grey-20);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
