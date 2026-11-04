@@ -667,22 +667,28 @@ html[data-route="options"] body {
   text-align: center;
   text-decoration: none;
 }
-/* Narrower than the five tabs need, they sit in two columns, each tab on
-   one line, with the last spanning both: even rows, none left alone, and
-   no tab taller than the rest because its label wrapped. */
+/* Narrower than the five tabs need, they stay one 44px row at their own
+   width and scroll sideways: no wrapped rows, no tab stretched alone. The
+   row fades out at its trailing edge, and whichever tab reaches that edge
+   is cut off by it, so more tabs plainly lie that way; the end padding
+   lets the last tab scroll clear of the fade. */
 @media (max-width: 40rem) {
   .options-nav {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    padding-inline-end: var(--space-8);
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - var(--space-8)),
+      transparent
+    );
   }
-  /* nav.options-nav: above the touch rule that starts standalone links
-     at their own width. */
   nav.options-nav a {
-    justify-self: stretch;
+    flex: none;
+    scroll-snap-align: start;
     white-space: nowrap;
-  }
-  nav.options-nav a:last-child {
-    grid-column: 1 / -1;
   }
 }
 .options-nav a[aria-current="true"] {

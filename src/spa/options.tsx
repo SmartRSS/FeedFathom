@@ -1,4 +1,11 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import type { Static } from "typebox";
 import {
   sessionResponse,
@@ -106,6 +113,15 @@ export function Options(props: {
   const [active, setActive] = createSignal<SectionId>(
     sectionFromHash(location.hash),
   );
+  // Where the tabs scroll sideways (a narrow phone), the current one is
+  // brought into view, however the section was chosen.
+  let nav: HTMLElement | undefined;
+  createEffect(() => {
+    active();
+    nav
+      ?.querySelector('[aria-current="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
 
   const onHashChange = () => {
     const next = sectionFromHash(location.hash);
@@ -280,7 +296,7 @@ export function Options(props: {
     <>
       <PageToolbar navigate={props.navigate} title="Options" />
       <main class="options-page">
-        <nav class="options-nav" aria-label="Options sections">
+        <nav class="options-nav" aria-label="Options sections" ref={nav}>
           <For each={sections}>
             {(section) => (
               <a
