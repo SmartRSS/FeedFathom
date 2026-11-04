@@ -42,11 +42,18 @@ test("empty and unparseable values render as nothing in either mode", () => {
   }
 });
 
-test("formatDay names the day alone, in either mode", () => {
+test("formatDay names the day alone, its year only when not this one", () => {
   setDateFormat("locale");
-  const date = new Date("2026-09-07T12:34:00Z");
-  expect(formatDay(date.toISOString())).toBe(
-    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date),
+  const past = new Date("2020-09-07T12:34:00Z");
+  expect(formatDay(past.toISOString())).toBe(
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(past),
+  );
+  const now = new Date();
+  expect(formatDay(now.toISOString())).toBe(
+    new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      month: "short",
+    }).format(now),
   );
   setDateFormat("iso");
   expect(formatDay("2026-09-07T23:34:00Z")).toBe("2026-09-07");
