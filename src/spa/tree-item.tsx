@@ -10,6 +10,7 @@ import { Icon } from "./icon.tsx";
 import { storedPreference } from "./preferences.ts";
 import feedRaw from "./assets/icons/System/rss-fill.svg?raw";
 import mailRaw from "./assets/icons/System/mail-fill.svg?raw";
+import alertRaw from "./assets/icons/System/alert-fill.svg?raw";
 import arrowDownRaw from "./assets/icons/Arrows/chevron-down-fill.svg?raw";
 import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
@@ -94,6 +95,10 @@ export function TreeItem(props: {
   // badge -- the server already zeroes the count -- so the row needs its
   // own mark, or a muted feed is indistinguishable from a quiet one.
   const snoozed = () => isSnoozedNode(props.node);
+  // Repeated fetch failures: the row says so, or a dead feed reads exactly
+  // like a quiet, read-up one.
+  const failing = () =>
+    props.node.type === "source" ? (props.node.failing ?? null) : null;
   const favicon = () =>
     props.node.type === "source" ? props.node.favicon : null;
   function toggle() {
@@ -201,6 +206,17 @@ export function TreeItem(props: {
           />
         </Show>
         <span class="source-name">{props.node.name}</span>
+        <Show when={failing()}>
+          {(state) => (
+            <span
+              class="source-failing"
+              title={`Not updating: ${state().reason}`}
+            >
+              <Icon raw={alertRaw} />
+              <span class="sr-only">Not updating</span>
+            </span>
+          )}
+        </Show>
         <Show when={snoozed()}>
           <span
             class="snoozed-badge"

@@ -86,6 +86,20 @@ const treeNodeResponse = Type.Cyclic(
       ),
       Type.Object(
         {
+          // Set while the source's recent fetches keep failing: the last
+          // error and when a fetch last succeeded. Absent on older servers.
+          failing: Type.Optional(
+            Type.Union([
+              Type.Object(
+                {
+                  lastSuccess: Type.Union([jsonDate, Type.Null()]),
+                  reason: Type.String(),
+                },
+                exact,
+              ),
+              Type.Null(),
+            ]),
+          ),
           favicon: Type.Union([Type.String(), Type.Null()]),
           homeUrl: Type.String(),
           kind: Type.Union([

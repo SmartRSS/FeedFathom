@@ -262,6 +262,10 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  const failingSelection = () => {
+    const node = selectedNode();
+    return node?.type === "source" ? (node.failing ?? null) : null;
+  };
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
@@ -2278,9 +2282,30 @@ export function Dashboard(props: {
                     </Show>
                   }
                 >
-                  <div class="article-list-empty" role="status">
-                    <p>All caught up.</p>
-                  </div>
+                  <Show
+                    when={failingSelection()}
+                    fallback={
+                      <div class="article-list-empty" role="status">
+                        <p>All caught up.</p>
+                      </div>
+                    }
+                  >
+                    {(failing) => (
+                      <div
+                        class="article-list-empty article-list-failing"
+                        role="status"
+                      >
+                        <p>
+                          {failing().lastSuccess
+                            ? `This feed hasn't updated since ${formatDate(failing().lastSuccess)}.`
+                            : "This feed hasn't loaded yet."}
+                        </p>
+                        <p class="article-list-failing-reason">
+                          {failing().reason}
+                        </p>
+                      </div>
+                    )}
+                  </Show>
                 </Show>
               }
             >

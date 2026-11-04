@@ -349,9 +349,12 @@ export class UserSourcesDataService {
         homeUrl: sources.homeUrl,
         id: sources.id,
         kind: sources.kind,
+        lastSuccess: sources.lastSuccess,
         name: userSources.name,
         parentId: userSources.parentId,
         pausedUntil: userSources.pausedUntil,
+        recentFailureDetails: sources.recentFailureDetails,
+        recentFailures: sources.recentFailures,
         unreadArticlesCount: userSources.unreadCount,
         url: sources.url,
       })
