@@ -87,6 +87,7 @@ export function Admin(props: {
     if (
       !(await confirmDialog(
         `Change "${oldUrl}" to "${newUrl}"? This affects ${source.subscriberCount} subscriber(s).`,
+        { confirmLabel: "Change URL" },
       ))
     )
       return;
@@ -107,7 +108,7 @@ export function Admin(props: {
     if (
       !(await confirmDialog(
         `Delete "${source.url}"? This removes it for every subscriber.`,
-        { danger: true },
+        { confirmLabel: "Delete", danger: true },
       ))
     )
       return;

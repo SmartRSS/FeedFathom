@@ -15,6 +15,9 @@ type DialogRequest =
       kind: "confirm";
       message: string;
       danger: boolean;
+      // The confirm button's label: the action's verb ("Delete") where it
+      // has one, so the button says what happens.
+      confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
   | {
@@ -96,10 +99,11 @@ function show(next: DialogRequest) {
 
 export function confirmDialog(
   message: string,
-  options?: { danger?: boolean },
+  options?: { confirmLabel?: string; danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) =>
     show({
+      confirmLabel: options?.confirmLabel ?? "OK",
       danger: options?.danger ?? false,
       kind: "confirm",
       message,
@@ -203,6 +207,10 @@ export function DialogHost() {
     const current = request();
     return current?.kind === "help" ? current : undefined;
   };
+  const confirmLabel = () => {
+    const current = request();
+    return current?.kind === "confirm" ? current.confirmLabel : "OK";
+  };
   const danger = () => {
     const current = request();
     return current?.kind === "confirm" && current.danger;
@@ -284,7 +292,7 @@ export function DialogHost() {
                 ref={confirmRef}
                 type="submit"
               >
-                {helpRequest() ? "Close" : "OK"}
+                {helpRequest() ? "Close" : confirmLabel()}
               </button>
             </div>
           </form>

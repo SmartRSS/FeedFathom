@@ -1893,7 +1893,7 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   await page.getByRole("button", { name: "delete source" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
 
   await expect(dialog).toHaveCount(0);
   await expect(sourceRow(page)).toHaveCount(0);
@@ -2491,8 +2491,12 @@ const expectSignIn = async (page: Page, next: string, refusals = 1) => {
 // read a 401 as an expired session. `ready` brings the page to the click
 // that sends the request; the session expires between the two. A failed
 // article change then reloads the list or the tree, a second 401.
+// A prompt confirms with "OK", a delete with its verb.
 const confirm = (page: Page) =>
-  page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^(OK|Delete)$/u })
+    .click();
 const expiringMutations: {
   name: string;
   prepare?: (state: Awaited<ReturnType<typeof installApiFixture>>) => void;
@@ -3389,7 +3393,7 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   await openRowMenu(page, "Tech Preview");
   await page.getByRole("menuitem", { name: "Unsubscribe" }).click();
   await expect(dialog).toContainText('Delete "Tech Preview"?');
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
   await expect(
     page.locator("button.source").filter({ hasText: "Tech Preview" }),
   ).toHaveCount(0);

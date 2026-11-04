@@ -1472,7 +1472,12 @@ export function Dashboard(props: {
       setError("Folder is not empty");
       return;
     }
-    if (!(await confirmDialog(`Delete "${node.name}"?`, { danger: true })))
+    if (
+      !(await confirmDialog(`Delete "${node.name}"?`, {
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    )
       return;
     try {
       setError("");
