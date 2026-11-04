@@ -1625,7 +1625,9 @@ img.skeleton-row {
   font-size: var(--fs-sm);
   font-weight: 700;
   line-height: 1.5rem;
-  text-align: center;
+  /* Lines up with the rows' text, which starts at their padding. */
+  padding-inline: var(--space-2);
+  text-align: start;
 }
 
 /* The reader fills its pane, so a short article starts at the top even where
@@ -1973,6 +1975,14 @@ input[aria-invalid="true"] {
     justify-self: start;
     min-width: var(--touch);
     min-height: var(--touch);
+  }
+  /* A result card centres its text, and its link with it. */
+  .account-result > a {
+    justify-content: center;
+    justify-self: center;
+  }
+  .date-group {
+    padding-inline: var(--space-3);
   }
 }
 /* A landscape tablet, or a desktop window this narrow, keeps three panes:
