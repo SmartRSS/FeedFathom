@@ -81,6 +81,7 @@ import {
 } from "./preferences.ts";
 import { ScrollPastQueue } from "./scroll-past.ts";
 import { formatDate } from "./format-date.ts";
+import { ReaderHeader } from "./reader-header.tsx";
 import { ContextMenu, type ContextMenuItem } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
 import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
@@ -2557,38 +2558,16 @@ export function Dashboard(props: {
             >
               {(item) => (
                 <>
-                  <header class="reader-header">
-                    <h1>{item().article.title}</h1>
-                    {/* One muted line: where it is from, who wrote it, when,
-                        and the way out to the original. The author is left
-                        out when it only repeats the feed's name, which is
-                        what a feed without authors falls back to. */}
-                    <p class="reader-meta">
-                      <Show when={articleFeedName(item().article)}>
-                        {(name) => <span>{name()}</span>}
-                      </Show>
-                      <Show
-                        when={
-                          item().article.author &&
-                          item().article.author !==
-                            articleFeedName(item().article)
-                        }
-                      >
-                        <span>{item().article.author}</span>
-                      </Show>
-                      <time datetime={item().article.publishedAt}>
-                        {formatDate(item().article.publishedAt)}
-                      </time>
-                      <a
-                        href={safeArticleUrl(
-                          item().article.url,
-                          window.location.href,
-                        )}
-                      >
-                        Original
-                      </a>
-                    </p>
-                  </header>
+                  <ReaderHeader
+                    author={item().article.author}
+                    feed={articleFeedName(item().article)}
+                    publishedAt={item().article.publishedAt}
+                    title={item().article.title}
+                    url={safeArticleUrl(
+                      item().article.url,
+                      window.location.href,
+                    )}
+                  />
                   <ReaderBody
                     article={item().article}
                     content={item().content}

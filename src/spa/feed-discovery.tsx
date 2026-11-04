@@ -21,6 +21,7 @@ import {
 } from "#shared/util/newsletter-address.ts";
 import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
+import { ReaderHeader } from "./reader-header.tsx";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
 export function BackButton(props: { backPane(): void }) {
@@ -597,10 +598,13 @@ export function FeedDiscovery(props: {
           >
             {(item) => (
               <>
-                <h1>{item().title}</h1>
-                <Show when={item().url}>
-                  <a href={item().url}>Original</a>
-                </Show>
+                <ReaderHeader
+                  author={item().author}
+                  feed={title() || undefined}
+                  publishedAt={item().publishedAt}
+                  title={item().title}
+                  url={item().url || undefined}
+                />
                 <Enclosures article={item()} body={item().content} />
                 <div innerHTML={item().content} />
               </>
