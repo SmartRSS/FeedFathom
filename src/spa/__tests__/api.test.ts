@@ -4,7 +4,13 @@ import {
   folderResponse,
   sessionResponse,
 } from "#shared/contracts/responses.ts";
-import { api, ApiError, isUnauthorizedError, messageOf } from "../api.ts";
+import {
+  api,
+  ApiError,
+  failureReason,
+  isUnauthorizedError,
+  messageOf,
+} from "../api.ts";
 
 const exactMessage = Type.Object(
   { message: Type.String() },
@@ -346,10 +352,29 @@ test("messageOf keeps an unreadable response's details out of the alert", async 
   );
   expect(cause).toBeInstanceOf(Error);
   expect(String(cause)).toContain("Invalid response from /api/tree (500)");
-  expect(messageOf(cause, "Unable to load feeds.")).toBe(
-    "Unable to load feeds.",
+  // The details stay out; the status the server answered with does not.
+  expect(messageOf(cause, "Could not create folder")).toBe(
+    "Could not create folder. The server answered 500.",
   );
+  expect(failureReason(cause)).toBe("The server answered 500.");
   expect(messageOf(new Error("Folder is not empty"), "x")).toBe(
     "Folder is not empty",
   );
+});
+
+test("failureReason tells an unreadable answer from no answer", async () => {
+  setFetch(() => Promise.resolve(new Response("{}", { status: 200 })));
+  const unreadable = await api("/tree", exactMessage).catch(
+    (error: unknown) => error,
+  );
+  expect(failureReason(unreadable)).toBe(
+    "The server's answer could not be read.",
+  );
+  expect(messageOf(unreadable, "Could not load articles")).toBe(
+    "Could not load articles",
+  );
+  expect(failureReason(await rejectedApiCall())).toMatch(
+    /^(Could not reach the server|You are offline)/u,
+  );
+  expect(failureReason("thrown string")).toBe("The server did not answer.");
 });

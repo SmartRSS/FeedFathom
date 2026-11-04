@@ -29,15 +29,47 @@ export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
 // A response this bundle could not read. Its message names the path and the
-// parse failure, which is for the console and the tests, not the reader.
-class InvalidResponseError extends Error {}
+// parse failure, which is for the console and the tests, not the reader; the
+// HTTP status it came with is for both.
+class InvalidResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | undefined,
+  ) {
+    super(message);
+  }
+}
+
+// An error status the server answered with, if the answer was unreadable.
+const answeredStatus = (cause: unknown) =>
+  cause instanceof InvalidResponseError &&
+  cause.status !== undefined &&
+  cause.status >= 400
+    ? cause.status
+    : undefined;
 
 // An Error carries its own message for the user; anything else thrown, and a
-// response that could not be read, does not, so the caller names what failed.
-export const messageOf = (cause: unknown, fallback: string) =>
-  cause instanceof Error && !(cause instanceof InvalidResponseError)
+// response that could not be read, does not, so the caller names what
+// failed -- adding the status the server answered with, where there is one.
+export const messageOf = (cause: unknown, fallback: string) => {
+  const status = answeredStatus(cause);
+  if (status !== undefined)
+    return `${fallback.replace(/[.!?]?$/u, ".")} The server answered ${status}.`;
+  return cause instanceof Error && !(cause instanceof InvalidResponseError)
     ? cause.message
     : fallback;
+};
+
+// Why a request failed, as a sentence of its own, for a message that already
+// names what failed ("Feeds couldn't load."): the status the server answered
+// with, an answer that could not be read, or the reason no answer came.
+export function failureReason(cause: unknown): string {
+  const status = answeredStatus(cause);
+  if (status !== undefined) return `The server answered ${status}.`;
+  if (cause instanceof InvalidResponseError)
+    return "The server's answer could not be read.";
+  return cause instanceof Error ? cause.message : "The server did not answer.";
+}
 
 const invalidResponse = (
   path: string,
@@ -46,6 +78,7 @@ const invalidResponse = (
 ): Error =>
   new InvalidResponseError(
     `Invalid response from /api${path}${status === undefined ? "" : ` (${status})`}: ${message}`,
+    status,
   );
 
 // Aborting a request is the caller's own decision, not a failure to report:

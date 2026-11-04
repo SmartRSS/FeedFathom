@@ -60,7 +60,7 @@ import {
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import { api, messageOf } from "./api.ts";
+import { api, failureReason, messageOf } from "./api.ts";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
@@ -829,7 +829,7 @@ export function Dashboard(props: {
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
-      setTreeFailed(messageOf(cause, "The server did not answer."));
+      setTreeFailed(failureReason(cause));
     } finally {
       revealTree();
     }
