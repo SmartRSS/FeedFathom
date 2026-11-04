@@ -106,6 +106,9 @@
     max(var(--toolbar-button), var(--control-h)) + 2 * var(--toolbar-pad) +
       var(--border-w)
   );
+  /* The filter or search row above the tree and the list: a field and the
+     space around it. Panes without one offset their placeholder by it. */
+  --search-row-h: calc(var(--control-h) + 2 * var(--space-2));
   /* A tree row. Dense under a mouse, a full touch target under a finger. */
   --row-h: 1.25rem;
   --error: #b00020;
@@ -1986,6 +1989,12 @@ textarea[aria-invalid="true"]:focus {
   padding: var(--space-8) var(--space-4);
   color: var(--muted);
   text-align: center;
+}
+/* The reader has no search row, and pads its content by --space-6 already:
+   its placeholder drops by the difference, so it shares a top line with
+   the tree's and the list's beside it. */
+.reader > .empty-pane {
+  padding-top: calc(var(--search-row-h) + var(--space-8) - var(--space-6));
 }
 .toolbar strong,
 .toolbar .toolbar-title {
