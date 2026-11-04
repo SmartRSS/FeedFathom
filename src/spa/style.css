@@ -1641,16 +1641,18 @@ img.skeleton-row {
 .details > span {
   flex: 1;
 }
-/* The open feed's name, shown only in the single-pane layer. */
+/* The open feed's name, shown only in the single-pane layer. A title, not
+   another date band: body size, more room, and the page's own surface
+   rather than the bands' grey. */
 .pane-title {
   display: none;
   flex-shrink: 0;
   margin: 0;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   overflow: hidden;
   border-bottom: var(--border);
-  background: var(--surface);
-  font-size: var(--fs-sm);
+  background: var(--white);
+  font-size: var(--fs-md);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
