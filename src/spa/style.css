@@ -223,6 +223,11 @@
     color: var(--grey-90);
     border: var(--border);
   }
+  /* A shadow cannot show on a black page, so a dialog rises by its fill:
+     the same raised surface. */
+  :root[data-theme="auto"] dialog.app-dialog {
+    background: var(--surface);
+  }
 }
 /* Tones between dark surface and text. Without color-mix() the hairlines
    stay GrayText and buttons keep the UA's ButtonFace. */
