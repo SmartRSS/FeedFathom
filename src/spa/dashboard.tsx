@@ -55,6 +55,7 @@ import {
 } from "./reading-session.ts";
 import {
   removalOutcome,
+  SINGLE_PANE_QUERY,
   soleSelectedIndex,
   transitionArticleSelection,
   type DashboardPane,
@@ -1007,8 +1008,14 @@ export function Dashboard(props: {
       const openIndex = restored ? Math.min(...restoredIndexes) : 0;
       const focusIndex =
         (restored ? restoredAt(restore?.focusedId) : undefined) ?? openIndex;
+      // Beside a visible reader the first row opens at once. Where one pane
+      // shows at a time the reader is out of sight, so nothing is selected
+      // until the reader asks for something; the keyboard cursor and the
+      // selection anchor still start on the first row.
+      const opensFirst =
+        nextArticles.length > 0 && !matchMedia(SINGLE_PANE_QUERY).matches;
       const nextIndexes = new Set(
-        restored ? restoredIndexes : nextArticles.length ? [openIndex] : [],
+        restored ? restoredIndexes : opensFirst ? [openIndex] : [],
       );
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(
@@ -1039,7 +1046,7 @@ export function Dashboard(props: {
       } else {
         recordAppSnapshot({
           articleFilter: articleFilter(),
-          articleId: nextArticles[openIndex]?.id,
+          articleId: opensFirst ? nextArticles[openIndex]?.id : undefined,
           listScrollTop: 0,
         });
       }

@@ -77,6 +77,27 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
   register: "Register",
 };
 
+// How the reader last drove the page, on <html> as data-input. The tree and
+// list cursor ring belongs to keyboard use: the app focuses rows on its own
+// (the first tree row on load), and :focus-visible counts that as keyboard
+// focus in Chromium, so the ring showed before anyone had typed anything.
+// A bare modifier is not input; Shift-click is still a pointer.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (!["Alt", "Control", "Meta", "Shift"].includes(event.key))
+      document.documentElement.dataset["input"] = "keyboard";
+  },
+  { capture: true },
+);
+window.addEventListener(
+  "pointerdown",
+  () => {
+    document.documentElement.dataset["input"] = "pointer";
+  },
+  { capture: true },
+);
+
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
 const paneSwitchHost: PaneSwitchHost = {

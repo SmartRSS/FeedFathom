@@ -411,13 +411,14 @@
 /* A dotted outline drawn just inside the item's edge, not a glow/shadow.
    White dots on selected (navy/dark) rows so the rect stays visible
    there too -- black dots read as invisible on a dark background. */
-:root[data-theme="high-contrast"] .source:focus-visible,
-:root[data-theme="high-contrast"] .article.active {
+:root[data-theme="high-contrast"][data-input="keyboard"] .source:focus,
+:root[data-theme="high-contrast"][data-input="keyboard"] .article.active {
   outline: 2px dotted var(--grey-90);
   outline-offset: -2px;
 }
-:root[data-theme="high-contrast"] .source.selected:focus-visible,
-:root[data-theme="high-contrast"] .article.selected.active {
+:root[data-theme="high-contrast"][data-input="keyboard"] .source.selected:focus,
+:root[data-theme="high-contrast"][data-input="keyboard"]
+  .article.selected.active {
   outline: 2px dotted var(--selected-fg);
   outline-offset: -2px;
 }
@@ -1374,14 +1375,16 @@ img.skeleton-row {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* :focus-visible, not :focus: the app focuses the first row on load, and
-   the ring belongs to keyboard use, not to a page that just opened. */
+/* The tree and list cursor ring shows only once the keyboard is in use
+   (data-input, set in main.tsx): the app focuses rows on its own, and
+   :focus-visible counts that as keyboard focus, so it lit "Today" on
+   load, touch screens included. */
 .source:focus {
   outline: none;
 }
-.source:focus-visible {
-  outline: 1px dotted var(--grey-90);
-  outline-offset: -1px;
+:root[data-input="keyboard"] .source:focus {
+  outline: 2px dotted var(--grey-90);
+  outline-offset: -2px;
 }
 .source.folder {
   padding-left: var(--space-1);
@@ -1502,17 +1505,17 @@ img.skeleton-row {
 .article:focus {
   outline: 0;
 }
-.article.active {
-  outline: 1px dotted var(--grey-90);
-  outline-offset: -1px;
+:root[data-input="keyboard"] .article.active {
+  outline: 2px dotted var(--grey-90);
+  outline-offset: -2px;
 }
 /* The classic focus rect on a selected item used white dots (an
    XOR-drawn pattern CSS can't replicate, but this gets the same
    result): black dots disappear against the navy selected background,
    so the rect needs to switch to the selected-row's own light text
    color there. */
-.source.selected:focus-visible,
-.article.selected.active {
+:root[data-input="keyboard"] .source.selected:focus,
+:root[data-input="keyboard"] .article.selected.active {
   outline-color: var(--selected-fg);
 }
 
