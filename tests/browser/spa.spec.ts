@@ -441,7 +441,7 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/folders",
+    "Could not create folder",
   );
   expect(state.treeRequests).toBe(1);
 });
@@ -1690,7 +1690,7 @@ test("surfaces a malformed Options session without crashing", async ({
   await openApp(page, { sessionFailure: true }, "/options");
 
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/session",
+    "Could not load session.",
   );
   expect(new URL(page.url()).pathname).toBe("/options");
 });
@@ -2259,7 +2259,7 @@ test("keeps preview usable when folder startup fails", async ({ page }) => {
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/folders",
+    "Could not load folders.",
   );
 });
 
@@ -2491,11 +2491,11 @@ const expectSignIn = async (page: Page, next: string, refusals = 1) => {
 // read a 401 as an expired session. `ready` brings the page to the click
 // that sends the request; the session expires between the two. A failed
 // article change then reloads the list or the tree, a second 401.
-// A prompt confirms with "OK", a delete with its verb.
+// A prompt confirms with "OK", other confirms with their verb.
 const confirm = (page: Page) =>
   page
     .getByRole("dialog")
-    .getByRole("button", { name: /^(OK|Delete)$/u })
+    .getByRole("button", { name: /^(OK|Delete|Change URL)$/u })
     .click();
 const expiringMutations: {
   name: string;
