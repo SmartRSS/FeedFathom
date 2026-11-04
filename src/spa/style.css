@@ -571,6 +571,15 @@ html[data-route="options"] #app {
   min-height: 100%;
   overflow: visible;
 }
+/* Firefox on Android sizes the document's scroll range to the large
+   viewport, as if its toolbar were hidden, but keeps the toolbar showing
+   while the page scrolls, so the last part of the page stayed under the
+   bottom edge. The difference between the large and the current viewport
+   is exactly what it holds back; where the toolbar does hide (Chrome),
+   that difference is zero at the end of the page. */
+html[data-route="options"] body {
+  padding-bottom: calc(100lvh - 100dvh);
+}
 /* Section tabs: one group renders at a time, keyed to the location hash so
    the page's deep links keep working -- a #section id selects that group,
    and the empty-tree guidance's #import-opml resolves into the Data group.
