@@ -195,6 +195,10 @@
     --danger-fg: #fff;
     --danger-border: 1px solid #b00020;
     --field-recessed: Canvas;
+    /* Field edges and muted text are one grey here: GrayText, about 5:1 on
+       the dark canvas, clears 4.5:1 for text and 3:1 for an edge. Two
+       tokens a hair apart read as a mistake. */
+    --control-border: 1px solid var(--grey-50);
   }
 }
 /* Tones between dark surface and text. Without color-mix() the hairlines
