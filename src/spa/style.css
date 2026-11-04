@@ -832,10 +832,13 @@ html[data-route="options"] body {
   display: flex;
   gap: var(--space-2);
 }
+/* Compact under a mouse, but with the text size and side padding every
+   other text button has. */
 .admin-table-actions button {
   --control-h: 1.75rem;
 
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-md);
 }
 .websub-status {
   padding: 0.125rem var(--space-2);
@@ -2167,9 +2170,19 @@ textarea[aria-invalid="true"]:focus {
     display: grid;
     max-width: 20rem;
   }
+  /* Stacked sources fill the width as a grid of cards, as many per row as
+     fit at 22rem, instead of one wide card per row holding a narrow column
+     of content. */
+  .admin-table tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
   .admin-table tbody tr {
     padding: var(--space-2) var(--space-3);
-    border-bottom: var(--border);
+    border: var(--border);
+    border-radius: var(--radius);
   }
   .admin-table td,
   .admin-table td:nth-child(2),
