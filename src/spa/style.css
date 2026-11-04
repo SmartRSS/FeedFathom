@@ -402,12 +402,12 @@
 /* A dotted outline drawn just inside the item's edge, not a glow/shadow.
    White dots on selected (navy/dark) rows so the rect stays visible
    there too -- black dots read as invisible on a dark background. */
-:root[data-theme="high-contrast"] .source:focus,
+:root[data-theme="high-contrast"] .source:focus-visible,
 :root[data-theme="high-contrast"] .article.active {
   outline: 2px dotted var(--grey-90);
   outline-offset: -2px;
 }
-:root[data-theme="high-contrast"] .source.selected:focus,
+:root[data-theme="high-contrast"] .source.selected:focus-visible,
 :root[data-theme="high-contrast"] .article.selected.active {
   outline: 2px dotted var(--selected-fg);
   outline-offset: -2px;
@@ -1344,7 +1344,12 @@ img.skeleton-row {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* :focus-visible, not :focus: the app focuses the first row on load, and
+   the ring belongs to keyboard use, not to a page that just opened. */
 .source:focus {
+  outline: none;
+}
+.source:focus-visible {
   outline: 1px dotted var(--grey-90);
   outline-offset: -1px;
 }
@@ -1476,7 +1481,7 @@ img.skeleton-row {
    result): black dots disappear against the navy selected background,
    so the rect needs to switch to the selected-row's own light text
    color there. */
-.source.selected:focus,
+.source.selected:focus-visible,
 .article.selected.active {
   outline-color: var(--selected-fg);
 }
