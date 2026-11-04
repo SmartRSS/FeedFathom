@@ -2535,6 +2535,14 @@ textarea[aria-invalid="true"]:focus {
   html[data-mobile-list-anchor="true"] .articles-pane > .article-list-empty {
     flex: none;
   }
+  /* The tree's own messages (no match, or the feeds failing to load) keep
+     their pane's space but rest on the filter field below them, where the
+     reader is typing. */
+  html[data-mobile-list-anchor="true"] .sources-pane > .article-list-empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
   html[data-mobile-list-anchor="true"] .articles-pane > .pane-title {
     margin-top: auto;
     border-top: var(--border);
