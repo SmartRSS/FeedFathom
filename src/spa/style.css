@@ -1487,12 +1487,13 @@ img.skeleton-row {
 .article-list.skeleton {
   overflow: hidden;
 }
+/* Upright, with figures of one width, so counts line up down the tree. */
 .source .unread-count {
   flex: none;
   margin-left: auto;
   color: var(--muted);
   font-size: var(--fs-sm);
-  font-style: italic;
+  font-variant-numeric: tabular-nums;
 }
 /* The warning sits right after the name, in the error colour, and turns
    to the row's own text colour when selected like the other row marks. */
@@ -1516,7 +1517,6 @@ img.skeleton-row {
   margin-left: auto;
   color: var(--muted);
   font-size: var(--fs-sm);
-  font-style: italic;
 }
 .source.selected .snoozed-badge {
   color: inherit;
