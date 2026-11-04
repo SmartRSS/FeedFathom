@@ -724,7 +724,10 @@ html[data-route="options"] body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  height: 100%;
+  /* The visible viewport, as the dashboard uses: a bottom page bar must
+     not end under a browser toolbar that stays showing. */
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
 }
 .admin-page > .page-toolbar {
@@ -1881,6 +1884,12 @@ img.skeleton-row {
   opacity: 1;
 }
 
+/* Until a preview has articles to list, the Discover/Edit form takes the
+   list's column as well, so addresses and titles show in full; the reader
+   keeps its own column. The single-pane layer puts it back in one. */
+.dashboard > .discovery-wide {
+  grid-column: span 2;
+}
 /* The form scrolls under its pane's toolbar. Its fields stop at 32rem, like
    the account forms and Options, held by the padding so the scrollbar stays
    at the pane edge on a wide single-pane screen. */
@@ -2136,6 +2145,39 @@ input[aria-invalid="true"] {
   }
   .pane-title {
     display: block;
+  }
+  /* The reader's feed, author, time and Original stack, one per line, so a
+     wrapped line never ends on a separator dot. */
+  .reader-meta {
+    flex-direction: column;
+    align-items: start;
+  }
+  .reader-meta > :not(a):has(+ :not(a))::after {
+    content: none;
+  }
+  .reader-meta a {
+    margin-inline-start: 0;
+  }
+  .dashboard > .discovery-wide {
+    grid-column: auto;
+  }
+  /* Bottom-anchored, the page bar of Options and Admin sits at the bottom
+     edge like every pane's toolbar. Options scrolls the document, so its
+     shell becomes a column with the bar last and sticky; Admin's page is
+     a column already. */
+  html[data-mobile-list-anchor="true"][data-route="options"] #app {
+    display: flex;
+    flex-direction: column;
+  }
+  html[data-mobile-list-anchor="true"] .page-toolbar {
+    order: 1;
+    top: auto;
+    bottom: 0;
+    border-top: var(--border);
+    border-bottom: 0;
+  }
+  html[data-mobile-list-anchor="true"] .admin-page > .page-toolbar {
+    margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
   }
   /* With the pane's column reversed, the heading still goes on top. */
   html[data-mobile-list-anchor="true"] .pane-title {

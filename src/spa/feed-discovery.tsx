@@ -353,7 +353,10 @@ export function FeedDiscovery(props: {
       <aside
         aria-label={props.editing ? "Edit feed" : "Discover feed"}
         class="dashboard-pane sources-pane"
-        classList={{ "focused-pane": props.pane() === "sources" }}
+        classList={{
+          "discovery-wide": !articles().length,
+          "focused-pane": props.pane() === "sources",
+        }}
       >
         {/* A toolbar like the other panes', so the three top edges line up;
             its title is the pane's heading. */}
@@ -522,29 +525,20 @@ export function FeedDiscovery(props: {
           </div>
         </form>
       </aside>
-      <section
-        aria-label="Preview articles"
-        class="dashboard-pane articles-pane"
-        classList={{ "focused-pane": props.pane() === "articles" }}
-      >
-        <div class="toolbar">
-          <BackButton backPane={props.backPane} />
-          <strong>{title() || "Preview"}</strong>
-          <span />
-        </div>
-        <div class="article-list">
-          <Show
-            when={articles().length}
-            fallback={
-              <p class="empty-pane">
-                {props.editing
-                  ? "Editing an existing subscription."
-                  : previewError()
-                    ? "Nothing to preview."
-                    : "Load a feed to preview its articles."}
-              </p>
-            }
-          >
+      {/* The preview list exists only while there is something to list;
+          until then the form takes its column too (style.css). */}
+      <Show when={articles().length}>
+        <section
+          aria-label="Preview articles"
+          class="dashboard-pane articles-pane"
+          classList={{ "focused-pane": props.pane() === "articles" }}
+        >
+          <div class="toolbar">
+            <BackButton backPane={props.backPane} />
+            <strong>{title() || "Preview"}</strong>
+            <span />
+          </div>
+          <div class="article-list">
             {/* The list covers only the rows: the truncation note beside it
                 is not a listitem, and a list may only own listitems. */}
             <div role="list">
@@ -578,9 +572,9 @@ export function FeedDiscovery(props: {
                 it.
               </p>
             </Show>
-          </Show>
-        </div>
-      </section>
+          </div>
+        </section>
+      </Show>
       <article
         aria-label="Preview reader"
         class="dashboard-pane reader-pane"
