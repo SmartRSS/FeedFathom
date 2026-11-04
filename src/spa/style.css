@@ -855,9 +855,11 @@ a {
 .dashboard {
   position: relative;
   display: grid;
-  /* 25/25/50 on a desktop; on a tablet (below) the two list panes keep a
-     usable width and the reader takes what is left. */
-  grid-template-columns: minmax(13rem, 25%) minmax(16rem, 25%) minmax(0, 1fr);
+  /* The list gets the width its titles need; the reader keeps its measure
+     either way, so it gives up only empty margin. On a narrower window
+     (below) the two list panes keep a usable width and the reader takes
+     what is left. */
+  grid-template-columns: minmax(13rem, 22%) minmax(22rem, 30%) minmax(0, 1fr);
   /* The panes take the one stretching row; the load-error alert, when it
      shows, takes its own full-width row above them instead of covering the
      toolbars. */
@@ -1858,7 +1860,7 @@ input[aria-invalid="true"] {
      1rem titles need, since a fixed row height rules out wrapping them. The
      narrower layers below override this. */
   .dashboard {
-    grid-template-columns: minmax(13rem, 24%) minmax(19rem, 34%) minmax(0, 1fr);
+    grid-template-columns: minmax(12rem, 22%) minmax(21rem, 38%) minmax(0, 1fr);
   }
   .context-menu button,
   .admin-table th button,
