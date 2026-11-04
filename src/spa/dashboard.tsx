@@ -781,7 +781,12 @@ export function Dashboard(props: {
     void probeReader();
     // Read the snapshot up front (before any await) so a reload restores the
     // state the tab actually left in, not whatever a faster boot wrote.
-    const restored = restoreEnabled() ? readingSession.snapshot() : undefined;
+    // A preview route opens on its own form: restoring the last reading
+    // session would bring its reader forward over it on one pane.
+    const restored =
+      restoreEnabled() && !props.initialDiscovery
+        ? readingSession.snapshot()
+        : undefined;
     if (!rememberReadingPosition.get())
       try {
         sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);

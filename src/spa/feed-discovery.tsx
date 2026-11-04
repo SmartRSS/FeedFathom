@@ -113,7 +113,7 @@ export function FeedDiscovery(props: {
         try {
           const url = new URL(initialFeedUrl);
           if (url.protocol === "http:" || url.protocol === "https:")
-            void preview(initialFeedUrl);
+            void preview(initialFeedUrl, false);
         } catch {}
       }
     }
@@ -186,7 +186,9 @@ export function FeedDiscovery(props: {
     }
   }
 
-  async function preview(url = feedUrl()) {
+  // A preview the user asked for shows its articles; the one a preview
+  // link starts by itself leaves the form in front.
+  async function preview(url = feedUrl(), showArticles = true) {
     const signal = startRequest();
     setLoading(true);
     setProgress("Loading preview…");
@@ -211,7 +213,7 @@ export function FeedDiscovery(props: {
       setSelectedIndex(result.articles.length ? 0 : undefined);
       setFeeds([]);
       setMessage("");
-      props.focusPane("articles");
+      if (showArticles) props.focusPane("articles");
     } catch (cause) {
       if (signal.aborted || props.handleUnauthorized(cause)) return;
       setPreviewError(
@@ -592,9 +594,11 @@ export function FeedDiscovery(props: {
           <Show
             when={selectedArticle()}
             fallback={
-              <Show when={articles().length}>
-                <p class="empty-pane">Select a preview article.</p>
-              </Show>
+              <p class="empty-pane">
+                {articles().length
+                  ? "Select a preview article."
+                  : "Load a preview to read its articles here."}
+              </p>
             }
           >
             {(item) => (
