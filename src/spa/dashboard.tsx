@@ -301,6 +301,9 @@ export function Dashboard(props: {
   // The feed list failed to load and there is none from before: nothing to
   // filter or search, so both fields are disabled while the panes say so.
   const feedsUnavailable = () => Boolean(treeFailed()) && !tree().length;
+  // The feeds are still on their way and there is none from before: as
+  // with the skeleton's filter box, nothing to search or filter yet.
+  const feedsPending = () => treeLoading() && !tree().length;
   const emptyFolderSelected = () => {
     const node = selectedNode();
     return node?.type === "folder" && node.children.length === 0;
@@ -2267,6 +2270,7 @@ export function Dashboard(props: {
               <span class="article-filter-label">Show</span>
               <select
                 class="article-filter"
+                disabled={feedsPending() || feedsUnavailable()}
                 value={articleFilter()}
                 onChange={(event) => {
                   const next = event.currentTarget.value;
@@ -2318,6 +2322,7 @@ export function Dashboard(props: {
                 class="article-search"
                 disabled={
                   feedsUnavailable() ||
+                  feedsPending() ||
                   (Boolean(failingSelection()) &&
                     !articles().length &&
                     !activeSearch())
