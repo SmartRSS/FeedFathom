@@ -200,7 +200,7 @@ export function TreeItem(props: {
             innerHTML={open() ? folderOpenedRaw : folderRaw}
           />
         </Show>
-        <span>{props.node.name}</span>
+        <span class="source-name">{props.node.name}</span>
         <Show when={snoozed()}>
           <span
             class="snoozed-badge"

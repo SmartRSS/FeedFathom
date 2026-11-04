@@ -2110,7 +2110,7 @@ export function Dashboard(props: {
                 view option, not an action, so it sits right of the spacer
                 with the reader pane's display-mode dropdown (#767). */}
             <label class="article-filter-field">
-              Show
+              <span class="article-filter-label">Show</span>
               <select
                 class="article-filter"
                 value={articleFilter()}

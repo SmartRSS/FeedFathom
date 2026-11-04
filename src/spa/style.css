@@ -19,6 +19,27 @@
   --selected-border: transparent;
   --radius: 0.5rem;
   --font-family: sans-serif;
+  /* One spacing and type scale for the app's own chrome. A one-off value
+     in between two steps is a sign it should snap to one of them. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  /* Every text control (input, select, textarea, button) shares one height,
+     radius and border, so a form reads as one set of controls. The phone
+     layer raises the height to a 44px touch target. */
+  --control-h: 2.25rem;
+  --control-radius: var(--radius);
+  --control-border: var(--border);
+  /* A tree row. Dense on desktop, a full touch target on phone. */
+  --row-h: 1.25rem;
   --error: #b00020;
   --status-success-fg: #0b6b2c;
   --status-success-bg: #d8f3dc;
@@ -56,6 +77,16 @@
   --selected-fg: HighlightText;
   --selected-fg: AccentColorText;
 }
+/* Chromium resolves AccentColor to #0075ff with white text whatever the OS
+   says, which is 4.21:1 and fails AA for the 13px row text. Where relative
+   colours exist, keep the accent's hue but cap its lightness so white text
+   always clears 4.5:1, whatever accent (light or dark) the OS hands over. */
+@supports (color: oklch(from red l c h)) {
+  :root[data-theme="auto"] {
+    --selected-bg: oklch(from AccentColor min(l, 0.5) c h);
+    --selected-fg: #fff;
+  }
+}
 /* Only under an OS/browser dark color scheme: surfaces and text follow
    the same System Color keywords used above for selection, so a dark
    OS theme actually turns this app dark instead of leaving every
@@ -69,8 +100,9 @@
     --grey-90: CanvasText;
     --grey-10: Field;
     --grey-20: Field;
-    --grey-30: GrayText;
-    --grey-30: ButtonBorder;
+    /* ButtonBorder resolves to pure white in Chromium's dark scheme, which
+       drew every row and pane edge far louder than the light grid. */
+    --grey-30: color-mix(in srgb, CanvasText 22%, Canvas);
     --grey-40: GrayText;
     --grey-50: GrayText;
     --white: Canvas;
@@ -200,20 +232,15 @@ main:focus {
 .update-banner {
   position: fixed;
   z-index: 200;
-  right: 0.5rem;
-  bottom: 0.5rem;
+  right: var(--space-2);
+  bottom: var(--space-2);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   background: var(--grey-90);
   color: var(--white);
   border-radius: var(--radius);
-}
-.update-banner button {
-  padding: 0.3rem 0.6rem;
-  color: inherit;
-  background: var(--blue-60);
 }
 
 .sr-only {
@@ -239,6 +266,16 @@ body,
   min-height: 100%;
   margin: 0;
 }
+/* The root size stays the user's own default (100%, never px) on every
+   viewport, so the browser or OS text-size setting scales the whole app in
+   either direction. Mobile font boosting is switched off for the same
+   reason: it enlarges some blocks and not others, so one text setting could
+   never look right everywhere. Sizes below are rem, or em inside a
+   component, so they move together. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   overflow: hidden;
@@ -259,7 +296,7 @@ main {
   gap: 1rem;
   width: min(100%, 32rem);
   margin: 8vh auto;
-  padding: 2rem;
+  padding: var(--space-8);
   border: var(--border);
   border-radius: var(--radius);
 }
@@ -269,16 +306,29 @@ main {
 .account-result > * {
   margin: 0;
 }
+/* The activate page puts its form inside the result card; one card is
+   enough. */
+.account-result .account-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 /* An input is not stretched by the grid: it keeps its size="20" width, which
-   at the 150% mobile root font is wider than the form on a narrow phone. */
+   is wider than the form on a narrow phone. */
 .account-form input {
   width: 100%;
-  min-width: 0;
+}
+.account-form h1,
+.options-page h1 {
+  margin: 0;
+  font-size: clamp(var(--fs-xl), 4vw, 2rem);
+  line-height: 1.2;
 }
 
 .options-page {
   display: grid;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
   align-content: start;
   width: min(100%, 32rem);
   margin: 2rem auto;
@@ -301,9 +351,6 @@ html[data-route="options"] #app {
   min-height: 100%;
   overflow: visible;
 }
-.options-page h1 {
-  margin: 0;
-}
 /* Section tabs: one group renders at a time, keyed to the location hash so
    the page's deep links keep working -- a #section id selects that group,
    and the empty-tree guidance's #import-opml resolves into the Data group.
@@ -315,7 +362,7 @@ html[data-route="options"] #app {
   gap: 0.5rem;
 }
 .options-nav a {
-  padding: 0.35rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   border: var(--border);
   border-radius: var(--radius);
   text-decoration: none;
@@ -330,13 +377,15 @@ html[data-route="options"] #app {
 /* The visible section's cards, spaced like the page grid they came from. */
 .options-section {
   display: grid;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
 }
 .options-card {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   margin: 0;
-  padding: 1.5rem;
+  padding: var(--space-6);
   border: var(--border);
   border-radius: var(--radius);
 }
@@ -347,6 +396,7 @@ html[data-route="options"] #app {
 }
 .options-card h2 {
   margin: 0;
+  font-size: var(--fs-lg);
 }
 /* One active session per row: the agent string truncates (raw headers,
    kept as the hover title, run long), and the date/current label wraps
@@ -368,7 +418,7 @@ html[data-route="options"] #app {
 }
 .session-row .session-date {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 /* Every other options card's action is a full-width button; the OPML export
    is a link because it downloads a file. ButtonFace/ButtonText are what the
@@ -376,10 +426,15 @@ html[data-route="options"] #app {
    -- so borrowing them keeps the two matching under every theme, the same
    way the System Color keywords elsewhere avoid a per-theme pass. */
 .options-card a.card-action {
-  padding: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  padding: var(--space-1) var(--space-3);
   background: ButtonFace;
   color: ButtonText;
-  text-align: center;
+  border: var(--control-border);
+  border-radius: var(--control-radius);
   text-decoration: none;
 }
 
@@ -402,12 +457,12 @@ html[data-route="options"] #app {
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 .admin-table th,
 .admin-table td {
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
   border-bottom: var(--border);
 }
@@ -424,23 +479,34 @@ html[data-route="options"] #app {
   background: var(--grey-10);
 }
 .admin-table th button {
+  min-height: 0;
   padding: 0;
+  border: 0;
   background: transparent;
   font: inherit;
   font-weight: 700;
 }
+/* A source URL can be hundreds of characters; the cell keeps a readable
+   width and the full address stays in the link itself. */
+.admin-table td:first-child a {
+  display: block;
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .admin-table-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .admin-table-actions button {
-  padding: 0.2rem 0.5rem;
-  font: inherit;
+  --control-h: 1.75rem;
+
+  padding: 0 var(--space-2);
 }
 .websub-status {
-  padding: 0.1rem 0.4rem;
+  padding: 0.125rem var(--space-2);
   border-radius: 1rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
 }
 .websub-status-verified {
   color: var(--status-success-fg);
@@ -457,7 +523,7 @@ html[data-route="options"] #app {
 
 label {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
 /* Label and input keep their own stacked grid; the reveal button is a sibling
    of the label, not a child, because a <label> may not hold interactive
@@ -470,16 +536,50 @@ label {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
-input,
-button {
-  padding: 0.6rem;
+/* The one control style. :where() keeps it at zero specificity, so a
+   component that draws its own control (a tree row, a toolbar icon, the
+   tree filter) overrides it with a single class. A file input keeps the
+   UA rendering: its button part cannot be restyled through the input. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="file"]),
+  select,
+  textarea
+) {
+  min-height: var(--control-h);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
   font: inherit;
+  color: inherit;
+  background: var(--white);
+  border: var(--control-border);
+  border-radius: var(--control-radius);
 }
-button {
-  border: 0;
+/* Text buttons paint with the UA's ButtonFace/ButtonText, which every theme
+   and forced-colors mode already resolves correctly; only the size, radius
+   and border are the app's. */
+:where(button) {
+  min-height: var(--control-h);
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  border: var(--control-border);
+  border-radius: var(--control-radius);
   cursor: pointer;
+}
+:where(button:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+/* The main action of a form or dialog. A literal white, not --white: under
+   auto+dark --white turns into Canvas, near-black on this blue (3.34:1). */
+.button-primary,
+.tree-empty button,
+.dashboard-alert button,
+.update-banner button {
+  color: #fff;
+  background: var(--blue-60);
+  border-color: var(--blue-60);
 }
 a {
   color: var(--blue);
@@ -492,7 +592,14 @@ a {
 .dashboard {
   position: relative;
   display: grid;
-  grid-template-columns: 25% 25% 50%;
+  /* 25/25/50 on a desktop; on a tablet the two list panes keep a usable
+     minimum width and the reader takes what is left. */
+  grid-template-columns: minmax(13rem, 25%) minmax(16rem, 25%) minmax(0, 1fr);
+  /* The panes take the one stretching row; the load-error alert, when it
+     shows, takes its own full-width row above them instead of covering the
+     toolbars. */
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
   /* viewport-fit=cover lets an installed PWA draw under the status and
      navigation bars, which swallowed the toolbars; the insets keep them in
      the visible area, and dvh tracks it rather than the largest viewport. */
@@ -504,35 +611,37 @@ a {
 }
 
 .dashboard-alert {
-  position: absolute;
-  z-index: 10;
-  top: 0.5rem;
-  right: 0.5rem;
-  left: 0.5rem;
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem;
-  border: var(--border);
-  background: var(--white);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  /* Mixed from the theme's own surface and error tokens, so the banner is a
+     pale red in light schemes and a dark red under auto+dark. */
+  background: color-mix(in srgb, var(--error) 12%, var(--white));
+  color: var(--grey-90);
+  box-shadow: inset 0.25rem 0 0 var(--error);
+}
+.dashboard:has(> .dashboard-alert) {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .dashboard-alert p {
   margin: 0;
 }
 .dashboard-alert button {
   flex-shrink: 0;
-  padding: 0.25rem 0.6rem;
-  background: var(--blue-60);
-  color: var(--white);
 }
 /* Empty-list fallbacks (#710): quiet, centered, never read as an error.
    flex: 1 so it (not the now-empty .article-list sibling above it, see
    #933) fills the listbox's old space. */
 .article-list-empty {
   flex: 1;
-  padding: 2rem 1rem;
-  color: var(--grey-60);
+  padding: var(--space-8) var(--space-4);
+  color: var(--muted);
   text-align: center;
 }
 .article-list-empty p {
@@ -552,40 +661,46 @@ a {
 }
 
 .toolbar {
-  height: 2rem;
-  min-height: 2rem;
+  --toolbar-button: 1.75rem;
+
+  flex-shrink: 0;
+  min-height: calc(var(--toolbar-button) + 2 * var(--space-1));
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.4rem;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-bottom: var(--border);
   background: var(--grey-10);
 }
 .toolbar > span {
   flex: 1;
 }
-.toolbar button,
-.toolbar select {
-  padding: 0;
-}
 .toolbar button {
   display: flex;
-  width: 1.8rem;
-  height: 1.8rem;
+  flex-shrink: 0;
+  width: var(--toolbar-button);
+  height: var(--toolbar-button);
+  min-height: 0;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 0;
   background: transparent;
+}
+.toolbar select {
+  min-height: 0;
+  height: var(--toolbar-button);
+  padding: 0 var(--space-1);
 }
 .toolbar button.only-mobile {
   display: none;
 }
 .toolbar button img,
 .toolbar button .icon {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 .toolbar button:disabled {
-  cursor: default;
   opacity: 0.45;
 }
 
@@ -593,26 +708,25 @@ a {
 .article {
   width: 100%;
   display: block;
-  padding: 0.2rem 0.5rem;
+  padding: var(--space-1) var(--space-2);
   text-align: left;
   color: inherit;
   background: transparent;
+  border: 0;
+  border-radius: 0;
   border-bottom: var(--border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tree-filter {
-  margin: 0.4rem;
-  padding: 0.4rem;
-  min-width: 0;
-  border: var(--border);
-  border-radius: var(--radius);
+  flex-shrink: 0;
+  margin: var(--space-2);
 }
 .tree-empty {
-  margin: 0 0.4rem;
+  margin: 0 var(--space-2);
   color: var(--grey-50);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 .tree {
   margin: 0;
@@ -631,11 +745,11 @@ a {
      that scrollbar-gutter can't reach (Safari, or an OS scrollbar
      that's simply wider than the reserved gutter expects). */
   scrollbar-width: thin;
-  padding: 0.5rem 0;
+  padding: var(--space-2) 0;
   list-style: none;
 }
 .tree::-webkit-scrollbar {
-  width: 10px;
+  width: 0.625rem;
 }
 .tree::-webkit-scrollbar-thumb {
   background: var(--grey-40);
@@ -655,7 +769,7 @@ a {
   z-index: 300;
   min-width: 12rem;
   margin: 0;
-  padding: 0.25rem;
+  padding: var(--space-1);
   list-style: none;
   background: var(--white);
   color: var(--grey-90);
@@ -664,12 +778,15 @@ a {
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
 .context-menu button {
+  --control-h: 2rem;
+
   width: 100%;
-  padding: 0.35rem 0.6rem;
+  padding: var(--space-1) var(--space-3);
   text-align: left;
   color: inherit;
   background: transparent;
-  border-radius: 0.25rem;
+  border: 0;
+  border-radius: var(--space-1);
 }
 /* :focus, not :focus-visible: the menu focuses its first item
    programmatically, and browsers skip :focus-visible after pointer
@@ -685,18 +802,19 @@ a {
 }
 .context-menu-separator {
   height: 1px;
-  margin: 0.25rem 0.4rem;
-  background: var(--grey-20);
+  margin: var(--space-1) var(--space-2);
+  background: var(--grey-30);
 }
 /* In-app dialog replacements for prompt()/confirm() (#698), hosted once by
    DialogHost. Same token approach as the context menu: surface, text and
    border tokens make it follow every theme (including auto+dark and
    high-contrast) with no per-theme overrides. The dialog element is centered
    by the UA when open via showModal(); it only needs its own surface styling.
-   The form width, not the dialog's, keeps the box modest on phones, where
-   the 150% root font at the 768px breakpoint would otherwise widen it. */
+   The form width keeps the box modest; max-width keeps it on a phone
+   screen whatever its content measures. */
 dialog.app-dialog {
-  padding: 1rem;
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-4);
   background: var(--white);
   color: var(--grey-90);
   border: var(--border);
@@ -709,26 +827,18 @@ dialog.app-dialog::backdrop {
 dialog.app-dialog form {
   display: flex;
   flex-flow: column;
-  gap: 1rem;
+  gap: var(--space-4);
   max-width: 24rem;
 }
 dialog.app-dialog label {
   display: flex;
   flex-flow: column;
-  gap: 0.35rem;
+  gap: var(--space-2);
 }
-dialog.app-dialog input {
-  padding: 0.4rem;
-  font: inherit;
-  color: inherit;
-  background: var(--grey-10);
-  border: var(--border);
-  border-radius: 0.25rem;
-}
-dialog.app-dialog-actions {
+dialog.app-dialog .app-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 /* The keyboard cheat sheet (#709) rides in the same DialogHost dialog: same
    surface, border and text tokens as the form variant, so every theme and
@@ -736,33 +846,32 @@ dialog.app-dialog-actions {
    growing the dialog past a phone screen. */
 dialog.app-dialog .app-dialog-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fs-lg);
 }
+/* Keys in one column, each description right beside its key. The row divs
+   step aside (display: contents) so dt and dd land in the shared grid. */
 dialog.app-dialog .app-dialog-shortcuts {
   margin: 0;
-  display: flex;
-  flex-flow: column;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
   max-height: 60vh;
   overflow-y: auto;
 }
 dialog.app-dialog .app-dialog-shortcuts div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
+  display: contents;
 }
 dialog.app-dialog .app-dialog-shortcuts dt {
   white-space: nowrap;
 }
 dialog.app-dialog .app-dialog-shortcuts dd {
   margin: 0;
-  text-align: right;
 }
 dialog.app-dialog .app-dialog-shortcuts kbd {
   font: inherit;
-  font-size: 0.85em;
-  padding: 0 0.3rem;
+  font-size: 0.875em;
+  padding: 0 var(--space-1);
   background: var(--grey-10);
   border: var(--border);
   border-radius: 0.25rem;
@@ -771,10 +880,10 @@ dialog.app-dialog .app-dialog-shortcuts kbd {
    error color [role="alert"] uses, so the risky button reads as risky in
    every theme -- --error is re-tokened per theme (e.g. #ff6b6b under
    auto+dark) already. */
-dialog.app-dialog-actions .app-dialog-danger {
+dialog.app-dialog .app-dialog-actions .app-dialog-danger {
   color: var(--white);
   background: var(--error);
-  border: 1px solid var(--error);
+  border-color: var(--error);
 }
 /* The long-press menu (#721) starts a text selection mid-hold, so the
    interactive rows suppress it (not the reader pane, where selecting text is
@@ -802,20 +911,15 @@ button.source {
   overflow: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  padding: 1rem;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: flex-start;
 }
 .tree-empty-heading {
   margin: 0;
   font-weight: 600;
-}
-.tree-empty button {
-  padding: 0.4rem 0.8rem;
-  background: var(--blue-60);
-  color: var(--white);
 }
 /* A nested list matches .tree too, so it would otherwise inherit that
    rule's scroll-container treatment and reserve a scrollbar gutter of its
@@ -906,19 +1010,27 @@ img.skeleton-row {
 .source {
   display: flex;
   align-items: center;
-  min-height: 1.2rem;
-  padding: 0 0.5rem 0 1.4rem;
+  min-height: var(--row-h);
+  padding: 0 var(--space-2) 0 var(--space-6);
   border-bottom: 0;
-  gap: 5px;
-  font-size: 0.85rem;
-  line-height: 1.2rem;
+  gap: var(--space-1);
+  font-size: var(--fs-md);
+  line-height: 1.5rem;
+}
+/* The name gives way first, with an ellipsis, so the unread count and the
+   snoozed badge always stay inside the row. */
+.source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .source:focus {
   outline: 1px dotted var(--grey-90);
   outline-offset: -1px;
 }
 .source.folder {
-  padding-left: 0.1rem;
+  padding-left: var(--space-1);
 }
 .tree.nested .source {
   padding-left: 2rem;
@@ -957,18 +1069,20 @@ img.skeleton-row {
   overflow: hidden;
 }
 .source .unread-count {
+  flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-style: italic;
 }
 /* A snoozed source (#725) shows no unread badge by design, so the row
    carries a literal "Snoozed" word instead: text, not colour alone, so the
    distinction survives forced-colors mode like .source.unread does. */
 .source .snoozed-badge {
+  flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-style: italic;
 }
 .source.selected .snoozed-badge {
@@ -1033,22 +1147,26 @@ img.skeleton-row {
 }
 
 .article {
+  --title-h: 1.375rem;
+  --details-h: 1.25rem;
+
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.85rem;
-  line-height: 1rem;
+  gap: var(--space-1);
+  font-size: var(--fs-md);
+  line-height: var(--title-h);
   text-decoration: none;
   white-space: normal;
   /* A page holds 200 rows and keeps appending, so off-screen rows skip
      layout and paint (#990). The placeholder is exact, not a guess: both
-     lines are a fixed 1rem high (.article .title, below) and nowrap, so the
-     content box is always two lines and the gap, with padding and border
-     added around it as for any box. A wrong value would shift a restored
-     scrollTop, and the scrollHeight that paging reads, by the error times
-     every row above. */
+     lines have a fixed height (.article .title and .details, below) and
+     nowrap, so the content box is always the two lines and the gap, with
+     padding and border added around it as for any box. A wrong value would
+     shift a restored scrollTop, and the scrollHeight that paging reads, by
+     the error times every row above. */
   content-visibility: auto;
-  contain-intrinsic-block-size: auto 2.2rem;
+  contain-intrinsic-block-size: auto
+    calc(var(--title-h) + var(--space-1) + var(--details-h));
 }
 .article-list {
   flex: 1;
@@ -1070,25 +1188,31 @@ img.skeleton-row {
   flex-shrink: 0;
 }
 .article-search {
-  min-width: 0;
   flex: 1;
-  margin: 0.4rem;
-  padding: 0.4rem;
-  border: var(--border);
-  border-radius: var(--radius);
-  font: inherit;
+  margin: var(--space-2);
+}
+/* The toolbar's own width decides whether the filter's visible "Show"
+   fits; the label text stays for screen readers either way. */
+.articles-pane {
+  container-type: inline-size;
+}
+@container (width < 18rem) {
+  .article-filter-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
 }
 .article-filter-field {
   display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-.article-filter {
+  flex-shrink: 1;
   min-width: 0;
-  font: inherit;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 .title,
 .details > span,
@@ -1097,21 +1221,21 @@ img.skeleton-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.title {
-  font-size: 0.8rem;
-}
 /* A fixed line each, so a blank title or byline cannot collapse a row below
    the placeholder size content-visibility reserves for it. */
-.article .title,
+.article .title {
+  height: var(--title-h);
+}
 .article .details {
-  height: 1rem;
+  height: var(--details-h);
+  line-height: var(--details-h);
 }
 .details {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--grey-50);
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
 }
 .details > span {
   flex: 1;
@@ -1122,8 +1246,8 @@ img.skeleton-row {
   z-index: 1;
   height: 1.5rem;
   border-bottom: var(--border);
-  background: linear-gradient(to bottom, var(--white) 3px, var(--grey-20));
-  font-size: 0.75rem;
+  background: linear-gradient(to bottom, var(--white) 0.2rem, var(--grey-20));
+  font-size: var(--fs-sm);
   font-weight: 700;
   line-height: 1.5rem;
   text-align: center;
@@ -1142,15 +1266,18 @@ img.skeleton-row {
    resolves once, against this element's font-size, and every child inherits
    the same column. It also keeps .reader the full-width scroll container, so
    the scrollbar stays at the pane edge instead of tracking a centred column,
-   and max() leaves the original 30px gutter in place whenever the pane is too
+   and max() leaves the original gutter in place whenever the pane is too
    narrow for the measure to bind -- which is every pane on mobile. */
 .reader {
   --reader-measure: 65ch;
 
   overflow: auto;
-  padding: 20px max(30px, (100% - var(--reader-measure)) / 2);
-  font-size: 0.9rem;
+  padding: var(--space-6)
+    max(var(--space-8), (100% - var(--reader-measure)) / 2);
+  font-size: var(--fs-md);
   line-height: 1.6;
+  /* A long URL or unbroken token wraps instead of running past the pane. */
+  overflow-wrap: anywhere;
 }
 /* The two reader steps from #712. Only the off-centre steps need a rule; the
    middle one is the declaration above, which is also what an unset or
@@ -1158,10 +1285,10 @@ img.skeleton-row {
    text size widens the column by the same proportion and the line count per
    paragraph holds -- the two settings stay independent of each other. */
 :root[data-reader-text="small"] .reader {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 :root[data-reader-text="large"] .reader {
-  font-size: 1.05rem;
+  font-size: 1.125rem;
 }
 :root[data-reader-width="small"] .reader {
   --reader-measure: 50ch;
@@ -1171,7 +1298,7 @@ img.skeleton-row {
 }
 .reader h1 {
   margin-top: 0;
-  font-size: 1.4rem;
+  font-size: var(--fs-xl);
   line-height: 1.25;
 }
 .reader img,
@@ -1238,30 +1365,28 @@ img.skeleton-row {
 
 .feed-discovery-form {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   height: 100%;
   align-content: start;
   overflow: auto;
-  padding: 1rem;
+  padding: var(--space-4);
 }
 .feed-discovery-form h2 {
   margin: 0;
-}
-.feed-discovery-form select {
-  padding: 0.6rem;
-  font: inherit;
+  font-size: var(--fs-lg);
 }
 .feed-discovery-form input:disabled {
   color: var(--muted);
 }
 .empty-pane {
   margin: 0;
-  padding: 1rem;
+  padding: var(--space-4);
   color: var(--muted);
 }
 .toolbar strong {
   overflow: hidden;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1273,26 +1398,28 @@ img.skeleton-row {
 }
 .found-feeds button {
   display: grid;
-  gap: 0.2rem;
-  padding: 0.5rem;
+  gap: var(--space-1);
+  padding: var(--space-2);
   overflow: hidden;
   text-align: left;
   background: var(--grey-10);
+  border: 0;
+  border-radius: 0;
   border-bottom: var(--border);
 }
 .found-feeds span {
   overflow: hidden;
   color: var(--grey-50);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .websub-badge {
   display: inline-block;
-  margin-left: 0.4rem;
-  padding: 0.05rem 0.4rem;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
   color: var(--status-success-fg);
-  font-size: 0.7rem;
+  font-size: var(--fs-sm);
   font-weight: 400;
   background: var(--status-success-bg);
   border-radius: 1rem;
@@ -1300,19 +1427,19 @@ img.skeleton-row {
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .progress {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0;
   color: var(--grey-50);
 }
 .spinner {
   width: 1rem;
   height: 1rem;
-  border: 2px solid var(--grey-30);
+  border: 0.125rem solid var(--grey-30);
   border-top-color: var(--blue-50);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -1323,12 +1450,54 @@ img.skeleton-row {
   }
 }
 
+/* The phone layer changes layout and touch sizes only. Type keeps the
+   desktop scale on the user's own root size, because no fixed upscale suits
+   both a browser at its default and one the user has scaled down. Touch
+   targets are floored in px so they stay usable at a small text setting. */
 @media (max-width: 768px) {
-  html {
-    font-size: 150%;
+  :root {
+    --touch: max(2.75rem, 44px);
+    --control-h: var(--touch);
+    --row-h: var(--touch);
+  }
+  .toolbar {
+    --toolbar-button: var(--touch);
+
+    gap: 0;
+    padding: 0 var(--space-1);
+  }
+  .article-filter-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .article {
+    padding: var(--space-2) var(--space-3);
+  }
+  .context-menu button,
+  .admin-table th button,
+  .admin-table-actions button {
+    min-height: var(--touch);
+  }
+  .account-form,
+  .account-result {
+    margin-block: var(--space-4);
+    padding: var(--space-4);
+    border: 0;
+  }
+  .options-page {
+    margin-block: var(--space-4);
+  }
+  .options-card {
+    padding: var(--space-4);
+  }
+  .reader {
+    padding: var(--space-4);
   }
   .dashboard {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .dashboard-pane {
     width: 100%;
