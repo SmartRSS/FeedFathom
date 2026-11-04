@@ -131,6 +131,11 @@
   --selected-fg: #fff;
   /* One accent: links, selection and primary buttons share it. */
   --blue: var(--selected-bg);
+  /* One value per role: button text is body text, and a button shares the
+     panel fill that read-only fields and toolbars use, instead of the UA's
+     near-identical ButtonText and ButtonFace. */
+  --button-fg: var(--grey-90);
+  --button-face: var(--grey-10);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
@@ -194,7 +199,11 @@
   @media (prefers-color-scheme: dark) {
     :root[data-theme="auto"] {
       --grey-30: color-mix(in srgb, CanvasText 22%, Canvas);
-      --button-face: color-mix(in srgb, CanvasText 14%, Canvas);
+      /* Panels, toolbars and buttons share one raised tone; --grey-20 sits
+         below it, so the loading shimmer that runs between the two shows. */
+      --grey-10: color-mix(in srgb, CanvasText 14%, Canvas);
+      --grey-20: color-mix(in srgb, CanvasText 8%, Canvas);
+      --button-face: var(--grey-10);
       --field-recessed: color-mix(in srgb, CanvasText 5%, Canvas);
     }
   }
