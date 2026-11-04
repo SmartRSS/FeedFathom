@@ -28,17 +28,27 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
   --fs-xs: 0.75rem;
-  --fs-sm: 0.875rem;
+  /* The smallest step keeps an 11px floor, the same way touch targets keep
+     44px, so dates and counts stay legible when the user scales text
+     down. */
+  --fs-sm: max(0.875rem, 11px);
   --fs-md: 1rem;
   --fs-lg: 1.25rem;
   --fs-xl: 1.5rem;
   /* Every text control (input, select, textarea, button) shares one height,
-     radius and border, so a form reads as one set of controls. The phone
-     layer raises the height to a 44px touch target. */
+     radius and border, so a form reads as one set of controls. Touch input
+     raises the height to a 44px target. */
   --control-h: 2.25rem;
   --control-radius: var(--radius);
-  --control-border: var(--border);
-  /* A tree row. Dense on desktop, a full touch target on phone. */
+  /* Stronger than --border: a field's edge is its only outline and needs
+     3:1 against the page (WCAG 1.4.11). Row and pane hairlines stay on the
+     quieter --border. */
+  --control-border: 1px solid color-mix(in srgb, CanvasText 45%, Canvas);
+  /* A text button's fill. The UA's ButtonFace in light schemes; the dark
+     block below swaps in a tone between surface and text, because dark
+     ButtonFace (#6b6b6b) was the brightest surface on the page. */
+  --button-face: ButtonFace;
+  /* A tree row. Dense under a mouse, a full touch target under a finger. */
   --row-h: 1.25rem;
   --error: #b00020;
   --status-success-fg: #0b6b2c;
@@ -108,6 +118,7 @@
     --white: Canvas;
     --blue: LinkText;
     --error: #ff6b6b;
+    --button-face: color-mix(in srgb, CanvasText 14%, Canvas);
   }
 }
 
@@ -188,6 +199,7 @@
   --grey-50: #000;
   --grey-90: #000;
   --border: 2px solid #000;
+  --control-border: var(--border);
   --selected-bg: #000d24;
   --selected-fg: #fff;
 }
@@ -431,7 +443,7 @@ html[data-route="options"] #app {
   justify-content: center;
   min-height: var(--control-h);
   padding: var(--space-1) var(--space-3);
-  background: ButtonFace;
+  background: var(--button-face);
   color: ButtonText;
   border: var(--control-border);
   border-radius: var(--control-radius);
@@ -556,20 +568,40 @@ label {
   border: var(--control-border);
   border-radius: var(--control-radius);
 }
-/* Text buttons paint with the UA's ButtonFace/ButtonText, which every theme
-   and forced-colors mode already resolves correctly; only the size, radius
-   and border are the app's. */
+/* A field the user cannot edit gets a fill and a dashed edge, so it does
+   not read as one waiting for input. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="file"]):is(
+      :disabled,
+      :read-only
+    ),
+  select:disabled,
+  textarea:is(:disabled, :read-only)
+) {
+  background: var(--grey-10);
+  border-style: dashed;
+}
+/* Text buttons paint with --button-face and the UA's ButtonText, which every
+   theme and forced-colors mode resolve correctly. */
 :where(button) {
+  min-width: var(--control-h);
   min-height: var(--control-h);
   padding: var(--space-1) var(--space-3);
   font: inherit;
+  color: ButtonText;
+  background: var(--button-face);
   border: var(--control-border);
   border-radius: var(--control-radius);
   cursor: pointer;
 }
+/* Disabled is drawn, not faded: opacity took the text down to 2:1 and the
+   button read as an empty field. GrayText is exempt from contrast rules and
+   every theme and forced-colors mode resolve it. */
 :where(button:disabled) {
+  color: GrayText;
+  background: transparent;
+  border-style: dashed;
   cursor: default;
-  opacity: 0.6;
 }
 /* The main action of a form or dialog. A literal white, not --white: under
    auto+dark --white turns into Canvas, near-black on this blue (3.34:1). */
@@ -580,6 +612,11 @@ label {
   color: #fff;
   background: var(--blue-60);
   border-color: var(--blue-60);
+}
+.button-primary:disabled {
+  color: GrayText;
+  background: transparent;
+  border-color: currentColor;
 }
 a {
   color: var(--blue);
@@ -592,8 +629,8 @@ a {
 .dashboard {
   position: relative;
   display: grid;
-  /* 25/25/50 on a desktop; on a tablet the two list panes keep a usable
-     minimum width and the reader takes what is left. */
+  /* 25/25/50 on a desktop; on a tablet (below) the two list panes keep a
+     usable width and the reader takes what is left. */
   grid-template-columns: minmax(13rem, 25%) minmax(16rem, 25%) minmax(0, 1fr);
   /* The panes take the one stretching row; the load-error alert, when it
      shows, takes its own full-width row above them instead of covering the
@@ -647,7 +684,6 @@ a {
 .article-list-empty p {
   margin: 0;
 }
-
 .dashboard-pane {
   display: flex;
   flex-direction: column;
@@ -697,11 +733,8 @@ a {
 }
 .toolbar button img,
 .toolbar button .icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-.toolbar button:disabled {
-  opacity: 0.45;
+  width: max(1.25rem, 20px);
+  height: max(1.25rem, 20px);
 }
 
 .source,
@@ -1149,10 +1182,11 @@ img.skeleton-row {
 .article {
   --title-h: 1.375rem;
   --details-h: 1.25rem;
+  --row-gap: var(--space-1);
 
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--row-gap);
   font-size: var(--fs-md);
   line-height: var(--title-h);
   text-decoration: none;
@@ -1166,7 +1200,7 @@ img.skeleton-row {
      the error times every row above. */
   content-visibility: auto;
   contain-intrinsic-block-size: auto
-    calc(var(--title-h) + var(--space-1) + var(--details-h));
+    calc(var(--title-h) + var(--row-gap) + var(--details-h));
 }
 .article-list {
   flex: 1;
@@ -1450,11 +1484,29 @@ img.skeleton-row {
   }
 }
 
-/* The phone layer changes layout and touch sizes only. Type keeps the
-   desktop scale on the user's own root size, because no fixed upscale suits
-   both a browser at its default and one the user has scaled down. Touch
-   targets are floored in px so they stay usable at a small text setting. */
-@media (max-width: 768px) {
+/* A mouse gets the dense lists a list-heavy reader wants: the small type
+   step and tight rows, about 19 articles on a 900px-tall screen. Touch keeps
+   the 1rem rows above. */
+@media (pointer: fine) {
+  .source,
+  .article {
+    font-size: var(--fs-sm);
+  }
+  .source {
+    line-height: 1.25rem;
+  }
+  .article {
+    --title-h: 1.125rem;
+    --details-h: 1rem;
+    --row-gap: 0.125rem;
+
+    padding-block: 0.125rem;
+  }
+}
+/* Touch sizing follows the input, not the width: a tablet is as much a
+   finger target as a phone. Targets are floored in px so they stay usable
+   when the user scales text down. */
+@media (pointer: coarse) {
   :root {
     --touch: max(2.75rem, 44px);
     --control-h: var(--touch);
@@ -1466,13 +1518,6 @@ img.skeleton-row {
     gap: 0;
     padding: 0 var(--space-1);
   }
-  .article-filter-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-  }
   .article {
     padding: var(--space-2) var(--space-3);
   }
@@ -1480,6 +1525,36 @@ img.skeleton-row {
   .admin-table th button,
   .admin-table-actions button {
     min-height: var(--touch);
+  }
+  /* Tabs and the standalone links (Home, Register instead, Login) are
+     targets too. */
+  .options-nav a,
+  .account-form > a,
+  .account-result > a,
+  .options-page > a,
+  .admin-page > a {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: var(--touch);
+  }
+}
+/* A tablet-width window: the feed pane keeps room for its names. */
+@media (769px <= width <= 1100px) {
+  .dashboard {
+    grid-template-columns: minmax(15rem, 30%) minmax(16rem, 30%) minmax(0, 1fr);
+  }
+}
+/* The phone layer changes layout only. Type keeps the desktop scale on the
+   user's own root size, because no fixed upscale suits both a browser at
+   its default and one the user has scaled down. */
+@media (max-width: 768px) {
+  .article-filter-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
   }
   .account-form,
   .account-result {
