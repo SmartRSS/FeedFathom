@@ -2244,10 +2244,11 @@ export function Dashboard(props: {
               recordListScroll(event.currentTarget.scrollTop);
             }}
           >
-            {/* The feeds loading is the list loading too: a restored
-                session opens its feed as soon as the tree arrives. */}
+            {/* The feeds loading is the list loading too, until something
+                is selected: a restored session opens its feed before the
+                tree is revealed, and its rows must be there to take focus. */}
             <Show
-              when={!articlesLoading() && !treeLoading()}
+              when={!articlesLoading() && !(treeLoading() && !selectedNode())}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
                   <div class="date-group" />
