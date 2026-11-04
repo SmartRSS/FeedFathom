@@ -1442,6 +1442,7 @@ export function Dashboard(props: {
               onSelect: () => void showProperties(node),
             },
             {
+              danger: true,
               disabled: Boolean(node.children?.length),
               kind: "action",
               label: "Delete folder",
@@ -1473,6 +1474,7 @@ export function Dashboard(props: {
             ...snoozeItems,
             { kind: "separator" },
             {
+              danger: true,
               kind: "action",
               label: "Unsubscribe",
               onSelect: () => void removeNode(node),

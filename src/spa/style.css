@@ -38,6 +38,10 @@
   --fs-lg: 1.25rem;
   --fs-xl: 1.5rem;
   --fs-2xl: 2rem;
+  /* Line heights: headings, interface text, and long-form reading. */
+  --lh-tight: 1.25;
+  --lh-body: 1.5;
+  --lh-reading: 1.6;
   /* Every text control (input, select, textarea, button) shares one height,
      radius and border, so a form reads as one set of controls. Touch input
      raises the height to a 44px target. */
@@ -498,6 +502,7 @@ html {
 body {
   overflow: hidden;
   background: var(--white);
+  line-height: var(--lh-body);
 }
 
 main {
@@ -543,7 +548,7 @@ main {
 .admin-page h1 {
   margin: 0;
   font-size: clamp(var(--fs-xl), 4vw, var(--fs-2xl));
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 
 .options-page {
@@ -1113,6 +1118,12 @@ a {
   border-radius: var(--radius);
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
+/* A menu reads at the size of the rows it was opened on. */
+@media (pointer: fine) and (hover: hover) {
+  .context-menu {
+    font-size: var(--fs-sm);
+  }
+}
 .context-menu button {
   box-shadow: none;
   --control-h: 2rem;
@@ -1133,6 +1144,9 @@ a {
 .context-menu button:focus {
   background: var(--selected-bg);
   color: var(--selected-fg);
+}
+.context-menu button.context-menu-danger:not(:hover, :focus) {
+  color: var(--error);
 }
 .context-menu button:disabled {
   color: var(--grey-40);
@@ -1675,7 +1689,7 @@ img.skeleton-row {
   padding: var(--space-6)
     max(var(--space-8), (100% - var(--reader-measure)) / 2);
   font-size: var(--fs-md);
-  line-height: 1.6;
+  line-height: var(--lh-reading);
   /* A long URL or unbroken token wraps instead of running past the pane. */
   overflow-wrap: anywhere;
 }
@@ -1699,7 +1713,7 @@ img.skeleton-row {
 .reader h1 {
   margin-top: 0;
   font-size: var(--fs-xl);
-  line-height: 1.25;
+  line-height: var(--lh-tight);
 }
 .reader-header h1 {
   margin-bottom: 0;
