@@ -1756,6 +1756,10 @@ input[aria-invalid="true"] {
   padding: var(--space-4);
   color: var(--muted);
 }
+/* The reader already pads its content. */
+.reader > .empty-pane {
+  padding: 0;
+}
 .toolbar strong,
 .toolbar .toolbar-title {
   overflow: hidden;

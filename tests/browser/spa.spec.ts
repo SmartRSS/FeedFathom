@@ -2651,9 +2651,13 @@ test("surfaces tree failures without masquerading as logout", async ({
   await openApp(page, { treeFailure: true });
 
   expect(new URL(page.url()).pathname).toBe("/");
-  await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/tree",
+  // An unreadable answer is described in the feeds pane, without the
+  // response's own details, and offers Retry there.
+  const failure = page.getByRole("complementary", { name: "Feeds" });
+  await expect(failure.getByRole("alert")).toContainText(
+    "Feeds couldn't load.",
   );
+  await expect(failure.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
 });
 
@@ -3357,7 +3361,9 @@ test("a failed delete leaves the feed switched to since alone", async ({
     page.getByRole("option", { name: /Subscribed article/ }),
   ).toBeVisible();
   failDelete!();
-  await expect(page.getByRole("alert")).toContainText("Invalid response");
+  await expect(page.getByRole("alert")).toContainText(
+    "Could not delete articles",
+  );
   await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
   await expectSelectedRow(page, /Tech Preview/);
 });

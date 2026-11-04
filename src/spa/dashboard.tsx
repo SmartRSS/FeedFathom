@@ -226,9 +226,10 @@ export function Dashboard(props: {
     filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
-  // The first-run guidance says "No feeds yet", which is false while the
-  // tree simply failed to load; the alert above the panes speaks instead.
-  const [treeFailed, setTreeFailed] = createSignal(false);
+  // Why the tree failed to load, or "" while it has not. The first-run
+  // guidance says "No feeds yet", which is false then; the feeds pane says
+  // what happened and offers Retry instead.
+  const [treeFailed, setTreeFailed] = createSignal("");
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
   // A full page means more articles may be available, not that another page
@@ -731,7 +732,7 @@ export function Dashboard(props: {
     treeRequestPromise = attempt;
     const nextTree = await attempt;
     if (controller.signal.aborted) return nextTree;
-    setTreeFailed(false);
+    setTreeFailed("");
     applyTree(nextTree);
     return nextTree;
   }
@@ -820,8 +821,7 @@ export function Dashboard(props: {
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
-      setTreeFailed(true);
-      reportError(cause, "Unable to load feeds.");
+      setTreeFailed(messageOf(cause, "The server did not answer."));
     } finally {
       revealTree();
     }
@@ -2033,7 +2033,7 @@ export function Dashboard(props: {
                 is empty, so it dismisses itself the moment a source exists
                 and never needs its own persistence. */}
             <Show
-              when={tree().length > 0}
+              when={tree().length > 0 || treeFailed()}
               fallback={
                 <Show when={!treeFailed()}>
                   <div class="tree-empty">
@@ -2071,7 +2071,23 @@ export function Dashboard(props: {
                   onInput={(event) => setTreeFilter(event.currentTarget.value)}
                 />
               </Show>
-              <Show when={treeFilter().trim() && !visibleTree().length}>
+              <Show when={treeFailed() && !tree().length}>
+                <div class="tree-empty" role="alert">
+                  <p class="tree-empty-heading">Feeds couldn't load.</p>
+                  <p>{treeFailed()}</p>
+                  <button
+                    type="button"
+                    onClick={() => void refreshCurrentView()}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </Show>
+              <Show
+                when={
+                  !treeFailed() && treeFilter().trim() && !visibleTree().length
+                }
+              >
                 <p class="tree-empty" role="status">
                   No feeds match that.
                 </p>
@@ -2225,8 +2241,10 @@ export function Dashboard(props: {
               recordListScroll(event.currentTarget.scrollTop);
             }}
           >
+            {/* The feeds loading is the list loading too: a restored
+                session opens its feed as soon as the tree arrives. */}
             <Show
-              when={!articlesLoading()}
+              when={!articlesLoading() && !treeLoading()}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
                   <div class="date-group" />
@@ -2472,7 +2490,12 @@ export function Dashboard(props: {
                 <Show
                   when={loadingArticle()}
                   fallback={
-                    <Show when={selected()}>
+                    <Show
+                      when={selected()}
+                      fallback={
+                        <p class="empty-pane">Select an article to read.</p>
+                      }
+                    >
                       <p>Reader content unavailable.</p>
                     </Show>
                   }
