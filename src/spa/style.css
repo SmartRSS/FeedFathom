@@ -56,6 +56,36 @@
      Under auto+dark that is Field, brighter than the editable fields, so
      the dark block swaps in a recessed tone. */
   --field-recessed: var(--grey-10);
+  /* How fields and buttons are drawn. The shared values below are this
+     app's own look; each named theme replaces them with the look of the
+     desktop it imitates, so the shared rules only ever read these. */
+  --field-bg: var(--white);
+  --field-radius: var(--control-radius);
+  --field-shadow: none;
+  --field-disabled-bg: var(--field-recessed);
+  --field-disabled-fg: var(--grey-90);
+  --field-disabled-border: var(--control-border);
+  /* A disabled or read-only edge: dashed here, solid in the named themes. */
+  --disabled-edge: dashed;
+  --button-fg: ButtonText;
+  --button-border: var(--control-border);
+  --button-radius: var(--control-radius);
+  --button-shadow: none;
+  --button-hover-bg: var(--button-face);
+  --button-hover-border: var(--button-border);
+  --button-hover-shadow: var(--button-shadow);
+  --button-disabled-bg: transparent;
+  --button-disabled-fg: GrayText;
+  --button-disabled-border: var(--button-border);
+  --button-disabled-shadow: var(--button-shadow);
+  /* The main action of a form or dialog, and a destructive confirm. */
+  --primary-bg: var(--blue-60);
+  --primary-fg: #fff;
+  --primary-border: 1px solid var(--blue-60);
+  --primary-shadow: none;
+  --danger-bg: var(--error);
+  --danger-fg: var(--white);
+  --danger-border: 1px solid var(--error);
   /* A toolbar icon button. On :root, not .toolbar, so the update banner can
      clear a bottom toolbar of this height. */
   --toolbar-button: 1.75rem;
@@ -160,28 +190,19 @@
 }
 
 /* Selectable themes (Options -> Appearance), one attribute drives all of
-   them: each is a distinct selection color/contrast era from desktop
-   OS history, picked apart wherever the default listbox highlight
-   actually changed. High contrast is its own theme rather than a
-   separate toggle, since it's just another point in the same "which
-   selection/border colors are active" space.
-
-   Beyond the selection color, each also carries its era's characteristic
-   surface color (--grey-10/--grey-20, used for toolbars/cards/panels),
-   border color (--grey-30), corner radius, and system font -- a period-
-   correct selection color alone still read as "off" sitting inside this
-   app's otherwise-unchanged flat modern chrome, so those needed to move
-   too. --grey-90 (body text) is left alone in all of them: every surface
-   color below is light enough that the existing dark text stays legible
-   without a second per-theme contrast pass. Real 3D bevel button edges
-   are the one thing deliberately skipped -- CSS can't cheaply fake those
-   without restructuring every button into per-side border colors, and a
-   flat approximation of the surface/border/font/radius already carries
-   most of the period feel. */
+   them. Each imitates one desktop look from OS history, as close to the
+   original as CSS allows: its selection colour, surfaces, fonts, corner
+   radii, and how its text fields and buttons are drawn -- edges, fills,
+   hover, disabled and read-only states. Values come from that desktop's
+   documented system colours or from samples of genuine screenshots, and
+   are kept even where one falls short of a contrast target: the theme is
+   a deliberate copy. This app's own additions -- rounded controls, dashed
+   disabled edges, mixed tones, the filled blue primary button -- stay out
+   of them; the larger touch targets stay in, since they are about use,
+   not look. High contrast is its own theme rather than a separate toggle,
+   since it's just another point in the same space. --grey-90 (body text)
+   is left alone in all of them. */
 :root[data-theme="classic"] {
-  /* Fields take the theme's own border grey, 3.95:1 on its white fields,
-     rather than the shared mixed tone. */
-  --control-border: 1px solid var(--grey-30);
   --selected-bg: #000080;
   --selected-fg: #fff;
   --grey-10: #c0c0c0;
@@ -189,6 +210,32 @@
   --grey-30: #808080;
   --radius: 0;
   --font-family: "MS Sans Serif", Tahoma, sans-serif;
+  /* Two-pixel bevels drawn with inset shadows: fields sunken, buttons
+     raised, the default button framed in black. */
+  --control-border: none;
+  --field-shadow:
+    inset -1px -1px #fff, inset 1px 1px #808080, inset -2px -2px #dfdfdf,
+    inset 2px 2px #000;
+  --field-disabled-bg: #c0c0c0;
+  --field-disabled-fg: #808080;
+  --field-disabled-border: none;
+  --disabled-edge: none;
+  --button-face: #c0c0c0;
+  --button-fg: #000;
+  --button-border: none;
+  --button-shadow:
+    inset -1px -1px #000, inset 1px 1px #fff, inset -2px -2px #808080,
+    inset 2px 2px #dfdfdf;
+  --button-disabled-bg: #c0c0c0;
+  --button-disabled-fg: #808080;
+  --button-disabled-border: none;
+  --primary-bg: #c0c0c0;
+  --primary-fg: #000;
+  --primary-border: none;
+  --primary-shadow: 0 0 0 1px #000, var(--button-shadow);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
 :root[data-theme="millennial"] {
   --selected-bg: #316ac5;
@@ -198,40 +245,124 @@
   --grey-30: #aca899;
   --radius: 0.35rem;
   --font-family: Tahoma, Verdana, sans-serif;
+  /* Square fields with a single blue-grey edge. */
+  --control-border: 1px solid #7f9db9;
+  --field-radius: 0;
+  --field-disabled-bg: #ece9d8;
+  --field-disabled-fg: #aca899;
+  --disabled-edge: solid;
+  /* Lightly shaded buttons with a dark blue edge and 4px corners; hover
+     lights an orange ring inside the edge, the default button a blue one. */
+  --button-face: linear-gradient(#fff, #f0f0ea 90%);
+  --button-fg: #000;
+  --button-border: 1px solid #003c74;
+  --button-radius: 4px;
+  --button-hover-shadow: inset 0 0 0 2px #f8b73b;
+  --button-disabled-bg: #f5f4ea;
+  --button-disabled-fg: #aca899;
+  --button-disabled-border: 1px solid #c9c7ba;
+  --primary-bg: var(--button-face);
+  --primary-fg: #000;
+  --primary-border: var(--button-border);
+  --primary-shadow: inset 0 0 0 2px #89ade4;
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
-/* Sampled directly from a real Windows 7 screenshot (Start Menu search
-   result selection, a keyboard-focused item rather than a hover/unfocused
-   one -- Windows used a notably more saturated fill for that state than
-   the pale Explorer-listview tone an earlier pass used here): solid fill
-   #309AFE, black text (measured 7.18:1 -- a lighter fill needed the
-   inverse and would have failed at 2.93:1), with a subtle 1px border
-   sampled from the fill/background edge transition. */
+/* The plain list highlight: a blue fill with white text, no border. */
 :root[data-theme="aero"] {
-  --selected-bg: #309afe;
-  --selected-fg: #000;
-  --selected-border: #4598e6;
-  --grey-10: #eaf3fc;
-  --grey-20: #eaf3fc;
+  --selected-bg: #39f;
+  --selected-fg: #fff;
+  --grey-10: #f0f0f0;
+  --grey-20: #f0f0f0;
   --grey-30: #a9c4e0;
   --radius: 0.4rem;
   --font-family: "Segoe UI", Tahoma, sans-serif;
+  /* Fields: a darker top edge fading to pale sides and bottom (set per side
+     below), 1px corners. */
+  --control-border: 1px solid #abadb3;
+  --field-radius: 1px;
+  --field-disabled-bg: #f4f4f4;
+  --field-disabled-fg: #6d6d6d;
+  --field-disabled-border: 1px solid #adb2b5;
+  --disabled-edge: solid;
+  /* Glossy two-tone buttons with a white inner edge, 3px corners, turning
+     light blue under the pointer. */
+  --button-face: linear-gradient(#f3f3f3, #ebebeb 50%, #ddd 50%, #cdcdcd);
+  --button-fg: #000;
+  --button-border: 1px solid #707070;
+  --button-radius: 3px;
+  --button-shadow: inset 0 0 0 1px #fff;
+  --button-hover-bg: linear-gradient(
+    #eaf6fd,
+    #d9f0fc 50%,
+    #bee6fd 50%,
+    #a7d9f5
+  );
+  --button-hover-border: 1px solid #3c7fb1;
+  --button-disabled-bg: #f4f4f4;
+  --button-disabled-fg: #838383;
+  --button-disabled-border: 1px solid #adb2b5;
+  --button-disabled-shadow: none;
+  --primary-bg: var(--button-face);
+  --primary-fg: #000;
+  --primary-border: 1px solid #3c7fb1;
+  --primary-shadow: var(--button-shadow);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
+}
+:root[data-theme="aero"]
+  :where(
+    input:not([type="checkbox"], [type="radio"], [type="file"]),
+    select,
+    textarea
+  ):not(:disabled, :read-only) {
+  border-color: #abadb3 #e2e3ea #e3e9ef;
 }
 :root[data-theme="modern"] {
-  --selected-bg: #0067b8;
+  --selected-bg: #0078d7;
   --selected-fg: #fff;
-  --grey-10: #f2f2f2;
-  --grey-20: #f2f2f2;
+  --grey-10: #f0f0f0;
+  --grey-20: #f0f0f0;
   --grey-30: #c8c8c8;
   --radius: 0;
   --font-family: "Segoe UI", Tahoma, sans-serif;
+  /* Flat and square: grey-edged fields that take the accent when focused,
+     grey buttons, the default button edged in the accent. */
+  --control-border: 1px solid #7a7a7a;
+  --disabled-edge: solid;
+  --field-disabled-fg: #6d6d6d;
+  --button-face: #e1e1e1;
+  --button-fg: #000;
+  --button-border: 1px solid #adadad;
+  --button-disabled-bg: #e1e1e1;
+  --button-disabled-fg: #6d6d6d;
+  --primary-bg: #e1e1e1;
+  --primary-fg: #000;
+  --primary-border: 2px solid #0078d7;
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
+}
+:root[data-theme="modern"]
+  :where(
+    input:not([type="checkbox"], [type="radio"], [type="file"]),
+    select,
+    textarea
+  ):focus {
+  border-color: #0078d7;
 }
 /* Overrides the same custom properties everything else already reads --
    selected rows, borders, focus indicators, and links all follow along
-   automatically instead of needing their own high-contrast variants. */
+   automatically instead of needing their own high-contrast variants.
+   White surfaces, black text and edges, a purple highlight, dark red for
+   disabled text and dark blue for links. */
 :root[data-theme="high-contrast"] {
   --blue-40: #001a4d;
   --blue-50: #001333;
   --blue-60: #000d24;
+  --blue: #00009f;
   --grey-10: #fff;
   --grey-20: #d0d0d0;
   --grey-30: #4d4d4d;
@@ -240,8 +371,22 @@
   --grey-90: #000;
   --border: 2px solid #000;
   --control-border: var(--border);
-  --selected-bg: #000d24;
+  --selected-bg: #37006e;
   --selected-fg: #fff;
+  --radius: 0;
+  --disabled-edge: solid;
+  --field-disabled-bg: #fff;
+  --field-disabled-fg: #600000;
+  --button-face: #fff;
+  --button-fg: #000;
+  --button-disabled-bg: #fff;
+  --button-disabled-fg: #600000;
+  --primary-bg: #fff;
+  --primary-fg: #000;
+  --primary-border: var(--border);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
 /* A dotted outline drawn just inside the item's edge, not a glow/shadow.
    White dots on selected (navy/dark) rows so the rect stays visible
@@ -494,9 +639,10 @@ html[data-route="options"] #app {
   min-height: var(--control-h);
   padding: var(--space-1) var(--space-3);
   background: var(--button-face);
-  color: ButtonText;
-  border: var(--control-border);
-  border-radius: var(--control-radius);
+  color: var(--button-fg);
+  border: var(--button-border);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
   text-decoration: none;
 }
 
@@ -541,6 +687,7 @@ html[data-route="options"] #app {
   background: var(--grey-10);
 }
 .admin-table th button {
+  box-shadow: none;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -614,9 +761,10 @@ label {
   padding: var(--space-1) var(--space-2);
   font: inherit;
   color: inherit;
-  background: var(--white);
+  background: var(--field-bg);
   border: var(--control-border);
-  border-radius: var(--control-radius);
+  border-radius: var(--field-radius);
+  box-shadow: var(--field-shadow);
 }
 /* A field the user cannot edit gets a fill and a dashed edge, so it does
    not read as one waiting for input. Its text stays at full contrast:
@@ -629,46 +777,59 @@ label {
   select:disabled,
   textarea:is(:disabled, :read-only)
 ) {
-  color: var(--grey-90);
-  background: var(--field-recessed);
-  border-style: dashed;
+  color: var(--field-disabled-fg);
+  background: var(--field-disabled-bg);
+  border: var(--field-disabled-border);
+  border-style: var(--disabled-edge);
 }
-/* Text buttons paint with --button-face and the UA's ButtonText, which every
-   theme and forced-colors mode resolve correctly. */
+/* Text buttons. A component that draws its own button (tree rows, toolbar
+   icons, menu items) sets its own background, border and shadow. */
 :where(button) {
   min-width: var(--control-h);
   min-height: var(--control-h);
   padding: var(--space-1) var(--space-3);
   font: inherit;
-  color: ButtonText;
+  color: var(--button-fg);
   background: var(--button-face);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
+  border: var(--button-border);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
   cursor: pointer;
+}
+:where(button:hover:not(:disabled)) {
+  background: var(--button-hover-bg);
+  border: var(--button-hover-border);
+  box-shadow: var(--button-hover-shadow);
 }
 /* Disabled is drawn, not faded: opacity took the text down to 2:1 and the
    button read as an empty field. GrayText is exempt from contrast rules and
    every theme and forced-colors mode resolve it. */
 :where(button:disabled) {
-  color: GrayText;
-  background: transparent;
-  border-style: dashed;
+  color: var(--button-disabled-fg);
+  background: var(--button-disabled-bg);
+  border: var(--button-disabled-border);
+  border-style: var(--disabled-edge);
+  box-shadow: var(--button-disabled-shadow);
   cursor: default;
 }
-/* The main action of a form or dialog. A literal white, not --white: under
-   auto+dark --white turns into Canvas, near-black on this blue (3.34:1). */
+/* The main action of a form or dialog. --primary-fg is a literal white,
+   not --white: under auto+dark --white turns into Canvas, near-black on
+   this blue (3.34:1). */
 .button-primary,
 .tree-empty button,
 .dashboard-alert button,
 .update-banner button {
-  color: #fff;
-  background: var(--blue-60);
-  border-color: var(--blue-60);
+  color: var(--primary-fg);
+  background: var(--primary-bg);
+  border: var(--primary-border);
+  box-shadow: var(--primary-shadow);
 }
 .button-primary:disabled {
-  color: GrayText;
-  background: transparent;
-  border-color: currentColor;
+  color: var(--button-disabled-fg);
+  background: var(--button-disabled-bg);
+  border: var(--button-disabled-border);
+  border-style: var(--disabled-edge);
+  box-shadow: var(--button-disabled-shadow);
 }
 /* In the auto theme a primary fill is the selection accent, so a browser
    that paints the OS accent (a slate, say) has one accent, not two. */
@@ -807,6 +968,7 @@ a {
   flex: 1;
 }
 .toolbar button {
+  box-shadow: none;
   display: flex;
   flex-shrink: 0;
   width: var(--toolbar-button);
@@ -836,6 +998,7 @@ a {
 
 .source,
 .article {
+  box-shadow: none;
   width: 100%;
   display: block;
   padding: var(--space-1) var(--space-2);
@@ -914,6 +1077,7 @@ p.tree-empty + .tree {
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
 .context-menu button {
+  box-shadow: none;
   --control-h: 2rem;
 
   width: 100%;
@@ -1017,13 +1181,15 @@ dialog.app-dialog .app-dialog-shortcuts kbd {
   border-radius: 0.25rem;
 }
 /* Destructive confirms (delete source/folder, admin remove) get the same
-   error color [role="alert"] uses, so the risky button reads as risky in
-   every theme -- --error is re-tokened per theme (e.g. #ff6b6b under
-   auto+dark) already. */
+   error color [role="alert"] uses, so the risky button reads as risky --
+   --error is re-tokened under auto+dark (#ff6b6b). The named themes draw
+   it as their default button instead: the desktops they imitate had no
+   red buttons, and its label names the action. */
 dialog.app-dialog .app-dialog-actions .app-dialog-danger {
-  color: var(--white);
-  background: var(--error);
-  border-color: var(--error);
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: var(--danger-border);
+  box-shadow: var(--primary-shadow);
 }
 /* The long-press menu (#721) starts a text selection mid-hold, so the
    interactive rows suppress it (not the reader pane, where selecting text is
@@ -1491,6 +1657,7 @@ img.skeleton-row {
   border: 0;
 }
 .youtube-cover {
+  box-shadow: none;
   position: relative;
   padding: 0;
   background: #000 center / cover;
@@ -1572,6 +1739,7 @@ input[aria-invalid="true"] {
   border: var(--border);
 }
 .found-feeds button {
+  box-shadow: none;
   display: grid;
   gap: var(--space-1);
   padding: var(--space-2);
