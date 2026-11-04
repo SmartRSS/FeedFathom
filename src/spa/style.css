@@ -699,20 +699,24 @@ html[data-route="options"] #app {
 }
 .admin-table th button {
   box-shadow: none;
-  min-height: 0;
+  /* The smallest pointer target WCAG 2.5.8 allows; touch raises it. */
+  min-height: 1.5rem;
   padding: 0;
   border: 0;
   background: transparent;
   font: inherit;
   font-weight: 700;
 }
-/* A source URL can be hundreds of characters; the cell keeps a readable
-   width and the full address stays in the link itself. */
+/* A source URL can be hundreds of characters; it wraps anywhere inside a
+   readable width instead of widening the table past its scroller. */
+.admin-table td:first-child {
+  white-space: normal;
+}
 .admin-table td:first-child a {
   display: block;
+  min-width: 12rem;
   max-width: 20rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .admin-table-actions {
   display: flex;

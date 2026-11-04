@@ -7,6 +7,20 @@ import {
 } from "#shared/contracts/responses.ts";
 import { api, messageOf } from "./api.ts";
 import { confirmDialog, promptDialog } from "./dialog.tsx";
+import { formatDate } from "./format-date.ts";
+
+// A timestamp in the reader's chosen date format, the exact value on hover.
+function Timestamp(props: { iso: string | null }) {
+  return (
+    <Show when={props.iso} fallback="—">
+      {(iso) => (
+        <time datetime={iso()} title={iso()}>
+          {formatDate(iso())}
+        </time>
+      )}
+    </Show>
+  );
+}
 
 type AdminSource = Static<typeof adminSourcesResponse>[number];
 type SourceSort =
@@ -193,9 +207,15 @@ export function Admin(props: {
                   <td data-label="Failures" title={source.recentFailureDetails}>
                     {source.recentFailures}
                   </td>
-                  <td data-label="Last attempt">{source.lastAttempt ?? "—"}</td>
-                  <td data-label="Last success">{source.lastSuccess ?? "—"}</td>
-                  <td data-label="Created">{source.createdAt}</td>
+                  <td data-label="Last attempt">
+                    <Timestamp iso={source.lastAttempt} />
+                  </td>
+                  <td data-label="Last success">
+                    <Timestamp iso={source.lastSuccess} />
+                  </td>
+                  <td data-label="Created">
+                    <Timestamp iso={source.createdAt} />
+                  </td>
                   <td data-label="WebSub">
                     <span
                       class="websub-status"
