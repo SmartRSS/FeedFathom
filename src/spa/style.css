@@ -2068,33 +2068,29 @@ input[aria-invalid="true"] {
     grid-template-columns: minmax(15rem, 30%) minmax(17rem, 30%) minmax(0, 1fr);
   }
 }
+.admin-sort {
+  display: none;
+}
 /* Below 1200px the admin table stacks: one block per source, each value
-   captioned from its data-label, with the header kept as a row of sort
-   buttons. Its nine columns do not fit narrower, and a landscape tablet
+   captioned from its data-label, sorted from one Sort by control. Its nine columns do not fit narrower, and a landscape tablet
    would lose the actions column off the edge. */
 @media (max-width: 1199px) {
   .admin-table,
   .admin-table tbody,
-  .admin-table tr,
-  .admin-table thead {
+  .admin-table tr {
     display: block;
   }
   .admin-table {
     white-space: normal;
   }
-  .admin-table thead tr {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-bottom: var(--border);
-  }
-  .admin-table th {
-    padding: 0;
-    border: 0;
-  }
-  .admin-table th:not([aria-sort]) {
+  /* Stacked rows caption their own values, so the header row has nothing
+     to head; the Sort by control above the table replaces it. */
+  .admin-table thead {
     display: none;
+  }
+  .admin-sort {
+    display: grid;
+    max-width: 20rem;
   }
   .admin-table tbody tr {
     padding: var(--space-2) var(--space-3);
@@ -2130,6 +2126,10 @@ input[aria-invalid="true"] {
    no fixed upscale suits both a browser at its default and one the user
    has scaled down. */
 @media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  .account-form h1,
+  .account-result h1 {
+    font-size: var(--fs-xl);
+  }
   .pane-title {
     display: block;
   }

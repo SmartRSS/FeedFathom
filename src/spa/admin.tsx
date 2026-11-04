@@ -86,6 +86,16 @@ export function Admin(props: {
   }
   onMount(load);
 
+  // The stacked layout's one sort control: a column and a direction.
+  function sortByChoice(value: string) {
+    const [column, direction] = value.split(":");
+    const choice = ADMIN_COLUMNS.find((item) => item.sort === column);
+    if (!choice || (direction !== "asc" && direction !== "desc")) return;
+    setSortBy(choice.sort);
+    setOrder(direction);
+    void load();
+  }
+
   function sortByColumn(column: SourceSort) {
     if (sortBy() === column) setOrder(order() === "asc" ? "desc" : "asc");
     else {
