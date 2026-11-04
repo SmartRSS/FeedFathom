@@ -1675,6 +1675,39 @@ img.skeleton-row {
 .reader pre {
   overflow: auto;
 }
+/* Feed content: quotes, code and tables, drawn from the theme's own tokens
+   so every theme carries them. */
+.reader hr {
+  border: 0;
+  border-top: var(--border);
+}
+.reader blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-4);
+  border-left: 0.1875rem solid var(--grey-30);
+  color: var(--muted);
+}
+.reader pre,
+.reader :not(pre) > code {
+  background: var(--grey-10);
+  border-radius: var(--radius);
+}
+.reader pre {
+  padding: var(--space-3);
+}
+.reader :not(pre) > code {
+  padding: 0 var(--space-1);
+}
+.reader table {
+  border-collapse: collapse;
+}
+.reader th,
+.reader td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--border);
+  text-align: start;
+  vertical-align: top;
+}
 .reader-plain {
   white-space: pre-wrap;
 }
