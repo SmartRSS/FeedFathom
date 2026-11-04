@@ -1044,7 +1044,8 @@ a {
 }
 /* "No feeds match that." stands alone: the empty tree beside it would push
    it down the pane. */
-p.tree-empty + .tree {
+p.tree-empty + .tree,
+.tree-empty[role="alert"] + .tree {
   display: none;
 }
 .tree-empty {
@@ -1697,9 +1698,10 @@ img.skeleton-row {
   color: var(--muted);
   font-size: var(--fs-sm);
 }
-.reader-meta > * + :not(a)::before {
+/* The dot trails an item, so a wrapped line never starts with one. */
+.reader-meta > :not(a):has(+ :not(a))::after {
   content: "·";
-  margin-inline-end: var(--space-2);
+  margin-inline-start: var(--space-2);
   color: var(--muted);
 }
 .reader-meta a {
