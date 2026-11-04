@@ -2677,8 +2677,10 @@ test("an admin can open the details behind a tree failure", async ({
   const failure = page.getByRole("complementary", { name: "Feeds" });
   await failure.getByText("Details").click();
   await expect(failure.getByRole("alert")).toContainText(
-    "HTTP 200. Invalid response from /api/tree (200)",
+    "Invalid response from /api/tree (200)",
   );
+  // The reason names the status already, so it isn't repeated.
+  await expect(failure.getByRole("alert")).not.toContainText("HTTP 200");
 });
 
 const goneFeed = {
@@ -2717,7 +2719,8 @@ test("an admin sees the status and reason behind a failing feed", async ({
   await selectSource(page);
   const notice = page.locator(".feed-notice");
   await notice.getByText("Details").click();
-  await expect(notice).toContainText(`HTTP 404. ${goneFeed.reason}`);
+  await expect(notice).toContainText(goneFeed.reason);
+  await expect(notice).not.toContainText("HTTP 404");
 });
 
 test("a feed down for less than a day lists its articles without a notice", async ({

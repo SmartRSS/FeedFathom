@@ -34,7 +34,10 @@ export function FailureDetails(props: {
       <details class="failure-details">
         <summary>Details</summary>
         <p>
-          {props.status ? `HTTP ${props.status}. ` : ""}
+          {/* The status leads unless the raw reason already names it. */}
+          {props.status && !props.reason.includes(String(props.status))
+            ? `HTTP ${props.status}. `
+            : ""}
           {props.reason || "No reason was recorded."}
         </p>
       </details>
