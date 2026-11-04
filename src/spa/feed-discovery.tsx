@@ -592,7 +592,9 @@ export function FeedDiscovery(props: {
               <p class="empty-pane">
                 {articles().length
                   ? "Select a preview article."
-                  : "Load a preview to read its articles here."}
+                  : props.editing
+                    ? "This feed's articles are in its list on the dashboard."
+                    : "Load a preview to read its articles here."}
               </p>
             }
           >
