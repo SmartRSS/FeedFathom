@@ -277,7 +277,10 @@ export function DialogHost() {
                 </button>
               </Show>
               <button
-                classList={{ "app-dialog-danger": danger() }}
+                classList={{
+                  "app-dialog-danger": danger(),
+                  "button-primary": !danger(),
+                }}
                 ref={confirmRef}
                 type="submit"
               >

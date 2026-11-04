@@ -484,7 +484,10 @@ export function FeedDiscovery(props: {
             <button type="button" onClick={props.close}>
               Cancel
             </button>
-            <button disabled={loading() || !feedUrl() || !title()}>
+            <button
+              class="button-primary"
+              disabled={loading() || !feedUrl() || !title()}
+            >
               {props.editing ? "Save" : "Subscribe"}
             </button>
           </div>

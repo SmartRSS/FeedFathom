@@ -70,7 +70,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
         <Show when={error()}>
           {(message) => <p role="alert">{message()}</p>}
         </Show>
-        <button>Login</button>
+        <button class="button-primary">Login</button>
         <Show when={resetEnabled()}>
           <a
             href="/password-reset"
@@ -270,7 +270,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
               <Show when={message()}>
                 {(text) => <p role="alert">{text()}</p>}
               </Show>
-              <button>Register</button>
+              <button class="button-primary">Register</button>
               <LoginLink navigate={props.navigate} next={props.next} />
             </form>
           )}
@@ -341,7 +341,7 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
         >
           <form class="account-form" onSubmit={activate}>
             <p>Activate this FeedFathom account?</p>
-            <button>Activate account</button>
+            <button class="button-primary">Activate account</button>
           </form>
         </Show>
         <LoginLink navigate={props.navigate} />
@@ -400,7 +400,7 @@ export function PasswordReset(props: { navigate(to: string): void }) {
             />
           </label>
           <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-          <button>Send reset link</button>
+          <button class="button-primary">Send reset link</button>
           <LoginLink navigate={props.navigate} />
         </form>
       </Show>
@@ -469,7 +469,7 @@ export function PasswordResetConfirm(props: {
             onInput={setConfirm}
           />
           <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-          <button>Set new password</button>
+          <button class="button-primary">Set new password</button>
           <LoginLink navigate={props.navigate} />
         </form>
       </Show>

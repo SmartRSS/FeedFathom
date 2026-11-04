@@ -605,7 +605,7 @@ export function Options(props: {
               label="Confirm new password"
               onInput={setPasswordConfirm}
             />
-            <button disabled={passwordLoading()}>
+            <button class="button-primary" disabled={passwordLoading()}>
               {passwordLoading() ? "Changing password…" : "Change password"}
             </button>
             <Show when={passwordMessage()}>
@@ -646,7 +646,7 @@ export function Options(props: {
                 required
               />
             </label>
-            <button disabled={opmlLoading()}>
+            <button class="button-primary" disabled={opmlLoading()}>
               {opmlLoading() ? "Importing…" : "Import"}
             </button>
             <Show when={opmlMessage()}>
