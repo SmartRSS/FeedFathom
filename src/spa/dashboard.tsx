@@ -2348,6 +2348,7 @@ export function Dashboard(props: {
                     </button>
                   </Show>
                   <button
+                    class="button-primary"
                     disabled={retryState() !== "idle"}
                     type="button"
                     onClick={() => void retrySelectedSource()}

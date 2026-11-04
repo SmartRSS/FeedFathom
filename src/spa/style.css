@@ -1123,17 +1123,41 @@ a {
   flex: 1 1 14rem;
   margin: 0;
 }
+/* A list pane too narrow for the sentence and the actions side by side
+   gives the actions their own row, rather than squeezing the sentence. */
+@container (width < 32rem) {
+  .feed-notice p {
+    flex-basis: 100%;
+  }
+}
 .feed-notice-actions {
   display: flex;
   gap: var(--space-2);
 }
+/* The same two actions as the failing-feed empty state, in the same look:
+   body-size text, with Try again the primary one. */
+.feed-notice button {
+  font-size: var(--fs-md);
+}
 /* What went wrong underneath, for admins: collapsed, and on a line of its
-   own once open. */
+   own once open. The summary is the target: 24px tall for a mouse, the
+   touch floor on touch, with its one line centred by line-height so the
+   disclosure triangle stays. */
 .failure-details {
   font-size: var(--fs-sm);
 }
 .failure-details summary {
+  line-height: max(1.5rem, 24px);
   cursor: pointer;
+}
+@media (pointer: coarse), (hover: none) {
+  .failure-details summary {
+    line-height: var(--touch);
+  }
+  /* Inset like the rows the notice sits with. */
+  .feed-notice {
+    padding: var(--space-2) var(--space-3);
+  }
 }
 .failure-details p {
   margin: var(--space-1) 0 0;
