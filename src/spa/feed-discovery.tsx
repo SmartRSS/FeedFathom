@@ -66,6 +66,9 @@ export function FeedDiscovery(props: {
   const [loading, setLoading] = createSignal(false);
   const [progress, setProgress] = createSignal("");
   const [message, setMessage] = createSignal("");
+  // A failed preview belongs to the Feed URL field, not the page: it shows
+  // under that field and clears once the address changes.
+  const [previewError, setPreviewError] = createSignal("");
   const [startupMessage, setStartupMessage] = createSignal("");
   // Only set where the server ingests mail, which is what gates the
   // newsletter button below -- a minted address is useless otherwise.
@@ -191,6 +194,7 @@ export function FeedDiscovery(props: {
     setTruncated(false);
     setSelectedIndex(undefined);
     setTitle("");
+    setPreviewError("");
     try {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
@@ -209,7 +213,12 @@ export function FeedDiscovery(props: {
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (!signal.aborted) reportError(cause, "Preview failed");
+      if (signal.aborted || props.handleUnauthorized(cause)) return;
+      setPreviewError(
+        `Couldn't load this feed. ${messageOf(cause, "The address did not return a readable feed.")}`,
+      );
+      // On one pane at a time the form, where the error is, comes forward.
+      props.focusPane("sources");
     } finally {
       if (!signal.aborted) {
         setLoading(false);
@@ -346,6 +355,13 @@ export function FeedDiscovery(props: {
         class="dashboard-pane sources-pane"
         classList={{ "focused-pane": props.pane() === "sources" }}
       >
+        {/* A toolbar like the other panes', so the three top edges line up;
+            its title is the pane's heading. */}
+        <div class="toolbar">
+          <h2 class="toolbar-title">
+            {props.editing ? "Edit feed" : "Discover feed"}
+          </h2>
+        </div>
         <form
           class="feed-discovery-form"
           onKeyDown={(event) => {
@@ -354,7 +370,6 @@ export function FeedDiscovery(props: {
           onSubmit={submit}
           ref={form}
         >
-          <h2>{props.editing ? "Edit feed" : "Discover feed"}</h2>
           <label>
             Website
             {/* Same shared-row lock as Feed URL below when editing -- see
@@ -417,6 +432,8 @@ export function FeedDiscovery(props: {
                 Unsubscribing and subscribing to a different URL is the
                 supported way to point at a different feed. */}
             <input
+              aria-describedby={previewError() ? "feed-url-error" : undefined}
+              aria-invalid={previewError() ? "true" : undefined}
               disabled={!!props.editing}
               title={
                 props.editing
@@ -424,9 +441,19 @@ export function FeedDiscovery(props: {
                   : undefined
               }
               value={feedUrl()}
-              onInput={(event) => setFeedUrl(event.currentTarget.value)}
+              onInput={(event) => {
+                setPreviewError("");
+                setFeedUrl(event.currentTarget.value);
+              }}
             />
           </label>
+          <Show when={previewError()}>
+            {(text) => (
+              <p class="field-error" id="feed-url-error" role="alert">
+                {text()}
+              </p>
+            )}
+          </Show>
           <Show when={!props.editing}>
             <Show when={feedUrl().includes("@")}>
               <button type="button" onClick={() => void copyAddress()}>
@@ -510,7 +537,9 @@ export function FeedDiscovery(props: {
               <p class="empty-pane">
                 {props.editing
                   ? "Editing an existing subscription."
-                  : "Load a feed to preview its articles."}
+                  : previewError()
+                    ? "Nothing to preview."
+                    : "Load a feed to preview its articles."}
               </p>
             }
           >
@@ -562,7 +591,11 @@ export function FeedDiscovery(props: {
         <div class="reader">
           <Show
             when={selectedArticle()}
-            fallback={<p>Select a preview article.</p>}
+            fallback={
+              <Show when={articles().length}>
+                <p class="empty-pane">Select a preview article.</p>
+              </Show>
+            }
           >
             {(item) => (
               <>

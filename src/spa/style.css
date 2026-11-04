@@ -1479,29 +1479,44 @@ img.skeleton-row {
   opacity: 1;
 }
 
+/* The form scrolls under its pane's toolbar. Its fields stop at 32rem, like
+   the account forms and Options, held by the padding so the scrollbar stays
+   at the pane edge on a wide single-pane screen. */
 .feed-discovery-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   align-content: start;
   overflow: auto;
-  padding: var(--space-4);
+  padding: var(--space-4) max(var(--space-4), (100% - 32rem) / 2);
 }
-.feed-discovery-form h2 {
-  margin: 0;
-  font-size: var(--fs-lg);
+/* A field's own error, directly under it. */
+.field-error {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--fs-sm);
+}
+input[aria-invalid="true"] {
+  border-color: var(--error);
 }
 .empty-pane {
   margin: 0;
   padding: var(--space-4);
   color: var(--muted);
 }
-.toolbar strong {
+.toolbar strong,
+.toolbar .toolbar-title {
   overflow: hidden;
+  margin: 0;
   font-size: var(--fs-sm);
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.toolbar .toolbar-title {
+  flex: 1;
+  padding-inline: var(--space-1);
 }
 .found-feeds {
   display: grid;
