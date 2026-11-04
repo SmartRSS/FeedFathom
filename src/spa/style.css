@@ -632,8 +632,9 @@ html[data-route="options"] body {
   margin: 0;
   font-size: var(--fs-lg);
 }
+/* The card's 16px gap is the only space between its parts. */
 .options-card p {
-  line-height: 1.5;
+  margin: 0;
 }
 /* One active session per row: the agent string truncates (raw headers,
    kept as the hover title, run long), and the date/current label wraps
