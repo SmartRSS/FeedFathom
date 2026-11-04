@@ -845,6 +845,10 @@ html[data-route="options"] body {
   border-radius: 1rem;
   font-size: var(--fs-sm);
 }
+/* No status is a bare dash, not a chip: it lines up with the column. */
+.websub-status-none {
+  padding-inline: 0;
+}
 .websub-status-verified {
   color: var(--status-success-fg);
   background: var(--status-success-bg);
