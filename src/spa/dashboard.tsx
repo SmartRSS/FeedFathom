@@ -2534,9 +2534,11 @@ export function Dashboard(props: {
                     <Show
                       when={selected()}
                       fallback={
-                        <Show when={!treeFailed()}>
-                          <p class="empty-pane">Select an article to read.</p>
-                        </Show>
+                        <p class="empty-pane">
+                          {treeFailed()
+                            ? "Nothing to read until the feeds load."
+                            : "Select an article to read."}
+                        </p>
                       }
                     >
                       <p>Reader content unavailable.</p>
