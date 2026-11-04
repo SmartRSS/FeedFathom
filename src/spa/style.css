@@ -98,10 +98,11 @@
      clear a bottom toolbar of this height. */
   --toolbar-button: 1.75rem;
   /* A toolbar holds icon buttons and the list filter, which is a field like
-     any other: it is as tall as the taller of the two, plus a half step
-     and its own bottom border, so every pane's toolbar is the same height
-     whatever it holds. */
-  --toolbar-pad: var(--space-half);
+     any other: it is as tall as the taller of the two, plus a step above
+     and below so the field keeps clear of the bar's edges, and its own
+     bottom border, so every pane's toolbar is the same height whatever it
+     holds. */
+  --toolbar-pad: var(--space-1);
   --toolbar-h: calc(
     max(var(--toolbar-button), var(--control-h)) + 2 * var(--toolbar-pad) +
       var(--border-w)
@@ -2243,8 +2244,6 @@ textarea[aria-invalid="true"]:focus {
     --control-h: var(--touch);
     --row-h: var(--touch);
     --toolbar-button: var(--touch);
-    /* The 44px controls sit inside the bar rather than filling it. */
-    --toolbar-pad: var(--space-1);
   }
   .toolbar {
     gap: 0;
