@@ -91,6 +91,8 @@
   color-scheme: light dark;
   --selected-bg: var(--blue-60);
   --selected-fg: #fff;
+  /* One accent: links, selection and primary buttons share it. */
+  --blue: var(--selected-bg);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
@@ -134,6 +136,16 @@
 }
 /* Tones between dark surface and text. Without color-mix() the hairlines
    stay GrayText and buttons keep the UA's ButtonFace. */
+/* Dark links from the same accent hue, lightened until they read on the dark
+   canvas (oklch lightness 0.78 is about 9:1 on #121212). Without relative
+   colours they keep the system LinkText. */
+@supports (color: oklch(from red l c h)) {
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --blue: oklch(from var(--selected-bg) max(l, 0.78) c h);
+    }
+  }
+}
 @supports (color: color-mix(in srgb, CanvasText 22%, Canvas)) {
   @media (prefers-color-scheme: dark) {
     :root[data-theme="auto"] {
@@ -648,6 +660,19 @@ label {
   color: GrayText;
   background: transparent;
   border-color: currentColor;
+}
+/* In the auto theme a primary fill is the selection accent, so a browser
+   that paints the OS accent (a slate, say) has one accent, not two. */
+:root[data-theme="auto"]
+  :is(
+    .button-primary,
+    .tree-empty button,
+    .dashboard-alert button,
+    .update-banner button
+  ):not(:disabled) {
+  color: var(--selected-fg);
+  background: var(--selected-bg);
+  border-color: var(--selected-bg);
 }
 a {
   color: var(--blue);
