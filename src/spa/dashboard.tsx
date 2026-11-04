@@ -2176,6 +2176,11 @@ export function Dashboard(props: {
               <Icon raw={settingsRaw} />
             </button>
           </div>
+          {/* Names the open feed or folder where the list fills the screen
+              and the tree is out of sight; hidden beside a visible tree. */}
+          <Show when={selectedNode()}>
+            {(node) => <h2 class="pane-title">{node().name}</h2>}
+          </Show>
           {/* Its own row rather than a slot in the toolbar: that row is eight
               icon buttons and a dropdown in a pane that is 320px wide, and a
               text input squeezed in there had no room to show what was typed.
@@ -2340,8 +2345,8 @@ export function Dashboard(props: {
                       >
                         <p>
                           {failing().lastSuccess
-                            ? `This feed hasn't updated since ${formatDate(failing().lastSuccess)}.`
-                            : "This feed can't be fetched."}
+                            ? `${selectedNode()?.name ?? "This feed"} hasn't updated since ${formatDate(failing().lastSuccess)}.`
+                            : `${selectedNode()?.name ?? "This feed"} can't be fetched.`}
                         </p>
                         <p
                           class="article-list-failing-reason"
