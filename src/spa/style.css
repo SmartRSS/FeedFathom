@@ -143,13 +143,13 @@
   /* One accent: links, selection and primary buttons share it. */
   --blue: var(--selected-bg);
   /* One value per role: button text is body text, and a button shares the
-     panel fill that read-only fields and toolbars use, instead of the UA's
-     near-identical ButtonText and ButtonFace. */
+     surface tone toolbars use, instead of the UA's near-identical
+     ButtonText and ButtonFace. #f9f9fa sat too close to the white page
+     for a toolbar or a button to read as a surface; the next grey step
+     does. */
   --button-fg: var(--grey-90);
-  --button-face: var(--grey-10);
-  /* #f9f9fa sat too close to the white page for a toolbar to read as a
-     surface; the next grey step does. */
   --surface: var(--grey-20);
+  --button-face: var(--surface);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
@@ -1278,7 +1278,7 @@ dialog.app-dialog .app-dialog-shortcuts kbd {
   font: inherit;
   font-size: max(0.875em, 11px);
   padding: 0 var(--space-1);
-  background: var(--grey-10);
+  background: var(--surface);
   border: var(--border);
   border-radius: 0.25rem;
 }
@@ -1803,7 +1803,7 @@ img.skeleton-row {
 }
 .reader pre,
 .reader :not(pre) > code {
-  background: var(--grey-10);
+  background: var(--surface);
   border-radius: var(--radius);
 }
 .reader pre {
