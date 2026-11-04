@@ -289,6 +289,8 @@ export function Dashboard(props: {
       reportError(cause, "Could not fetch the feed again");
     }
   }
+  const articleFeedName = (article: { sourceId: number }) =>
+    findNode(tree(), "source", String(article.sourceId))?.name;
   const emptyFolderSelected = () => {
     const node = selectedNode();
     return node?.type === "folder" && node.children.length === 0;
@@ -2485,15 +2487,38 @@ export function Dashboard(props: {
             >
               {(item) => (
                 <>
-                  <h1>{item().article.title}</h1>
-                  <a
-                    href={safeArticleUrl(
-                      item().article.url,
-                      window.location.href,
-                    )}
-                  >
-                    Original
-                  </a>
+                  <header class="reader-header">
+                    <h1>{item().article.title}</h1>
+                    {/* One muted line: where it is from, who wrote it, when,
+                        and the way out to the original. The author is left
+                        out when it only repeats the feed's name, which is
+                        what a feed without authors falls back to. */}
+                    <p class="reader-meta">
+                      <Show when={articleFeedName(item().article)}>
+                        {(name) => <span>{name()}</span>}
+                      </Show>
+                      <Show
+                        when={
+                          item().article.author &&
+                          item().article.author !==
+                            articleFeedName(item().article)
+                        }
+                      >
+                        <span>{item().article.author}</span>
+                      </Show>
+                      <time datetime={item().article.publishedAt}>
+                        {formatDate(item().article.publishedAt)}
+                      </time>
+                      <a
+                        href={safeArticleUrl(
+                          item().article.url,
+                          window.location.href,
+                        )}
+                      >
+                        Original
+                      </a>
+                    </p>
+                  </header>
                   <ReaderBody
                     article={item().article}
                     content={item().content}

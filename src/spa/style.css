@@ -1630,6 +1630,27 @@ img.skeleton-row {
   font-size: var(--fs-xl);
   line-height: 1.25;
 }
+.reader-header h1 {
+  margin-bottom: 0;
+}
+/* Feed · author · time, with the way to the original at the end. */
+.reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  margin: var(--space-1) 0 var(--space-6);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+.reader-meta > * + :not(a)::before {
+  content: "·";
+  margin-inline-end: var(--space-2);
+  color: var(--muted);
+}
+.reader-meta a {
+  margin-inline-start: auto;
+}
 .reader img,
 .reader video {
   max-width: 100%;
@@ -1852,7 +1873,7 @@ input[aria-invalid="true"] {
   }
   /* Tabs and the standalone links (Home, Register instead, Login, the
      reader's Original) are targets too. */
-  .reader > a,
+  .reader-meta a,
   .options-nav a,
   .account-form > a,
   .account-result > a,
