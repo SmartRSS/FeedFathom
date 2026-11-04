@@ -1198,7 +1198,9 @@ dialog.app-dialog .app-dialog-shortcuts {
   margin: 0;
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
+  /* Both cells share the row height, so the rule under them runs straight
+     where a description wraps. */
+  align-items: stretch;
   max-height: 60vh;
   overflow-y: auto;
 }
