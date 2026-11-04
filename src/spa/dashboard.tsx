@@ -16,6 +16,7 @@ import {
   removedArticlesResponse,
   removedIdResponse,
   snoozedSourceResponse,
+  successResponse,
   treeResponse,
   updatedFolderResponse,
   type Article,
@@ -263,6 +264,31 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  // "Try again" on a failing feed: the fetch runs in the worker, so the tree
+  // is reloaded a little later to show how it went.
+  const [retryState, setRetryState] = createSignal<
+    "idle" | "queued" | "sending"
+  >("idle");
+  async function retrySelectedSource() {
+    const node = selectedNode();
+    if (node?.type !== "source") return;
+    setRetryState("sending");
+    try {
+      await api("/source/refresh", successResponse, {
+        body: JSON.stringify({ sourceId: Number(node.uid) }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      setRetryState("queued");
+      setTimeout(() => {
+        setRetryState("idle");
+        if (!disposed) void refreshCurrentView();
+      }, 8000);
+    } catch (cause) {
+      setRetryState("idle");
+      reportError(cause, "Could not fetch the feed again");
+    }
+  }
   const emptyFolderSelected = () => {
     const node = selectedNode();
     return node?.type === "folder" && node.children.length === 0;
@@ -2075,6 +2101,7 @@ export function Dashboard(props: {
             <BackButton backPane={props.backPane} />
             <button
               aria-label="select all"
+              disabled={articles().length === 0}
               onClick={() => {
                 // Clicking focuses this button, which sits outside
                 // .article-list, so handleArticleKeys would stop firing.
@@ -2307,7 +2334,7 @@ export function Dashboard(props: {
                         <p>
                           {failing().lastSuccess
                             ? `This feed hasn't updated since ${formatDate(failing().lastSuccess)}.`
-                            : "This feed hasn't loaded yet."}
+                            : "This feed can't be fetched."}
                         </p>
                         <p
                           class="article-list-failing-reason"
@@ -2315,6 +2342,27 @@ export function Dashboard(props: {
                         >
                           {describeFetchFailure(failing().reason)}
                         </p>
+                        <div class="form-actions">
+                          <button
+                            type="button"
+                            onClick={() => void showProperties()}
+                          >
+                            Edit feed
+                          </button>
+                          <button
+                            class="button-primary"
+                            disabled={retryState() === "sending"}
+                            type="button"
+                            onClick={() => void retrySelectedSource()}
+                          >
+                            Try again
+                          </button>
+                        </div>
+                        <Show when={retryState() === "queued"}>
+                          <p class="article-list-failing-reason">
+                            Fetching again. This can take a minute.
+                          </p>
+                        </Show>
                       </div>
                     )}
                   </Show>

@@ -7,6 +7,7 @@ import {
   newsletterAddressRequest,
   previewQuery,
   readArticlesRequest,
+  refreshSourceRequest,
   removeArticlesRequest,
   removeFolderRequest,
   removeSourceRequest,
@@ -21,6 +22,7 @@ import { getFindHandler } from "#features/feeds/routes/find.ts";
 import { getPreviewHandler } from "#features/feeds/routes/preview.ts";
 import { postNewsletterAddressHandler } from "#features/feeds/routes/newsletter-address.ts";
 import { postSubscribeHandler } from "#features/feeds/routes/subscribe.ts";
+import { postRefreshSourceHandler } from "#features/feeds/routes/refresh.ts";
 import {
   deleteArticlesHandler,
   patchArticlesHandler,
@@ -44,6 +46,7 @@ export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
   Parameters<typeof getFindHandler>[1] &
   Parameters<typeof postSubscribeHandler>[1] &
   Parameters<typeof postNewsletterAddressHandler>[1] &
+  Parameters<typeof postRefreshSourceHandler>[1] &
   Pick<
     typeof feeds,
     "articlesDataService" | "foldersDataService" | "userSourcesDataService"
@@ -146,6 +149,9 @@ export const createReaderRoutes = (services: ReaderRouteServices) => {
             sourceId: updated.id,
           });
         },
+      )
+      .post("/api/source/refresh", { body: refreshSourceRequest }, (ctx) =>
+        postRefreshSourceHandler(ctx, services),
       )
       .get("/api/preview", { query: previewQuery }, (ctx) =>
         getPreviewHandler(ctx, services),

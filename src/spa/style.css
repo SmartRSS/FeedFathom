@@ -738,6 +738,9 @@ a {
   align-content: start;
   color: var(--grey-90);
 }
+.article-list-failing .form-actions {
+  justify-content: center;
+}
 .article-list-failing-reason {
   color: var(--muted);
   font-size: var(--fs-sm);

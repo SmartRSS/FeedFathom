@@ -331,6 +331,23 @@ export class UserSourcesDataService {
     ).at(0);
   }
 
+  // The source behind one of this user's subscriptions, or undefined when
+  // the user does not subscribe to it.
+  public async getSubscribedSource(userId: number, sourceId: number) {
+    return (
+      await this.drizzleConnection
+        .select({ id: sources.id, url: sources.url })
+        .from(userSources)
+        .innerJoin(sources, eq(sources.id, userSources.sourceId))
+        .where(
+          and(
+            eq(userSources.userId, userId),
+            eq(userSources.sourceId, sourceId),
+          ),
+        )
+    ).at(0);
+  }
+
   public async getUserSourceIds(userId: number): Promise<number[]> {
     const rows = await this.drizzleConnection
       .select({ id: userSources.sourceId })
