@@ -261,18 +261,22 @@ export function Admin(props: {
                       : "—"}
                   </td>
                   <td class="admin-table-actions">
-                    <button
-                      type="button"
-                      onClick={() => void replaceUrl(source)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void removeSource(source)}
-                    >
-                      Remove
-                    </button>
+                    {/* The flex row lives inside the cell: a flex <td> is
+                        no longer a table cell and breaks the row rules. */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => void replaceUrl(source)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void removeSource(source)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}

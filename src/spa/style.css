@@ -836,7 +836,7 @@ html[data-route="options"] body {
   max-width: 20rem;
   overflow-wrap: anywhere;
 }
-.admin-table-actions {
+.admin-table-actions > div {
   display: flex;
   gap: var(--space-2);
 }
@@ -2219,7 +2219,7 @@ textarea[aria-invalid="true"]:focus {
     max-width: none;
   }
   .admin-table td.admin-table-actions {
-    display: flex;
+    display: block;
   }
 }
 /* The single-pane layer (SINGLE_PANE_QUERY in src/spa/behavior.ts): a
