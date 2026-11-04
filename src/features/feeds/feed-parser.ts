@@ -338,9 +338,10 @@ export class FeedParser {
     }
   }
 
+  // A failure comes back as the fetcher's reason, for the route to phrase.
   public async preview(
     sourceUrl: string,
-  ): Promise<ReturnType<typeof mapFeedToPreview> | undefined> {
+  ): Promise<ReturnType<typeof mapFeedToPreview> | { failure: string }> {
     try {
       const {
         feed: parsedFeed,
@@ -361,7 +362,7 @@ export class FeedParser {
       ) {
         throw error_;
       }
-      return undefined;
+      return { failure: error_ instanceof Error ? error_.message : "" };
     }
   }
 

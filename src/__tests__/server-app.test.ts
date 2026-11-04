@@ -192,7 +192,7 @@ function createDependencies(): Dependencies {
       {
         async discoverAndSubscribeWebSub() {},
         async preview() {
-          return undefined;
+          return { failure: "" };
         },
       },
       "feedParser",
@@ -686,7 +686,7 @@ test("returns sanitized transient preview articles and rejects parser failures",
   };
   dependencies.feedParser.preview = async (sourceUrl) =>
     sourceUrl.endsWith("/invalid")
-      ? undefined
+      ? { failure: "Failed to load data for x, received status 404" }
       : {
           articles: [
             {
@@ -761,7 +761,9 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[1]).toBe("https://feed.example/rss");
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
-  expect(await invalid.json()).toEqual({ error: "Invalid feed url" });
+  expect(await invalid.json()).toEqual({
+    error: "The server answered 404 (not found).",
+  });
 });
 
 test("preview and find return a dynamic Retry-After when the host is throttled", async () => {
@@ -836,7 +838,7 @@ test.each([
     };
     dependencies.feedParser.preview = async () => {
       reached.push("feedParser.preview");
-      return undefined;
+      return { failure: "" };
     };
     dependencies.feedParser.parseUrl = async () => {
       reached.push("feedParser.parseUrl");
@@ -1075,7 +1077,9 @@ test("preview refuses a feed that resolves to a private address", async () => {
   );
 
   expect(response.status).toBe(400);
-  expect(await response.json()).toEqual({ error: "Invalid feed url" });
+  expect(await response.json()).toEqual({
+    error: "The address did not return a readable feed.",
+  });
   expect(dispatched).toEqual([]);
 });
 
@@ -1164,7 +1168,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
 
   dependencies.feedParser.preview = async () => {
     parserCalls++;
-    return undefined;
+    return { failure: "" };
   };
   dependencies.feedPreviewCache.get = async () => cachedPreview;
   dependencies.userSourcesDataService.addSourceToUser = async (

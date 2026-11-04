@@ -23,6 +23,7 @@ import {
   type TreeNode,
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
+import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
   filterTree,
   findNode,
@@ -262,6 +263,10 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  const emptyFolderSelected = () => {
+    const node = selectedNode();
+    return node?.type === "folder" && node.children.length === 0;
+  };
   const failingSelection = () => {
     const node = selectedNode();
     return node?.type === "source" ? (node.failing ?? null) : null;
@@ -2286,7 +2291,11 @@ export function Dashboard(props: {
                     when={failingSelection()}
                     fallback={
                       <div class="article-list-empty" role="status">
-                        <p>All caught up.</p>
+                        <p>
+                          {emptyFolderSelected()
+                            ? "This folder is empty. Add a feed or move one here."
+                            : "All caught up."}
+                        </p>
                       </div>
                     }
                   >
@@ -2300,8 +2309,11 @@ export function Dashboard(props: {
                             ? `This feed hasn't updated since ${formatDate(failing().lastSuccess)}.`
                             : "This feed hasn't loaded yet."}
                         </p>
-                        <p class="article-list-failing-reason">
-                          {failing().reason}
+                        <p
+                          class="article-list-failing-reason"
+                          title={failing().reason}
+                        >
+                          {describeFetchFailure(failing().reason)}
                         </p>
                       </div>
                     )}

@@ -523,7 +523,9 @@ test("a failed redirect-cache write still returns the redirected feed", async ()
 
   const preview = await parser.preview("https://publisher.example/feed.xml");
 
-  expect(preview?.articles.map(({ guid }) => guid)).toEqual(["a"]);
+  expect(
+    "articles" in preview ? preview.articles.map(({ guid }) => guid) : [],
+  ).toEqual(["a"]);
   expect(logged).toHaveBeenCalledTimes(1);
 });
 
