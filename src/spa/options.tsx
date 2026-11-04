@@ -431,7 +431,9 @@ export function Options(props: {
                 options={SHOW_HIDE}
               />
             </section>
-            <section class="options-card">
+            {/* Hidden on a touch-only device (style.css), which has no
+                keyboard to use it with. */}
+            <section class="options-card options-keyboard">
               <h2>Keyboard</h2>
               <p>The dashboard is keyboard-first.</p>
               {/* The same DialogHost dialog the `?` shortcut opens; it works on

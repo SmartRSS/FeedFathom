@@ -69,6 +69,7 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader.ts";
+import { ArticleMarkup } from "./article-markup.tsx";
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { ForEachNode, TreeItem } from "./tree-item.tsx";
@@ -127,7 +128,7 @@ function ReaderBody(props: { content: ReaderContent; article: Article }) {
 
 function ReaderMarkup(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
-    <div innerHTML={props.content.content} />
+    <ArticleMarkup html={props.content.content} />
   ) : (
     <div class="reader-plain">{props.content.content}</div>
   );

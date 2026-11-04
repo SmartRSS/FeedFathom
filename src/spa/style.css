@@ -714,6 +714,13 @@ html[data-route="options"] body {
   border: var(--border);
   border-radius: var(--radius);
 }
+/* The Options card about keyboard shortcuts, on a device with nothing but
+   a touch screen. */
+@media (hover: none) and (pointer: coarse) {
+  .options-keyboard {
+    display: none;
+  }
+}
 .options-mobile-layout {
   display: none;
 }

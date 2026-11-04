@@ -14,6 +14,7 @@ import {
 import { readerHidden, type DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, ApiError, failureDetails, messageOf } from "./api.ts";
+import { ArticleMarkup } from "./article-markup.tsx";
 import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
@@ -638,7 +639,7 @@ export function FeedDiscovery(props: {
                   url={item().url || undefined}
                 />
                 <Enclosures article={item()} body={item().content} />
-                <div innerHTML={item().content} />
+                <ArticleMarkup html={item().content} />
               </>
             )}
           </Show>
