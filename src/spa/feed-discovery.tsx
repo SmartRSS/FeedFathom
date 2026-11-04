@@ -113,7 +113,7 @@ export function FeedDiscovery(props: {
         try {
           const url = new URL(initialFeedUrl);
           if (url.protocol === "http:" || url.protocol === "https:")
-            void preview(initialFeedUrl, false);
+            void preview(initialFeedUrl);
         } catch {}
       }
     }
@@ -186,9 +186,7 @@ export function FeedDiscovery(props: {
     }
   }
 
-  // A preview the user asked for shows its articles; the one a preview
-  // link starts by itself leaves the form in front.
-  async function preview(url = feedUrl(), showArticles = true) {
+  async function preview(url = feedUrl()) {
     const signal = startRequest();
     setLoading(true);
     setProgress("Loading preview…");
@@ -213,7 +211,7 @@ export function FeedDiscovery(props: {
       setSelectedIndex(result.articles.length ? 0 : undefined);
       setFeeds([]);
       setMessage("");
-      if (showArticles) props.focusPane("articles");
+      props.focusPane("articles");
     } catch (cause) {
       if (signal.aborted || props.handleUnauthorized(cause)) return;
       setPreviewError(
@@ -360,6 +358,8 @@ export function FeedDiscovery(props: {
         {/* A toolbar like the other panes', so the three top edges line up;
             its title is the pane's heading. */}
         <div class="toolbar">
+          {/* On one pane at a time this bar is the way out, as Cancel is. */}
+          <BackButton backPane={props.close} />
           <h2 class="toolbar-title">
             {props.editing ? "Edit feed" : "Discover feed"}
           </h2>
