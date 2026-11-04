@@ -271,6 +271,7 @@ export function Admin(props: {
                         Edit
                       </button>
                       <button
+                        class="button-danger-text"
                         type="button"
                         onClick={() => void removeSource(source)}
                       >

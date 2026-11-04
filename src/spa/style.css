@@ -1339,7 +1339,10 @@ a {
   background: var(--selected-bg);
   color: var(--selected-fg);
 }
-.context-menu button.context-menu-danger:not(:hover, :focus) {
+/* A destructive action's trigger, in a menu or beside harmless buttons,
+   has red text; the red fill is kept for the button that confirms it. */
+.context-menu button.context-menu-danger:not(:hover, :focus),
+.button-danger-text:not(:disabled) {
   color: var(--error);
 }
 .context-menu button:disabled {
