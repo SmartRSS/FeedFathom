@@ -5,6 +5,7 @@ import {
   isXmlElement,
   parseXml,
 } from "#platform/xml.ts";
+import { decodeHtmlReferences } from "#features/feeds/plain-text.ts";
 
 const maximumDepth = 32;
 const maximumNodes = 10_000;
@@ -59,8 +60,12 @@ function processOutlines(outlines: unknown[]): OpmlNode[] {
     // skip it and keep processing the rest of the file.
     if (!isXmlElement(outline)) continue;
 
-    const title =
-      attribute(outline, "title") || attribute(outline, "text") || "Unknown";
+    // Readers that keep titles HTML-escaped export them escaped again for
+    // XML ("&amp;#39;"), so one HTML pass follows the XML one: the same pass
+    // the feed library gives a feed's own title. Tags stay as text.
+    const title = decodeHtmlReferences(
+      attribute(outline, "title") || attribute(outline, "text") || "Unknown",
+    );
     const type = attribute(outline, "type").toLowerCase();
     const xmlUrl = attribute(outline, "xmlUrl");
 

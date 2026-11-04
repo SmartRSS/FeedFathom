@@ -1,4 +1,5 @@
 import { parseFeed } from "@rowanmanning/feed-parser";
+import { parseContactString } from "@rowanmanning/feed-parser/lib/utils/parse-contact-string.js";
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
@@ -39,6 +40,7 @@ import {
 } from "#features/feeds/websub.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
+import { hasHtmlTag, stripHtmlTags } from "#features/feeds/plain-text.ts";
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 const feedAuthorProjection = Type.Object(
@@ -112,6 +114,27 @@ Object.defineProperty(Element.prototype, "textContentAsDate", {
 
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 
+// The library splits an RSS author or dc:creator as "Name <email>" and drops
+// any word's outer angle brackets, so a name wrapped in markup (WordPress
+// h-card plugins wrap dc:creator in a span) came out as
+// "span class='p-author h-card'>Name</span". Where the raw text holds a tag,
+// the tags are stripped before the same split, over the same elements the
+// library reads. Undefined leaves the library's own reading in place, which
+// is always the case for Atom: its <author> has child elements and is not
+// split this way.
+function authorsWithoutMarkup(element: XmlElement) {
+  const raw = ["managingeditor", "author", "creator"]
+    .flatMap((name) => element.findElementsWithName(name))
+    .filter((author) =>
+      author.children.every((child) => typeof child === "string"),
+    )
+    .map((author) => author.textContentNormalized);
+  if (!raw.some(hasHtmlTag)) return undefined;
+  return raw
+    .map((text) => parseContactString(stripHtmlTags(text)))
+    .filter((author) => author !== null);
+}
+
 const isMediaRss = (element: XmlElement) =>
   element.namespaceUri === "http://search.yahoo.com/mrss/" ||
   element.namespaceUri === "https://search.yahoo.com/mrss/";
@@ -133,12 +156,19 @@ const mediaDescription = (element: XmlElement) =>
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
   const feed = parseFeed(text);
+  const feedAuthors = authorsWithoutMarkup(feed.element);
+  if (feedAuthors)
+    Object.defineProperty(feed, "authors", { value: feedAuthors });
   // An item without its own url, authors or categories falls back to the
   // feed's, which the library recomputes on every read by wrapping each child
   // of the channel, items included. Pinned once, reading every item is linear
   // in the item count instead of quadratic (#1031).
   for (const key of ["authors", "categories", "url"] as const) {
     Object.defineProperty(feed, key, { value: feed[key] });
+  }
+  for (const item of feed.items) {
+    const authors = authorsWithoutMarkup(item.element);
+    if (authors) Object.defineProperty(item, "authors", { value: authors });
   }
   for (const item of feed.items) {
     if (item.content !== null || item.description !== null) continue;

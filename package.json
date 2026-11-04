@@ -45,6 +45,7 @@
     "drizzle-orm": "^0.45.4",
     "elysia": "2.0.0-rc.1",
     "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
+    "html-entities": "^2.6.0",
     "ioredis": "^6.0.0",
     "linkedom": "file:./vendor/linkedom-shim",
     "mailparser": "^3.14.1",

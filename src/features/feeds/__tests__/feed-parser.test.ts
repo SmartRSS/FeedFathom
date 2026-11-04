@@ -526,3 +526,16 @@ test("a failed redirect-cache write still returns the redirected feed", async ()
   expect(preview?.articles.map(({ guid }) => guid)).toEqual(["a"]);
   expect(logged).toHaveBeenCalledTimes(1);
 });
+
+describe("feed authors", () => {
+  test("keeps the text of an author wrapped in markup", async () => {
+    const parsed = parseXmlFeed(await fixture("markup-authors.xml"));
+    expect(parsed.items.map((entry) => entry.authors[0]?.name)).toEqual([
+      "Geoff Graham",
+      "Geoff & Co",
+      "Channel Author",
+      "Jane Doe",
+    ]);
+    expect(parsed.items[3]?.authors[0]?.email).toBe("jane@geoff.example");
+  });
+});
