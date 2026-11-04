@@ -454,8 +454,8 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  // #817: the dialog's accessible name is its visible prompt.
-  await expect(dialog).toHaveAccessibleName("Folder name");
+  // #817: the dialog's accessible name is its visible title.
+  await expect(dialog).toHaveAccessibleName("New folder");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
   await dialog.getByRole("button", { name: "OK" }).click();
@@ -2852,11 +2852,11 @@ test("a second dialog request cancels the one still pending", async ({
 
   const first = await page.evaluate(async (url) => {
     const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
-    const pending = confirmDialog("First?");
+    const pending = confirmDialog("First?", "");
     // Let the first dialog open and take focus, so the second replaces an
     // open dialog and must keep the first one's focus-return target.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    void promptDialog("Second", "kept");
+    void promptDialog("Second", "Name", "kept");
     return await pending;
   }, "/dialog.tsx");
   expect(first).toBe(false);

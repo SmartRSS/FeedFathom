@@ -1166,6 +1166,13 @@ dialog.app-dialog .app-dialog-actions {
   justify-content: flex-end;
   gap: var(--space-2);
 }
+/* OK and Cancel are the same width, whatever their labels. */
+dialog.app-dialog .app-dialog-actions button {
+  min-width: 5rem;
+}
+dialog.app-dialog p {
+  margin: 0;
+}
 /* The keyboard cheat sheet (#709) rides in the same DialogHost dialog: same
    surface, border and text tokens as the form variant, so every theme and
    the single-pane layout come along for free. The list scrolls rather than

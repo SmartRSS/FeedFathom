@@ -758,7 +758,7 @@ export function Dashboard(props: {
     });
   };
   async function addNewFolder() {
-    const name = await promptDialog("Folder name");
+    const name = await promptDialog("New folder", "Folder name");
     if (!name?.trim()) return;
     setError("");
     try {
@@ -1343,7 +1343,7 @@ export function Dashboard(props: {
       setShowDiscovery(true);
       return;
     }
-    const name = await promptDialog("Folder name", node.name);
+    const name = await promptDialog("Rename folder", "Folder name", node.name);
     if (!name?.trim() || name === node.name) return;
     setError("");
     try {
@@ -1475,10 +1475,13 @@ export function Dashboard(props: {
       return;
     }
     if (
-      !(await confirmDialog(`Delete "${node.name}"?`, {
-        confirmLabel: "Delete",
-        danger: true,
-      }))
+      !(await confirmDialog(
+        `Delete "${node.name}"?`,
+        node.type === "source"
+          ? "You unsubscribe from this feed, and its articles leave your lists."
+          : "The folder is removed. It holds no feeds.",
+        { confirmLabel: "Delete", danger: true },
+      ))
     )
       return;
     try {

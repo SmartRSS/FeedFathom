@@ -96,11 +96,12 @@ export function Admin(props: {
 
   async function replaceUrl(source: AdminSource) {
     const oldUrl = source.url;
-    const newUrl = await promptDialog("New URL", oldUrl);
+    const newUrl = await promptDialog("Change feed URL", "New URL", oldUrl);
     if (!newUrl || newUrl === oldUrl) return;
     if (
       !(await confirmDialog(
-        `Change "${oldUrl}" to "${newUrl}"? This affects ${source.subscriberCount} subscriber(s).`,
+        "Change feed URL?",
+        `"${oldUrl}" becomes "${newUrl}" for its ${source.subscriberCount} subscriber(s).`,
         { confirmLabel: "Change URL" },
       ))
     )
@@ -121,7 +122,8 @@ export function Admin(props: {
   async function removeSource(source: AdminSource) {
     if (
       !(await confirmDialog(
-        `Delete "${source.url}"? This removes it for every subscriber.`,
+        "Delete this feed for everyone?",
+        `"${source.url}" and its articles are removed for every subscriber.`,
         { confirmLabel: "Delete", danger: true },
       ))
     )
