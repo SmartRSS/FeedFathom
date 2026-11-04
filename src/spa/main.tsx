@@ -69,6 +69,7 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
   admin: "Admin",
   dashboard: "FeedFathom",
   login: "Login",
+  notFound: "Page not found",
   options: "Options",
   passwordReset: "Reset password",
   passwordResetConfirm: "Reset password",
@@ -307,6 +308,23 @@ function Router(props: {
               handleUnauthorized={props.handleUnauthorized}
               navigate={props.navigate}
             />
+          </Match>
+          <Match when={props.route.name === "notFound"}>
+            <main>
+              <section class="account-result">
+                <h1>Page not found</h1>
+                <p>There is nothing at this address.</p>
+                <a
+                  href="/"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    props.navigate("/");
+                  }}
+                >
+                  Home
+                </a>
+              </section>
+            </main>
           </Match>
           <Match when={props.route.name === "admin"}>
             <Admin

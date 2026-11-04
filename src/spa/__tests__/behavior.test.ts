@@ -93,9 +93,9 @@ describe("resolveRoute", () => {
       token: "exact-token",
     });
     expect(resolveRoute("/activate/exact-token/extra")).toEqual({
-      name: "dashboard",
+      name: "notFound",
     });
-    expect(resolveRoute("/activate/")).toEqual({ name: "dashboard" });
+    expect(resolveRoute("/activate/")).toEqual({ name: "notFound" });
   });
 
   test("prefills preview from its decoded feedUrl query", () => {
@@ -119,7 +119,9 @@ describe("resolveRoute", () => {
 
   test("requires an exact match for named pages", () => {
     expect(resolveRoute("/options")).toEqual({ name: "options" });
-    expect(resolveRoute("/options/more")).toEqual({ name: "dashboard" });
+    expect(resolveRoute("/options/more")).toEqual({ name: "notFound" });
+    expect(resolveRoute("/no/such/page")).toEqual({ name: "notFound" });
+    expect(resolveRoute("/?feed=1")).toEqual({ name: "dashboard" });
   });
 });
 

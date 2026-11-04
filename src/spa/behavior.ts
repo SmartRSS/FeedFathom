@@ -150,7 +150,7 @@ export function registerPath(next: string): string {
 export type Route =
   | { name: "activate"; token: string }
   | { name: "login" | "register"; next: string }
-  | { name: "admin" | "dashboard" | "options" | "passwordReset" }
+  | { name: "admin" | "dashboard" | "notFound" | "options" | "passwordReset" }
   | { name: "passwordResetConfirm"; token: string }
   | { feedUrl?: string; name: "preview"; newsletter?: true };
 
@@ -186,7 +186,9 @@ export function resolveRoute(path: string): Route {
         name: "register",
         next: safeNextPath(url.searchParams.get("next")),
       };
-    default:
+    case "/":
       return { name: "dashboard" };
+    default:
+      return { name: "notFound" };
   }
 }
