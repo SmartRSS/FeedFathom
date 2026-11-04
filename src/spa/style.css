@@ -668,14 +668,31 @@ a {
      toolbars. */
   grid-template-rows: minmax(0, 1fr);
   grid-auto-rows: minmax(0, 1fr);
-  /* viewport-fit=cover lets an installed PWA draw under the status and
-     navigation bars, which swallowed the toolbars; the insets keep them in
-     the visible area, and dvh tracks it rather than the largest viewport. */
+  /* dvh tracks the visible viewport rather than the largest one. */
   height: 100vh;
   height: 100dvh;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: var(--inset-top) var(--inset-right) var(--inset-bottom)
+    var(--inset-left);
   overflow: hidden;
+}
+/* viewport-fit=cover lets an installed app draw under the status and
+   navigation bars, which swallowed the toolbars; the insets keep them in
+   the visible area. Only there: in an ordinary browser tab the page already
+   ends above the bars, yet Firefox still reports a bottom inset, which drew
+   a blank band under the bottom toolbar. */
+:root {
+  --inset-top: 0px;
+  --inset-right: 0px;
+  --inset-bottom: 0px;
+  --inset-left: 0px;
+}
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    --inset-top: env(safe-area-inset-top, 0px);
+    --inset-right: env(safe-area-inset-right, 0px);
+    --inset-bottom: env(safe-area-inset-bottom, 0px);
+    --inset-left: env(safe-area-inset-left, 0px);
+  }
 }
 
 .dashboard-alert {
@@ -1346,6 +1363,12 @@ img.skeleton-row {
   text-align: center;
 }
 
+/* The reader fills its pane, so a short article starts at the top even where
+   the pane's column is reversed to put the toolbar at the bottom. */
+.reader-pane > .reader {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .dashboard article {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1675,10 +1698,13 @@ img.skeleton-row {
   .admin-table td.admin-table-actions {
     display: flex;
   }
+  /* With the toolbars at the bottom, the banner sits above them and above
+     the filter or search row that rests on them, instead of covering
+     Refresh, the filter, Options or the field. */
   html[data-mobile-list-anchor="true"] .update-banner {
     bottom: calc(
-      env(safe-area-inset-bottom) + var(--toolbar-button) + 2 * var(--space-1) +
-        var(--space-2)
+      var(--inset-bottom) + var(--toolbar-button) + 2 * var(--space-1) +
+        var(--control-h) + 3 * var(--space-2)
     );
   }
   .article-filter-label {
