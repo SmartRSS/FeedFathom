@@ -1105,6 +1105,47 @@ a {
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
+/* A failing feed that still has articles: one slim line above them in the
+   warning tone, its actions beside it where they fit. */
+.feed-notice {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-block: var(--border);
+  color: var(--status-warning-fg);
+  background: var(--status-warning-bg);
+  font-size: var(--fs-sm);
+}
+.feed-notice p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+.feed-notice-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+/* What went wrong underneath, for admins: collapsed, and on a line of its
+   own once open. */
+.failure-details {
+  font-size: var(--fs-sm);
+}
+.failure-details summary {
+  cursor: pointer;
+}
+.failure-details p {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.feed-notice .failure-details,
+.dashboard-alert .failure-details[open] {
+  flex-basis: 100%;
+}
+.dashboard-alert {
+  flex-wrap: wrap;
+}
 
 .dashboard-pane {
   display: flex;

@@ -156,7 +156,7 @@ export function Options(props: {
       void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionMessage(messageOf(cause, "Could not load session."));
+      setSessionMessage(messageOf(cause, "Could not load your account."));
     }
     // The empty-tree guidance links here with a hash; the SPA navigation
     // never scrolls on its own, so honour the target once it is rendered.
@@ -176,7 +176,7 @@ export function Options(props: {
       setSessions(listed.sessions);
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not load sessions."));
+      setSessionsMessage(messageOf(cause, "Could not load your sessions."));
     }
   }
 
@@ -190,7 +190,7 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not sign out session."));
+      setSessionsMessage(messageOf(cause, "Could not sign out that session."));
     } finally {
       setRevokingId(undefined);
     }
@@ -204,7 +204,9 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not sign out sessions."));
+      setSessionsMessage(
+        messageOf(cause, "Could not sign out the other sessions."),
+      );
     } finally {
       setRevokingId(undefined);
     }
@@ -263,7 +265,7 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setPasswordFailed(true);
-      setPasswordMessage(messageOf(cause, "Could not change password."));
+      setPasswordMessage(messageOf(cause, "Could not change your password."));
     } finally {
       setPasswordLoading(false);
     }
@@ -286,7 +288,7 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setOpmlFailed(true);
-      setOpmlMessage(messageOf(cause, "Could not import OPML."));
+      setOpmlMessage(messageOf(cause, "Could not import the OPML file."));
     } finally {
       setOpmlLoading(false);
     }

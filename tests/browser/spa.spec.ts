@@ -444,7 +444,7 @@ test("surfaces folder creation failures without refreshing the tree", async ({
     .click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "Could not create folder",
+    "FeedFathom couldn't create the folder. Try again in a moment.",
   );
   expect(state.treeRequests).toBe(1);
 });
@@ -1693,7 +1693,7 @@ test("surfaces a malformed Options session without crashing", async ({
   await openApp(page, { sessionFailure: true }, "/options");
 
   await expect(page.getByRole("alert")).toContainText(
-    "Could not load session.",
+    "FeedFathom couldn't load your account. Try again in a moment.",
   );
   expect(new URL(page.url()).pathname).toBe("/options");
 });
@@ -2262,7 +2262,7 @@ test("keeps preview usable when folder startup fails", async ({ page }) => {
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
   await expect(page.getByRole("alert")).toContainText(
-    "Could not load folders.",
+    "FeedFathom couldn't load your folders. Try again in a moment.",
   );
 });
 
@@ -2656,14 +2656,79 @@ test("surfaces tree failures without masquerading as logout", async ({
   await openApp(page, { treeFailure: true });
 
   expect(new URL(page.url()).pathname).toBe("/");
-  // An unreadable answer is described in the feeds pane, without the
-  // response's own details, and offers Retry there.
+  // An unreadable answer is FeedFathom's failure, said in a plain sentence
+  // in the feeds pane, which offers Try again there. A reader gets no
+  // details.
   const failure = page.getByRole("complementary", { name: "Feeds" });
   await expect(failure.getByRole("alert")).toContainText(
-    "Feeds couldn't load.",
+    "FeedFathom couldn't load your feeds. Try again in a moment.",
   );
-  await expect(failure.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(
+    failure.getByRole("button", { name: "Try again" }),
+  ).toBeVisible();
+  await expect(failure.getByText("Details")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
+});
+
+test("an admin can open the details behind a tree failure", async ({
+  page,
+}) => {
+  await openApp(page, { admin: true, treeFailure: true });
+  const failure = page.getByRole("complementary", { name: "Feeds" });
+  await failure.getByText("Details").click();
+  await expect(failure.getByRole("alert")).toContainText(
+    "HTTP 200. Invalid response from /api/tree (200)",
+  );
+});
+
+const goneFeed = {
+  reason:
+    "Failed to load data for https://news.example/feed.xml, received status 404",
+};
+
+test("a feed failing for over a day keeps its articles under a notice", async ({
+  page,
+}) => {
+  await openApp(page, { failing: { ...goneFeed, daysSinceSuccess: 2 } });
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(1);
+  const notice = page.locator(".feed-notice");
+  await expect(notice).toContainText(
+    "This feed seems to have moved or been removed.",
+  );
+  await expect(notice).toContainText("Not updated since");
+  await expect(notice.getByRole("button", { name: "Edit feed" })).toBeVisible();
+  await expect(notice.getByRole("button", { name: "Try again" })).toBeVisible();
+  // The status and the fetcher's own words are for admins.
+  await expect(notice.getByText("Details")).toHaveCount(0);
+  await expect(notice).not.toContainText("404");
+  // Only on the feed itself.
+  await page.locator("button.source").filter({ hasText: "Today" }).click();
+  await expect(page.locator(".feed-notice")).toHaveCount(0);
+});
+
+test("an admin sees the status and reason behind a failing feed", async ({
+  page,
+}) => {
+  await openApp(page, {
+    admin: true,
+    failing: { ...goneFeed, daysSinceSuccess: 2 },
+  });
+  await selectSource(page);
+  const notice = page.locator(".feed-notice");
+  await notice.getByText("Details").click();
+  await expect(notice).toContainText(`HTTP 404. ${goneFeed.reason}`);
+});
+
+test("a feed down for less than a day lists its articles without a notice", async ({
+  page,
+}) => {
+  await openApp(page, {
+    failing: { daysSinceSuccess: 0.5, reason: "connect ECONNREFUSED 1.2.3.4" },
+  });
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(1);
+  await expect(page.locator(".feed-notice")).toHaveCount(0);
 });
 
 // #833: refreshing while the boot tree request is still in flight aborts it.
@@ -3370,7 +3435,7 @@ test("a failed delete leaves the feed switched to since alone", async ({
   ).toBeVisible();
   failDelete!();
   await expect(page.getByRole("alert")).toContainText(
-    "Could not delete articles",
+    "FeedFathom couldn't delete articles. Try again in a moment.",
   );
   await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
   await expectSelectedRow(page, /Tech Preview/);

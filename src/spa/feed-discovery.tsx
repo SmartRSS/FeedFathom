@@ -131,7 +131,7 @@ export function FeedDiscovery(props: {
         if (props.editing) setFolderId(props.editing.parentUid ?? "");
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
-        setStartupMessage(messageOf(cause, "Could not load folders."));
+        setStartupMessage(messageOf(cause, "Could not load your folders."));
       }
     })();
     // Separate from the folders load: mail being unavailable only costs the
@@ -178,7 +178,7 @@ export function FeedDiscovery(props: {
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (!signal.aborted) reportError(cause, "No feeds found");
+      if (!signal.aborted) reportError(cause, "Could not look for feeds.");
     } finally {
       if (!signal.aborted) {
         setLoading(false);
@@ -215,9 +215,7 @@ export function FeedDiscovery(props: {
       props.focusPane("articles");
     } catch (cause) {
       if (signal.aborted || props.handleUnauthorized(cause)) return;
-      setPreviewError(
-        `Couldn't load this feed. ${messageOf(cause, "The address did not return a readable feed.")}`,
-      );
+      setPreviewError(messageOf(cause, "Could not load this feed."));
       // On one pane at a time the form, where the error is, comes forward.
       props.focusPane("sources");
     } finally {

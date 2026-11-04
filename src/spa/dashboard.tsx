@@ -24,7 +24,7 @@ import {
   type TreeNode,
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
-import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
+import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
   filterTree,
   findNode,
@@ -60,7 +60,8 @@ import {
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import { api, failureReason, messageOf } from "./api.ts";
+import { api, failureDetails, messageOf } from "./api.ts";
+import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
@@ -80,7 +81,7 @@ import {
   todayView,
 } from "./preferences.ts";
 import { ScrollPastQueue } from "./scroll-past.ts";
-import { formatDate } from "./format-date.ts";
+import { formatDate, formatDay } from "./format-date.ts";
 import { ReaderHeader } from "./reader-header.tsx";
 import { ContextMenu, type ContextMenuItem } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
@@ -228,10 +229,13 @@ export function Dashboard(props: {
     filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
-  // Why the tree failed to load, or "" while it has not. The first-run
-  // guidance says "No feeds yet", which is false then; the feeds pane says
-  // what happened and offers Retry instead.
-  const [treeFailed, setTreeFailed] = createSignal("");
+  // Why the tree failed to load, while it has. The first-run guidance says
+  // "No feeds yet", which is false then; the feeds pane says what happened
+  // and offers Try again instead.
+  const [treeFailed, setTreeFailed] = createSignal<{
+    details: ReturnType<typeof failureDetails>;
+    message: string;
+  }>();
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
   // A full page means more articles may be available, not that another page
@@ -305,6 +309,22 @@ export function Dashboard(props: {
     const node = selectedNode();
     return node?.type === "source" ? (node.failing ?? null) : null;
   };
+  const failingCause = () => {
+    const failing = failingSelection();
+    return failing ? classifyFetchFailure(failing.reason) : undefined;
+  };
+  // A failing feed that still has articles lists them, under a notice once
+  // it has gone a day without an update: a shorter outage is usually the
+  // next poll's to fix. Only on the feed itself, not Today or its folder.
+  const failingNotice = () => {
+    const failing = failingSelection();
+    return failing?.lastSuccess &&
+      articles().length > 0 &&
+      !activeSearch() &&
+      Date.now() - Date.parse(failing.lastSuccess) > 24 * 60 * 60 * 1000
+      ? failing
+      : undefined;
+  };
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
@@ -332,10 +352,19 @@ export function Dashboard(props: {
   );
   const [readerAvailable, setReaderAvailable] = createSignal(false);
   const [error, setError] = createSignal("");
+  // The details behind the alert, kept with the message they explain: an
+  // alert set from a plain string has none.
+  const [errorDetails, setErrorDetails] = createSignal<{
+    details: ReturnType<typeof failureDetails>;
+    message: string;
+  }>();
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setError(messageOf(cause, fallback));
+    const message = messageOf(cause, fallback);
+    setErrorDetails({ details: failureDetails(cause), message });
+    setError(message);
   };
+  const isAdmin = createAdminFlag();
   const [showDiscovery, setShowDiscovery] = createSignal(
     props.initialDiscovery ?? false,
   );
@@ -737,7 +766,7 @@ export function Dashboard(props: {
     treeRequestPromise = attempt;
     const nextTree = await attempt;
     if (controller.signal.aborted) return nextTree;
-    setTreeFailed("");
+    setTreeFailed(undefined);
     applyTree(nextTree);
     return nextTree;
   }
@@ -776,7 +805,7 @@ export function Dashboard(props: {
       });
       await loadTree();
     } catch (cause) {
-      reportError(cause, "Could not create folder");
+      reportError(cause, "Could not create the folder");
     }
   }
   onMount(async () => {
@@ -833,7 +862,10 @@ export function Dashboard(props: {
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
-      setTreeFailed(failureReason(cause));
+      setTreeFailed({
+        details: failureDetails(cause),
+        message: messageOf(cause, "Could not load your feeds."),
+      });
     } finally {
       revealTree();
     }
@@ -1375,7 +1407,7 @@ export function Dashboard(props: {
       });
       await loadTree();
     } catch (cause) {
-      reportError(cause, "Could not rename folder");
+      reportError(cause, "Could not rename the folder");
     }
   }
   async function copyToClipboard(url: string, announcement: string) {
@@ -1407,8 +1439,8 @@ export function Dashboard(props: {
       reportError(
         cause,
         pausedUntil === null
-          ? "Could not unsnooze feed"
-          : "Could not snooze feed",
+          ? "Could not unsnooze the feed"
+          : "Could not snooze the feed",
       );
     }
   }
@@ -1555,7 +1587,7 @@ export function Dashboard(props: {
         document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
       );
     } catch (cause) {
-      reportError(cause, "Could not delete item");
+      reportError(cause, "Could not delete it");
     }
   }
   // In-flight article GETs by id, prefetches and opens alike. A press, a
@@ -1704,7 +1736,7 @@ export function Dashboard(props: {
         );
         return;
       }
-      reportError(cause, "Could not load article");
+      reportError(cause, "Could not load the article");
     } finally {
       if (!body.controller.signal.aborted) setLoadingArticle(false);
     }
@@ -1779,7 +1811,7 @@ export function Dashboard(props: {
         if (rememberReadingPosition.get())
           readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
-          reportError(cause, "Could not refresh tree"),
+          reportError(cause, "Could not refresh your feeds"),
         );
       })
       .catch((cause) => {
@@ -1794,7 +1826,7 @@ export function Dashboard(props: {
           setSelectionAnchor(Math.min(...indexes));
         }
         loadTree().catch((reloadCause) =>
-          reportError(reloadCause, "Could not refresh tree"),
+          reportError(reloadCause, "Could not refresh your feeds"),
         );
       });
   }
@@ -1973,6 +2005,17 @@ export function Dashboard(props: {
         {(message) => (
           <div class="dashboard-alert" role="alert">
             <p>{message()}</p>
+            <Show
+              when={
+                errorDetails()?.message === message()
+                  ? errorDetails()
+                  : undefined
+              }
+            >
+              {(shown) => (
+                <FailureDetails admin={isAdmin()} {...shown().details} />
+              )}
+            </Show>
             <button type="button" onClick={() => void refreshCurrentView()}>
               Retry
             </button>
@@ -2118,17 +2161,21 @@ export function Dashboard(props: {
                   class="article-list-empty article-list-failing"
                   role="alert"
                 >
-                  <p>Feeds couldn't load.</p>
-                  <p class="article-list-failing-reason">{treeFailed()}</p>
+                  <p>{treeFailed()?.message}</p>
                   <div class="form-actions">
                     <button
                       class="button-primary"
                       type="button"
                       onClick={() => void refreshCurrentView()}
                     >
-                      Retry
+                      Try again
                     </button>
                   </div>
+                  <Show when={treeFailed()?.details}>
+                    {(details) => (
+                      <FailureDetails admin={isAdmin()} {...details()} />
+                    )}
+                  </Show>
                 </div>
               </Show>
               <Show
@@ -2287,6 +2334,37 @@ export function Dashboard(props: {
               />
             </form>
           </Show>
+          <Show when={failingNotice()}>
+            {(failing) => (
+              <div class="feed-notice">
+                <p>
+                  Not updated since {formatDay(failing().lastSuccess)} ·{" "}
+                  {failingCause()?.sentence}
+                </p>
+                <div class="feed-notice-actions">
+                  <Show when={failingCause()?.editable}>
+                    <button type="button" onClick={() => void showProperties()}>
+                      Edit feed
+                    </button>
+                  </Show>
+                  <button
+                    disabled={retryState() !== "idle"}
+                    type="button"
+                    onClick={() => void retrySelectedSource()}
+                  >
+                    {retryState() === "queued"
+                      ? "Fetching again…"
+                      : "Try again"}
+                  </button>
+                </div>
+                <FailureDetails
+                  admin={isAdmin()}
+                  reason={failing().reason}
+                  status={failingCause()?.status}
+                />
+              </div>
+            )}
+          </Show>
           <div
             aria-busy={articlesLoading()}
             aria-label="Articles"
@@ -2431,22 +2509,21 @@ export function Dashboard(props: {
                       >
                         <p>
                           {failing().lastSuccess
-                            ? `${selectedNode()?.name ?? "This feed"} hasn't updated since ${formatDate(failing().lastSuccess)}.`
-                            : `${selectedNode()?.name ?? "This feed"} can't be fetched.`}
+                            ? `${selectedNode()?.name ?? "This feed"} hasn't updated since ${formatDay(failing().lastSuccess)}.`
+                            : `${selectedNode()?.name ?? "This feed"} isn't updating.`}
                         </p>
-                        <p
-                          class="article-list-failing-reason"
-                          title={failing().reason}
-                        >
-                          {describeFetchFailure(failing().reason)}
+                        <p class="article-list-failing-reason">
+                          {failingCause()?.sentence}
                         </p>
                         <div class="form-actions">
-                          <button
-                            type="button"
-                            onClick={() => void showProperties()}
-                          >
-                            Edit feed
-                          </button>
+                          <Show when={failingCause()?.editable}>
+                            <button
+                              type="button"
+                              onClick={() => void showProperties()}
+                            >
+                              Edit feed
+                            </button>
+                          </Show>
                           <button
                             class="button-primary"
                             disabled={retryState() === "sending"}
@@ -2461,6 +2538,11 @@ export function Dashboard(props: {
                             Fetching again. This can take a minute.
                           </p>
                         </Show>
+                        <FailureDetails
+                          admin={isAdmin()}
+                          reason={failing().reason}
+                          status={failingCause()?.status}
+                        />
                       </div>
                     )}
                   </Show>

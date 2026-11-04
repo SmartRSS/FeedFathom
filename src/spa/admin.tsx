@@ -81,7 +81,7 @@ export function Admin(props: {
       );
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Unauthorized"));
+      setMessage(messageOf(cause, "Could not load the sources."));
     }
   }
   onMount(load);
@@ -129,7 +129,7 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Could not update URL."));
+      setMessage(messageOf(cause, "Could not update the URL."));
     }
   }
 
@@ -151,7 +151,7 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Could not delete source."));
+      setMessage(messageOf(cause, "Could not delete the source."));
     }
   }
 

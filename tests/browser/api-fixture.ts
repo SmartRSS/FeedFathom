@@ -151,8 +151,12 @@ export async function installApiFixture(
   // A context also routes what a controlling service worker fetches.
   page: BrowserContext | Page,
   options: {
+    admin?: boolean;
     authenticated?: boolean;
     discoveryRace?: boolean;
+    // Tech News keeps failing with this reason, its last success that long
+    // ago; its articles stay.
+    failing?: { daysSinceSuccess: number; reason: string };
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
     longArticle?: boolean;
@@ -209,7 +213,9 @@ export async function installApiFixture(
       if (options.sessionFailure) return respond({ user: { id: "malformed" } });
       return respond({
         ...(options.mailDomain ? { mailDomain: options.mailDomain } : {}),
-        user: state.authenticated ? user : null,
+        user: state.authenticated
+          ? { ...user, isAdmin: options.admin ?? false }
+          : null,
       });
     }
 
@@ -305,9 +311,20 @@ export async function installApiFixture(
       state.treeRequests++;
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
       if (options.treeFailure) return respond({ tree: "malformed" });
-      const currentSource = state.updatedSource
-        ? { ...source, name: state.updatedSource.name }
-        : source;
+      const currentSource = {
+        ...source,
+        ...(state.updatedSource ? { name: state.updatedSource.name } : {}),
+        ...(options.failing
+          ? {
+              failing: {
+                lastSuccess: new Date(
+                  Date.now() - options.failing.daysSinceSuccess * 86_400_000,
+                ).toJSON(),
+                reason: options.failing.reason,
+              },
+            }
+          : {}),
+      };
       return respond({
         tree: state.removedFolderIds.includes(7)
           ? []

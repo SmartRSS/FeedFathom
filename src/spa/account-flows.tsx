@@ -89,7 +89,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
       });
       props.navigate(props.next);
     } catch (cause) {
-      setError(messageOf(cause, "Login failed"));
+      setError(messageOf(cause, "Could not sign in."));
     }
   }
   return (
@@ -264,7 +264,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
       });
       setRegistered(true);
     } catch (cause) {
-      setMessage(messageOf(cause, "Registration failed"));
+      setMessage(messageOf(cause, "Could not register."));
     }
   }
   return (
@@ -404,7 +404,7 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
       );
       setResult("success");
     } catch (cause) {
-      setMessage(messageOf(cause, "Account activation failed."));
+      setMessage(messageOf(cause, "Could not activate the account."));
       setResult("error");
     }
   }
