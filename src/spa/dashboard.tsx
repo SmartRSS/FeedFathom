@@ -2245,9 +2245,18 @@ export function Dashboard(props: {
                 void runSearch(searchTerms());
               }}
             >
+              {/* Disabled on a failing feed with nothing to list, like
+                  select-all, mark-read and delete: nothing there to search
+                  from. Kept in place, so the panes' placeholders still
+                  share a top line. */}
               <input
                 aria-label="Search articles"
                 class="article-search"
+                disabled={
+                  Boolean(failingSelection()) &&
+                  !articles().length &&
+                  !activeSearch()
+                }
                 placeholder="Search articles"
                 type="search"
                 value={searchTerms()}
