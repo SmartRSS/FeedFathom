@@ -1899,6 +1899,13 @@ img.skeleton-row {
 .reader-header h1 {
   margin-bottom: 0;
 }
+/* A feed's own headings rank below the article's title. */
+.reader h2 {
+  font-size: var(--fs-lg);
+}
+.reader :is(h3, h4, h5, h6) {
+  font-size: var(--fs-md);
+}
 /* Feed · author · time, with the way to the original at the end. */
 .reader-meta {
   display: flex;
