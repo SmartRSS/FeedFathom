@@ -2419,6 +2419,22 @@ textarea[aria-invalid="true"]:focus {
     > :first-child:not(.skeleton) {
     margin-top: auto;
   }
+  /* The list pane's content sinks as one stack: rows, an empty or failure
+     state, and the feed's title above them. The list takes only the height
+     its rows need (and scrolls once they overflow), the state only its own,
+     and the free space goes above the title, which carries a top edge so
+     the space reads as the pane's background rather than missing rows. A
+     long list leaves no free space, so its title is at the top as before. */
+  html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
+    flex: 0 1 auto;
+  }
+  html[data-mobile-list-anchor="true"] .articles-pane > .article-list-empty {
+    flex: none;
+  }
+  html[data-mobile-list-anchor="true"] .articles-pane > .pane-title {
+    margin-top: auto;
+    border-top: var(--border);
+  }
   .toolbar button.only-mobile {
     display: flex;
   }
