@@ -912,6 +912,22 @@ label {
   border-radius: var(--field-radius);
   box-shadow: var(--field-shadow);
 }
+/* In the auto theme a select is drawn like the other fields: its text starts
+   at the same inset, and its chevron is the app's own (two gradient halves
+   in the text colour) instead of a different one per browser. The named
+   themes keep their own controls. */
+:root[data-theme="auto"] select {
+  appearance: none;
+  padding-inline-end: calc(var(--space-2) + 1rem);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--space-2) - 0.3125rem) 55%,
+    calc(100% - var(--space-2)) 55%;
+  background-size: 0.3125rem 0.3125rem;
+  background-repeat: no-repeat;
+}
 /* A field the user cannot edit gets a fill and a dashed edge, so it does
    not read as one waiting for input. Its text stays at full contrast:
    these hold URLs people read and copy. */
