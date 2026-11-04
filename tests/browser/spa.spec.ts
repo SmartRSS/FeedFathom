@@ -2104,7 +2104,7 @@ test("mints a newsletter address when opened with ?newsletter", async ({
     "/preview?newsletter",
   );
 
-  const feedUrl = page.getByLabel("Feed URL");
+  const feedUrl = page.getByLabel("Email address");
   await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
   const minted = await feedUrl.inputValue();
   await expect.poll(() => state.reservedAddresses).toEqual([minted]);
@@ -2132,12 +2132,12 @@ test("says so when a generated address could not be reserved", async ({
       "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
     ),
   ).toBeVisible();
-  const address = await page.getByLabel("Feed URL").inputValue();
+  const address = await page.getByLabel("Email address").inputValue();
   expect(state.deliverNewsletter(address)).toBe(false);
 
   state.failReservations = false;
   await page.reload();
-  await expect(page.getByLabel("Feed URL")).toHaveValue(address);
+  await expect(page.getByLabel("Email address")).toHaveValue(address);
   await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
   await expect(page.getByText(/^Address not reserved/u)).toHaveCount(0);
   const failures = browserFailures.get(page) ?? [];
@@ -2158,7 +2158,7 @@ test("keeps mail sent to a generated address before Subscribe", async ({
 
   await page.getByRole("button", { name: "Generate email address" }).click();
   await expect(page.getByText("Address copied.")).toBeVisible();
-  const address = await page.getByLabel("Feed URL").inputValue();
+  const address = await page.getByLabel("Email address").inputValue();
   await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
 
   await page.getByLabel("Title").fill("Letters");
@@ -2254,6 +2254,39 @@ test("keeps the newest discovery preview response", async ({ page }) => {
     page.getByRole("heading", { name: "Fast feed article" }),
   ).toBeVisible();
 });
+
+for (const admin of [false, true])
+  test(`a failed preview gives ${admin ? "an admin" : "a reader"} ${admin ? "the sentence and its details" : "the sentence alone"}`, async ({
+    page,
+  }) => {
+    await installApiFixture(page, { admin });
+    await page.route("**/api/preview?*", (route) =>
+      route.fulfill({
+        json: {
+          detail: "getaddrinfo ENOTFOUND preview.example",
+          error: "This site can't be found.",
+        },
+        status: 400,
+      }),
+    );
+    await page.goto("/preview");
+    await page.getByLabel("Feed URL").fill("https://preview.example/feed.xml");
+    await page.getByRole("button", { name: "Load preview" }).click();
+    await expect(page.locator("#feed-url-error")).toHaveText(
+      "This site can't be found.",
+    );
+    // The browser logs the 400 itself.
+    (browserFailures.get(page) ?? []).length = 0;
+    const details = page.locator(".failure-details");
+    if (!admin) {
+      await expect(details).toHaveCount(0);
+      return;
+    }
+    await details.getByText("Details").click();
+    await expect(details).toContainText(
+      "HTTP 400. getaddrinfo ENOTFOUND preview.example",
+    );
+  });
 
 test("keeps preview usable when folder startup fails", async ({ page }) => {
   await installApiFixture(page, { foldersFailure: true });

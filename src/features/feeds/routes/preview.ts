@@ -27,8 +27,13 @@ export async function getPreviewHandler(
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   const source = await feedParser.preview(decoded.feedUrl);
+  // The sentence is what a reader sees; the fetcher's own words are for an
+  // admin's Details.
   if ("failure" in source)
-    return json({ error: describeFetchFailure(source.failure) }, 400);
+    return json(
+      { detail: source.failure, error: describeFetchFailure(source.failure) },
+      400,
+    );
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
   return json({
     articles: source.articles.map((article) => ({

@@ -11,9 +11,10 @@ import {
   type FoundFeed,
   type PreviewArticle,
 } from "#shared/contracts/responses.ts";
-import type { DashboardPane } from "./behavior.ts";
+import { readerHidden, type DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api, ApiError, messageOf } from "./api.ts";
+import { api, ApiError, failureDetails, messageOf } from "./api.ts";
+import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
   isNewsletterAddress,
@@ -57,6 +58,7 @@ export function FeedDiscovery(props: {
 }) {
   const [link, setLink] = createSignal("");
   const [feedUrl, setFeedUrl] = createSignal("");
+  const isEmail = () => feedUrl().includes("@");
   const [title, setTitle] = createSignal("");
   const [folderId, setFolderId] = createSignal("");
   const [folders, setFolders] = createSignal<Folder[]>([]);
@@ -70,6 +72,9 @@ export function FeedDiscovery(props: {
   // A failed preview belongs to the Feed URL field, not the page: it shows
   // under that field and clears once the address changes.
   const [previewError, setPreviewError] = createSignal("");
+  const [previewDetails, setPreviewDetails] =
+    createSignal<ReturnType<typeof failureDetails>>();
+  const isAdmin = createAdminFlag();
   const [startupMessage, setStartupMessage] = createSignal("");
   // Only set where the server ingests mail, which is what gates the
   // newsletter button below -- a minted address is useless otherwise.
@@ -208,13 +213,18 @@ export function FeedDiscovery(props: {
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      // A preview lands on its first article, or on nothing when it is empty.
-      setSelectedIndex(result.articles.length ? 0 : undefined);
+      // Beside a visible reader a preview lands on its first article. Where
+      // the reader is out of sight until a row is opened, nothing is
+      // selected yet, as in the dashboard's list.
+      setSelectedIndex(
+        result.articles.length && !readerHidden() ? 0 : undefined,
+      );
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
       if (signal.aborted || props.handleUnauthorized(cause)) return;
+      setPreviewDetails(failureDetails(cause));
       setPreviewError(messageOf(cause, "Could not load this feed."));
       // On one pane at a time the form, where the error is, comes forward.
       props.focusPane("sources");
@@ -396,6 +406,7 @@ export function FeedDiscovery(props: {
           </label>
           <Show when={!props.editing}>
             <button
+              class="field-action"
               type="button"
               disabled={loading() || !link()}
               onClick={() => void findFeeds()}
@@ -429,7 +440,9 @@ export function FeedDiscovery(props: {
             </Show>
           </Show>
           <label>
-            Feed URL
+            {/* An address generated for email subscriptions is not a URL,
+                and the field says what it holds. */}
+            {isEmail() ? "Email address" : "Feed URL"}
             {/* Shared/deduplicated across every subscriber to this feed
                 (see sources_url_unique) -- locked here so editing can't
                 silently repoint everyone else's subscription too.
@@ -458,31 +471,22 @@ export function FeedDiscovery(props: {
               </p>
             )}
           </Show>
-          <Show when={!props.editing}>
-            <Show when={feedUrl().includes("@")}>
-              <button type="button" onClick={() => void copyAddress()}>
-                Copy address
-              </button>
-            </Show>
-            <Show when={mailDomain()}>
-              <button
-                type="button"
-                disabled={loading()}
-                title="Subscribe by email: mail sent to this address becomes articles in this feed."
-                onClick={() => void useNewsletterAddress()}
-              >
-                Generate email address
-              </button>
-            </Show>
-            <Show when={!feedUrl().includes("@")}>
-              <button
-                type="button"
-                disabled={loading() || !feedUrl()}
-                onClick={() => void preview()}
-              >
-                Load preview
-              </button>
-            </Show>
+          <Show when={previewError() ? previewDetails() : undefined}>
+            {(details) => <FailureDetails admin={isAdmin()} {...details()} />}
+          </Show>
+          {/* The address's own next step, right under it: primary until the
+              title is in, which a preview fills and Subscribe then needs, so
+              one primary action shows at a time. */}
+          <Show when={!props.editing && !isEmail()}>
+            <button
+              class="field-action"
+              classList={{ "button-primary": Boolean(feedUrl()) && !title() }}
+              type="button"
+              disabled={loading() || !feedUrl()}
+              onClick={() => void preview()}
+            >
+              Load preview
+            </button>
           </Show>
           <label>
             Title
@@ -503,6 +507,30 @@ export function FeedDiscovery(props: {
               </For>
             </select>
           </label>
+          {/* Subscribing by email is another way in, not a step of the
+              address above, so it is its own group after the fields. */}
+          <Show when={!props.editing && (mailDomain() || isEmail())}>
+            <fieldset class="discovery-email">
+              <legend>Subscribe by email</legend>
+              <div class="discovery-email-actions">
+                <Show when={mailDomain()}>
+                  <button
+                    type="button"
+                    disabled={loading()}
+                    title="Mail sent to this address becomes articles in this feed."
+                    onClick={() => void useNewsletterAddress()}
+                  >
+                    Generate email address
+                  </button>
+                </Show>
+                <Show when={isEmail()}>
+                  <button type="button" onClick={() => void copyAddress()}>
+                    Copy address
+                  </button>
+                </Show>
+              </div>
+            </fieldset>
+          </Show>
           <Show when={progress()}>
             {(text) => (
               <p class="progress" role="status">

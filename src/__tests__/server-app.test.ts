@@ -761,7 +761,10 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[1]).toBe("https://feed.example/rss");
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
+  // The sentence is for everyone; the fetcher's own words ride along for
+  // an admin's Details.
   expect(await invalid.json()).toEqual({
+    detail: expect.stringContaining("received status 404"),
     error: "This feed seems to have moved or been removed.",
   });
 });
@@ -1078,6 +1081,7 @@ test("preview refuses a feed that resolves to a private address", async () => {
 
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
+    detail: expect.any(String),
     error: "This address doesn't serve a feed.",
   });
   expect(dispatched).toEqual([]);

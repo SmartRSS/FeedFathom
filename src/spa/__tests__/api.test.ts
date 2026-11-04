@@ -397,6 +397,20 @@ test("details carry the status and the raw reason", async () => {
       ),
     ),
   ).toEqual({ reason: "Internal Server Error", status: 500 });
+  // A refusal that carries the raw reason behind its sentence shows that.
+  expect(
+    failureDetails(
+      await failedWith(
+        Response.json(
+          {
+            detail: "getaddrinfo ENOTFOUND feed.example",
+            error: "This site can't be found.",
+          },
+          { status: 400 },
+        ),
+      ),
+    ),
+  ).toEqual({ reason: "getaddrinfo ENOTFOUND feed.example", status: 400 });
   expect(failureDetails(await rejectedApiCall())).toEqual({
     reason: "TypeError: Failed to fetch",
     status: undefined,

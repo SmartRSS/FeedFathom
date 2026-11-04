@@ -4,7 +4,13 @@ import { Value } from "typebox/value";
 const exact = { additionalProperties: false } as const;
 const errorResponse = Type.Union([
   Type.Object(
-    { error: Type.String(), success: Type.Optional(Type.Literal(false)) },
+    {
+      // The raw reason behind `error`, where the server keeps one for an
+      // admin's details.
+      detail: Type.Optional(Type.String()),
+      error: Type.String(),
+      success: Type.Optional(Type.Literal(false)),
+    },
     exact,
   ),
   Type.Object({ success: Type.Literal(false) }, exact),
@@ -19,6 +25,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly detail?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -70,6 +77,8 @@ export function failureDetails(cause: unknown): {
       ? cause.status
       : undefined;
   if (!(cause instanceof Error)) return { reason: String(cause), status };
+  if (cause instanceof ApiError && cause.detail)
+    return { reason: cause.detail, status };
   // No answer at all: the browser's own error is the only detail there is.
   if (!status && cause.cause instanceof Error)
     return { reason: String(cause.cause), status };
@@ -180,6 +189,7 @@ export async function api<T extends TSchema>(
           ? payload.error
           : response.statusText || `Request failed (${response.status})`,
         response.status,
+        "detail" in payload ? payload.detail : undefined,
       );
     if (
       response.status === 422 &&
