@@ -2273,6 +2273,26 @@ textarea[aria-invalid="true"]:focus {
     grid-template-columns: minmax(15rem, 30%) minmax(17rem, 30%) minmax(0, 1fr);
   }
 }
+/* Two panes on a landscape touch screen below 1200px (TWO_PANE_QUERY in
+   behavior.ts): three panes of touch-size rows leave each too narrow for
+   its names and titles. The feeds stay beside the list, and the reader
+   takes the list's place while it is the focused pane; its back button
+   returns to the list. The list's options button stands in for the
+   reader's while the reader is out of sight. */
+@media (orientation: landscape) and (769px <= width <= 1199px) and (pointer: coarse),
+  (orientation: landscape) and (769px <= width <= 1199px) and (hover: none) {
+  .dashboard {
+    grid-template-columns: minmax(15rem, 32%) minmax(0, 1fr);
+  }
+  .dashboard > .reader-pane:not(.focused-pane),
+  .dashboard:has(> .reader-pane.focused-pane) > .articles-pane {
+    display: none;
+  }
+  .reader-pane .toolbar button.only-mobile,
+  .articles-pane .toolbar button.only-mobile[aria-label="options"] {
+    display: flex;
+  }
+}
 .admin-sort {
   display: none;
 }

@@ -103,12 +103,19 @@ export type PaneSwitchHost = {
 };
 
 // When the dashboard shows one pane at a time: a phone, and a portrait
-// tablet, whose width cannot fit three panes of touch-size rows. A landscape
-// tablet keeps all three. style.css cannot import this, so each of its
-// copies carries a comment pointing here, and a unit test fails if any copy
-// differs.
+// tablet, whose width cannot fit three panes of touch-size rows. style.css
+// cannot import this, so each of its copies carries a comment pointing here,
+// and a unit test fails if any copy differs.
 export const SINGLE_PANE_QUERY =
   "(max-width: 768px), (orientation: portrait) and (max-width: 1100px)";
+
+// When it shows two: a landscape touch screen below 1200px, a tablet or a
+// large phone turned sideways, where three panes of touch-size rows leave
+// each too narrow for its names and titles. The feeds stay beside the list,
+// and the reader takes the list's place while an article is open. Its one
+// copy in style.css is checked the same way.
+export const TWO_PANE_QUERY =
+  "(orientation: landscape) and (769px <= width <= 1199px) and (pointer: coarse), (orientation: landscape) and (769px <= width <= 1199px) and (hover: none)";
 
 // Applies a pane switch, cross-faded where it reads as one (#990). Only the
 // single-pane layout shows one pane at a time; on a wider screen every pane stays
@@ -192,3 +199,7 @@ export function resolveRoute(path: string): Route {
       return { name: "notFound" };
   }
 }
+
+// Whether the reader is out of sight until an article is opened.
+export const readerHidden = () =>
+  matchMedia(SINGLE_PANE_QUERY).matches || matchMedia(TWO_PANE_QUERY).matches;
