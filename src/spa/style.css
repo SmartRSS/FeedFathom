@@ -89,6 +89,11 @@
   /* A toolbar icon button. On :root, not .toolbar, so the update banner can
      clear a bottom toolbar of this height. */
   --toolbar-button: 1.75rem;
+  /* A toolbar holds icon buttons and the list filter, which is a field like
+     any other: it is as tall as the taller of the two, plus a half step. */
+  --toolbar-h: calc(
+    max(var(--toolbar-button), var(--control-h)) + 2 * var(--space-half)
+  );
   /* A tree row. Dense under a mouse, a full touch target under a finger. */
   --row-h: 1.25rem;
   --error: #b00020;
@@ -958,11 +963,11 @@ a {
 
 .toolbar {
   flex-shrink: 0;
-  min-height: calc(var(--toolbar-button) + 2 * var(--space-1));
+  min-height: var(--toolbar-h);
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-half) var(--space-2);
   border-bottom: var(--border);
   background: var(--grey-10);
 }
@@ -985,9 +990,9 @@ a {
 /* A select cut to "Unreac" hides its own value; it keeps its width. */
 .toolbar select {
   flex: none;
-  min-height: 0;
-  height: var(--toolbar-button);
+  height: var(--control-h);
   padding: 0 var(--space-1);
+  font-size: var(--fs-md);
 }
 .toolbar button.only-mobile {
   display: none;
@@ -2018,8 +2023,8 @@ input[aria-invalid="true"] {
      Refresh, the filter, Options or the field. */
   html[data-mobile-list-anchor="true"] .update-banner {
     bottom: calc(
-      var(--inset-bottom) + var(--toolbar-button) + 2 * var(--space-1) +
-        var(--control-h) + 3 * var(--space-2)
+      var(--inset-bottom) + var(--toolbar-h) + var(--control-h) + 3 *
+        var(--space-2)
     );
   }
   .article-filter-label {
