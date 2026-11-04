@@ -107,7 +107,10 @@ export function Admin(props: {
 
   async function replaceUrl(source: AdminSource) {
     const oldUrl = source.url;
-    const newUrl = await promptDialog("Change feed URL", "New URL", oldUrl);
+    const newUrl = await promptDialog("Change feed URL", "New URL", {
+      confirmLabel: "Continue",
+      initial: oldUrl,
+    });
     if (!newUrl || newUrl === oldUrl) return;
     if (
       !(await confirmDialog(

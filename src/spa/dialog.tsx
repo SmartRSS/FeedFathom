@@ -18,8 +18,8 @@ type DialogRequest =
       title: string;
       message: string;
       danger: boolean;
-      // The confirm button's label: the action's verb ("Delete") where it
-      // has one, so the button says what happens.
+      // The confirm button's label: the action's verb ("Delete", "Create"),
+      // so the button says what happens. Required, with no "OK" default.
       confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
@@ -28,6 +28,7 @@ type DialogRequest =
       title: string;
       label: string;
       initial: string;
+      confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
   | {
@@ -104,12 +105,12 @@ function show(next: DialogRequest) {
 export function confirmDialog(
   title: string,
   message: string,
-  options?: { confirmLabel?: string; danger?: boolean },
+  options: { confirmLabel: string; danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) =>
     show({
-      confirmLabel: options?.confirmLabel ?? "OK",
-      danger: options?.danger ?? false,
+      confirmLabel: options.confirmLabel,
+      danger: options.danger ?? false,
       kind: "confirm",
       message,
       resolve: (value) => resolve(value === true),
@@ -121,11 +122,12 @@ export function confirmDialog(
 export function promptDialog(
   title: string,
   label: string,
-  initial = "",
+  options: { confirmLabel: string; initial?: string },
 ): Promise<string | null> {
   return new Promise((resolve) =>
     show({
-      initial,
+      confirmLabel: options.confirmLabel,
+      initial: options.initial ?? "",
       kind: "prompt",
       label,
       resolve: (value) => resolve(typeof value === "string" ? value : null),
@@ -223,7 +225,7 @@ export function DialogHost() {
   };
   const confirmLabel = () => {
     const current = request();
-    return current?.kind === "confirm" ? current.confirmLabel : "OK";
+    return current?.kind === "help" ? "" : (current?.confirmLabel ?? "");
   };
   const danger = () => {
     const current = request();

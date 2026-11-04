@@ -438,7 +438,10 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "add folder" }).click();
   await page.getByRole("dialog").getByRole("textbox").fill("Saved");
-  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Create" })
+    .click();
 
   await expect(page.getByRole("alert")).toContainText(
     "Could not create folder",
@@ -458,7 +461,7 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
   await expect(dialog).toHaveAccessibleName("New folder");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Create" }).click();
 
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
@@ -1915,7 +1918,7 @@ test("renaming a folder through properties updates the tree", async ({
   // The rename prompt opens pre-filled with the current name (#698).
   await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
   await dialog.getByRole("textbox").fill("Archive");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Rename" }).click();
 
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
@@ -2491,11 +2494,13 @@ const expectSignIn = async (page: Page, next: string, refusals = 1) => {
 // read a 401 as an expired session. `ready` brings the page to the click
 // that sends the request; the session expires between the two. A failed
 // article change then reloads the list or the tree, a second 401.
-// A prompt confirms with "OK", other confirms with their verb.
+// Every dialog confirms with its action's verb.
 const confirm = (page: Page) =>
   page
     .getByRole("dialog")
-    .getByRole("button", { name: /^(OK|Delete|Change URL)$/u })
+    .getByRole("button", {
+      name: /^(Change URL|Continue|Create|Delete|Rename)$/u,
+    })
     .click();
 const expiringMutations: {
   name: string;
@@ -2852,11 +2857,14 @@ test("a second dialog request cancels the one still pending", async ({
 
   const first = await page.evaluate(async (url) => {
     const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
-    const pending = confirmDialog("First?", "");
+    const pending = confirmDialog("First?", "", { confirmLabel: "OK" });
     // Let the first dialog open and take focus, so the second replaces an
     // open dialog and must keep the first one's focus-return target.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    void promptDialog("Second", "Name", "kept");
+    void promptDialog("Second", "Name", {
+      confirmLabel: "OK",
+      initial: "kept",
+    });
     return await pending;
   }, "/dialog.tsx");
   expect(first).toBe(false);
@@ -3383,7 +3391,7 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
   await dialog.getByRole("textbox").fill("Archive");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Rename" }).click();
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
   ).toBeVisible();

@@ -759,7 +759,9 @@ export function Dashboard(props: {
     });
   };
   async function addNewFolder() {
-    const name = await promptDialog("New folder", "Folder name");
+    const name = await promptDialog("New folder", "Folder name", {
+      confirmLabel: "Create",
+    });
     if (!name?.trim()) return;
     setError("");
     try {
@@ -1355,7 +1357,10 @@ export function Dashboard(props: {
       setShowDiscovery(true);
       return;
     }
-    const name = await promptDialog("Rename folder", "Folder name", node.name);
+    const name = await promptDialog("Rename folder", "Folder name", {
+      confirmLabel: "Rename",
+      initial: node.name,
+    });
     if (!name?.trim() || name === node.name) return;
     setError("");
     try {
