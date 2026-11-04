@@ -28,17 +28,23 @@ export class ApiError extends Error {
 export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
-// An Error carries its own message for the user; anything else thrown does
-// not, so the caller names what failed.
+// A response this bundle could not read. Its message names the path and the
+// parse failure, which is for the console and the tests, not the reader.
+class InvalidResponseError extends Error {}
+
+// An Error carries its own message for the user; anything else thrown, and a
+// response that could not be read, does not, so the caller names what failed.
 export const messageOf = (cause: unknown, fallback: string) =>
-  cause instanceof Error ? cause.message : fallback;
+  cause instanceof Error && !(cause instanceof InvalidResponseError)
+    ? cause.message
+    : fallback;
 
 const invalidResponse = (
   path: string,
   message: string,
   status?: number,
 ): Error =>
-  new Error(
+  new InvalidResponseError(
     `Invalid response from /api${path}${status === undefined ? "" : ` (${status})`}: ${message}`,
   );
 

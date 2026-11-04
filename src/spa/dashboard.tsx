@@ -224,6 +224,9 @@ export function Dashboard(props: {
     filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
+  // The first-run guidance says "No feeds yet", which is false while the
+  // tree simply failed to load; the alert above the panes speaks instead.
+  const [treeFailed, setTreeFailed] = createSignal(false);
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
   // A full page means more articles may be available, not that another page
@@ -691,6 +694,7 @@ export function Dashboard(props: {
     treeRequestPromise = attempt;
     const nextTree = await attempt;
     if (controller.signal.aborted) return nextTree;
+    setTreeFailed(false);
     applyTree(nextTree);
     return nextTree;
   }
@@ -779,6 +783,7 @@ export function Dashboard(props: {
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
+      setTreeFailed(true);
       reportError(cause, "Unable to load feeds.");
     } finally {
       revealTree();
@@ -1988,25 +1993,30 @@ export function Dashboard(props: {
             <Show
               when={tree().length > 0}
               fallback={
-                <div class="tree-empty">
-                  <p class="tree-empty-heading">No feeds yet.</p>
-                  <button type="button" onClick={() => setShowDiscovery(true)}>
-                    Add your first feed
-                  </button>
-                  <p>
-                    Moving from another reader?{" "}
-                    <a
-                      href="/options#import-opml"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        props.navigate("/options#import-opml");
-                      }}
+                <Show when={!treeFailed()}>
+                  <div class="tree-empty">
+                    <p class="tree-empty-heading">No feeds yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscovery(true)}
                     >
-                      Import an OPML file
-                    </a>
-                    .
-                  </p>
-                </div>
+                      Add your first feed
+                    </button>
+                    <p>
+                      Moving from another reader?{" "}
+                      <a
+                        href="/options#import-opml"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          props.navigate("/options#import-opml");
+                        }}
+                      >
+                        Import an OPML file
+                      </a>
+                      .
+                    </p>
+                  </div>
+                </Show>
               }
             >
               <Show when={feedFilterBox.get()}>

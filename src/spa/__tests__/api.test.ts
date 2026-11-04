@@ -4,7 +4,7 @@ import {
   folderResponse,
   sessionResponse,
 } from "#shared/contracts/responses.ts";
-import { api, ApiError, isUnauthorizedError } from "../api.ts";
+import { api, ApiError, isUnauthorizedError, messageOf } from "../api.ts";
 
 const exactMessage = Type.Object(
   { message: Type.String() },
@@ -337,4 +337,19 @@ describe("schema-first SPA API", () => {
       },
     );
   });
+});
+
+test("messageOf keeps an unreadable response's details out of the alert", async () => {
+  setFetch(() => Promise.resolve(new Response("boom", { status: 500 })));
+  const cause = await api("/tree", exactMessage).catch(
+    (error: unknown) => error,
+  );
+  expect(cause).toBeInstanceOf(Error);
+  expect(String(cause)).toContain("Invalid response from /api/tree (500)");
+  expect(messageOf(cause, "Unable to load feeds.")).toBe(
+    "Unable to load feeds.",
+  );
+  expect(messageOf(new Error("Folder is not empty"), "x")).toBe(
+    "Folder is not empty",
+  );
 });
