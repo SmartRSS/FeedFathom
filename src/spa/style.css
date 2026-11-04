@@ -559,9 +559,6 @@ main {
   border: var(--border);
   border-radius: var(--radius);
 }
-.account-result {
-  text-align: center;
-}
 .account-result > * {
   margin: 0;
 }
@@ -652,8 +649,7 @@ html[data-route="options"] body {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* Tabs grow to fill each wrapped row, so a narrow screen never leaves one
-   alone on a row of its own. */
+/* Tabs grow to fill their row. */
 .options-nav a {
   flex: 1 1 auto;
   justify-content: center;
@@ -2132,11 +2128,6 @@ textarea[aria-invalid="true"]:focus {
     justify-self: start;
     min-width: var(--touch);
     min-height: var(--touch);
-  }
-  /* A result card centres its text, and its link with it. */
-  .account-result > a {
-    justify-content: center;
-    justify-self: center;
   }
   .date-group {
     padding-inline: var(--space-3);
