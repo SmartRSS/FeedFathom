@@ -294,6 +294,9 @@ export function Dashboard(props: {
   }
   const articleFeedName = (article: { sourceId: number }) =>
     findNode(tree(), "source", String(article.sourceId))?.name;
+  // The feed list failed to load and there is none from before: nothing to
+  // filter or search, so both fields are disabled while the panes say so.
+  const feedsUnavailable = () => Boolean(treeFailed()) && !tree().length;
   const emptyFolderSelected = () => {
     const node = selectedNode();
     return node?.type === "folder" && node.children.length === 0;
@@ -2101,6 +2104,7 @@ export function Dashboard(props: {
                 <input
                   aria-label="Filter feeds"
                   class="tree-filter"
+                  disabled={feedsUnavailable()}
                   placeholder="Filter feeds"
                   type="search"
                   value={treeFilter()}
@@ -2266,9 +2270,10 @@ export function Dashboard(props: {
                 aria-label="Search articles"
                 class="article-search"
                 disabled={
-                  Boolean(failingSelection()) &&
-                  !articles().length &&
-                  !activeSearch()
+                  feedsUnavailable() ||
+                  (Boolean(failingSelection()) &&
+                    !articles().length &&
+                    !activeSearch())
                 }
                 placeholder="Search articles"
                 type="search"
