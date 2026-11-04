@@ -1913,7 +1913,9 @@ test("authenticates only active users without revealing account state", async ()
     const response = await post(app, "/api/login", attempt);
 
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: "Wrong login data" });
+    expect(await response.json()).toEqual({
+      error: "Email or password is wrong.",
+    });
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(sessionCalls).toBe(0);
     expect(dummyHashCalls).toBe(
@@ -2012,7 +2014,9 @@ test("login refuses when the verified password was replaced before issuance", as
   );
 
   expect(response.status).toBe(401);
-  expect(await response.json()).toEqual({ error: "Wrong login data" });
+  expect(await response.json()).toEqual({
+    error: "Email or password is wrong.",
+  });
   expect(response.headers.get("set-cookie")).toBeNull();
   // Counted and never taken back: it stays a failure.
   expect(throttled).toEqual(["attempt"]);
@@ -2048,7 +2052,9 @@ test("stops guessing at one account from one address", async () => {
   // the enumeration signal the equal-time hashing was there to avoid.
   const throttled = await attempt("password", "203.0.113.7");
   expect(throttled.status).toBe(401);
-  expect(await throttled.json()).toEqual({ error: "Wrong login data" });
+  expect(await throttled.json()).toEqual({
+    error: "Email or password is wrong.",
+  });
 
   // The account itself is not locked: the counter is keyed on the address as
   // well, so hammering an address cannot shut its owner out from elsewhere.
