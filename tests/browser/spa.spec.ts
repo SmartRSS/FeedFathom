@@ -962,7 +962,7 @@ test("the options page offers and persists the read-mark policy", async ({
   await expect(policy).toHaveValue("manual");
   await expect(policy.locator("option")).toHaveCount(3);
   await expect(policy.locator("option[value=manual]")).toHaveText(
-    /Manually only/,
+    /Manually \(m key or Mark read\)/,
   );
   await expect(policy.locator("option[value=on-open]")).toHaveText(/On open/);
   await expect(policy.locator("option[value=on-scroll-past]")).toHaveText(

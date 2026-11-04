@@ -367,7 +367,7 @@ export function Options(props: {
                 label="When articles get marked read"
                 preference={markReadPolicy}
                 options={[
-                  ["manual", "Manually only (m key or the Mark read button)"],
+                  ["manual", "Manually (m key or Mark read)"],
                   [
                     "on-open",
                     "On open (opening an article marks it read, All view)",
@@ -382,7 +382,7 @@ export function Options(props: {
                 label="Remember reading position"
                 preference={rememberReadingPosition}
                 options={[
-                  [true, "On (reopening the app resumes where you stopped)"],
+                  [true, "On (resume where you stopped)"],
                   [false, "Off (always start at the top)"],
                 ]}
               />
