@@ -1926,6 +1926,18 @@ test("renaming a folder through properties updates the tree", async ({
   expect(state.updatedFolder).toEqual({ name: "Archive" });
 });
 
+test("an empty folder offers Add feed, which starts Discover in it", async ({
+  page,
+}) => {
+  await openApp(page, { emptyFolder: true });
+  await page.locator("button.source").filter({ hasText: "Later" }).click();
+  await expect(page.getByText("This folder is empty.")).toBeVisible();
+  // Nothing listed and no search to change: nothing to search from.
+  await expect(page.getByLabel("Search articles")).toBeDisabled();
+  await page.getByRole("button", { name: "Add feed" }).click();
+  await expect(page.getByLabel("Folder")).toHaveValue("12");
+});
+
 test("blocks deleting a non-empty folder", async ({ page }) => {
   await openApp(page);
   await page

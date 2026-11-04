@@ -371,6 +371,8 @@ export function Dashboard(props: {
   const [showDiscovery, setShowDiscovery] = createSignal(
     props.initialDiscovery ?? false,
   );
+  // The folder Discover starts in when it was opened from an empty folder.
+  const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [authenticated, setAuthenticated] = createSignal(false);
   // Reader documents are extension-only; never proxy them through the FeedFathom backend.
   const readerBridge = createExtensionReaderBridge();
@@ -2313,17 +2315,19 @@ export function Dashboard(props: {
                 void runSearch(searchTerms());
               }}
             >
-              {/* Disabled on a failing feed with nothing to list, like
-                  select-all, mark-read and delete: nothing there to search
-                  from. Kept in place, so the panes' placeholders still
-                  share a top line. */}
+              {/* Disabled while a selected feed or folder lists nothing and
+                  no search is open, like select-all, mark-read and delete.
+                  With nothing selected it stays: search answers across
+                  every subscription. Kept in place, so the panes'
+                  placeholders still share a top line. */}
               <input
                 aria-label="Search articles"
                 class="article-search"
                 disabled={
                   feedsUnavailable() ||
                   feedsPending() ||
-                  (Boolean(failingSelection()) &&
+                  (Boolean(selectedNode()) &&
+                    !articlesLoading() &&
                     !articles().length &&
                     !activeSearch())
                 }
@@ -2499,12 +2503,33 @@ export function Dashboard(props: {
                   <Show
                     when={failingSelection()}
                     fallback={
-                      <div class="article-list-empty" role="status">
+                      <div
+                        class="article-list-empty"
+                        classList={{
+                          "article-list-prompt": emptyFolderSelected(),
+                        }}
+                        role="status"
+                      >
                         <p>
                           {emptyFolderSelected()
                             ? "This folder is empty. Add a feed or move one here."
                             : "All caught up."}
                         </p>
+                        <Show when={emptyFolderSelected()}>
+                          <div class="form-actions">
+                            <button
+                              class="button-primary"
+                              type="button"
+                              onClick={() => {
+                                setDiscoveryFolder(selectedNode()?.uid);
+                                props.focusPane("sources");
+                                setShowDiscovery(true);
+                              }}
+                            >
+                              Add feed
+                            </button>
+                          </div>
+                        </Show>
                       </div>
                     }
                   >
@@ -2652,7 +2677,9 @@ export function Dashboard(props: {
                         <p class="empty-pane">
                           {treeFailed()
                             ? "Nothing to read until the feeds load."
-                            : "Select an article to read."}
+                            : feedsPending()
+                              ? "Loading…"
+                              : "Select an article to read."}
                         </p>
                       }
                     >
@@ -2710,11 +2737,13 @@ export function Dashboard(props: {
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
           initialFeedUrl={props.initialFeedUrl}
+          initialFolder={discoveryFolder()}
           initialNewsletter={props.initialNewsletter ?? false}
           pane={props.pane}
           close={() => {
             const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setDiscoveryFolder(undefined);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             else
@@ -2731,6 +2760,7 @@ export function Dashboard(props: {
           saved={async (sourceId) => {
             const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setDiscoveryFolder(undefined);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             const savedNode = findNode(

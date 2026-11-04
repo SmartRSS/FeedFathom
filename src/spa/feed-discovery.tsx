@@ -52,6 +52,8 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
+  // A folder to start in (its uid), for Discover opened from that folder.
+  initialFolder?: string | undefined;
   initialNewsletter?: boolean;
   pane(): DashboardPane;
   saved(sourceId: number): void;
@@ -132,8 +134,10 @@ export function FeedDiscovery(props: {
         // assigning the <select>'s value while its matching <option> doesn't
         // exist yet has nothing to select against, and Solid doesn't
         // re-apply that binding just because sibling <option>s appear later,
-        // so it would silently fall back to "No parent" instead.
-        if (props.editing) setFolderId(props.editing.parentUid ?? "");
+        // so it would silently fall back to "No folder" instead.
+        setFolderId(
+          (props.editing ? props.editing.parentUid : props.initialFolder) ?? "",
+        );
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
         setStartupMessage(messageOf(cause, "Could not load your folders."));

@@ -1095,13 +1095,19 @@ a {
 .article-list-empty p {
   margin: 0;
 }
-.article-list-failing {
+/* A message with actions under it: a failing feed, or an empty folder's
+   Add feed. */
+.article-list-failing,
+.article-list-prompt {
   display: grid;
   gap: var(--space-2);
   align-content: start;
+}
+.article-list-failing {
   color: var(--grey-90);
 }
-.article-list-failing .form-actions {
+.article-list-failing .form-actions,
+.article-list-prompt .form-actions {
   justify-content: center;
 }
 .article-list-failing-reason {

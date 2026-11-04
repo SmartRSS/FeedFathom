@@ -154,6 +154,8 @@ export async function installApiFixture(
     admin?: boolean;
     authenticated?: boolean;
     discoveryRace?: boolean;
+    // A second folder, "Later", with nothing in it.
+    emptyFolder?: boolean;
     // Tech News keeps failing with this reason, its last success that long
     // ago; its articles stay.
     failing?: { daysSinceSuccess: number; reason: string };
@@ -356,6 +358,9 @@ export async function installApiFixture(
                 type: "folder",
                 uid: "7",
               },
+              ...(options.emptyFolder
+                ? [{ children: [], name: "Later", type: "folder", uid: "12" }]
+                : []),
             ],
       });
     }
@@ -502,6 +507,17 @@ export async function installApiFixture(
           updatedAt: "2026-07-01T00:00:00.000Z",
           userId: 42,
         },
+        ...(options.emptyFolder
+          ? [
+              {
+                createdAt: "2026-07-01T00:00:00.000Z",
+                id: 12,
+                name: "Later",
+                updatedAt: "2026-07-01T00:00:00.000Z",
+                userId: 42,
+              },
+            ]
+          : []),
       ]);
     }
 
