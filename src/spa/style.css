@@ -1221,6 +1221,12 @@ dialog.app-dialog {
   border-radius: var(--radius);
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
+/* A dialog's fill is the page's own, which under dark leaves almost nothing
+   between them: its edge is a field's edge, 4.74:1 there. Auto only: the
+   named themes draw their own dialog edges. */
+:root[data-theme="auto"] dialog.app-dialog {
+  border: var(--control-border);
+}
 dialog.app-dialog::backdrop {
   background: rgb(0 0 0 / 40%);
 }
