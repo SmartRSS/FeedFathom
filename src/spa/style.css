@@ -101,8 +101,9 @@
      any other: it is as tall as the taller of the two, plus a half step
      and its own bottom border, so every pane's toolbar is the same height
      whatever it holds. */
+  --toolbar-pad: var(--space-half);
   --toolbar-h: calc(
-    max(var(--toolbar-button), var(--control-h)) + 2 * var(--space-half) +
+    max(var(--toolbar-button), var(--control-h)) + 2 * var(--toolbar-pad) +
       var(--border-w)
   );
   /* A tree row. Dense under a mouse, a full touch target under a finger. */
@@ -1056,7 +1057,7 @@ a {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-half) var(--space-2);
+  padding: var(--toolbar-pad) var(--space-2);
   border-bottom: var(--border);
   background: var(--surface);
 }
@@ -2048,10 +2049,12 @@ textarea[aria-invalid="true"]:focus {
     --control-h: var(--touch);
     --row-h: var(--touch);
     --toolbar-button: var(--touch);
+    /* The 44px controls sit inside the bar rather than filling it. */
+    --toolbar-pad: var(--space-1);
   }
   .toolbar {
     gap: 0;
-    padding: 0 var(--space-1);
+    padding: var(--toolbar-pad) var(--space-1);
   }
   .article {
     padding: var(--space-2) var(--space-3);
