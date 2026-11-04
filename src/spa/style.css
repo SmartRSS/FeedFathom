@@ -1944,15 +1944,17 @@ img.skeleton-row {
 .reader-meta {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: start;
   gap: 0 var(--space-4);
   margin: var(--space-1) 0 var(--space-6);
   color: var(--muted);
   font-size: var(--fs-sm);
 }
 /* Each item leads with its dot, and the run is shifted back by one dot's
-   width inside a clipped box: the first item of every line, wrapped or
-   not, has its dot cut off, so no line starts or ends with one. */
+   width inside a clipped box: the first item of every line has its dot cut
+   off, so no line starts or ends with one. That holds only while every
+   line starts with an item, so an item never wraps: one too long for the
+   line ends in an ellipsis instead. */
 .reader-meta-items {
   --meta-dot: var(--space-4);
 
@@ -1965,12 +1967,27 @@ img.skeleton-row {
 }
 .reader-meta-items > span > * {
   display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
 }
 .reader-meta-items > span > *::before {
   display: inline-block;
   width: var(--meta-dot);
   content: "·";
   text-align: center;
+}
+/* Original is a 24px target under a mouse and a touch target on touch,
+   centred on the first line rather than hanging below it. */
+.reader-meta a {
+  --original-h: max(1.5rem, 24px);
+
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--original-h);
+  margin-block: calc((1lh - var(--original-h)) / 2);
 }
 .reader img,
 .reader video {
@@ -2275,7 +2292,11 @@ textarea[aria-invalid="true"]:focus {
   }
   /* Tabs and the standalone links (Register instead, Login, the reader's
      Original) are targets too. */
-  .reader-meta a,
+  .reader-meta a {
+    --original-h: var(--touch);
+
+    min-width: var(--touch);
+  }
   .options-nav a,
   .account-form > a,
   .account-result > a {
