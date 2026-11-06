@@ -795,9 +795,11 @@ html[data-route="options"] body {
   margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
 }
 /* For an account that isn't an admin, the message takes the table's place
-   and its space, so the page bar keeps its edge. */
+   at its own height, sentence and link together; the space below it goes
+   to its bottom margin, so a page bar anchored at the bottom keeps its
+   edge. */
 .admin-page > .admin-forbidden {
-  flex: 1;
+  margin-bottom: auto;
 }
 .admin-table-scroll {
   flex: 1;
