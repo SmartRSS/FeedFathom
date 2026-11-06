@@ -11,6 +11,7 @@ import {
 } from "./extension-reader.ts";
 import { readerMaximumHtmlBytes } from "#shared/reader-bridge.ts";
 import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
+import { mapSrcset } from "#shared/util/srcset.ts";
 
 // Extraction runs on the main thread, so it must stay short enough that a
 // click to switch away is still answered. These budgets send larger pages to
@@ -60,19 +61,11 @@ const rewriteDocumentUrls = (root: ParentNode, base: URL): void => {
 
   for (const element of root.querySelectorAll("[srcset]")) {
     const value = element.getAttribute("srcset");
-    if (!value || value.includes("data:")) continue;
-    element.setAttribute(
-      "srcset",
-      value
-        .split(",")
-        .map((candidate) => {
-          const [url, ...descriptor] = candidate.trim().split(/\s+/);
-          return url
-            ? [rewriteUrl(url, base), ...descriptor].join(" ")
-            : candidate;
-        })
-        .join(", "),
-    );
+    if (value)
+      element.setAttribute(
+        "srcset",
+        mapSrcset(value, (url) => rewriteUrl(url, base)),
+      );
   }
 };
 
