@@ -16,6 +16,9 @@ import {
 
 import { maximumRequestIds } from "./limits.ts";
 
+// The multipart field the OPML import posts its file in.
+export const opmlUploadField = "opml";
+
 const id = Type.Integer({ minimum: 1 });
 // RFC 5321 caps both envelope paths, so no deliverable sender is longer
 // than a minted recipient may be.

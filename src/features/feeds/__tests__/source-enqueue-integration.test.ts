@@ -1,9 +1,11 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { JobName } from "#features/feeds/queued-job.ts";
 import { Job, Queue } from "bullmq";
 import Redis from "ioredis";
-import { JobName } from "#features/feeds/job-name-enum.ts";
 import {
   type ParseRequest,
+  parseSourceJobId,
+  pendingParseRefreshKey,
   SourceEnqueuer,
 } from "#features/feeds/source-enqueue.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
@@ -17,8 +19,8 @@ describe("queued refresh merging with BullMQ", () => {
     connection,
   });
   const source = { id: 1 + Math.floor(Math.random() * 2_000_000_000) };
-  const jobId = `${JobName.ParseSource}-${source.id}`;
-  const pendingKey = `pending_parse_refresh:${source.id}`;
+  const jobId = parseSourceJobId(source.id);
+  const pendingKey = pendingParseRefreshKey(source.id);
   const enqueuer = new SourceEnqueuer(queue, connection);
   // The follow-up a run of the source's job would owe, if any.
   const followUp = async () => {

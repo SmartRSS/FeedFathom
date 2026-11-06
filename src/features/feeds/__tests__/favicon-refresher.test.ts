@@ -3,8 +3,7 @@ import { Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
-import { JobDeferral } from "#features/feeds/queued-job.ts";
-import { JobName } from "#features/feeds/job-name-enum.ts";
+import { JobDeferral, JobName } from "#features/feeds/queued-job.ts";
 import {
   FaviconRefresher,
   type FaviconRefreshQueue,

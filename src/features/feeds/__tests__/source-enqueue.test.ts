@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { JobDeferral } from "#features/feeds/queued-job.ts";
+import { JobDeferral, JobName } from "#features/feeds/queued-job.ts";
 import {
   type ParseRequest,
   type SourceParseJobHandle,
   type SourceParseQueue,
   type SourceParseRedis,
+  parseSourceJobId,
+  pendingParseRefreshKey,
   SourceEnqueuer,
 } from "#features/feeds/source-enqueue.ts";
 
@@ -53,8 +54,8 @@ const parsesOf = async (enqueuer: SourceEnqueuer) => {
 
 describe("SourceEnqueuer", () => {
   const source = { id: 3, url: "https://example.test/feed" };
-  const jobId = `${JobName.ParseSource}-${source.id}`;
-  const pendingKey = `pending_parse_refresh:${source.id}`;
+  const jobId = parseSourceJobId(source.id);
+  const pendingKey = pendingParseRefreshKey(source.id);
 
   const fakeQueue = (holder: SourceParseJobHandle | null = null) => {
     const adds: unknown[] = [];

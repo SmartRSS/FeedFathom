@@ -13,7 +13,10 @@ import {
   successResponse,
 } from "#shared/contracts/responses.ts";
 import { todayWindowHours } from "#shared/contracts/limits.ts";
-import { passwordRequest } from "#shared/contracts/requests.ts";
+import {
+  opmlUploadField,
+  passwordRequest,
+} from "#shared/contracts/requests.ts";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
 import { api, messageOf } from "./api.ts";
 import { loginPath } from "./routes.ts";
@@ -472,7 +475,7 @@ export function Options(props: {
                 OPML file
                 <input
                   accept=".opml,.xml,application/xml,text/xml"
-                  name="opml"
+                  name={opmlUploadField}
                   type="file"
                   required
                 />

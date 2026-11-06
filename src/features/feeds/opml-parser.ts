@@ -4,7 +4,7 @@ import {
   childElements,
   isXmlElement,
   parseXml,
-} from "#platform/xml.ts";
+} from "#features/feeds/xml.ts";
 import { isWebUrl } from "#shared/validation/address-shape.ts";
 import { decodeHtmlReferences } from "#features/feeds/plain-text.ts";
 

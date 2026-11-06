@@ -1,4 +1,5 @@
 import type { AppConfig } from "#platform/config.ts";
+import { JobName } from "#features/feeds/queued-job.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { RetentionService } from "#features/feeds/retention.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
@@ -6,7 +7,6 @@ import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import { expect, setSystemTime, spyOn, test } from "bun:test";
 import { Readable } from "node:stream";
 import { DelayedError } from "bullmq";
-import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";

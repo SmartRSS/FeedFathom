@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import {
   HttpRateLimiter,
   rateLimitBlockUntil,
@@ -220,22 +220,24 @@ describe("HttpRateLimiter shared host clock", () => {
     expect(slept).not.toHaveBeenCalled();
   });
 
-  // The production default, read off the wait the limiter asks for rather
-  // than off the wall clock.
+  // The production default, read off the wait the limiter asks for, with the
+  // clock stopped so no time passes between the seed and the reservation.
   test("interactive requests to one host sit one second apart by default", async () => {
-    const redis = createFakeHttpRedis();
-    redis.seed(lastKey, String(Date.now()), 10_000);
-    const deadline = new RequestDeadline(20_000);
-    using slept = spyOn(deadline, "sleep").mockImplementation(async () => {
-      redis.seed(lastKey, String(Date.now() - 10_000), 10_000);
-    });
+    setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    try {
+      const redis = createFakeHttpRedis();
+      redis.seed(lastKey, String(Date.now()), 10_000);
+      const deadline = new RequestDeadline(20_000);
+      using slept = spyOn(deadline, "sleep").mockImplementation(async () => {
+        redis.seed(lastKey, String(Date.now() - 10_000), 10_000);
+      });
 
-    await reserve(new HttpRateLimiter(redis), "interactive", deadline);
+      await reserve(new HttpRateLimiter(redis), "interactive", deadline);
 
-    expect(slept).toHaveBeenCalledTimes(1);
-    const [waited] = slept.mock.calls[0] ?? [];
-    expect(waited).toBeGreaterThanOrEqual(990);
-    expect(waited).toBeLessThanOrEqual(1_000);
+      expect(slept.mock.calls).toEqual([[1_000]]);
+    } finally {
+      setSystemTime();
+    }
   });
 
   // A waiter keeps waiting for its turn after the first interval, so the

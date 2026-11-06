@@ -1,9 +1,9 @@
 import { type Static, Type } from "typebox";
-import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   finishedJobRetention,
   JobDeferral,
+  JobName,
 } from "#features/feeds/queued-job.ts";
 
 export const parseSourceJobData = Type.Object({
@@ -18,8 +18,17 @@ export type ParseRequest = Static<typeof parseSourceJobData>;
 
 // One job id per source, so BullMQ dedupes a second add while one is queued
 // and the merge script below finds the queued one.
-const parseSourceJobId = (sourceId: number) =>
+export const parseSourceJobId = (sourceId: number) =>
   `${JobName.ParseSource}-${sourceId}`;
+
+// The refresh requests that arrived while the source's job ran. "1" means a
+// request asked to bypass the cache, "0" that none did; writes are ordered so
+// "1" always dominates ("1" overwrites unconditionally, "0" only lands on an
+// empty key), which keeps the merge correct without read-modify-write: a
+// burst of requests coalesces into the strongest bypass any of them asked for
+// (#813).
+export const pendingParseRefreshKey = (sourceId: number) =>
+  `pending_parse_refresh:${sourceId}`;
 
 const mergeQueuedRefresh = `
 local stored = redis.call('HGET', KEYS[1], 'data')
@@ -78,13 +87,6 @@ export type SourceParseRedis = {
  * source's job is running is parsed by that same run before it ends.
  */
 export class SourceEnqueuer {
-  // One key per source. "1" means a request asked to bypass the cache, "0"
-  // that none did; writes are ordered so "1" always dominates ("1" overwrites
-  // unconditionally, "0" only lands on an empty key), which keeps the merge
-  // correct without read-modify-write: a burst of requests coalesces into
-  // the strongest bypass any of them asked for (#813).
-  private readonly pendingKeyPrefix = "pending_parse_refresh:";
-
   constructor(
     private readonly bullmqQueue: SourceParseQueue,
     private readonly redis: SourceParseRedis,
@@ -109,7 +111,7 @@ export class SourceEnqueuer {
         mergeQueuedRefresh,
         5,
         this.bullmqQueue.toKey(jobId),
-        `${this.pendingKeyPrefix}${source.id}`,
+        pendingParseRefreshKey(source.id),
         this.bullmqQueue.toKey("wait"),
         this.bullmqQueue.toKey("paused"),
         this.bullmqQueue.toKey("delayed"),
@@ -186,14 +188,12 @@ export class SourceEnqueuer {
   private async takePendingRefresh(
     sourceId: number,
   ): Promise<{ skipCache: boolean } | null> {
-    const value = await this.redis.getdel(
-      `${this.pendingKeyPrefix}${sourceId}`,
-    );
+    const value = await this.redis.getdel(pendingParseRefreshKey(sourceId));
     return value === null ? null : { skipCache: value === "1" };
   }
 
   private async mergePendingRefresh(sourceId: number, skipCache: boolean) {
-    const key = `${this.pendingKeyPrefix}${sourceId}`;
+    const key = pendingParseRefreshKey(sourceId);
     // A cache bypass swallows a plain refresh; a plain refresh must not
     // swallow a bypass. Unconditional set for "1", fill-only-if-empty for
     // "0", so concurrent merges can never downgrade the pending request.

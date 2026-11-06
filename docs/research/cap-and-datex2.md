@@ -138,7 +138,7 @@ Add a short user-facing list of the feed URLs that work. The most important item
 
 ### (b) Minimal CAP awareness (~6–8 h; add ~6–10 h for dereferencing)
 
-1. **Read `cap:*` from Atom/RSS entries and render it** (~6–8 h). Detect the CAP namespace in the feed text, re-parse with `parseXml` (`src/platform/xml.ts`), and match entries by id. Then:
+1. **Read `cap:*` from Atom/RSS entries and render it** (~6–8 h). Detect the CAP namespace in the feed text, re-parse with `parseXml` (`src/features/feeds/xml.ts`), and match entries by id. Then:
    - prepend a small definition list to the body: event, severity/urgency/certainty, onset–expires, areaDesc;
    - **skip items whose `expires` has passed or whose `status` is not `Actual`** when mapping;
    - optionally take NAAD's `category term="language=…"` into the guid, so both languages survive.

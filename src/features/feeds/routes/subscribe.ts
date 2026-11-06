@@ -155,7 +155,11 @@ export async function postSubscribeHandler(
                 trigger: "poll",
               },
             );
-          } catch {
+          } catch (error) {
+            console.error(
+              `Stored preview import failed for source ${subscription.source.id}; queueing a fetch:`,
+              error,
+            );
             await sourceEnqueuer.enqueueSource(subscription.source);
           }
         } else {

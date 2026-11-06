@@ -24,7 +24,6 @@ const pushedBodyFreshMs = pollFloorMs;
 // already buffered, so the cap has to run while streaming the body in -- a
 // declared Content-Length alone is not evidence, and an oversized stream is
 // abandoned mid-read.
-
 const readCappedPushBody = async (
   request: Request,
 ): Promise<Buffer | undefined> => {

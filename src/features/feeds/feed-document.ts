@@ -3,7 +3,7 @@ import { parseContactString } from "@rowanmanning/feed-parser/lib/utils/parse-co
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import Schema from "typebox/schema";
 import { decodeXml } from "#shared/util/decode-body.ts";
-import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
+import { rejectXmlEntityDeclarations } from "#features/feeds/xml.ts";
 import {
   inCapScope,
   mentionsCapNamespace,

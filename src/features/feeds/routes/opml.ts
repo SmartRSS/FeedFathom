@@ -6,6 +6,7 @@ import { Value } from "typebox/value";
 import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json, jsonError } from "#platform/http/json.ts";
+import { opmlUploadField } from "#shared/contracts/requests.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
 import type { OpmlNode, OpmlSource } from "#features/feeds/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
@@ -13,7 +14,7 @@ import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
-export const opmlRequest = Type.Object({ opml: t.File() });
+export const opmlRequest = Type.Object({ [opmlUploadField]: t.File() });
 
 export async function postOpmlHandler(
   {

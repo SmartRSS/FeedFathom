@@ -13,16 +13,17 @@ import {
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
-import { JobName } from "#features/feeds/job-name-enum.ts";
 import {
   finishedJobRetention,
   JobDeferral,
+  JobName,
 } from "#features/feeds/queued-job.ts";
 
 // How often every live source's favicon is refreshed. The gather takes each
-// source fetched since the previous run, with an hour of slack for a daily
-// poll landing late.
+// source fetched within the window: the previous run, plus an hour of slack
+// for a daily poll landing late.
 export const faviconGatherIntervalMs = 24 * 60 * 60_000;
+export const faviconGatherWindowMs = faviconGatherIntervalMs + 60 * 60_000;
 
 // A refresh that a provider blocks waits at most this long past the first
 // block. That rides out the hour-long Retry-After that providers commonly
@@ -189,12 +190,8 @@ export class FaviconRefresher {
     // smaller icon while a later one has a bigger one. unavatar.io is
     // capped at 25 requests/day on the free tier, so it's only used as a
     // last resort when nothing else has an icon.
-    let hostname: string;
-    try {
-      hostname = new URL(source.homeUrl).hostname;
-    } catch {
-      return;
-    }
+    const hostname = URL.parse(source.homeUrl)?.hostname;
+    if (hostname === undefined) return;
     const isMiss = (deferral: HttpDeferredError) => {
       const now = Date.now();
       if (now > source.firstRunAt + faviconRefreshBackstopMs) return true;

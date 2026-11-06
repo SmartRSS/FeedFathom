@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseXml, xmlSafeText } from "#platform/xml.ts";
+import { parseXml, xmlSafeText } from "#features/feeds/xml.ts";
 
 describe("xmlSafeText", () => {
   test("strips the C0 controls XML cannot represent", () => {

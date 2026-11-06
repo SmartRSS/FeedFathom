@@ -32,7 +32,7 @@ import {
   pollFloorMs,
   webSubFallbackPollMs,
 } from "#features/feeds/source-schedule-policy.ts";
-import { faviconGatherIntervalMs } from "#features/feeds/favicon-refresher.ts";
+import { faviconGatherWindowMs } from "#features/feeds/favicon-refresher.ts";
 
 // Bound each gathering pass when an outage makes many sources due at once.
 // notBefore staggers normal arrivals; the cap does not scale with backlog size.
@@ -176,7 +176,7 @@ export class SourcesDataService {
         and(
           gt(
             sources.lastSuccess,
-            sql`NOW() - ${faviconGatherIntervalMs + 60 * 60_000} * INTERVAL '1 millisecond'`,
+            sql`NOW() - ${faviconGatherWindowMs} * INTERVAL '1 millisecond'`,
           ),
           ne(sources.kind, "email"),
         ),

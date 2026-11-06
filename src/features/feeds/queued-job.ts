@@ -1,5 +1,14 @@
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
+export enum JobName {
+  Cleanup = "cleanup",
+  GatherFaviconJobs = "GATHER_FAVICON_JOBS",
+  GatherJobs = "gatherJobs",
+  ParseSource = "parseSource",
+  RefreshFavicon = "REFRESH_FAVICON",
+  WebSubRenewal = "WEBSUB_RENEWAL",
+}
+
 // Failures are recorded in PostgreSQL by whoever owns them, so BullMQ keeps
 // no finished job: without this every run stays in Redis for good.
 export const finishedJobRetention = {
