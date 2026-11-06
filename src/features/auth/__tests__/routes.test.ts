@@ -15,7 +15,31 @@ import {
   get,
   post,
   authenticated,
+  type Dependencies,
 } from "../../../__tests__/server-harness.ts";
+
+// Records what a route asks the throttle, answering every count with
+// `allow`.
+function recordThrottle(dependencies: Dependencies, allow: boolean) {
+  const calls: string[] = [];
+  dependencies.authThrottle = strictFake<AuthThrottle>({
+    async attempt(scope, address, email) {
+      calls.push(`attempt ${scope} ${address} ${email}`);
+      return allow;
+    },
+    async attemptPasswordChange(userId) {
+      calls.push(`attemptPasswordChange ${userId}`);
+      return allow;
+    },
+    async passwordChanged(userId) {
+      calls.push(`passwordChanged ${userId}`);
+    },
+    async succeeded(scope, address, email) {
+      calls.push(`succeeded ${scope} ${address} ${email}`);
+    },
+  });
+  return calls;
+}
 
 // The session row's activity stamp and device label are refreshed by the
 // auth plugin on every request that resolves the cookie -- if the plugin
@@ -238,53 +262,45 @@ test("login refuses when the verified password was replaced before issuance", as
 // on its own: an attacker who cannot tell accounts apart can still try
 // passwords as fast as the box answers. The README's reverse-proxy setup adds
 // no rate limiting of its own, so this cannot be left to the deployment.
-test("stops guessing at one account from one address", async () => {
-  const target = { ...account, email: "throttled@example.com" };
-  const dependencies = createDependencies();
-  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
-  dependencies.usersDataService.findUser = async (email) =>
-    email === target.email ? target : undefined;
-  dependencies.password.verify = async (value, hash) =>
-    hash === target.password && value === "password";
-  const app = await appFor(dependencies);
-  const attempt = (password: string, address: string) =>
-    post(
-      app,
-      "/api/login",
-      { email: target.email, password },
-      { headers: { "x-forwarded-for": address } },
-    );
-
-  for (let guess = 0; guess < 10; guess++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    expect((await attempt("wrong", "203.0.113.7")).status).toBe(401);
-  }
-
-  // Same body and status as a wrong password, so the throttle does not become
-  // the enumeration signal the equal-time hashing was there to avoid.
-  const throttled = await attempt("password", "203.0.113.7");
-  expect(throttled.status).toBe(401);
-  expect(await throttled.json()).toEqual({
-    error: "Email or password is wrong.",
-  });
-
-  // The account itself is not locked: the counter is keyed on the address as
-  // well, so hammering an address cannot shut its owner out from elsewhere.
-  const elsewhere = await attempt("password", "198.51.100.4");
-  expect(elsewhere.status).toBe(200);
-});
-
-// What stays counted is failures: the right password takes its own attempt
-// back, so a user who mistyped nine times starts the next window fresh.
-test("a successful login clears the guesses counted against it", async () => {
+// How the counters are keyed and limited is auth-throttle-integration's.
+test("a throttled login answers like a wrong password without checking it", async () => {
   const dependencies = createDependencies();
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
   dependencies.usersDataService.findUser = async () => account;
   let verifyCalls = 0;
-  dependencies.password.verify = async (value) => {
+  dependencies.password.verify = async () => {
     verifyCalls++;
-    return value === "password";
+    return true;
   };
+  const throttle = recordThrottle(dependencies, false);
+  const app = await appFor(dependencies);
+
+  const response = await post(
+    app,
+    "/api/login",
+    { email: account.email, password: "password" },
+    { headers: { "x-forwarded-for": "203.0.113.7" } },
+  );
+
+  // Same body and status as a wrong password, so the throttle does not become
+  // the enumeration signal the equal-time hashing was there to avoid.
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({
+    error: "Email or password is wrong.",
+  });
+  expect(verifyCalls).toBe(0);
+  expect(throttle).toEqual([`attempt login 203.0.113.7 ${account.email}`]);
+});
+
+// Counted before the password is checked, so a parallel burst cannot all
+// pass; what stays counted is failures, so the right password takes its own
+// attempt back.
+test("a login counts its attempt first and a success takes it back", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
+  dependencies.usersDataService.findUser = async () => account;
+  dependencies.password.verify = async (value) => value === "password";
+  const throttle = recordThrottle(dependencies, true);
   const app = await appFor(dependencies);
   const attempt = (password: string) =>
     post(
@@ -294,45 +310,14 @@ test("a successful login clears the guesses counted against it", async () => {
       { headers: { "x-forwarded-for": "203.0.113.7" } },
     );
 
-  for (let guess = 0; guess < 9; guess++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await attempt(`typo-${guess}`);
-  }
+  expect((await attempt("typo")).status).toBe(401);
   expect((await attempt("password")).status).toBe(200);
-  for (let guess = 0; guess < 10; guess++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await attempt(`typo-again-${guess}`);
-  }
-  expect(verifyCalls).toBe(20);
-});
 
-// A check before the password and a failure recorded after it let a burst all
-// pass the check before any was counted; counting first is what holds.
-test("a parallel burst of guesses reaches the password check at most the limit", async () => {
-  const dependencies = createDependencies();
-  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
-  dependencies.usersDataService.findUser = async () => account;
-  let verifyCalls = 0;
-  dependencies.password.verify = async () => {
-    verifyCalls++;
-    await Bun.sleep(1);
-    return false;
-  };
-  const app = await appFor(dependencies);
-
-  const responses = await Promise.all(
-    Array.from({ length: 200 }, (_, guess) =>
-      post(
-        app,
-        "/api/login",
-        { email: account.email, password: `guess-${guess}` },
-        { headers: { "x-forwarded-for": "203.0.113.7" } },
-      ),
-    ),
-  );
-
-  expect(responses.every((response) => response.status === 401)).toBe(true);
-  expect(verifyCalls).toBe(10);
+  expect(throttle).toEqual([
+    `attempt login 203.0.113.7 ${account.email}`,
+    `attempt login 203.0.113.7 ${account.email}`,
+    `succeeded login 203.0.113.7 ${account.email}`,
+  ]);
 });
 
 test("rejects mismatched registration passwords before the handler", async () => {
@@ -419,52 +404,45 @@ test("refuses a password change whose verified password was replaced", async () 
 
 // A stolen session must not be a way to grind the account's real password.
 // Counted per user, so changing address does not reset the budget.
-test("stops guessing the current password from one session", async () => {
+test("a throttled password change is refused unchecked", async () => {
   const dependencies = createDependencies();
-  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
   authenticated(dependencies);
   dependencies.usersDataService.findUser = async () => account;
   let verifyCalls = 0;
-  dependencies.password.verify = async (value, hash) => {
+  dependencies.password.verify = async () => {
     verifyCalls++;
-    return hash === account.password && value === "old-password";
+    return true;
   };
-  dependencies.usersDataService.updatePassword = async () => true;
+  const throttle = recordThrottle(dependencies, false);
   const app = await appFor(dependencies);
-  const change = (oldPassword: string, address: string) =>
-    post(
-      app,
-      "/api/options/password",
-      { oldPassword, password1: "new-password", password2: "new-password" },
-      { auth: true, headers: { "x-forwarded-for": address } },
-    );
 
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await change(`guess-${attempt}`, `203.0.113.${attempt}`);
-  }
-  expect(verifyCalls).toBe(10);
+  const blocked = await post(
+    app,
+    "/api/options/password",
+    {
+      oldPassword: "old-password",
+      password1: "new-password",
+      password2: "new-password",
+    },
+    { auth: true },
+  );
 
-  // Even the right password, from a fresh address, is refused unchecked. The
-  // caller is signed in, so the refusal can say what it is.
-  const blocked = await change("old-password", "198.51.100.4");
+  // The caller is signed in, so the refusal can say what it is.
   expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({
     error: "Too many attempts. Try again later.",
   });
-  expect(verifyCalls).toBe(10);
+  expect(verifyCalls).toBe(0);
+  expect(throttle).toEqual([`attemptPasswordChange ${sessionUser.id}`]);
 });
 
 test("a successful password change clears the session's guess count", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.usersDataService.findUser = async () => account;
-  let verifyCalls = 0;
-  dependencies.password.verify = async (value) => {
-    verifyCalls++;
-    return value === "old-password";
-  };
+  dependencies.password.verify = async (value) => value === "old-password";
   dependencies.usersDataService.updatePassword = async () => true;
+  const throttle = recordThrottle(dependencies, true);
   const app = await appFor(dependencies);
   const change = (oldPassword: string) =>
     post(
@@ -474,18 +452,14 @@ test("a successful password change clears the session's guess count", async () =
       { auth: true },
     );
 
-  for (let attempt = 0; attempt < 9; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await change(`typo-${attempt}`);
-  }
+  expect((await change("typo")).status).toBe(400);
   expect((await change("old-password")).status).toBe(200);
 
-  // A fresh budget: ten more mistakes all reach the check.
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    expect((await change(`typo-again-${attempt}`)).status).toBe(400);
-  }
-  expect(verifyCalls).toBe(20);
+  expect(throttle).toEqual([
+    `attemptPasswordChange ${sessionUser.id}`,
+    `attemptPasswordChange ${sessionUser.id}`,
+    `passwordChanged ${sessionUser.id}`,
+  ]);
 });
 
 test("creates active users without registration integrations", async () => {
@@ -594,39 +568,31 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   dependencies.mailSender.sendActivationEmail = async () => {
     mailCalls++;
   };
+  const throttle = recordThrottle(dependencies, false);
   const app = await appFor(dependencies);
-  const register = (email: string, address: string) =>
-    post(
-      app,
-      "/api/register",
-      {
-        email,
-        password: "password",
-        passwordConfirm: "password",
-        username: "Stranger",
-      },
-      { headers: { "x-forwarded-for": address } },
-    );
 
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await register("stranger@example.com", "203.0.113.7");
-  }
-  expect(mailCalls).toBe(10);
+  const blocked = await post(
+    app,
+    "/api/register",
+    {
+      email: "stranger@example.com",
+      password: "password",
+      passwordConfirm: "password",
+      username: "Stranger",
+    },
+    { headers: { "x-forwarded-for": "203.0.113.7" } },
+  );
 
   // Counted per address whether or not the account exists, so saying so
   // answers nothing about who has one -- and no mail leaves.
-  const blocked = await register("stranger@example.com", "203.0.113.7");
   expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({
     error: "Too many attempts. Try again later.",
   });
-  expect(mailCalls).toBe(10);
-
-  // Keyed on the address too, so spending one address's budget cannot stop
-  // anyone else from signing up.
-  await register("stranger@example.com", "198.51.100.4");
-  expect(mailCalls).toBe(11);
+  expect(mailCalls).toBe(0);
+  expect(throttle).toEqual([
+    "attempt register 203.0.113.7 stranger@example.com",
+  ]);
 });
 
 // Without mail there is nothing to send, but every attempt still costs a
@@ -634,39 +600,25 @@ test("stops an open signup form from mailing strangers on demand", async () => {
 test("throttles registration when email activation is off", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
-  dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
   let hashCalls = 0;
   dependencies.password.hash = async () => {
     hashCalls++;
     return "hashed-password";
   };
   dependencies.usersDataService.getUserCount = async () => 1;
-  dependencies.usersDataService.findUser = async () => undefined;
-  dependencies.usersDataService.createUser = async () => "created";
+  recordThrottle(dependencies, false);
   const app = await appFor(dependencies);
-  const register = () =>
-    post(
-      app,
-      "/api/register",
-      {
-        email: "stranger@example.com",
-        password: "password",
-        passwordConfirm: "password",
-        username: "Stranger",
-      },
-      { headers: { "x-forwarded-for": "203.0.113.7" } },
-    );
 
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await register();
-  }
-  expect(hashCalls).toBe(10);
+  const blocked = await post(app, "/api/register", {
+    email: "stranger@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Stranger",
+  });
 
   // Not the success it would otherwise claim: no account was made.
-  const blocked = await register();
   expect(blocked.status).toBe(429);
-  expect(hashCalls).toBe(10);
+  expect(hashCalls).toBe(0);
 });
 
 // A failed account-exists notice answers like a sent one; the failure is
@@ -786,18 +738,18 @@ test("never throttles the first operator of an empty instance", async () => {
   dependencies.mailSender.sendActivationEmail = async () => {
     mailCalls++;
   };
+  const throttle = recordThrottle(dependencies, false);
   const app = await appFor(dependencies);
 
-  for (let attempt = 0; attempt < 12; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    await post(app, "/api/register", {
-      email: "operator@example.com",
-      password: "password",
-      passwordConfirm: "password",
-      username: "Operator",
-    });
-  }
-  expect(mailCalls).toBe(12);
+  await post(app, "/api/register", {
+    email: "operator@example.com",
+    password: "password",
+    passwordConfirm: "password",
+    username: "Operator",
+  });
+
+  expect(mailCalls).toBe(1);
+  expect(throttle).toEqual([]);
 });
 
 test("rejects missing or malformed Turnstile responses before database mutation", async () => {
@@ -1090,38 +1042,22 @@ test("stops a reset form from mailing one account on demand", async () => {
   dependencies.mailSender.sendPasswordResetEmail = async () => {
     sent++;
   };
+  const throttle = recordThrottle(dependencies, false);
   const app = await appFor(dependencies);
-  const request = (address: string) =>
-    post(
-      app,
-      "/api/password-reset",
-      { email: target.email },
-      { headers: { "x-forwarded-for": address } },
-    );
 
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- The counter is the point.
-    expect((await request("203.0.113.7")).status).toBe(200);
-  }
-  const throttled = await request("203.0.113.7");
-  const elsewhere = await request("198.51.100.4");
+  const throttled = await post(
+    app,
+    "/api/password-reset",
+    { email: target.email },
+    { headers: { "x-forwarded-for": "203.0.113.7" } },
+  );
 
   expect(throttled.status).toBe(200);
   expect(await throttled.json()).toEqual({ success: true });
-  expect(elsewhere.status).toBe(200);
-  expect(sent).toBe(11);
-
-  // The reset counter is its own scope: tripping it does not lock the same
-  // address out of signing in with the right password.
-  dependencies.password.verify = async (value, hash) =>
-    hash === target.password && value === "password";
-  const login = await post(
-    app,
-    "/api/login",
-    { email: target.email, password: "password" },
-    { headers: { "x-forwarded-for": "203.0.113.7" } },
-  );
-  expect(login.status).toBe(200);
+  expect(sent).toBe(0);
+  expect(throttle).toEqual([
+    `attempt password-reset 203.0.113.7 ${target.email}`,
+  ]);
 });
 
 test("spends a reset token once and refuses one the store does not hold", async () => {

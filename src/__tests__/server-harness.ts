@@ -1,4 +1,4 @@
-import type { AppConfig } from "#platform/config.ts";
+import { loadConfig } from "#platform/config.ts";
 import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { type EmailHandler } from "#features/mail-ingest/email-handler.ts";
@@ -17,8 +17,7 @@ import type { ArticleEventHub } from "#features/reader/article-event-hub.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { resolve } from "node:path";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
-import { AuthThrottle } from "#features/auth/auth-throttle.ts";
-import { createFakeThrottleRedis } from "#features/auth/__tests__/fake-throttle-redis.ts";
+import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
 import { createServerApp, type ServerServices } from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
@@ -65,23 +64,9 @@ export type Dependencies = {
 // answer the reads most routes make on the way in, and anything else a test
 // has not arranged throws and names itself.
 export function createDependencies(): Dependencies {
-  const config: AppConfig = {
-    ALLOWED_EMAILS: [],
-    ARTICLE_STALE_AFTER_DAYS: 365,
-    CLEANUP_INTERVAL: 1_000,
+  const config = loadConfig({
     DATABASE_URL: "postgres://feedfathom:feedfathom@localhost/feedfathom",
-    DB_POOL_MAX: 10,
-    ENABLE_REGISTRATION: false,
-    GATHER_JOBS_INTERVAL: 1_000,
-    LOCK_DURATION: 1_000,
-    MAIL_ENABLED: false,
-    REDIS_URL: "redis://localhost:6379",
-    SLOW_REQUEST_MS: 500,
-    USER_DORMANT_AFTER_DAYS: 365,
-    USER_EXPIRY_DAYS: 730,
-    WORKER_CONCURRENCY: 1,
-    production: false,
-  };
+  });
   const articlesDataService = strictFake<ArticlesDataService>(
     {
       async getUserArticle() {
@@ -163,7 +148,19 @@ export function createDependencies(): Dependencies {
       sourcesDataService,
     ),
     articlesDataService,
-    authThrottle: new AuthThrottle(createFakeThrottleRedis()),
+    authThrottle: strictFake<AuthThrottle>(
+      {
+        async attempt() {
+          return true;
+        },
+        async attemptPasswordChange() {
+          return true;
+        },
+        async passwordChanged() {},
+        async succeeded() {},
+      },
+      "authThrottle",
+    ),
     config,
     emailHandler: strictFake<EmailHandler>({}, "emailHandler"),
     feedParser: strictFake<FeedParser>(
