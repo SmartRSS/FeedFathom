@@ -6,9 +6,25 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
-import { articlePageSize } from "../../src/shared/contracts/responses.ts";
+import { Value } from "typebox/value";
+import { articlesRequest } from "#shared/contracts/requests.ts";
+import {
+  articlePageSize,
+  articleResponse,
+  articlesResponse,
+  errorResponse,
+  registrationResponse,
+  successResponse,
+  treeResponse,
+  type TreeNode,
+} from "#shared/contracts/responses.ts";
 import type * as Dialogs from "../../src/spa/dialog.tsx";
-import { installApiFixture } from "./api-fixture.ts";
+import {
+  installApiFixture,
+  malformed,
+  refuse,
+  respond,
+} from "./api-fixture.ts";
 
 // The real service worker (see src/spa/sw.ts) takes /api/* fetches
 // over itself once it activates -- its own internal fetch() calls run
@@ -133,19 +149,17 @@ const pagedSummary = (id: number) => ({
 // not know.
 const fulfillPagedArticle = async (route: Route) => {
   const id = Number(new URL(route.request().url()).searchParams.get("article"));
-  await route.fulfill({
-    json: {
-      author: "Author",
-      content: `<p>Body ${id}</p>`,
-      guid: `guid-${id}`,
-      id,
-      lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-      publishedAt: "2026-07-20T10:00:00.000Z",
-      sourceId: 3,
-      title: `Article ${id}`,
-      updatedAt: null,
-      url: `https://articles.example/${id}`,
-    },
+  await respond(route, articleResponse, {
+    author: "Author",
+    content: `<p>Body ${id}</p>`,
+    guid: `guid-${id}`,
+    id,
+    lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+    publishedAt: "2026-07-20T10:00:00.000Z",
+    sourceId: 3,
+    title: `Article ${id}`,
+    updatedAt: null,
+    url: `https://articles.example/${id}`,
   });
 };
 
@@ -289,19 +303,17 @@ test("renders the tree while its favicons are still loading", async ({
   await installApiFixture(page);
   const rowCount = 50;
   await page.route("**/api/tree", async (route) => {
-    await route.fulfill({
-      json: {
-        tree: Array.from({ length: rowCount }, (_, index) => ({
-          favicon: `/api/favicon/${index + 1}?v=1`,
-          homeUrl: "https://news.example/",
-          kind: "feed",
-          name: `Feed ${index}`,
-          type: "source",
-          uid: String(index + 1),
-          unreadCount: 0,
-          xmlUrl: `https://news.example/${index}.xml`,
-        })),
-      },
+    await respond(route, treeResponse, {
+      tree: Array.from({ length: rowCount }, (_, index): TreeNode => ({
+        favicon: `/api/favicon/${index + 1}?v=1`,
+        homeUrl: "https://news.example/",
+        kind: "feed",
+        name: `Feed ${index}`,
+        type: "source",
+        uid: String(index + 1),
+        unreadCount: 0,
+        xmlUrl: `https://news.example/${index}.xml`,
+      })),
     });
   });
   const held: Route[] = [];
@@ -386,11 +398,7 @@ test("offers first-run guidance while the tree is empty", async ({ page }) => {
   await installApiFixture(page);
   // Registered after the fixture's own **/api/** handler, so it wins.
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      body: JSON.stringify({ tree: [] }),
-      contentType: "application/json",
-      status: 200,
-    }),
+    respond(route, treeResponse, { tree: [] }),
   );
   await page.goto("/");
 
@@ -642,7 +650,10 @@ test("a late response to a cleared search leaves the list empty", async ({
   // requests hold until released, everything else falls through.
   const { released: searchReleased, release: releaseSearch } = deferred();
   await page.route("**/api/articles", async (route) => {
-    const query: string | undefined = route.request().postDataJSON().query;
+    const { query } = Value.Parse(
+      articlesRequest,
+      route.request().postDataJSON(),
+    );
     if (!query) return route.fallback();
     await searchReleased;
     return route.fallback();
@@ -682,15 +693,15 @@ test("fetches the next article page after a delete empties the list", async ({
   // through to the fixture for every other request the page makes.
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     cursors.push(body.cursor);
     const start = body.cursor === undefined ? 1 : pageSize + 1;
     const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
+    );
   });
   // Selecting the list also opens its first row, and these ids are not ones
   // the fixture knows.
@@ -721,15 +732,16 @@ test("moving the focus re-evaluates only the rows it leaves and enters", async (
   const pageSize = 500;
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
-    await route.fulfill({
-      json:
-        body.cursor === undefined
-          ? Array.from({ length: pageSize }, (_, index) =>
-              pagedSummary(index + 1),
-            )
-          : [],
-    });
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
+    await respond(
+      route,
+      articlesResponse,
+      body.cursor === undefined
+        ? Array.from({ length: pageSize }, (_, index) =>
+            pagedSummary(index + 1),
+          )
+        : [],
+    );
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
@@ -773,15 +785,15 @@ test("pages the Today view with the view, not its node uid", async ({
   const bodies: { cursor?: number; sources: number[]; view?: string }[] = [];
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     bodies.push(body);
     const start = body.cursor === undefined ? 1 : pageSize + 1;
     const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
+    );
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
@@ -1123,10 +1135,7 @@ test("a throttled password change says to try again later", async ({
 }) => {
   await openApp(page, {}, "/options");
   await page.route("**/api/options/password", (route) =>
-    route.fulfill({
-      json: { error: "Too many attempts. Try again later." },
-      status: 429,
-    }),
+    refuse(route, 429, "Too many attempts. Try again later."),
   );
   await page.getByRole("link", { exact: true, name: "Account" }).click();
 
@@ -1147,19 +1156,17 @@ test("a throttled password change says to try again later", async ({
 
 const openRegistration = async (
   page: Page,
-  answer: { json: object; status: number },
+  answer: (route: Route) => Promise<void>,
 ) => {
   await installApiFixture(page, { authenticated: false });
   await page.route("**/api/register", (route) =>
     route.request().method() === "GET"
-      ? route.fulfill({
-          json: {
-            passwordResetEnabled: true,
-            registrationStatus: "ENABLED",
-            turnstileSiteKey: null,
-          },
+      ? respond(route, registrationResponse, {
+          passwordResetEnabled: true,
+          registrationStatus: "ENABLED",
+          turnstileSiteKey: null,
         })
-      : route.fulfill(answer),
+      : answer(route),
   );
   await page.goto("/register");
   await page.getByLabel("Name").fill("Reader");
@@ -1172,7 +1179,9 @@ const openRegistration = async (
 test("registration success says what to do if no email arrives", async ({
   page,
 }) => {
-  await openRegistration(page, { json: { success: true }, status: 200 });
+  await openRegistration(page, (route) =>
+    respond(route, successResponse, { success: true }),
+  );
 
   await expect(
     page.getByRole("heading", { name: "Registration successful" }),
@@ -1183,10 +1192,9 @@ test("registration success says what to do if no email arrives", async ({
 });
 
 test("a throttled registration says to try again later", async ({ page }) => {
-  await openRegistration(page, {
-    json: { error: "Too many attempts. Try again later." },
-    status: 429,
-  });
+  await openRegistration(page, (route) =>
+    refuse(route, 429, "Too many attempts. Try again later."),
+  );
 
   await expect(page.getByRole("alert")).toHaveText(
     "Too many attempts. Try again later.",
@@ -1347,19 +1355,17 @@ test("moving tree focus works out the tab stop once, not per row", async ({
   await installApiFixture(page);
   const rowCount = 300;
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: Array.from({ length: rowCount }, (_, index) => ({
-          favicon: null,
-          homeUrl: "https://news.example/",
-          kind: "feed",
-          name: `Feed ${index}`,
-          type: "source",
-          uid: String(index + 1),
-          unreadCount: 0,
-          xmlUrl: `https://news.example/${index}.xml`,
-        })),
-      },
+    respond(route, treeResponse, {
+      tree: Array.from({ length: rowCount }, (_, index): TreeNode => ({
+        favicon: null,
+        homeUrl: "https://news.example/",
+        kind: "feed",
+        name: `Feed ${index}`,
+        type: "source",
+        uid: String(index + 1),
+        unreadCount: 0,
+        xmlUrl: `https://news.example/${index}.xml`,
+      })),
     }),
   );
   await page.goto("/");
@@ -1399,28 +1405,26 @@ test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   const source = await row.elementHandle();
 
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              {
-                favicon: null,
-                homeUrl: "https://news.example/",
-                kind: "feed",
-                name: "Tech News",
-                type: "source",
-                uid: "3",
-                unreadCount: 5,
-                xmlUrl: "https://news.example/feed.xml",
-              },
-            ],
-            name: "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            {
+              favicon: null,
+              homeUrl: "https://news.example/",
+              kind: "feed",
+              name: "Tech News",
+              type: "source",
+              uid: "3",
+              unreadCount: 5,
+              xmlUrl: "https://news.example/feed.xml",
+            },
+          ],
+          name: "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     }),
   );
   await page.clock.runFor(30_000);
@@ -1467,11 +1471,7 @@ test("opening the activation link activates nothing until the button says so", a
   const activations: string[] = [];
   await page.route("**/api/activate/**", async (route) => {
     activations.push(route.request().method());
-    return route.fulfill({
-      body: JSON.stringify({ success: true }),
-      contentType: "application/json",
-      status: 200,
-    });
+    return respond(route, successResponse, { success: true });
   });
 
   await page.goto("/activate/scan-magnet");
@@ -2296,13 +2296,15 @@ for (const admin of [false, true])
   }) => {
     await installApiFixture(page, { admin });
     await page.route("**/api/preview?*", (route) =>
-      route.fulfill({
-        json: {
+      respond(
+        route,
+        errorResponse,
+        {
           detail: "getaddrinfo ENOTFOUND preview.example",
           error: "This site can't be found.",
         },
-        status: 400,
-      }),
+        400,
+      ),
     );
     await page.goto("/preview");
     await page.getByLabel("Feed URL").fill("https://preview.example/feed.xml");
@@ -3384,7 +3386,7 @@ test.describe("session restoration", () => {
 // #835: the tree context menu acts on its row without selecting it, so the
 // article list, its pagination cursor and the reading position stay with the
 // selection the user actually made.
-const menuTreeSource = (uid: string, name: string) => ({
+const menuTreeSource = (uid: string, name: string): TreeNode => ({
   favicon: null,
   homeUrl: `https://${uid}.example/`,
   kind: "feed",
@@ -3399,22 +3401,20 @@ const routeTwoSourceTree = async (
   state: Awaited<ReturnType<typeof installApiFixture>>,
 ) => {
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              menuTreeSource("3", "Tech News"),
-              menuTreeSource("9", "Tech Preview"),
-            ].filter(
-              (source) => !state.removedSourceIds.includes(Number(source.uid)),
-            ),
-            name: state.updatedFolder?.name ?? "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            menuTreeSource("3", "Tech News"),
+            menuTreeSource("9", "Tech Preview"),
+          ].filter(
+            (source) => !state.removedSourceIds.includes(Number(source.uid)),
+          ),
+          name: state.updatedFolder?.name ?? "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     }),
   );
 };
@@ -3443,32 +3443,19 @@ test("the tree context menu leaves the article paging scope alone", async ({
   let releasePage: (() => void) | undefined;
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     bodies.push(body);
     if (body.cursor !== undefined)
       await new Promise<void>((release) => (releasePage = release));
     const start = body.cursor === undefined ? 1 : pageSize + 1;
     const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
-  });
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
     );
-    await route.fulfill({
-      json: {
-        ...pagedSummary(id),
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        updatedAt: null,
-      },
-    });
   });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page);
   const rows = page.locator(".article-list .article");
@@ -3507,8 +3494,8 @@ test("switching feeds does not wait on the old feed's next page", async ({
   const held = new Map<number, () => void>();
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
-    const source: number = body.sources[0];
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
+    const source = body.sources[0]!;
     const offset = body.cursor === undefined ? 1 : pageSize + 1;
     if (body.cursor !== undefined) {
       pageRequests.push(body.sources);
@@ -3516,13 +3503,13 @@ test("switching feeds does not wait on the old feed's next page", async ({
     }
     const size = body.cursor === undefined ? pageSize : 3;
     // The app aborts the abandoned page, so its route may be gone by now.
-    await route
-      .fulfill({
-        json: Array.from({ length: size }, (_, index) =>
-          pagedSummary(source * 1000 + offset + index),
-        ),
-      })
-      .catch(() => {});
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) =>
+        pagedSummary(source * 1000 + offset + index),
+      ),
+    ).catch(() => {});
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   const list = page.locator(".article-list");
@@ -3568,7 +3555,7 @@ test("a failed delete leaves the feed switched to since alone", async ({
     if (route.request().method() !== "DELETE") return await route.fallback();
     await new Promise<void>((release) => (failDelete = release));
     // Malformed rather than a 500, which the console guard would flag.
-    await route.fulfill({ json: { removed: "malformed" } });
+    await malformed(route, { removed: "malformed" });
   });
   await page.goto("/");
   await selectSource(page);
@@ -3716,28 +3703,26 @@ test("an article event refreshes the tree ahead of the poll", async ({
   let treeRequests = 0;
   await page.route("**/api/tree", (route) => {
     treeRequests++;
-    return route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              {
-                favicon: null,
-                homeUrl: "https://news.example/",
-                kind: "feed",
-                name: "Tech News",
-                type: "source",
-                uid: "3",
-                unreadCount: 5,
-                xmlUrl: "https://news.example/feed.xml",
-              },
-            ],
-            name: "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    return respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            {
+              favicon: null,
+              homeUrl: "https://news.example/",
+              kind: "feed",
+              name: "Tech News",
+              type: "source",
+              uid: "3",
+              unreadCount: 5,
+              xmlUrl: "https://news.example/feed.xml",
+            },
+          ],
+          name: "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     });
   });
   release();
@@ -3803,7 +3788,7 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
 
 // #989: a slow network doesn't hold a tree the worker already has.
 // Releasing with no response lets the fixture answer as usual.
-type HeldTree = { json: object; status?: number } | undefined;
+type HeldTree = ((route: Route) => Promise<void>) | undefined;
 const reloadWithHeldTree = async (
   page: Page,
   beforeReload?: () => Promise<void>,
@@ -3822,8 +3807,8 @@ const reloadWithHeldTree = async (
     release = resolve;
   });
   await context.route("**/api/tree", async (route) => {
-    const response = await held;
-    await (response ? route.fulfill(response) : route.fallback());
+    const answer = await held;
+    await (answer ? answer(route) : route.fallback());
   });
   await page.reload();
   await expect(sourceRow(page)).toBeVisible();
@@ -3895,8 +3880,10 @@ const downloadUnread = async (page: Page) => {
   await context.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
     const publishedAt = new Date().toJSON();
-    return route.fulfill({
-      json: ["First", "Second", "Third"].map((title, index) => ({
+    return respond(
+      route,
+      articlesResponse,
+      ["First", "Second", "Third"].map((title, index) => ({
         author: "News Author",
         id: 11 + index,
         publishedAt,
@@ -3906,7 +3893,7 @@ const downloadUnread = async (page: Page) => {
         title: `${title} article`,
         url: `https://articles.example/${index}`,
       })),
-    });
+    );
   });
   await page.goto("/");
   await page.waitForFunction(() => navigator.serviceWorker.controller);
@@ -3996,8 +3983,8 @@ test.describe("under a controlling service worker", () => {
       page.getByRole("treeitem", { name: "Tech News 2 unread" }),
     ).toBeVisible();
 
-    release({
-      json: {
+    release((route) =>
+      respond(route, treeResponse, {
         tree: [
           {
             favicon: null,
@@ -4010,8 +3997,8 @@ test.describe("under a controlling service worker", () => {
             xmlUrl: "https://news.example/feed.xml",
           },
         ],
-      },
-    });
+      }),
+    );
     await expect(
       page.getByRole("treeitem", { name: "Tech News 5 unread" }),
     ).toBeVisible();
@@ -4111,7 +4098,7 @@ test.describe("under a controlling service worker", () => {
     page,
   }) => {
     const release = await reloadWithHeldTree(page);
-    release({ json: { error: "Unauthorized" }, status: 401 });
+    release((route) => refuse(route, 401, "Unauthorized"));
     await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
     (browserFailures.get(page) ?? []).length = 0;
   });
@@ -4132,7 +4119,7 @@ test.describe("under a controlling service worker", () => {
         .context()
         .route("**/api/articles", (route) =>
           route.request().method() === "DELETE"
-            ? route.fulfill({ json: { error: "Not found" }, status: 404 })
+            ? refuse(route, 404, "Not found")
             : route.fallback(),
         ),
     );
