@@ -4,6 +4,17 @@ import { Value } from "typebox/value";
 export const readerBridgeChannel = "feedfathom-reader";
 export const readerBridgeVersion = 1;
 
+// The extension gives up on an article fetch after readerFetchTimeoutMs and
+// answers TIMEOUT; the page waits a little longer than that, so a slow fetch
+// reaches it as TIMEOUT rather than as a silent UNAVAILABLE.
+export const readerFetchTimeoutMs = 15_000;
+export const readerResponseTimeoutMs = readerFetchTimeoutMs + 5_000;
+
+// One budget for both ends: the extension refuses a body larger than this
+// before transferring it, and the page refuses decoded HTML whose UTF-8 size
+// exceeds it before parsing.
+export const readerMaximumHtmlBytes = 3 * 1024 * 1024;
+
 const requestIdSchema = Type.String({
   pattern:
     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
@@ -86,43 +97,6 @@ const readerResponseSchema = Type.Union([
     { additionalProperties: false },
   ),
 ]);
-const listFeedsMessageSchema = Type.Object(
-  {
-    action: Type.Literal("list-feeds"),
-    feedsData: Type.Array(
-      Type.Object(
-        {
-          title: Type.String(),
-          url: Type.String(),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
-const visibilityLostMessageSchema = Type.Object(
-  { action: Type.Literal("visibility-lost") },
-  { additionalProperties: false },
-);
-const scanRequestMessageSchema = Type.Object(
-  { action: Type.Literal("scan-request") },
-  { additionalProperties: false },
-);
-const instanceStorageResultSchema = Type.Object(
-  { instance: Type.Optional(Type.String()) },
-  { additionalProperties: false },
-);
-const badgeStorageResultSchema = Type.Object(
-  { showBadge: Type.Optional(Type.Boolean()) },
-  { additionalProperties: false },
-);
-
-const openRssStorageResultSchema = Type.Object(
-  { showOpenRss: Type.Optional(Type.Boolean()) },
-  { additionalProperties: false },
-);
-
 const readerResponseForRequestSchema = (request: ReaderRequest) =>
   Type.Intersect([
     readerResponseSchema,
@@ -135,43 +109,9 @@ const readerResponseForRequestSchema = (request: ReaderRequest) =>
 export type ReaderErrorCode = Static<typeof readerErrorCodeSchema>;
 export type ReaderRequest = Static<typeof readerRequestSchema>;
 export type ReaderResponse = Static<typeof readerResponseSchema>;
-export type ListFeedsMessage = Static<typeof listFeedsMessageSchema>;
-export type VisibilityLostMessage = Static<typeof visibilityLostMessageSchema>;
-export type ScanRequestMessage = Static<typeof scanRequestMessageSchema>;
-
-export const storedInstance = (value: unknown): string | undefined =>
-  Value.Check(instanceStorageResultSchema, value) ? value.instance : undefined;
-
-// The toolbar badge is opt-out (#768): an absent key means on, and so does an
-// unreadable storage result -- a storage failure must never silently turn a
-// feature off.
-export const storedBadgeEnabled = (value: unknown): boolean =>
-  Value.Check(badgeStorageResultSchema, value)
-    ? value.showBadge !== false
-    : true;
-
-// The OpenRSS suggestion is opt-in: it sends the page address to a third
-// party, so only an explicit stored true turns it on.
-export const storedOpenRssEnabled = (value: unknown): boolean =>
-  Value.Check(openRssStorageResultSchema, value) && value.showOpenRss === true;
-
-export const isListFeedsMessage = (value: unknown): value is ListFeedsMessage =>
-  Value.Check(listFeedsMessageSchema, value);
-
-export const isVisibilityLostMessage = (
-  value: unknown,
-): value is VisibilityLostMessage =>
-  Value.Check(visibilityLostMessageSchema, value);
-
-export const isScanRequestMessage = (
-  value: unknown,
-): value is ScanRequestMessage => Value.Check(scanRequestMessageSchema, value);
 
 export const isReaderRequest = (value: unknown): value is ReaderRequest =>
   Value.Check(readerRequestSchema, value);
-
-export const isReaderResponse = (value: unknown): value is ReaderResponse =>
-  Value.Check(readerResponseSchema, value);
 
 export const isReaderResponseForRequest = (
   value: unknown,
@@ -179,15 +119,61 @@ export const isReaderResponseForRequest = (
 ): value is ReaderResponse =>
   Value.Check(readerResponseForRequestSchema(request), value);
 
+export type ReaderFetchRequest = Extract<ReaderRequest, { action: "fetch" }>;
+
+const envelope = {
+  channel: readerBridgeChannel,
+  version: readerBridgeVersion,
+} as const;
+
+export const readerCapabilitiesRequest = (): ReaderRequest => ({
+  ...envelope,
+  action: "capabilities",
+  id: crypto.randomUUID(),
+  type: "request",
+});
+
+export const readerFetchRequest = (url: string): ReaderFetchRequest => ({
+  ...envelope,
+  action: "fetch",
+  id: crypto.randomUUID(),
+  type: "request",
+  url,
+});
+
+export const readerCapabilitiesResponse = (
+  request: ReaderRequest,
+): ReaderResponse => ({
+  ...envelope,
+  action: "capabilities",
+  available: true,
+  id: request.id,
+  ok: true,
+  type: "response",
+});
+
+export const readerFetchResponse = (
+  request: ReaderFetchRequest,
+  finalUrl: string,
+  html: string,
+): ReaderResponse => ({
+  ...envelope,
+  action: "fetch",
+  finalUrl,
+  html,
+  id: request.id,
+  ok: true,
+  type: "response",
+});
+
 export const readerErrorResponse = (
   request: ReaderRequest,
   error: ReaderErrorCode,
 ): ReaderResponse => ({
+  ...envelope,
   action: request.action,
-  channel: readerBridgeChannel,
   error,
   id: request.id,
   ok: false,
   type: "response",
-  version: readerBridgeVersion,
 });

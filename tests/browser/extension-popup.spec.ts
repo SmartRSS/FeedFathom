@@ -36,12 +36,12 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
 
     const optionsPage = await context.newPage();
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
-    const input = optionsPage.locator("#instance");
+    const input = optionsPage.getByLabel("Instance");
 
     // A plain-http address that is not loopback is the rejection people
-    // actually hit. It used to arrive as an alert(), which a browser can
-    // offer to suppress -- after which the field silently reverted with
-    // nothing said at all.
+    // actually hit, and it must be said inline: a browser can offer to
+    // suppress repeat alert() dialogs, after which the field would revert
+    // with nothing said at all.
     await input.fill("http://feeds.example.com");
     await input.dispatchEvent("change");
     await expect(optionsPage.getByRole("alert")).toContainText(
@@ -51,7 +51,7 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
 
     await input.fill(instance);
     await input.dispatchEvent("change");
-    await expect(optionsPage.locator("#instance-error")).toHaveText("");
+    await expect(input).toHaveAccessibleDescription("");
     await optionsPage.waitForFunction(
       async (expected) =>
         (await chrome.storage.sync.get("instance"))["instance"] === expected,
@@ -70,14 +70,11 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
     await expect(feedButton).toBeVisible();
     // The URL under the title is what tells apart feeds whose titles share a
     // long prefix and clip to the same words.
-    await expect(popupPage.locator("#feeds span")).toHaveText(
-      "https://feed.test/rss",
-    );
-    // extension.css has to stay an external file: the manifest's
-    // extension_pages CSP sets no style-src, so it falls back to
-    // default-src 'self' and an inline <style> is dropped outright,
-    // leaving the popup at the browser's unstyled defaults.
-    expect(await popupPage.evaluate(() => document.styleSheets.length)).toBe(1);
+    await expect(feedButton).toContainText("https://feed.test/rss");
+    // The manifest's extension_pages CSP sets no style-src, so it falls back
+    // to default-src 'self' and an inline <style> is dropped outright. A row
+    // laid out as a grid shows extension.css was applied.
+    await expect(feedButton).toHaveCSS("display", "grid");
 
     const [openedPage] = await Promise.all([
       context.waitForEvent("page"),
@@ -157,9 +154,9 @@ test("mobile popup shows an empty state with no cached feeds", async () => {
 
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
-    await expect(popupPage.locator("#feeds")).toHaveText(
-      "No feeds found on this page.",
-    );
+    await expect(
+      popupPage.getByText("No feeds found on this page."),
+    ).toBeVisible();
   } finally {
     await context.close();
     await rm(profile, { recursive: true });

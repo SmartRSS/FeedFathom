@@ -9,17 +9,17 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader.ts";
+import { readerMaximumHtmlBytes } from "#shared/reader-bridge.ts";
+import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
 
 // Extraction runs on the main thread, so it must stay short enough that a
-// click to switch away is still answered. The extension already refuses
-// documents over 5 MiB; these tighter budgets send larger pages to Feed mode
-// before any parsing starts. The largest Wikipedia articles (about 2.8 MB and
-// 23,000 elements) still fit; a 3.8 MB page of 24,000 linked paragraphs,
-// which held the thread for about 465 ms, does not.
-// UTF-8 bytes, measured with TextEncoder rather than html.length, so a
-// non-Latin-script page (Polish, Cyrillic, CJK) is budgeted by its real
-// transfer size instead of its UTF-16 code-unit count.
-const maximumHtmlBytes = 3 * 1024 * 1024;
+// click to switch away is still answered. These budgets send larger pages to
+// Feed mode before any parsing starts. The largest Wikipedia articles (about
+// 2.8 MB and 23,000 elements) still fit; a 3.8 MB page of 24,000 linked
+// paragraphs, which held the thread for about 465 ms, does not.
+// The byte budget counts UTF-8 bytes, measured with TextEncoder rather than
+// html.length, so a non-Latin-script page (Polish, Cyrillic, CJK) is budgeted
+// by its real size instead of its UTF-16 code-unit count.
 const maximumElements = 30_000;
 const textEncoder = new TextEncoder();
 
@@ -35,7 +35,7 @@ const exceedsElementBudget = (html: string): boolean => {
 
 const assertWithinBudget = (html: string): void => {
   if (
-    textEncoder.encode(html).byteLength > maximumHtmlBytes ||
+    textEncoder.encode(html).byteLength > readerMaximumHtmlBytes ||
     exceedsElementBudget(html)
   )
     throw new ReaderExtensionError("TOO_LARGE");
@@ -77,18 +77,8 @@ const rewriteDocumentUrls = (root: ParentNode, base: URL): void => {
 };
 
 const validatedBaseUrl = (value: string): URL => {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ReaderExtensionError("INVALID_RESPONSE");
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== ""
-  )
-    throw new ReaderExtensionError("INVALID_RESPONSE");
+  const url = httpUrlWithoutCredentials(value);
+  if (!url) throw new ReaderExtensionError("INVALID_RESPONSE");
   return url;
 };
 

@@ -1,13 +1,12 @@
 import {
-  isReaderResponse,
-  readerBridgeChannel,
-  readerBridgeVersion,
+  isReaderResponseForRequest,
+  readerCapabilitiesRequest,
+  readerFetchRequest,
+  readerResponseTimeoutMs,
   type ReaderErrorCode,
   type ReaderRequest,
   type ReaderResponse,
-} from "#shared/extension-types.ts";
-
-const responseTimeoutMs = 20_000;
+} from "#shared/reader-bridge.ts";
 
 const errorMessages: Record<ReaderErrorCode, string> = {
   FETCH_FAILED: "The Reader extension could not fetch this article.",
@@ -66,15 +65,16 @@ export const createExtensionReaderBridge = (windowObject: Window = window) => {
   const receive = (event: MessageEvent<unknown>) => {
     if (
       event.source !== windowObject ||
-      event.origin !== windowObject.location.origin ||
-      !isReaderResponse(event.data)
+      event.origin !== windowObject.location.origin
     )
       return;
-    const request = pending.get(event.data.id);
-    if (!request || request.request.action !== event.data.action) return;
-    pending.delete(event.data.id);
-    clearTimeout(request.timer);
-    request.resolve(event.data);
+    for (const [id, request] of pending)
+      if (isReaderResponseForRequest(event.data, request.request)) {
+        pending.delete(id);
+        clearTimeout(request.timer);
+        request.resolve(event.data);
+        return;
+      }
   };
   windowObject.addEventListener("message", receive);
 
@@ -83,22 +83,15 @@ export const createExtensionReaderBridge = (windowObject: Window = window) => {
       const timer = setTimeout(() => {
         pending.delete(request.id);
         reject(new ReaderExtensionError("UNAVAILABLE"));
-      }, responseTimeoutMs);
+      }, readerResponseTimeoutMs);
       pending.set(request.id, { reject, request, resolve, timer });
       windowObject.postMessage(request, windowObject.location.origin);
     });
 
   return {
     async available(): Promise<boolean> {
-      const request: ReaderRequest = {
-        action: "capabilities",
-        channel: readerBridgeChannel,
-        id: crypto.randomUUID(),
-        type: "request",
-        version: readerBridgeVersion,
-      };
       try {
-        const response = await send(request);
+        const response = await send(readerCapabilitiesRequest());
         return response.ok && response.action === "capabilities";
       } catch {
         return false;
@@ -113,15 +106,7 @@ export const createExtensionReaderBridge = (windowObject: Window = window) => {
       pending.clear();
     },
     async fetch(url: string): Promise<{ finalUrl: string; html: string }> {
-      const request: ReaderRequest = {
-        action: "fetch",
-        channel: readerBridgeChannel,
-        id: crypto.randomUUID(),
-        type: "request",
-        url,
-        version: readerBridgeVersion,
-      };
-      const response = await send(request);
+      const response = await send(readerFetchRequest(url));
       if (!response.ok) throw new ReaderExtensionError(response.error);
       if (response.action !== "fetch")
         throw new ReaderExtensionError("INVALID_RESPONSE");

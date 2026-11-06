@@ -1,4 +1,6 @@
-export type ContextMenuOperations = {
+import type { MenuOperations } from "./menu-sync.ts";
+
+type ContextMenusApi = {
   create(
     properties: chrome.contextMenus.CreateProperties,
     callback: () => void,
@@ -6,10 +8,12 @@ export type ContextMenuOperations = {
   removeAll(callback: () => void): void;
 };
 
-export type RuntimeErrors = {
+type RuntimeErrors = {
   readonly lastError?: { message?: string } | undefined;
 };
 
+// chrome.contextMenus reports failure only through runtime.lastError inside
+// the callback, so each operation settles there.
 const callbackPromise = (
   operation: (callback: () => void) => void,
   runtime: RuntimeErrors,
@@ -23,19 +27,14 @@ const callbackPromise = (
     });
   });
 
-export const createContextMenu = (
-  properties: chrome.contextMenus.CreateProperties,
-  operations: ContextMenuOperations = chrome.contextMenus,
-  runtime: RuntimeErrors = chrome.runtime,
-): Promise<void> =>
-  callbackPromise((callback) => {
-    operations.create(properties, callback);
-  }, runtime);
-
-export const removeAllContextMenus = (
-  operations: ContextMenuOperations = chrome.contextMenus,
-  runtime: RuntimeErrors = chrome.runtime,
-): Promise<void> =>
-  callbackPromise((callback) => {
-    operations.removeAll(callback);
-  }, runtime);
+export const contextMenuOperations = (
+  api: ContextMenusApi,
+  runtime: RuntimeErrors,
+): MenuOperations => ({
+  create: (properties) =>
+    callbackPromise((callback) => {
+      api.create(properties, callback);
+    }, runtime),
+  removeAll: () =>
+    callbackPromise((callback) => api.removeAll(callback), runtime),
+});

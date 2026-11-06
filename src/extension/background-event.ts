@@ -1,15 +1,20 @@
-import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { isReaderRequest, type ReaderResponse } from "#shared/reader-bridge.ts";
+import { badgeColor, formatBadgeCount } from "./badge.ts";
+import { contextMenuOperations } from "./context-menu.ts";
+import { getInstanceUrl, openTarget } from "./instance.ts";
 import {
-  isListFeedsMessage,
-  isReaderRequest,
-  isVisibilityLostMessage,
-  type ReaderResponse,
-} from "#shared/extension-types.ts";
-import { badgeColor, formatBadgeCount, getBadgeEnabled } from "./badge.ts";
-import { createContextMenu, removeAllContextMenus } from "./context-menu.ts";
-import { getInstanceUrl } from "./instance.ts";
+  createMenuSync,
+  newsletterMenuId,
+  subscribeMenuId,
+} from "./menu-sync.ts";
+import { isListFeedsMessage, isVisibilityLostMessage } from "./messages.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
-import { buildNewsletterUrl, resolveFeedOpenUrl } from "./url-helpers.ts";
+import {
+  forgetFoundFeeds,
+  onBadgeTurnedOff,
+  readSettings,
+  storeFoundFeeds,
+} from "./settings.ts";
 
 // Firefox for Android has no contextMenus API at all: touching it throws
 // synchronously, which would otherwise abort this whole script (including
@@ -22,19 +27,19 @@ if (!hasContextMenus) {
 }
 
 // Content scripts can't touch chrome.action, so they report the found-feed
-// count via the existing list-feeds / visibility-lost messages and the
-// background keeps the per-tab badge honest. setBadgeText with a tabId is
-// per-tab; without one it would stamp every tab with the last report.
+// count via the list-feeds / visibility-lost messages and the background
+// keeps the per-tab badge honest. setBadgeText with a tabId is per-tab;
+// without one it would stamp every tab with the last report.
 const setTabBadge = (tabId: number, feedsFound: number): void => {
-  try {
-    void chrome.action.setBadgeText({
-      tabId,
-      text: formatBadgeCount(feedsFound),
-    });
-  } catch {}
+  void chrome.action.setBadgeText({
+    tabId,
+    text: formatBadgeCount(feedsFound),
+  });
 };
 const clearTabBadge = (tabId: number): void => setTabBadge(tabId, 0);
 
+// Guarded like contextMenus above: a synchronous throw here would stop the
+// rest of this script, the reader bridge included, from loading.
 try {
   void chrome.action.setBadgeBackgroundColor({ color: badgeColor });
 } catch {}
@@ -51,119 +56,31 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 // page left open. query() needs no "tabs" permission -- only reading a tab's
 // url or title does -- and ids are filtered because some pseudo-tabs
 // (devtools) have none.
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || changes["showBadge"]?.newValue !== false) return;
+onBadgeTurnedOff(() => {
   void (async () => {
-    try {
-      for (const tab of await chrome.tabs.query({}))
-        if (tab.id !== undefined) clearTabBadge(tab.id);
-    } catch {}
+    for (const tab of await chrome.tabs.query({}))
+      if (tab.id !== undefined) clearTabBadge(tab.id);
   })();
 });
 
-let clearMenusRequested = false;
-let isMenuUpdateInProgress = false;
-let menuUpdateTimer: null | ReturnType<typeof setTimeout> = null;
-let pendingFeedsData: FeedData[] | null = null;
-const debounceTime = 300;
-
-const updateContextMenus = async (feedsData: FeedData[]): Promise<void> => {
-  if (isMenuUpdateInProgress) {
-    pendingFeedsData = feedsData;
-    return;
-  }
-
-  isMenuUpdateInProgress = true;
-
-  try {
-    await removeAllContextMenus();
-
-    if (clearMenusRequested) {
-      clearMenusRequested = false;
-      return;
-    }
-
-    await Promise.all([
-      createContextMenu({
-        contexts: ["action"],
-        id: "FeedFathom_newsletter",
-        title: "newsletter",
-      }),
-      createContextMenu({
-        contexts: ["action"],
-        id: "FeedFathom",
-        title: "Subscribe",
-      }),
-    ]);
-
-    // A clear may have been requested while the parents were being created.
-    if (clearMenusRequested) {
-      await removeAllContextMenus();
-      clearMenusRequested = false;
-      return;
-    }
-
-    // create() rejects on a duplicate id and feed.url is the id, so a page
-    // listing the same feed twice would silently drop that entry.
-    const uniqueFeedsData = [
-      ...new Map(feedsData.map((feed) => [feed.url, feed])).values(),
-    ];
-    await Promise.all(
-      uniqueFeedsData.map((feed) =>
-        createContextMenu({
-          contexts: ["action"],
-          id: feed.url,
-          parentId: "FeedFathom",
-          title: feed.title,
-        }),
-      ),
-    );
-  } catch {
-    // A failed menu must not break the rest of the extension.
-  } finally {
-    if (clearMenusRequested) {
-      try {
-        await removeAllContextMenus();
-      } catch {}
-      clearMenusRequested = false;
-    }
-
-    isMenuUpdateInProgress = false;
-
-    if (pendingFeedsData !== null) {
-      const pendingFeeds = pendingFeedsData;
-      pendingFeedsData = null;
-      void updateContextMenus(pendingFeeds);
-    }
-  }
-};
+const menuSync = hasContextMenus
+  ? createMenuSync(
+      contextMenuOperations(chrome.contextMenus, chrome.runtime),
+      (callback, delayMs) => {
+        const timer = setTimeout(callback, delayMs);
+        return () => clearTimeout(timer);
+      },
+    )
+  : undefined;
 
 if (hasContextMenus) {
   chrome.contextMenus.onClicked.addListener((info) => {
-    if (info.menuItemId === "FeedFathom") {
+    if (info.menuItemId === subscribeMenuId) return;
+    if (info.menuItemId === newsletterMenuId) {
+      void openTarget("newsletter");
       return;
     }
-
-    void (async () => {
-      const instance = await getInstanceUrl();
-
-      if (info.menuItemId === "FeedFathom_newsletter") {
-        if (!instance) {
-          await chrome.runtime.openOptionsPage();
-          return;
-        }
-
-        const url = buildNewsletterUrl(instance);
-        if (url) void chrome.tabs.create({ url });
-        return;
-      }
-
-      const feedUrl =
-        typeof info.menuItemId === "string"
-          ? info.menuItemId
-          : info.menuItemId.toString();
-      void chrome.tabs.create({ url: resolveFeedOpenUrl(instance, feedUrl) });
-    })();
+    void openTarget({ feedUrl: String(info.menuItemId) });
   });
 }
 
@@ -192,49 +109,26 @@ const messageHandler = (
   if (isListFeedsMessage(message)) {
     // The popup fallback (no contextMenus) reads this directly, so it's
     // kept current independent of the menu update below.
-    void chrome.storage.session.set({ feedsData: message.feedsData });
+    void storeFoundFeeds(message.feedsData);
 
     const tabId = sender.tab?.id;
     if (tabId !== undefined) {
-      // The badge is opt-out (#768): with the setting off a report only
-      // clears whatever the page's previous state left behind.
+      // With the badge setting off a report only clears whatever the page's
+      // previous state left behind.
       void (async () => {
-        if (await getBadgeEnabled())
+        if ((await readSettings()).showBadge)
           setTabBadge(tabId, message.feedsData.length);
         else clearTabBadge(tabId);
       })();
     }
 
-    if (hasContextMenus) {
-      if (menuUpdateTimer) {
-        clearTimeout(menuUpdateTimer);
-      }
-
-      menuUpdateTimer = setTimeout(() => {
-        void updateContextMenus(message.feedsData);
-        menuUpdateTimer = null;
-      }, debounceTime);
-    }
+    menuSync?.show(message.feedsData);
   }
 
   if (isVisibilityLostMessage(message)) {
-    void chrome.storage.session.remove("feedsData");
-
+    void forgetFoundFeeds();
     if (sender.tab?.id !== undefined) clearTabBadge(sender.tab.id);
-
-    if (hasContextMenus) {
-      if (menuUpdateTimer) {
-        clearTimeout(menuUpdateTimer);
-        menuUpdateTimer = null;
-      }
-
-      if (isMenuUpdateInProgress) {
-        clearMenusRequested = true;
-        pendingFeedsData = null;
-      } else {
-        void removeAllContextMenus().catch(() => {});
-      }
-    }
+    menuSync?.clear();
   }
 
   return false;
@@ -243,16 +137,5 @@ const messageHandler = (
 chrome.runtime.onMessage.addListener(messageHandler);
 
 chrome.action.onClicked.addListener(() => {
-  void (async () => {
-    const instance = await getInstanceUrl();
-    if (!instance) {
-      await chrome.runtime.openOptionsPage();
-      return;
-    }
-
-    void chrome.tabs.create({
-      active: true,
-      url: instance,
-    });
-  })();
+  void openTarget("dashboard");
 });

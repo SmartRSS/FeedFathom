@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { safeArticleUrl, safeHttpUrl } from "#shared/util/safe-url.ts";
+import {
+  httpUrlWithoutCredentials,
+  safeArticleUrl,
+  safeHttpUrl,
+} from "#shared/util/safe-url.ts";
 
 const BASE = "https://example.com/feed/page";
 
@@ -69,4 +73,21 @@ test("does not treat an /article/ prefix deeper in the path as an article link",
   expect(safeArticleUrl("blog/article/x", BASE)).toBe(
     "https://example.com/feed/blog/article/x",
   );
+});
+
+test.each([
+  ["https://example.com/story", undefined, "https://example.com/story"],
+  ["/story", "http://example.com/a/", "http://example.com/story"],
+])("httpUrlWithoutCredentials accepts %s", (value, base, expected) => {
+  expect(httpUrlWithoutCredentials(value, base)?.href).toBe(expected);
+});
+
+test.each([
+  "ftp://example.com/",
+  "javascript:alert(1)",
+  "https://user@example.com/",
+  "https://user:secret@example.com/",
+  "/relative-without-base",
+])("httpUrlWithoutCredentials refuses %s", (value) => {
+  expect(httpUrlWithoutCredentials(value)).toBeUndefined();
 });

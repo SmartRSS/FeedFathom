@@ -1,21 +1,17 @@
-import { scan } from "#shared/scanners/scanner.ts";
-import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { openRssSuggestion, scan } from "#shared/scanners/scanner.ts";
 import {
   isReaderRequest,
   isReaderResponseForRequest,
-  isScanRequestMessage,
   readerErrorResponse,
-  storedOpenRssEnabled,
-} from "#shared/extension-types.ts";
+} from "#shared/reader-bridge.ts";
+import { isScanRequestMessage, listFeedsMessage } from "./messages.ts";
+import { createPageScanner } from "./page-scanner.ts";
+import { readSettings } from "./settings.ts";
 
 const scanDocument = async (href: string) => {
-  let openRss = false;
-  try {
-    openRss = storedOpenRssEnabled(
-      await chrome.storage.sync.get("showOpenRss"),
-    );
-  } catch {}
-  return scan(href, document, openRss);
+  const feeds = scan(href, document);
+  if (feeds.length > 0 || !(await readSettings()).showOpenRss) return feeds;
+  return [openRssSuggestion(href)];
 };
 
 // The mobile popup fallback (no contextMenus) can't wait out the on-load
@@ -24,8 +20,8 @@ const scanDocument = async (href: string) => {
 chrome.runtime.onMessage.addListener(
   (message: unknown, _sender, sendResponse) => {
     if (!isScanRequestMessage(message)) return false;
-    void scanDocument(document.location.href).then((feedsData) =>
-      sendResponse({ action: "list-feeds", feedsData }),
+    void scanDocument(document.location.href).then((feeds) =>
+      sendResponse(listFeedsMessage(feeds)),
     );
     return true;
   },
@@ -46,6 +42,8 @@ const readerMessage = (event: MessageEvent<unknown>) => {
       location.origin,
     );
 
+  // sendMessage throws once the extension is reloaded or removed under a
+  // page that still runs this script; the page then sees UNAVAILABLE.
   try {
     chrome.runtime.sendMessage(request, (response: unknown) => {
       if (chrome.runtime.lastError) {
@@ -64,88 +62,38 @@ const readerMessage = (event: MessageEvent<unknown>) => {
   }
 };
 
-(() => {
-  type Timer = ReturnType<typeof setTimeout>;
-
-  const visibilityDebounceMs = 500;
-  const scanDebounceMs = 1_500;
-
-  let currentHref = document.location.href;
-  let latestFeeds: FeedData[] = [];
-  let scanGeneration = 0;
-  let scanTimeoutRef: null | Timer = null;
-  let visibilityTimeoutRef: null | Timer = null;
-
-  const updateAvailableSourcesList = () => {
-    if (visibilityTimeoutRef) clearTimeout(visibilityTimeoutRef);
-
-    if (document.hidden) {
-      try {
-        void chrome.runtime.sendMessage({ action: "visibility-lost" });
-      } catch {}
-      visibilityTimeoutRef = null;
-      return;
-    }
-
-    visibilityTimeoutRef = setTimeout(() => {
-      try {
-        void chrome.runtime.sendMessage({
-          action: "list-feeds",
-          feedsData: latestFeeds,
-        });
-      } catch {}
-      visibilityTimeoutRef = null;
-    }, visibilityDebounceMs);
-  };
-
-  const scanPage = async (href: string, generation: number) => {
+const pageScanner = createPageScanner({
+  hidden: () => document.hidden,
+  href: () => document.location.href,
+  scan: scanDocument,
+  schedule: (callback, delayMs) => {
+    const timer = setTimeout(callback, delayMs);
+    return () => clearTimeout(timer);
+  },
+  send: (message) => {
+    // Throws once the extension context is invalidated; the page has no one
+    // left to report to.
     try {
-      const feeds = await scanDocument(href);
-      if (generation !== scanGeneration || href !== document.location.href)
-        return;
-      latestFeeds = feeds;
-      updateAvailableSourcesList();
+      void chrome.runtime.sendMessage(message);
     } catch {}
-  };
+  },
+});
 
-  const rescanIfHrefChanged = () => {
-    const href = document.location.href;
-    if (href === currentHref) return;
+const start = () => {
+  if (document.body)
+    new MutationObserver(pageScanner.rescanIfHrefChanged).observe(
+      document.body,
+      { childList: true, subtree: true },
+    );
+  pageScanner.start();
+};
 
-    currentHref = href;
-    latestFeeds = [];
-    const generation = ++scanGeneration;
-    updateAvailableSourcesList();
-    if (scanTimeoutRef) clearTimeout(scanTimeoutRef);
-    scanTimeoutRef = setTimeout(() => {
-      scanTimeoutRef = null;
-      void scanPage(href, generation);
-    }, scanDebounceMs);
-  };
+window.addEventListener("message", readerMessage);
+window.addEventListener("pagehide", pageScanner.report);
+window.addEventListener("popstate", pageScanner.rescanIfHrefChanged);
+window.addEventListener("hashchange", pageScanner.rescanIfHrefChanged);
+document.addEventListener("visibilitychange", pageScanner.report);
 
-  const setupMutationObserver = () => {
-    const body = document.body;
-    if (!body) return;
-    new MutationObserver(rescanIfHrefChanged).observe(body, {
-      childList: true,
-      subtree: true,
-    });
-  };
-
-  const init = () => {
-    currentHref = document.location.href;
-    const generation = ++scanGeneration;
-    setupMutationObserver();
-    void scanPage(currentHref, generation);
-  };
-
-  window.addEventListener("message", readerMessage);
-  window.addEventListener("pagehide", updateAvailableSourcesList);
-  window.addEventListener("popstate", rescanIfHrefChanged);
-  window.addEventListener("hashchange", rescanIfHrefChanged);
-  document.addEventListener("visibilitychange", updateAvailableSourcesList);
-
-  if (document.readyState === "loading")
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  else init();
-})();
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", start, { once: true });
+else start();
