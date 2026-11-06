@@ -54,15 +54,15 @@ const ownFailure = (cause: unknown) =>
   cause instanceof InvalidResponseError ||
   (cause instanceof ApiError && cause.status >= 500 && cause.status !== 504);
 
-// The sentence a reader sees. `fallback` names the action as "Could not
-// <action>.": it stands alone for anything thrown that isn't an Error, and
-// becomes "FeedFathom couldn't <action>." when FeedFathom itself failed. Any
-// other Error -- a refusal the server explained, or no connection -- carries
-// its own sentence. Statuses and raw reasons stay out: they are for an
-// admin's details (failureDetails).
+// The sentence a reader sees: the cause, as a feed's failures name theirs.
+// FeedFathom's own failure says so; any other Error -- a refusal the server
+// explained, or no connection -- carries its own sentence; `fallback`
+// ("Could not <action>.") stands alone for anything thrown that isn't an
+// Error. Statuses and raw reasons stay out: they are for an admin's details
+// (failureDetails).
 export const messageOf = (cause: unknown, fallback: string) => {
   if (ownFailure(cause))
-    return `FeedFathom couldn't ${fallback.replace(/^Could not /u, "").replace(/[.!?]?$/u, "")}. Try again in a moment.`;
+    return "The FeedFathom server ran into a problem. Try again in a moment.";
   return cause instanceof Error ? cause.message : fallback;
 };
 
@@ -126,7 +126,9 @@ async function responseJson(
 // rather than at each call site; the original stays as the cause, for an
 // admin's details.
 const unreachable = (cause: unknown): Error =>
-  new Error("Can't reach FeedFathom. Check your connection.", { cause });
+  new Error("FeedFathom can't reach its server. Check your connection.", {
+    cause,
+  });
 
 // Cloudflare now and then holds a request for seconds to a minute before it
 // reaches the origin, which answers in milliseconds; a copy sent meanwhile

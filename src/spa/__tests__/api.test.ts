@@ -73,7 +73,7 @@ describe("schema-first SPA API", () => {
       expect(failure).toBeInstanceOf(Error);
       if (!(failure instanceof Error)) return;
       expect(failure.message).toBe(
-        "Can't reach FeedFathom. Check your connection.",
+        "FeedFathom can't reach its server. Check your connection.",
       );
       expect(failure.cause).toBeInstanceOf(TypeError);
     });
@@ -83,7 +83,7 @@ describe("schema-first SPA API", () => {
     await withOnLine(true, async () => {
       const failure = await rejectedApiCall();
       expect(messageOf(failure, "Could not load your feeds.")).toBe(
-        "Can't reach FeedFathom. Check your connection.",
+        "FeedFathom can't reach its server. Check your connection.",
       );
     });
   });
@@ -321,7 +321,7 @@ describe("schema-first SPA API", () => {
       [
         "a network failure",
         () => Promise.reject(new TypeError("Failed to fetch")),
-        "Can't reach FeedFathom. Check your connection.",
+        "FeedFathom can't reach its server. Check your connection.",
       ],
       [
         "invalid JSON",
@@ -363,12 +363,11 @@ test.each([
   ["an answer this bundle can't read", () => Response.json({})],
 ])("%s blames FeedFathom, not the reader", async (_case, response) => {
   const cause = await failedWith(response());
-  expect(messageOf(cause, "Could not load your feeds.")).toBe(
-    "FeedFathom couldn't load your feeds. Try again in a moment.",
-  );
-  expect(messageOf(cause, "Could not create the folder")).toBe(
-    "FeedFathom couldn't create the folder. Try again in a moment.",
-  );
+  // The cause, as the feed failures name theirs; whatever was being done.
+  for (const fallback of ["Could not load your feeds.", "Could not create"])
+    expect(messageOf(cause, fallback)).toBe(
+      "The FeedFathom server ran into a problem. Try again in a moment.",
+    );
 });
 
 test("keeps the server's own sentence for a request it refused", async () => {

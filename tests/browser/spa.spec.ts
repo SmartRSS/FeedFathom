@@ -444,7 +444,7 @@ test("surfaces folder creation failures without refreshing the tree", async ({
     .click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "FeedFathom couldn't create the folder. Try again in a moment.",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   expect(state.treeRequests).toBe(1);
 });
@@ -1693,7 +1693,7 @@ test("surfaces a malformed Options session without crashing", async ({
   await openApp(page, { sessionFailure: true }, "/options");
 
   await expect(page.getByRole("alert")).toContainText(
-    "FeedFathom couldn't load your account. Try again in a moment.",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   expect(new URL(page.url()).pathname).toBe("/options");
 });
@@ -2310,7 +2310,7 @@ test("keeps preview usable when folder startup fails", async ({ page }) => {
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
   await expect(page.getByRole("alert")).toContainText(
-    "FeedFathom couldn't load your folders. Try again in a moment.",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
 });
 
@@ -2747,7 +2747,7 @@ test("surfaces tree failures without masquerading as logout", async ({
   // details.
   const failure = page.getByRole("complementary", { name: "Feeds" });
   await expect(failure.getByRole("alert")).toContainText(
-    "FeedFathom couldn't load your feeds. Try again in a moment.",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   await expect(
     failure.getByRole("button", { name: "Try again" }),
@@ -3524,7 +3524,7 @@ test("a failed delete leaves the feed switched to since alone", async ({
   ).toBeVisible();
   failDelete!();
   await expect(page.getByRole("alert")).toContainText(
-    "FeedFathom couldn't delete articles. Try again in a moment.",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
   await expectSelectedRow(page, /Tech Preview/);
