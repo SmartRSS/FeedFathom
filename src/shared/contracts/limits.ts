@@ -1,0 +1,11 @@
+// Server-owned numbers the clients also act on or tell the reader about.
+// Dependency-free, so the service worker bundle can import them without the
+// schema library.
+
+// The article list is keyset-paged with at most this many rows. A full page
+// can have more results; request the next page with the last row's ID as cursor.
+export const articlePageSize = 200;
+
+// The virtual "Today" view (#715) lists unread articles published this many
+// hours back.
+export const todayWindowHours = 24;

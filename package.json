@@ -80,6 +80,7 @@
     "$schema": "https://unpkg.com/knip@5/schema.json",
     "entry": [
       "src/migrator.ts",
+      "src/spa/sw.ts",
       "src/features/mail-ingest/email-worker.ts",
       "src/extension/{background-event,content-script,options,popup}.ts",
       "tests/browser/**/*.ts",

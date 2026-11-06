@@ -2,6 +2,7 @@ import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import { sourceIds } from "./dashboard-behavior.ts";
 import { storedToggle } from "./preferences.ts";
+import { postToWorker } from "./sw-protocol.ts";
 
 // Prefetching the next article's content (#716) costs the server one extra
 // extract-route hit per opened article, and some users count that as waste:
@@ -30,10 +31,7 @@ if (typeof window !== "undefined")
 
 // The worker lists and downloads the unread articles of these sources.
 export function postOfflineSync(sources: number[]) {
-  navigator.serviceWorker?.controller?.postMessage({
-    sources,
-    type: "offline-sync",
-  });
+  postToWorker({ sources, type: "offline-sync" });
 }
 
 // Only sources with something unread are asked about. ponytail: one article

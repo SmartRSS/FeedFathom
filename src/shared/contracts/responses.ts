@@ -149,9 +149,7 @@ const articleSummaryResponse = Type.Object(
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
 
-// The article list is keyset-paged with at most this many rows. A full page
-// can have more results; request the next page with the last row's ID as cursor.
-export const articlePageSize = 200;
+export { articlePageSize } from "./limits.ts";
 
 // A file the feed attached to an article (RSS <enclosure>, Media RSS,
 // JSON Feed attachments): a podcast episode, a video, an image. Both URLs are
