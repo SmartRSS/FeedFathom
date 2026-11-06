@@ -1,4 +1,5 @@
 import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
+import { isSnoozed } from "#shared/util/snooze.ts";
 
 // The Today view (#715): a row in the tree that lists the last day's articles
 // from every subscription. It is not a feed, so it has no id, unread count,
@@ -207,19 +208,10 @@ export function snoozeUntilIso(
   return new Date(now + hours * 3_600_000).toJSON();
 }
 
-/**
- * Whether a tree node is a source whose `pausedUntil` is still in the
- * future. Folders are never snoozed, and a missing or past value reads as
- * not snoozed, which is also how expiry and early un-pausing fall out with
- * no job behind them.
- */
+/** Folders are never snoozed. */
 export function isSnoozedNode(
   node: ListNode,
   now: number = Date.now(),
 ): boolean {
-  if (node.type !== "source") return false;
-  const pausedUntil = node.pausedUntil;
-  if (pausedUntil === undefined || pausedUntil === null) return false;
-  const time = new Date(pausedUntil).getTime();
-  return Number.isFinite(time) && time > now;
+  return node.type === "source" && isSnoozed(node.pausedUntil, now);
 }
