@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
+import { JobDeferral } from "#features/feeds/queued-job.ts";
 import {
   FaviconRefresher,
   faviconDeferralHorizonMs,
@@ -116,10 +117,10 @@ test("a source without an icon stores the best one so far while a provider defer
     .refreshFavicon(source)
     .catch((caught: unknown) => caught);
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof JobDeferral)) throw error;
   expect(updated).toEqual([1]);
-  // Written back into the job data, so the retry does not downgrade it.
-  expect(source.hasFavicon).toBe(true);
+  // Carried into the retry's job data, so the retry does not downgrade it.
+  expect(error.data).toMatchObject({ hasFavicon: true });
 });
 
 test("defers to the latest primary retry time without unavatar, one slot after the last deferral", async () => {
@@ -200,9 +201,13 @@ test("the horizon starts at the first block, not at the first run", async () => 
     .refreshFavicon(source)
     .catch((caught: unknown) => caught);
 
-  expect(error).toBeInstanceOf(HttpDeferredError);
+  if (!(error instanceof JobDeferral)) throw error;
   expect(updated).toEqual([]);
-  expect(source.deferredSince).toBeGreaterThan(source.firstRunAt);
+  // The retry carries when the block began, which the horizon counts from.
+  expect(error.data).toMatchObject({
+    deferredSince: expect.any(Number),
+    firstRunAt: source.firstRunAt,
+  });
 });
 
 test("a short origin Retry-After still counts against the horizon", async () => {

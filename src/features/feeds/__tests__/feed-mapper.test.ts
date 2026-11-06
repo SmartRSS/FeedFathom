@@ -4,7 +4,6 @@ import {
   mapFeedToPreview,
   previewArticleLimit,
   previewContentBytesLimit,
-  type Source,
 } from "#features/feeds/feed-mapper.ts";
 
 type FeedInput = Parameters<typeof mapFeedItemToArticle>[1];
@@ -33,10 +32,7 @@ const createMockFeedItem = (
 });
 
 describe("mapFeedItemToArticle", () => {
-  const mockSource: Source = {
-    id: 1,
-    url: "https://example.com/feed.xml",
-  };
+  const mockSource = "https://example.com/feed.xml";
 
   const mockFeed = createMockFeed({
     description: "Feed description",
@@ -66,7 +62,6 @@ describe("mapFeedItemToArticle", () => {
       enclosures: [],
       guid: "123",
       publishedAt: new Date("2024-03-06T12:00:00Z"),
-      sourceId: 1,
       title: "Test Title",
       updatedAt: new Date("2024-03-06T13:00:00Z"),
       url: "https://example.com/article",
@@ -85,7 +80,6 @@ describe("mapFeedItemToArticle", () => {
       enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
-      sourceId: 1,
       title: "Feed Title",
       updatedAt: null,
       url: "",
@@ -106,7 +100,6 @@ describe("mapFeedItemToArticle", () => {
       enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
-      sourceId: 1,
       title: "https://example.com/feed.xml",
       updatedAt: null,
       url: "",
@@ -306,7 +299,7 @@ describe("content link base", () => {
     const article = mapFeedItemToArticle(
       feed.items[0] ?? createMockFeedItem(),
       feed,
-      { id: 1, url: sourceUrl },
+      sourceUrl,
     );
     const preview = mapFeedToPreview(feed, sourceUrl);
 

@@ -4,6 +4,14 @@
 // every gather cycle.
 export const pollFloorMs = 5 * 60_000;
 
+// A failing source waits one more floor per consecutive failure, up to this
+// many.
+export const failureBackoffMaxSteps = 15;
+
+// How often a source with a verified WebSub subscription is polled anyway, as
+// a safety net for a push the hub dropped.
+export const webSubFallbackPollMs = 24 * 60 * 60_000;
+
 /**
  * The earliest a source may next be fetched: the requested time, or the poll
  * floor, whichever is later.

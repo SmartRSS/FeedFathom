@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
 import { enclosureSchema } from "#shared/contracts/responses.ts";
-import { capAlertSchema } from "#features/feeds/cap-entry.ts";
-import type {
-  FeedMapperInput,
-  FeedPreview,
+import {
+  type FeedMapperInput,
+  type FeedPreview,
+  parsedFeedWireSchema,
 } from "#features/feeds/feed-mapper.ts";
 
 type PreviewCacheRedis = {
@@ -36,54 +36,13 @@ const previewArticleWireSchema = Type.Object(
   },
   exact,
 );
-const nullableString = Type.Union([Type.String(), Type.Null()]);
-const nullableTime = Type.Union([Type.Number(), Type.Null()]);
-// Only the fields mapFeedItemToArticle reads, so subscribe can map the full
-// feed later. The feed parser caps a body at 24 MiB, which bounds this too.
-const feedWireSchema = Type.Object(
-  {
-    description: nullableString,
-    items: Type.Array(
-      Type.Object(
-        {
-          authors: Type.Array(Type.Object({ name: nullableString }, exact)),
-          cap: Type.Optional(capAlertSchema),
-          content: nullableString,
-          description: nullableString,
-          id: nullableString,
-          language: Type.Optional(Type.String()),
-          media: Type.Optional(
-            Type.Array(
-              Type.Object(
-                {
-                  image: nullableString,
-                  mimeType: nullableString,
-                  title: nullableString,
-                  type: nullableString,
-                  url: Type.String(),
-                },
-                exact,
-              ),
-            ),
-          ),
-          published: nullableTime,
-          title: nullableString,
-          updated: nullableTime,
-          url: nullableString,
-        },
-        exact,
-      ),
-    ),
-    title: nullableString,
-    url: nullableString,
-  },
-  exact,
-);
 const previewWireSchema = Type.Object(
   {
     articles: Type.Array(previewArticleWireSchema),
     description: Type.Optional(Type.String()),
-    feed: Type.Optional(feedWireSchema),
+    // The full parsed feed, so subscribe can map it later. The feed parser
+    // caps a body at 24 MiB, which bounds this too.
+    feed: Type.Optional(parsedFeedWireSchema),
     feedUrl: Type.String(),
     finalUrl: Type.Optional(Type.String()),
     freshUntil: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
@@ -98,7 +57,9 @@ const previewWireCheck = Schema.Compile(previewWireSchema);
 const dateOrNull = (time: null | number) =>
   time === null ? null : new Date(time);
 
-const decodeFeed = (value: Static<typeof feedWireSchema>): FeedMapperInput => ({
+const decodeFeed = (
+  value: Static<typeof parsedFeedWireSchema>,
+): FeedMapperInput => ({
   ...value,
   items: value.items.map((item) => ({
     ...item,
@@ -109,7 +70,9 @@ const decodeFeed = (value: Static<typeof feedWireSchema>): FeedMapperInput => ({
 
 // Projects the parsed feed field by field: the feed parser's items expose
 // their fields through prototype getters, which JSON.stringify skips.
-const encodeFeed = (feed: FeedMapperInput): Static<typeof feedWireSchema> => ({
+const encodeFeed = (
+  feed: FeedMapperInput,
+): Static<typeof parsedFeedWireSchema> => ({
   description: feed.description,
   items: feed.items.map((item) => ({
     authors: item.authors.map((author) => ({ name: author.name })),

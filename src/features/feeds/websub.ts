@@ -76,6 +76,11 @@ export function discoverWebSub(
   return { hubUrl: resolvedHub, topicUrl: resolvedTopic };
 }
 
+// The route a hub verifies and pushes to; the routes mount it with ":token".
+export const webSubCallbackPath = <Token extends string>(
+  token: Token,
+): `/api/websub/callback/${Token}` => `/api/websub/callback/${token}`;
+
 export type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
 
 // Narrow on purpose: HttpClient satisfies it, and a test does not have to
@@ -105,7 +110,7 @@ export async function requestHubSubscription(params: {
     return { error: "Hub URL is not a public http or https URL", ok: false };
 
   const body = new URLSearchParams({
-    "hub.callback": `https://${params.domain}/api/websub/callback/${params.callbackToken}`,
+    "hub.callback": `https://${params.domain}${webSubCallbackPath(params.callbackToken)}`,
     "hub.mode": "subscribe",
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,

@@ -51,9 +51,8 @@ test("a new window allows calls again", async () => {
     // eslint-disable-next-line no-await-in-loop -- Each call builds on the last.
     await budget.consume(user);
   }
-  // Stands in for the window having passed.
-  await redis.send("PEXPIRE", [key, "1"]);
-  await Bun.sleep(50);
+  // The counter expiring is what the window passing amounts to.
+  await redis.send("DEL", [key]);
 
   await expect(budget.consume(user)).resolves.toBeUndefined();
 });

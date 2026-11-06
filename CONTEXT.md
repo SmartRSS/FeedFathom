@@ -87,9 +87,14 @@ up in the diff, instead of arriving as a quiet new import.
   test rather than a second plugin.
 - **`feeds`** — getting content and the store it lands in: feed parsing
   (RSS/Atom, JSON Feed, microformats), OPML import and export, discovery and
-  preview,
-  subscription, WebSub, favicons, article extraction and link rewriting, and
-  the sources, articles, user-sources and folders data services.
+  preview, subscription, WebSub, favicons, article extraction and link
+  rewriting, retention, and the sources, articles, user-sources and folders
+  data services. It also owns what its jobs carry and how they run: the
+  ParseSource payload, job id and follow-up parse live in `source-enqueue.ts`,
+  the favicon job's in `favicon-refresher.ts`, each cadence beside the query
+  it bounds. Retention deletes expired users and sessions, which are `auth`'s
+  tables, first: every other rule reads the set of current subscribers, which
+  the cascade from an expired user shrinks.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
@@ -98,7 +103,9 @@ up in the diff, instead of arriving as a quiet new import.
   instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
-- **`jobs`** — the worker main loop.
+- **`jobs`** — the worker main loop: validates each job and hands it to the
+  `feeds` service that runs it, and turns what is thrown into BullMQ's
+  acknowledge-or-delay.
 
 ## Imports
 
@@ -150,10 +157,9 @@ The criterion is testability, not line count. A long file whose decisions are
 all extracted is finished. Splitting it further buys a smaller file and
 nothing else.
 
-Two clusters were deliberately left in place on exactly that basis: the WebSub
-lifecycle methods on the sources data service, and the cache read/write half of
-the HTTP client. Both are pure I/O with the decisions already lifted out, so
-moving them would cost a rewiring across their callers and gain no test.
+The cache read/write half of the HTTP client was deliberately left in place on
+exactly that basis: it is pure I/O with the decisions already lifted out, so
+moving it would cost a rewiring across its callers and gain no test.
 
 Extracted SPA logic goes in one behaviour module per view — `behavior.ts` keeps
 only genuinely cross-view concerns. A single shared module would become the new

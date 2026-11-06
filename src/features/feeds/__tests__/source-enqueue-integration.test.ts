@@ -2,7 +2,10 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { Job, Queue } from "bullmq";
 import Redis from "ioredis";
 import { JobName } from "#shared/types/job-name-enum.ts";
-import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import {
+  type ParseRequest,
+  SourceEnqueuer,
+} from "#features/feeds/source-enqueue.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 describe("queued refresh merging with BullMQ", () => {
@@ -13,13 +16,18 @@ describe("queued refresh merging with BullMQ", () => {
   const queue = new Queue(`source-enqueue-test-${crypto.randomUUID()}`, {
     connection,
   });
-  const source = {
-    id: 1 + Math.floor(Math.random() * 2_000_000_000),
-    url: "https://example.test/feed",
-  };
+  const source = { id: 1 + Math.floor(Math.random() * 2_000_000_000) };
   const jobId = `${JobName.ParseSource}-${source.id}`;
   const pendingKey = `pending_parse_refresh:${source.id}`;
   const enqueuer = new SourceEnqueuer(queue, connection);
+  // The follow-up a run of the source's job would owe, if any.
+  const followUp = async () => {
+    const parsed: ParseRequest[] = [];
+    await enqueuer.runParse(source, async (request) => {
+      parsed.push(request);
+    });
+    return parsed[1] ?? null;
+  };
 
   beforeEach(async () => {
     await queue.obliterate({ force: true });
@@ -58,7 +66,7 @@ describe("queued refresh merging with BullMQ", () => {
             expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(
               1,
             );
-            expect(await enqueuer.takePendingRefresh(source.id)).toBeNull();
+            expect(await followUp()).toBeNull();
           });
         }
       }
@@ -70,6 +78,7 @@ describe("queued refresh merging with BullMQ", () => {
       if (!stale) throw new Error("Queued job was not found");
       const staleQueue = {
         add: queue.add.bind(queue),
+        addBulk: queue.addBulk.bind(queue),
         async getJob() {
           return stale;
         },
@@ -85,7 +94,7 @@ describe("queued refresh merging with BullMQ", () => {
 
       expect((await queue.getJob(jobId))?.data.skipCache).toBe(true);
       expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(1);
-      expect(await enqueuer.takePendingRefresh(source.id)).toBeNull();
+      expect(await followUp()).toBeNull();
     });
   }
 
@@ -94,6 +103,7 @@ describe("queued refresh merging with BullMQ", () => {
 
     const raceQueue = {
       add: queue.add.bind(queue),
+      addBulk: queue.addBulk.bind(queue),
       async getJob() {
         await connection.lmove(
           queue.toKey("wait"),
@@ -114,9 +124,7 @@ describe("queued refresh merging with BullMQ", () => {
     await racer.enqueueSource(source, "manual", true);
 
     expect((await queue.getJob(jobId))?.data.skipCache).toBeUndefined();
-    expect(await enqueuer.takePendingRefresh(source.id)).toEqual({
-      skipCache: true,
-    });
+    expect(await followUp()).toMatchObject({ skipCache: true });
   });
 
   test("a paused queue behaves like a waiting merge", async () => {
@@ -128,7 +136,7 @@ describe("queued refresh merging with BullMQ", () => {
       const job = await queue.getJob(jobId);
       expect(job?.data.skipCache).toBe(true);
       expect(await job?.getState()).toBe("waiting");
-      expect(await enqueuer.takePendingRefresh(source.id)).toBeNull();
+      expect(await followUp()).toBeNull();
     } finally {
       await queue.resume();
     }

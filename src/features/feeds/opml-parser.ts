@@ -5,6 +5,7 @@ import {
   isXmlElement,
   parseXml,
 } from "#platform/xml.ts";
+import { safeHttpUrl } from "#shared/util/safe-url.ts";
 import { decodeHtmlReferences } from "#features/feeds/plain-text.ts";
 
 const maximumDepth = 32;
@@ -17,16 +18,8 @@ type PendingOutline = {
   value: unknown;
 };
 
-const webUrl = (value: string): URL | undefined => {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url
-      : undefined;
-  } catch {
-    return undefined;
-  }
-};
+// No base to resolve against: only an absolute http(s) URL passes.
+const webUrl = (value: string): string => safeHttpUrl(value, "");
 
 export function parseOpml(opml: string): OpmlNode[] {
   const parsed = parseXml(opml);
@@ -70,14 +63,10 @@ function processOutlines(outlines: unknown[]): OpmlNode[] {
     const xmlUrl = attribute(outline, "xmlUrl");
 
     if (sourceTypes.has(type) || xmlUrl) {
-      const parsedXmlUrl = webUrl(xmlUrl);
-      // A single malformed feed URL shouldn't abort the whole import --
-      // skip just this outline and keep processing the rest of the file.
-      if (!parsedXmlUrl) continue;
+      if (!webUrl(xmlUrl)) continue;
       const homeUrl = attribute(outline, "htmlUrl");
-      const parsedHomeUrl = webUrl(homeUrl);
       current.target.push({
-        homeUrl: parsedHomeUrl ? homeUrl : parsedXmlUrl.origin,
+        homeUrl: webUrl(homeUrl) ? homeUrl : new URL(xmlUrl).origin,
         name: title,
         type: "source",
         xmlUrl,

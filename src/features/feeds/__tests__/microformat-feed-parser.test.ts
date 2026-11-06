@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { validateParsedFeed } from "#features/feeds/feed-parser.ts";
-import {
-  isMicroformatHtml,
-  parseMicroformatFeed,
-} from "#features/feeds/microformat-feed-parser.ts";
+import { feedFormat } from "#features/feeds/feed-document.ts";
+import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
+
+const isMicroformatHtml = (text: string, contentType: string | null) =>
+  feedFormat(text, contentType) === "microformat";
 
 const withFeedWrapper = `<!doctype html>
 <html>
@@ -84,7 +84,6 @@ describe("microformats feed parsing", () => {
       withFeedWrapper,
       "https://example.com/",
     );
-    expect(() => validateParsedFeed(parsed)).not.toThrow();
     expect(parsed.title).toBe("My Blog");
     expect(parsed.items).toHaveLength(1);
     expect(parsed.items[0]).toMatchObject({

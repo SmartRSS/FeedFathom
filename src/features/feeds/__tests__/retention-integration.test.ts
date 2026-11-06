@@ -1,12 +1,28 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { RetentionService } from "#features/feeds/retention.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
+
+type Connection = ReturnType<typeof createDrizzleConnection>;
+const yearLong = {
+  ARTICLE_STALE_AFTER_DAYS: 365,
+  USER_DORMANT_AFTER_DAYS: 365,
+  USER_EXPIRY_DAYS: 730,
+};
+const prune = (drizzleConnection: Connection, config = yearLong) =>
+  new RetentionService(
+    drizzleConnection,
+    new UserSourcesDataService(
+      drizzleConnection,
+      new SourcesDataService(drizzleConnection),
+    ),
+    config,
+  ).prune();
 
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
@@ -101,7 +117,7 @@ test("only prunes articles the feed has really stopped listing", async () => {
         FROM articles WHERE guid = ${guid}`;
     }
 
-    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+    await prune(drizzleConnection);
 
     const rows = await client<{ id: number }[]>`
       SELECT id FROM articles ORDER BY id`;
@@ -120,19 +136,13 @@ test("only prunes articles the feed has really stopped listing", async () => {
 });
 
 // Cleanup deletes article rows straight through SQL, so the unread badge a
-// subscriber sees is stale the moment the prune commits (#812): an unread
-// newsletter aged past retention used to keep its count until some
-// unrelated event recounted the source. cleanupOrphanedData reports the
-// sources it shrank; the recompose of the counter -- the same call the
-// worker makes -- must bring the badge back in step with the list.
-test("reports pruned sources so their unread totals can be recounted", async () => {
+// subscriber sees would be stale the moment the prune commits (#812): an
+// unread newsletter aged past retention kept its count until some unrelated
+// event recounted the source.
+test("recounts the unread totals of the sources it pruned", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const drizzleConnection = createDrizzleConnection(databaseUrl);
-  const userSourcesDataService = new UserSourcesDataService(
-    drizzleConnection,
-    new SourcesDataService(drizzleConnection),
-  );
 
   try {
     await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
@@ -161,19 +171,8 @@ test("reports pruned sources so their unread totals can be recounted", async () 
                 NOW() - CAST(${guid === "fresh" ? "30 days" : "91 days"} AS interval))`;
     }
 
-    const prunedSourceIds = await cleanupOrphanedData(
-      drizzleConnection,
-      365,
-      365,
-      730,
-    );
-    expect(prunedSourceIds).toEqual([mailbox!.id]);
+    await prune(drizzleConnection);
 
-    const [stale] = await client<{ unread: number }[]>`
-      SELECT unread_count AS unread FROM user_sources WHERE source_id = ${mailbox!.id}`;
-    expect(stale!.unread).toBe(2);
-
-    await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
     const [recounted] = await client<{ unread: number }[]>`
       SELECT unread_count AS unread FROM user_sources WHERE source_id = ${mailbox!.id}`;
     expect(recounted!.unread).toBe(1);
@@ -208,7 +207,7 @@ test("drops orphaned sources, expired users and sessions, but never every source
         ('https://orphan.test/feed', 'https://orphan.test', NOW() - INTERVAL '2 days')
       RETURNING id`;
 
-    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+    await prune(drizzleConnection);
     expect(await sourceUrls()).toEqual([
       "https://kept.test/feed",
       "https://orphan.test/feed",
@@ -228,7 +227,7 @@ test("drops orphaned sources, expired users and sessions, but never every source
         ('live', 'a', ${reader!.id}, NOW() + INTERVAL '1 day'),
         ('dead', 'a', ${reader!.id}, NOW() - INTERVAL '1 second')`;
 
-    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+    await prune(drizzleConnection);
 
     // The expired user's subscription went with them, orphaning its source.
     expect(await sourceUrls()).toEqual(["https://kept.test/feed"]);
@@ -255,10 +254,6 @@ test("prunes articles last seen before a source's earliest subscription", async 
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const drizzleConnection = createDrizzleConnection(databaseUrl);
-  const userSourcesDataService = new UserSourcesDataService(
-    drizzleConnection,
-    new SourcesDataService(drizzleConnection),
-  );
 
   try {
     await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
@@ -296,13 +291,11 @@ test("prunes articles last seen before a source's earliest subscription", async 
     }
 
     // Every other rule off, so only the earliest-subscription cutoff acts.
-    const prunedSourceIds = await cleanupOrphanedData(
-      drizzleConnection,
-      0,
-      0,
-      0,
-    );
-    expect(prunedSourceIds).toEqual([feed!.id]);
+    await prune(drizzleConnection, {
+      ARTICLE_STALE_AFTER_DAYS: 0,
+      USER_DORMANT_AFTER_DAYS: 0,
+      USER_EXPIRY_DAYS: 0,
+    });
     expect(
       (
         await client<{ guid: string }[]>`SELECT guid FROM articles ORDER BY id`
@@ -310,7 +303,6 @@ test("prunes articles last seen before a source's earliest subscription", async 
     ).toEqual(["between-subscriptions", "recent", "after-subscription"]);
 
     // Each subscriber counts only what was seen since they joined.
-    await userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
     expect([
       ...(await client<{ unread: number; user_id: number }[]>`
         SELECT user_id, unread_count AS unread FROM user_sources

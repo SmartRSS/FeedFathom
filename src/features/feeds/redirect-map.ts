@@ -23,13 +23,10 @@ type RedirectRedis = {
 
 export class RedirectMap {
   private readonly redisKeyPrefix = "redirect_map:";
-  private readonly ttl = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly ttl = 24 * 60 * 60 * 1000;
 
   constructor(private readonly redis: RedirectRedis) {}
 
-  /**
-   * Store a redirect mapping from old URL to new URL
-   */
   async setRedirect(oldUrl: string, newUrl: string): Promise<void> {
     const key = `${this.redisKeyPrefix}${this.normalizeUrl(oldUrl)}`;
     await this.redis.set(key, newUrl, "PX", this.ttl);

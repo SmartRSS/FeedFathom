@@ -15,7 +15,7 @@ import {
 } from "#shared/util/newsletter-address.ts";
 import {
   type FeedPreview,
-  mapFeedToPreviewArticles,
+  mapFeedToArticles,
 } from "#features/feeds/feed-mapper.ts";
 
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
@@ -32,7 +32,7 @@ function completePreview({
   if (!feed) return undefined;
   return {
     ...preview,
-    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, {
+    articles: mapFeedToArticles(feed, preview.feedUrl, {
       baseUrl: finalUrl,
     }),
     truncated: false,
@@ -56,7 +56,6 @@ export async function postSubscribeHandler(
     feedPreviewCache,
     outboundFetchBudget,
     sourceEnqueuer,
-    sourcesDataService,
     userSourcesDataService,
   }: Pick<
     typeof feeds,
@@ -65,7 +64,6 @@ export async function postSubscribeHandler(
     | "feedPreviewCache"
     | "outboundFetchBudget"
     | "sourceEnqueuer"
-    | "sourcesDataService"
     | "userSourcesDataService"
   > & { config: AppConfig },
 ) {
@@ -76,14 +74,11 @@ export async function postSubscribeHandler(
   const isEmail = sourceUrl.kind === "email";
   if (!config.MAIL_ENABLED && isEmail)
     return jsonError("Email subscriptions are not allowed.", 400);
-  let homeUrl = new URL(request.url).origin;
   const cachedPreview = isEmail
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
-  if (cachedPreview?.link) homeUrl = cachedPreview.link;
   const importablePreview = cachedPreview && completePreview(cachedPreview);
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
-    homeUrl,
     initializationSnapshot: importablePreview
       ? serializeFeedPreview(importablePreview)
       : null,
@@ -92,13 +87,15 @@ export async function postSubscribeHandler(
     url: sourceUrl.value,
     ...(isEmail
       ? {
+          // A newsletter has no site of its own; it links back to this app.
+          homeUrl: new URL(request.url).origin,
           kind: "email",
           minted: isMintedNewsletterAddress(
             sourceUrl.value,
             newsletterMailDomain(config) ?? "",
           ),
         }
-      : { kind: "feed" }),
+      : { homeUrl: cachedPreview?.link, kind: "feed" }),
   });
   if (!subscription) return jsonError("Invalid folder", 400);
   // Another account's newsletter address, or one this instance does not
@@ -155,29 +152,16 @@ export async function postSubscribeHandler(
           // worker. Falls back to enqueueing if anything here fails,
           // including an import that committed only some batches.
           try {
-            // A retry imports from the stored snapshot, which can hold an
-            // alert that has expired since.
-            const now = Date.now();
-            await articleImporter.importArticles(
+            await articleImporter.recordFetch(
               subscription.source.id,
-              preview.articles
-                .filter(
-                  (article) =>
-                    article.expiresAt === undefined || article.expiresAt > now,
-                )
-                .map(({ expiresAt: _expiresAt, ...article }) =>
-                  Object.assign(article, {
-                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  }),
-                ),
-              { alwaysRecount: true },
+              preview.articles,
+              {
+                alwaysRecount: true,
+                cached: true,
+                freshUntil: preview.freshUntil,
+                trigger: "poll",
+              },
             );
-            await sourcesDataService.successSource(subscription.source.id, {
-              cached: true,
-              notBefore: preview.freshUntil
-                ? new Date(preview.freshUntil)
-                : undefined,
-            });
           } catch {
             await sourceEnqueuer.enqueueSource(subscription.source);
           }

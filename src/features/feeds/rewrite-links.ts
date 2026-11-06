@@ -1,3 +1,5 @@
+import { mapSrcset } from "#shared/util/srcset.ts";
+
 const tagAttributePairs = [
   ["a", "href"],
   ["audio", "src"],
@@ -11,23 +13,11 @@ const tagAttributePairs = [
   ["picture", "srcset"],
 ] as const;
 
-const srcsetSplitterExpression = /\s+/u;
-// A candidate ends at a comma followed by whitespace or one right after its
-// descriptor; a comma inside the URL itself, as in a data: URI, splits nothing.
-const srcsetCandidateSeparator = /\s*,\s+|(?<=\s[\d.]+[hwx]),\s*/u;
-
 const processSrcset = (srcsetValue: string, baseUrl: string): string =>
-  srcsetValue
-    .trim()
-    .split(srcsetCandidateSeparator)
-    .filter(Boolean)
-    .map((path) => {
-      const [url, width] = path.split(srcsetSplitterExpression);
-      if (!url || !URL.canParse(url, baseUrl)) return path;
-      const absoluteUrl = URL.canParse(url) ? url : new URL(url, baseUrl).href;
-      return width ? `${absoluteUrl} ${width}` : absoluteUrl;
-    })
-    .join(", ");
+  mapSrcset(srcsetValue, (url) => {
+    if (!URL.canParse(url, baseUrl)) return url;
+    return URL.canParse(url) ? url : new URL(url, baseUrl).href;
+  });
 
 const handleElement = (
   element: HTMLRewriterTypes.Element,

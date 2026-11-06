@@ -526,7 +526,7 @@ test("preview refuses a feed that resolves to a private address", async () => {
     dependencies.articleImporter,
     privatelyResolvingClient(dispatched),
     dependencies.sourcesDataService,
-    dependencies.websubStateService,
+    { subscribe: async () => {}, wants: () => false },
     dependencies.redirectMap,
   );
   const app = await appFor(dependencies);
@@ -702,12 +702,23 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     sourceId: 91,
     title: "Cached article",
   });
-  expect(upsertedArticle.lastSeenInFeedAt).toEqual(subscriptionCreatedAt);
+  expect(successes[0]?.[1]?.observedAt).toEqual(
+    upsertedArticle.lastSeenInFeedAt,
+  );
   expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
   // No freshness from the cached fetch, so successSource applies its poll floor.
-  expect(successes[0]).toEqual([91, { cached: true, notBefore: undefined }]);
+  expect(successes[0]).toEqual([
+    91,
+    {
+      cached: true,
+      homeUrl: undefined,
+      notBefore: undefined,
+      observedAt: upsertedArticle.lastSeenInFeedAt,
+      trigger: "poll",
+    },
+  ]);
   expect(enqueues).toEqual([]);
 });
 
@@ -914,7 +925,7 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   const polled = mapFeedItemToArticle(
     feed.items[0]!,
     feed,
-    subscriptionSource,
+    subscriptionSource.url,
     {
       baseUrl: finalUrl,
     },
@@ -1093,7 +1104,7 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
     ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const cacheLookups: [number, string][] = [];
-  const enqueues: [number, string][] = [];
+  const enqueues: number[] = [];
 
   dependencies.feedPreviewCache.get = async (userId, sourceUrl) => {
     cacheLookups.push([userId, sourceUrl]);
@@ -1118,7 +1129,7 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
   dependencies.sourceEnqueuer.enqueueSource = async (source) => {
-    enqueues.push([source.id, source.url]);
+    enqueues.push(source.id);
   };
   const app = await appFor(dependencies);
   const web = await subscribe(app, {
@@ -1135,7 +1146,7 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
   expect(await web.json()).toEqual({ sourceId: 91 });
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
-  expect(enqueues).toEqual([[91, subscriptionSource.url]]);
+  expect(enqueues).toEqual([91]);
   expect(discoveryCalls).toEqual([
     [91, subscriptionSource.url, subscriptionSource.websubStatus],
   ]);
@@ -1500,9 +1511,7 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
     },
   ]);
   // skipCache false: the seeded body is what the parse is meant to read.
-  expect(enqueued).toEqual([
-    [{ id: websubSource.id, url: websubSource.url }, "websub-push", false],
-  ]);
+  expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", false]]);
 });
 
 // A thin ping is a notification with no document attached. There is nothing
@@ -1534,9 +1543,7 @@ test("WebSub push with no body falls back to a fetch", async () => {
 
   expect(response.status).toBe(200);
   expect(seedCalls).toBe(0);
-  expect(enqueued).toEqual([
-    [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
-  ]);
+  expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", true]]);
 });
 
 // Losing the saved request is acceptable; losing the notification is not.
@@ -1567,9 +1574,7 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
   );
 
   expect(response.status).toBe(200);
-  expect(enqueued).toEqual([
-    [{ id: websubSource.id, url: websubSource.url }, "websub-push", true],
-  ]);
+  expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", true]]);
 });
 
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {

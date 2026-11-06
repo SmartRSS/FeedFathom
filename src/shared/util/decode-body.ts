@@ -19,7 +19,7 @@ export function headerCharset(contentType: string | null): string | undefined {
   return charset ? charset.replace(/^"(.*)"$/, "$1") : undefined;
 }
 
-export function detectEncoding(
+function detectEncoding(
   bytes: Uint8Array,
   contentType: string | null,
   declaration: RegExp,

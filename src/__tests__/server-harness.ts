@@ -93,6 +93,22 @@ export function createDependencies(): Dependencies {
     },
     "articlesDataService",
   );
+  const sourcesDataService = strictFake<SourcesDataService>(
+    {
+      async deleteSource() {},
+      async getFavicon() {
+        return null;
+      },
+      async listAllSources() {
+        return [];
+      },
+      async successSource() {},
+      async updateSourceUrl() {
+        return "updated";
+      },
+    },
+    "sourcesDataService",
+  );
   const userSourcesDataService = strictFake<UserSourcesDataService>(
     {
       async getUserSourceIds() {
@@ -144,6 +160,7 @@ export function createDependencies(): Dependencies {
       articlesDataService,
       userSourcesDataService,
       { publish() {} },
+      sourcesDataService,
     ),
     articlesDataService,
     authThrottle: new AuthThrottle(createFakeThrottleRedis()),
@@ -216,22 +233,7 @@ export function createDependencies(): Dependencies {
       { async enqueueSource() {} },
       "sourceEnqueuer",
     ),
-    sourcesDataService: strictFake<SourcesDataService>(
-      {
-        async deleteSource() {},
-        async getFavicon() {
-          return null;
-        },
-        async listAllSources() {
-          return [];
-        },
-        async successSource() {},
-        async updateSourceUrl() {
-          return "updated";
-        },
-      },
-      "sourcesDataService",
-    ),
+    sourcesDataService,
     userSourcesDataService,
     usersDataService,
     websubStateService: strictFake<WebSubStateService>(

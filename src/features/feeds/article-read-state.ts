@@ -1,6 +1,17 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 
 /**
+ * Whether a subscription sees an article: the feed listed it at or after the
+ * subscription began. The article list, the unread badge and retention all
+ * decide with this, so they cannot disagree about which articles a
+ * subscriber has.
+ */
+export const subscriptionSeesArticle = (
+  articleLastSeen: SQLWrapper,
+  subscribedAt: SQLWrapper,
+): SQL => sql`${articleLastSeen} >= ${subscribedAt}`;
+
+/**
  * The columns an unread test needs, from whichever aliases the caller's query
  * happens to use.
  */
