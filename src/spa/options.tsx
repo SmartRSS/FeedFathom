@@ -114,13 +114,20 @@ export function Options(props: {
     sectionFromHash(location.hash),
   );
   // Where the tabs scroll sideways (a narrow phone), the current one is
-  // brought into view, however the section was chosen.
+  // centred in the strip, clear of the fade at its end, however the section
+  // was chosen and on the first load too. A frame later, once the strip is
+  // laid out; and by the strip's own scroll, so the page never moves.
   let nav: HTMLElement | undefined;
   createEffect(() => {
     active();
-    nav
-      ?.querySelector('[aria-current="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    requestAnimationFrame(() => {
+      const tab = nav?.querySelector('[aria-current="true"]');
+      if (!nav || !tab) return;
+      const strip = nav.getBoundingClientRect();
+      const current = tab.getBoundingClientRect();
+      nav.scrollLeft +=
+        current.left - strip.left - (strip.width - current.width) / 2;
+    });
   });
 
   const onHashChange = () => {
