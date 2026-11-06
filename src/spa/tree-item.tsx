@@ -17,17 +17,14 @@ import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
 import folderOpenedRaw from "./assets/icons/Document/folder-open-fill.svg?raw";
 
-// Reads visible row order straight from the DOM instead of tracking it in
-// state -- closed folders' children simply aren't rendered, so a plain
-// query already reflects exactly what's visible, with no separate
-// flattened-tree bookkeeping to keep in sync with each TreeItem's own
-// open/closed signal.
+// Visible row order comes from the DOM: a closed folder's children are not
+// rendered, so the rows under the tree root are exactly the visible ones.
 // Stops at the first and last row rather than wrapping (WAI-ARIA tree
 // pattern). Home and End pass -Infinity and Infinity, which clamp to the ends.
 function moveTreeFocus(current: HTMLElement, offset: number) {
-  const items = [
-    ...document.querySelectorAll<HTMLElement>(".sources-pane .source"),
-  ];
+  const tree = current.closest('[role="tree"]');
+  if (!tree) return;
+  const items = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
   const index = items.indexOf(current);
   if (index === -1) return;
   const next = items[Math.min(items.length - 1, Math.max(0, index + offset))];
