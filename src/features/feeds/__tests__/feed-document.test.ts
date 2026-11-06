@@ -7,7 +7,8 @@ import {
   mapFeedToPreview,
   parsedFeedSchema,
 } from "#features/feeds/feed-mapper.ts";
-import { decodeFeedBody, parseXmlFeed } from "#features/feeds/feed-document.ts";
+import { parseXmlFeed } from "#features/feeds/feed-document.ts";
+import { decodeXml } from "#shared/util/decode-body.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
 
@@ -51,6 +52,9 @@ describe("external feed parser projection", () => {
     expect(check.Check({ ...feed, items: [{}] })).toBe(false);
   });
 });
+
+const decodeFeedBody = (body: ArrayBuffer, contentType: string | null) =>
+  decodeXml(new Uint8Array(body), contentType);
 
 describe("feed body encoding detection", () => {
   test("prefers UTF-16 BOMs over the Content-Type header", () => {

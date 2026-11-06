@@ -1,6 +1,13 @@
 import { Elysia } from "elysia";
-import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
 import { jsonError } from "./json.ts";
+
+// The healthcheck answers only when the request came from this machine. Exact literals
+// rather than a range check -- the peer address is one of these three or the
+// request is not local.
+const loopbackAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+const isLoopbackAddress = (address: string): boolean =>
+  loopbackAddresses.has(address);
 
 // The port both processes listen on inside their container. compose.yml's
 // healthcheck probes it as a literal.

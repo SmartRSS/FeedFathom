@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { JobDeferral } from "#features/feeds/queued-job.ts";
 import {

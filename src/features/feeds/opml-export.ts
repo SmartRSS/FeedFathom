@@ -1,4 +1,4 @@
-import type { OpmlNode } from "#shared/types/opml-types.ts";
+import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import { xmlSafeText } from "#platform/xml.ts";
 
 type XmlNode = {

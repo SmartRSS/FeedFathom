@@ -13,6 +13,11 @@ interface FetchFailure {
 const gone = "This feed seems to have moved or been removed.";
 const down = "This site isn't responding right now.";
 
+// The reason the fetcher stores for an answer other than 200. Stored reasons
+// outlive a deploy, so the wording is part of what classifyFetchFailure reads.
+export const httpStatusFailure = (url: string, status: number): string =>
+  `Failed to load data for ${url}, received status ${status.toString()}`;
+
 export function classifyFetchFailure(reason: string): FetchFailure {
   const status =
     Number(/received status (\d{3})/u.exec(reason)?.[1]) || undefined;

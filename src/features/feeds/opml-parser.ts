@@ -1,4 +1,4 @@
-import type { OpmlFolder, OpmlNode } from "#shared/types/opml-types.ts";
+import type { OpmlFolder, OpmlNode } from "#features/feeds/opml-types.ts";
 import {
   attribute,
   childElements,

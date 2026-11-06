@@ -18,6 +18,7 @@ import type { SourcesDataService } from "#features/feeds/source-data-service.ts"
 import { discoverWebSub } from "#features/feeds/websub.ts";
 import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
+import { httpStatusFailure } from "#shared/util/fetch-failure.ts";
 
 export class FeedParser {
   constructor(
@@ -138,9 +139,7 @@ export class FeedParser {
       ...(subscribers === undefined ? {} : { subscribers }),
     });
     if (response.status !== 200) {
-      throw new Error(
-        `Failed to load data for ${fetchedUrl}, received status ${response.status.toString()}`,
-      );
+      throw new Error(httpStatusFailure(fetchedUrl, response.status));
     }
     const finalUrl = response.url;
     // 301/308 are permanent, so persist onto the subscribed source's URL;

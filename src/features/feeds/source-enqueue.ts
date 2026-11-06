@@ -1,5 +1,5 @@
 import { type Static, Type } from "typebox";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   finishedJobRetention,

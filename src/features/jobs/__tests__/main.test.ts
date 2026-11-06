@@ -6,7 +6,7 @@ import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import { expect, setSystemTime, spyOn, test } from "bun:test";
 import { Readable } from "node:stream";
 import { DelayedError } from "bullmq";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";

@@ -1,8 +1,6 @@
-// Picks a body's encoding: a BOM wins, then the Content-Type charset, then the
-// label `declaration` captures in the first `sniffBytes` bytes, then UTF-8.
 // The in-document declaration (XML prolog, HTML <meta>) is ASCII-compatible,
-// so decoding the prefix as windows-1252 (a superset of ASCII with no invalid
-// byte sequences) is always safe just to go looking for it.
+// so decoding a body's prefix as windows-1252 (a superset of ASCII with no
+// invalid byte sequences) is always safe just to go looking for it.
 function bomEncoding(bytes: Uint8Array): string | undefined {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return "utf-8";
@@ -19,33 +17,24 @@ function headerCharset(contentType: string | null): string | undefined {
   return charset ? charset.replace(/^"(.*)"$/, "$1") : undefined;
 }
 
-function detectEncoding(
+// A feed's rules: a BOM, then the Content-Type charset, then the XML
+// prolog's encoding, then UTF-8. An unknown label falls back to UTF-8, the
+// right default for almost every body.
+const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
+
+export function decodeXml(
   bytes: Uint8Array,
   contentType: string | null,
-  declaration: RegExp,
-  sniffBytes: number,
 ): string {
-  const transport = bomEncoding(bytes) ?? headerCharset(contentType);
-  if (transport) return transport;
-
-  const prefix = new TextDecoder("windows-1252").decode(
-    bytes.subarray(0, sniffBytes),
-  );
-  return declaration.exec(prefix)?.[1] ?? "utf-8";
-}
-
-export function decodeBody(
-  bytes: Uint8Array,
-  contentType: string | null,
-  declaration: RegExp,
-  sniffBytes: number,
-): string {
+  const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
+  const encoding =
+    bomEncoding(bytes) ??
+    headerCharset(contentType) ??
+    xmlEncodingPattern.exec(prolog)?.[1] ??
+    "utf-8";
   try {
-    return new TextDecoder(
-      detectEncoding(bytes, contentType, declaration, sniffBytes),
-    ).decode(bytes);
+    return new TextDecoder(encoding).decode(bytes);
   } catch {
-    // Unrecognized label; UTF-8 is the right default for almost every body.
     return new TextDecoder("utf-8").decode(bytes);
   }
 }

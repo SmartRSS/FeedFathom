@@ -4,7 +4,7 @@ import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { JobDeferral } from "#features/feeds/queued-job.ts";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import {
   FaviconRefresher,
   type FaviconRefreshQueue,

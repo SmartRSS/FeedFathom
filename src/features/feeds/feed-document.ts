@@ -2,7 +2,7 @@ import { parseFeed } from "@rowanmanning/feed-parser";
 import { parseContactString } from "@rowanmanning/feed-parser/lib/utils/parse-contact-string.js";
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import Schema from "typebox/schema";
-import { decodeBody } from "#shared/util/decode-body.ts";
+import { decodeXml } from "#shared/util/decode-body.ts";
 import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import {
   inCapScope,
@@ -23,20 +23,6 @@ import {
 } from "#features/feeds/plain-text.ts";
 
 const parsedFeedCheck = Schema.Compile(parsedFeedSchema);
-const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
-
-export function decodeFeedBody(
-  buffer: ArrayBuffer,
-  contentType: string | null,
-): string {
-  return decodeBody(
-    new Uint8Array(buffer),
-    contentType,
-    xmlEncodingPattern,
-    200,
-  );
-}
-
 // feed-parser reads every RSS and Atom date, on items and on the feed, through
 // this one getter, which hands the text to a bare `new Date`. Replacing the
 // getter routes them all through parseFeedDate; the date-zones fixtures fail
@@ -171,7 +157,7 @@ export function parseFeedDocument(
   contentType: string | null,
   url: string,
 ): { feed: FeedMapperInput; text: string; websubHubUrl?: string } {
-  const text = decodeFeedBody(body, contentType);
+  const text = decodeXml(new Uint8Array(body), contentType);
   const format = feedFormat(text, contentType);
   if (format === "json") {
     const { websubHubUrl, ...feed } = parseJsonFeed(text);

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { Job, Queue } from "bullmq";
 import Redis from "ioredis";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import {
   type ParseRequest,
   SourceEnqueuer,

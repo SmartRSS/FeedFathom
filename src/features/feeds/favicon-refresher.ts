@@ -13,7 +13,7 @@ import {
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import {
   finishedJobRetention,
   JobDeferral,

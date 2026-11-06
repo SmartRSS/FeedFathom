@@ -42,6 +42,7 @@ import {
   type ArticleSummary,
   type TreeNode,
 } from "#shared/contracts/responses.ts";
+import { invalidRequestMessage } from "#platform/http/json.ts";
 
 // Answers as the server does: the body is checked against the contract the
 // SPA decodes it with, at lint time and again when the test runs, since a
@@ -694,7 +695,7 @@ export async function installApiFixture(
       }
       // Addresses are minted only: the server refuses one typed by hand.
       if (body.sourceUrl.endsWith("@mail.example"))
-        return refuse(route, 422, "Refine Error");
+        return refuse(route, 422, invalidRequestMessage);
       expect(body).toEqual({
         sourceFolder: 7,
         sourceName: "Tech Preview",

@@ -7,7 +7,7 @@ import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
-import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
+import type { OpmlNode, OpmlSource } from "#features/feeds/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";

@@ -8,7 +8,7 @@ import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { DelayedError, type Job, type JobsOptions } from "bullmq";
-import { JobName } from "#shared/types/job-name-enum.ts";
+import { JobName } from "#features/feeds/job-name-enum.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   faviconGatherIntervalMs,
