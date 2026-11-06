@@ -152,6 +152,21 @@ describe("schema-first SPA API", () => {
     ).resolves.toEqual({ items: [{ message: "ok" }], message: "ok" });
   });
 
+  test("sends a JSON body with its content type", async () => {
+    let sent: Request | undefined;
+    setFetch((_input, init) => {
+      sent = new Request("https://feedfathom.test/api/message", init);
+      return Promise.resolve(Response.json({ message: "ok" }));
+    });
+    await api("/message", exactMessage, {
+      json: { name: "News" },
+      method: "POST",
+      request: Type.Object({ name: Type.String() }),
+    });
+    expect(sent?.headers.get("Content-Type")).toBe("application/json");
+    expect(await sent?.json()).toEqual({ name: "News" });
+  });
+
   test("reports non-JSON successful responses", async () => {
     returnResponse(new Response("not json"));
     await expect(api("/message", exactMessage)).rejects.toThrow(
@@ -176,31 +191,11 @@ describe("schema-first SPA API", () => {
     expect(isUnauthorizedError(cause)).toBe(true);
   });
 
-  test("uses a validated Elysia validation message", async () => {
-    returnResponse(
-      Response.json(
-        {
-          errors: [],
-          found: { name: "" },
-          message: "Expected string length greater or equal to 1",
-          on: "body",
-          property: "/name",
-          type: "validation",
-        },
-        { status: 422 },
-      ),
-    );
-
-    await expect(api("/message", exactMessage)).rejects.toThrow(
-      "Expected string length greater or equal to 1",
-    );
-  });
-
   test.each([
     ["missing", { message: "Denied" }],
     ["malformed", { error: 1 }],
     ["extra", { error: "Denied", extra: true }],
-    ["validation on wrong status", { message: "Denied", type: "validation" }],
+    ["validation", { message: "Denied", type: "validation" }],
   ])("rejects a %s error payload", async (_name, payload) => {
     returnResponse(Response.json(payload, { status: 400 }));
     await expect(api("/message", exactMessage)).rejects.toThrow(
@@ -255,6 +250,16 @@ describe("schema-first SPA API", () => {
       const result = api("/message", exactMessage);
       attempts[0]?.answer(Response.json({ message: "first" }));
       await expect(result).resolves.toEqual({ message: "first" });
+      jest.advanceTimersByTime(5000);
+      expect(attempts).toHaveLength(1);
+    });
+
+    test("never repeats a GET whose caller turns the race off", () => {
+      jest.useFakeTimers();
+      const attempts = pendingFetches();
+      void api("/message", exactMessage, { raceWhenStalled: false }).catch(
+        () => {},
+      );
       jest.advanceTimersByTime(5000);
       expect(attempts).toHaveLength(1);
     });

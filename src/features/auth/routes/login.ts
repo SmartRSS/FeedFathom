@@ -4,7 +4,7 @@ import type { AppConfig } from "#platform/config.ts";
 import { Elysia } from "elysia";
 import { loginRequest } from "#shared/contracts/requests.ts";
 import { json, jsonError } from "#platform/http/json.ts";
-import { loginResponse } from "#shared/contracts/responses.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
@@ -55,7 +55,7 @@ export function createLoginRoute({
       );
       if (!sid) return wrongLoginData;
       await authThrottle.succeeded("login", address, parsed.email);
-      return json(loginResponse, { success: true }, 200, {
+      return json(successResponse, { success: true }, 200, {
         "set-cookie": sessionHeader(sid, config.production),
       });
     },

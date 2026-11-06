@@ -1,13 +1,8 @@
 import { expect, test } from "bun:test";
-import {
-  neighbours,
-  offlineUnread,
-  prefetchNext,
-  unreadSourceIds,
-} from "../reading-prefetch.ts";
+import { offlineUnread, prefetchNext } from "../preferences.ts";
+import { neighbours, unreadSourceIds } from "../reading-prefetch.ts";
 
 // Both download in the background, so neither may start without consent.
-// Persistence is storedToggle's, covered in preferences.test.ts.
 test("prefetching and offline reading both default to off", () => {
   expect(prefetchNext.get()).toBe(false);
   expect(offlineUnread.get()).toBe(false);

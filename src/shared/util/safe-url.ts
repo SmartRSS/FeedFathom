@@ -17,8 +17,9 @@ export const safeHttpUrl = (value: string, baseUrl: string): string => {
   return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
 };
 
-// Newsletter articles have no source URL of their own; they are addressed by
-// a path of the app's own, which is already safe.
+// Newsletter articles have no page of their own. The mail handler stores each
+// under a path no route serves, which keeps the URL unique per message, so
+// they get no link.
 const newsletterArticlePrefix = "/article/";
 export const newsletterArticlePath = (guid: string) =>
   `${newsletterArticlePrefix}${guid}`;
@@ -26,7 +27,8 @@ const isNewsletterArticlePath = (value: string) =>
   value.startsWith(newsletterArticlePrefix);
 
 export const safeArticleUrl = (value: string, baseUrl: string): string =>
-  isNewsletterArticlePath(value) ? value : safeHttpUrl(value, baseUrl);
+  isNewsletterArticlePath(value) ? "" : safeHttpUrl(value, baseUrl);
+
 // An absolute http(s) URL with no username or password, resolved against
 // `base` when given; undefined for anything else. Credentials are refused
 // because a URL carrying them would send them to whatever host it names.

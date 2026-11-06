@@ -1,10 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-test.skip(
-  !process.env["PLAYWRIGHT_BASE_URL"],
-  "production smoke requires PLAYWRIGHT_BASE_URL",
-);
-
 test("executes the production SPA and loads its assets", async ({ page }) => {
   const browserFailures: string[] = [];
   const loadedAssets: string[] = [];

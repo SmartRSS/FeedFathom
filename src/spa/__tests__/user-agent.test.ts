@@ -64,7 +64,7 @@ describe("describeUserAgent", () => {
       "SomeBot/1.0 (unlisted client)",
     );
     expect(describeUserAgent("")).toBe("Unknown device");
-    expect(describeUserAgent("UNKNOWN")).toBe("Unknown device");
+    expect(describeUserAgent(null)).toBe("Unknown device");
     expect(describeUserAgent("   ")).toBe("Unknown device");
   });
 });
