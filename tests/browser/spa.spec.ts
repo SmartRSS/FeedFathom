@@ -9,7 +9,7 @@ import {
 import type * as Dialogs from "../../src/spa/dialog.tsx";
 import { installApiFixture } from "./api-fixture.ts";
 
-// The real service worker (see src/spa/public/sw.js) takes /api/* fetches
+// The real service worker (see src/spa/sw.ts) takes /api/* fetches
 // over itself once it activates -- its own internal fetch() calls run
 // outside the page's network stack, so they bypass installApiFixture's
 // page.route() mock entirely and hit vite's real dev proxy instead
@@ -3879,6 +3879,27 @@ test("logging out from an uncontrolled page drops the API cache", async ({
   });
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  expect(
+    await page.evaluate(async () =>
+      (await caches.keys()).filter((key) => key.startsWith("api-")),
+    ),
+  ).toEqual([]);
+});
+
+// The next account must not be served the previous one's cached data, which
+// the uncontrolled page's sign-in never shows the worker either (#974).
+test("signing in from an uncontrolled page drops the API cache", async ({
+  page,
+}) => {
+  await openApp(page, { authenticated: false }, "/login");
+  await page.evaluate(async () => {
+    const cache = await caches.open("api-test");
+    await cache.put("/api/tree", Response.json({ tree: [] }));
+  });
+  await page.getByLabel("Email").fill("reader@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page).not.toHaveURL(/\/login/);
   expect(
     await page.evaluate(async () =>
       (await caches.keys()).filter((key) => key.startsWith("api-")),
