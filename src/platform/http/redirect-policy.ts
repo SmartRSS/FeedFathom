@@ -1,4 +1,7 @@
-import type { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
+import type {
+  HttpRateLimiter,
+  Priority,
+} from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
   type NativeHttpResponse,
@@ -24,7 +27,7 @@ export class RedirectPolicy {
   async follow(
     url: string,
     headers: Headers,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;

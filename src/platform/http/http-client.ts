@@ -12,6 +12,7 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   type HostIntervals,
   HttpRateLimiter,
+  type Priority,
 } from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
@@ -31,9 +32,14 @@ import {
   buildUserAgentPrefix,
   type HttpClientIdentity,
 } from "#platform/http/identity.ts";
-import { RedirectPolicy } from "#platform/http/redirect-policy.ts";
+import {
+  type FetchResult,
+  RedirectPolicy,
+} from "#platform/http/redirect-policy.ts";
 
 const requestDeadlineMs = 30_000;
+// One request and two retries, for an interactive caller only.
+const maxAttempts = 3;
 
 const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
 const rateLimitedStatus = 429;
@@ -45,7 +51,7 @@ const notModifiedStatus = 304;
 const seededCacheHeaders = ["content-type", "link"];
 
 type HttpRequestOptions = {
-  priority?: "background" | "interactive";
+  priority?: Priority;
   responseType?: "arrayBuffer";
   // Skips the local TTL short-circuit but keeps conditional revalidation, so
   // an unchanged origin still answers 304 cheaply. For an explicit user
@@ -69,11 +75,6 @@ type HttpClientOptions = HttpClientIdentity & {
   // sit out the real ones; see HttpRateLimiter for the production values.
   intervalMs?: HostIntervals;
   transport?: NativeHttpTransport;
-};
-
-type FetchResult = {
-  permanent: boolean;
-  response: NativeHttpResponse;
 };
 
 // A POST has no cached body to hand back and no caller here reads one, so
@@ -164,20 +165,7 @@ export class HttpClient {
         this.transport(url, headers, deadline.controller.signal, encoded),
       );
       response.destroy();
-      await this.rateLimiter.applyRateLimitHeaders(
-        hostname,
-        response.headers,
-        deadline,
-      );
-      const retryAfter = response.headers.get("retry-after");
-      if (
-        response.status === rateLimitedStatus ||
-        (retryAfter !== null && response.status >= 400)
-      ) {
-        throw new HttpDeferredError(
-          await this.rateLimiter.block(hostname, retryAfter, deadline),
-        );
-      }
+      await this.deferIfLimited(hostname, response, deadline);
       return { headers: response.headers, status: response.status };
     } finally {
       deadline.dispose();
@@ -330,7 +318,7 @@ export class HttpClient {
     url: string,
     headers: Headers,
     hostname: string,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     /* eslint-disable no-await-in-loop -- Each retry depends on its response and on re-reserving the host. */
@@ -341,29 +329,12 @@ export class HttpClient {
         // Whatever answered is what gets held back, which after a redirect
         // is not the host the request started at.
         const answeringHost = hostnameOf(result.response.url) ?? hostname;
-        await this.rateLimiter.applyRateLimitHeaders(
-          answeringHost,
-          result.response.headers,
-          deadline,
-        );
-        const retryAfter = result.response.headers.get("retry-after");
-        // Retry-After also applies to errors such as 503 (RFC 9110 10.2.3),
-        // so defer rather than retry immediately. This handles final error
-        // responses, not redirects.
-        if (
-          result.response.status === rateLimitedStatus ||
-          (retryAfter !== null && result.response.status >= 400)
-        ) {
-          result.response.destroy();
-          result = undefined;
-          throw new HttpDeferredError(
-            await this.rateLimiter.block(answeringHost, retryAfter, deadline),
-          );
-        }
+        await this.deferIfLimited(answeringHost, result.response, deadline);
+        const lastAttempt = attempt === maxAttempts - 1;
         if (
           priority === "background" ||
           !this.isRetryable(result.response.status) ||
-          attempt === 2
+          lastAttempt
         ) {
           return result;
         }
@@ -376,13 +347,38 @@ export class HttpClient {
           error instanceof HttpDeadlineError ||
           deadline.controller.signal.aborted ||
           priority === "background" ||
-          attempt === 2
+          attempt === maxAttempts - 1
         ) {
           throw error;
         }
       }
     }
     /* eslint-enable no-await-in-loop */
+  }
+
+  // Records the host's rate-limit headers, and defers on a 429, or on an
+  // error that carries Retry-After, which also applies to errors such as 503
+  // (RFC 9110 10.2.3). The response is destroyed before a deferral is thrown.
+  private async deferIfLimited(
+    hostname: string,
+    response: NativeHttpResponse,
+    deadline: RequestDeadline,
+  ): Promise<void> {
+    await this.rateLimiter.applyRateLimitHeaders(
+      hostname,
+      response.headers,
+      deadline,
+    );
+    const retryAfter = response.headers.get("retry-after");
+    if (
+      response.status === rateLimitedStatus ||
+      (retryAfter !== null && response.status >= 400)
+    ) {
+      response.destroy();
+      throw new HttpDeferredError(
+        await this.rateLimiter.block(hostname, retryAfter, deadline),
+      );
+    }
   }
 
   private fromCached(
