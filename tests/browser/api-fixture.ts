@@ -156,6 +156,7 @@ export async function installApiFixture(
     discoveryRace?: boolean;
     // A second folder, "Later", with nothing in it.
     emptyFolder?: boolean;
+    notAdmin?: boolean;
     // Tech News keeps failing with this reason, its last success that long
     // ago; its articles stay.
     failing?: { daysSinceSuccess: number; reason: string };
@@ -608,6 +609,8 @@ export async function installApiFixture(
     // the 401 matters to the specs, so the changes are acknowledged, not kept.
     if (url.pathname === "/api/admin") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      // What the server answers a signed-in account that isn't an admin.
+      if (options.notAdmin) return respond({ error: "Unauthorized" }, 403);
       if (method === "GET")
         return respond([
           {

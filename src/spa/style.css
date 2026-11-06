@@ -794,6 +794,11 @@ html[data-route="options"] body {
 .admin-page > .page-toolbar {
   margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
 }
+/* For an account that isn't an admin, the message takes the table's place
+   and its space, so the page bar keeps its edge. */
+.admin-page > .admin-forbidden {
+  flex: 1;
+}
 .admin-table-scroll {
   flex: 1;
   min-height: 0;

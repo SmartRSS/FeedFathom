@@ -2695,6 +2695,21 @@ for (const { name, ready, send } of expiringAdminRequests) {
   });
 }
 
+test("a regular user on the admin page is told it is for admins", async ({
+  page,
+}) => {
+  await openApp(page, { notAdmin: true }, "/admin");
+  await expect(
+    page.getByText("This page is for administrators."),
+  ).toBeVisible();
+  await expect(page.getByText("Unauthorized")).toHaveCount(0);
+  await expect(page.getByLabel("Sort by")).toHaveCount(0);
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await page.getByRole("link", { name: "Back to your feeds" }).click();
+  await expect(page).toHaveURL("/");
+  (browserFailures.get(page) ?? []).length = 0;
+});
+
 test("surfaces tree failures without masquerading as logout", async ({
   page,
 }) => {
