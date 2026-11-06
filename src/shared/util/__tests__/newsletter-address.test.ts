@@ -5,7 +5,6 @@ import {
   isMintedNewsletterAddress,
   isNewsletterAddress,
   newsletterAddress,
-  newsletterMailDomain,
 } from "../newsletter-address.ts";
 
 describe("newsletterAddress", () => {
@@ -65,26 +64,5 @@ describe("isMintedNewsletterAddress", () => {
     ["a UUID on another domain", `${crypto.randomUUID()}@other.example`],
   ])("refuses %s", (_, address) => {
     expect(isMintedNewsletterAddress(address, "mail.example")).toBe(false);
-  });
-});
-
-describe("newsletterMailDomain", () => {
-  test("is absent while mail is disabled", () => {
-    expect(
-      newsletterMailDomain({
-        MAIL_DOMAIN: "mail.example",
-        MAIL_ENABLED: false,
-      }),
-    ).toBeUndefined();
-  });
-
-  test("falls back past a blank MAIL_DOMAIN and drops the port", () => {
-    expect(
-      newsletterMailDomain({
-        FEED_FATHOM_DOMAIN: "localhost:3456",
-        MAIL_DOMAIN: " ",
-        MAIL_ENABLED: true,
-      }),
-    ).toBe("localhost");
   });
 });

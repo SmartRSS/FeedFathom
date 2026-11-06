@@ -64,7 +64,7 @@ export const articleImporter = /* @__PURE__ */ new ArticleImporter(
 export const webSubSubscriber = /* @__PURE__ */ new WebSubSubscriber(
   websubStateService,
   httpClient,
-  config.FEED_FATHOM_DOMAIN,
+  config.publicOrigin,
 );
 export const feedParser = /* @__PURE__ */ new FeedParser(
   articleImporter,

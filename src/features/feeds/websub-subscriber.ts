@@ -27,14 +27,16 @@ export class WebSubSubscriber {
       | "recordWebSubDiscovery"
     >,
     private readonly hubPoster: HubPoster,
-    // Undefined turns WebSub off: without a public domain there is no
+    // Undefined turns WebSub off: without a public origin there is no
     // callback URL a hub could reach.
-    private readonly domain: string | undefined,
+    private readonly publicOrigin: URL | undefined,
   ) {}
 
   /** Whether a fetch of a source in this state should look for a hub. */
   public wants(status: undefined | WebSubStatus): boolean {
-    return this.domain !== undefined && shouldAttemptWebSubSubscribe(status);
+    return (
+      this.publicOrigin !== undefined && shouldAttemptWebSubSubscribe(status)
+    );
   }
 
   /**
@@ -43,8 +45,8 @@ export class WebSubSubscriber {
    * feed's health, so it must not fail the fetch that found it.
    */
   public async subscribe(sourceId: number, discovery: WebSubDiscovery) {
-    const domain = this.domain;
-    if (!domain) return;
+    const publicOrigin = this.publicOrigin;
+    if (!publicOrigin) return;
     try {
       if (
         !(await this.websubStateService.claimWebSubSubscribeAttempt(sourceId))
@@ -55,7 +57,11 @@ export class WebSubSubscriber {
         discovery.hubUrl,
         discovery.topicUrl,
       );
-      await this.request(domain, { id: sourceId, ...lease, ...discovery });
+      await this.request(publicOrigin, {
+        id: sourceId,
+        ...lease,
+        ...discovery,
+      });
     } catch (error) {
       console.error(`WebSub subscribe threw for source ${sourceId}:`, error);
       await this.websubStateService.markWebSubFailed(sourceId);
@@ -64,19 +70,19 @@ export class WebSubSubscriber {
 
   /** Renews every verified subscription whose lease ends before the next run. */
   public async renewDue() {
-    const domain = this.domain;
-    if (!domain) return;
+    const publicOrigin = this.publicOrigin;
+    if (!publicOrigin) return;
     const subscriptions =
       await this.websubStateService.getWebSubSubscriptionsNeedingRenewal();
     await Promise.all(
       subscriptions.map(
-        async (subscription) => await this.request(domain, subscription),
+        async (subscription) => await this.request(publicOrigin, subscription),
       ),
     );
   }
 
   private async request(
-    domain: string,
+    publicOrigin: URL,
     subscription: {
       callbackToken: string;
       hubUrl: string;
@@ -87,8 +93,8 @@ export class WebSubSubscriber {
   ) {
     const result = await requestHubSubscription({
       ...subscription,
-      domain,
       hubPoster: this.hubPoster,
+      publicOrigin,
     });
     if (result.ok) return;
     console.error(

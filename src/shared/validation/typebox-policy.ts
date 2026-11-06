@@ -1,32 +1,17 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { isPlainText } from "#shared/util/is-plain-text.ts";
+import {
+  isEmailAddress,
+  isWebUrl,
+  maxEmailAddressLength,
+} from "./address-shape.ts";
 
 type SubscriptionTarget =
   | { kind: "email"; value: string }
   | { kind: "feed"; value: string };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const nonblankString = Type.String({ minLength: 1, pattern: "\\S" });
-
-// Credentials are refused here rather than late in the fetch, which refuses
-// them too.
-function isWebUrl(value: string) {
-  try {
-    const url = new URL(value.trim());
-    return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isEmailAddress(value: string) {
-  return emailPattern.test(value.trim());
-}
 
 // typebox dropped the non-JSON-Schema Type.Date() builtin; this replicates
 // its runtime `instanceof Date` check for in-memory (not over-the-wire)
@@ -80,12 +65,9 @@ export const normalizedWebUrl = Type.Codec(
   .Decode((value) => value.trim())
   .Encode((value) => value);
 
-// RFC 5321 caps a forward path at 256 octets, brackets included, so no
-// deliverable address is longer than 254. The cap matters beyond mail: the
-// address is part of the auth throttle's Redis keys, and an unbounded one lets
-// each request park up to the body limit in Redis.
-const maxEmailAddressLength = 254;
-
+// The cap matters beyond mail: the address is part of the auth throttle's
+// Redis keys, and an unbounded one lets each request park up to the body limit
+// in Redis.
 export const normalizedEmailAddress = Type.Codec(
   Type.Refine(
     nonblankString,

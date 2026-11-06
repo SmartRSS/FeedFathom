@@ -10,5 +10,6 @@ export const articlePageSize = 200;
 // hours back.
 export const todayWindowHours = 24;
 
-// How long a password-reset link stays valid.
-export const passwordResetLifetimeMs = 60 * 60 * 1000;
+// How long a password-reset link stays valid. `words` is what the mail and the
+// reset form promise.
+export const passwordResetLifetime = { ms: 60 * 60 * 1000, words: "an hour" };

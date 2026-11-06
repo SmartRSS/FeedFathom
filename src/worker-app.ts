@@ -1,5 +1,9 @@
 import type { MainWorker } from "#features/jobs/main.ts";
-import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
+import {
+  containerPort,
+  healthcheckPath,
+  healthcheckResponse,
+} from "#platform/http/internal-routes.ts";
 
 export type WorkerAppServices = {
   close: () => Promise<void>;
@@ -50,23 +54,15 @@ export async function runWorker({
   // budget and its consequences in compose.yml. A migration too slow for
   // that budget is rolled out by hand.
   Bun.serve({
-    async fetch(request, server) {
-      const url = new URL(request.url);
-      const ip = server.requestIP(request)?.address ?? "";
-
-      if (!isLoopbackAddress(ip)) {
-        return Response.json({ error: "Unauthorized" }, { status: 403 });
-      }
-
-      if (url.pathname === "/healthcheck") {
-        return consuming
-          ? Response.json({ status: "ok" })
-          : Response.json({ status: "starting" }, { status: 503 });
-      }
-
-      return new Response("Not Found", { status: 404 });
+    fetch(request, server) {
+      if (new URL(request.url).pathname !== healthcheckPath)
+        return new Response("Not Found", { status: 404 });
+      return healthcheckResponse(
+        server.requestIP(request)?.address ?? "",
+        consuming,
+      );
     },
-    port: 3000,
+    port: containerPort,
   });
 
   await waitForMigration();

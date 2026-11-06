@@ -11,10 +11,16 @@ export function isEmailAddress(value: string): boolean {
   return emailPattern.test(value.trim());
 }
 
+// Credentials are refused here rather than late in the fetch, which refuses
+// them too.
 export function isWebUrl(value: string): boolean {
   try {
-    const { protocol } = new URL(value.trim());
-    return protocol === "http:" || protocol === "https:";
+    const url = new URL(value.trim());
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+    );
   } catch {
     return false;
   }

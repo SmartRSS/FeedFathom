@@ -11,7 +11,7 @@ const lease = {
   topicUrl: "https://feed.example/feed.xml",
 };
 
-const subscriberWith = (hubStatus: number, domain?: string) => {
+const subscriberWith = (hubStatus: number, publicOrigin?: URL) => {
   const failed: number[] = [];
   const posted: string[] = [];
   const subscriber = new WebSubSubscriber(
@@ -29,14 +29,17 @@ const subscriberWith = (hubStatus: number, domain?: string) => {
         return { status: hubStatus };
       },
     },
-    domain,
+    publicOrigin,
   );
   return { failed, posted, subscriber };
 };
 
 test("a refused subscribe or renewal marks the subscription failed", async () => {
   using _ = spyOn(console, "error").mockImplementation(() => {});
-  const { failed, posted, subscriber } = subscriberWith(500, "app.example");
+  const { failed, posted, subscriber } = subscriberWith(
+    500,
+    new URL("https://app.example"),
+  );
 
   await subscriber.subscribe(lease.id, lease);
   await subscriber.renewDue();
@@ -49,14 +52,17 @@ test("a refused subscribe or renewal marks the subscription failed", async () =>
 });
 
 test("an accepted request leaves the subscription to the hub's verification", async () => {
-  const { failed, subscriber } = subscriberWith(202, "app.example");
+  const { failed, subscriber } = subscriberWith(
+    202,
+    new URL("https://app.example"),
+  );
   await subscriber.subscribe(lease.id, lease);
   await subscriber.renewDue();
   expect(failed).toEqual([]);
 });
 
-// Without a public domain no hub could reach the callback.
-test("without a domain nothing is asked of any hub", async () => {
+// Without a public origin no hub could reach the callback.
+test("without a public origin nothing is asked of any hub", async () => {
   const { posted, subscriber } = subscriberWith(202);
   expect(subscriber.wants("none")).toBe(false);
   await subscriber.subscribe(lease.id, lease);

@@ -5,10 +5,7 @@ import type { newsletterAddressRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
-import {
-  isNewsletterAddress,
-  newsletterMailDomain,
-} from "#shared/util/newsletter-address.ts";
+import { isNewsletterAddress } from "#shared/util/newsletter-address.ts";
 
 // Creates the email source for an address the SPA just minted, before any
 // subscription to it, so mail that arrives ahead of Subscribe is stored
@@ -37,7 +34,7 @@ export async function postNewsletterAddressHandler(
   // Nothing is fetched, but every call can add a row, and registration is
   // open: the allowance find, preview and subscribe share bounds that too.
   await outboundFetchBudget.consume(user.id);
-  const domain = newsletterMailDomain(config);
+  const domain = config.mailDomain;
   if (!domain) return jsonError("Email subscriptions are not allowed.", 400);
   // Only an address in the minted format on this instance's mail domain:
   // this endpoint is not a way to claim an address nothing here mints.

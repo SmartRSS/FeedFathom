@@ -12,6 +12,7 @@ import {
   removedArticlesResponse,
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
+import { todayWindowHours } from "#shared/contracts/limits.ts";
 
 type ArticleServices = Pick<
   typeof feeds,
@@ -43,7 +44,7 @@ export async function postArticlesHandler(
     body.cursor,
     body.filter,
     body.view === "today"
-      ? { allSubscribed: true, publishedWithinHours: 24 }
+      ? { allSubscribed: true, publishedWithinHours: todayWindowHours }
       : // Search (#697) spans every subscription -- what makes it worth
         // having is finding the article whose feed you no longer remember --
         // so subscription authorizes the rows, as it does for Today.

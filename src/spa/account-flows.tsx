@@ -17,7 +17,7 @@ import {
   passwordResetRequest,
   registerRequest,
 } from "#shared/contracts/requests.ts";
-import { passwordResetLifetimeMs } from "#shared/contracts/limits.ts";
+import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import type { Turnstile } from "./turnstile.d.ts";
 import { api, messageOf } from "./api.ts";
@@ -25,12 +25,6 @@ import { loginPath, registerPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
 import { forgetAccountData } from "./sw-protocol.ts";
-
-const resetLinkLifetime = new Intl.NumberFormat("en", {
-  style: "unit",
-  unit: "hour",
-  unitDisplay: "long",
-}).format(passwordResetLifetimeMs / 3_600_000);
 
 type FieldErrors = Partial<Record<AccountField, string>>;
 
@@ -487,7 +481,7 @@ export function PasswordReset(props: { navigate(to: string): void }) {
                 refuses to. */}
             <p role="status">
               If that address has an account here, a reset link is on its way.
-              The link is good for {resetLinkLifetime}.
+              The link is good for {passwordResetLifetime.words}.
             </p>
             <LoginLink navigate={props.navigate} />
           </section>

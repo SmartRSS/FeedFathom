@@ -8,7 +8,7 @@ export const healthcheckPath = "/healthcheck";
 
 // Loopback only: the probe runs inside the container, and nobody outside
 // needs to learn whether this process is up.
-function healthcheckResponse(address: string, ready: boolean) {
+export function healthcheckResponse(address: string, ready: boolean) {
   if (!isLoopbackAddress(address))
     return Response.json({ error: "Forbidden" }, { status: 403 });
   if (!ready) return Response.json({ status: "starting" }, { status: 503 });

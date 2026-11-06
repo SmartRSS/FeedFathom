@@ -9,10 +9,7 @@ import {
   deserializeFeedPreview,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
-import {
-  isMintedNewsletterAddress,
-  newsletterMailDomain,
-} from "#shared/util/newsletter-address.ts";
+import { isMintedNewsletterAddress } from "#shared/util/newsletter-address.ts";
 import {
   type FeedPreview,
   mapFeedToArticles,
@@ -92,7 +89,7 @@ export async function postSubscribeHandler(
           kind: "email",
           minted: isMintedNewsletterAddress(
             sourceUrl.value,
-            newsletterMailDomain(config) ?? "",
+            config.mailDomain ?? "",
           ),
         }
       : { homeUrl: cachedPreview?.link, kind: "feed" }),

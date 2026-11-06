@@ -1,6 +1,5 @@
 import { Type, type StaticDecode } from "typebox";
 import { Value } from "typebox/value";
-import { newsletterMailDomain } from "#shared/util/newsletter-address.ts";
 
 // Blank is unset: compose.yml passes every variable through as `${X:-}`, so
 // the defaults below are the only ones, and an unset variable arrives as "".
@@ -148,6 +147,27 @@ export type AppConfig = StaticDecode<typeof configSchema> & {
   // is enabled.
   mailDomain?: string;
 };
+
+// The host addresses are minted at, or undefined unless this deployment
+// ingests mail. FEED_FATHOM_DOMAIN is only a fallback for the single-domain
+// case: the address host is wherever inbound mail is routed, which is a
+// separate deployment decision. Either way it carries the public port for link
+// building (localhost:3456 in dev), and an address host never has one.
+// First non-blank wins rather than first non-nullish: compose.yml passes
+// MAIL_DOMAIN through as `${MAIL_DOMAIN:-}`, so an unset variable arrives as
+// "" and a `??` chain would let it shadow the fallback -- which is how
+// production silently stopped advertising a newsletter host at all.
+function newsletterMailDomain(config: {
+  FEED_FATHOM_DOMAIN?: string | undefined;
+  MAIL_DOMAIN?: string | undefined;
+  MAIL_ENABLED: boolean;
+}): string | undefined {
+  if (!config.MAIL_ENABLED) return undefined;
+  return [config.MAIL_DOMAIN, config.FEED_FATHOM_DOMAIN]
+    .map((host) => host?.trim())
+    .find(Boolean)
+    ?.replace(/:\d+$/u, "");
+}
 
 function publicOrigin(domain: string | undefined): URL | undefined {
   const host = domain?.trim();

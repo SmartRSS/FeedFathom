@@ -27,6 +27,8 @@ import {
   createInternalRoutes,
   healthcheckPath,
 } from "#platform/http/internal-routes.ts";
+import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
+import { serviceWorkerPathPattern } from "./spa/sw-protocol.ts";
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
@@ -134,8 +136,7 @@ function contentSecurityPolicy(
     scriptSources.push(
       `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
     );
-  if (turnstileSiteKey?.trim())
-    scriptSources.push("https://challenges.cloudflare.com");
+  if (turnstileSiteKey?.trim()) scriptSources.push(turnstileOrigin);
   return `script-src ${scriptSources.join(" ")}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`;
 }
 
@@ -164,7 +165,7 @@ export async function createServerApp(
         const filePath = path === "/" ? "/index.html" : path;
         const file = Bun.file(`${spaDirectory}${filePath}`);
         if (!(await file.exists())) throw new NotFound();
-        if (/^\/sw-[a-f0-9]+\.js$/.test(filePath)) {
+        if (serviceWorkerPathPattern.test(filePath)) {
           return new Response(file, {
             headers: { "Cache-Control": "public, max-age=3600" },
           });

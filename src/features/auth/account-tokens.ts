@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 
 // How long a mailed link stays valid. `words` is what the mail promises.
 export const activationLifetime = { ms: 24 * 60 * 60 * 1_000, words: "a day" };
-export const resetLifetime = { ms: 60 * 60 * 1_000, words: "an hour" };
+export const resetLifetime = passwordResetLifetime;
 
 export function issueToken(lifetime: { ms: number }) {
   return {

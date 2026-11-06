@@ -98,8 +98,8 @@ export type HubPoster = {
  */
 export async function requestHubSubscription(params: {
   callbackToken: string;
-  // The public host the hub calls back on.
-  domain: string;
+  // Where this instance is reachable; the hub calls back there.
+  publicOrigin: URL;
   hubPoster: HubPoster;
   hubUrl: string;
   secret: string;
@@ -110,7 +110,10 @@ export async function requestHubSubscription(params: {
     return { error: "Hub URL is not a public http or https URL", ok: false };
 
   const body = new URLSearchParams({
-    "hub.callback": `https://${params.domain}${webSubCallbackPath(params.callbackToken)}`,
+    "hub.callback": new URL(
+      webSubCallbackPath(params.callbackToken),
+      params.publicOrigin,
+    ).href,
     "hub.mode": "subscribe",
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,
