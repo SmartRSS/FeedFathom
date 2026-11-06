@@ -26,6 +26,7 @@ import { DialogHost } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
 import { isUnauthorizedError } from "./api.ts";
 import {
+  density,
   mobileListAnchor,
   readerText,
   readerWidth,
@@ -123,6 +124,9 @@ function App() {
   // Solid 2.0's compute-then-apply split wants (docs/upcoming-upgrades.md).
   createEffect(() => {
     document.documentElement.dataset["readerText"] = readerText.get();
+  });
+  createEffect(() => {
+    document.documentElement.dataset["density"] = density.get();
   });
   createEffect(() => {
     document.documentElement.dataset["readerWidth"] = readerWidth.get();

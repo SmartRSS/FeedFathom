@@ -49,6 +49,16 @@ export const theme = storedPreference(
   "auto",
 );
 
+// How much space the chrome takes, separate from the theme: "compact" halves
+// the spacing scale and drops rows to 20px with the browser's line height.
+// Stored per device like every preference, so a phone and a desktop can
+// differ.
+export const density = storedPreference(
+  "density",
+  ["comfortable", "compact"],
+  "comfortable",
+);
+
 // The only OS-level signal a webpage can actually read here: browsers
 // don't expose which desktop theme or OS version is running (and
 // User-Agent sniffing for that is both unreliable and being actively
