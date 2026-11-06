@@ -5,9 +5,9 @@ import { mailConfigured, sendLater } from "#features/auth/mail-sender.ts";
 import { Elysia } from "elysia";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { Value } from "typebox/value";
 import { isDisposableEmail } from "disposable-email-domains-js";
 import { registerRequest } from "#shared/contracts/requests.ts";
+import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import {
   registrationResponse,
@@ -15,7 +15,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import {
-  activationLifetime,
+  activationLifetimeMs,
   issueToken,
 } from "#features/auth/account-tokens.ts";
 
@@ -33,7 +33,7 @@ async function validateCaptcha(
   if (!token) return false;
   try {
     const response = await fetchFn(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      new URL("/turnstile/v0/siteverify", turnstileOrigin),
       {
         body: JSON.stringify({ response: token, secret }),
         headers: { "content-type": "application/json" },
@@ -76,9 +76,6 @@ export function createRegisterRoute({
     );
   };
 
-  const allowedEmailPolicy = Type.String(
-    config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
-  );
   const useEmailActivation = mailConfigured(config);
 
   return new Elysia()
@@ -112,8 +109,11 @@ export function createRegisterRoute({
         const userCount = await usersDataService.getUserCount();
         if (userCount > 0 && !config.ENABLE_REGISTRATION)
           return registrationDisabled();
-        if (!Value.Check(allowedEmailPolicy, request.email)) {
-          return jsonError("", 403);
+        if (
+          config.ALLOWED_EMAILS.length > 0 &&
+          !config.ALLOWED_EMAILS.includes(request.email)
+        ) {
+          return jsonError("This email address may not register", 403);
         }
         if (isDisposableEmail(request.email)) return accepted();
 
@@ -147,7 +147,7 @@ export function createRegisterRoute({
             if (existing.status === "inactive") {
               // Stored only while the current link is missing or expired, and
               // persisted before a link to it is sent.
-              const { expiresAt, token } = issueToken(activationLifetime);
+              const { expiresAt, token } = issueToken(activationLifetimeMs);
               if (
                 await usersDataService.refreshActivationToken(
                   existing.id,
@@ -169,7 +169,7 @@ export function createRegisterRoute({
         }
 
         const activation = useEmailActivation
-          ? issueToken(activationLifetime)
+          ? issueToken(activationLifetimeMs)
           : undefined;
         const outcome = await usersDataService.createUser(
           {

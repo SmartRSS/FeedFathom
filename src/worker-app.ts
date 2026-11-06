@@ -1,6 +1,5 @@
 import type { MainWorker } from "#features/jobs/main.ts";
 import {
-  containerPort,
   healthcheckPath,
   healthcheckResponse,
 } from "#platform/http/internal-routes.ts";
@@ -8,12 +7,15 @@ import {
 export type WorkerAppServices = {
   close: () => Promise<void>;
   mainWorker: MainWorker;
+  port: number;
   waitForMigration: () => Promise<void>;
 };
 
-export async function runWorker({
+// Returns the healthcheck server at once and `ready` when jobs are consumed.
+export function runWorker({
   close,
   mainWorker,
+  port,
   waitForMigration,
 }: WorkerAppServices) {
   let shutdownPromise: Promise<void> | undefined;
@@ -53,7 +55,7 @@ export async function runWorker({
   // reading as a crash loop, so it has to cover a normal migration; see the
   // budget and its consequences in compose.yml. A migration too slow for
   // that budget is rolled out by hand.
-  Bun.serve({
+  const healthcheckServer = Bun.serve({
     fetch(request, server) {
       if (new URL(request.url).pathname !== healthcheckPath)
         return new Response("Not Found", { status: 404 });
@@ -62,16 +64,18 @@ export async function runWorker({
         consuming,
       );
     },
-    port: containerPort,
+    port,
   });
 
-  await waitForMigration();
-
-  try {
-    await mainWorker.initialize();
-  } catch (error) {
-    console.error("Failed to initialize worker:", error);
-    throw new Error("Worker initialization failed", { cause: error });
-  }
-  consuming = true;
+  const ready = (async () => {
+    await waitForMigration();
+    try {
+      await mainWorker.initialize();
+    } catch (error) {
+      console.error("Failed to initialize worker:", error);
+      throw new Error("Worker initialization failed", { cause: error });
+    }
+    consuming = true;
+  })();
+  return { ready, server: healthcheckServer };
 }

@@ -25,13 +25,9 @@ export async function postRefreshSourceHandler(
     "outboundFetchBudget" | "sourceEnqueuer" | "userSourcesDataService"
   >,
 ) {
-  // Each call is an outbound fetch the user asked for, like find and preview.
   await outboundFetchBudget.consume(user.id);
-  const source = await userSourcesDataService.getSubscribedSource(
-    user.id,
-    body.sourceId,
-  );
-  if (!source) return jsonError("Invalid source", 400);
-  await sourceEnqueuer.enqueueSource(source);
+  if (!(await userSourcesDataService.isSubscribed(user.id, body.sourceId)))
+    return jsonError("Invalid source", 400);
+  await sourceEnqueuer.enqueueSource({ id: body.sourceId });
   return json(successResponse, { success: true });
 }

@@ -19,7 +19,7 @@ export const capAlertSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type CapAlert = Static<typeof capAlertSchema>;
+type CapAlert = Static<typeof capAlertSchema>;
 
 const capNamespace = /urn:oasis:names:tc:emergency:cap:1\.[12]/u;
 /**

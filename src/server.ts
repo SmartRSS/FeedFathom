@@ -14,8 +14,9 @@ import * as mailIngest from "#features/mail-ingest/services.ts";
 import * as reader from "#features/reader/services.ts";
 import { createServerApp, stopServerApp } from "./server-app.ts";
 
-// The server uses every service these four modules build, so spreading them
-// pulls in nothing the bundle would otherwise drop.
+// Spreading a module keeps all of its services in the bundle, including the
+// worker-only faviconRefresher and retentionService that no route reaches.
+// Their constructors only store their arguments, so they cost code size alone.
 const services = {
   ...auth,
   ...feeds,

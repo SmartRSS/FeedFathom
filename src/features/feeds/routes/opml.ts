@@ -45,33 +45,30 @@ export async function postOpmlHandler(
   return json(successResponse, { success: true });
 }
 
-// Newsletter subscriptions are left out. Their "url" is an address this
-// instance minted and routes mail for, so an outline carrying it would be a
-// feed no reader can fetch and, re-imported anywhere else, a subscription
-// nothing would ever deliver to. Everything OPML can actually represent is a
-// source with an http(s) URL.
 const byName = (left: { name: string }, right: { name: string }) =>
   left.name.localeCompare(right.name);
 
+// Newsletter subscriptions are left out. Their "url" is an address this
+// instance minted and routes mail for, so an outline carrying it would be a
+// feed no reader can fetch and, re-imported anywhere else, a subscription
+// nothing would ever deliver to.
 function subscriptionTree(
   folders: { id: number; name: string }[],
   sources: {
-    kind: null | string;
+    kind: string;
     name: string;
-    homeUrl: null | string;
+    homeUrl: string;
     parentId: null | number;
-    url: null | string;
+    url: string;
   }[],
 ): OpmlNode[] {
   const { children, roots } = groupByFolder(
-    sources.filter(
-      (source) => source.kind !== "email" && source.url?.startsWith("http"),
-    ),
+    sources.filter((source) => source.kind !== "email"),
     (source): OpmlSource => ({
-      homeUrl: source.homeUrl ?? "",
+      homeUrl: source.homeUrl,
       name: source.name,
       type: "source",
-      xmlUrl: source.url ?? "",
+      xmlUrl: source.url,
     }),
   );
   // Stable ordering keeps exports comparable even if query order changes.

@@ -175,7 +175,10 @@ export class FeedPreviewCache {
       const preview = deserializeFeedPreview(cached, feedUrl);
       if (!preview) await this.redis.del(key);
       return preview;
-    } catch {
+    } catch (error_: unknown) {
+      // A miss makes subscribe queue the feed for the worker instead, so the
+      // subscription still works; the trace says why it took longer.
+      console.error(`Failed to read feed preview for ${feedUrl}:`, error_);
       return undefined;
     }
   }

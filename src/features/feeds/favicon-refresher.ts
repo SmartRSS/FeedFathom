@@ -13,7 +13,11 @@ import {
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
-import { JobDeferral } from "#features/feeds/queued-job.ts";
+import { JobName } from "#shared/types/job-name-enum.ts";
+import {
+  finishedJobRetention,
+  JobDeferral,
+} from "#features/feeds/queued-job.ts";
 
 // How often every live source's favicon is refreshed. The gather takes each
 // source fetched since the previous run, with an hour of slack for a daily
@@ -45,6 +49,17 @@ export const refreshFaviconJobData = Type.Object({
   homeUrl: Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]),
   id: Type.Integer({ minimum: 1 }),
 });
+type RefreshFaviconJob = Static<typeof refreshFaviconJobData>;
+
+export type FaviconRefreshQueue = {
+  addBulk(
+    jobs: {
+      data: RefreshFaviconJob;
+      name: JobName;
+      opts: typeof finishedJobRetention & { jobId: string; priority: number };
+    }[],
+  ): Promise<unknown>;
+};
 
 // Deferred refreshes queue up behind one another, one slot per background
 // interval plus slack for start jitter and the round trips of a job's own
@@ -87,7 +102,29 @@ export class FaviconRefresher {
     private readonly redis: {
       send(command: "EVAL", args: string[]): Promise<unknown>;
     },
+    private readonly queue: FaviconRefreshQueue,
   ) {}
+
+  // No delay: most refreshes are answered from the HTTP cache. One that a
+  // provider defers queues for its own slot (#1087).
+  public async enqueueRefreshes(sources: readonly RefreshFaviconJob[]) {
+    await this.queue.addBulk(
+      sources.map((source) => ({
+        data: source,
+        name: JobName.RefreshFavicon,
+        opts: {
+          ...finishedJobRetention,
+          // A refresh still delayed by a provider's Retry-After keeps this
+          // id, so the next gather's add does not jump its backoff.
+          jobId: `${JobName.RefreshFavicon}-${source.id}`,
+          // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
+          // GatherJobs) first, so a large favicon run can't crowd out feed
+          // parsing.
+          priority: 10,
+        },
+      })),
+    );
+  }
 
   // The best answer, and the providers whose deferral is not a miss: those
   // may still hold a better icon, so the caller defers rather than settle. An
@@ -147,10 +184,10 @@ export class FaviconRefresher {
    * Throws a JobDeferral, carrying the job data its retry needs, when a
    * provider that may still hold a better icon asks to be retried later.
    */
-  public async refreshFavicon(job: Static<typeof refreshFaviconJobData>) {
+  public async refreshFavicon(job: RefreshFaviconJob) {
     const source = { ...job, firstRunAt: job.firstRunAt ?? Date.now() };
     // Query the free providers concurrently and keep the smallest valid
-    // image that still meets TARGET_FAVICON_SIZE (falling back to the
+    // image that still meets targetFaviconSize (falling back to the
     // biggest available if none do) -- an earlier one can succeed with a
     // smaller icon while a later one has a bigger one. unavatar.io is
     // capped at 25 requests/day on the free tier, so it's only used as a

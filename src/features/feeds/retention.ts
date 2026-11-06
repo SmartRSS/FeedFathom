@@ -249,7 +249,7 @@ async function deleteUnreachableRows(
   // to subscribers who joined before it disappeared; a later subscriber never
   // had the chance to delete it, so their missing row must not block the prune.
   //
-  // A false positive is no longer unrecoverable: user_articles is keyed on
+  // A false positive is recoverable: user_articles is keyed on
   // (source, guid) with no foreign key to articles, so a removal outlives the
   // prune and a re-inserted article stays removed. The buffer stays because
   // re-fetching content is waste, not because being wrong is destructive.

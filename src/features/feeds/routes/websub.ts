@@ -10,10 +10,7 @@ import {
   verifyHubSignature,
   webSubCallbackPath,
 } from "#features/feeds/websub.ts";
-import {
-  leaseExpiresAt,
-  resolveLeaseSeconds,
-} from "#features/feeds/websub-lease-policy.ts";
+import { resolveLeaseSeconds } from "#features/feeds/websub-lease-policy.ts";
 
 // How long the pushed body stays fresh in the cache. Long enough for the job
 // it is queued alongside to pick it up under any normal backlog, and no
@@ -27,13 +24,12 @@ const pushedBodyFreshMs = pollFloorMs;
 // already buffered, so the cap has to run while streaming the body in -- a
 // declared Content-Length alone is not evidence, and an oversized stream is
 // abandoned mid-read.
-const pushBodyLimitBytes = maximumFeedBodyBytes;
 
 const readCappedPushBody = async (
   request: Request,
 ): Promise<Buffer | undefined> => {
   const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > pushBodyLimitBytes)
+  if (Number.isFinite(declared) && declared > maximumFeedBodyBytes)
     return undefined;
 
   const reader = request.body?.getReader();
@@ -47,7 +43,7 @@ const readCappedPushBody = async (
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > pushBodyLimitBytes) {
+    if (total > maximumFeedBodyBytes) {
       // oxlint-disable-next-line eslint/no-await-in-loop
       await reader.cancel();
       return undefined;
@@ -89,7 +85,7 @@ export function createWebSubRoutes({
         const leaseSeconds = resolveLeaseSeconds(decoded["hub.lease_seconds"]);
         await websubStateService.markWebSubVerified(
           source.id,
-          leaseExpiresAt(leaseSeconds, Date.now()),
+          new Date(Date.now() + leaseSeconds * 1_000),
         );
 
         // Per spec: 2xx with the challenge echoed back verbatim as the
@@ -123,7 +119,7 @@ export function createWebSubRoutes({
       // the new document rather than the one the push replaced.
       //
       // A thin ping carries no body. Nothing to seed, so the parse skips
-      // the cache and fetches, which is what the push used to do always.
+      // the cache and fetches.
       let seeded = false;
       if (body.byteLength > 0) {
         try {

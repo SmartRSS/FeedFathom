@@ -63,7 +63,12 @@ const redisUrl = Type.Codec(Type.String({ default: defaultRedisUrl }))
 const configSchema = Type.Object(
   {
     ALLOWED_EMAILS: Type.Codec(Type.String({ default: "" }))
-      .Decode((value) => value.split(",").filter(Boolean))
+      .Decode((value) =>
+        value
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      )
       .Encode((value) => value.join(",")),
     ENABLE_REGISTRATION: booleanString(),
     WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "25", 1, 128),

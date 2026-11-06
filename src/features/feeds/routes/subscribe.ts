@@ -3,7 +3,7 @@ import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json, jsonError } from "#platform/http/json.ts";
+import { invalidRequestMessage, json, jsonError } from "#platform/http/json.ts";
 import { subscriptionResponse } from "#shared/contracts/responses.ts";
 import {
   deserializeFeedPreview,
@@ -64,12 +64,11 @@ export async function postSubscribeHandler(
     | "userSourcesDataService"
   > & { config: AppConfig },
 ) {
-  // Counted before any outbound work, including a cache hit: the budget is
-  // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   const { sourceUrl } = body;
   const isEmail = sourceUrl.kind === "email";
-  if (!config.MAIL_ENABLED && isEmail)
+  const { mailDomain } = config;
+  if (isEmail && !mailDomain)
     return jsonError("Email subscriptions are not allowed.", 400);
   const cachedPreview = isEmail
     ? undefined
@@ -82,15 +81,12 @@ export async function postSubscribeHandler(
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
-    ...(isEmail
+    ...(isEmail && mailDomain
       ? {
           // A newsletter has no site of its own; it links back to this app.
           homeUrl: new URL(request.url).origin,
           kind: "email",
-          minted: isMintedNewsletterAddress(
-            sourceUrl.value,
-            config.mailDomain ?? "",
-          ),
+          minted: isMintedNewsletterAddress(sourceUrl.value, mailDomain),
         }
       : { homeUrl: cachedPreview?.link, kind: "feed" }),
   });
@@ -99,7 +95,7 @@ export async function postSubscribeHandler(
   // mint. Answered exactly as a malformed target is (the validation error
   // server-app.ts maps), so a refusal says nothing about whether the address
   // exists or whose it is.
-  if (subscription === "refused") return jsonError("Refine Error", 422);
+  if (subscription === "refused") return jsonError(invalidRequestMessage, 422);
   if (subscription.initialized === true)
     return json(subscriptionResponse, { sourceId: subscription.source.id });
 

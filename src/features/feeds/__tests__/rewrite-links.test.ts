@@ -14,12 +14,11 @@ const testCaseSchema = Type.Object(
   { additionalProperties: false },
 );
 const testCaseCheck = Schema.Compile(testCaseSchema);
+const casesDir = join(import.meta.dir, "rewrite-links-cases");
 
 describe("rewriteLinks", () => {
   const articleUrl = "https://example.com/article";
-  const files = readdirSync(
-    "./src/features/feeds/__tests__/rewrite-links-cases",
-  )
+  const files = readdirSync(casesDir)
     .filter((file) => {
       return file.endsWith(".json");
     })
@@ -28,10 +27,7 @@ describe("rewriteLinks", () => {
     });
 
   for (const file of files) {
-    const content = readFileSync(
-      join("src/features/feeds/__tests__/rewrite-links-cases", file),
-      "utf8",
-    );
+    const content = readFileSync(join(casesDir, file), "utf8");
     const testCase: unknown = JSON.parse(content);
     if (!testCaseCheck.Check(testCase)) {
       throw new Error(`Invalid rewrite-links fixture: ${file}`);

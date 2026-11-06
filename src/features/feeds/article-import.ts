@@ -84,7 +84,7 @@ export class ArticleImporter {
    * retry after a crash between upsert and recount changes no row yet still
    * has a badge to fix.
    */
-  public async importArticles(
+  private async importArticles(
     sourceId: number,
     rows: readonly Omit<ArticleInsert, "sourceId">[],
     { alwaysRecount = false }: { alwaysRecount?: boolean } = {},

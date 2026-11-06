@@ -24,8 +24,6 @@ export async function getPreviewHandler(
     "feedParser" | "feedPreviewCache" | "outboundFetchBudget"
   >,
 ) {
-  // Counted before any outbound work, including a cache hit: the budget is
-  // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   const source = await feedParser.preview(decoded.feedUrl);
   // The sentence is what a reader sees; the fetcher's own words are for an

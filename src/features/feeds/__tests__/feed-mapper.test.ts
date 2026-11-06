@@ -253,6 +253,18 @@ describe("mapFeedToPreview", () => {
       },
     ]);
   });
+
+  // Polling resolves the feed's site against the post-redirect URL, and
+  // subscribe stores the preview's link, so the two must agree.
+  test("resolves a relative site link against where the feed was served", () => {
+    const result = mapFeedToPreview(
+      createMockFeed({ url: "/blog/" }),
+      "https://old.example/feed.xml",
+      { baseUrl: "https://new.example/feed.xml" },
+    );
+
+    expect(result.link).toBe("https://new.example/blog/");
+  });
 });
 
 const rewritten = (base: string) =>

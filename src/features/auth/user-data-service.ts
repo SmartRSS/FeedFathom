@@ -6,11 +6,8 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { SESSION_TTL_DAYS, sessions } from "#platform/db/schemas/sessions.ts";
 import { users } from "#platform/db/schemas/users.ts";
-import {
-  digestToken,
-  issueToken,
-  resetLifetime,
-} from "#features/auth/account-tokens.ts";
+import { digestToken, issueToken } from "#features/auth/account-tokens.ts";
+import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 
 const authenticatedRowsCheck = Schema.Compile(
   Type.Array(
@@ -328,7 +325,7 @@ export class UsersDataService {
 
   // Stores a fresh reset token's digest and returns the token for the mail.
   public async startPasswordReset(userId: number): Promise<string> {
-    const { expiresAt, token } = issueToken(resetLifetime);
+    const { expiresAt, token } = issueToken(passwordResetLifetime.ms);
     await this.drizzleConnection
       .update(users)
       .set({

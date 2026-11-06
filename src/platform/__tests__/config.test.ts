@@ -34,7 +34,7 @@ describe("loadConfig", () => {
   test("transforms configured strings", () => {
     expect(
       loadConfig({
-        ALLOWED_EMAILS: "one@example.com,,two@example.com",
+        ALLOWED_EMAILS: "one@example.com,, two@example.com ",
         CLEANUP_INTERVAL: "20",
         DATABASE_URL: databaseUrl,
         DB_POOL_MAX: "3",

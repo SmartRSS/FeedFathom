@@ -77,6 +77,7 @@ export const faviconRefresher = /* @__PURE__ */ new FaviconRefresher(
   httpClient,
   sourcesDataService,
   redis,
+  bullmqQueue,
 );
 export const retentionService = /* @__PURE__ */ new RetentionService(
   drizzleConnection,

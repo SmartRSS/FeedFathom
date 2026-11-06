@@ -105,7 +105,7 @@ up in the diff, instead of arriving as a quiet new import.
   `createAdminPlugin`, so the authorisation check is a property of the group
   instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
-  email handler, the email processor, and the Cloudflare email worker.
+  email handler, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop: validates each job and hands it to the
   `feeds` service that runs it, and turns what is thrown into BullMQ's
   acknowledge-or-delay.
@@ -125,8 +125,8 @@ specifiers keep their `.ts` suffix.
 
 An error type with a canonical HTTP representation is mapped once, in the
 composition root's error hook, next to the types already mapped there —
-`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError` and
-`MailRejectedError`.
+`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError`,
+`HttpDeadlineError` and `MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
 mapping could not. `find` is the example: it knows the URL it just failed to

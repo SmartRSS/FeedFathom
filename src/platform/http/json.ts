@@ -30,6 +30,9 @@ export function json<Schema extends TSchema>(
   return Response.json(value, headers ? { headers, status } : { status });
 }
 
+// What a request the schema refuses is told, whatever check refused it.
+export const invalidRequestMessage = "Invalid request.";
+
 export function jsonError(
   error: string,
   status: number,

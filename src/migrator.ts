@@ -183,9 +183,14 @@ async function predropIndexesConcurrently(
 const connectRetryDeadline = 120_000;
 const connectRetryInterval = 1_000;
 
+type ConnectRetry = { deadline?: number; interval?: number };
+
 async function reserveWhenReady(
   databaseUrl: AppConfig["DATABASE_URL"],
-  deadline: number,
+  {
+    deadline = connectRetryDeadline,
+    interval = connectRetryInterval,
+  }: ConnectRetry,
 ) {
   const giveUpAt = Date.now() + deadline;
   for (;;) {
@@ -199,7 +204,7 @@ async function reserveWhenReady(
       if (Date.now() >= giveUpAt) throw cause;
       console.log("Database is not accepting connections yet; retrying");
       // eslint-disable-next-line no-await-in-loop -- Retries are sequential by nature.
-      await Bun.sleep(connectRetryInterval);
+      await Bun.sleep(interval);
     }
   }
 }
@@ -211,9 +216,12 @@ const migrationLockKey = "feedfathom:migrations";
 export async function migrateDatabase(
   databaseUrl: AppConfig["DATABASE_URL"],
   migrationsFolder = "./drizzle",
-  deadline = connectRetryDeadline,
+  connectRetry: ConnectRetry = {},
 ) {
-  const { database, reserved } = await reserveWhenReady(databaseUrl, deadline);
+  const { database, reserved } = await reserveWhenReady(
+    databaseUrl,
+    connectRetry,
+  );
   try {
     let locked = false;
     try {

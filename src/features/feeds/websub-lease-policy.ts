@@ -18,10 +18,6 @@ export function resolveLeaseSeconds(requested: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultLeaseSeconds;
 }
 
-export function leaseExpiresAt(leaseSeconds: number, now: number): Date {
-  return new Date(now + leaseSeconds * 1_000);
-}
-
 /**
  * Whether a source with this WebSub status is worth a subscribe attempt.
  *

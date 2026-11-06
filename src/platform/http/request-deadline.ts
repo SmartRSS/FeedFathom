@@ -1,3 +1,9 @@
+export class HttpDeadlineError extends Error {
+  constructor(milliseconds: number) {
+    super(`HTTP request exceeded its ${milliseconds} ms deadline`);
+  }
+}
+
 /**
  * A wall-clock budget shared by every step of one HTTP request -- the fetch,
  * each retry, each redirect hop, and the sleeps between them.
@@ -10,12 +16,6 @@
  * The AbortController is exposed so the transport can be cancelled the moment
  * the budget runs out rather than after its current read returns.
  */
-export class HttpDeadlineError extends Error {
-  constructor(milliseconds: number) {
-    super(`HTTP request exceeded its ${milliseconds} ms deadline`);
-  }
-}
-
 export class RequestDeadline {
   readonly controller = new AbortController();
   // Exposed so a caller that has to wait for something else (a rate-limit

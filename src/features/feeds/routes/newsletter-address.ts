@@ -31,8 +31,6 @@ export async function postNewsletterAddressHandler(
     config: AppConfig;
   },
 ) {
-  // Nothing is fetched, but every call can add a row, and registration is
-  // open: the allowance find, preview and subscribe share bounds that too.
   await outboundFetchBudget.consume(user.id);
   const domain = config.mailDomain;
   if (!domain) return jsonError("Email subscriptions are not allowed.", 400);

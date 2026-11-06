@@ -22,7 +22,6 @@ import {
   type MailRouteServices,
 } from "#features/mail-ingest/routes/mail.ts";
 import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
-import type * as reader from "#features/reader/services.ts";
 import {
   createInternalRoutes,
   healthcheckPath,
@@ -32,7 +31,7 @@ import { serviceWorkerPathPattern } from "#shared/contracts/service-worker-file.
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
-import { jsonError } from "#platform/http/json.ts";
+import { invalidRequestMessage, jsonError } from "#platform/http/json.ts";
 import {
   type MailRelayRejection,
   mailRelayRejectionStatus,
@@ -43,18 +42,11 @@ export type ServerServices = AuthRouteServices &
   FeedRouteServices &
   ReaderRouteServices &
   AdminRouteServices &
-  MailRouteServices &
-  Pick<typeof reader, "articleEventHub">;
+  MailRouteServices;
 
 export type ServerAppOptions = {
   spaDirectory?: string;
 };
-
-// Bun buffers the whole body before any schema validation runs, so the cap
-// has to sit at the server level, not per-route. The largest legitimate body
-// is a pushed feed document, which can carry anything a fetch could, so the
-// cap is the fetch pipeline's. Anything larger never reaches a handler.
-export const MAX_REQUEST_BODY_BYTES = maximumFeedBodyBytes;
 
 // The origin is rate limited, or this instance's own politeness interval for
 // the host has not elapsed. The client is meant to come back, and
@@ -201,7 +193,7 @@ export async function createServerApp(
     // Elysia's own body is a dump of its internal validation state, not the
     // error envelope clients read.
     if (error instanceof ValidationError) {
-      return jsonError(error.message || "Invalid request.", 422);
+      return jsonError(invalidRequestMessage, 422);
     }
     if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
@@ -217,7 +209,7 @@ export async function createServerApp(
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
-      return jsonError("Invalid request.", 400);
+      return jsonError(invalidRequestMessage, 400);
     }
     // Our own request budget ran out. That is an upstream timeout, not a
     // malformed request, and the handlers that fetch a user-supplied URL
@@ -231,8 +223,12 @@ export async function createServerApp(
   }
 
   return (
+    // Bun buffers the whole body before any schema validation runs, so the
+    // cap has to sit at the server level, not per-route. The largest
+    // legitimate body is a pushed feed document, which can carry anything a
+    // fetch could, so the cap is the fetch pipeline's.
     new Elysia({
-      serve: { maxRequestBodySize: MAX_REQUEST_BODY_BYTES },
+      serve: { maxRequestBodySize: maximumFeedBodyBytes },
     })
       .onRequest(({ request }) => {
         requestStartedAt.set(request, performance.now());

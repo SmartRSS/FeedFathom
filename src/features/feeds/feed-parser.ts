@@ -3,8 +3,10 @@ import type {
   WebSubStatus,
 } from "#platform/db/schemas/sources.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import {
+  HttpDeferredError,
+  isNoAnswerError,
+} from "#platform/http/http-deferred-error.ts";
 import type { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { parseFeedDocument } from "#features/feeds/feed-document.ts";
 import {
@@ -107,15 +109,7 @@ export class FeedParser {
         { freshUntil },
       );
     } catch (error_: unknown) {
-      // A deferral and our own expired deadline both mean "we never got an
-      // answer", which the error hook maps to a 429 and a 504. Collapsing
-      // them into undefined would report our timeout as the user's bad URL.
-      if (
-        error_ instanceof HttpDeferredError ||
-        error_ instanceof HttpDeadlineError
-      ) {
-        throw error_;
-      }
+      if (isNoAnswerError(error_)) throw error_;
       return { failure: error_ instanceof Error ? error_.message : "" };
     }
   }

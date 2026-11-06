@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
+import { jsonError } from "./json.ts";
 
 // The port both processes listen on inside their container. compose.yml's
 // healthcheck probes it as a literal.
@@ -9,8 +10,7 @@ export const healthcheckPath = "/healthcheck";
 // Loopback only: the probe runs inside the container, and nobody outside
 // needs to learn whether this process is up.
 export function healthcheckResponse(address: string, ready: boolean) {
-  if (!isLoopbackAddress(address))
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!isLoopbackAddress(address)) return jsonError("Forbidden", 403);
   if (!ready) return Response.json({ status: "starting" }, { status: 503 });
   return Response.json({ status: "ok" });
 }
