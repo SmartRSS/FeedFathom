@@ -51,7 +51,7 @@ const notReadyCodes = new Set([
   "ERR_POSTGRES_CONNECTION_TIMEOUT",
 ]);
 
-function isNotReady(error: unknown) {
+export function isNotReady(error: unknown) {
   return (
     error instanceof SQL.PostgresError &&
     (notReadyCodes.has(error.code) || notReadyCodes.has(error.errno ?? ""))

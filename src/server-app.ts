@@ -128,7 +128,7 @@ function contentSecurityPolicy(
     scriptSources.push(
       `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
     );
-  if (turnstileSiteKey?.trim()) scriptSources.push(turnstileOrigin);
+  if (turnstileSiteKey !== undefined) scriptSources.push(turnstileOrigin);
   return `script-src ${scriptSources.join(" ")}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`;
 }
 

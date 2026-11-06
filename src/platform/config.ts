@@ -4,6 +4,7 @@ import { isLoopbackHostname } from "#shared/net/private-network-guard.ts";
 
 // Blank is unset: compose.yml passes every variable through as `${X:-}`, so
 // the defaults below are the only ones, and an unset variable arrives as "".
+// Optional strings are trimmed, and a blank one decodes to undefined.
 const integerString = (
   name: string,
   defaultValue: string | undefined,
@@ -26,10 +27,17 @@ const integerString = (
     })
     .Encode(String);
 
-const booleanString = (defaultValue = "false") =>
-  Type.Codec(Type.String({ default: defaultValue }))
+const booleanString = () =>
+  Type.Codec(Type.String({ default: "false" }))
     .Decode((value) => value === "true")
     .Encode(String);
+
+const optionalString = () =>
+  Type.Optional(
+    Type.Codec(Type.String())
+      .Decode((value): string | undefined => value.trim() || undefined)
+      .Encode((value) => value ?? ""),
+  );
 
 const databaseUrl = Type.Codec(Type.String())
   .Decode((value) => {
@@ -120,25 +128,25 @@ const configSchema = Type.Object(
     // The host newsletter addresses are minted at, when it differs from
     // FEED_FATHOM_DOMAIN: Cloudflare Email Routing is rarely configured on
     // the host the app is served from. Read through `mailDomain`.
-    MAIL_DOMAIN: Type.Optional(Type.String()),
-    MAIL_RELAY_SECRET: Type.Optional(Type.String()),
-    MAILJET_API_KEY: Type.Optional(Type.String()),
-    MAILJET_API_SECRET: Type.Optional(Type.String()),
+    MAIL_DOMAIN: optionalString(),
+    MAIL_RELAY_SECRET: optionalString(),
+    MAILJET_API_KEY: optionalString(),
+    MAILJET_API_SECRET: optionalString(),
     // The public host (and port) the app is served at. Read through
     // `publicOrigin`.
-    FEED_FATHOM_DOMAIN: Type.Optional(Type.String()),
+    FEED_FATHOM_DOMAIN: optionalString(),
     // Commit this image was built from, baked in by the Dockerfile rather than
     // supplied by the deployment, so it survives a moving tag. Optional: a
     // local build has no commit to claim.
-    FEEDFATHOM_BUILD: Type.Optional(Type.String()),
+    FEEDFATHOM_BUILD: optionalString(),
     // Header carrying the real client address, for deployments that sit
     // behind a proxy (`X-Forwarded-For`, or `CF-Connecting-IP` on Cloudflare).
     // Unset means the socket address is used, which is the right answer when
     // nothing is in front and the only safe one when something is: a header
     // trusted without a proxy to set it is a key the client picks.
-    TRUSTED_PROXY_HEADER: Type.Optional(Type.String()),
-    TURNSTILE_SITE_KEY: Type.Optional(Type.String()),
-    TURNSTILE_SECRET_KEY: Type.Optional(Type.String()),
+    TRUSTED_PROXY_HEADER: optionalString(),
+    TURNSTILE_SITE_KEY: optionalString(),
+    TURNSTILE_SECRET_KEY: optionalString(),
   },
   { additionalProperties: false },
 );
@@ -146,8 +154,8 @@ const configSchema = Type.Object(
 export type AppConfig = StaticDecode<typeof configSchema> & {
   // NODE_ENV=production: Secure cookies, the CSP, and serving the built SPA.
   production: boolean;
-  // Where mail links point. http only for localhost, whose dev server has no
-  // certificate.
+  // Where mail links point. http only for loopback hosts, whose dev server
+  // has no certificate.
   publicOrigin?: URL;
   // The host newsletter addresses are minted at, set only while mail ingest
   // is enabled.
@@ -159,25 +167,29 @@ export type AppConfig = StaticDecode<typeof configSchema> & {
 // case: the address host is wherever inbound mail is routed, which is a
 // separate deployment decision. Either way it carries the public port for link
 // building (localhost:3456 in dev), and an address host never has one.
-// First non-blank wins rather than first non-nullish: compose.yml passes
-// MAIL_DOMAIN through as `${MAIL_DOMAIN:-}`, so an unset variable arrives as
-// "" and a `??` chain would let it shadow the fallback -- which is how
-// production silently stopped advertising a newsletter host at all.
 function newsletterMailDomain(config: {
   FEED_FATHOM_DOMAIN?: string | undefined;
   MAIL_DOMAIN?: string | undefined;
   MAIL_ENABLED: boolean;
 }): string | undefined {
   if (!config.MAIL_ENABLED) return undefined;
-  return [config.MAIL_DOMAIN, config.FEED_FATHOM_DOMAIN]
-    .map((host) => host?.trim())
-    .find(Boolean)
-    ?.replace(/:\d+$/u, "");
+  return (config.MAIL_DOMAIN ?? config.FEED_FATHOM_DOMAIN)?.replace(
+    /:\d+$/u,
+    "",
+  );
 }
 
-function publicOrigin(domain: string | undefined): URL | undefined {
-  const host = domain?.trim();
-  if (!host) return undefined;
+function requirePair(
+  names: string,
+  first: string | undefined,
+  second: string | undefined,
+) {
+  if ((first === undefined) !== (second === undefined))
+    throw new Error(`${names} must both be configured`);
+}
+
+function publicOrigin(host: string | undefined): URL | undefined {
+  if (host === undefined) return undefined;
   const hostname = host.replace(/:\d+$/u, "");
   const protocol = isLoopbackHostname(hostname) ? "http" : "https";
   return new URL(`${protocol}://${host}`);
@@ -188,25 +200,23 @@ export function loadConfig(
 ): AppConfig {
   try {
     const parsed = Value.Decode(configSchema, environment);
-    if (parsed.MAIL_ENABLED && !parsed.MAIL_RELAY_SECRET?.trim()) {
+    if (parsed.MAIL_ENABLED && parsed.MAIL_RELAY_SECRET === undefined) {
       throw new Error(
         "MAIL_RELAY_SECRET is required when MAIL_ENABLED is true",
       );
     }
-    if (
-      parsed.TURNSTILE_SITE_KEY?.trim() ||
-      parsed.TURNSTILE_SECRET_KEY?.trim()
-    ) {
-      if (
-        !parsed.TURNSTILE_SITE_KEY?.trim() ||
-        !parsed.TURNSTILE_SECRET_KEY?.trim()
-      )
-        throw new Error(
-          "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
-        );
-    }
+    requirePair(
+      "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY",
+      parsed.TURNSTILE_SITE_KEY,
+      parsed.TURNSTILE_SECRET_KEY,
+    );
+    requirePair(
+      "MAILJET_API_KEY and MAILJET_API_SECRET",
+      parsed.MAILJET_API_KEY,
+      parsed.MAILJET_API_SECRET,
+    );
     const origin = publicOrigin(parsed.FEED_FATHOM_DOMAIN);
-    if (parsed.MAILJET_API_KEY && parsed.MAILJET_API_SECRET && !origin)
+    if (parsed.MAILJET_API_KEY !== undefined && !origin)
       throw new Error(
         "FEED_FATHOM_DOMAIN is required when Mailjet is configured, for the links mail carries",
       );

@@ -113,20 +113,20 @@ describe("loadConfig", () => {
   );
 
   test.each([
-    ["both blank (off)", "", ""],
-    ["both set", "secret", "site"],
-  ])("accepts Turnstile keys that are %s", (_case, secret, site) => {
-    expect(
-      loadConfig({
+    ["both blank (off)", " ", "", undefined, undefined],
+    ["both set", " secret ", "site", "secret", "site"],
+  ])(
+    "accepts Turnstile keys that are %s",
+    (_case, secret, site, expectedSecret, expectedSite) => {
+      const loaded = loadConfig({
         DATABASE_URL: databaseUrl,
         TURNSTILE_SECRET_KEY: secret,
         TURNSTILE_SITE_KEY: site,
-      }),
-    ).toMatchObject({
-      TURNSTILE_SECRET_KEY: secret,
-      TURNSTILE_SITE_KEY: site,
-    });
-  });
+      });
+      expect(loaded.TURNSTILE_SECRET_KEY).toBe(expectedSecret);
+      expect(loaded.TURNSTILE_SITE_KEY).toBe(expectedSite);
+    },
+  );
 
   test.each([
     { TURNSTILE_SITE_KEY: "site" },
@@ -139,6 +139,20 @@ describe("loadConfig", () => {
     ).toThrow(
       "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
     );
+  });
+
+  test.each([
+    { MAILJET_API_KEY: "key" },
+    { MAILJET_API_KEY: "key", MAILJET_API_SECRET: " " },
+    { MAILJET_API_SECRET: "secret" },
+  ])("rejects incomplete Mailjet configuration %#", (environment) => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        FEED_FATHOM_DOMAIN: "feeds.example.com",
+        ...environment,
+      }),
+    ).toThrow("MAILJET_API_KEY and MAILJET_API_SECRET must both be configured");
   });
 
   // compose.yml passes every variable through as ${X:-}.

@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { SQL } from "bun";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -142,6 +142,23 @@ test("stops waiting on a database it cannot sign in to", async () => {
     );
   } finally {
     await client.close();
+  }
+});
+
+test("the migrator stops retrying a database it cannot sign in to", async () => {
+  const databaseUrl = new URL(requireDisposableDatabaseUrl());
+  databaseUrl.password = "not-the-password";
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await expect(
+      migrateDatabase(databaseUrl.href, currentMigrationsFolder, {
+        deadline: 60_000,
+        interval: 10,
+      }),
+    ).rejects.toThrow(SQL.PostgresError);
+    expect(log).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
   }
 });
 

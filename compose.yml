@@ -141,6 +141,8 @@ services:
       MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-}
+      SLOW_REQUEST_MS: ${SLOW_REQUEST_MS:-}
     healthcheck: *app-healthcheck
     # The migrator is deliberately absent. Short-form depends_on could only
     # order its start anyway, never its completion, and listing it would make

@@ -77,6 +77,17 @@ test("offers same-host anchors whose path looks like a feed", () => {
   ]);
 });
 
+test.each([
+  ["https://blog.example/archive/", ["https://blog.example/archive/feed"]],
+  ["https://static.example/", []],
+])("resolves anchors against the base %s", (baseUrl, expected) => {
+  const feeds = scan("https://blog.example/post/1", {
+    anchors: [{ href: "feed", text: "Feed" }],
+    baseUrl,
+  });
+  expect(feeds.map((feed) => feed.url)).toEqual(expected);
+});
+
 test("offers the page itself when it has microformats entries", () => {
   expect(
     scan("https://blog.example/", { hasMicroformatEntries: true }),

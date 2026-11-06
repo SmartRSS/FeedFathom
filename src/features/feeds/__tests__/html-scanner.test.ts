@@ -10,7 +10,10 @@ describe("scanHtml", () => {
           <base href="https://static.example/section/">
           <link type="application/rss+xml" href="../main.xml" title="Main feed">
           <meta name="generator" content="WordPress 6">
-        </head><body><a href="/feeds/rss">Article feed</a></body></html>`,
+        </head><body>
+          <a href="/feeds/rss">Static host feed</a>
+          <a href="https://publisher.example/feeds/rss">Article feed</a>
+        </body></html>`,
       ),
     ).toEqual([
       { title: "Main feed", url: "https://static.example/main.xml" },

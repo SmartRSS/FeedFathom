@@ -17,7 +17,7 @@ export const scanLinkFeed = (
   const feeds: FeedData[] = [];
 
   for (const anchor of page.anchors) {
-    const feedUrl = anchor.href && URL.parse(anchor.href, currentUrl.href);
+    const feedUrl = anchor.href && URL.parse(anchor.href, page.baseUrl);
     if (!feedUrl || feedUrl.hostname !== currentUrl.hostname) continue;
     if (isFeedUrl(feedUrl.pathname))
       feeds.push({
