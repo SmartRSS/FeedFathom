@@ -97,8 +97,8 @@ const fakeIndexedDb = () => {
   };
 };
 
-// Runs public/sw.js against an in-memory Cache API, a counting fetch and an
-// in-memory IndexedDB, and hands back its fetch listener.
+// Runs the bundled worker against an in-memory Cache API, a counting fetch
+// and an in-memory IndexedDB, and hands back its fetch listener.
 const loadServiceWorker = (
   network: (
     path: string,
