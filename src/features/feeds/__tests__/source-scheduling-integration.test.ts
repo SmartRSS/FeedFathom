@@ -11,7 +11,7 @@ const databaseUrl = requireDisposableDatabaseUrl();
 // of retrying -- right for a container racing PostgreSQL's first boot, and
 // two minutes of nothing for a developer who simply has no PostgreSQL
 // running.
-await migrateDatabase(databaseUrl, "./drizzle", 5_000);
+await migrateDatabase(databaseUrl, "./drizzle", { deadline: 5_000 });
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 

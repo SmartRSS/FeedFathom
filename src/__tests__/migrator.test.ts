@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import {
   migrateDatabase,
@@ -22,20 +22,26 @@ test("lists every SQL migration in the Drizzle journal", async () => {
 // than exiting on the first refused connection -- compose.yml and
 // deploy/stack.yml both depend on that, and Swarm arranges no ordering at
 // all. Nothing is listening on this port, so every attempt is refused
-// immediately; taking longer than one interval proves it retried instead of
-// giving up, and still rejecting proves it gives up eventually.
+// immediately.
 test("retries an unreachable database until its deadline, then fails", async () => {
-  const started = Date.now();
+  const log = spyOn(console, "log").mockImplementation(() => {});
 
-  await expect(
-    migrateDatabase(
-      "postgresql://postgres:postgres@127.0.0.1:1/absent",
-      "./drizzle",
-      2_500,
-    ),
-  ).rejects.toThrow();
+  try {
+    await expect(
+      migrateDatabase(
+        "postgresql://postgres:postgres@127.0.0.1:1/absent",
+        "./drizzle",
+        { deadline: 200, interval: 10 },
+      ),
+    ).rejects.toThrow();
 
-  expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    const retries = log.mock.calls.filter(([line]) =>
+      String(line).includes("retrying"),
+    );
+    expect(retries.length).toBeGreaterThan(1);
+  } finally {
+    log.mockRestore();
+  }
 });
 
 // The prebuild pass exists so a populated table does not take an ACCESS
