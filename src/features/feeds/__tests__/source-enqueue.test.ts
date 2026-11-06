@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { JobName } from "#shared/types/job-name-enum.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { JobDeferral } from "#features/feeds/queued-job.ts";
 import {
+  type ParseRequest,
   type SourceParseJobHandle,
   type SourceParseQueue,
   type SourceParseRedis,
@@ -39,6 +42,15 @@ const holderFor = (state: string): SourceParseJobHandle => ({
   },
 });
 
+// The requests one run of the source's job parses.
+const parsesOf = async (enqueuer: SourceEnqueuer) => {
+  const parsed: ParseRequest[] = [];
+  await enqueuer.runParse({ id: 3 }, async (request) => {
+    parsed.push(request);
+  });
+  return parsed;
+};
+
 describe("SourceEnqueuer", () => {
   const source = { id: 3, url: "https://example.test/feed" };
   const jobId = `${JobName.ParseSource}-${source.id}`;
@@ -49,6 +61,10 @@ describe("SourceEnqueuer", () => {
     const queue: SourceParseQueue = {
       async add(name, data, options) {
         adds.push([name, data, options]);
+        return undefined;
+      },
+      async addBulk(jobs) {
+        adds.push(...jobs.map(({ data, name, opts }) => [name, data, opts]));
         return undefined;
       },
       async getJob(id) {
@@ -72,7 +88,7 @@ describe("SourceEnqueuer", () => {
     expect(adds).toEqual([
       [
         JobName.ParseSource,
-        { id: 3, skipCache: true, trigger: "manual", url: source.url },
+        { id: 3, skipCache: true, trigger: "manual" },
         {
           jobId,
           lifo: true,
@@ -104,7 +120,10 @@ describe("SourceEnqueuer", () => {
       }
 
       expect(adds).toEqual([]);
-      expect(await enqueuer.takePendingRefresh(source.id)).toEqual(followUp);
+      expect(await parsesOf(enqueuer)).toEqual([
+        { id: source.id },
+        { id: source.id, ...followUp, trigger: "manual" },
+      ]);
     },
   );
 
@@ -118,16 +137,54 @@ describe("SourceEnqueuer", () => {
     expect(adds).toHaveLength(1);
   });
 
-  test("takePendingRefresh coalesces to one request, or none", async () => {
+  test("a run answers the requests that piled up during it once", async () => {
     const { queue } = fakeQueue(null);
     const { redis } = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
 
-    expect(await enqueuer.takePendingRefresh(source.id)).toEqual({
-      skipCache: true,
-    });
+    expect(await parsesOf(enqueuer)).toEqual([
+      { id: source.id },
+      { id: source.id, skipCache: true, trigger: "manual" },
+    ]);
     // The take is the consume: the same burst cannot be answered twice.
-    expect(await enqueuer.takePendingRefresh(source.id)).toBeNull();
-    expect(await enqueuer.takePendingRefresh(999)).toBeNull();
+    expect(await parsesOf(enqueuer)).toEqual([{ id: source.id }]);
+  });
+
+  // The follow-up runs on intent already taken off the marker, and a deferred
+  // job retries from its data -- so the deferral carries that intent, or the
+  // retry would parse the original request and lose the bypass (#847).
+  test("a deferred follow-up hands its intent to the retry", async () => {
+    const { queue } = fakeQueue(null);
+    const { redis } = fakeRedis({ [pendingKey]: "1" });
+    const enqueuer = new SourceEnqueuer(queue, redis);
+    const retryAt = Date.now() + 60_000;
+
+    const run = enqueuer.runParse(
+      { id: source.id, skipCache: false },
+      async (request) => {
+        if (request.trigger === "manual") throw new HttpDeferredError(retryAt);
+      },
+    );
+
+    const deferral = await run.catch((error: unknown) => error);
+    expect(deferral).toBeInstanceOf(JobDeferral);
+    expect(deferral).toMatchObject({
+      data: { id: source.id, skipCache: true, trigger: "manual" },
+      retryAt,
+    });
+  });
+
+  test("queues each due source behind explicit requests", async () => {
+    const { queue, adds } = fakeQueue(null);
+    await new SourceEnqueuer(queue, fakeRedis().redis).enqueueDueSources([
+      source,
+    ]);
+    expect(adds).toEqual([
+      [
+        JobName.ParseSource,
+        { id: source.id },
+        { jobId, removeOnComplete: { count: 0 }, removeOnFail: { count: 0 } },
+      ],
+    ]);
   });
 });

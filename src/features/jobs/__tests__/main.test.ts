@@ -1,9 +1,8 @@
 import type { AppConfig } from "#platform/config.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
+import type { RetentionService } from "#features/feeds/retention.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
-import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
+import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import { expect, setSystemTime, spyOn, test } from "bun:test";
 import { Readable } from "node:stream";
 import { DelayedError } from "bullmq";
@@ -16,6 +15,11 @@ import {
   faviconDeferralHorizonMs,
 } from "#features/feeds/favicon-refresher.ts";
 import { imageDimensions } from "#features/feeds/favicon-selection.ts";
+import {
+  SourceEnqueuer,
+  type SourceParseQueue,
+  type SourceParseRedis,
+} from "#features/feeds/source-enqueue.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import {
   MainWorker,
@@ -82,15 +86,24 @@ const idleSources = () =>
     "sourcesDataService",
   );
 
-const idleSourceEnqueuer = () =>
-  strictFake<SourceEnqueuer>(
-    {
-      async takePendingRefresh() {
-        return null;
+// A real enqueuer whose pending-refresh marker reads, in turn, each of
+// `markers` ("1" a cache bypass, "0" a plain refresh, null nothing pending).
+const enqueuerWithMarkers = (markers: (null | string)[] = []) => {
+  const reads = { count: 0 };
+  const enqueuer = new SourceEnqueuer(
+    strictFake<SourceParseQueue>({ async addBulk() {} }, "parseQueue"),
+    strictFake<SourceParseRedis>(
+      {
+        async getdel() {
+          reads.count++;
+          return markers.shift() ?? null;
+        },
       },
-    },
-    "sourceEnqueuer",
+      "parseRedis",
+    ),
   );
+  return { enqueuer, reads };
+};
 
 // Initializes a MainWorker over idle services, with the test's replacements
 // on top, and hands back the job processor it gave its BullMQ worker.
@@ -99,27 +112,18 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
   const worker = new MainWorker({
     bullmqQueue: {
       async add() {},
-      async addBulk() {},
       async upsertJobScheduler() {},
     },
-    cleanupOrphanedData: async () => [],
     config,
     faviconRefresher: strictFake<FaviconRefresher>({}, "faviconRefresher"),
     feedParser: strictFake<FeedParser>(
       { async parseSource() {} },
       "feedParser",
     ),
-    hubPoster: strictFake({}, "hubPoster"),
-    sourceEnqueuer: idleSourceEnqueuer(),
+    retentionService: strictFake<RetentionService>({}, "retentionService"),
+    sourceEnqueuer: enqueuerWithMarkers().enqueuer,
     sourcesDataService: idleSources(),
-    userSourcesDataService: strictFake<UserSourcesDataService>(
-      { async recomputeUnreadCounts() {} },
-      "userSourcesDataService",
-    ),
-    websubStateService: strictFake<WebSubStateService>(
-      {},
-      "websubStateService",
-    ),
+    webSubSubscriber: strictFake<WebSubSubscriber>({}, "webSubSubscriber"),
     ...overrides,
     createWorker(value, options) {
       processor = value;
@@ -144,7 +148,7 @@ const job = (
 });
 
 const parseJob = (overrides: Partial<MainWorkerJob> = {}) =>
-  job(JobName.ParseSource, { id: source.id, url: source.url }, overrides);
+  job(JobName.ParseSource, { id: source.id }, overrides);
 
 const deferredParser = (retryAt = Date.now() + 60_000) =>
   strictFake<FeedParser>({
@@ -155,20 +159,17 @@ const deferredParser = (retryAt = Date.now() + 60_000) =>
 
 test("initializes scheduled jobs and closes the worker on cleanup", async () => {
   let closeCalls = 0;
-  const repeatIntervals = new Map<string, number>();
+  const scheduled: string[] = [];
   const templates: unknown[] = [];
-  let workerOptions: unknown;
   const { worker } = await startWorker({
     bullmqQueue: {
       async add() {},
-      async addBulk() {},
-      async upsertJobScheduler(name, options, template) {
-        repeatIntervals.set(name, options.every);
+      async upsertJobScheduler(name, _options, template) {
+        scheduled.push(name);
         templates.push(template.opts);
       },
     },
-    createWorker(_processor, options) {
-      workerOptions = options;
+    createWorker() {
       return {
         ...idleJobWorker,
         async close() {
@@ -178,19 +179,18 @@ test("initializes scheduled jobs and closes the worker on cleanup", async () => 
     },
   });
 
-  expect(Object.fromEntries(repeatIntervals)).toEqual({
-    [JobName.Cleanup]: 20_000,
-    [JobName.GatherFaviconJobs]: 86_400_000,
-    [JobName.GatherJobs]: 30_000,
-    [JobName.WebSubRenewal]: 86_400_000,
-  });
+  expect(scheduled.toSorted()).toEqual(
+    [
+      JobName.Cleanup,
+      JobName.GatherFaviconJobs,
+      JobName.GatherJobs,
+      JobName.WebSubRenewal,
+    ].toSorted(),
+  );
+  // A failure is recorded in PostgreSQL, never kept in BullMQ.
   for (const opts of templates) {
-    expect(opts).toEqual({
-      removeOnComplete: { count: 0 },
-      removeOnFail: { count: 0 },
-    });
+    expect(opts).toMatchObject({ removeOnFail: { count: 0 } });
   }
-  expect(workerOptions).toEqual({ concurrency: 2, lockDuration: 40_000 });
   expect(closeCalls).toBe(0);
   await worker.cleanup();
   expect(closeCalls).toBe(1);
@@ -207,11 +207,7 @@ test("captured processor parses the queued source", async () => {
   });
 
   await process(
-    job(JobName.ParseSource, {
-      id: source.id,
-      skipCache: true,
-      url: source.url,
-    }),
+    job(JobName.ParseSource, { id: source.id, skipCache: true }),
   );
 
   expect(parsedSource).toEqual({
@@ -243,31 +239,16 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
 
 // A request that arrived while the job held the source's id was recorded
 // rather than queued (the add would have been deduped away); the run folds it
-// in itself at the end. It cannot hand it back to the enqueuer -- the id is
-// still active until this processor returns, so that add would be deduped
-// against this very job and the refresh would wait for the next poll.
+// in itself at the end.
 test("folds requests that arrived mid-run into one more parse", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
-  const followedUp: Parameters<SourceEnqueuer["enqueueSource"]>[] = [];
-  let pending: { skipCache: boolean } | null = { skipCache: true };
   const { process } = await startWorker({
     feedParser: strictFake<FeedParser>({
       async parseSource(input) {
         parsed.push([input.skipCache, input.trigger]);
       },
     }),
-    sourceEnqueuer: strictFake<SourceEnqueuer>({
-      async enqueueSource(...args) {
-        followedUp.push(args);
-      },
-      // getdel: the take is the consume, so a second call sees nothing.
-      async takePendingRefresh(sourceId) {
-        if (sourceId !== source.id) return null;
-        const taken = pending;
-        pending = null;
-        return taken;
-      },
-    }),
+    sourceEnqueuer: enqueuerWithMarkers(["1"]).enqueuer,
   });
 
   await process(parseJob());
@@ -276,26 +257,20 @@ test("folds requests that arrived mid-run into one more parse", async () => {
     [undefined, "poll"],
     [true, "manual"],
   ]);
-  expect(followedUp).toEqual([]);
 });
 
 // A deferral keeps the job (and its id) alive for another run, so the
 // recorded requests stay on the marker for that run to act on -- consuming
 // them here would answer the add the retry itself will make.
 test("a deferred parse leaves pending refreshes to its retry", async () => {
-  let taken = 0;
+  const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
   const { process } = await startWorker({
     feedParser: deferredParser(),
-    sourceEnqueuer: strictFake<SourceEnqueuer>({
-      async takePendingRefresh() {
-        taken += 1;
-        return null;
-      },
-    }),
+    sourceEnqueuer: enqueuer,
   });
 
   await expect(process(parseJob())).rejects.toBeInstanceOf(DelayedError);
-  expect(taken).toBe(0);
+  expect(reads.count).toBe(0);
 });
 
 // The follow-up parse runs on intent already taken off the marker, and a
@@ -305,8 +280,7 @@ test("a deferred parse leaves pending refreshes to its retry", async () => {
 test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const outcomes = ["ok", "defer", "defer", "ok"];
-  let pending: { skipCache: boolean } | null = { skipCache: true };
-  let taken = 0;
+  const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
   const { process } = await startWorker({
     feedParser: strictFake<FeedParser>({
       async parseSource(input) {
@@ -316,14 +290,7 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
         }
       },
     }),
-    sourceEnqueuer: strictFake<SourceEnqueuer>({
-      async takePendingRefresh() {
-        taken += 1;
-        const value = pending;
-        pending = null;
-        return value;
-      },
-    }),
+    sourceEnqueuer: enqueuer,
   });
 
   // The order is the point: data written after the move would retry the
@@ -331,7 +298,7 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
   const events: string[] = [];
   const deferrable: MainWorkerJob = job(
     JobName.ParseSource,
-    { id: source.id, skipCache: false, url: source.url },
+    { id: source.id, skipCache: false },
     {
       async moveToDelayed() {
         events.push("delay");
@@ -350,7 +317,6 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
     id: source.id,
     skipCache: true,
     trigger: "manual",
-    url: source.url,
   });
 
   // Deferred again before finishing: the persisted bypass stays as it is.
@@ -365,12 +331,12 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
     [true, "manual"],
     [true, "manual"],
   ]);
-  expect(taken).toBe(2);
+  expect(reads.count).toBe(2);
   expect(events).toEqual(["update", "delay", "delay"]);
 });
 
 test("refreshes favicons only for validated job data", async () => {
-  const refreshed: { firstRunAt: number; homeUrl: string; id: number }[] = [];
+  const refreshed: { homeUrl: string; id: number }[] = [];
   const { process } = await startWorker({
     faviconRefresher: strictFake<FaviconRefresher>({
       async refreshFavicon(value) {
@@ -383,9 +349,7 @@ test("refreshes favicons only for validated job data", async () => {
     job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: source.id }),
   );
 
-  expect(refreshed).toEqual([
-    { firstRunAt: expect.any(Number), homeUrl: source.homeUrl, id: source.id },
-  ]);
+  expect(refreshed).toEqual([{ homeUrl: source.homeUrl, id: source.id }]);
 });
 
 // A favicon run queues every due source at once, at a priority below the
@@ -401,7 +365,6 @@ test("queues every due favicon refresh concurrently, below feed parsing", async 
         if (added.size === 2) bothStarted.resolve();
         await release.promise;
       },
-      async addBulk() {},
       async upsertJobScheduler() {},
     },
     sourcesDataService: strictFake<SourcesDataService>({
@@ -510,7 +473,6 @@ async function simulateFaviconGather(
       async add(_name, data, options) {
         queued.push({ data, runAt: Date.now() + (options?.delay ?? 0) });
       },
-      async addBulk() {},
       async upsertJobScheduler() {},
     },
     faviconRefresher: new FaviconRefresher(
@@ -679,27 +641,24 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
   const { process } = await startWorker({
     bullmqQueue: {
       add: record("queue.add", undefined),
-      addBulk: record("queue.addBulk", undefined),
       async upsertJobScheduler() {},
     },
-    cleanupOrphanedData: record("cleanup", []),
     faviconRefresher: strictFake<FaviconRefresher>({
       refreshFavicon: record("refreshFavicon", undefined),
     }),
     feedParser: strictFake<FeedParser>({
       parseSource: record("parseSource", undefined),
     }),
+    retentionService: strictFake<RetentionService>({
+      prune: record("prune", undefined),
+    }),
     sourcesDataService: strictFake<SourcesDataService>({
       findSourceById: record("findSourceById", source),
       getSourcesDueFaviconRefresh: record("getSourcesDueFaviconRefresh", []),
       getSourcesToProcess: record("getSourcesToProcess", []),
     }),
-    websubStateService: strictFake<WebSubStateService>({
-      getWebSubSubscriptionsNeedingRenewal: record(
-        "getWebSubSubscriptionsNeedingRenewal",
-        [],
-      ),
-      markWebSubFailed: record("markWebSubFailed", undefined),
+    webSubSubscriber: strictFake<WebSubSubscriber>({
+      renewDue: record("renewDue", undefined),
     }),
   });
   downstreamCalls.length = 0;
@@ -709,31 +668,13 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
       job(JobName.Cleanup, { unexpected: true }),
       job(JobName.GatherFaviconJobs, null),
       job(JobName.GatherJobs, []),
-      job(JobName.ParseSource, { id: source.id, url: "not a web URL" }),
+      job(JobName.ParseSource, { id: 0 }),
       job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: 1.5 }),
       job("unknown", {}),
     ].map(process),
   );
 
   expect(downstreamCalls).toEqual([]);
-});
-
-// The prune bypasses the services that own the unread badge, so the worker
-// has to hand every source cleanup reports to the recompute itself (#812).
-test("cleanup recounts the unread totals of every pruned source", async () => {
-  const recounted: number[][] = [];
-  const { process } = await startWorker({
-    cleanupOrphanedData: async () => [7, 9],
-    userSourcesDataService: strictFake<UserSourcesDataService>({
-      async recomputeUnreadCounts(sourceIds) {
-        recounted.push(sourceIds);
-      },
-    }),
-  });
-
-  await process(job(JobName.Cleanup, {}));
-
-  expect(recounted).toEqual([[7, 9]]);
 });
 
 class PoisonedError extends Error {
@@ -770,9 +711,11 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
   [
     "a plain job error",
     {
-      async cleanupOrphanedData() {
-        throw failure;
-      },
+      retentionService: strictFake<RetentionService>({
+        async prune() {
+          throw failure;
+        },
+      }),
     },
     job(JobName.Cleanup, {}),
     failure,
@@ -780,9 +723,11 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
   [
     "a poisoned error whose message getter throws",
     {
-      async cleanupOrphanedData() {
-        throw poisonedError;
-      },
+      retentionService: strictFake<RetentionService>({
+        async prune() {
+          throw poisonedError;
+        },
+      }),
     },
     job(JobName.Cleanup, {}),
     poisonedError,

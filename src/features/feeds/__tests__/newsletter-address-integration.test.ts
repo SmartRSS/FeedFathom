@@ -11,7 +11,7 @@ import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { RetentionService } from "#features/feeds/retention.ts";
 import { postNewsletterAddressHandler } from "#features/feeds/routes/newsletter-address.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
@@ -52,6 +52,7 @@ const articleImporter = new ArticleImporter(
   articlesDataService,
   userSourcesDataService,
   { publish() {} },
+  sourcesDataService,
 );
 const emailHandler = new EmailHandler(sourcesDataService, articleImporter);
 const config = strictFake<AppConfig>(
@@ -165,7 +166,13 @@ const articleTitles = async (sourceId: number) =>
       SELECT title FROM articles WHERE source_id = ${sourceId} ORDER BY id`
   ).map(({ title }) => title);
 
-const cleanup = () => cleanupOrphanedData(drizzleConnection, 0, 0, 0);
+const prune = (USER_EXPIRY_DAYS: number) =>
+  new RetentionService(drizzleConnection, userSourcesDataService, {
+    ARTICLE_STALE_AFTER_DAYS: 0,
+    USER_DORMANT_AFTER_DAYS: 0,
+    USER_EXPIRY_DAYS,
+  }).prune();
+const cleanup = () => prune(0);
 
 test("mail to a minted address is kept before Subscribe and read after it", async () => {
   const reserved = await post("/newsletter-address", {
@@ -372,7 +379,7 @@ test("an older shared address passes to its next subscriber when its owner expir
   await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE url = ${owned}`;
   await client`UPDATE users SET last_seen_at = NOW() - INTERVAL '10 days' WHERE id = ${account.id}`;
 
-  await cleanupOrphanedData(drizzleConnection, 0, 0, 5);
+  await prune(5);
 
   expect((await sourceRows()).map(({ url }) => url)).toEqual([address]);
   expect(await subscribers(legacy!.id)).toEqual([other.id]);

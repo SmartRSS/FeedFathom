@@ -1,20 +1,25 @@
-import { type AnyColumn, and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  type AnyColumn,
+  and,
+  eq,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import { webSubRenewalIntervalMs } from "#features/feeds/websub-subscriber.ts";
 
 // The column's current value on a pending subscription, else `fresh`.
 const pendingOr = (column: AnyColumn, fresh: string) =>
   sql<string>`CASE WHEN ${sources.websubStatus} = 'pending' THEN COALESCE(${column}, ${fresh}) ELSE ${fresh} END`;
 
 /**
- * WebSub subscription lease state on a source: the subscribe-attempt claim,
- * discovery record, verification/failure transitions, callback lookup and the
- * renewal sweep query.
- *
- * Deliberately free of orchestration -- POSTing to the hub stays with the
- * callers (FeedParser, MainWorker); this only owns the columns that make the
- * hub conversation reproducible.
+ * The WebSub columns of a source, which make the hub conversation
+ * reproducible. Talking to the hub is WebSubSubscriber's.
  */
 export class WebSubStateService {
   constructor(
@@ -115,23 +120,28 @@ export class WebSubStateService {
     ).at(0);
   }
 
-  // The daily renewal job (see MainWorker) selects verified subscriptions
-  // with expired leases or leases expiring within a day. Late or missed runs
-  // can let a lease lapse before the next attempt.
+  // Verified subscriptions whose lease has expired or expires before the
+  // next renewal run. A late or missed run can let a lease lapse first.
+  // recordWebSubDiscovery writes the hub columns together before a source can
+  // be verified, so the IS NOT NULL tests drop nothing real.
   public async getWebSubSubscriptionsNeedingRenewal() {
     return await this.drizzleConnection
       .select({
-        callbackToken: sources.websubCallbackToken,
-        hubUrl: sources.websubHubUrl,
+        callbackToken: sql<string>`${sources.websubCallbackToken}`,
+        hubUrl: sql<string>`${sources.websubHubUrl}`,
         id: sources.id,
-        secret: sources.websubSecret,
-        topicUrl: sources.websubTopicUrl,
+        secret: sql<string>`${sources.websubSecret}`,
+        topicUrl: sql<string>`${sources.websubTopicUrl}`,
       })
       .from(sources)
       .where(
         and(
           eq(sources.websubStatus, "verified"),
-          sql`${sources.websubLeaseExpiresAt} <= NOW() + INTERVAL '1 day'`,
+          isNotNull(sources.websubCallbackToken),
+          isNotNull(sources.websubHubUrl),
+          isNotNull(sources.websubSecret),
+          isNotNull(sources.websubTopicUrl),
+          sql`${sources.websubLeaseExpiresAt} <= NOW() + ${webSubRenewalIntervalMs} * INTERVAL '1 millisecond'`,
         ),
       );
   }

@@ -45,6 +45,7 @@ const articleImporter = new ArticleImporter(
   articlesDataService,
   userSourcesDataService,
   { publish() {} },
+  sourcesDataService,
 );
 const reader = createReaderRoutes(
   strictFake<ReaderRouteServices>(

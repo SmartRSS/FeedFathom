@@ -37,12 +37,16 @@ redis.onclose = () => {
 };
 await redis.connect();
 
+// The one BullMQ queue: the server and the worker add to it, the worker
+// consumes it.
+export const jobQueueName = "tasks";
+
 // BullMQ requires maxRetriesPerRequest: null, so this connection is
 // configured rather than handed the URL alone.
 const bullmqRedis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
-const bullmqQueue = new Queue("tasks", { connection: bullmqRedis });
+const bullmqQueue = new Queue(jobQueueName, { connection: bullmqRedis });
 const drizzleConnection = createDrizzleConnection(config.DATABASE_URL, {
   max: config.DB_POOL_MAX,
 });

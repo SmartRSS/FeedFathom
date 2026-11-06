@@ -4,7 +4,7 @@ import {
   type FeedMapperItem,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
-import { parseXmlFeed } from "#features/feeds/feed-parser.ts";
+import { parseXmlFeed } from "#features/feeds/feed-document.ts";
 
 const casesDir = "src/features/feeds/__tests__/cap-entry-cases";
 const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();

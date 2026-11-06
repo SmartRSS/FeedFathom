@@ -1,269 +1,66 @@
-import { parseFeed } from "@rowanmanning/feed-parser";
-import { parseContactString } from "@rowanmanning/feed-parser/lib/utils/parse-contact-string.js";
-import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
-import { Type } from "typebox";
-import Schema from "typebox/schema";
-import { dateType } from "#shared/validation/typebox-policy.ts";
-import { decodeBody, detectEncoding } from "#shared/util/decode-body.ts";
+import type {
+  FetchTrigger,
+  WebSubStatus,
+} from "#platform/db/schemas/sources.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
-import { rejectXmlEntityDeclarations } from "#platform/xml.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import type { RedirectMap } from "#features/feeds/redirect-map.ts";
+import { parseFeedDocument } from "#features/feeds/feed-document.ts";
 import {
-  inCapScope,
-  mentionsCapNamespace,
-  readCapAlert,
-} from "#features/feeds/cap-entry.ts";
-import { parseFeedDate } from "#features/feeds/feed-date.ts";
-import {
-  type FeedMapperItem,
-  currentFeedItems,
-  mapFeedItemToArticle,
+  feedHomeUrl,
+  mapFeedToArticles,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
-import {
-  asHtmlText,
-  isJsonFeedText,
-  parseJsonFeed,
-} from "#features/feeds/json-feed-parser.ts";
-import {
-  isMicroformatHtml,
-  parseMicroformatFeed,
-} from "#features/feeds/microformat-feed-parser.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import type { WebSubStateService } from "#features/feeds/websub-state-service.ts";
-import {
-  discoverWebSub,
-  requestHubSubscription,
-  type WebSubDiscovery,
-} from "#features/feeds/websub.ts";
+import { discoverWebSub } from "#features/feeds/websub.ts";
+import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
-import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
-import { hasHtmlTag, stripHtmlTags } from "#features/feeds/plain-text.ts";
-
-const nullableString = Type.Union([Type.String(), Type.Null()]);
-const feedAuthorProjection = Type.Object(
-  { name: nullableString },
-  { additionalProperties: true },
-);
-const feedItemProjection = Type.Object(
-  {
-    authors: Type.Array(feedAuthorProjection),
-    content: nullableString,
-    description: nullableString,
-    id: nullableString,
-    published: Type.Union([dateType, Type.Null()]),
-    title: nullableString,
-    updated: Type.Union([dateType, Type.Null()]),
-    url: nullableString,
-  },
-  { additionalProperties: true },
-);
-const feedProjection = Type.Object(
-  {
-    description: nullableString,
-    items: Type.Array(feedItemProjection),
-    title: nullableString,
-    url: nullableString,
-  },
-  { additionalProperties: true },
-);
-const feedProjectionCheck = Schema.Compile(feedProjection);
-const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
-
-export function detectFeedEncoding(
-  buffer: ArrayBuffer,
-  contentType: string | null,
-): string {
-  return detectEncoding(
-    new Uint8Array(buffer),
-    contentType,
-    xmlEncodingPattern,
-    200,
-  );
-}
-
-export function decodeFeedBody(
-  buffer: ArrayBuffer,
-  contentType: string | null,
-): string {
-  return decodeBody(
-    new Uint8Array(buffer),
-    contentType,
-    xmlEncodingPattern,
-    200,
-  );
-}
-
-export function validateParsedFeed(value: unknown): void {
-  if (!feedProjectionCheck.Check(value)) {
-    throw new Error("Feed parser returned an invalid feed projection");
-  }
-}
-
-// feed-parser reads every RSS and Atom date, on items and on the feed, through
-// this one getter, which hands the text to a bare `new Date`. Replacing the
-// getter routes them all through parseFeedDate; the date-zones fixtures fail
-// if a feed-parser release stops reading dates through it.
-Object.defineProperty(Element.prototype, "textContentAsDate", {
-  get(this: Element) {
-    return parseFeedDate(this.textContent);
-  },
-});
-
-type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
-
-// The library splits an RSS author or dc:creator as "Name <email>" and drops
-// any word's outer angle brackets, so a name wrapped in markup (WordPress
-// h-card plugins wrap dc:creator in a span) came out as
-// "span class='p-author h-card'>Name</span". Where the raw text holds a tag,
-// the tags are stripped before the same split, over the same elements the
-// library reads. Undefined leaves the library's own reading in place, which
-// is always the case for Atom: its <author> has child elements and is not
-// split this way.
-function authorsWithoutMarkup(element: XmlElement) {
-  const raw = ["managingeditor", "author", "creator"]
-    .flatMap((name) => element.findElementsWithName(name))
-    .filter((author) =>
-      author.children.every((child) => typeof child === "string"),
-    )
-    .map((author) => author.textContentNormalized);
-  if (!raw.some(hasHtmlTag)) return undefined;
-  return raw
-    .map((text) => parseContactString(stripHtmlTags(text)))
-    .filter((author) => author !== null);
-}
-
-const isMediaRss = (element: XmlElement) =>
-  element.namespaceUri === "http://search.yahoo.com/mrss/" ||
-  element.namespaceUri === "https://search.yahoo.com/mrss/";
-
-// Media RSS's description, on the entry or its media:group. It is plain text.
-const mediaDescription = (element: XmlElement) =>
-  [element, ...element.findElementsWithName("group").filter(isMediaRss)]
-    .flatMap((parent) => parent.findElementsWithName("description"))
-    .find((child) => isMediaRss(child) && child.textContent.trim())
-    ?.textContent;
-
-/**
- * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
- * alert fields, if any, as `cap`, and its `xml:lang`, else the
- * `language=en-CA` category NAAD uses, else "", as `language`; see
- * generateArticleGuid. An entry with no body of its own,
- * such as every YouTube video, takes its Media RSS description instead.
- */
-export const parseXmlFeed = (text: string) => {
-  rejectXmlEntityDeclarations(text);
-  const feed = parseFeed(text);
-  const feedAuthors = authorsWithoutMarkup(feed.element);
-  if (feedAuthors)
-    Object.defineProperty(feed, "authors", { value: feedAuthors });
-  // An item without its own url, authors or categories falls back to the
-  // feed's, which the library recomputes on every read by wrapping each child
-  // of the channel, items included. Pinned once, reading every item is linear
-  // in the item count instead of quadratic (#1031).
-  for (const key of ["authors", "categories", "url"] as const) {
-    Object.defineProperty(feed, key, { value: feed[key] });
-  }
-  for (const item of feed.items) {
-    const authors = authorsWithoutMarkup(item.element);
-    if (authors) Object.defineProperty(item, "authors", { value: authors });
-  }
-  for (const item of feed.items) {
-    if (item.content !== null || item.description !== null) continue;
-    const description = asHtmlText(mediaDescription(item.element));
-    // The prototype's getter has no setter, so plain assignment would throw.
-    if (description)
-      Object.defineProperty(item, "description", { value: description });
-  }
-  if (!mentionsCapNamespace(text)) return feed;
-  for (const item of feed.items.filter(({ element }) => inCapScope(element))) {
-    const language =
-      item.element.getAttribute("xml:lang") ??
-      item.categories
-        .find(({ term }) => term.startsWith("language="))
-        ?.term.slice("language=".length) ??
-      "";
-    const cap = readCapAlert(item.element);
-    Object.assign(item, cap ? { cap, language } : { language });
-  }
-  return feed;
-};
 
 export class FeedParser {
   constructor(
-    private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
+    private readonly articleImporter: Pick<ArticleImporter, "recordFetch">,
     private readonly httpClient: HttpClient,
     private readonly sourcesDataService: Pick<
       SourcesDataService,
-      "failSource" | "successSource" | "updateSourceUrl"
+      "failSource" | "updateSourceUrl"
     >,
-    private readonly websubStateService: Pick<
-      WebSubStateService,
-      | "claimWebSubSubscribeAttempt"
-      | "markWebSubFailed"
-      | "recordWebSubDiscovery"
+    private readonly webSubSubscriber: Pick<
+      WebSubSubscriber,
+      "subscribe" | "wants"
     >,
     private readonly redirectMap: RedirectMap,
-    // Undefined skips WebSub (see maybeSubscribeToWebSub): without a public
-    // domain there is no callback URL a hub could reach.
-    private readonly feedFathomDomain?: string,
   ) {}
 
   public async parseSource(source: {
     id: number;
     skipCache?: boolean;
     subscriberCount?: number;
-    trigger?: "manual" | "poll" | "websub-push";
+    trigger?: FetchTrigger;
     url: string;
-    websubCallbackToken?: null | string;
-    websubHubUrl?: null | string;
-    websubSecret?: null | string;
-    websubStatus?: "failed" | "none" | "pending" | "verified";
-    websubTopicUrl?: null | string;
+    websubStatus?: WebSubStatus;
   }) {
     try {
-      const {
-        cached,
-        feed: parsedFeed,
-        finalUrl,
-        freshUntil,
-        websub,
-      } = await this.parseUrl(source.url, {
-        priority: "background",
-        skipCache: source.skipCache,
-        subscribers: source.subscriberCount,
-        websub:
-          Boolean(this.feedFathomDomain) &&
-          shouldAttemptWebSubSubscribe(source.websubStatus),
-      });
+      const { cached, feed, finalUrl, freshUntil, websub } =
+        await this.parseUrl(source.url, {
+          priority: "background",
+          skipCache: source.skipCache,
+          subscribers: source.subscriberCount,
+          websub: this.webSubSubscriber.wants(source.websubStatus),
+        });
 
-      if (websub) await this.maybeSubscribeToWebSub(source.id, websub);
+      if (websub) await this.webSubSubscriber.subscribe(source.id, websub);
 
-      const observedAt = new Date();
-      const articlesToUpsert = currentFeedItems<FeedMapperItem>(
-        parsedFeed.items,
-        observedAt.getTime(),
-      ).map((item) =>
-        Object.assign(
-          mapFeedItemToArticle(
-            item,
-            parsedFeed,
-            { id: source.id, url: source.url },
-            { baseUrl: finalUrl, now: observedAt.getTime() },
-          ),
-          { lastSeenInFeedAt: observedAt },
-        ),
+      await this.articleImporter.recordFetch(
+        source.id,
+        mapFeedToArticles(feed, source.url, { baseUrl: finalUrl }),
+        {
+          cached,
+          freshUntil,
+          homeUrl: feedHomeUrl(feed, finalUrl),
+          trigger: source.trigger ?? "poll",
+        },
       );
-      await this.articleImporter.importArticles(source.id, articlesToUpsert);
-
-      await this.sourcesDataService.successSource(source.id, {
-        cached,
-        notBefore: freshUntil ? new Date(freshUntil) : undefined,
-        observedAt,
-        trigger: source.trigger ?? "poll",
-      });
     } catch (error_: unknown) {
       if (error_ instanceof HttpDeferredError) {
         throw error_;
@@ -281,13 +78,12 @@ export class FeedParser {
   public async discoverAndSubscribeWebSub(
     sourceId: number,
     url: string,
-    websubStatus?: "failed" | "none" | "pending" | "verified",
+    websubStatus?: WebSubStatus,
   ): Promise<void> {
-    if (!this.feedFathomDomain || !shouldAttemptWebSubSubscribe(websubStatus))
-      return;
+    if (!this.webSubSubscriber.wants(websubStatus)) return;
     try {
       const { websub } = await this.parseUrl(url);
-      if (websub) await this.maybeSubscribeToWebSub(sourceId, websub);
+      if (websub) await this.webSubSubscriber.subscribe(sourceId, websub);
     } catch (error) {
       // The article-fetch path running alongside this (cached-preview upsert
       // or the enqueued parseSource job) already reports fetch/parse failures.
@@ -298,58 +94,16 @@ export class FeedParser {
     }
   }
 
-  // Never allowed to reach parseSource's try/catch: an unreachable hub says
-  // nothing about the feed's health, and marking the source failed would stop
-  // polling the content over a failed subscribe attempt.
-  private async maybeSubscribeToWebSub(
-    sourceId: number,
-    websub: WebSubDiscovery,
-  ): Promise<void> {
-    const domain = this.feedFathomDomain;
-    if (!domain) return;
-    try {
-      if (
-        !(await this.websubStateService.claimWebSubSubscribeAttempt(sourceId))
-      )
-        return;
-      const { callbackToken, secret } =
-        await this.websubStateService.recordWebSubDiscovery(
-          sourceId,
-          websub.hubUrl,
-          websub.topicUrl,
-        );
-      const result = await requestHubSubscription({
-        callbackToken,
-        domain,
-        hubPoster: this.httpClient,
-        hubUrl: websub.hubUrl,
-        secret,
-        topicUrl: websub.topicUrl,
-      });
-      if (!result.ok) {
-        console.error(
-          `WebSub subscribe failed for source ${sourceId}: ${result.error}`,
-        );
-        await this.websubStateService.markWebSubFailed(sourceId);
-      }
-    } catch (error) {
-      console.error(`WebSub subscribe threw for source ${sourceId}:`, error);
-      await this.websubStateService.markWebSubFailed(sourceId);
-    }
-  }
-
   // A failure comes back as the fetcher's reason, for the route to phrase.
   public async preview(
     sourceUrl: string,
   ): Promise<ReturnType<typeof mapFeedToPreview> | { failure: string }> {
     try {
-      const {
-        feed: parsedFeed,
-        finalUrl,
-        freshUntil,
-      } = await this.parseUrl(sourceUrl, { websub: false });
+      const { feed, finalUrl, freshUntil } = await this.parseUrl(sourceUrl, {
+        websub: false,
+      });
       return Object.assign(
-        mapFeedToPreview(parsedFeed, sourceUrl, { baseUrl: finalUrl }),
+        mapFeedToPreview(feed, sourceUrl, { baseUrl: finalUrl }),
         { freshUntil },
       );
     } catch (error_: unknown) {
@@ -416,27 +170,18 @@ export class FeedParser {
         await rememberRedirect(originalUrl, finalUrl);
       }
     }
-    const contentType = response.headers.get("content-type");
-    const text = decodeFeedBody(response.data, contentType);
-    const jsonFeed = isJsonFeedText(text) ? parseJsonFeed(text) : undefined;
-    const parsedFeed =
-      jsonFeed ??
-      (isMicroformatHtml(text, contentType)
-        ? parseMicroformatFeed(text, finalUrl)
-        : parseXmlFeed(text));
-    validateParsedFeed(parsedFeed);
+    const { feed, text, websubHubUrl } = parseFeedDocument(
+      response.data,
+      response.headers.get("content-type"),
+      finalUrl,
+    );
     return {
       cached: response.cached,
-      feed: parsedFeed,
+      feed,
       finalUrl,
       freshUntil: response.freshUntil,
       websub: websub
-        ? discoverWebSub(
-            response.headers,
-            text,
-            finalUrl,
-            jsonFeed?.websubHubUrl,
-          )
+        ? discoverWebSub(response.headers, text, finalUrl, websubHubUrl)
         : undefined,
     };
   }

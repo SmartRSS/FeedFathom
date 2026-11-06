@@ -3,7 +3,12 @@ import type { HttpClient } from "#platform/http/http-client.ts";
 import { Elysia } from "elysia";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
-import { verifyHubSignature } from "#features/feeds/websub.ts";
+import { maximumBodyBytes } from "#platform/http/http-cache-store.ts";
+import { pollFloorMs } from "#features/feeds/source-schedule-policy.ts";
+import {
+  verifyHubSignature,
+  webSubCallbackPath,
+} from "#features/feeds/websub.ts";
 import {
   leaseExpiresAt,
   resolveLeaseSeconds,
@@ -12,17 +17,16 @@ import {
 // How long the pushed body stays fresh in the cache. Long enough for the job
 // it is queued alongside to pick it up under any normal backlog, and no
 // longer: past that the parse falls back to a real fetch, which is the safe
-// direction to fail in. It also matches successSource's own fallback poll
-// spacing, so a push never pulls the next fetch earlier than a poll would.
-const pushedBodyFreshMs = 5 * 60_000;
+// direction to fail in. As the poll floor, a push never pulls the next fetch
+// earlier than a poll would.
+const pushedBodyFreshMs = pollFloorMs;
 
-// Matches the fetch pipeline's ceiling for a feed document
-// (http-client's maximumBodyBytes): a push replaces a fetch, so it can
-// carry anything a fetch could. The callback is unauthenticated, and the
-// signature only covers bytes we have already buffered, so the cap has to
-// run while streaming the body in -- a declared Content-Length alone is
-// not evidence, and an oversized stream is abandoned mid-read.
-const pushBodyLimitBytes = 24 * 1024 * 1024;
+// A push replaces a fetch, so it can carry anything a fetch could. The
+// callback is unauthenticated, and the signature only covers bytes we have
+// already buffered, so the cap has to run while streaming the body in -- a
+// declared Content-Length alone is not evidence, and an oversized stream is
+// abandoned mid-read.
+const pushBodyLimitBytes = maximumBodyBytes;
 
 const readCappedPushBody = async (
   request: Request,
@@ -64,7 +68,7 @@ export function createWebSubRoutes({
 }: WebSubRouteServices) {
   return new Elysia()
     .get(
-      "/api/websub/callback/:token",
+      webSubCallbackPath(":token"),
       { query: websubVerificationQuery },
       async ({ params, query: decoded, status }) => {
         const source = await websubStateService.findSourceByWebSubCallbackToken(
@@ -95,7 +99,7 @@ export function createWebSubRoutes({
       },
     )
     .post(
-      "/api/websub/callback/:token",
+      webSubCallbackPath(":token"),
       async ({ params, request, status }) => {
         const source = await websubStateService.findSourceByWebSubCallbackToken(
           params.token,
@@ -138,7 +142,7 @@ export function createWebSubRoutes({
           }
         }
         await sourceEnqueuer.enqueueSource(
-          { id: source.id, url: source.url },
+          { id: source.id },
           "websub-push",
           !seeded,
         );

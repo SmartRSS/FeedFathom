@@ -1,3 +1,5 @@
+import { type Static, Type } from "typebox";
+import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import {
   HttpDeferredError,
@@ -11,6 +13,12 @@ import {
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
+import { JobDeferral } from "#features/feeds/queued-job.ts";
+
+// How often every live source's favicon is refreshed. The gather takes each
+// source fetched since the previous run, with an hour of slack for a daily
+// poll landing late.
+export const faviconGatherIntervalMs = 24 * 60 * 60_000;
 
 // A refresh that a provider blocks waits at most this long past the first
 // block. That rides out the hour-long Retry-After that providers commonly
@@ -21,9 +29,22 @@ import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
 export const faviconDeferralHorizonMs = 2 * 60 * 60_000;
 
 // Past this long after a job's first run, every deferral is a miss, pacing
-// included, so each job completes, and frees its jobId, before the next daily
+// included, so each job completes, and frees its jobId, before the next
 // gather.
-export const faviconRefreshBackstopMs = 20 * 60 * 60_000;
+export const faviconRefreshBackstopMs =
+  faviconGatherIntervalMs - 4 * 60 * 60_000;
+
+// `firstRunAt` is when this refresh first ran and `deferredSince` when a
+// provider first blocked it, both carried across deferrals in the job data.
+// Only `hasFavicon: false` lets a deferred refresh store an icon: job data
+// from before the field existed may belong to a source that has one.
+export const refreshFaviconJobData = Type.Object({
+  deferredSince: Type.Optional(Type.Integer({ minimum: 0 })),
+  firstRunAt: Type.Optional(Type.Integer({ minimum: 0 })),
+  hasFavicon: Type.Optional(Type.Boolean()),
+  homeUrl: Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]),
+  id: Type.Integer({ minimum: 1 }),
+});
 
 // Deferred refreshes queue up behind one another, one slot per background
 // interval plus slack for start jitter and the round trips of a job's own
@@ -123,20 +144,11 @@ export class FaviconRefresher {
   }
 
   /**
-   * `firstRunAt` is when this refresh first ran and `deferredSince` when a
-   * provider first blocked it, both carried across deferrals in the job data.
-   * The refresher sets `deferredSince` and `hasFavicon` on `source` itself,
-   * for the caller to write back before it defers. Only `hasFavicon: false`
-   * lets a deferred refresh store an icon: job data from before the field
-   * existed may belong to a source that has one.
+   * Throws a JobDeferral, carrying the job data its retry needs, when a
+   * provider that may still hold a better icon asks to be retried later.
    */
-  public async refreshFavicon(source: {
-    deferredSince?: number;
-    firstRunAt: number;
-    hasFavicon?: boolean;
-    homeUrl: string;
-    id: number;
-  }) {
+  public async refreshFavicon(job: Static<typeof refreshFaviconJobData>) {
+    const source = { ...job, firstRunAt: job.firstRunAt ?? Date.now() };
     // Query the free providers concurrently and keep the smallest valid
     // image that still meets TARGET_FAVICON_SIZE (falling back to the
     // biggest available if none do) -- an earlier one can succeed with a
@@ -197,7 +209,7 @@ export class FaviconRefresher {
       source.hasFavicon = true;
     }
     if (found.deferrals.length > 0) {
-      throw new HttpDeferredError(await this.reserveSlot(found.deferrals));
+      throw new JobDeferral(await this.reserveSlot(found.deferrals), source);
     }
   }
 

@@ -21,7 +21,10 @@ type SubscriptionResult = {
 export class UserSourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly sourcesDataService: SourcesDataService,
+    private readonly sourcesDataService: Pick<
+      SourcesDataService,
+      "addSource" | "findSourceByUrl"
+    >,
   ) {}
 
   /**
@@ -33,17 +36,21 @@ export class UserSourcesDataService {
   public async addSourceToUser(
     userId: number,
     sourcePayload: {
-      homeUrl: string;
       initializationSnapshot?: null | string;
-      kind?: "email" | "feed" | undefined;
-      // An email address in a format this instance mints, on its mail
-      // domain. Any other address can only be subscribed to if its source
-      // already exists.
-      minted?: boolean;
       name: string;
       parentId: null | number;
       url: string;
-    },
+    } & (
+      | {
+          homeUrl: string;
+          kind: "email";
+          // An address in a format this instance mints, on its mail domain.
+          // Any other address can only be subscribed to if its source
+          // already exists.
+          minted: boolean;
+        }
+      | { homeUrl?: string | undefined; kind?: "feed" }
+    ),
   ): Promise<"refused" | SubscriptionResult | undefined> {
     if (!(await this.ownsFolder(userId, sourcePayload.parentId))) {
       console.error(
@@ -65,16 +72,22 @@ export class UserSourcesDataService {
     userId: number,
     sourcePayload: Parameters<UserSourcesDataService["addSourceToUser"]>[1],
   ): Promise<"refused" | SubscriptionResult> {
-    const isEmail = sourcePayload.kind === "email";
-    const source =
-      isEmail && !sourcePayload.minted
-        ? await this.sourcesDataService.findSourceByUrl(sourcePayload.url)
-        : await this.sourcesDataService.addSource({
-            homeUrl: sourcePayload.homeUrl,
-            kind: sourcePayload.kind,
-            url: sourcePayload.url,
-            ...(isEmail && { reservedBy: userId }),
-          });
+    let source: Source | undefined;
+    if (sourcePayload.kind !== "email") {
+      source = await this.sourcesDataService.addSource({
+        homeUrl: sourcePayload.homeUrl,
+        url: sourcePayload.url,
+      });
+    } else if (sourcePayload.minted) {
+      source = await this.sourcesDataService.addSource({
+        homeUrl: sourcePayload.homeUrl,
+        kind: "email",
+        reservedBy: userId,
+        url: sourcePayload.url,
+      });
+    } else {
+      source = await this.sourcesDataService.findSourceByUrl(sourcePayload.url);
+    }
     if (!source) return "refused";
     if (
       source.kind === "email" &&

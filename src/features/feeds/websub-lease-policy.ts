@@ -1,3 +1,5 @@
+import type { WebSubStatus } from "#platform/db/schemas/sources.ts";
+
 // What a hub is assumed to have granted when it verifies a subscription
 // without naming a lease, or names one that makes no sense.
 export const defaultLeaseSeconds = 24 * 60 * 60;
@@ -20,7 +22,6 @@ export function leaseExpiresAt(leaseSeconds: number, now: number): Date {
   return new Date(now + leaseSeconds * 1_000);
 }
 
-export type WebSubStatus = "failed" | "none" | "pending" | "verified";
 
 /**
  * Whether a source with this WebSub status is worth a subscribe attempt.

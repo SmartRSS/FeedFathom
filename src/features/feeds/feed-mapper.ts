@@ -1,64 +1,99 @@
+import {
+  type Static,
+  type TObjectOptions,
+  type TSchema,
+  Type,
+} from "typebox";
 import type { Enclosure } from "#shared/contracts/responses.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
 import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
-  type CapAlert,
+  capAlertSchema,
   isCapAlertCurrent,
   renderCapAlert,
 } from "#features/feeds/cap-entry.ts";
 import { stripHtmlTags } from "#features/feeds/plain-text.ts";
 
-export type FeedMapperItem = {
-  authors: readonly { name: string | null }[];
-  cap?: CapAlert;
-  content: string | null;
-  description: string | null;
-  id: string | null;
-  // Set, possibly empty, on every entry of a CAP feed, and only there.
-  language?: string;
-  // feed-parser's enclosures and Media RSS content; `type` is the medium
-  // attribute, else the MIME type's top level.
-  media?: readonly FeedItemMedia[];
-  published: Date | null;
-  title: string | null;
-  updated: Date | null;
-  url: string | null;
-};
+const nullableString = Type.Union([Type.String(), Type.Null()]);
 
-export type FeedItemMedia = {
-  image: string | null;
-  mimeType: string | null;
-  title: string | null;
-  type: string | null;
-  url: string;
-};
+// The fields of a parsed feed that mapping reads, whichever parser produced
+// it. `time` is how a date is held: a Date in memory, epoch milliseconds in
+// the preview cache. An open schema accepts the XML library's objects, which
+// carry more than this; the cache's closed one rejects anything else.
+const parsedFeedSchemaWith = <Time extends TSchema>(
+  time: Time,
+  options: TObjectOptions,
+) =>
+  Type.Object(
+    {
+      description: nullableString,
+      items: Type.Array(
+        Type.Object(
+          {
+            authors: Type.Array(Type.Object({ name: nullableString }, options)),
+            cap: Type.Optional(capAlertSchema),
+            content: nullableString,
+            description: nullableString,
+            id: nullableString,
+            // Set, possibly empty, on every entry of a CAP feed, and only there.
+            language: Type.Optional(Type.String()),
+            // feed-parser's enclosures and Media RSS content; `type` is the
+            // medium attribute, else the MIME type's top level.
+            media: Type.Optional(
+              Type.Array(
+                Type.Object(
+                  {
+                    image: nullableString,
+                    mimeType: nullableString,
+                    title: nullableString,
+                    type: nullableString,
+                    url: Type.String(),
+                  },
+                  options,
+                ),
+              ),
+            ),
+            published: Type.Union([time, Type.Null()]),
+            title: nullableString,
+            updated: Type.Union([time, Type.Null()]),
+            url: nullableString,
+          },
+          options,
+        ),
+      ),
+      title: nullableString,
+      url: nullableString,
+    },
+    options,
+  );
 
-export type FeedMapperInput = {
-  description: string | null;
-  items: readonly FeedMapperItem[];
-  title: string | null;
-  url: string | null;
-};
+export const parsedFeedSchema = parsedFeedSchemaWith(dateType, {
+  additionalProperties: true,
+});
+export const parsedFeedWireSchema = parsedFeedSchemaWith(Type.Number(), {
+  additionalProperties: false,
+});
 
-export type ArticlePayload = {
+export type FeedMapperInput = Static<typeof parsedFeedSchema>;
+export type FeedMapperItem = FeedMapperInput["items"][number];
+export type FeedItemMedia = NonNullable<FeedMapperItem["media"]>[number];
+
+export type FeedArticle = {
   author: string;
   content: string;
   enclosures: Enclosure[];
+  // A CAP alert's expiry: an import after it must leave the alert out.
+  expiresAt?: number;
   guid: string;
   publishedAt: Date;
-  sourceId: number;
   title: string;
   updatedAt: Date | null;
   url: string;
 };
 
-export type FeedPreviewArticle = Omit<ArticlePayload, "sourceId"> & {
-  // A CAP alert's expiry: subscribing later must not import it once passed.
-  expiresAt?: number;
-};
-
 export type FeedPreview = {
-  articles: FeedPreviewArticle[];
+  articles: FeedArticle[];
   description: string | undefined;
   feedUrl: string;
   freshUntil?: number | null;
@@ -77,11 +112,6 @@ export type FeedPreview = {
 // `baseUrl` is where the feed was fetched from after redirects, the source
 // URL by default; `now` dates an entry that carries no date of its own.
 type MapOptions = { baseUrl?: string | undefined; now?: number };
-
-export type Source = {
-  id: number;
-  url: string;
-};
 
 const baseArticleGuid = (
   item: FeedMapperItem,
@@ -125,6 +155,12 @@ const generateArticleGuid = (
   return `${guid}#${entry.toString(36)}`;
 };
 
+// The site a feed says it belongs to, resolved against `baseUrl`.
+export const feedHomeUrl = (
+  parsedFeed: FeedMapperInput,
+  baseUrl: string,
+): string | undefined => safeHttpUrl(parsedFeed.url ?? "", baseUrl) || undefined;
+
 // The HTML an article body starts from, before its links are rewritten.
 const itemBody = (item: FeedMapperItem): string =>
   (item.cap ? renderCapAlert(item.cap) : "") +
@@ -160,25 +196,26 @@ const mapEnclosures = (
 export const mapFeedItemToArticle = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
-  source: Source,
-  { baseUrl = source.url, now = Date.now() }: MapOptions = {},
-): ArticlePayload => {
+  sourceUrl: string,
+  { baseUrl = sourceUrl, now = Date.now() }: MapOptions = {},
+): FeedArticle => {
   // Content links resolve against the article, then the feed homepage, then
   // the feed itself, so relative feed URLs still land on the publisher.
-  const fallbackBase = safeHttpUrl(baseUrl, source.url) || source.url;
+  const fallbackBase = safeHttpUrl(baseUrl, sourceUrl) || sourceUrl;
   const homepage =
     safeHttpUrl(parsedFeed.url ?? "", fallbackBase) || fallbackBase;
   const url = safeHttpUrl(item.url ?? "", homepage);
   // A name that was nothing but markup falls back like a missing one.
   const authorName = stripHtmlTags(item.authors[0]?.name ?? "") || null;
+  const expiresAt = Date.parse(item.cap?.expires ?? "");
   return {
-    author: authorName ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
+    author: authorName ?? parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
     content: rewriteLinks(itemBody(item), url || homepage),
     enclosures: mapEnclosures(item.media ?? [], url || homepage),
-    guid: generateArticleGuid(item, parsedFeed, source.url),
+    ...(Number.isNaN(expiresAt) ? {} : { expiresAt }),
+    guid: generateArticleGuid(item, parsedFeed, sourceUrl),
     publishedAt: new Date(item.published ?? item.updated ?? now),
-    sourceId: source.id,
-    title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
+    title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
     updatedAt:
       item.updated || item.published
         ? new Date(item.updated ?? item.published ?? now)
@@ -188,10 +225,10 @@ export const mapFeedItemToArticle = (
 };
 
 // CAP feeds keep listing alerts that have expired, and may carry test ones.
-export const currentFeedItems = <Item extends FeedMapperItem>(
-  items: readonly Item[],
+const currentFeedItems = (
+  items: readonly FeedMapperItem[],
   now: number,
-): Item[] =>
+): FeedMapperItem[] =>
   items.filter(
     (item) => item.cap === undefined || isCapAlertCurrent(item.cap, now),
   );
@@ -218,7 +255,8 @@ const previewItems = (
   return items.slice(0, count);
 };
 
-export const mapFeedToPreviewArticles = (
+// The feed's current articles, every one of them unless `items` narrows it.
+export const mapFeedToArticles = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
   {
@@ -226,21 +264,10 @@ export const mapFeedToPreviewArticles = (
     items = parsedFeed.items,
     now = Date.now(),
   }: MapOptions & { items?: readonly FeedMapperItem[] } = {},
-): FeedPreviewArticle[] => {
-  const source = { id: 0, url: sourceUrl };
-  return currentFeedItems(items, now).map((item) => {
-    const { sourceId: _sourceId, ...article } = mapFeedItemToArticle(
-      item,
-      parsedFeed,
-      source,
-      { baseUrl, now },
-    );
-    const expiresAt = Date.parse(item.cap?.expires ?? "");
-    return Number.isNaN(expiresAt)
-      ? article
-      : Object.assign(article, { expiresAt });
-  });
-};
+): FeedArticle[] =>
+  currentFeedItems(items, now).map((item) =>
+    mapFeedItemToArticle(item, parsedFeed, sourceUrl, { baseUrl, now }),
+  );
 
 export const mapFeedToPreview = (
   parsedFeed: FeedMapperInput,
@@ -252,14 +279,14 @@ export const mapFeedToPreview = (
   const truncated = items.length < current.length;
   return Object.assign(
     {
-      articles: mapFeedToPreviewArticles(parsedFeed, sourceUrl, {
+      articles: mapFeedToArticles(parsedFeed, sourceUrl, {
         baseUrl,
         items,
         now,
       }),
       description: parsedFeed.description ?? undefined,
       feedUrl: sourceUrl,
-      link: safeHttpUrl(parsedFeed.url ?? "", sourceUrl) || undefined,
+      link: feedHomeUrl(parsedFeed, sourceUrl),
       title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
       truncated,
     },

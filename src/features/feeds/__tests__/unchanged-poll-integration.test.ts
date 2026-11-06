@@ -6,7 +6,7 @@ import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { RetentionService } from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
@@ -101,6 +101,7 @@ async function parse(body: string) {
           published.push([id, count]);
         },
       },
+      sourcesDataService,
     ),
     new HttpClient(createFakeHttpRedis(), {
       transport: async () => ({
@@ -112,13 +113,7 @@ async function parse(body: string) {
       }),
     }),
     sourcesDataService,
-    {
-      claimWebSubSubscribeAttempt: async () => false,
-      markWebSubFailed: async () => {},
-      recordWebSubDiscovery: async () => {
-        throw new Error("no WebSub in these feeds");
-      },
-    },
+    { subscribe: async () => {}, wants: () => false },
     new RedirectMap(redirectRedis),
   );
   await parser.parseSource({ id: sourceId, url: feedUrl });
@@ -267,7 +262,11 @@ test("the throttle never lets the cull take an article that is still in the feed
     // eslint-disable-next-line no-await-in-loop -- Each step reads the last.
     await parse(rss([present]));
     // eslint-disable-next-line no-await-in-loop -- Each step reads the last.
-    await cleanupOrphanedData(drizzleConnection, 365, 365, 730);
+    await new RetentionService(drizzleConnection, userSourcesDataService, {
+      ARTICLE_STALE_AFTER_DAYS: 365,
+      USER_DORMANT_AFTER_DAYS: 365,
+      USER_EXPIRY_DAYS: 730,
+    }).prune();
     // eslint-disable-next-line no-await-in-loop -- Each step reads the last.
     const remaining = await guids();
     expect(remaining).toContain("present");

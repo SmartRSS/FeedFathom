@@ -1,4 +1,25 @@
+import { type Static, Type } from "typebox";
 import { JobName } from "#shared/types/job-name-enum.ts";
+import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import {
+  finishedJobRetention,
+  JobDeferral,
+} from "#features/feeds/queued-job.ts";
+
+export const parseSourceJobData = Type.Object({
+  id: Type.Integer({ minimum: 1 }),
+  skipCache: Type.Optional(Type.Boolean()),
+  // Absent on a scheduled poll.
+  trigger: Type.Optional(
+    Type.Union([Type.Literal("manual"), Type.Literal("websub-push")]),
+  ),
+});
+export type ParseRequest = Static<typeof parseSourceJobData>;
+
+// One job id per source, so BullMQ dedupes a second add while one is queued
+// and the merge script below finds the queued one.
+const parseSourceJobId = (sourceId: number) =>
+  `${JobName.ParseSource}-${sourceId}`;
 
 const mergeQueuedRefresh = `
 local stored = redis.call('HGET', KEYS[1], 'data')
@@ -30,18 +51,15 @@ export type SourceParseQueue = {
   getJob(jobId: string): Promise<SourceParseJobHandle | null | undefined>;
   add(
     name: JobName,
-    data: {
-      id: number;
-      skipCache: boolean;
-      trigger?: "manual" | "websub-push";
-      url: string;
-    },
-    options: {
-      jobId: string;
-      lifo: boolean;
-      removeOnComplete: { count: number };
-      removeOnFail: { count: number };
-    },
+    data: ParseRequest,
+    options: typeof finishedJobRetention & { jobId: string; lifo: boolean },
+  ): Promise<unknown>;
+  addBulk(
+    jobs: {
+      data: ParseRequest;
+      name: JobName;
+      opts: typeof finishedJobRetention & { jobId: string };
+    }[],
   ): Promise<unknown>;
 };
 
@@ -56,9 +74,8 @@ export type SourceParseRedis = {
 };
 
 /**
- * Enqueues ParseSource jobs for sources that already exist. Orchestration,
- * not storage: a data service loads the sources, this hands them to the
- * worker -- callers compose the two explicitly.
+ * Queues ParseSource jobs, and runs them: a request that arrives while its
+ * source's job is running is parsed by that same run before it ends.
  */
 export class SourceEnqueuer {
   // One key per source. "1" means a request asked to bypass the cache, "0"
@@ -78,18 +95,16 @@ export class SourceEnqueuer {
   // the feed document attached: that body is already in the cache by the time
   // this is called, and skipping it would re-request what the hub just sent.
   public async enqueueSource(
-    source: { id: number; url: string },
+    source: { id: number },
     trigger: "manual" | "websub-push" = "manual",
     skipCache = true,
   ) {
-    const payload = { id: source.id, skipCache, trigger, url: source.url };
-    const holder = await this.bullmqQueue.getJob(
-      `${JobName.ParseSource}-${source.id}`,
-    );
+    const payload = { id: source.id, skipCache, trigger };
+    const jobId = parseSourceJobId(source.id);
+    const holder = await this.bullmqQueue.getJob(jobId);
     const state = holder ? await holder.getState() : null;
 
     if (holder && (state === "waiting" || state === "delayed")) {
-      const jobId = `${JobName.ParseSource}-${source.id}`;
       const merged = await this.redis.eval(
         mergeQueuedRefresh,
         5,
@@ -116,20 +131,59 @@ export class SourceEnqueuer {
     }
 
     await this.bullmqQueue.add(JobName.ParseSource, payload, {
-      jobId: `${JobName.ParseSource}-${source.id}`,
+      ...finishedJobRetention,
+      jobId,
       lifo: true,
-      removeOnComplete: { count: 0 },
-      removeOnFail: { count: 0 },
     });
   }
 
+  /** Queues a scheduled poll of each source, behind any explicit request. */
+  public async enqueueDueSources(sources: readonly { id: number }[]) {
+    await this.bullmqQueue.addBulk(
+      sources.map((source) => ({
+        data: { id: source.id },
+        name: JobName.ParseSource,
+        opts: { ...finishedJobRetention, jobId: parseSourceJobId(source.id) },
+      })),
+    );
+  }
+
   /**
-   * Takes the refresh requests that piled up while a job held the source's
-   * id, coalesced into one request. Null means nothing arrived during the
-   * run and no follow-up is owed. The take is the consume: whatever lands
-   * after it belongs to the next run.
+   * Runs one ParseSource job through `parse`. Requests that landed mid-run
+   * were recorded on a marker rather than queued, because BullMQ would have
+   * deduped their add against this job (#813). Queueing them now would hit
+   * that same dedupe -- the id stays active until the job returns -- so the
+   * run parses once more itself, the way the newest request asked. Anything
+   * arriving during that pass stays on the marker: a deferral, the next poll
+   * or the next request all reach it.
    */
-  public async takePendingRefresh(
+  public async runParse(
+    request: ParseRequest,
+    parse: (request: ParseRequest) => Promise<void>,
+  ) {
+    await parse(request);
+    const pending = await this.takePendingRefresh(request.id);
+    if (!pending) return;
+    const followUp: ParseRequest = {
+      ...request,
+      skipCache: pending.skipCache,
+      trigger: "manual",
+    };
+    try {
+      await parse(followUp);
+    } catch (error) {
+      // The marker is gone, so a retry of the original request would lose
+      // the follow-up's intent (#847).
+      if (error instanceof HttpDeferredError)
+        throw new JobDeferral(error.retryAt, followUp);
+      throw error;
+    }
+  }
+
+  // The requests that piled up while a job held the source's id, coalesced
+  // into one. Null means nothing arrived during the run. The take is the
+  // consume: whatever lands after it belongs to the next run.
+  private async takePendingRefresh(
     sourceId: number,
   ): Promise<{ skipCache: boolean } | null> {
     const value = await this.redis.getdel(
