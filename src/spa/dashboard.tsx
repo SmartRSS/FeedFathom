@@ -7,12 +7,14 @@ import {
   onMount,
   Show,
 } from "solid-js";
+import type { Static } from "typebox";
 import {
   articleResponse,
   articlesResponse,
   folderResponse,
   removedArticlesResponse,
   removedIdResponse,
+  sessionResponse,
   snoozedSourceResponse,
   successResponse,
   treeResponse,
@@ -68,11 +70,7 @@ import {
 import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
-import {
-  createAdminFlag,
-  FailureDetails,
-  type RetryState,
-} from "./failure-details.tsx";
+import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
 import { deleteTraceHeader } from "#shared/contracts/headers.ts";
 import { createExtensionReaderBridge } from "./extension-reader.ts";
@@ -169,7 +167,11 @@ export function Dashboard(props: {
     setLiveText("");
     setTimeout(() => setLiveText(message), 100);
   };
-  const isAdmin = createAdminFlag();
+  // Asked once per dashboard: admins see what lies under a failure, and a
+  // mail domain is what lets Discover mint newsletter addresses.
+  const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
+  api("/session", sessionResponse).then(setSession, () => {});
+  const isAdmin = () => session()?.user?.isAdmin ?? false;
 
   // The feeds.
   const [tree, setTree] = createSignal<TreeNode[]>([]);
@@ -1412,6 +1414,7 @@ export function Dashboard(props: {
       </Show>
       <Show when={showDiscovery() && authenticated()}>
         <FeedDiscovery
+          admin={isAdmin()}
           backPane={props.backPane}
           editing={
             editingSource() && {
@@ -1427,6 +1430,7 @@ export function Dashboard(props: {
           initialFeedUrl={props.initialFeedUrl}
           initialFolder={discoveryFolder()}
           initialNewsletter={props.initialNewsletter ?? false}
+          mailDomain={session()?.mailDomain}
           pane={props.pane}
           close={() => {
             const wasEditing = closeDiscovery();

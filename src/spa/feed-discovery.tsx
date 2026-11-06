@@ -1,9 +1,16 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import {
   foldersResponse,
   foundFeedsResponse,
   previewResponse,
-  sessionResponse,
   subscriptionResponse,
   successResponse,
   updatedSourceResponse,
@@ -21,7 +28,7 @@ import { readerHidden, type DashboardPane } from "./panes.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, ApiError, failureDetails, messageOf } from "./api.ts";
 import { ArticleMarkup } from "./article-markup.tsx";
-import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
+import { FailureDetails } from "./failure-details.tsx";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
   isNewsletterAddress,
@@ -32,6 +39,7 @@ import { ReaderHeader } from "./reader-header.tsx";
 import { BackButton } from "./page-toolbar.tsx";
 
 export function FeedDiscovery(props: {
+  admin: boolean;
   backPane(): void;
   close(): void;
   // Present only when editing an existing subscription instead of adding a
@@ -53,6 +61,9 @@ export function FeedDiscovery(props: {
   // A folder to start in (its uid), for Discover opened from that folder.
   initialFolder?: string | undefined;
   initialNewsletter?: boolean;
+  // Only set where the server ingests mail, which is what gates the
+  // newsletter button below -- a minted address is useless otherwise.
+  mailDomain: string | undefined;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
@@ -74,11 +85,7 @@ export function FeedDiscovery(props: {
   const [previewError, setPreviewError] = createSignal("");
   const [previewDetails, setPreviewDetails] =
     createSignal<ReturnType<typeof failureDetails>>();
-  const isAdmin = createAdminFlag();
   const [startupMessage, setStartupMessage] = createSignal("");
-  // Only set where the server ingests mail, which is what gates the
-  // newsletter button below -- a minted address is useless otherwise.
-  const [mailDomain, setMailDomain] = createSignal("");
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
     setMessage(messageOf(cause, fallback));
@@ -139,26 +146,24 @@ export function FeedDiscovery(props: {
         setStartupMessage(messageOf(cause, "Could not load your folders."));
       }
     })();
-    // Separate from the folders load: mail being unavailable only costs the
-    // newsletter button, so a failure here must not take the panel's own
-    // startup message with it.
-    if (!props.editing)
-      void (async () => {
-        try {
-          const session = await api("/session", sessionResponse);
-          if (disposed) return;
-          const domain = session.mailDomain;
-          setMailDomain(domain ?? "");
-          if (!domain) return;
-          if (props.initialNewsletter && !feedUrl())
-            void mintNewsletterAddress(domain).then(reportUnreserved);
-          // A reload of a minted address: reserving is idempotent, and this
-          // recovers one whose first reservation failed.
-          else if (isNewsletterAddress(feedUrl(), domain))
-            void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
-        } catch {}
-      })();
   });
+
+  // The session may still be loading when the panel opens, so this waits
+  // for the domain rather than reading it once at mount.
+  createEffect(
+    on(
+      () => props.mailDomain,
+      (domain) => {
+        if (!domain || props.editing) return;
+        if (props.initialNewsletter && !feedUrl())
+          void mintNewsletterAddress(domain).then(reportUnreserved);
+        // A reload of a minted address: reserving is idempotent, and this
+        // recovers one whose first reservation failed.
+        else if (isNewsletterAddress(feedUrl(), domain))
+          void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
+      },
+    ),
+  );
 
   function websiteIsValid() {
     if (!websiteInput) return false;
@@ -288,7 +293,7 @@ export function FeedDiscovery(props: {
   }
 
   async function useNewsletterAddress() {
-    const reserved = mintNewsletterAddress(mailDomain());
+    const reserved = mintNewsletterAddress(props.mailDomain ?? "");
     setArticles([]);
     setSelectedIndex(undefined);
     await copyAddress();
@@ -471,7 +476,7 @@ export function FeedDiscovery(props: {
             )}
           </Show>
           <Show when={previewError() ? previewDetails() : undefined}>
-            {(details) => <FailureDetails admin={isAdmin()} {...details()} />}
+            {(details) => <FailureDetails admin={props.admin} {...details()} />}
           </Show>
           {/* The address's own next step, right under it: primary until the
               title is in, which a preview fills and Subscribe then needs, so
@@ -508,11 +513,13 @@ export function FeedDiscovery(props: {
           </label>
           {/* Subscribing by email is another way in, not a step of the
               address above, so it is its own group after the fields. */}
-          <Show when={!props.editing && (mailDomain() || isEmail())}>
+          <Show
+            when={!props.editing && (Boolean(props.mailDomain) || isEmail())}
+          >
             <fieldset class="discovery-email">
               <legend>Subscribe by email</legend>
               <div class="discovery-email-actions">
-                <Show when={mailDomain()}>
+                <Show when={props.mailDomain}>
                   <button
                     type="button"
                     disabled={loading()}

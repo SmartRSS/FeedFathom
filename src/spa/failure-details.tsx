@@ -1,26 +1,4 @@
-import { createSignal, Show, type Accessor, type JSX } from "solid-js";
-import { sessionResponse } from "#shared/contracts/responses.ts";
-import { api } from "./api.ts";
-
-// Whether the signed-in account is an admin. Asked of the server the first
-// time it is read -- when a failure's details could show -- and kept for the
-// life of the view that made it, which a sign-out ends.
-export function createAdminFlag(): Accessor<boolean> {
-  const [admin, setAdmin] = createSignal(false);
-  let asked = false;
-  return () => {
-    if (!asked) {
-      asked = true;
-      api("/session", sessionResponse).then(
-        (session) => setAdmin(session.user?.isAdmin ?? false),
-        () => {
-          asked = false;
-        },
-      );
-    }
-    return admin();
-  };
-}
+import { Show, type JSX } from "solid-js";
 
 // What went wrong underneath a failure's plain sentence, for admins only:
 // everyone else gets the sentence alone.
