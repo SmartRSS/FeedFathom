@@ -8,6 +8,9 @@ import { shortcutHelp } from "./keyboard-shortcuts.ts";
 // in main.tsx serves every call site; showModal() provides the focus trap,
 // the inert background and the Esc-to-dismiss handling for free.
 
+export const isDialogOpen = () =>
+  document.querySelector("dialog[open]") !== null;
+
 // Both variants store one common resolve signature (the broadest of the
 // two), so dismissals can be routed without casting; the public helpers
 // adapt it back to their own promise type at creation.

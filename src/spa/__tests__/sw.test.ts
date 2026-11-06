@@ -1145,16 +1145,7 @@ test.each([
     await sw.loadArticle(2);
 
     expect(sw.messages).toEqual(
-      final
-        ? [
-            {
-              method: "DELETE",
-              status,
-              type: "queued-mutation-failed",
-              url: `${ORIGIN}/api/source`,
-            },
-          ]
-        : [],
+      final ? [{ type: "queued-mutation-failed" }] : [],
     );
     expect(sw.queue.rows.size).toBe(final ? 0 : 2);
   },

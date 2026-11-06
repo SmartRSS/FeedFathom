@@ -187,11 +187,11 @@ export async function api<T extends TSchema, R extends TSchema = never>(
   if (!response.ok) {
     if (Value.Check(errorResponse, payload))
       throw new ApiError(
-        "error" in payload && payload.error
-          ? payload.error
-          : response.statusText || `Request failed (${response.status})`,
+        payload.error ||
+          response.statusText ||
+          `Request failed (${response.status})`,
         response.status,
-        "detail" in payload ? payload.detail : undefined,
+        payload.detail,
       );
     throw invalidResponse(path, "malformed error payload", response.status);
   }

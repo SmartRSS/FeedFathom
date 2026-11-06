@@ -13,15 +13,22 @@ export type WorkerMessage =
   // The server's shell names different assets than the cached one served.
   | { type: "shell-updated" }
   // A removal queued offline was refused once it replayed.
-  | {
-      method: string;
-      status: number;
-      type: "queued-mutation-failed";
-      url: string;
-    };
+  | { type: "queued-mutation-failed" };
 
 export function postToWorker(message: PageMessage): void {
   navigator.serviceWorker?.controller?.postMessage(message);
+}
+
+export function isPageMessage(data: unknown): data is PageMessage {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    data.type === "offline-sync" &&
+    "sources" in data &&
+    Array.isArray(data.sources) &&
+    data.sources.every(Number.isSafeInteger)
+  );
 }
 
 export function isWorkerMessage<K extends WorkerMessage["type"]>(
