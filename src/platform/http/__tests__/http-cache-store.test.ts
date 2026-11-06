@@ -1,13 +1,12 @@
 import { expect, test } from "bun:test";
 import { Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
+import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import {
   type NativeHttpResponse,
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
-
-const maximumFeedBodyBytes = 24 * 1024 * 1024;
 
 const redis = createFakeHttpRedis;
 

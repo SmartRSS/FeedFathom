@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
+import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
+import { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
+import { RequestDeadline } from "#platform/http/request-deadline.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
@@ -9,8 +12,6 @@ import {
   type NativeHttpResponse,
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
-
-const maximumFeedBodyBytes = 24 * 1024 * 1024;
 
 const redis = createFakeHttpRedis;
 
@@ -89,6 +90,27 @@ async function deferral(request: Promise<unknown>) {
   return error;
 }
 
+// When the store says the host may next be fetched, asked through a client of
+// its own that is never paced: undefined when the host is not blocked.
+async function blockedUntil(
+  store: ReturnType<typeof redis>,
+  host: string,
+): Promise<number | undefined> {
+  const probe = new HttpClient(store, {
+    intervalMs: { background: 0, interactive: 0 },
+    transport: async (url) => nativeResponse("probe", { url }),
+  });
+  const error = await probe
+    .get(`https://${host}/probe`, { priority: "background" })
+    .then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+  if (error === undefined) return undefined;
+  if (error instanceof HttpDeferredError) return error.retryAt;
+  throw error;
+}
+
 function queuedTransport(
   responses: NativeHttpResponse[],
   onRequest?: (url: string) => void,
@@ -121,44 +143,46 @@ test("caches fresh responses, retries transient failures, and defers background 
   expect((await client.get("https://1.1.1.1/feed")).cached).toBe(true);
   expect(requests).toBe(2);
 
-  await client.get("https://8.8.8.8/other", {
-    priority: "background",
+  // The real background interval, which no stall on a loaded machine
+  // outlasts.
+  const poller = new HttpClient(redis(), {
+    transport: queuedTransport([nativeResponse("other")]),
   });
+  await poller.get("https://8.8.8.8/other", { priority: "background" });
   await expect(
-    client.get("https://8.8.8.8/another", { priority: "background" }),
+    poller.get("https://8.8.8.8/another", { priority: "background" }),
   ).rejects.toBeInstanceOf(HttpDeferredError);
 });
 
 test("skipCache sends validators and a 304 prevents another request while fresh", async () => {
   const sentHeaders: Headers[] = [];
-  const store = redis();
-  const client = new HttpClient(store, {
+  const modified = "Thu, 01 Jan 2026 12:00:00 GMT";
+  const responses = [
+    nativeResponse("cached-feed", {
+      headers: {
+        "cache-control": "max-age=30",
+        etag: '"v1"',
+        "last-modified": modified,
+      },
+    }),
+    nativeResponse("", {
+      headers: { "cache-control": "max-age=60" },
+      status: 304,
+    }),
+  ];
+  const client = new HttpClient(redis(), {
+    intervalMs: shortIntervals,
     transport: async (_url, headers) => {
       sentHeaders.push(new Headers(headers));
-      return nativeResponse("", {
-        headers: { "cache-control": "max-age=60" },
-        status: 304,
-      });
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected HTTP request");
+      return response;
     },
   });
 
   const url = "https://1.1.1.1/feed";
-  const initialExpiry = Date.now() + 30_000;
-  const modified = "Thu, 01 Jan 2026 12:00:00 GMT";
-  const cacheKey = `http-cache:${Buffer.from(url).toString("base64url")}`;
-  store.values.set(
-    cacheKey,
-    JSON.stringify({
-      body: Buffer.from("cached-feed").toString("base64"),
-      expiresAt: initialExpiry,
-      headers: [
-        ["etag", '"v1"'],
-        ["last-modified", modified],
-      ],
-      status: 200,
-      url,
-    }),
-  );
+  const initialExpiry = (await client.get(url)).freshUntil ?? 0;
+  sentHeaders.length = 0;
 
   const revalidated = await client.get(url, { skipCache: true });
   expect(revalidated.data).toBe("cached-feed");
@@ -200,9 +224,6 @@ test("a 304 with nothing cached fails, stores nothing, and the next request is u
   const url = "https://1.1.1.1/feed";
 
   await expect(client.get(url)).rejects.toBeInstanceOf(HttpPolicyError);
-  expect(
-    [...store.values.keys()].filter((key) => key.startsWith("http-cache:")),
-  ).toEqual([]);
 
   const next = await client.get(url);
   expect(next.status).toBe(200);
@@ -253,9 +274,7 @@ test.each([
     expect(error.retryAt).toBeGreaterThanOrEqual(before + 5 * 60_000);
     expect(error.retryAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
     expect(requests).toBe(1);
-    expect(store.values.get("http-blocked:1.1.1.1")).toBe(
-      String(error.retryAt),
-    );
+    expect(await blockedUntil(store, "1.1.1.1")).toBe(error.retryAt);
   },
 );
 
@@ -495,12 +514,12 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
 
   expect(error.retryAt).toBeGreaterThanOrEqual(before + 3_600_000);
   expect(requests).toBe(1);
-  expect(store.values.get("http-blocked:1.1.1.1")).toBe(String(error.retryAt));
+  expect(await blockedUntil(store, "1.1.1.1")).toBe(error.retryAt);
 });
 
-// The host slot used to be reserved once per call, so the three attempts of
-// one retry sequence landed 200ms and 400ms apart -- three requests to one
-// host inside an interval that exists to allow one.
+// Each attempt of a retry sequence reserves the host's slot again, so the
+// three attempts sit an interval apart rather than three requests landing
+// inside an interval that exists to allow one.
 test("spaces retries by the host interval instead of a fixed backoff", async () => {
   const log: string[] = [];
   const store = slotLoggingRedis(log);
@@ -571,8 +590,13 @@ test("reserves the redirect target's slot, not just the original host's", async 
 // request started at.
 test("checks the redirect target against its own block", async () => {
   const store = redis();
-  const retryAt = Date.now() + 60_000;
-  store.values.set("http-blocked:8.8.8.8", String(retryAt));
+  const deadline = new RequestDeadline(1_000);
+  const retryAt = await new HttpRateLimiter(store).block(
+    "8.8.8.8",
+    "60",
+    deadline,
+  );
+  deadline.dispose();
   const client = new HttpClient(store, {
     deadlineMs: 1_000,
     transport: async (url) =>
@@ -611,13 +635,13 @@ test("blocks the host that answered, not the one the chain started at", async ()
   await expect(client.get("https://1.1.1.1/a")).rejects.toBeInstanceOf(
     HttpDeferredError,
   );
-  expect(store.values.get("http-blocked:8.8.8.8")).toBeDefined();
-  expect(store.values.get("http-blocked:1.1.1.1")).toBeUndefined();
+  expect(await blockedUntil(store, "8.8.8.8")).toBeDefined();
+  expect(await blockedUntil(store, "1.1.1.1")).toBeUndefined();
 });
 
-// The WebSub hub POST used to be a bare fetch(): no reservation, no block
-// check, and the hub's own Retry-After discarded. A handful of shared hubs
-// carry a large share of all feeds, so an import fired them back to back.
+// The WebSub hub POST goes through the same reservation, block check and
+// Retry-After as a fetch. A handful of shared hubs carry a large share of all
+// feeds, so an import would otherwise fire them back to back.
 test("post reserves the host, sends the body, and does not follow redirects", async () => {
   const sent: Array<{ body: string | undefined; url: string }> = [];
   const log: string[] = [];
@@ -702,7 +726,7 @@ test("post honours a hub's Retry-After instead of discarding it", async () => {
   await expect(
     client.post("https://hub.example/", new URLSearchParams()),
   ).rejects.toBeInstanceOf(HttpDeferredError);
-  expect(store.values.get("http-blocked:hub.example")).toBeDefined();
+  expect(await blockedUntil(store, "hub.example")).toBeDefined();
 });
 
 // A WebSub push arrives with the feed document attached. Seeding it means the

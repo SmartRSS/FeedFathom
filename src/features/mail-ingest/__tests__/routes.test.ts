@@ -122,7 +122,7 @@ test("enforces the raw MIME byte limit before EmailHandler", async () => {
   const notBase64 = await mail("Subject: Test\r\n\r\nBody");
 
   expect(exact.status).toBe(200);
-  expect(over.status).not.toBe(200);
+  expect(over.status).toBe(413);
   expect(notBase64.status).toBe(422);
   expect(sizes).toEqual([maxRawEmailBytes]);
 });

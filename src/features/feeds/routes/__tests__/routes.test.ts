@@ -231,7 +231,7 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.feedParser.preview = async () => {
-    throw new HttpDeferredError(Date.now() + 2_500);
+    throw new HttpDeferredError(Date.now() + 2_900);
   };
   dependencies.httpClient.get = async () => {
     throw new HttpDeferredError(Date.now() + 5 * 60_000);

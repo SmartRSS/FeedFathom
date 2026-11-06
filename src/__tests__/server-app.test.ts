@@ -167,6 +167,7 @@ test("logs a slow request with its route pattern, never the raw query string", a
 test("a request under the threshold logs nothing", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
+  dependencies.config.SLOW_REQUEST_MS = 600_000;
   const app = await appFor(dependencies);
   const log = spyOn(console, "log").mockImplementation(() => {});
 

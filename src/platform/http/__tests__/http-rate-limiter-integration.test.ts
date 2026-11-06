@@ -15,6 +15,18 @@ afterAll(() => {
   redis.close();
 });
 
+// Polls a Redis read until it answers `expected`, bounded so a counter that
+// never gets there fails the test instead of hanging it.
+async function settlesTo(read: () => Promise<unknown>, expected: unknown) {
+  for (let wait = 0; wait < 400; wait++) {
+    // eslint-disable-next-line no-await-in-loop -- Polls until the write lands.
+    if ((await read()) === expected) return;
+    // eslint-disable-next-line no-await-in-loop -- Polls until the write lands.
+    await Bun.sleep(5);
+  }
+  expect(await read()).toBe(expected);
+}
+
 async function reserve(
   host: string,
   priority: "background" | "interactive",
@@ -63,20 +75,16 @@ test("overlapping waiters keep a counter that covers their wait and leaves no ke
       deadline,
     ),
   );
-  await Bun.sleep(100);
-
-  expect(await redis.get(waitersKey)).toBe("2");
+  await settlesTo(() => redis.get(waitersKey), "2");
   expect(await redis.pttl(waitersKey)).toBeGreaterThan(19_000);
 
   await Promise.race(reservations);
-  await Bun.sleep(20);
-  expect(await redis.get(waitersKey)).toBe("1");
+  await settlesTo(() => redis.get(waitersKey), "1");
   expect(await redis.pttl(waitersKey)).toBeGreaterThan(19_000);
 
   // The counter vanishing under the last waiter must not leave it at -1.
   await redis.del(waitersKey);
   await Promise.all(reservations);
-  await Bun.sleep(20);
-  expect(await redis.exists(waitersKey)).toBe(false);
+  await settlesTo(() => redis.exists(waitersKey), false);
   for (const deadline of deadlines) deadline.dispose();
 });

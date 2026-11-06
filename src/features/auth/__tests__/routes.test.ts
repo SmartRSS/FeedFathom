@@ -733,17 +733,14 @@ test.each([
     };
     const app = await appFor(dependencies);
 
-    const response = await Promise.race([
-      post(app, "/api/register", {
-        email: account.email,
-        password: "password",
-        passwordConfirm: "password",
-        username: "Someone",
-      }),
-      Bun.sleep(500).then(() => "still waiting" as const),
-    ]);
+    // A route that awaited the mail would hang here until the test times out.
+    const response = await post(app, "/api/register", {
+      email: account.email,
+      password: "password",
+      passwordConfirm: "password",
+      username: "Someone",
+    });
 
-    if (response === "still waiting") throw new Error("awaited the mail");
     expect(response.status).toBe(200);
     expect(sends).toHaveLength(1);
   },
