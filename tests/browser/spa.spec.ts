@@ -957,12 +957,12 @@ test("the options page offers and persists the read-mark policy", async ({
   await openApp(page, {}, "/options");
 
   const policy = page.getByRole("combobox", {
-    name: "When articles get marked read",
+    name: "Mark articles read",
   });
   await expect(policy).toHaveValue("manual");
   await expect(policy.locator("option")).toHaveCount(3);
   await expect(policy.locator("option[value=manual]")).toHaveText(
-    /Manually \(m key or Mark read\)/,
+    /Manually \(M key or Mark read\)/,
   );
   await expect(policy.locator("option[value=on-open]")).toHaveText(/On open/);
   await expect(policy.locator("option[value=on-scroll-past]")).toHaveText(
@@ -972,7 +972,7 @@ test("the options page offers and persists the read-mark policy", async ({
   await policy.selectOption("on-scroll-past");
   await page.reload();
   await expect(
-    page.getByRole("combobox", { name: "When articles get marked read" }),
+    page.getByRole("combobox", { name: "Mark articles read" }),
   ).toHaveValue("on-scroll-past");
 });
 
@@ -1039,7 +1039,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
 // all at once, with the list shrinking to prove the revoke landed.
 test("lists active sessions and signs out another one", async ({ page }) => {
   const state = await openApp(page, {}, "/options");
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
   await expect(page.getByText("This session")).toBeVisible();
   await expect(page.getByText("Phone")).toBeVisible();
@@ -1068,7 +1068,7 @@ test("an expired session on the options page routes to login, returning to optio
   page,
 }) => {
   const state = await openApp(page, {}, "/options");
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
   await expect(page.getByText("Phone")).toBeVisible();
 
   state.authenticated = false;
@@ -1087,7 +1087,7 @@ test("an expired session on the options page routes to login, returning to optio
 
 test("signs out all other sessions at once", async ({ page }) => {
   const state = await openApp(page, {}, "/options");
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
   await expect(page.getByText("This browser")).toBeVisible();
 
   await page
@@ -1102,7 +1102,7 @@ test("a password change keeps this session and drops the others from the list", 
   page,
 }) => {
   await openApp(page, {}, "/options");
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
   await expect(page.getByText("Phone")).toBeVisible();
 
   await page.getByLabel("Current password").fill("old-password");
@@ -1127,7 +1127,7 @@ test("a throttled password change says to try again later", async ({
       status: 429,
     }),
   );
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
 
   await page.getByLabel("Current password").fill("old-password");
   await page.getByLabel("New password", { exact: true }).fill("new-password");
@@ -1220,7 +1220,7 @@ test("the reader steps change the rendered column, not just storage", async ({
 
   const medium = await columnOf();
 
-  await page.goto("/options");
+  await page.goto("/options#appearance");
   const size = page.getByRole("combobox", { name: "Text size" });
   await expect(size).toHaveValue("medium");
   await expect(page.getByRole("combobox", { name: "Line width" })).toHaveValue(
@@ -1235,7 +1235,7 @@ test("the reader steps change the rendered column, not just storage", async ({
 
   // Narrowing the measure widens the padding that centres it, so the effect
   // is visible on the box even though no width is set on the element.
-  await page.goto("/options");
+  await page.goto("/options#appearance");
   await page
     .getByRole("combobox", { name: "Line width" })
     .selectOption("small");
@@ -1501,7 +1501,7 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   // Leaving the dashboard drops the badge on its own, before the setting
   // changes anything.
   await expect(page).toHaveTitle("Options · FeedFathom");
-  await page.getByRole("link", { name: "New-article signal" }).click();
+  await page.getByRole("link", { name: "Lists" }).click();
   await page
     .getByRole("combobox", { name: "Unread count in tab title" })
     .selectOption("false");
@@ -1525,7 +1525,7 @@ test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
   );
   await openApp(page, {}, "/options");
   await expect(
-    page.getByRole("combobox", { name: "When articles get marked read" }),
+    page.getByRole("combobox", { name: "Mark articles read" }),
   ).toHaveValue("on-open");
 });
 
@@ -1540,9 +1540,9 @@ test("hides the feed filter and article search boxes independently", async ({
   await expect(page.getByText("No feeds match that.")).toBeVisible();
 
   await page.getByRole("button", { name: "options" }).first().click();
-  await page.getByRole("link", { name: "Reading" }).click();
+  await page.getByRole("link", { name: "Lists" }).click();
   await page
-    .getByRole("combobox", { name: "Feed filter box in the sidebar" })
+    .getByRole("combobox", { name: "Feed filter box" })
     .selectOption("false");
   await page.getByRole("link", { name: "Home" }).click();
 
@@ -1551,7 +1551,7 @@ test("hides the feed filter and article search boxes independently", async ({
   await expect(page.getByLabel("Search articles")).toBeVisible();
 
   await page.getByRole("button", { name: "options" }).first().click();
-  await page.getByRole("link", { name: "Reading" }).click();
+  await page.getByRole("link", { name: "Lists" }).click();
   await page
     .getByRole("combobox", { name: "Article search box" })
     .selectOption("false");
@@ -1699,7 +1699,7 @@ test("a press starts the article fetch even with prefetch Off", async ({
 
 test("shows the current account and logs out", async ({ page }) => {
   const state = await openApp(page, {}, "/options");
-  await page.getByRole("link", { name: "Account & security" }).click();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
 
   await expect(page.getByText("Reader (reader@example.com)")).toBeVisible();
   await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
@@ -2721,18 +2721,54 @@ for (const { name, ready, send } of expiringAdminRequests) {
   });
 }
 
+// Tabs were renamed and merged; links and bookmarks that carry an old hash
+// still open the tab that now holds those settings, with the tabs in view
+// rather than scrolled under the page bar.
+for (const [hash, tab, card] of [
+  ["#signal", "Lists", "New articles"],
+  ["#data", "Import & export", "Import OPML"],
+  ["#appearance", "Appearance", "Display"],
+  ["#nonsense", "Reading", "Marking as read"],
+] as const)
+  test(`/options${hash} opens the ${tab} tab`, async ({ page }) => {
+    await openApp(page, {}, `/options${hash}`);
+    await expect(
+      page.getByRole("heading", { exact: true, name: card }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { exact: true, name: tab }),
+    ).toHaveAttribute("aria-current", "true");
+    await expect(
+      page.getByRole("navigation", { name: "Options sections" }),
+    ).toBeInViewport();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+// Every preference is stored per device and the account's settings are
+// not; each tab says which it holds.
+test("each Options tab says whether it applies to this device or the account", async ({
+  page,
+}) => {
+  await openApp(page, {}, "/options");
+  await expect(page.getByText("Saved on this device only.")).toBeVisible();
+  await page.getByRole("link", { exact: true, name: "Account" }).click();
+  await expect(
+    page.getByText("Applies to your account on every device."),
+  ).toBeVisible();
+});
+
 // Narrow, the Options tabs wrap rather than scroll: every one is whole
 // inside the strip, at widths where one row would not hold them all.
 for (const width of [390, 594])
   test(`every Options tab is fully visible at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ height: 844, width });
-    await openApp(page, {}, "/options#data");
+    await openApp(page, {}, "/options#import-export");
     const nav = page.getByRole("navigation", { name: "Options sections" });
     const strip = await nav.boundingBox();
     const tabs = await Promise.all(
       (await nav.getByRole("link").all()).map((tab) => tab.boundingBox()),
     );
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(6);
     for (const box of tabs)
       expect(
         Boolean(
@@ -3059,9 +3095,9 @@ test("a second dialog request cancels the one still pending", async ({
 test("the options page can open the shortcut help dialog without a keyboard", async ({
   page,
 }) => {
-  await openApp(page, {}, "/options");
+  await openApp(page, {}, "/options#keyboard");
 
-  await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  await page.getByRole("button", { name: "Show keyboard shortcuts" }).click();
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
@@ -4071,7 +4107,7 @@ test.describe("under a controlling service worker", () => {
     await page.goto("/options");
     await page
       .getByRole("combobox", {
-        name: "Download unread articles for offline reading",
+        name: "Download unread for offline reading",
       })
       .selectOption("false");
     await expect.poll(() => downloaded(page)).toEqual([]);
@@ -4080,7 +4116,7 @@ test.describe("under a controlling service worker", () => {
     await page.goto("/");
     await expect.poll(() => downloaded(page)).toHaveLength(3);
     await page.goto("/options");
-    await page.getByRole("link", { name: "Account & security" }).click();
+    await page.getByRole("link", { exact: true, name: "Account" }).click();
     await page.getByRole("button", { name: "Logout" }).click();
     await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
     expect(await downloaded(page)).toEqual([]);
