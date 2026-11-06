@@ -1,15 +1,74 @@
-import { expect, type BrowserContext, type Page } from "@playwright/test";
-import type { Static } from "typebox";
-import type {
-  Article,
-  ArticleSummary,
+import {
+  expect,
+  type BrowserContext,
+  type Page,
+  type Route,
+} from "@playwright/test";
+import type { Static, StaticEncode, TSchema } from "typebox";
+import { Value } from "typebox/value";
+import {
+  articlesRequest,
+  createFolderRequest,
+  loginRequest,
+  newsletterAddressRequest,
+  readArticlesRequest,
+  removeArticlesRequest,
+  removeFolderRequest,
+  removeSourceRequest,
+  subscribeRequest,
+  updateFolderRequest,
+  updateSourceRequest,
+} from "#shared/contracts/requests.ts";
+import {
+  adminSourcesResponse,
+  articleResponse,
+  articlesResponse,
+  errorResponse,
+  folderResponse,
+  foldersResponse,
+  foundFeedsResponse,
+  previewResponse,
+  registrationResponse,
+  removedArticlesResponse,
+  removedIdResponse,
   sessionResponse,
   sessionsResponse,
-  TreeNode,
+  subscriptionResponse,
+  successResponse,
+  treeResponse,
+  updatedFolderResponse,
+  updatedSourceResponse,
+  type Article,
+  type ArticleSummary,
+  type TreeNode,
 } from "#shared/contracts/responses.ts";
 
-// The fixture answers as the server does, so each response shape is checked
-// against the contract the SPA decodes it with.
+// Answers as the server does: the body is checked against the contract the
+// SPA decodes it with, at lint time and again when the test runs, since a
+// spread escapes TypeScript's excess-property check and the contracts are
+// exact.
+export function respond<S extends TSchema>(
+  route: Route,
+  schema: S,
+  body: StaticEncode<S>,
+  status = 200,
+) {
+  if (!Value.Check(schema, body)) {
+    const issue = Value.Errors(schema, body)[0];
+    throw new Error(
+      `Fixture answer to ${route.request().url()} breaks its contract: ${issue?.instancePath} ${issue?.message}`,
+    );
+  }
+  return route.fulfill({ json: body, status });
+}
+
+export const refuse = (route: Route, status: number, error: string) =>
+  respond(route, errorResponse, { error }, status);
+
+// An answer that breaks the contract on purpose, to test how the SPA takes it.
+export const malformed = (route: Route, body: unknown) =>
+  route.fulfill({ json: body });
+
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 type SessionEntry = Static<typeof sessionsResponse>["sessions"][number];
 
@@ -218,16 +277,11 @@ export async function installApiFixture(
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
-    const respond = (body: object | object[], status = 200) =>
-      route.fulfill({
-        body: JSON.stringify(body),
-        contentType: "application/json",
-        status,
-      });
 
     if (method === "GET" && url.pathname === "/api/session") {
-      if (options.sessionFailure) return respond({ user: { id: "malformed" } });
-      return respond({
+      if (options.sessionFailure)
+        return malformed(route, { user: { id: "malformed" } });
+      return respond(route, sessionResponse, {
         ...(options.mailDomain ? { mailDomain: options.mailDomain } : {}),
         user: state.authenticated
           ? { ...user, isAdmin: options.admin ?? false }
@@ -238,7 +292,7 @@ export async function installApiFixture(
     // The login view reads this to decide whether to offer a reset link, so
     // it is fetched on every visit to /login, not just on the register page.
     if (method === "GET" && url.pathname === "/api/register") {
-      return respond({
+      return respond(route, registrationResponse, {
         passwordResetEnabled: options.passwordResetEnabled ?? false,
         registrationStatus: "DISABLED",
         turnstileSiteKey: null,
@@ -246,24 +300,24 @@ export async function installApiFixture(
     }
 
     if (method === "POST" && url.pathname === "/api/login") {
-      expect(request.postDataJSON()).toEqual({
+      expect(Value.Parse(loginRequest, request.postDataJSON())).toEqual({
         email: "reader@example.com",
         password: "password",
       });
       state.authenticated = true;
-      return respond({ success: true });
+      return respond(route, successResponse, { success: true });
     }
 
     if (method === "POST" && url.pathname === "/api/logout") {
       state.authenticated = false;
-      return respond({ success: true });
+      return respond(route, successResponse, { success: true });
     }
 
     // Two sessions for the signed-in account: id 1 stands in for the
     // browser making the request, id 2 for a second device. Revocations
     // update the list, so the options page can be asserted to shrink.
     if (method === "GET" && url.pathname === "/api/options/sessions") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       const sessions: SessionEntry[] = [
         {
           createdAt: "2026-09-08T00:00:00.000Z",
@@ -286,35 +340,36 @@ export async function installApiFixture(
           !state.revokedSessionIds.includes(session.id) &&
           !(state.revokedOtherSessions && !session.current),
       );
-      return respond({ sessions });
+      return respond(route, sessionsResponse, { sessions });
     }
 
     // A change signs out every other session, as the server's does.
     if (method === "POST" && url.pathname === "/api/options/password") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       state.revokedOtherSessions = true;
-      return respond({ success: true });
+      return respond(route, successResponse, { success: true });
     }
 
     if (method === "DELETE" && url.pathname === "/api/options/sessions") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       state.revokedOtherSessions = true;
-      return respond({ success: true });
+      return respond(route, successResponse, { success: true });
     }
 
     if (
       method === "DELETE" &&
       url.pathname.startsWith("/api/options/sessions/")
     ) {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       const id = Number(url.pathname.slice("/api/options/sessions/".length));
       if (id === 1)
-        return respond(
-          { error: "The current session signs out via Logout instead." },
+        return refuse(
+          route,
           400,
+          "The current session signs out via Logout instead.",
         );
       state.revokedSessionIds.push(id);
-      return respond({ success: true });
+      return respond(route, successResponse, { success: true });
     }
 
     // 204 is the one answer EventSource never retries, so by default the
@@ -325,8 +380,8 @@ export async function installApiFixture(
 
     if (method === "GET" && url.pathname === "/api/tree") {
       state.treeRequests++;
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      if (options.treeFailure) return respond({ tree: "malformed" });
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      if (options.treeFailure) return malformed(route, { tree: "malformed" });
       const currentSource = {
         ...source,
         ...(state.updatedSource ? { name: state.updatedSource.name } : {}),
@@ -341,70 +396,68 @@ export async function installApiFixture(
             }
           : {}),
       };
-      return respond({
-        tree: state.removedFolderIds.includes(7)
-          ? []
-          : [
-              {
-                children: [
-                  ...(state.removedSourceIds.includes(3)
-                    ? []
-                    : [currentSource]),
-                  ...(state.subscribed && !state.removedSourceIds.includes(9)
-                    ? [subscribedSource]
-                    : []),
-                  ...(state.newsletterSubscription
-                    ? [
-                        {
-                          favicon: null,
-                          homeUrl: "http://127.0.0.1",
-                          kind: "email",
-                          name: "Letters",
-                          type: "source",
-                          uid: "21",
-                          unreadCount: state.newsletterDelivered ? 1 : 0,
-                          xmlUrl: state.newsletterSubscription,
-                        },
-                      ]
-                    : []),
-                ],
-                name: state.updatedFolder?.name ?? "Reading",
-                type: "folder",
-                uid: "7",
-              },
-              ...(options.emptyFolder
-                ? [{ children: [], name: "Later", type: "folder", uid: "12" }]
-                : []),
-            ],
-      });
+      const reading: TreeNode[] = [];
+      if (!state.removedSourceIds.includes(3)) reading.push(currentSource);
+      if (state.subscribed && !state.removedSourceIds.includes(9))
+        reading.push(subscribedSource);
+      if (state.newsletterSubscription)
+        reading.push({
+          favicon: null,
+          homeUrl: "http://127.0.0.1",
+          kind: "email",
+          name: "Letters",
+          type: "source",
+          uid: "21",
+          unreadCount: state.newsletterDelivered ? 1 : 0,
+          xmlUrl: state.newsletterSubscription,
+        });
+      const tree: TreeNode[] = [];
+      if (!state.removedFolderIds.includes(7)) {
+        tree.push({
+          children: reading,
+          name: state.updatedFolder?.name ?? "Reading",
+          type: "folder",
+          uid: "7",
+        });
+        if (options.emptyFolder)
+          tree.push({ children: [], name: "Later", type: "folder", uid: "12" });
+      }
+      return respond(route, treeResponse, { tree });
     }
 
     if (method === "POST" && url.pathname === "/api/articles") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       state.articleRequests += 1;
       // Search (#697) is answered by Postgres full text in the real app; the
       // fixture only has to prove the client asked across subscriptions
       // rather than for the selected feed, so a title substring will do.
-      const query: string | undefined = request.postDataJSON().query;
+      const {
+        filter = "unread",
+        query,
+        sources,
+      } = Value.Parse(articlesRequest, request.postDataJSON());
       if (query) {
         const terms = query.toLowerCase();
         return respond(
+          route,
+          articlesResponse,
           [article, secondArticle, thirdArticle, subscribedArticle]
             .filter((item) => item.title.toLowerCase().includes(terms))
             .map((item) => summary(item, state.readArticleIds.has(item.id))),
         );
       }
-      const sources = request.postDataJSON().sources;
-      expect(
-        sources.every((sourceId: number) => [3, 9, 21].includes(sourceId)),
-      ).toBe(true);
+      expect(sources.every((sourceId) => [3, 9, 21].includes(sourceId))).toBe(
+        true,
+      );
       if (sources.length === 1 && sources[0] === 21) {
         return respond(
+          route,
+          articlesResponse,
           state.newsletterDelivered ? [summary(newsletterArticle)] : [],
         );
       }
       if (sources.length === 1 && sources[0] === 9) {
-        return respond([summary(subscribedArticle)]);
+        return respond(route, articlesResponse, [summary(subscribedArticle)]);
       }
       const techNewsArticles = options.manyArticles
         ? manyArticles
@@ -413,8 +466,9 @@ export async function installApiFixture(
           : options.longArticle
             ? [{ ...article, content: longContent }]
             : [article];
-      const filter: string = request.postDataJSON().filter ?? "unread";
       return respond(
+        route,
+        articlesResponse,
         techNewsArticles
           .filter((item) => !state.removedArticleIds.includes(item.id))
           .filter((item) => {
@@ -427,23 +481,27 @@ export async function installApiFixture(
     }
 
     if (method === "PATCH" && url.pathname === "/api/articles") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { articleIdList, read } = request.postDataJSON();
-      expect(articleIdList.length > 0).toBe(true);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { articleIdList, read } = Value.Parse(
+        readArticlesRequest,
+        request.postDataJSON(),
+      );
       state.readMarks.push(articleIdList);
       for (const id of articleIdList) {
         if (read) state.readArticleIds.add(id);
         else state.readArticleIds.delete(id);
       }
-      return respond(articleIdList);
+      return respond(route, removedArticlesResponse, articleIdList);
     }
 
     if (method === "DELETE" && url.pathname === "/api/articles") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { removedArticleIdList } = request.postDataJSON();
-      expect(removedArticleIdList.length > 0).toBe(true);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { removedArticleIdList } = Value.Parse(
+        removeArticlesRequest,
+        request.postDataJSON(),
+      );
       state.removedArticleIds.push(...removedArticleIdList);
-      return respond(removedArticleIdList);
+      return respond(route, removedArticlesResponse, removedArticleIdList);
     }
 
     if (method === "GET" && url.pathname === "/api/article") {
@@ -456,22 +514,32 @@ export async function installApiFixture(
         numeric < 100 + manyArticles.length;
       if (fromMany) {
         const item = manyArticles[numeric - 100]!;
-        return respond({ ...item, content: longContent });
+        return respond(route, articleResponse, {
+          ...item,
+          content: longContent,
+        });
       }
       expect(["11", "12", "13", "19", "21"]).toContain(id);
-      if (id === "19") return respond(subscribedArticle);
-      if (id === "21") return respond(newsletterArticle);
-      if (id === "12") return respond(secondArticle);
-      if (id === "13") return respond(thirdArticle);
+      if (id === "19")
+        return respond(route, articleResponse, subscribedArticle);
+      if (id === "21")
+        return respond(route, articleResponse, newsletterArticle);
+      if (id === "12") return respond(route, articleResponse, secondArticle);
+      if (id === "13") return respond(route, articleResponse, thirdArticle);
       return respond(
+        route,
+        articleResponse,
         options.longArticle ? { ...article, content: longContent } : article,
       );
     }
 
     if (method === "POST" && url.pathname === "/api/folders") {
-      expect(request.postDataJSON()).toEqual({ name: "Saved" });
-      if (options.folderCreateFailure) return respond({ id: "malformed" });
-      return respond({
+      expect(Value.Parse(createFolderRequest, request.postDataJSON())).toEqual({
+        name: "Saved",
+      });
+      if (options.folderCreateFailure)
+        return malformed(route, { id: "malformed" });
+      return respond(route, folderResponse, {
         createdAt: "2026-07-01T00:00:00.000Z",
         id: 8,
         name: "Saved",
@@ -481,39 +549,52 @@ export async function installApiFixture(
     }
 
     if (method === "DELETE" && url.pathname === "/api/source") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { removeSourceId } = request.postDataJSON();
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { removeSourceId } = Value.Parse(
+        removeSourceRequest,
+        request.postDataJSON(),
+      );
       state.removedSourceIds.push(removeSourceId);
-      return respond(removeSourceId);
+      return respond(route, removedIdResponse, removeSourceId);
     }
 
     if (method === "PATCH" && url.pathname === "/api/source") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { sourceFolder, sourceId, sourceName } = request.postDataJSON();
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { sourceFolder, sourceId, sourceName } = Value.Parse(
+        updateSourceRequest,
+        request.postDataJSON(),
+      );
       expect(sourceId).toBe(3);
       state.updatedSource = { name: sourceName, parentId: sourceFolder };
-      return respond({ sourceId });
+      return respond(route, updatedSourceResponse, { sourceId });
     }
 
     if (method === "PATCH" && url.pathname === "/api/folders") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { folderId, folderName } = request.postDataJSON();
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { folderId, folderName } = Value.Parse(
+        updateFolderRequest,
+        request.postDataJSON(),
+      );
       expect(folderId).toBe(7);
       state.updatedFolder = { name: folderName };
-      return respond({ folderId });
+      return respond(route, updatedFolderResponse, { folderId });
     }
 
     if (method === "DELETE" && url.pathname === "/api/folders") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const { removeFolderId } = request.postDataJSON();
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      const { removeFolderId } = Value.Parse(
+        removeFolderRequest,
+        request.postDataJSON(),
+      );
       state.removedFolderIds.push(removeFolderId);
-      return respond(removeFolderId);
+      return respond(route, removedIdResponse, removeFolderId);
     }
 
     if (method === "GET" && url.pathname === "/api/folders") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      if (options.foldersFailure) return respond({ folders: "malformed" });
-      return respond([
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
+      if (options.foldersFailure)
+        return malformed(route, { folders: "malformed" });
+      return respond(route, foldersResponse, [
         {
           createdAt: "2026-07-01T00:00:00.000Z",
           id: 7,
@@ -539,6 +620,8 @@ export async function installApiFixture(
       state.findRequests++;
       expect(url.searchParams.get("link")).toBe("https://preview.example/");
       return respond(
+        route,
+        foundFeedsResponse,
         options.discoveryRace
           ? [
               {
@@ -563,17 +646,17 @@ export async function installApiFixture(
     }
 
     if (method === "GET" && url.pathname === "/api/preview") {
-      const feedUrl = url.searchParams.get("feedUrl");
-      if (options.discoveryRace && feedUrl?.endsWith("/slow.xml"))
+      const feedUrl = url.searchParams.get("feedUrl") ?? "";
+      if (options.discoveryRace && feedUrl.endsWith("/slow.xml"))
         await slowPreview.promise;
       else if (!options.discoveryRace)
         expect(feedUrl).toBe("https://preview.example/feed.xml");
       const title = options.discoveryRace
-        ? feedUrl?.endsWith("/fast.xml")
+        ? feedUrl.endsWith("/fast.xml")
           ? "Fast feed"
           : "Slow feed"
         : "Tech Preview";
-      return respond({
+      return respond(route, previewResponse, {
         articles: [
           {
             author: "Preview Author",
@@ -593,21 +676,25 @@ export async function installApiFixture(
 
     if (method === "POST" && url.pathname === "/api/newsletter-address") {
       if (state.failReservations)
-        return respond({ error: "Internal server error" }, 500);
-      state.reservedAddresses.push(request.postDataJSON().address);
-      return respond({ success: true });
+        return refuse(route, 500, "Internal server error");
+      const { address } = Value.Parse(
+        newsletterAddressRequest,
+        request.postDataJSON(),
+      );
+      state.reservedAddresses.push(address);
+      return respond(route, successResponse, { success: true });
     }
 
     if (method === "POST" && url.pathname === "/api/subscribe") {
-      const body = request.postDataJSON();
+      const body = Value.Parse(subscribeRequest, request.postDataJSON());
       if (state.reservedAddresses.includes(body.sourceUrl)) {
         state.subscriptionBodies.push(body);
         state.newsletterSubscription = body.sourceUrl;
-        return respond({ sourceId: 21 });
+        return respond(route, subscriptionResponse, { sourceId: 21 });
       }
       // Addresses are minted only: the server refuses one typed by hand.
       if (body.sourceUrl.endsWith("@mail.example"))
-        return respond({ error: "Refine Error" }, 422);
+        return refuse(route, 422, "Refine Error");
       expect(body).toEqual({
         sourceFolder: 7,
         sourceName: "Tech Preview",
@@ -615,17 +702,17 @@ export async function installApiFixture(
       });
       state.subscriptionBodies.push(body);
       state.subscribed = true;
-      return respond({ sourceId: 9 });
+      return respond(route, subscriptionResponse, { sourceId: 9 });
     }
 
     // The admin page's source list, with the two changes it can make. Only
     // the 401 matters to the specs, so the changes are acknowledged, not kept.
     if (url.pathname === "/api/admin") {
-      if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
+      if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       // What the server answers a signed-in account that isn't an admin.
-      if (options.notAdmin) return respond({ error: "Unauthorized" }, 403);
+      if (options.notAdmin) return refuse(route, 403, "Unauthorized");
       if (method === "GET")
-        return respond([
+        return respond(route, adminSourcesResponse, [
           {
             createdAt: "2026-07-01T00:00:00.000Z",
             homeUrl: source.homeUrl,
@@ -640,9 +727,15 @@ export async function installApiFixture(
             websubStatus: "none",
           },
         ]);
-      if (method === "POST") return respond({ success: true });
-      if (method === "DELETE")
-        return respond(request.postDataJSON().removeSourceId);
+      if (method === "POST")
+        return respond(route, successResponse, { success: true });
+      if (method === "DELETE") {
+        const { removeSourceId } = Value.Parse(
+          removeSourceRequest,
+          request.postDataJSON(),
+        );
+        return respond(route, removedIdResponse, removeSourceId);
+      }
     }
 
     throw new Error(
