@@ -1,11 +1,4 @@
-import {
-  createEffect,
-  createSignal,
-  For,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { Static } from "typebox";
 import {
   sessionResponse,
@@ -113,23 +106,6 @@ export function Options(props: {
   const [active, setActive] = createSignal<SectionId>(
     sectionFromHash(location.hash),
   );
-  // Where the tabs scroll sideways (a narrow phone), the current one is
-  // centred in the strip, clear of the fade at its end, however the section
-  // was chosen and on the first load too. A frame later, once the strip is
-  // laid out; and by the strip's own scroll, so the page never moves.
-  let nav: HTMLElement | undefined;
-  createEffect(() => {
-    active();
-    requestAnimationFrame(() => {
-      const tab = nav?.querySelector('[aria-current="true"]');
-      if (!nav || !tab) return;
-      const strip = nav.getBoundingClientRect();
-      const current = tab.getBoundingClientRect();
-      nav.scrollLeft +=
-        current.left - strip.left - (strip.width - current.width) / 2;
-    });
-  });
-
   const onHashChange = () => {
     const next = sectionFromHash(location.hash);
     if (next === active()) return;
@@ -305,7 +281,7 @@ export function Options(props: {
     <>
       <PageToolbar navigate={props.navigate} title="Options" />
       <main class="options-page">
-        <nav class="options-nav" aria-label="Options sections" ref={nav}>
+        <nav class="options-nav" aria-label="Options sections">
           <For each={sections}>
             {(section) => (
               <a

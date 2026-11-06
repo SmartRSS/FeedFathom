@@ -658,39 +658,19 @@ html[data-route="options"] body {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* Tabs grow to fill their row. */
+/* Tabs keep their own width, each whole, and wrap where a row can't hold
+   them all: none is stretched alone across a row, and none is hidden. A
+   row that filled itself, or scrolled behind a fade, depended on the font
+   to leave no tab stranded or cut to a sliver. */
 .options-nav a {
-  flex: 1 1 auto;
+  flex: none;
+  white-space: nowrap;
   justify-content: center;
   padding: var(--space-2) var(--space-3);
   border: var(--border);
   border-radius: var(--radius);
   text-align: center;
   text-decoration: none;
-}
-/* Narrower than the five tabs need, they stay one 44px row at their own
-   width and scroll sideways: no wrapped rows, no tab stretched alone. The
-   row fades out at its trailing edge, and whichever tab reaches that edge
-   is cut off by it, so more tabs plainly lie that way; the end padding
-   lets the last tab scroll clear of the fade. */
-@media (max-width: 40rem) {
-  .options-nav {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-    padding-inline-end: var(--space-8);
-    mask-image: linear-gradient(
-      to right,
-      #000 calc(100% - var(--space-8)),
-      transparent
-    );
-  }
-  nav.options-nav a {
-    flex: none;
-    scroll-snap-align: start;
-    white-space: nowrap;
-  }
 }
 .options-nav a[aria-current="true"] {
   color: var(--selected-fg);

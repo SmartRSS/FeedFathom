@@ -2698,28 +2698,30 @@ for (const { name, ready, send } of expiringAdminRequests) {
   });
 }
 
-test("narrow Options tabs keep the current one in view", async ({ page }) => {
-  await page.setViewportSize({ height: 844, width: 390 });
-  await openApp(page, {}, "/options#data");
-  const nav = page.getByRole("navigation", { name: "Options sections" });
-  const inView = async (name: string) => {
+// Narrow, the Options tabs wrap rather than scroll: every one is whole
+// inside the strip, at widths where one row would not hold them all.
+for (const width of [390, 594])
+  test(`every Options tab is fully visible at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ height: 844, width });
+    await openApp(page, {}, "/options#data");
+    const nav = page.getByRole("navigation", { name: "Options sections" });
     const strip = await nav.boundingBox();
-    const tab = await nav.getByRole("link", { name }).boundingBox();
-    // Clear of the 32px fade at the strip's end, not just inside it,
-    // with a pixel of leeway for sub-pixel layout.
-    return Boolean(
-      strip &&
-      tab &&
-      tab.x >= strip.x &&
-      tab.x + tab.width <= strip.x + strip.width - 31,
+    const tabs = await Promise.all(
+      (await nav.getByRole("link").all()).map((tab) => tab.boundingBox()),
     );
-  };
-  await expect.poll(() => inView("Data")).toBe(true);
-  await nav.getByRole("link", { name: "Reading" }).click();
-  await expect.poll(() => inView("Reading")).toBe(true);
-  await nav.getByRole("link", { name: "Account & security" }).click();
-  await expect.poll(() => inView("Account & security")).toBe(true);
-});
+    expect(tabs).toHaveLength(5);
+    for (const box of tabs)
+      expect(
+        Boolean(
+          strip &&
+          box &&
+          box.x >= strip.x &&
+          box.x + box.width <= strip.x + strip.width &&
+          box.y >= strip.y &&
+          box.y + box.height <= strip.y + strip.height,
+        ),
+      ).toBe(true);
+  });
 
 test("a regular user on the admin page is told it is for admins", async ({
   page,
