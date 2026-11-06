@@ -70,13 +70,6 @@ export const hasSqlState = (
 
 export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 
-/**
- * Sources repository: CRUD on the sources table plus the poll-schedule
- * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
- * the fetch pipeline, and the favicon data URL written by the favicon refresher
- * and read back by the /api/favicon route. WebSub lease state lives in
- * WebSubStateService, and ParseSource enqueueing in SourceEnqueuer.
- */
 export class SourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,

@@ -1,7 +1,6 @@
 import type { MainWorker } from "#features/jobs/main.ts";
 import { isLoopbackAddress } from "#shared/net/private-network-guard.ts";
 
-// What the worker's startup reaches, built once per process by the entrypoint.
 export type WorkerAppServices = {
   close: () => Promise<void>;
   mainWorker: MainWorker;
