@@ -8,7 +8,9 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 import type { RequestDeadline } from "#platform/http/request-deadline.ts";
-import { maximumRedirects, redirectStatuses } from "#shared/net/redirects.ts";
+
+const redirectStatuses: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+const maximumRedirects = 5;
 
 export type FetchResult = {
   permanent: boolean;

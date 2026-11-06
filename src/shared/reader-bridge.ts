@@ -31,7 +31,6 @@ const readerErrorCodeSchema = Type.Union([
   Type.Literal("PRIVATE_URL"),
   Type.Literal("TIMEOUT"),
   Type.Literal("TOO_LARGE"),
-  Type.Literal("TOO_MANY_REDIRECTS"),
   Type.Literal("UNAUTHORIZED"),
   Type.Literal("UNAVAILABLE"),
 ]);

@@ -16,7 +16,6 @@ const errorMessages: Record<ReaderErrorCode, string> = {
   PRIVATE_URL: "The Reader extension refused a private network address.",
   TIMEOUT: "The Reader extension timed out fetching this article.",
   TOO_LARGE: "This article is too large for Reader mode.",
-  TOO_MANY_REDIRECTS: "This article redirected too many times.",
   UNAUTHORIZED: "The Reader extension is configured for another instance.",
   UNAVAILABLE: "The Reader extension is unavailable.",
 };
