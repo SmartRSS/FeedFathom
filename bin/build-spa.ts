@@ -2,7 +2,7 @@
 // Builds the page with Vite and the service worker with Bun, then names the
 // worker by a content hash of its bundle (see serviceWorkerFile).
 import { $ } from "bun";
-import { serviceWorkerFile } from "../src/spa/sw-protocol.ts";
+import { serviceWorkerFile } from "#shared/contracts/service-worker-file.ts";
 
 const bundle = await Bun.build({
   entrypoints: ["src/spa/sw.ts"],

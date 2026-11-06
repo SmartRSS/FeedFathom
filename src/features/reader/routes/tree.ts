@@ -3,7 +3,7 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { treeResponse } from "#shared/contracts/responses.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
-import { isSnoozed } from "#features/feeds/source-snooze-policy.ts";
+import { isSnoozed } from "#shared/util/snooze.ts";
 
 // One failed fetch is usually a blip the next poll recovers from; two in a
 // row, with the backoff between them, is worth telling the reader about.
@@ -25,7 +25,7 @@ export async function getTreeHandler(
     // keeps accumulating so the backlog survives, but while the pause is
     // active the tree shows none of it -- the same answer the unread article
     // list gives, evaluated lazily here so expiry needs no job.
-    const snoozed = isSnoozed(source.pausedUntil ?? null);
+    const snoozed = isSnoozed(source.pausedUntil);
     return {
       failing:
         (source.recentFailures ?? 0) >= failingAfter

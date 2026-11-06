@@ -1,6 +1,5 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { isPlainText } from "#shared/util/is-plain-text.ts";
 import {
   isEmailAddress,
   isWebUrl,
@@ -47,7 +46,12 @@ export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
 }
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
-export const plainTextPolicy = Type.Refine(Type.String(), isPlainText);
+// Control characters other than tab, line feed and carriage return.
+const nonPrintablePattern = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/u;
+export const plainTextPolicy = Type.Refine(
+  Type.String(),
+  (value) => !nonPrintablePattern.test(value),
+);
 export const jsonDatePolicy = Type.Refine(
   Type.String(),
   (value) =>

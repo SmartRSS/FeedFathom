@@ -1,5 +1,6 @@
 import { Type, type StaticDecode } from "typebox";
 import { Value } from "typebox/value";
+import { isLoopbackHostname } from "#shared/net/private-network-guard.ts";
 
 // Blank is unset: compose.yml passes every variable through as `${X:-}`, so
 // the defaults below are the only ones, and an unset variable arrives as "".
@@ -172,7 +173,8 @@ function newsletterMailDomain(config: {
 function publicOrigin(domain: string | undefined): URL | undefined {
   const host = domain?.trim();
   if (!host) return undefined;
-  const protocol = host.startsWith("localhost") ? "http" : "https";
+  const hostname = host.replace(/:\d+$/u, "");
+  const protocol = isLoopbackHostname(hostname) ? "http" : "https";
   return new URL(`${protocol}://${host}`);
 }
 

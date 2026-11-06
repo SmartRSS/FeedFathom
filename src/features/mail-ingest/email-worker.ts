@@ -7,6 +7,7 @@ import {
   maxRawEmailMebibytes,
 } from "#shared/contracts/mail-relay.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
+import { secureOrigin } from "#shared/util/safe-url.ts";
 
 // Deliberately hand-written rather than expressed as schemas: this module is
 // bundled for Cloudflare, and pulling typebox in for three checks over strings
@@ -37,10 +38,6 @@ export type IncomingEmailMessage = {
   setReject(reason: string): void;
   to: unknown;
 };
-
-// A URL's hostname keeps the brackets for an IPv6 literal, so `[::1]` is the
-// form to compare against.
-const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 const oversizeReason = `Message exceeds ${maxRawEmailMebibytes} MiB`;
 
@@ -110,36 +107,15 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+// Plaintext is allowed only where it cannot leave the host, because the
+// relay secret and the whole message travel in this request.
 function mailEndpoint(domain: string): URL {
-  let endpoint: URL;
-  try {
-    endpoint = new URL(domain);
-  } catch (cause) {
-    throw new Error("MAIL_ENDPOINT_DOMAIN must be a valid URL origin", {
-      cause,
-    });
-  }
-
-  if (
-    endpoint.username ||
-    endpoint.password ||
-    endpoint.pathname !== "/" ||
-    endpoint.search ||
-    endpoint.hash
-  ) {
-    throw new Error("MAIL_ENDPOINT_DOMAIN must contain only a URL origin");
-  }
-  // Plaintext is allowed only where it cannot leave the host, because the
-  // relay secret and the whole message travel in this request.
-  if (
-    endpoint.protocol !== "https:" &&
-    !(endpoint.protocol === "http:" && loopbackHosts.has(endpoint.hostname))
-  ) {
-    throw new Error("MAIL_ENDPOINT_DOMAIN must be https, or http on loopback");
-  }
-
-  endpoint.pathname = mailRelayPath;
-  return endpoint;
+  const origin = secureOrigin(domain);
+  if (!origin)
+    throw new Error(
+      "MAIL_ENDPOINT_DOMAIN must be an https origin, or an http origin on loopback",
+    );
+  return new URL(mailRelayPath, origin);
 }
 
 export function createEmailWorker(

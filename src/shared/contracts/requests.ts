@@ -3,6 +3,7 @@ import {
   base64Pattern,
   maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
+import { maxEmailAddressLength } from "#shared/validation/address-shape.ts";
 import {
   jsonDatePolicy,
   normalizedEmailAddress,
@@ -15,8 +16,10 @@ import {
 
 const id = Type.Integer({ minimum: 1 });
 export const maximumRequestIds = 500;
+// RFC 5321 caps both envelope paths, so no deliverable sender is longer
+// than a minted recipient may be.
 const mailEnvelopeValue = Type.String({
-  maxLength: 320,
+  maxLength: maxEmailAddressLength,
   minLength: 1,
   pattern: "\\S",
 });

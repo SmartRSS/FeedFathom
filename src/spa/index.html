@@ -13,12 +13,12 @@
     <!-- Starts /api/tree next to the bundles instead of after them (#938).
          A script, not a static <link>: this one shell serves every route,
          and the sign-in routes must not spend a request on a 401.
-         vite.config.ts fills in the route list from treePreloadExcludedPaths
-         in sw-protocol.ts. crossorigin="anonymous" matches the credentials
+         vite.config.ts fills in the route list from treePreloadPaths in
+         routes.ts. crossorigin="anonymous" matches the credentials
          mode of the dashboard's plain fetch("/api/tree"), so the fetch reuses
          this response instead of issuing a second one. -->
     <script>
-      if (!/TREE_PRELOAD_EXCLUDED_PATHS/.test(location.pathname))
+      if (/TREE_PRELOAD_PATHS/.test(location.pathname))
         document.head.append(
           Object.assign(document.createElement("link"), {
             as: "fetch",

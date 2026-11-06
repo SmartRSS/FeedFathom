@@ -3,6 +3,7 @@ import {
   httpUrlWithoutCredentials,
   safeArticleUrl,
   safeHttpUrl,
+  secureOrigin,
 } from "#shared/util/safe-url.ts";
 
 const BASE = "https://example.com/feed/page";
@@ -76,12 +77,12 @@ test("does not treat an /article/ prefix deeper in the path as an article link",
   );
 });
 
-test.each([
-  ["https://example.com/story", undefined, "https://example.com/story"],
-  ["/story", "http://example.com/a/", "http://example.com/story"],
-])("httpUrlWithoutCredentials accepts %s", (value, base, expected) => {
-  expect(httpUrlWithoutCredentials(value, base)?.href).toBe(expected);
-});
+test.each(["https://example.com/story", "http://example.com/a?b#c"])(
+  "httpUrlWithoutCredentials accepts %s",
+  (value) => {
+    expect(httpUrlWithoutCredentials(value)?.href).toBe(value);
+  },
+);
 
 test.each([
   "ftp://example.com/",
@@ -91,4 +92,29 @@ test.each([
   "/relative-without-base",
 ])("httpUrlWithoutCredentials refuses %s", (value) => {
   expect(httpUrlWithoutCredentials(value)).toBeUndefined();
+});
+
+test.each([
+  ["https://example.com", "https://example.com"],
+  ["https://EXAMPLE.com:443/", "https://example.com"],
+  ["http://localhost:3456", "http://localhost:3456"],
+  ["http://dev.localhost:3456/", "http://dev.localhost:3456"],
+  ["http://127.0.0.2:3456", "http://127.0.0.2:3456"],
+  ["http://[::1]:3456", "http://[::1]:3456"],
+])("secureOrigin accepts %s", (value, expected) => {
+  expect(secureOrigin(value)).toBe(expected);
+});
+
+test.each([
+  "http://example.com",
+  "http://localhost.example.com",
+  "ftp://example.com",
+  "mailto:user@example.com",
+  "https://user:password@example.com",
+  "https://example.com/path",
+  "https://example.com/?",
+  "https://example.com/#fragment",
+  "not a URL",
+])("secureOrigin refuses %s", (value) => {
+  expect(secureOrigin(value)).toBeUndefined();
 });

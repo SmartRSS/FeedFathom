@@ -1,6 +1,5 @@
 import { decodeHtml } from "#shared/util/decode-body.ts";
 import { isBlockedHostname } from "#shared/net/private-network-guard.ts";
-import { maximumRedirects, redirectStatuses } from "#shared/net/redirects.ts";
 import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
 import {
   readerCapabilitiesResponse,
@@ -34,8 +33,8 @@ const isReaderSender = (sender: unknown, origin: string): boolean => {
   return URL.parse(url)?.origin === origin;
 };
 
-const validateArticleUrl = (value: string, base?: URL): ValidatedUrl => {
-  const url = httpUrlWithoutCredentials(value, base?.href);
+const validateArticleUrl = (value: string): ValidatedUrl => {
+  const url = httpUrlWithoutCredentials(value);
   if (!url) return { error: "INVALID_URL" };
   return isBlockedHostname(url.hostname) ? { error: "PRIVATE_URL" } : { url };
 };
@@ -76,59 +75,40 @@ const fetchArticle = async (
   request: ReaderFetchRequest,
   fetchImplementation: ReaderFetch,
 ): Promise<ReaderResponse> => {
-  let validated = validateArticleUrl(request.url);
+  const validated = validateArticleUrl(request.url);
   if ("error" in validated)
     return readerErrorResponse(request, validated.error);
 
   const signal = AbortSignal.timeout(readerFetchTimeoutMs);
-  /* eslint-disable no-await-in-loop -- Each fetch follows the previously validated redirect. */
   try {
-    for (let redirects = 0; ; redirects++) {
-      const response = await fetchImplementation(validated.url, {
-        credentials: "omit",
-        redirect: "manual",
-        referrer: "",
-        signal,
-      });
+    // A redirect would lead to a host nobody validated. Under "manual" every
+    // browser answers one with an opaqueredirect, which hides its target.
+    const response = await fetchImplementation(validated.url, {
+      credentials: "omit",
+      redirect: "manual",
+      referrer: "",
+      signal,
+    });
+    if (response.type === "opaqueredirect")
+      return readerErrorResponse(request, "INVALID_RESPONSE");
+    if (!response.ok) return readerErrorResponse(request, "FETCH_FAILED");
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType !== "text/html" && contentType !== "application/xhtml+xml")
+      return readerErrorResponse(request, "NOT_HTML");
 
-      if (response.type === "opaqueredirect")
-        return readerErrorResponse(request, "INVALID_RESPONSE");
-
-      if (redirectStatuses.has(response.status)) {
-        if (redirects === maximumRedirects)
-          return readerErrorResponse(request, "TOO_MANY_REDIRECTS");
-        const location = response.headers.get("location");
-        if (!location) return readerErrorResponse(request, "INVALID_RESPONSE");
-        validated = validateArticleUrl(location, validated.url);
-        if ("error" in validated)
-          return readerErrorResponse(request, validated.error);
-        continue;
-      }
-
-      if (!response.ok) return readerErrorResponse(request, "FETCH_FAILED");
-      const contentType = response.headers
-        .get("content-type")
-        ?.split(";", 1)[0]
-        ?.trim()
-        .toLowerCase();
-      if (
-        contentType !== "text/html" &&
-        contentType !== "application/xhtml+xml"
-      )
-        return readerErrorResponse(request, "NOT_HTML");
-
-      const content = await readBoundedHtml(response);
-      if ("error" in content)
-        return readerErrorResponse(request, content.error);
-      return readerFetchResponse(request, validated.url.href, content.html);
-    }
+    const content = await readBoundedHtml(response);
+    if ("error" in content) return readerErrorResponse(request, content.error);
+    return readerFetchResponse(request, validated.url.href, content.html);
   } catch {
     return readerErrorResponse(
       request,
       signal.aborted ? "TIMEOUT" : "FETCH_FAILED",
     );
   }
-  /* eslint-enable no-await-in-loop */
 };
 
 export const handleReaderRequest = async (

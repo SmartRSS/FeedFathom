@@ -10,7 +10,7 @@ import {
 
 // withMatchingPasswords and withMatchingChangedPasswords are held to their
 // contract at the routes that use them.
-test("checks URL, email, plain-text, and internal-address policies", () => {
+test("checks URL and email policies", () => {
   expect(Value.Check(webUrlPolicy, "https://feed.example/rss")).toBe(true);
   expect(Value.Check(webUrlPolicy, "javascript:alert(1)")).toBe(false);
   expect(Value.Check(webUrlPolicy, "https://user:pw@feed.example/")).toBe(
@@ -18,11 +18,23 @@ test("checks URL, email, plain-text, and internal-address policies", () => {
   );
   expect(Value.Check(normalizedEmailAddress, "reader@example.com")).toBe(true);
   expect(Value.Check(normalizedEmailAddress, "reader@localhost")).toBe(false);
-  expect(Value.Check(plainTextPolicy, "plain\ntext")).toBe(true);
-  expect(Value.Check(plainTextPolicy, `bad${String.fromCharCode(0)}text`)).toBe(
-    false,
-  );
 });
+
+test("plain text allows markup, Unicode and text whitespace", () => {
+  expect(Value.Check(plainTextPolicy, "")).toBe(true);
+  expect(
+    Value.Check(plainTextPolicy, '<p>Café 世界 😀</p>\t\r\n{"key": "value"}'),
+  ).toBe(true);
+});
+
+test.each([0, 8, 11, 12, 14, 31, 127, 159])(
+  "plain text refuses the control character %i",
+  (code) => {
+    expect(
+      Value.Check(plainTextPolicy, `before${String.fromCodePoint(code)}after`),
+    ).toBe(false);
+  },
+);
 
 const addressOfLength = (length: number) =>
   `${"a".repeat(length - "@example.com".length)}@example.com`;

@@ -3,7 +3,7 @@ import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.
 import {
   activationPath,
   passwordResetPath,
-} from "#shared/contracts/account-links.ts";
+} from "#shared/contracts/spa-routes.ts";
 import { resetLifetime } from "#features/auth/account-tokens.ts";
 
 type MailConfig = Pick<

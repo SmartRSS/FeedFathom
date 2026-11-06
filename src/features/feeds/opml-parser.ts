@@ -5,7 +5,7 @@ import {
   isXmlElement,
   parseXml,
 } from "#platform/xml.ts";
-import { safeHttpUrl } from "#shared/util/safe-url.ts";
+import { isWebUrl } from "#shared/validation/address-shape.ts";
 import { decodeHtmlReferences } from "#features/feeds/plain-text.ts";
 
 const maximumDepth = 32;
@@ -17,9 +17,6 @@ type PendingOutline = {
   target: OpmlNode[];
   value: unknown;
 };
-
-// No base to resolve against: only an absolute http(s) URL passes.
-const webUrl = (value: string): string => safeHttpUrl(value, "");
 
 export function parseOpml(opml: string): OpmlNode[] {
   const parsed = parseXml(opml);
@@ -63,10 +60,10 @@ function processOutlines(outlines: unknown[]): OpmlNode[] {
     const xmlUrl = attribute(outline, "xmlUrl");
 
     if (sourceTypes.has(type) || xmlUrl) {
-      if (!webUrl(xmlUrl)) continue;
+      if (!isWebUrl(xmlUrl)) continue;
       const homeUrl = attribute(outline, "htmlUrl");
       current.target.push({
-        homeUrl: webUrl(homeUrl) ? homeUrl : new URL(xmlUrl).origin,
+        homeUrl: isWebUrl(homeUrl) ? homeUrl : new URL(xmlUrl).origin,
         name: title,
         type: "source",
         xmlUrl,

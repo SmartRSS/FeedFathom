@@ -1,15 +1,16 @@
-import { openRssSuggestion, scan } from "#shared/scanners/scanner.ts";
+import { openRssSuggestion } from "#shared/scanners/scanner.ts";
 import {
   isReaderRequest,
   isReaderResponseForRequest,
   readerErrorResponse,
 } from "#shared/reader-bridge.ts";
+import { scanDocument } from "./document-scanner.ts";
 import { isScanRequestMessage, listFeedsMessage } from "./messages.ts";
 import { createPageScanner } from "./page-scanner.ts";
 import { readSettings } from "./settings.ts";
 
-const scanDocument = async (href: string) => {
-  const feeds = scan(href, document);
+const scanWithFallback = async (href: string) => {
+  const feeds = scanDocument(href, document);
   if (feeds.length > 0 || !(await readSettings()).showOpenRss) return feeds;
   return [openRssSuggestion(href)];
 };
@@ -20,7 +21,7 @@ const scanDocument = async (href: string) => {
 chrome.runtime.onMessage.addListener(
   (message: unknown, _sender, sendResponse) => {
     if (!isScanRequestMessage(message)) return false;
-    void scanDocument(document.location.href).then((feeds) =>
+    void scanWithFallback(document.location.href).then((feeds) =>
       sendResponse(listFeedsMessage(feeds)),
     );
     return true;
@@ -65,16 +66,16 @@ const readerMessage = (event: MessageEvent<unknown>) => {
 const pageScanner = createPageScanner({
   hidden: () => document.hidden,
   href: () => document.location.href,
-  scan: scanDocument,
+  scan: scanWithFallback,
   schedule: (callback, delayMs) => {
     const timer = setTimeout(callback, delayMs);
     return () => clearTimeout(timer);
   },
   send: (message) => {
-    // Throws once the extension context is invalidated; the page has no one
-    // left to report to.
+    // Throws or rejects, depending on the browser, once the extension
+    // context is invalidated; the page has no one left to report to.
     try {
-      void chrome.runtime.sendMessage(message);
+      chrome.runtime.sendMessage(message).catch(() => {});
     } catch {}
   },
 });

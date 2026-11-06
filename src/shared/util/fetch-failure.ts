@@ -4,7 +4,7 @@
 // plain sentence. The URL and the status stay out of the sentence: wherever
 // it shows, the feed is already named, and the status is for an admin's
 // details. `editable` marks the causes a new address can fix.
-export interface FetchFailure {
+interface FetchFailure {
   editable: boolean;
   sentence: string;
   status: number | undefined;

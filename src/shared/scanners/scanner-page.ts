@@ -11,9 +11,9 @@ export type ScannerPage = {
   youtubeChannelHref?: string | undefined;
 };
 
-// The elements a ScannerPage is read from. Both extractors -- the live
-// Document here and the server's HTMLRewriter pass -- use this table and take
-// the first match of each single-valued selector.
+// The elements a ScannerPage is read from. Both extractors -- the
+// extension's over the live Document and the server's HTMLRewriter pass --
+// use this table and take the first match of each single-valued selector.
 export const scannerSelectors = {
   bitchuteChannel: ".owner>a",
   feedLinks:
@@ -23,39 +23,3 @@ export const scannerSelectors = {
   vimeoChannel: "a.js-user-link",
   youtubeChannel: "#upload-info .ytd-channel-name>a",
 } as const;
-
-export const scannerPageFromDocument = (
-  address: string,
-  document_: Document,
-): ScannerPage => {
-  const root =
-    document_.querySelector("#webkit-xml-viewer-source-xml")
-      ?.firstElementChild ?? document_.documentElement;
-  const value = (selector: string, attribute: string) =>
-    document_.querySelector(selector)?.getAttribute(attribute) ?? undefined;
-
-  return {
-    anchors: Array.from(document_.querySelectorAll("a"), (anchor) => ({
-      href: anchor.getAttribute("href") ?? "",
-      text: anchor.textContent ?? "",
-    })),
-    baseUrl: document_.baseURI || address,
-    bitchuteChannelName:
-      document_.querySelector(scannerSelectors.bitchuteChannel)?.textContent ??
-      undefined,
-    feedLinks: Array.from(
-      document_.querySelectorAll(scannerSelectors.feedLinks),
-      (link) => ({
-        href: link.getAttribute("href") ?? "",
-        title: link.getAttribute("title") ?? undefined,
-      }),
-    ),
-    generator: value(scannerSelectors.generator, "content"),
-    hasMicroformatEntries:
-      document_.querySelector(scannerSelectors.microformatEntries) !== null,
-    rootName: root?.nodeName.toLowerCase() ?? "",
-    rootXmlns: root?.getAttribute("xmlns") ?? undefined,
-    vimeoChannelHref: value(scannerSelectors.vimeoChannel, "href"),
-    youtubeChannelHref: value(scannerSelectors.youtubeChannel, "href"),
-  };
-};

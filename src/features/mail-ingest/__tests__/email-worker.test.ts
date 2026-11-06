@@ -113,9 +113,7 @@ describe("Cloudflare email worker", () => {
         message(),
         environment({ MAIL_ENDPOINT_DOMAIN: "http://reader.example" }),
       ),
-    ).rejects.toThrow(
-      "MAIL_ENDPOINT_DOMAIN must be https, or http on loopback",
-    );
+    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must be an https origin");
     await expect(
       worker.email(
         message(),
@@ -127,7 +125,7 @@ describe("Cloudflare email worker", () => {
         message(),
         environment({ MAIL_ENDPOINT_DOMAIN: "https://reader.example/path" }),
       ),
-    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must contain only a URL origin");
+    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must be an https origin");
 
     expect(endpoints).toEqual([
       "http://localhost:3456/api/mail",
