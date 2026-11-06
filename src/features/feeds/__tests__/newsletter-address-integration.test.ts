@@ -1,3 +1,4 @@
+import { Elysia } from "elysia";
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { RedisClient, SQL } from "bun";
 import { fileURLToPath } from "node:url";
@@ -23,6 +24,10 @@ import {
   createFeedRoutes,
   type FeedRouteServices,
 } from "#features/feeds/routes.ts";
+import {
+  createReaderRoutes,
+  type ReaderRouteServices,
+} from "#features/reader/routes.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
 // A newsletter address is copied to the user before Subscribe, so mail can
@@ -64,23 +69,28 @@ const config = strictFake<AppConfig>(
 );
 // Subscribing an email source fetches and imports nothing, so the feed-only
 // services stay unarranged: reaching one is a failure.
-const reader = createFeedRoutes(
-  strictFake<FeedRouteServices>(
-    {
-      articleImporter: strictFake({}, "articleImporter"),
-      config,
-      feedParser: strictFake({}, "feedParser"),
-      feedPreviewCache: strictFake({}, "feedPreviewCache"),
-      foldersDataService: strictFake({}, "foldersDataService"),
-      outboundFetchBudget,
-      sourceEnqueuer: strictFake({}, "sourceEnqueuer"),
-      sourcesDataService,
-      userSourcesDataService,
-      usersDataService,
-    },
-    "readerServices",
-  ),
+const services = strictFake<FeedRouteServices & ReaderRouteServices>(
+  {
+    articleEventHub: strictFake({}, "articleEventHub"),
+    articleImporter: strictFake({}, "articleImporter"),
+    articlesDataService,
+    config,
+    feedParser: strictFake({}, "feedParser"),
+    feedPreviewCache: strictFake({}, "feedPreviewCache"),
+    foldersDataService: strictFake({}, "foldersDataService"),
+    httpClient: strictFake({}, "httpClient"),
+    outboundFetchBudget,
+    sourceEnqueuer: strictFake({}, "sourceEnqueuer"),
+    sourcesDataService,
+    userSourcesDataService,
+    usersDataService,
+    websubStateService: strictFake({}, "websubStateService"),
+  },
+  "routeServices",
 );
+const feedRoutes = new Elysia()
+  .use(createReaderRoutes(services))
+  .use(createFeedRoutes(services));
 
 afterAll(async () => {
   redis.close();
@@ -111,7 +121,7 @@ beforeEach(async () => {
 });
 
 const post = (path: string, body: object, as = account) =>
-  reader.handle(
+  feedRoutes.handle(
     new Request(`http://localhost/api${path}`, {
       body: JSON.stringify(body),
       headers: { "content-type": "application/json", cookie: as.cookie },
