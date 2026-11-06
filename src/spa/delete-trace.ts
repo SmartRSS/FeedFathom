@@ -1,14 +1,12 @@
 // Forensics for article deletes. On 2026-10-20 two articles were deleted
 // 0.53 s apart, 17 s after the user's last click, and nothing on the client or
-// the server could say what sent them. Every article DELETE now carries the
+// the server could say what sent them. Every article DELETE carries the
 // event that triggered it and the input this tab saw just before it, and the
 // server logs both with the request. A delete with no triggering event, or
 // one whose recent input shows no click or key at all, then names itself.
 //
 // Only key names are kept: a printable key is recorded as "char", so the
 // trace never holds anything the user typed.
-
-export const DELETE_TRACE_HEADER = "X-FeedFathom-Trace";
 
 const RECENT_LIMIT = 12;
 // Request headers this size pass every proxy in front of the server.

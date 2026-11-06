@@ -1,6 +1,12 @@
 import type { ArticleSummary, TreeNode } from "#shared/contracts/responses.ts";
 
-export function treeNodeKey(node: TreeNode): string {
+// The Today view (#715): a row in the tree that lists the last day's articles
+// from every subscription. It is not a feed, so it has no id, unread count,
+// feed URL or menu, and the type makes every consumer say what it does with it.
+type TodayNode = { name: "Today"; type: "view"; uid: "today" };
+export type ListNode = TodayNode | TreeNode;
+
+export function treeNodeKey(node: ListNode): string {
   return `${node.type}:${node.uid}`;
 }
 
@@ -14,15 +20,30 @@ export function sourceIds(
   return keep(node) ? [Number(node.uid)] : [];
 }
 
+// What one article list asks the server for. Its later pages ask the same.
+export type ListScope = {
+  folder?: number;
+  query?: string;
+  sources: number[];
+  view?: "today";
+};
+
 // A folder is asked for by id and the server resolves its sources (#976):
 // its source ids would run into the request's 500-id cap.
-export function articleScope(node: TreeNode): {
-  folder?: number;
-  sources: number[];
-} {
-  return node.type === "folder"
-    ? { folder: Number(node.uid), sources: [] }
-    : { sources: sourceIds(node) };
+export function articleScope(node: ListNode): ListScope {
+  if (node.type === "view") return { sources: [], view: node.uid };
+  if (node.type === "folder") return { folder: Number(node.uid), sources: [] };
+  return { sources: [Number(node.uid)] };
+}
+
+// Search answers across every subscription, so it names no source.
+export const searchScope = (query: string): ListScope => ({
+  query,
+  sources: [],
+});
+
+export function isEmptyFolder(node: ListNode | undefined): boolean {
+  return node?.type === "folder" && node.children.length === 0;
 }
 
 /**
@@ -33,21 +54,25 @@ export function articleScope(node: TreeNode): {
  * folder the user just named. A folder that does not match survives only
  * through the descendants that do.
  */
-export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+export function filterTree(nodes: ListNode[], query: string): ListNode[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return nodes;
-  const matching = (node: TreeNode): TreeNode | undefined => {
-    if (node.name.toLowerCase().includes(needle)) return node;
-    if (node.type === "source") return undefined;
-    const children = filterTree(node.children, query);
-    return children.length ? { ...node, children } : undefined;
-  };
-  return nodes
-    .map(matching)
-    .filter((node): node is TreeNode => node !== undefined);
+  return nodes.flatMap((node) => matchingNode(node, needle) ?? []);
 }
 
-function hasNodeKey(nodes: TreeNode[], key: string): boolean {
+function matchingNode<N extends ListNode>(
+  node: N,
+  needle: string,
+): N | undefined {
+  if (node.name.toLowerCase().includes(needle)) return node;
+  if (node.type !== "folder") return undefined;
+  const children = node.children.flatMap(
+    (child) => matchingNode(child, needle) ?? [],
+  );
+  return children.length ? { ...node, children } : undefined;
+}
+
+function hasNodeKey(nodes: ListNode[], key: string): boolean {
   return nodes.some(
     (node) =>
       treeNodeKey(node) === key ||
@@ -64,7 +89,7 @@ function hasNodeKey(nodes: TreeNode[], key: string): boolean {
  * a tree Tab skips over entirely. The first row still showing takes over.
  */
 export function treeTabStopKey(
-  nodes: TreeNode[],
+  nodes: ListNode[],
   focusedKey: string | undefined,
 ): string | undefined {
   if (focusedKey !== undefined && hasNodeKey(nodes, focusedKey))
@@ -116,10 +141,10 @@ export function readStateDeltas(
 }
 
 export function findNode(
-  nodes: TreeNode[],
-  type: TreeNode["type"],
+  nodes: ListNode[],
+  type: ListNode["type"],
   uid: string,
-): TreeNode | undefined {
+): ListNode | undefined {
   const queue = [...nodes];
   for (const node of queue) {
     if (node.type === type && node.uid === uid) return node;
@@ -146,43 +171,19 @@ export function findParentFolderUid(
   return undefined;
 }
 
-export function unreadCount(node: TreeNode): number {
-  return node.type === "source"
-    ? (node.unreadCount ?? 0)
-    : (node.children ?? []).reduce(
-        (count, child) => count + unreadCount(child),
-        0,
-      );
-}
-
-// The virtual "Today" view (#715): not a real source, so it never reaches
-// sourceIds() or the server as an id -- callers branch on isTodayNode and
-// request the view instead.
-const todayNodeUid = "today";
-
-export function isTodayNode(node: TreeNode | undefined): boolean {
-  return node?.type === "source" && node.uid === todayNodeUid;
-}
-
-// Prepends the Today entry ahead of the user's own tree. Never shown on an
-// empty tree (the first-run guidance owns that state), and carries no
-// unread count of its own -- that number would need its own server
+// Today carries no count of its own: that number would need its own server
 // aggregate, and the view itself is one click away.
-export function withTodayNode(nodes: TreeNode[], enabled: boolean): TreeNode[] {
+export function unreadCount(node: ListNode): number {
+  if (node.type === "view") return 0;
+  if (node.type === "source") return node.unreadCount;
+  return node.children.reduce((count, child) => count + unreadCount(child), 0);
+}
+
+// Today leads the user's own tree. An empty tree has no Today: the first-run
+// guidance owns that state.
+export function withTodayNode(nodes: TreeNode[], enabled: boolean): ListNode[] {
   if (!enabled || nodes.length === 0) return nodes;
-  return [
-    {
-      favicon: null,
-      homeUrl: "",
-      kind: "feed",
-      name: "Today",
-      type: "source",
-      uid: todayNodeUid,
-      unreadCount: 0,
-      xmlUrl: "",
-    },
-    ...nodes,
-  ];
+  return [{ name: "Today", type: "view", uid: "today" }, ...nodes];
 }
 
 export function totalUnread(nodes: TreeNode[]): number {
@@ -213,7 +214,7 @@ export function snoozeUntilIso(
  * no job behind them.
  */
 export function isSnoozedNode(
-  node: TreeNode,
+  node: ListNode,
   now: number = Date.now(),
 ): boolean {
   if (node.type !== "source") return false;
@@ -221,21 +222,4 @@ export function isSnoozedNode(
   if (pausedUntil === undefined || pausedUntil === null) return false;
   const time = new Date(pausedUntil).getTime();
   return Number.isFinite(time) && time > now;
-}
-
-// Background poll spacing, backing off so a long-idle tab asks less often:
-// 30s doubling to a 5-minute ceiling. While the /api/events stream is open
-// (#991) it carries the signal, so the poll only backs it up at the ceiling.
-const firstPollDelayMs = 30_000;
-const maxPollDelayMs = 5 * 60_000;
-
-export function nextPollDelayMs(
-  completedCycles: number,
-  streamOpen = false,
-): number {
-  if (streamOpen) return maxPollDelayMs;
-  return Math.min(
-    maxPollDelayMs,
-    firstPollDelayMs * 2 ** Math.max(0, completedCycles),
-  );
 }

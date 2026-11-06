@@ -12,8 +12,8 @@ import type {
   TreeNode,
   treeResponse,
 } from "#shared/contracts/responses.ts";
-import { sourceIds } from "./dashboard-behavior.ts";
-import { DELETE_TRACE_HEADER } from "./delete-trace.ts";
+import { sourceIds } from "./feed-tree.ts";
+import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
 import {
   queueAdd,
   queueAll,
@@ -299,8 +299,8 @@ async function replayEntry(
       "Content-Type": "application/json",
       // The server log tells a replay from a live request by this, and the
       // original trace says what queued it and when.
-      "X-FeedFathom-Replay": String(value.queuedAt ?? "unknown"),
-      ...(value.trace ? { [DELETE_TRACE_HEADER]: value.trace } : {}),
+      [replayHeader]: String(value.queuedAt ?? "unknown"),
+      ...(value.trace ? { [deleteTraceHeader]: value.trace } : {}),
     },
     method: value.method,
   });
@@ -390,7 +390,7 @@ async function queueableMutation(request: Request, path: keyof Removals) {
       body,
       method: request.method,
       queuedAt: Date.now(),
-      trace: request.headers.get(DELETE_TRACE_HEADER),
+      trace: request.headers.get(deleteTraceHeader),
       url: request.url,
     };
     await queueAdd(entry);

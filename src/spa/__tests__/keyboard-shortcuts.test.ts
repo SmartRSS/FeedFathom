@@ -1,42 +1,58 @@
 import { describe, expect, test } from "bun:test";
-import { isTextEntry, mapArticleShortcut } from "../keyboard-shortcuts.ts";
+import { isTextEntry, mapArticleKey } from "../keyboard-shortcuts.ts";
 
 const key = (event: Partial<KeyboardEvent>) => ({
   altKey: false,
   ctrlKey: false,
   key: "",
   metaKey: false,
+  shiftKey: false,
   ...event,
 });
 
-describe("mapArticleShortcut", () => {
+describe("mapArticleKey", () => {
   test("maps the plain #709 vocabulary", () => {
-    expect(mapArticleShortcut(key({ key: "j" }))).toBe("next");
-    expect(mapArticleShortcut(key({ key: "k" }))).toBe("previous");
-    expect(mapArticleShortcut(key({ key: "o" }))).toBe("open");
-    expect(mapArticleShortcut(key({ key: "v" }))).toBe("openOriginal");
-    expect(mapArticleShortcut(key({ key: "r" }))).toBe("refresh");
-    expect(mapArticleShortcut(key({ key: "?" }))).toBe("help");
+    expect(mapArticleKey(key({ key: "j" }))).toBe("next");
+    expect(mapArticleKey(key({ key: "k" }))).toBe("previous");
+    expect(mapArticleKey(key({ key: "o" }))).toBe("open");
+    expect(mapArticleKey(key({ key: "v" }))).toBe("openOriginal");
+    expect(mapArticleKey(key({ key: "r" }))).toBe("refresh");
+    expect(mapArticleKey(key({ key: "?" }))).toBe("help");
+    expect(mapArticleKey(key({ key: "Enter" }))).toBe("read");
   });
 
-  test("Enter reads in the app while o and v keep their meanings (#1029)", () => {
-    expect(mapArticleShortcut(key({ key: "Enter" }))).toBe("read");
-    expect(mapArticleShortcut(key({ key: "o" }))).toBe("open");
-    expect(mapArticleShortcut(key({ key: "v" }))).toBe("openOriginal");
+  test("the letters never fire with a modifier held", () => {
+    expect(mapArticleKey(key({ ctrlKey: true, key: "Enter" }))).toBeNull();
+    expect(mapArticleKey(key({ ctrlKey: true, key: "r" }))).toBeNull();
+    expect(mapArticleKey(key({ key: "j", metaKey: true }))).toBeNull();
+    expect(mapArticleKey(key({ altKey: true, key: "k" }))).toBeNull();
   });
 
-  test("never fires with a modifier held", () => {
-    expect(mapArticleShortcut(key({ ctrlKey: true, key: "Enter" }))).toBeNull();
-    expect(mapArticleShortcut(key({ ctrlKey: true, key: "r" }))).toBeNull();
-    expect(mapArticleShortcut(key({ key: "j", metaKey: true }))).toBeNull();
-    expect(mapArticleShortcut(key({ altKey: true, key: "k" }))).toBeNull();
+  test("the navigation keys answer with a modifier too", () => {
+    expect(mapArticleKey(key({ ctrlKey: true, key: "ArrowDown" }))).toBe(
+      "next",
+    );
+    expect(mapArticleKey(key({ key: "Home", metaKey: true }))).toBe("first");
+    expect(mapArticleKey(key({ key: " ", shiftKey: true }))).toBe(
+      "toggleSelection",
+    );
+  });
+
+  test("m toggles read state in either case, unless Ctrl or Cmd is held", () => {
+    expect(mapArticleKey(key({ key: "m" }))).toBe("toggleRead");
+    expect(mapArticleKey(key({ key: "M" }))).toBe("toggleRead");
+    expect(mapArticleKey(key({ ctrlKey: true, key: "m" }))).toBeNull();
+  });
+
+  test("Ctrl or Cmd with A selects everything", () => {
+    expect(mapArticleKey(key({ ctrlKey: true, key: "a" }))).toBe("selectAll");
+    expect(mapArticleKey(key({ key: "A", metaKey: true }))).toBe("selectAll");
+    expect(mapArticleKey(key({ key: "a" }))).toBeNull();
   });
 
   test("leaves every other key alone", () => {
-    expect(mapArticleShortcut(key({ key: "ArrowDown" }))).toBeNull();
-    expect(mapArticleShortcut(key({ key: "m" }))).toBeNull();
-    expect(mapArticleShortcut(key({ key: "J" }))).toBeNull();
-    expect(mapArticleShortcut(key({ key: "" }))).toBeNull();
+    expect(mapArticleKey(key({ key: "J" }))).toBeNull();
+    expect(mapArticleKey(key({ key: "" }))).toBeNull();
   });
 });
 

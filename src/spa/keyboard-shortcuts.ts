@@ -1,27 +1,52 @@
-// The industry-standard keyboard vocabulary (#709) layered on top of the
-// dashboard's existing arrow/Space/Delete/Ctrl+A handling. Pure on
-// purpose: the keydown handler in dashboard.tsx owns every side effect, this
-// only decides which shortcut (if any) an event means, and whether a key
-// press landed in something the person is typing into.
+// Every key the article list answers to, and the cheat sheet that lists
+// them. The list's keydown handler owns the side effects; this decides which
+// command, if any, a key press means.
 
-export type ArticleShortcut =
+type ArticleCommand =
+  | "delete"
+  | "first"
+  | "help"
+  | "last"
   | "next"
-  | "previous"
   | "open"
-  | "read"
   | "openOriginal"
+  | "previous"
+  | "read"
   | "refresh"
-  | "help";
+  | "selectAll"
+  | "toFeeds"
+  | "toggleRead"
+  | "toggleSelection";
 
-// Plain keys only: every modifier combination keeps its browser or
-// existing-app meaning, so a chorded press is never a shortcut. Enter reads
-// the row in the app (#1029), what activating a listbox option means to a
-// screen-reader user; `v` is the way to the original site. The `m`
-// read/unread toggle predates this module (#682) and stays in dashboard.tsx.
-export function mapArticleShortcut(
-  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">,
-): ArticleShortcut | null {
-  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+type KeyPress = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">;
+
+// The navigation keys answer with any modifier: Ctrl or Cmd on an arrow
+// moves the cursor without selecting, and the handler reads that itself.
+// The letters are the industry-standard layer (#709) and answer only bare,
+// so a chorded press keeps its browser meaning. Enter reads the row in the
+// app (#1029), what activating a listbox option means to a screen-reader
+// user; `v` is the way to the original site.
+export function mapArticleKey(event: KeyPress): ArticleCommand | null {
+  switch (event.key) {
+    case "ArrowDown":
+      return "next";
+    case "ArrowUp":
+      return "previous";
+    case "ArrowLeft":
+      return "toFeeds";
+    case "Home":
+      return "first";
+    case "End":
+      return "last";
+    case " ":
+      return "toggleSelection";
+    case "Delete":
+      return "delete";
+  }
+  if (event.ctrlKey || event.metaKey)
+    return event.key.toLowerCase() === "a" ? "selectAll" : null;
+  if (event.key.toLowerCase() === "m") return "toggleRead";
+  if (event.altKey) return null;
   switch (event.key) {
     case "j":
       return "next";
@@ -41,6 +66,30 @@ export function mapArticleShortcut(
       return null;
   }
 }
+
+// The cheat sheet: each row's alternative key combinations, then what they do.
+export const shortcutHelp: [string[][], string][] = [
+  [[["↓"], ["↑"]], "Select the next / previous article"],
+  [[["j"], ["k"]], "Same, the RSS-reader standard keys"],
+  [
+    [
+      ["Ctrl", "↓"],
+      ["Ctrl", "↑"],
+    ],
+    "Move the cursor without selecting",
+  ],
+  [[["Home"], ["End"]], "Select the first / last article"],
+  [[["Space"]], "Add or remove the article at the cursor"],
+  [[["Enter"]], "Read the article at the cursor"],
+  [[["v"]], "Open the original in a new tab"],
+  [[["o"]], "Move between the list and the reader pane"],
+  [[["m"]], "Mark read / unread"],
+  [[["Delete"]], "Delete the selection"],
+  [[["Ctrl", "A"]], "Select all articles"],
+  [[["←"]], "Back to the feed list"],
+  [[["r"]], "Refresh"],
+  [[["?"], ["Esc"]], "This cheat sheet / close"],
+];
 
 // Keystrokes in text fields are content, not commands. Structural checks
 // let unit tests pass plain shapes without a DOM.

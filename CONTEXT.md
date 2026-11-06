@@ -162,9 +162,19 @@ The cache read/write half of the HTTP client was deliberately left in place on
 exactly that basis: it is pure I/O with the decisions already lifted out, so
 moving it would cost a rewiring across its callers and gain no test.
 
-Extracted SPA logic goes in one behaviour module per view — `behavior.ts` keeps
-only genuinely cross-view concerns. A single shared module would become the new
-large file and would change for several unrelated reasons.
+Extracted SPA logic goes in a module named for what it decides, beside the
+component that uses it: `behavior.ts` holds the routes, `panes.ts` the pane
+layout and history, `feed-tree.ts` the tree helpers, `article-selection.ts`
+the list selection algebra. A single shared module would become the new large
+file and would change for several unrelated reasons.
+
+The dashboard is wiring over one controller per concern (`article-list.ts`,
+`session-restore.ts`, `reader-content.ts`, `new-article-signal.ts`,
+`offline-sync.ts`) and one component per pane. A controller takes its
+requests, timers and storage as arguments, so `bun test` drives it with fakes;
+`bun test` runs Solid's server build, where effects never run, so a
+controller's decisions sit in plain methods and only its thin `createX`
+wrapper uses effects.
 
 ## Tests
 

@@ -13,6 +13,7 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import { todayWindowHours } from "#shared/contracts/limits.ts";
+import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
 
 type ArticleServices = Pick<
   typeof feeds,
@@ -92,11 +93,11 @@ export async function deleteArticlesHandler(
       cfRay: request.headers.get("cf-ray"),
       event: "articles.delete",
       removed: articleIds,
-      replayQueuedAt: request.headers.get("x-feedfathom-replay"),
+      replayQueuedAt: request.headers.get(replayHeader),
       requested: body.removedArticleIdList,
       trace:
         request.headers
-          .get("x-feedfathom-trace")
+          .get(deleteTraceHeader)
           ?.slice(0, MAX_TRACE_LOG_LENGTH) ?? null,
       userAgent: request.headers.get("user-agent"),
       userId: user.id,

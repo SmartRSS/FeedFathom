@@ -21,7 +21,7 @@ import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import type { Turnstile } from "./turnstile.d.ts";
 import { api, messageOf } from "./api.ts";
-import { loginPath, registerPath } from "./behavior.ts";
+import { loginPath, registerPath } from "./routes.ts";
 import { PasswordInput } from "./password-input.tsx";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
 import { forgetAccountData } from "./sw-protocol.ts";

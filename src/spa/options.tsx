@@ -16,7 +16,7 @@ import { todayWindowHours } from "#shared/contracts/limits.ts";
 import { passwordRequest } from "#shared/contracts/requests.ts";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
 import { api, messageOf } from "./api.ts";
-import { loginPath } from "./behavior.ts";
+import { loginPath } from "./routes.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
   articleSearchBox,

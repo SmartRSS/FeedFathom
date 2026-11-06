@@ -729,7 +729,7 @@ html[data-route="options"] body {
 .options-mobile-layout {
   display: none;
 }
-/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/behavior.ts. */
+/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/panes.ts. */
 @media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
   .options-mobile-layout {
     display: grid;
@@ -1128,6 +1128,28 @@ a {
   grid-template-rows: auto minmax(0, 1fr);
 }
 .dashboard-alert p {
+  margin: 0;
+}
+/* An alert that belongs to no one page: over whatever is open. */
+.app-alert {
+  position: fixed;
+  z-index: 200;
+  top: var(--space-2);
+  right: var(--space-2);
+  left: var(--space-2);
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--error) 12%, var(--white));
+  color: var(--grey-90);
+  box-shadow:
+    inset 0.25rem 0 0 var(--error),
+    0 0.25rem 1rem rgb(0 0 0 / 15%);
+}
+.app-alert p {
   margin: 0;
 }
 .dashboard-alert button {
@@ -2395,7 +2417,7 @@ textarea[aria-invalid="true"]:focus {
   }
 }
 /* Two panes on a landscape touch screen below 1200px (TWO_PANE_QUERY in
-   behavior.ts): three panes of touch-size rows leave each too narrow for
+   panes.ts): three panes of touch-size rows leave each too narrow for
    its names and titles. The feeds stay beside the list, and the reader
    takes the list's place while it is the focused pane; its back button
    returns to the list. The list's options button stands in for the
@@ -2476,7 +2498,7 @@ textarea[aria-invalid="true"]:focus {
     display: block;
   }
 }
-/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/behavior.ts): a
+/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/panes.ts): a
    phone, or a portrait tablet, shows one pane at a time. It changes layout
    only. Type keeps the desktop scale on the user's own root size, because
    no fixed upscale suits both a browser at its default and one the user

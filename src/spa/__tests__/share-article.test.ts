@@ -2,14 +2,11 @@ import { expect, test } from "bun:test";
 import { shareArticle } from "../share-article.ts";
 
 const clipboardWrites: string[] = [];
-const clipboardObject = {
+const clipboard = {
   writeText: async (text: string) => {
     clipboardWrites.push(text);
   },
 };
-// Partial mock: shareArticle only calls `writeText`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-const clipboard = clipboardObject as unknown as Clipboard;
 
 // Each test reads the clipboard in isolation.
 function freshClipboard() {
@@ -19,10 +16,8 @@ function freshClipboard() {
 
 function navigatorWithShare(
   behavior: (data: { title?: string; url?: string }) => Promise<void>,
-): Navigator {
-  // Partial mock: shareArticle only calls `share`.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return { share: behavior } as unknown as Navigator;
+) {
+  return { share: behavior };
 }
 
 test("uses the Web Share sheet when the platform has one", async () => {
@@ -44,9 +39,7 @@ test("uses the Web Share sheet when the platform has one", async () => {
 test("falls back to the clipboard where share is missing", async () => {
   const outcome = await shareArticle(
     { title: "First article", url: "https://articles.example/first" },
-    // Partial mock: a navigator without `share` selects the clipboard path.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    {} as Navigator,
+    {},
     freshClipboard(),
   );
   expect(outcome).toBe("copied");
@@ -85,4 +78,15 @@ test("an article without a URL does nothing", async () => {
     freshClipboard(),
   );
   expect(outcome).toBe("dismissed");
+});
+
+test("a denied or missing clipboard reports the failure", async () => {
+  const denied = {
+    writeText: async () => {
+      throw new DOMException("Denied", "NotAllowedError");
+    },
+  };
+  const article = { url: "https://articles.example/first" };
+  expect(await shareArticle(article, {}, denied)).toBe("failed");
+  expect(await shareArticle(article, {}, undefined)).toBe("failed");
 });

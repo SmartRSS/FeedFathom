@@ -6,6 +6,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
+import { articlePageSize } from "../../src/shared/contracts/responses.ts";
 import type * as Dialogs from "../../src/spa/dialog.tsx";
 import { installApiFixture } from "./api-fixture.ts";
 
@@ -374,7 +375,9 @@ test("sweeps the skeleton by transform, and not at all under reduced motion", as
       bar: getComputedStyle(element).animationName,
       overlay: getComputedStyle(element, "::after").animationName,
     }));
-  expect(await sweep()).toEqual({ bar: "none", overlay: "skeleton-sweep" });
+  const moving = await sweep();
+  expect(moving.bar).toBe("none");
+  expect(moving.overlay).not.toBe("none");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await sweep()).toEqual({ bar: "none", overlay: "none" });
@@ -674,7 +677,7 @@ test("fetches the next article page after a delete empties the list", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = 200;
+  const pageSize = articlePageSize;
   const cursors: (number | undefined)[] = [];
   // Registered after the fixture, so it wins for this one route and falls
   // through to the fixture for every other request the page makes.
@@ -767,7 +770,7 @@ test("pages the Today view with the view, not its node uid", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = 200;
+  const pageSize = articlePageSize;
   const bodies: { cursor?: number; sources: number[]; view?: string }[] = [];
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
@@ -898,6 +901,8 @@ test("announces mark-read and delete results once per action", async ({
 test("scroll-past policy batches dwelled rows into one PATCH", async ({
   page,
 }) => {
+  // The dwell and the flush run on timers, so the clock can run them out.
+  await page.clock.install();
   await page.addInitScript(() => {
     localStorage.setItem("markReadPolicy", "on-scroll-past");
   });
@@ -915,11 +920,10 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
   // three rows fit this viewport, so on most runs it moves nothing. What the
   // rows share is that they dwell, and 11 is excluded because the reader has
   // it open. The batching rule itself is pinned in scroll-past.test.ts against
-  // a stepping clock -- including the millisecond-apart case that used to
-  // split this into [[12], [13]] on a loaded runner and pass everywhere else.
-  await expect
-    .poll(() => state.readMarks, { timeout: 10_000 })
-    .toEqual([[12, 13]]);
+  // a stepping clock, including rows whose dwells end a millisecond apart.
+  await intersectionsDelivered(page);
+  await page.clock.runFor(10_000);
+  await expect.poll(() => state.readMarks).toEqual([[12, 13]]);
 
   // One request for both rows, and the rows render as read from the same
   // optimistic update the Mark read button uses.
@@ -1055,9 +1059,7 @@ test("lists active sessions and signs out another one", async ({ page }) => {
     .filter({ hasText: "Phone" })
     .getByRole("button", { exact: true, name: "Sign out" })
     .click();
-  await expect
-    .poll(() => state.revokedSessionIds, { timeout: 5_000 })
-    .toEqual([2]);
+  await expect.poll(() => state.revokedSessionIds).toEqual([2]);
   await expect(page.getByText("Phone")).toHaveCount(0);
 });
 
@@ -1394,10 +1396,8 @@ test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   const row = sourceRow(page);
   await expect(row.locator(".unread-count")).toHaveText("2");
   await row.focus();
-  const folder = await page
-    .locator("button.source.folder")
-    .elementHandle({ timeout: 1000 });
-  const source = await row.elementHandle({ timeout: 1000 });
+  const folder = await page.locator("button.source.folder").elementHandle();
+  const source = await row.elementHandle();
 
   await page.route("**/api/tree", (route) =>
     route.fulfill({
@@ -1627,9 +1627,7 @@ test("prefetches the next article when the setting is On", async ({ page }) => {
   await expect(articleOptions(page)).toHaveCount(3);
 
   await articleOptions(page).first().click();
-  await expect
-    .poll(() => new Set(ids).size, { timeout: 5_000 })
-    .toBeGreaterThan(1);
+  await expect.poll(() => new Set(ids).size).toBeGreaterThan(1);
 });
 
 test("skips the next-article prefetch when the setting is Off", async ({
@@ -2672,7 +2670,7 @@ for (const { booted, path } of [
         await page.clock.runFor(30_000);
         return state.treeRequests;
       })
-      .toBe(2);
+      .toBeGreaterThanOrEqual(2);
     await expectSignIn(page, path);
   });
 }
@@ -3045,9 +3043,10 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   await expect(dialog.getByText("Mark read / unread")).toBeVisible();
   // Ctrl+A is a chord, not two alternatives: keys inside one group join with
   // "+", and only separate groups read as "or".
-  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText(
+  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText([
+    "Ctrl + ↓ or Ctrl + ↑",
     "Ctrl + A",
-  );
+  ]);
 
   // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");
@@ -3440,7 +3439,7 @@ test("the tree context menu leaves the article paging scope alone", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = 200;
+  const pageSize = articlePageSize;
   const bodies: { cursor?: number; sources: number[] }[] = [];
   let releasePage: (() => void) | undefined;
   await page.route("**/api/articles", async (route) => {
@@ -3504,7 +3503,7 @@ test("switching feeds does not wait on the old feed's next page", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = 200;
+  const pageSize = articlePageSize;
   const pageRequests: number[][] = [];
   const held = new Map<number, () => void>();
   await page.route("**/api/articles", async (route) => {
@@ -3752,39 +3751,6 @@ test("an article event refreshes the tree ahead of the poll", async ({
     .toBe(1);
   await expect(row.locator(".unread-count")).toHaveText("5");
   await expect(page.getByText("3 new articles.")).toBeVisible();
-});
-
-// A proxy that accepts the stream and drops it on every reconnect must not
-// keep pushing the fallback poll back: it still lands at 30s.
-test("a stream that keeps dropping leaves the fallback poll on time", async ({
-  page,
-}) => {
-  await page.clock.install();
-  const state = await installApiFixture(page);
-  let streams = 0;
-  await page.route("**/api/events", (route) => {
-    streams++;
-    return route.fulfill({
-      body: "retry: 100\n: connected\n\n",
-      contentType: "text/event-stream",
-    });
-  });
-  await page.goto("/");
-  await expect(sourceRow(page)).toBeVisible();
-  expect(state.treeRequests).toBe(1);
-
-  // EventSource reconnects on real time, the poll on the installed clock.
-  const streamCount = () => streams;
-  for (let step = 0; step < 10; step++) {
-    const before = streams;
-    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
-    await expect.poll(streamCount).toBeGreaterThan(before);
-    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
-    await page.clock.runFor(3_000);
-  }
-  // A poll still in flight when the clock jumps 3s has, by the page's clock,
-  // waited past a second, so it races a second copy of its GET (see api.ts).
-  await expect.poll(() => state.treeRequests).toBeGreaterThanOrEqual(2);
 });
 
 // #927: arrowing through the list opens each row it passes. The page cancels

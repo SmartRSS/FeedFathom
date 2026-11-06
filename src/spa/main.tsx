@@ -11,16 +11,14 @@ import {
   Switch,
 } from "solid-js";
 import { render } from "solid-js/web";
+import { loginPath, resolveRoute, showsPanes, type Route } from "./routes.ts";
 import {
-  loginPath,
   parseDashboardPane,
-  resolveRoute,
   switchPane,
   withDashboardPane,
   type DashboardPane,
   type PaneSwitchHost,
-  type Route,
-} from "./behavior.ts";
+} from "./panes.ts";
 import { Dashboard } from "./dashboard.tsx";
 import { DialogHost } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
@@ -101,6 +99,11 @@ window.addEventListener(
   { capture: true },
 );
 
+// The service worker reported success for a change made offline, and the
+// server refused it once back online. Nothing else tells the user, so it
+// shows on whichever page is open.
+const [offlineChangeLost, setOfflineChangeLost] = createSignal(false);
+
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
 const paneSwitchHost: PaneSwitchHost = {
@@ -139,15 +142,12 @@ function App() {
     );
   });
 
-  if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
+  if (showsPanes(initialRoute))
     history.replaceState(withDashboardPane(history.state, "sources"), "");
 
   const navigate = (to: string) => {
     const nextRoute = resolveRoute(to);
-    const nextPane =
-      nextRoute.name === "dashboard" || nextRoute.name === "preview"
-        ? "sources"
-        : undefined;
+    const nextPane = showsPanes(nextRoute) ? "sources" : undefined;
     history.pushState(nextPane ? withDashboardPane({}, nextPane) : {}, "", to);
     setPath(to);
     setPane(nextPane ?? "sources");
@@ -251,6 +251,21 @@ function App() {
         Skip to accessibility settings
       </a>
       <DialogHost />
+      <Show when={offlineChangeLost()}>
+        <div class="app-alert" role="alert">
+          <p>
+            A change made while offline could not be applied and was discarded.
+            Reload to see the current state.
+          </p>
+          <button
+            class="button-primary"
+            type="button"
+            onClick={() => location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      </Show>
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}
       <ErrorBoundary
@@ -297,7 +312,7 @@ function Router(props: {
 }) {
   return (
     <Show
-      when={props.route.name === "dashboard" || props.route.name === "preview"}
+      when={showsPanes(props.route)}
       fallback={
         <Switch>
           <Match when={props.route.name === "register" && props.route}>
@@ -433,6 +448,8 @@ if ("serviceWorker" in navigator) {
   // through controllerchange.
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (isWorkerMessage(event.data, "shell-updated")) markUpdatePending();
+    else if (isWorkerMessage(event.data, "queued-mutation-failed"))
+      setOfflineChangeLost(true);
   });
   void navigator.serviceWorker.register(workerPath, {
     type: builtWorkerPath ? "classic" : "module",

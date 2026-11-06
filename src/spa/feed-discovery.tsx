@@ -17,7 +17,7 @@ import {
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { isEmailAddress, isWebUrl } from "#shared/validation/address-shape.ts";
-import { readerHidden, type DashboardPane } from "./behavior.ts";
+import { readerHidden, type DashboardPane } from "./panes.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, ApiError, failureDetails, messageOf } from "./api.ts";
 import { ArticleMarkup } from "./article-markup.tsx";
@@ -27,25 +27,9 @@ import {
   isNewsletterAddress,
   newsletterAddress,
 } from "#shared/util/newsletter-address.ts";
-import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
 import { ReaderHeader } from "./reader-header.tsx";
-import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
-
-// The list's and the reader's way back show only where one pane does;
-// Discover's shows at every width, as Options' and Admin's do, since it
-// replaces the panes it leads back to.
-export function BackButton(props: { always?: boolean; backPane(): void }) {
-  return (
-    <button
-      aria-label="back"
-      classList={{ "only-mobile": !props.always }}
-      onClick={props.backPane}
-    >
-      <Icon raw={backRaw} />
-    </button>
-  );
-}
+import { BackButton } from "./page-toolbar.tsx";
 
 export function FeedDiscovery(props: {
   backPane(): void;

@@ -8,8 +8,6 @@ import {
   findNode,
   findParentFolderUid,
   isSnoozedNode,
-  isTodayNode,
-  nextPollDelayMs,
   readStateDeltas,
   sourceIds,
   snoozeUntilIso,
@@ -18,7 +16,7 @@ import {
   treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
-} from "../dashboard-behavior.ts";
+} from "../feed-tree.ts";
 
 function source(
   uid: string,
@@ -77,6 +75,11 @@ describe("articleScope", () => {
   test("sends a source as its own id", () => {
     expect(articleScope(source("7"))).toEqual({ sources: [7] });
   });
+  test("asks for Today by view, never as an id", () => {
+    const [today] = withTodayNode([source("1")], true);
+    expect(articleScope(today!)).toEqual({ sources: [], view: "today" });
+    expect(Value.Check(articlesRequest, articleScope(today!))).toBe(true);
+  });
 });
 
 describe("totalUnread", () => {
@@ -86,27 +89,6 @@ describe("totalUnread", () => {
       folder("f", [source("2", { unreadCount: 4 })]),
     ];
     expect(totalUnread(nodes)).toBe(7);
-  });
-});
-
-describe("nextPollDelayMs", () => {
-  test("starts at 30 seconds and doubles to a 5-minute ceiling", () => {
-    expect(nextPollDelayMs(0)).toBe(30_000);
-    expect(nextPollDelayMs(1)).toBe(60_000);
-    expect(nextPollDelayMs(2)).toBe(120_000);
-    expect(nextPollDelayMs(3)).toBe(240_000);
-    expect(nextPollDelayMs(4)).toBe(300_000);
-    expect(nextPollDelayMs(5)).toBe(300_000);
-    expect(nextPollDelayMs(50)).toBe(300_000);
-  });
-
-  test("negative attempt counts read as the first interval", () => {
-    expect(nextPollDelayMs(-1)).toBe(30_000);
-  });
-
-  test("an open event stream holds the poll at the ceiling", () => {
-    expect(nextPollDelayMs(0, true)).toBe(300_000);
-    expect(nextPollDelayMs(0, false)).toBe(30_000);
   });
 });
 
@@ -273,9 +255,8 @@ describe("withTodayNode", () => {
     const nodes = [source("1")];
     const next = withTodayNode(nodes, true);
     expect(next).toHaveLength(2);
-    expect(isTodayNode(next[0])).toBe(true);
+    expect(next[0]).toEqual({ name: "Today", type: "view", uid: "today" });
     expect(next[1]).toBe(nodes[0]);
-    expect(next[0]!.type === "source" && next[0]!.name).toBe("Today");
   });
 
   test("leaves an empty tree alone so first-run guidance owns it", () => {

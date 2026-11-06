@@ -1,12 +1,12 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
-import type { TreeNode } from "#shared/contracts/responses.ts";
 import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
   isSnoozedNode,
   treeNodeKey,
   unreadCount,
-} from "./dashboard-behavior.ts";
+  type ListNode,
+} from "./feed-tree.ts";
 import { Icon } from "./icon.tsx";
 import { storedPreference } from "./preferences.ts";
 import feedRaw from "./assets/icons/System/rss-fill.svg?raw";
@@ -17,17 +17,14 @@ import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
 import folderOpenedRaw from "./assets/icons/Document/folder-open-fill.svg?raw";
 
-// Reads visible row order straight from the DOM instead of tracking it in
-// state -- closed folders' children simply aren't rendered, so a plain
-// query already reflects exactly what's visible, with no separate
-// flattened-tree bookkeeping to keep in sync with each TreeItem's own
-// open/closed signal.
+// Visible row order comes from the DOM: a closed folder's children are not
+// rendered, so the rows under the tree root are exactly the visible ones.
 // Stops at the first and last row rather than wrapping (WAI-ARIA tree
 // pattern). Home and End pass -Infinity and Infinity, which clamp to the ends.
 function moveTreeFocus(current: HTMLElement, offset: number) {
-  const items = [
-    ...document.querySelectorAll<HTMLElement>(".sources-pane .source"),
-  ];
+  const tree = current.closest('[role="tree"]');
+  if (!tree) return;
+  const items = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
   const index = items.indexOf(current);
   if (index === -1) return;
   const next = items[Math.min(items.length - 1, Math.max(0, index + offset))];
@@ -40,8 +37,8 @@ function moveTreeFocus(current: HTMLElement, offset: number) {
 // focus drops to <body> and every favicon replays its skeleton. Keying rows
 // on treeNodeKey keeps each row mounted and updates its node in place.
 export function ForEachNode(props: {
-  children: (node: () => TreeNode) => JSX.Element;
-  each: TreeNode[];
+  children: (node: () => ListNode) => JSX.Element;
+  each: ListNode[];
 }) {
   const byKey = createMemo(
     () => new Map(props.each.map((node) => [treeNodeKey(node), node])),
@@ -56,14 +53,14 @@ export function ForEachNode(props: {
 export function TreeItem(props: {
   focused: boolean;
   focusedKey: string | undefined;
-  node: TreeNode;
-  onContext(x: number, y: number, node: TreeNode): void;
-  onFocus(node: TreeNode): void;
-  select(node: TreeNode): void;
-  selected: TreeNode | undefined;
+  node: ListNode;
+  onContext(x: number, y: number, node: ListNode): void;
+  onFocus(node: ListNode): void;
+  select(node: ListNode): void;
+  selected: ListNode | undefined;
 }) {
   // By key, not reference: the selected node and this row's node can come
-  // from different tree loads, and the Today row is rebuilt on every read.
+  // from different tree loads.
   const isSelected = () =>
     props.selected !== undefined &&
     treeNodeKey(props.selected) === treeNodeKey(props.node);

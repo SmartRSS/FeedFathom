@@ -1,10 +1,9 @@
-// The mark-read-on-scroll-past queue (#714). Pure bookkeeping: which row ids
-// have dwelled in the viewport long enough to count as "scrolled past", and
-// how they batch into one request. The IntersectionObserver that feeds it and
-// the request it flushes into live in dashboard.tsx; this module stays free of
-// both so the dwell/batch rules can be tested against a fake clock.
+// Mark read on scroll past (#714): which rows have dwelled in the viewport
+// long enough to count as scrolled past, and how they batch into one
+// request. The queue takes an injectable clock, so the dwell and batch rules
+// are tested without one.
 
-export type ScrollPastQueueOptions = {
+type ScrollPastQueueOptions = {
   /** Called with a nonempty, ordered, deduplicated id list. */
   flush: (ids: number[]) => void;
   /** How long a row must stay ≥50% visible before it counts as read. */
@@ -179,4 +178,45 @@ export class ScrollPastQueue {
     }
     this.#arm();
   }
+}
+
+/** Watches the list's rows and marks the ones that dwell, until the returned
+ *  stop runs. Stopping sends what had finished dwelling: a change of list or
+ *  an unmount must not drop rows the policy already counts as read. With
+ *  `passiveFirstPass`, the rows visible at the start only take note; they
+ *  become eligible once they leave and re-enter the viewport. */
+export function observeScrollPast(options: {
+  eligible(id: number): boolean;
+  flush(ids: number[]): void;
+  list: HTMLElement;
+  passiveFirstPass: boolean;
+  rowId(row: Element): number | undefined;
+}): () => void {
+  const queue = new ScrollPastQueue({ flush: options.flush });
+  let primed = !options.passiveFirstPass;
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const counting = primed;
+      primed = true;
+      for (const entry of entries) {
+        const id = options.rowId(entry.target);
+        if (id === undefined) continue;
+        const dwelling =
+          counting &&
+          entry.isIntersecting &&
+          entry.intersectionRatio >= 0.5 &&
+          options.eligible(id);
+        if (dwelling) queue.add(id);
+        else queue.cancel(id);
+      }
+    },
+    { root: options.list, threshold: [0.5] },
+  );
+  for (const row of options.list.querySelectorAll(".article[data-index]"))
+    observer.observe(row);
+  return () => {
+    queue.flushNow();
+    queue.dispose();
+    observer.disconnect();
+  };
 }
