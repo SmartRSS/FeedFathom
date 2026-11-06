@@ -237,3 +237,12 @@ test("a session expires a year after it opens", async () => {
     FROM sessions WHERE sid = ${sid ?? ""}`;
   expect(row?.days).toBe(SESSION_TTL_DAYS);
 });
+
+test("a session opened without a User-Agent lists none", async () => {
+  const { userId } = await setUp();
+  const sid =
+    (await usersDataService.createSession(userId, "old-password-hash", null)) ??
+    "";
+  const [session] = await usersDataService.listSessions(userId, sid);
+  expect(session?.userAgent).toBeNull();
+});

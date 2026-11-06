@@ -17,6 +17,13 @@ export const errorResponse = Type.Object(
   exact,
 );
 
+// The session id travels only in the HttpOnly cookie, never in a body page
+// script could read.
+export const loginResponse = Type.Object(
+  { success: Type.Literal(true) },
+  exact,
+);
+
 const sessionUser = Type.Object(
   {
     email: Type.String(),

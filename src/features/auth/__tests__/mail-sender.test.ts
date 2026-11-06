@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { MailSender } from "#features/auth/mail-sender.ts";
+import { describe, expect, spyOn, test } from "bun:test";
+import { MailSender, sendLater } from "#features/auth/mail-sender.ts";
 
 const config = (domain = "example.test") => ({
   MAILJET_API_KEY: "mailjet-key",
@@ -115,5 +115,27 @@ describe("MailSender", () => {
     await expect(
       sender.sendActivationEmail("reader@example.com", "activation-token"),
     ).rejects.toBe(failure);
+  });
+});
+
+describe("sendLater", () => {
+  test("logs a failed send and undoes what the mail was for", async () => {
+    const undone = Promise.withResolvers<void>();
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      sendLater(
+        "Activation",
+        async () => {
+          throw new Error("Mailjet unavailable");
+        },
+        async () => undone.resolve(),
+      );
+      await undone.promise;
+      expect(logged.mock.calls[0]?.[0]).toBe(
+        "Activation email failed to send:",
+      );
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

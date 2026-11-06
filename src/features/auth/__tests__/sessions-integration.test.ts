@@ -129,8 +129,7 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       Date.now() - 60_000,
     );
 
-    // A missing header never overwrites a known agent with the UNKNOWN
-    // sentinel, and a stale row within its freshness window is left alone.
+    // A missing header never overwrites a known agent, and a stale row within its freshness window is left alone.
     await usersDataService.authenticate(browserSid, null);
     expect(
       (
