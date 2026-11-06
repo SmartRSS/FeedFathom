@@ -9,6 +9,7 @@ name follows each one:
   Document/folder-fill.svg          folder
   Document/folder-open-fill.svg     folder-open
   System/add-box-fill.svg           square-plus
+  System/alert-fill.svg             triangle-alert
   System/check-circle-fill.svg      circle-check
   System/check-double-fill.svg      check-check
   System/delete-bin-7-fill.svg      trash-2
@@ -23,8 +24,9 @@ name follows each one:
 Lucide is ISC-licensed. Some of these glyphs descend from Feather and carry a
 second MIT notice; both are reproduced verbatim below, straight from upstream,
 because the ISC and MIT terms each require their notice to travel with the
-copies. arrow-left, chevron-down, chevron-right, info, rss, square-plus and
-trash-2 are the Feather-derived ones here.
+copies. arrow-left, chevron-down, chevron-right, info, rss, square-plus,
+trash-2 and triangle-alert (Feather's alert-triangle) are the Feather-derived
+ones here.
 
 --------------------------------------------------------------------------
 

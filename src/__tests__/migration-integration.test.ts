@@ -344,6 +344,59 @@ test("upgrading gives each email source its earliest subscriber as owner", async
   }
 });
 
+test("upgrading decodes stored feed names and strips markup from authors", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const olderMigrationsFolder = await migrationsFolderBefore(
+    "0014_plain_feed_names",
+  );
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, olderMigrationsFolder);
+    const [user] = await client<{ id: number }[]>`INSERT INTO "users"
+      ("email", "name", "password") VALUES ('a@example.com', 'a', 'x')
+      RETURNING "id"`;
+    const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
+      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      RETURNING "id"`;
+    await client`INSERT INTO "user_folders" ("name", "user_id")
+      VALUES ('Tom &amp; Jerry', ${user!.id})`;
+    await client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
+      VALUES (${"Jake&#39;s &#x2014; &lt;dialog&gt; &#38;#39; &#0; &amp;amp; Bob & Al"}, ${source!.id}, ${user!.id})`;
+    await client`INSERT INTO "articles"
+      ("author", "content", "guid", "published_at", "source_id", "title", "url")
+      VALUES
+        (${"span class='p-author h-card'>Geoff Graham</span"}, '', 'a', now(), ${source!.id}, 't', ''),
+        (${"<a href='https://x.example'>Ann</a>"}, '', 'b', now(), ${source!.id}, 't', ''),
+        (${"Jane <jane@example.com>"}, '', 'c', now(), ${source!.id}, 't', ''),
+        (${"<span></span>"}, '', 'd', now(), ${source!.id}, 't', '')`;
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+
+    const [folder] = await client<{ name: string }[]>`
+      SELECT "name" FROM "user_folders"`;
+    expect(folder?.name).toBe("Tom & Jerry");
+    // One pass, as the parser does on import: "&#38;#39;" leaves "&#39;".
+    const [subscription] = await client<{ name: string }[]>`
+      SELECT "name" FROM "user_sources"`;
+    expect(subscription?.name).toBe(
+      "Jake's \u2014 <dialog> &#39; \uFFFD &amp; Bob & Al",
+    );
+    const authors = await client<{ author: string }[]>`
+      SELECT "author" FROM "articles" ORDER BY "guid"`;
+    expect(authors.map(({ author }) => author)).toEqual([
+      "Geoff Graham",
+      "Ann",
+      "Jane <jane@example.com>",
+      "<span></span>",
+    ]);
+  } finally {
+    await client.close();
+    await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
 // sid is a random UUID per login, so duplicates should never exist. If one
 // does, the unique index build must fail the whole migration transaction
 // rather than leave the user_id index applied without it.

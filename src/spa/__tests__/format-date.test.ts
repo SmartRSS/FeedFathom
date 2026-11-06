@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { dateFormat, formatDate } from "../format-date.ts";
+import { dateFormat, formatDate, formatDay } from "../format-date.ts";
 
 const setDateFormat = dateFormat.set;
 afterEach(() => setDateFormat("locale"));
@@ -40,4 +40,22 @@ test("empty and unparseable values render as nothing in either mode", () => {
     expect(formatDate("")).toBe("");
     expect(formatDate("not a date")).toBe("");
   }
+});
+
+test("formatDay names the day alone, its year only when not this one", () => {
+  setDateFormat("locale");
+  const past = new Date("2020-09-07T12:34:00Z");
+  expect(formatDay(past.toISOString())).toBe(
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(past),
+  );
+  const now = new Date();
+  expect(formatDay(now.toISOString())).toBe(
+    new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      month: "short",
+    }).format(now),
+  );
+  setDateFormat("iso");
+  expect(formatDay("2026-09-07T23:34:00Z")).toBe("2026-09-07");
+  expect(formatDay(null)).toBe("");
 });

@@ -11,9 +11,11 @@ import {
   type FoundFeed,
   type PreviewArticle,
 } from "#shared/contracts/responses.ts";
-import type { DashboardPane } from "./behavior.ts";
+import { readerHidden, type DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
-import { api, ApiError, messageOf } from "./api.ts";
+import { api, ApiError, failureDetails, messageOf } from "./api.ts";
+import { ArticleMarkup } from "./article-markup.tsx";
+import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { websiteValidationMessage, withScheme } from "./discovery-behavior.ts";
 import {
   isNewsletterAddress,
@@ -21,11 +23,19 @@ import {
 } from "#shared/util/newsletter-address.ts";
 import { Icon } from "./icon.tsx";
 import { formatDate } from "./format-date.ts";
+import { ReaderHeader } from "./reader-header.tsx";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
-export function BackButton(props: { backPane(): void }) {
+// The list's and the reader's way back show only where one pane does;
+// Discover's shows at every width, as Options' and Admin's do, since it
+// replaces the panes it leads back to.
+export function BackButton(props: { always?: boolean; backPane(): void }) {
   return (
-    <button aria-label="back" class="only-mobile" onClick={props.backPane}>
+    <button
+      aria-label="back"
+      classList={{ "only-mobile": !props.always }}
+      onClick={props.backPane}
+    >
       <Icon raw={backRaw} />
     </button>
   );
@@ -50,12 +60,15 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
+  // A folder to start in (its uid), for Discover opened from that folder.
+  initialFolder?: string | undefined;
   initialNewsletter?: boolean;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
   const [link, setLink] = createSignal("");
   const [feedUrl, setFeedUrl] = createSignal("");
+  const isEmail = () => feedUrl().includes("@");
   const [title, setTitle] = createSignal("");
   const [folderId, setFolderId] = createSignal("");
   const [folders, setFolders] = createSignal<Folder[]>([]);
@@ -66,6 +79,12 @@ export function FeedDiscovery(props: {
   const [loading, setLoading] = createSignal(false);
   const [progress, setProgress] = createSignal("");
   const [message, setMessage] = createSignal("");
+  // A failed preview belongs to the Feed URL field, not the page: it shows
+  // under that field and clears once the address changes.
+  const [previewError, setPreviewError] = createSignal("");
+  const [previewDetails, setPreviewDetails] =
+    createSignal<ReturnType<typeof failureDetails>>();
+  const isAdmin = createAdminFlag();
   const [startupMessage, setStartupMessage] = createSignal("");
   // Only set where the server ingests mail, which is what gates the
   // newsletter button below -- a minted address is useless otherwise.
@@ -98,7 +117,9 @@ export function FeedDiscovery(props: {
     // The pane that held focus (the toolbar button that opened this) was
     // just unmounted, which drops focus to <body>: start in the form, on the
     // first field that can be typed into (Title when editing).
-    form.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
+    form
+      .querySelector<HTMLInputElement>("input:not([disabled], [readonly])")
+      ?.focus();
     if (props.editing) {
       setFeedUrl(props.editing.xmlUrl);
       setLink(props.editing.homeUrl);
@@ -123,11 +144,13 @@ export function FeedDiscovery(props: {
         // assigning the <select>'s value while its matching <option> doesn't
         // exist yet has nothing to select against, and Solid doesn't
         // re-apply that binding just because sibling <option>s appear later,
-        // so it would silently fall back to "No parent" instead.
-        if (props.editing) setFolderId(props.editing.parentUid ?? "");
+        // so it would silently fall back to "No folder" instead.
+        setFolderId(
+          (props.editing ? props.editing.parentUid : props.initialFolder) ?? "",
+        );
       } catch (cause) {
         if (disposed || props.handleUnauthorized(cause)) return;
-        setStartupMessage(messageOf(cause, "Could not load folders."));
+        setStartupMessage(messageOf(cause, "Could not load your folders."));
       }
     })();
     // Separate from the folders load: mail being unavailable only costs the
@@ -174,7 +197,7 @@ export function FeedDiscovery(props: {
       setFeeds(found);
       setMessage("");
     } catch (cause) {
-      if (!signal.aborted) reportError(cause, "No feeds found");
+      if (!signal.aborted) reportError(cause, "Could not look for feeds.");
     } finally {
       if (!signal.aborted) {
         setLoading(false);
@@ -191,6 +214,7 @@ export function FeedDiscovery(props: {
     setTruncated(false);
     setSelectedIndex(undefined);
     setTitle("");
+    setPreviewError("");
     try {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
@@ -203,13 +227,21 @@ export function FeedDiscovery(props: {
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      // A preview lands on its first article, or on nothing when it is empty.
-      setSelectedIndex(result.articles.length ? 0 : undefined);
+      // Beside a visible reader a preview lands on its first article. Where
+      // the reader is out of sight until a row is opened, nothing is
+      // selected yet, as in the dashboard's list.
+      setSelectedIndex(
+        result.articles.length && !readerHidden() ? 0 : undefined,
+      );
       setFeeds([]);
       setMessage("");
       props.focusPane("articles");
     } catch (cause) {
-      if (!signal.aborted) reportError(cause, "Preview failed");
+      if (signal.aborted || props.handleUnauthorized(cause)) return;
+      setPreviewDetails(failureDetails(cause));
+      setPreviewError(messageOf(cause, "Could not load this feed."));
+      // On one pane at a time the form, where the error is, comes forward.
+      props.focusPane("sources");
     } finally {
       if (!signal.aborted) {
         setLoading(false);
@@ -344,8 +376,20 @@ export function FeedDiscovery(props: {
       <aside
         aria-label={props.editing ? "Edit feed" : "Discover feed"}
         class="dashboard-pane sources-pane"
-        classList={{ "focused-pane": props.pane() === "sources" }}
+        classList={{
+          "discovery-wide": !articles().length,
+          "focused-pane": props.pane() === "sources",
+        }}
       >
+        {/* A toolbar like the other panes', so the three top edges line up;
+            its title is the pane's heading. */}
+        <div class="toolbar">
+          {/* This bar's way out, as Cancel is. */}
+          <BackButton always backPane={props.close} />
+          <h2 class="toolbar-title">
+            {props.editing ? "Edit feed" : "Discover feed"}
+          </h2>
+        </div>
         <form
           class="feed-discovery-form"
           onKeyDown={(event) => {
@@ -354,14 +398,13 @@ export function FeedDiscovery(props: {
           onSubmit={submit}
           ref={form}
         >
-          <h2>{props.editing ? "Edit feed" : "Discover feed"}</h2>
           <label>
             Website
             {/* Same shared-row lock as Feed URL below when editing -- see
                 that field's comment. */}
             <input
               ref={websiteInput}
-              disabled={!!props.editing}
+              readOnly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
@@ -377,6 +420,7 @@ export function FeedDiscovery(props: {
           </label>
           <Show when={!props.editing}>
             <button
+              class="field-action"
               type="button"
               disabled={loading() || !link()}
               onClick={() => void findFeeds()}
@@ -410,48 +454,53 @@ export function FeedDiscovery(props: {
             </Show>
           </Show>
           <label>
-            Feed URL
+            {/* An address generated for email subscriptions is not a URL,
+                and the field says what it holds. */}
+            {isEmail() ? "Email address" : "Feed URL"}
             {/* Shared/deduplicated across every subscriber to this feed
                 (see sources_url_unique) -- locked here so editing can't
                 silently repoint everyone else's subscription too.
                 Unsubscribing and subscribing to a different URL is the
                 supported way to point at a different feed. */}
             <input
-              disabled={!!props.editing}
+              aria-describedby={previewError() ? "feed-url-error" : undefined}
+              aria-invalid={previewError() ? "true" : undefined}
+              readOnly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
                   : undefined
               }
               value={feedUrl()}
-              onInput={(event) => setFeedUrl(event.currentTarget.value)}
+              onInput={(event) => {
+                setPreviewError("");
+                setFeedUrl(event.currentTarget.value);
+              }}
             />
           </label>
-          <Show when={!props.editing}>
-            <Show when={feedUrl().includes("@")}>
-              <button type="button" onClick={() => void copyAddress()}>
-                Copy address
-              </button>
-            </Show>
-            <Show when={mailDomain()}>
-              <button
-                type="button"
-                disabled={loading()}
-                title="Subscribe by email: mail sent to this address becomes articles in this feed."
-                onClick={() => void useNewsletterAddress()}
-              >
-                Generate email address
-              </button>
-            </Show>
-            <Show when={!feedUrl().includes("@")}>
-              <button
-                type="button"
-                disabled={loading() || !feedUrl()}
-                onClick={() => void preview()}
-              >
-                Load preview
-              </button>
-            </Show>
+          <Show when={previewError()}>
+            {(text) => (
+              <p class="field-error" id="feed-url-error" role="alert">
+                {text()}
+              </p>
+            )}
+          </Show>
+          <Show when={previewError() ? previewDetails() : undefined}>
+            {(details) => <FailureDetails admin={isAdmin()} {...details()} />}
+          </Show>
+          {/* The address's own next step, right under it: primary until the
+              title is in, which a preview fills and Subscribe then needs, so
+              one primary action shows at a time. */}
+          <Show when={!props.editing && !isEmail()}>
+            <button
+              class="field-action"
+              classList={{ "button-primary": Boolean(feedUrl()) && !title() }}
+              type="button"
+              disabled={loading() || !feedUrl()}
+              onClick={() => void preview()}
+            >
+              Load preview
+            </button>
           </Show>
           <label>
             Title
@@ -466,12 +515,36 @@ export function FeedDiscovery(props: {
               value={folderId()}
               onChange={(event) => setFolderId(event.currentTarget.value)}
             >
-              <option value="">No parent</option>
+              <option value="">No folder</option>
               <For each={folders()}>
                 {(item) => <option value={item.id}>{item.name}</option>}
               </For>
             </select>
           </label>
+          {/* Subscribing by email is another way in, not a step of the
+              address above, so it is its own group after the fields. */}
+          <Show when={!props.editing && (mailDomain() || isEmail())}>
+            <fieldset class="discovery-email">
+              <legend>Subscribe by email</legend>
+              <div class="discovery-email-actions">
+                <Show when={mailDomain()}>
+                  <button
+                    type="button"
+                    disabled={loading()}
+                    title="Mail sent to this address becomes articles in this feed."
+                    onClick={() => void useNewsletterAddress()}
+                  >
+                    Generate email address
+                  </button>
+                </Show>
+                <Show when={isEmail()}>
+                  <button type="button" onClick={() => void copyAddress()}>
+                    Copy address
+                  </button>
+                </Show>
+              </div>
+            </fieldset>
+          </Show>
           <Show when={progress()}>
             {(text) => (
               <p class="progress" role="status">
@@ -484,33 +557,29 @@ export function FeedDiscovery(props: {
             <button type="button" onClick={props.close}>
               Cancel
             </button>
-            <button disabled={loading() || !feedUrl() || !title()}>
+            <button
+              class="button-primary"
+              disabled={loading() || !feedUrl() || !title()}
+            >
               {props.editing ? "Save" : "Subscribe"}
             </button>
           </div>
         </form>
       </aside>
-      <section
-        aria-label="Preview articles"
-        class="dashboard-pane articles-pane"
-        classList={{ "focused-pane": props.pane() === "articles" }}
-      >
-        <div class="toolbar">
-          <BackButton backPane={props.backPane} />
-          <strong>{title() || "Preview"}</strong>
-          <span />
-        </div>
-        <div class="article-list">
-          <Show
-            when={articles().length}
-            fallback={
-              <p class="empty-pane">
-                {props.editing
-                  ? "Editing an existing subscription."
-                  : "Load a feed to preview its articles."}
-              </p>
-            }
-          >
+      {/* The preview list exists only while there is something to list;
+          until then the form takes its column too (style.css). */}
+      <Show when={articles().length}>
+        <section
+          aria-label="Preview articles"
+          class="dashboard-pane articles-pane"
+          classList={{ "focused-pane": props.pane() === "articles" }}
+        >
+          <div class="toolbar">
+            <BackButton backPane={props.backPane} />
+            <strong>{title() || "Preview"}</strong>
+            <span />
+          </div>
+          <div class="article-list">
             {/* The list covers only the rows: the truncation note beside it
                 is not a listitem, and a list may only own listitems. */}
             <div role="list">
@@ -544,9 +613,9 @@ export function FeedDiscovery(props: {
                 it.
               </p>
             </Show>
-          </Show>
-        </div>
-      </section>
+          </div>
+        </section>
+      </Show>
       <article
         aria-label="Preview reader"
         class="dashboard-pane reader-pane"
@@ -559,16 +628,27 @@ export function FeedDiscovery(props: {
         <div class="reader">
           <Show
             when={selectedArticle()}
-            fallback={<p>Select a preview article.</p>}
+            fallback={
+              <p class="empty-pane">
+                {articles().length
+                  ? "Select a preview article."
+                  : props.editing
+                    ? "This feed's articles are in its list on the dashboard."
+                    : "Load a preview to read its articles here."}
+              </p>
+            }
           >
             {(item) => (
               <>
-                <h1>{item().title}</h1>
-                <Show when={item().url}>
-                  <a href={item().url}>Original</a>
-                </Show>
+                <ReaderHeader
+                  author={item().author}
+                  feed={title() || undefined}
+                  publishedAt={item().publishedAt}
+                  title={item().title}
+                  url={item().url || undefined}
+                />
                 <Enclosures article={item()} body={item().content} />
-                <div innerHTML={item().content} />
+                <ArticleMarkup html={item().content} />
               </>
             )}
           </Show>

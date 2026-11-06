@@ -4,6 +4,7 @@ import type { previewQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
+import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
 
 export async function getPreviewHandler(
   {
@@ -26,7 +27,13 @@ export async function getPreviewHandler(
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   const source = await feedParser.preview(decoded.feedUrl);
-  if (!source) return json({ error: "Invalid feed url" }, 400);
+  // The sentence is what a reader sees; the fetcher's own words are for an
+  // admin's Details.
+  if ("failure" in source)
+    return json(
+      { detail: source.failure, error: describeFetchFailure(source.failure) },
+      400,
+    );
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
   return json({
     articles: source.articles.map((article) => ({

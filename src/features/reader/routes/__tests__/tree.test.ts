@@ -19,9 +19,12 @@ const services = {
         homeUrl: "https://a.example/",
         id: 1,
         kind: "feed",
+        lastSuccess: null,
         name: "With icon",
         parentId: null,
         pausedUntil: null,
+        recentFailureDetails: "",
+        recentFailures: 0,
         unreadArticlesCount: 0,
         url: "https://a.example/feed.xml",
       },
@@ -30,9 +33,12 @@ const services = {
         homeUrl: "https://b.example/",
         id: 2,
         kind: "feed",
+        lastSuccess: null,
         name: "No icon",
         parentId: null,
         pausedUntil: null,
+        recentFailureDetails: "",
+        recentFailures: 0,
         unreadArticlesCount: 0,
         url: "https://b.example/feed.xml",
       },
@@ -49,6 +55,7 @@ test("a source's favicon URL carries its fingerprint, and a source with no icon 
   const body = (await response.json()) as { tree: unknown[] };
   expect(body.tree).toEqual([
     {
+      failing: null,
       favicon: "/api/favicon/1?v=d41d8cd98f00b204e9800998ecf8427e",
       homeUrl: "https://a.example/",
       kind: "feed",
@@ -60,6 +67,7 @@ test("a source's favicon URL carries its fingerprint, and a source with no icon 
       xmlUrl: "https://a.example/feed.xml",
     },
     {
+      failing: null,
       favicon: null,
       homeUrl: "https://b.example/",
       kind: "feed",
@@ -70,5 +78,38 @@ test("a source's favicon URL carries its fingerprint, and a source with no icon 
       unreadCount: 0,
       xmlUrl: "https://b.example/feed.xml",
     },
+  ]);
+});
+
+const failingSource = (id: number, recentFailures: number) => ({
+  faviconFingerprint: null,
+  homeUrl: "https://c.example/",
+  id,
+  kind: "feed" as const,
+  lastSuccess: new Date("2026-11-01T10:00:00.000Z"),
+  name: `Source ${id}`,
+  parentId: null,
+  pausedUntil: null,
+  recentFailureDetails: "HTTP 404",
+  recentFailures,
+  unreadArticlesCount: 0,
+  url: "https://c.example/feed.xml",
+});
+
+test("a source whose fetches keep failing carries the reason; one blip does not", async () => {
+  const response = await getTreeHandler(
+    { user: strictFake<AuthedUser>({ id: 1 }) },
+    {
+      ...services,
+      userSourcesDataService: strictFake<UserSourcesDataService>({
+        getUserSources: async () => [failingSource(3, 2), failingSource(4, 1)],
+      }),
+    },
+  );
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const body = (await response.json()) as { tree: { failing: unknown }[] };
+  expect(body.tree.map(({ failing }) => failing)).toEqual([
+    { lastSuccess: "2026-11-01T10:00:00.000Z", reason: "HTTP 404" },
+    null,
   ]);
 });

@@ -26,6 +26,12 @@ const localeDateTime = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
+const localeDate = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+const localeDayOfYear = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
 // The single place a timestamp turns into display text, so a format
 // decision is made once per mode, not per call site. The DOM keeps the raw
 // value in <time datetime>; only this text varies.
@@ -35,4 +41,15 @@ export function formatDate(iso: null | string | undefined): string {
   if (Number.isNaN(date.getTime())) return "";
   if (dateFormat.get() === "iso") return isoDateTime(date);
   return localeDateTime.format(date);
+}
+
+// The day alone, for "since" wording where the hour would be noise, and
+// its year only when that isn't this one. ISO keeps its fixed form.
+export function formatDay(iso: null | string | undefined): string {
+  const full = formatDate(iso);
+  if (!full || dateFormat.get() === "iso") return full.slice(0, 10);
+  const date = new Date(iso ?? "");
+  return date.getFullYear() === new Date().getFullYear()
+    ? localeDayOfYear.format(date)
+    : localeDate.format(date);
 }

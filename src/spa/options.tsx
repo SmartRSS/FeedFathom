@@ -28,6 +28,7 @@ import { describeUserAgent } from "./user-agent.ts";
 import { backgroundPoll, unreadBadge } from "./news-signal.ts";
 import { offlineUnread, prefetchNext } from "./reading-prefetch.ts";
 import { helpDialog } from "./dialog.tsx";
+import { PageToolbar } from "./page-toolbar.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
@@ -105,7 +106,6 @@ export function Options(props: {
   const [active, setActive] = createSignal<SectionId>(
     sectionFromHash(location.hash),
   );
-
   const onHashChange = () => {
     const next = sectionFromHash(location.hash);
     if (next === active()) return;
@@ -139,7 +139,7 @@ export function Options(props: {
       void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionMessage(messageOf(cause, "Could not load session."));
+      setSessionMessage(messageOf(cause, "Could not load your account."));
     }
     // The empty-tree guidance links here with a hash; the SPA navigation
     // never scrolls on its own, so honour the target once it is rendered.
@@ -159,7 +159,7 @@ export function Options(props: {
       setSessions(listed.sessions);
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not load sessions."));
+      setSessionsMessage(messageOf(cause, "Could not load your sessions."));
     }
   }
 
@@ -173,7 +173,7 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not sign out session."));
+      setSessionsMessage(messageOf(cause, "Could not sign out that session."));
     } finally {
       setRevokingId(undefined);
     }
@@ -187,7 +187,9 @@ export function Options(props: {
       await loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setSessionsMessage(messageOf(cause, "Could not sign out sessions."));
+      setSessionsMessage(
+        messageOf(cause, "Could not sign out the other sessions."),
+      );
     } finally {
       setRevokingId(undefined);
     }
@@ -246,7 +248,7 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setPasswordFailed(true);
-      setPasswordMessage(messageOf(cause, "Could not change password."));
+      setPasswordMessage(messageOf(cause, "Could not change your password."));
     } finally {
       setPasswordLoading(false);
     }
@@ -269,394 +271,390 @@ export function Options(props: {
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       setOpmlFailed(true);
-      setOpmlMessage(messageOf(cause, "Could not import OPML."));
+      setOpmlMessage(messageOf(cause, "Could not import the OPML file."));
     } finally {
       setOpmlLoading(false);
     }
   }
 
   return (
-    <main class="options-page">
-      <h1>Options</h1>
-      <a
-        href="/"
-        onClick={(event) => {
-          event.preventDefault();
-          props.navigate("/");
-        }}
-      >
-        Home
-      </a>
-      <nav class="options-nav" aria-label="Options sections">
-        <For each={sections}>
-          {(section) => (
-            <a
-              href={`#${section.id}`}
-              aria-current={active() === section.id ? "true" : undefined}
-            >
-              {section.label}
-            </a>
-          )}
-        </For>
-      </nav>
-      <Show when={sessionMessage()}>
-        {(message) => <p role="alert">{message()}</p>}
-      </Show>
-      <Show when={active() === "reading"}>
-        <section id="reading" class="options-section" aria-label="Reading">
-          <section class="options-card">
-            <h2>Reader</h2>
-            <PreferenceSelect
-              label="Text size"
-              preference={readerText}
-              options={[
-                ["small", "Small"],
-                ["medium", "Medium"],
-                ["large", "Large"],
-              ]}
-            />
-            <PreferenceSelect
-              label="Line width"
-              preference={readerWidth}
-              options={[
-                ["small", "Narrow"],
-                ["medium", "Medium"],
-                ["large", "Wide"],
-              ]}
-            />
-            <PreferenceSelect
-              label="Attachments"
-              preference={enclosuresOpen}
-              options={[
-                ["single", "Expand when there is only one"],
-                ["always", "Always expand"],
-                ["never", "Always collapse"],
-              ]}
-            />
-            <PreferenceSelect
-              label="YouTube player"
-              preference={youtubeLoad}
-              options={[
-                ["click", "Load on click"],
-                ["open", "Load when the article opens"],
-              ]}
-            />
-            <PreferenceSelect
-              label="YouTube domain"
-              preference={youtubeHost}
-              options={[
-                ["nocookie", "youtube-nocookie.com (no login)"],
-                ["youtube", "youtube.com (keeps your login)"],
-              ]}
-            />
-          </section>
-          <section class="options-card">
-            <h2>Marking articles read</h2>
-            <PreferenceSelect
-              label="When articles get marked read"
-              preference={markReadPolicy}
-              options={[
-                ["manual", "Manually only (m key or the Mark read button)"],
-                [
-                  "on-open",
-                  "On open (opening an article marks it read, All view)",
-                ],
-                [
-                  "on-scroll-past",
-                  "On scroll-past (a row left visible for a second is marked read)",
-                ],
-              ]}
-            />
-            <PreferenceSelect
-              label="Remember reading position"
-              preference={rememberReadingPosition}
-              options={[
-                [true, "On (reopening the app resumes where you stopped)"],
-                [false, "Off (always start at the top)"],
-              ]}
-            />
-            <p>
-              Manual only, by default. This reader is built around deleting an
-              article once you are done with it, so nothing is marked read
-              behind your back unless you ask for it. Automatic marking uses the
-              same read-state path as the button, so filtered lists still update
-              the same way.
-            </p>
-          </section>
-          <section class="options-card">
-            <h2>Prefetch and "Today" view</h2>
-            <PreferenceSelect
-              label="Prefetch next article"
-              preference={prefetchNext}
-              options={[
-                [false, "Off"],
-                [true, "On (fetches the next article after you open one)"],
-              ]}
-            />
-            <PreferenceSelect
-              label="Download unread articles for offline reading"
-              preference={offlineUnread}
-              options={[
-                [false, "Off"],
-                [true, "On (keeps up to 500 unread from the last 14 days)"],
-              ]}
-            />
-            <PreferenceSelect
-              label={'"Today" view in the sidebar'}
-              preference={todayView}
-              options={[
-                [true, "Show (unread from the last 24h)"],
-                [false, "Hide"],
-              ]}
-            />
-            <PreferenceSelect
-              label="Feed filter box in the sidebar"
-              preference={feedFilterBox}
-              options={SHOW_HIDE}
-            />
-            <PreferenceSelect
-              label="Article search box"
-              preference={articleSearchBox}
-              options={SHOW_HIDE}
-            />
-          </section>
-          <section class="options-card">
-            <h2>Keyboard</h2>
-            <p>The dashboard is keyboard-first.</p>
-            {/* The same DialogHost dialog the `?` shortcut opens; it works on
-                this route too because the host is mounted app-wide. */}
-            <button type="button" onClick={() => void helpDialog()}>
-              Keyboard shortcuts
-            </button>
-          </section>
-        </section>
-      </Show>
-      <Show when={active() === "appearance"}>
-        <section
-          id="appearance"
-          class="options-section"
-          aria-label="Appearance"
-        >
-          <section class="options-card">
-            <h2>Appearance</h2>
-            <PreferenceSelect
-              label="Theme"
-              preference={theme}
-              options={[
-                ["auto", "Auto (match OS colors)"],
-                ["smart", "Smart"],
-                ["classic", "Classic"],
-                ["millennial", "Millennial"],
-                ["aero", "Aero"],
-                ["modern", "Modern"],
-                ["high-contrast", "High contrast (accessibility)"],
-              ]}
-            />
-            <PreferenceSelect
-              label="Date format"
-              preference={dateFormat}
-              options={[
-                ["locale", "System locale"],
-                ["iso", "ISO 8601 (UTC)"],
-              ]}
-            />
-          </section>
-          {/* Only where the mobile layout exists: style.css hides it past the
-              same 768px breakpoint the mobile rules use. */}
-          <section class="options-card options-mobile-layout">
-            <h2>Mobile layout</h2>
-            <PreferenceSelect
-              label="Layout variant"
-              preference={mobileListAnchor}
-              options={[
-                [false, "Regular"],
-                [true, "Pull down"],
-              ]}
-            />
-          </section>
-        </section>
-      </Show>
-      <Show when={active() === "signal"}>
-        <section
-          id="signal"
-          class="options-section"
-          aria-label="New-article signal"
-        >
-          <section class="options-card">
-            <h2>New-article signal</h2>
-            <PreferenceSelect
-              label="Unread count in tab title"
-              preference={unreadBadge}
-              options={SHOW_HIDE}
-            />
-            <PreferenceSelect
-              label="Background check for new articles"
-              preference={backgroundPoll}
-              options={[
-                [true, 'On (shows a "new articles" toast)'],
-                [false, "Off (no background requests)"],
-              ]}
-            />
-          </section>
-        </section>
-      </Show>
-      <Show when={active() === "account"}>
-        <section
-          id="account"
-          class="options-section"
-          aria-label="Account & security"
-        >
-          <Show when={user()}>
-            {(account) => (
-              <section class="options-card">
-                <h2>Account</h2>
-                <p>
-                  {account().name} ({account().email})
-                </p>
-                <Show when={account().isAdmin}>
-                  <a
-                    href="/admin"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      props.navigate("/admin");
-                    }}
-                  >
-                    Admin
-                  </a>
-                </Show>
-                <button
-                  type="button"
-                  disabled={logoutLoading()}
-                  onClick={() => void logout()}
-                >
-                  {logoutLoading() ? "Logging out…" : "Logout"}
-                </button>
-              </section>
+    <>
+      <PageToolbar navigate={props.navigate} title="Options" />
+      <main class="options-page">
+        <nav class="options-nav" aria-label="Options sections">
+          <For each={sections}>
+            {(section) => (
+              <a
+                href={`#${section.id}`}
+                aria-current={active() === section.id ? "true" : undefined}
+              >
+                {section.label}
+              </a>
             )}
-          </Show>
-          <Show when={user()}>
+          </For>
+        </nav>
+        <Show when={sessionMessage()}>
+          {(message) => <p role="alert">{message()}</p>}
+        </Show>
+        <Show when={active() === "reading"}>
+          <section id="reading" class="options-section" aria-label="Reading">
             <section class="options-card">
-              <h2>Active sessions</h2>
-              <For each={sessions()}>
-                {(session) => (
-                  <div class="session-row">
-                    <span
-                      class="session-agent"
-                      // The raw header survives as hover detail for
-                      // anything the parsed label leaves ambiguous.
-                      title={
-                        session.userAgent.trim() &&
-                        session.userAgent !== "UNKNOWN"
-                          ? session.userAgent
-                          : undefined
-                      }
-                    >
-                      {describeUserAgent(session.userAgent)}
-                    </span>
-                    <span class="session-date">
-                      {session.current
-                        ? "This session"
-                        : `Active ${formatDate(session.lastUsedAt)} · expires ${formatDate(session.expiresAt)}`}
-                    </span>
-                    <Show when={!session.current}>
-                      <button
-                        type="button"
-                        disabled={revokingId() !== undefined}
-                        onClick={() => void revokeSession(session.id)}
-                      >
-                        {revokingId() === session.id
-                          ? "Signing out…"
-                          : "Sign out"}
-                      </button>
-                    </Show>
-                  </div>
-                )}
-              </For>
-              <Show when={sessions().some((session) => !session.current)}>
-                <button
-                  type="button"
-                  disabled={revokingId() !== undefined}
-                  onClick={() => void revokeOtherSessions()}
-                >
-                  {revokingId() === -1
-                    ? "Signing out…"
-                    : "Sign out all other sessions"}
-                </button>
-              </Show>
-              <Show when={sessionsMessage()}>
-                {(message) => <p role="alert">{message()}</p>}
-              </Show>
+              <h2>Reader</h2>
+              <PreferenceSelect
+                label="Text size"
+                preference={readerText}
+                options={[
+                  ["small", "Small"],
+                  ["medium", "Medium"],
+                  ["large", "Large"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Line width"
+                preference={readerWidth}
+                options={[
+                  ["small", "Narrow"],
+                  ["medium", "Medium"],
+                  ["large", "Wide"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Attachments"
+                preference={enclosuresOpen}
+                options={[
+                  ["single", "Expand when there is only one"],
+                  ["always", "Always expand"],
+                  ["never", "Always collapse"],
+                ]}
+              />
+              <PreferenceSelect
+                label="YouTube player"
+                preference={youtubeLoad}
+                options={[
+                  ["click", "Load on click"],
+                  ["open", "Load when the article opens"],
+                ]}
+              />
+              <PreferenceSelect
+                label="YouTube domain"
+                preference={youtubeHost}
+                options={[
+                  ["nocookie", "youtube-nocookie.com (no login)"],
+                  ["youtube", "youtube.com (keeps your login)"],
+                ]}
+              />
             </section>
-          </Show>
-          <form class="options-card" onSubmit={submitPassword}>
-            <h2>Change password</h2>
-            <PasswordInput
-              autocomplete="current-password"
-              label="Current password"
-              onInput={setOldPassword}
-            />
-            <PasswordInput
-              autocomplete="new-password"
-              label="New password"
-              onInput={setPassword}
-            />
-            <PasswordInput
-              autocomplete="new-password"
-              label="Confirm new password"
-              onInput={setPasswordConfirm}
-            />
-            <button disabled={passwordLoading()}>
-              {passwordLoading() ? "Changing password…" : "Change password"}
-            </button>
-            <Show when={passwordMessage()}>
-              {(message) => (
-                <p role={passwordFailed() ? "alert" : "status"}>{message()}</p>
+            <section class="options-card">
+              <h2>Marking articles read</h2>
+              <PreferenceSelect
+                label="When articles get marked read"
+                preference={markReadPolicy}
+                options={[
+                  ["manual", "Manually (m key or Mark read)"],
+                  [
+                    "on-open",
+                    "On open (opening an article marks it read, All view)",
+                  ],
+                  [
+                    "on-scroll-past",
+                    "On scroll-past (a row left visible for a second is marked read)",
+                  ],
+                ]}
+              />
+              <PreferenceSelect
+                label="Remember reading position"
+                preference={rememberReadingPosition}
+                options={[
+                  [true, "On (resume where you stopped)"],
+                  [false, "Off (always start at the top)"],
+                ]}
+              />
+              <p>
+                Manual only, by default. This reader is built around deleting an
+                article once you are done with it, so nothing is marked read
+                behind your back unless you ask for it. Automatic marking works
+                the same as Mark read.
+              </p>
+            </section>
+            <section class="options-card">
+              <h2>Prefetch and "Today" view</h2>
+              <PreferenceSelect
+                label="Prefetch next article"
+                preference={prefetchNext}
+                options={[
+                  [false, "Off"],
+                  [true, "On (fetches the next article after you open one)"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Download unread articles for offline reading"
+                preference={offlineUnread}
+                options={[
+                  [false, "Off"],
+                  [true, "On (keeps up to 500 unread from the last 14 days)"],
+                ]}
+              />
+              <PreferenceSelect
+                label={'"Today" view in the sidebar'}
+                preference={todayView}
+                options={[
+                  [true, "Show (unread from the last 24h)"],
+                  [false, "Hide"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Feed filter box in the sidebar"
+                preference={feedFilterBox}
+                options={SHOW_HIDE}
+              />
+              <PreferenceSelect
+                label="Article search box"
+                preference={articleSearchBox}
+                options={SHOW_HIDE}
+              />
+            </section>
+            {/* Hidden on a touch-only device (style.css), which has no
+                keyboard to use it with. */}
+            <section class="options-card options-keyboard">
+              <h2>Keyboard</h2>
+              <p>The dashboard is keyboard-first.</p>
+              {/* The same DialogHost dialog the `?` shortcut opens; it works on
+                this route too because the host is mounted app-wide. */}
+              <button type="button" onClick={() => void helpDialog()}>
+                Keyboard shortcuts
+              </button>
+            </section>
+          </section>
+        </Show>
+        <Show when={active() === "appearance"}>
+          <section
+            id="appearance"
+            class="options-section"
+            aria-label="Appearance"
+          >
+            <section class="options-card">
+              <h2>Appearance</h2>
+              <PreferenceSelect
+                label="Theme"
+                preference={theme}
+                options={[
+                  ["auto", "Auto (match OS colors)"],
+                  ["smart", "Smart"],
+                  ["classic", "Classic"],
+                  ["millennial", "Millennial"],
+                  ["aero", "Aero"],
+                  ["modern", "Modern"],
+                  ["high-contrast", "High contrast (accessibility)"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Date format"
+                preference={dateFormat}
+                options={[
+                  ["locale", "System locale"],
+                  ["iso", "ISO 8601 (UTC)"],
+                ]}
+              />
+            </section>
+            {/* Only where the mobile layout exists: style.css shows it under the
+              single-pane query (SINGLE_PANE_QUERY in behavior.ts). */}
+            <section class="options-card options-mobile-layout">
+              <h2>Mobile layout</h2>
+              <PreferenceSelect
+                label="Layout variant"
+                preference={mobileListAnchor}
+                options={[
+                  [false, "Regular"],
+                  [true, "Pull down"],
+                ]}
+              />
+            </section>
+          </section>
+        </Show>
+        <Show when={active() === "signal"}>
+          <section
+            id="signal"
+            class="options-section"
+            aria-label="New-article signal"
+          >
+            <section class="options-card">
+              <h2>New-article signal</h2>
+              <PreferenceSelect
+                label="Unread count in tab title"
+                preference={unreadBadge}
+                options={SHOW_HIDE}
+              />
+              <PreferenceSelect
+                label="Background check for new articles"
+                preference={backgroundPoll}
+                options={[
+                  [true, 'On (shows a "new articles" toast)'],
+                  [false, "Off (no background requests)"],
+                ]}
+              />
+            </section>
+          </section>
+        </Show>
+        <Show when={active() === "account"}>
+          <section
+            id="account"
+            class="options-section"
+            aria-label="Account & security"
+          >
+            <Show when={user()}>
+              {(account) => (
+                <section class="options-card">
+                  <h2>Account</h2>
+                  <p>
+                    {account().name} ({account().email})
+                  </p>
+                  <Show when={account().isAdmin}>
+                    <a
+                      href="/admin"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        props.navigate("/admin");
+                      }}
+                    >
+                      Admin
+                    </a>
+                  </Show>
+                  <button
+                    type="button"
+                    disabled={logoutLoading()}
+                    onClick={() => void logout()}
+                  >
+                    {logoutLoading() ? "Logging out…" : "Logout"}
+                  </button>
+                </section>
               )}
             </Show>
-          </form>
-        </section>
-      </Show>
-      <Show when={active() === "data"}>
-        <section id="data" class="options-section" aria-label="Data">
-          <section class="options-card">
-            <h2>Export OPML</h2>
-            <p>
-              Download every feed subscription as an OPML file any other reader
-              can import.
-            </p>
-            {/* A plain link rather than a fetch: the API is cookie-authenticated,
+            <Show when={user()}>
+              <section class="options-card">
+                <h2>Active sessions</h2>
+                <For each={sessions()}>
+                  {(session) => (
+                    <div class="session-row">
+                      <span
+                        class="session-agent"
+                        // The raw header survives as hover detail for
+                        // anything the parsed label leaves ambiguous.
+                        title={
+                          session.userAgent.trim() &&
+                          session.userAgent !== "UNKNOWN"
+                            ? session.userAgent
+                            : undefined
+                        }
+                      >
+                        {describeUserAgent(session.userAgent)}
+                      </span>
+                      <span class="session-date">
+                        {session.current
+                          ? "This session"
+                          : `Active ${formatDate(session.lastUsedAt)} · expires ${formatDate(session.expiresAt)}`}
+                      </span>
+                      <Show when={!session.current}>
+                        <button
+                          type="button"
+                          disabled={revokingId() !== undefined}
+                          onClick={() => void revokeSession(session.id)}
+                        >
+                          {revokingId() === session.id
+                            ? "Signing out…"
+                            : "Sign out"}
+                        </button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <Show when={sessions().some((session) => !session.current)}>
+                  <button
+                    type="button"
+                    disabled={revokingId() !== undefined}
+                    onClick={() => void revokeOtherSessions()}
+                  >
+                    {revokingId() === -1
+                      ? "Signing out…"
+                      : "Sign out all other sessions"}
+                  </button>
+                </Show>
+                <Show when={sessionsMessage()}>
+                  {(message) => <p role="alert">{message()}</p>}
+                </Show>
+              </section>
+            </Show>
+            <form class="options-card" onSubmit={submitPassword}>
+              <h2>Change password</h2>
+              <PasswordInput
+                autocomplete="current-password"
+                label="Current password"
+                onInput={setOldPassword}
+              />
+              <PasswordInput
+                autocomplete="new-password"
+                label="New password"
+                onInput={setPassword}
+              />
+              <PasswordInput
+                autocomplete="new-password"
+                label="Confirm new password"
+                onInput={setPasswordConfirm}
+              />
+              <button class="button-primary" disabled={passwordLoading()}>
+                {passwordLoading() ? "Changing password…" : "Change password"}
+              </button>
+              <Show when={passwordMessage()}>
+                {(message) => (
+                  <p role={passwordFailed() ? "alert" : "status"}>
+                    {message()}
+                  </p>
+                )}
+              </Show>
+            </form>
+          </section>
+        </Show>
+        <Show when={active() === "data"}>
+          <section id="data" class="options-section" aria-label="Data">
+            <section class="options-card">
+              <h2>Export OPML</h2>
+              <p>
+                Download every feed subscription as an OPML file any other
+                reader can import.
+              </p>
+              {/* A plain link rather than a fetch: the API is cookie-authenticated,
                 so the browser downloads it without the SPA holding the file in
                 memory first. */}
-            <a class="card-action" download="" href="/api/options/opml">
-              Download subscriptions
-            </a>
-            <p>
-              Newsletter subscriptions are not included. Their addresses are
-              minted by this instance, so they mean nothing to another reader.
-            </p>
+              <a class="card-action" download="" href="/api/options/opml">
+                Download subscriptions
+              </a>
+              <p>
+                Newsletter subscriptions are not included. Their addresses are
+                minted by this instance, so they mean nothing to another reader.
+              </p>
+            </section>
+            <form id="import-opml" class="options-card" onSubmit={submitOpml}>
+              <h2>Import OPML</h2>
+              <label>
+                OPML file
+                <input
+                  accept=".opml,.xml,application/xml,text/xml"
+                  name="opml"
+                  type="file"
+                  required
+                />
+              </label>
+              <button class="button-primary" disabled={opmlLoading()}>
+                {opmlLoading() ? "Importing…" : "Import"}
+              </button>
+              <Show when={opmlMessage()}>
+                {(message) => (
+                  <p role={opmlFailed() ? "alert" : "status"}>{message()}</p>
+                )}
+              </Show>
+            </form>
           </section>
-          <form id="import-opml" class="options-card" onSubmit={submitOpml}>
-            <h2>Import OPML</h2>
-            <label>
-              OPML file
-              <input
-                accept=".opml,.xml,application/xml,text/xml"
-                name="opml"
-                type="file"
-                required
-              />
-            </label>
-            <button disabled={opmlLoading()}>
-              {opmlLoading() ? "Importing…" : "Import"}
-            </button>
-            <Show when={opmlMessage()}>
-              {(message) => (
-                <p role={opmlFailed() ? "alert" : "status"}>{message()}</p>
-              )}
-            </Show>
-          </form>
-        </section>
-      </Show>
-    </main>
+        </Show>
+      </main>
+    </>
   );
 }

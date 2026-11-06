@@ -4,7 +4,13 @@ import { Value } from "typebox/value";
 const exact = { additionalProperties: false } as const;
 const errorResponse = Type.Union([
   Type.Object(
-    { error: Type.String(), success: Type.Optional(Type.Literal(false)) },
+    {
+      // The raw reason behind `error`, where the server keeps one for an
+      // admin's details.
+      detail: Type.Optional(Type.String()),
+      error: Type.String(),
+      success: Type.Optional(Type.Literal(false)),
+    },
     exact,
   ),
   Type.Object({ success: Type.Literal(false) }, exact),
@@ -19,6 +25,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly detail?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -28,18 +35,64 @@ export class ApiError extends Error {
 export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
-// An Error carries its own message for the user; anything else thrown does
-// not, so the caller names what failed.
-export const messageOf = (cause: unknown, fallback: string) =>
-  cause instanceof Error ? cause.message : fallback;
+// A response this bundle could not read. Its message names the path and the
+// parse failure, which is for the console and the tests, not the reader; the
+// HTTP status it came with is for both.
+class InvalidResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | undefined,
+  ) {
+    super(message);
+  }
+}
+
+// FeedFathom's own failure: an answer this bundle can't read, or a 5xx the
+// server sent itself. A 504 with a readable error is the exception: the
+// server's request to a feed site ran out of time, and its sentence says so.
+const ownFailure = (cause: unknown) =>
+  cause instanceof InvalidResponseError ||
+  (cause instanceof ApiError && cause.status >= 500 && cause.status !== 504);
+
+// The sentence a reader sees: the cause, as a feed's failures name theirs.
+// FeedFathom's own failure says so; any other Error -- a refusal the server
+// explained, or no connection -- carries its own sentence; `fallback`
+// ("Could not <action>.") stands alone for anything thrown that isn't an
+// Error. Statuses and raw reasons stay out: they are for an admin's details
+// (failureDetails).
+export const messageOf = (cause: unknown, fallback: string) => {
+  if (ownFailure(cause))
+    return "The FeedFathom server ran into a problem. Try again in a moment.";
+  return cause instanceof Error ? cause.message : fallback;
+};
+
+// What an admin's Details show for a failure: the HTTP status, where there
+// was an answer, and the raw reason.
+export function failureDetails(cause: unknown): {
+  reason: string;
+  status: number | undefined;
+} {
+  const status =
+    cause instanceof ApiError || cause instanceof InvalidResponseError
+      ? cause.status
+      : undefined;
+  if (!(cause instanceof Error)) return { reason: String(cause), status };
+  if (cause instanceof ApiError && cause.detail)
+    return { reason: cause.detail, status };
+  // No answer at all: the browser's own error is the only detail there is.
+  if (!status && cause.cause instanceof Error)
+    return { reason: String(cause.cause), status };
+  return { reason: cause.message, status };
+}
 
 const invalidResponse = (
   path: string,
   message: string,
   status?: number,
 ): Error =>
-  new Error(
+  new InvalidResponseError(
     `Invalid response from /api${path}${status === undefined ? "" : ` (${status})`}: ${message}`,
+    status,
   );
 
 // Aborting a request is the caller's own decision, not a failure to report:
@@ -69,18 +122,13 @@ async function responseJson(
 
 // A request that never reaches the server rejects with a browser-specific
 // TypeError -- "Failed to fetch" in Chrome, "NetworkError when attempting to
-// fetch resource" in Firefox -- and that string is what the dashboard's alert
-// puts in front of the user. Replaced once here, where every call passes,
-// rather than at each call site. navigator.onLine is only trustworthy in the
-// negative: true means an interface is up, not that anything is reachable, so
-// a false reading is allowed to name the cause and a true one is not.
+// fetch resource" in Firefox. Replaced once here, where every call passes,
+// rather than at each call site; the original stays as the cause, for an
+// admin's details.
 const unreachable = (cause: unknown): Error =>
-  new Error(
-    navigator.onLine
-      ? "Could not reach the server. It may be restarting."
-      : "You are offline. This could not be sent.",
-    { cause },
-  );
+  new Error("FeedFathom can't reach its server. Check your connection.", {
+    cause,
+  });
 
 // Cloudflare now and then holds a request for seconds to a minute before it
 // reaches the origin, which answers in milliseconds; a copy sent meanwhile
@@ -143,6 +191,7 @@ export async function api<T extends TSchema>(
           ? payload.error
           : response.statusText || `Request failed (${response.status})`,
         response.status,
+        "detail" in payload ? payload.detail : undefined,
       );
     if (
       response.status === 422 &&

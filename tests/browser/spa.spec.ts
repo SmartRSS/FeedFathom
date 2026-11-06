@@ -438,10 +438,13 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "add folder" }).click();
   await page.getByRole("dialog").getByRole("textbox").fill("Saved");
-  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Create" })
+    .click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/folders",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   expect(state.treeRequests).toBe(1);
 });
@@ -454,11 +457,11 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  // #817: the dialog's accessible name is its visible prompt.
-  await expect(dialog).toHaveAccessibleName("Folder name");
+  // #817: the dialog's accessible name is its visible title.
+  await expect(dialog).toHaveAccessibleName("New folder");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Create" }).click();
 
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
@@ -959,7 +962,7 @@ test("the options page offers and persists the read-mark policy", async ({
   await expect(policy).toHaveValue("manual");
   await expect(policy.locator("option")).toHaveCount(3);
   await expect(policy.locator("option[value=manual]")).toHaveText(
-    /Manually only/,
+    /Manually \(m key or Mark read\)/,
   );
   await expect(policy.locator("option[value=on-open]")).toHaveText(/On open/);
   await expect(policy.locator("option[value=on-scroll-past]")).toHaveText(
@@ -984,7 +987,7 @@ test("scrolls the options page when the settings exceed the viewport", async ({
   await installApiFixture(page);
   await page.setViewportSize({ height: 500, width: 800 });
   await page.goto("/options");
-  await expect(page.locator(".options-page h1")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
 
   await expect
     .poll(async () =>
@@ -1690,7 +1693,7 @@ test("surfaces a malformed Options session without crashing", async ({
   await openApp(page, { sessionFailure: true }, "/options");
 
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/session",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
   expect(new URL(page.url()).pathname).toBe("/options");
 });
@@ -1814,8 +1817,9 @@ test("source properties reuses the discovery panel with feed/website locked", as
   page,
 }) => {
   // Editing reuses the exact same left-pane form the "add source" flow
-  // uses (see feed-discovery.tsx), just with feed/home URL disabled and
-  // the website-search/preview steps hidden -- not a separate dialog.
+  // uses (see feed-discovery.tsx), just with feed/home URL read-only --
+  // still selectable and copyable -- and the website-search/preview steps
+  // hidden; not a separate dialog.
   await openApp(page);
   await selectSource(page);
 
@@ -1826,9 +1830,11 @@ test("source properties reuses the discovery panel with feed/website locked", as
   const website = page.getByLabel("Website");
   const feedUrl = page.getByLabel("Feed URL");
   await expect(website).toHaveValue("https://news.example/");
-  await expect(website).toBeDisabled();
+  await expect(website).not.toBeEditable();
+  await expect(website).toBeEnabled();
   await expect(feedUrl).toHaveValue("https://news.example/feed.xml");
-  await expect(feedUrl).toBeDisabled();
+  await expect(feedUrl).not.toBeEditable();
+  await expect(feedUrl).toBeEnabled();
   await expect(page.getByRole("button", { name: "Find feeds" })).toHaveCount(0);
 });
 
@@ -1893,7 +1899,7 @@ test("deletes a source after confirmation and refreshes the tree", async ({
   await page.getByRole("button", { name: "delete source" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
 
   await expect(dialog).toHaveCount(0);
   await expect(sourceRow(page)).toHaveCount(0);
@@ -1915,12 +1921,24 @@ test("renaming a folder through properties updates the tree", async ({
   // The rename prompt opens pre-filled with the current name (#698).
   await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
   await dialog.getByRole("textbox").fill("Archive");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Rename" }).click();
 
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
   ).toBeVisible();
   expect(state.updatedFolder).toEqual({ name: "Archive" });
+});
+
+test("an empty folder offers Add feed, which starts Discover in it", async ({
+  page,
+}) => {
+  await openApp(page, { emptyFolder: true });
+  await page.locator("button.source").filter({ hasText: "Later" }).click();
+  await expect(page.getByText("This folder is empty.")).toBeVisible();
+  // Nothing listed and no search to change: nothing to search from.
+  await expect(page.getByLabel("Search articles")).toBeDisabled();
+  await page.getByRole("button", { name: "Add feed" }).click();
+  await expect(page.getByLabel("Folder")).toHaveValue("12");
 });
 
 test("blocks deleting a non-empty folder", async ({ page }) => {
@@ -2101,7 +2119,7 @@ test("mints a newsletter address when opened with ?newsletter", async ({
     "/preview?newsletter",
   );
 
-  const feedUrl = page.getByLabel("Feed URL");
+  const feedUrl = page.getByLabel("Email address");
   await expect(feedUrl).toHaveValue(/^[\da-f]{16}@mail\.example$/u);
   const minted = await feedUrl.inputValue();
   await expect.poll(() => state.reservedAddresses).toEqual([minted]);
@@ -2129,12 +2147,12 @@ test("says so when a generated address could not be reserved", async ({
       "Address not reserved: mail sent to it bounces until you subscribe. Generate another or subscribe now.",
     ),
   ).toBeVisible();
-  const address = await page.getByLabel("Feed URL").inputValue();
+  const address = await page.getByLabel("Email address").inputValue();
   expect(state.deliverNewsletter(address)).toBe(false);
 
   state.failReservations = false;
   await page.reload();
-  await expect(page.getByLabel("Feed URL")).toHaveValue(address);
+  await expect(page.getByLabel("Email address")).toHaveValue(address);
   await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
   await expect(page.getByText(/^Address not reserved/u)).toHaveCount(0);
   const failures = browserFailures.get(page) ?? [];
@@ -2155,7 +2173,7 @@ test("keeps mail sent to a generated address before Subscribe", async ({
 
   await page.getByRole("button", { name: "Generate email address" }).click();
   await expect(page.getByText("Address copied.")).toBeVisible();
-  const address = await page.getByLabel("Feed URL").inputValue();
+  const address = await page.getByLabel("Email address").inputValue();
   await expect.poll(() => state.deliverNewsletter(address)).toBe(true);
 
   await page.getByLabel("Title").fill("Letters");
@@ -2252,6 +2270,39 @@ test("keeps the newest discovery preview response", async ({ page }) => {
   ).toBeVisible();
 });
 
+for (const admin of [false, true])
+  test(`a failed preview gives ${admin ? "an admin" : "a reader"} ${admin ? "the sentence and its details" : "the sentence alone"}`, async ({
+    page,
+  }) => {
+    await installApiFixture(page, { admin });
+    await page.route("**/api/preview?*", (route) =>
+      route.fulfill({
+        json: {
+          detail: "getaddrinfo ENOTFOUND preview.example",
+          error: "This site can't be found.",
+        },
+        status: 400,
+      }),
+    );
+    await page.goto("/preview");
+    await page.getByLabel("Feed URL").fill("https://preview.example/feed.xml");
+    await page.getByRole("button", { name: "Load preview" }).click();
+    await expect(page.locator("#feed-url-error")).toHaveText(
+      "This site can't be found.",
+    );
+    // The browser logs the 400 itself.
+    (browserFailures.get(page) ?? []).length = 0;
+    const details = page.locator(".failure-details");
+    if (!admin) {
+      await expect(details).toHaveCount(0);
+      return;
+    }
+    await details.getByText("Details").click();
+    await expect(details).toContainText(
+      "HTTP 400. getaddrinfo ENOTFOUND preview.example",
+    );
+  });
+
 test("keeps preview usable when folder startup fails", async ({ page }) => {
   await installApiFixture(page, { foldersFailure: true });
   await page.setViewportSize({ height: 844, width: 390 });
@@ -2259,7 +2310,7 @@ test("keeps preview usable when folder startup fails", async ({ page }) => {
 
   await expect(page.getByLabel("Title")).toHaveValue("Tech Preview");
   await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/folders",
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
 });
 
@@ -2491,8 +2542,14 @@ const expectSignIn = async (page: Page, next: string, refusals = 1) => {
 // read a 401 as an expired session. `ready` brings the page to the click
 // that sends the request; the session expires between the two. A failed
 // article change then reloads the list or the tree, a second 401.
+// Every dialog confirms with its action's verb.
 const confirm = (page: Page) =>
-  page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  page
+    .getByRole("dialog")
+    .getByRole("button", {
+      name: /^(Change URL|Continue|Create|Delete|Rename)$/u,
+    })
+    .click();
 const expiringMutations: {
   name: string;
   prepare?: (state: Awaited<ReturnType<typeof installApiFixture>>) => void;
@@ -2641,16 +2698,128 @@ for (const { name, ready, send } of expiringAdminRequests) {
   });
 }
 
+// Narrow, the Options tabs wrap rather than scroll: every one is whole
+// inside the strip, at widths where one row would not hold them all.
+for (const width of [390, 594])
+  test(`every Options tab is fully visible at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ height: 844, width });
+    await openApp(page, {}, "/options#data");
+    const nav = page.getByRole("navigation", { name: "Options sections" });
+    const strip = await nav.boundingBox();
+    const tabs = await Promise.all(
+      (await nav.getByRole("link").all()).map((tab) => tab.boundingBox()),
+    );
+    expect(tabs).toHaveLength(5);
+    for (const box of tabs)
+      expect(
+        Boolean(
+          strip &&
+          box &&
+          box.x >= strip.x &&
+          box.x + box.width <= strip.x + strip.width &&
+          box.y >= strip.y &&
+          box.y + box.height <= strip.y + strip.height,
+        ),
+      ).toBe(true);
+  });
+
+test("a regular user on the admin page is told it is for admins", async ({
+  page,
+}) => {
+  await openApp(page, { notAdmin: true }, "/admin");
+  await expect(
+    page.getByText("This page is for administrators."),
+  ).toBeVisible();
+  await expect(page.getByText("Unauthorized")).toHaveCount(0);
+  await expect(page.getByLabel("Sort by")).toHaveCount(0);
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await page.getByRole("link", { name: "Back to your feeds" }).click();
+  await expect(page).toHaveURL("/");
+  (browserFailures.get(page) ?? []).length = 0;
+});
+
 test("surfaces tree failures without masquerading as logout", async ({
   page,
 }) => {
   await openApp(page, { treeFailure: true });
 
   expect(new URL(page.url()).pathname).toBe("/");
-  await expect(page.getByRole("alert")).toContainText(
-    "Invalid response from /api/tree",
+  // An unreadable answer is FeedFathom's failure, said in a plain sentence
+  // in the feeds pane, which offers Try again there. A reader gets no
+  // details.
+  const failure = page.getByRole("complementary", { name: "Feeds" });
+  await expect(failure.getByRole("alert")).toContainText(
+    "The FeedFathom server ran into a problem. Try again in a moment.",
   );
+  await expect(
+    failure.getByRole("button", { name: "Try again" }),
+  ).toBeVisible();
+  await expect(failure.getByText("Details")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Login" })).toHaveCount(0);
+});
+
+test("an admin can open the details behind a tree failure", async ({
+  page,
+}) => {
+  await openApp(page, { admin: true, treeFailure: true });
+  const failure = page.getByRole("complementary", { name: "Feeds" });
+  await failure.getByText("Details").click();
+  await expect(failure.getByRole("alert")).toContainText(
+    "Invalid response from /api/tree (200)",
+  );
+  // The reason names the status already, so it isn't repeated.
+  await expect(failure.getByRole("alert")).not.toContainText("HTTP 200");
+});
+
+const goneFeed = {
+  reason:
+    "Failed to load data for https://news.example/feed.xml, received status 404",
+};
+
+test("a feed failing for over a day keeps its articles under a notice", async ({
+  page,
+}) => {
+  await openApp(page, { failing: { ...goneFeed, daysSinceSuccess: 2 } });
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(1);
+  const notice = page.locator(".feed-notice");
+  await expect(notice).toContainText(
+    "This feed seems to have moved or been removed.",
+  );
+  await expect(notice).toContainText("Not updated since");
+  await expect(notice.getByRole("button", { name: "Edit feed" })).toBeVisible();
+  await expect(notice.getByRole("button", { name: "Try again" })).toBeVisible();
+  // The status and the fetcher's own words are for admins.
+  await expect(notice.getByText("Details")).toHaveCount(0);
+  await expect(notice).not.toContainText("404");
+  // Only on the feed itself.
+  await page.locator("button.source").filter({ hasText: "Today" }).click();
+  await expect(page.locator(".feed-notice")).toHaveCount(0);
+});
+
+test("an admin sees the status and reason behind a failing feed", async ({
+  page,
+}) => {
+  await openApp(page, {
+    admin: true,
+    failing: { ...goneFeed, daysSinceSuccess: 2 },
+  });
+  await selectSource(page);
+  const notice = page.locator(".feed-notice");
+  await notice.getByText("Details").click();
+  await expect(notice).toContainText(goneFeed.reason);
+  await expect(notice).not.toContainText("HTTP 404");
+});
+
+test("a feed down for less than a day lists its articles without a notice", async ({
+  page,
+}) => {
+  await openApp(page, {
+    failing: { daysSinceSuccess: 0.5, reason: "connect ECONNREFUSED 1.2.3.4" },
+  });
+  await selectSource(page);
+  await expect(articleOptions(page)).toHaveCount(1);
+  await expect(page.locator(".feed-notice")).toHaveCount(0);
 });
 
 // #833: refreshing while the boot tree request is still in flight aborts it.
@@ -2844,11 +3013,14 @@ test("a second dialog request cancels the one still pending", async ({
 
   const first = await page.evaluate(async (url) => {
     const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
-    const pending = confirmDialog("First?");
+    const pending = confirmDialog("First?", "", { confirmLabel: "OK" });
     // Let the first dialog open and take focus, so the second replaces an
     // open dialog and must keep the first one's focus-return target.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    void promptDialog("Second", "kept");
+    void promptDialog("Second", "Name", {
+      confirmLabel: "OK",
+      initial: "kept",
+    });
     return await pending;
   }, "/dialog.tsx");
   expect(first).toBe(false);
@@ -3353,7 +3525,9 @@ test("a failed delete leaves the feed switched to since alone", async ({
     page.getByRole("option", { name: /Subscribed article/ }),
   ).toBeVisible();
   failDelete!();
-  await expect(page.getByRole("alert")).toContainText("Invalid response");
+  await expect(page.getByRole("alert")).toContainText(
+    "The FeedFathom server ran into a problem. Try again in a moment.",
+  );
   await expect(articleOptions(page)).toHaveText([/Subscribed article/]);
   await expectSelectedRow(page, /Tech Preview/);
 });
@@ -3373,7 +3547,7 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
   await dialog.getByRole("textbox").fill("Archive");
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Rename" }).click();
   await expect(
     page.locator("button.source.folder").filter({ hasText: "Archive" }),
   ).toBeVisible();
@@ -3389,7 +3563,7 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   await openRowMenu(page, "Tech Preview");
   await page.getByRole("menuitem", { name: "Unsubscribe" }).click();
   await expect(dialog).toContainText('Delete "Tech Preview"?');
-  await dialog.getByRole("button", { name: "OK" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
   await expect(
     page.locator("button.source").filter({ hasText: "Tech Preview" }),
   ).toHaveCount(0);

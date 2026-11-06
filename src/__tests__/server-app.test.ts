@@ -192,7 +192,7 @@ function createDependencies(): Dependencies {
       {
         async discoverAndSubscribeWebSub() {},
         async preview() {
-          return undefined;
+          return { failure: "" };
         },
       },
       "feedParser",
@@ -686,7 +686,7 @@ test("returns sanitized transient preview articles and rejects parser failures",
   };
   dependencies.feedParser.preview = async (sourceUrl) =>
     sourceUrl.endsWith("/invalid")
-      ? undefined
+      ? { failure: "Failed to load data for x, received status 404" }
       : {
           articles: [
             {
@@ -761,7 +761,12 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[1]).toBe("https://feed.example/rss");
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
-  expect(await invalid.json()).toEqual({ error: "Invalid feed url" });
+  // The sentence is for everyone; the fetcher's own words ride along for
+  // an admin's Details.
+  expect(await invalid.json()).toEqual({
+    detail: expect.stringContaining("received status 404"),
+    error: "This feed seems to have moved or been removed.",
+  });
 });
 
 test("preview and find return a dynamic Retry-After when the host is throttled", async () => {
@@ -836,7 +841,7 @@ test.each([
     };
     dependencies.feedParser.preview = async () => {
       reached.push("feedParser.preview");
-      return undefined;
+      return { failure: "" };
     };
     dependencies.feedParser.parseUrl = async () => {
       reached.push("feedParser.parseUrl");
@@ -1075,7 +1080,10 @@ test("preview refuses a feed that resolves to a private address", async () => {
   );
 
   expect(response.status).toBe(400);
-  expect(await response.json()).toEqual({ error: "Invalid feed url" });
+  expect(await response.json()).toEqual({
+    detail: expect.any(String),
+    error: "This address doesn't serve a feed.",
+  });
   expect(dispatched).toEqual([]);
 });
 
@@ -1164,7 +1172,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
 
   dependencies.feedParser.preview = async () => {
     parserCalls++;
-    return undefined;
+    return { failure: "" };
   };
   dependencies.feedPreviewCache.get = async () => cachedPreview;
   dependencies.userSourcesDataService.addSourceToUser = async (
@@ -1909,7 +1917,9 @@ test("authenticates only active users without revealing account state", async ()
     const response = await post(app, "/api/login", attempt);
 
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: "Wrong login data" });
+    expect(await response.json()).toEqual({
+      error: "Email or password is wrong.",
+    });
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(sessionCalls).toBe(0);
     expect(dummyHashCalls).toBe(
@@ -2008,7 +2018,9 @@ test("login refuses when the verified password was replaced before issuance", as
   );
 
   expect(response.status).toBe(401);
-  expect(await response.json()).toEqual({ error: "Wrong login data" });
+  expect(await response.json()).toEqual({
+    error: "Email or password is wrong.",
+  });
   expect(response.headers.get("set-cookie")).toBeNull();
   // Counted and never taken back: it stays a failure.
   expect(throttled).toEqual(["attempt"]);
@@ -2044,7 +2056,9 @@ test("stops guessing at one account from one address", async () => {
   // the enumeration signal the equal-time hashing was there to avoid.
   const throttled = await attempt("password", "203.0.113.7");
   expect(throttled.status).toBe(401);
-  expect(await throttled.json()).toEqual({ error: "Wrong login data" });
+  expect(await throttled.json()).toEqual({
+    error: "Email or password is wrong.",
+  });
 
   // The account itself is not locked: the counter is keyed on the address as
   // well, so hammering an address cannot shut its owner out from elsewhere.
@@ -2764,9 +2778,12 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       homeUrl: "https://news.test",
       id: 1,
       kind: "feed",
+      lastSuccess: null,
       name: "Daily",
       parentId: 4,
       pausedUntil: null,
+      recentFailureDetails: "",
+      recentFailures: 0,
       unreadArticlesCount: 0,
       url: "https://news.test/feed",
     },
@@ -2775,9 +2792,12 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
       homeUrl: null,
       id: 2,
       kind: "email",
+      lastSuccess: null,
       name: "A newsletter",
       parentId: null,
       pausedUntil: null,
+      recentFailureDetails: "",
+      recentFailures: 0,
       unreadArticlesCount: 0,
       url: "abc123@mail.example.com",
     },
@@ -2825,9 +2845,12 @@ test("exports the same bytes whatever order the services return rows in", async 
       homeUrl: "https://b.test",
       id: 1,
       kind: "feed" as const,
+      lastSuccess: null,
       name: "Beta",
       parentId: 2,
       pausedUntil: null,
+      recentFailureDetails: "",
+      recentFailures: 0,
       unreadArticlesCount: 0,
       url: "https://b.test/feed",
     },
@@ -2836,9 +2859,12 @@ test("exports the same bytes whatever order the services return rows in", async 
       homeUrl: "https://a.test",
       id: 2,
       kind: "feed" as const,
+      lastSuccess: null,
       name: "Aardvark",
       parentId: 2,
       pausedUntil: null,
+      recentFailureDetails: "",
+      recentFailures: 0,
       unreadArticlesCount: 0,
       url: "https://a.test/feed",
     },
@@ -2847,9 +2873,12 @@ test("exports the same bytes whatever order the services return rows in", async 
       homeUrl: "https://c.test",
       id: 3,
       kind: "feed" as const,
+      lastSuccess: null,
       name: "Loose",
       parentId: null,
       pausedUntil: null,
+      recentFailureDetails: "",
+      recentFailures: 0,
       unreadArticlesCount: 0,
       url: "https://c.test/feed",
     },

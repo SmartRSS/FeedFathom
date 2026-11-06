@@ -109,6 +109,8 @@ export const updateFolderRequest = Type.Object({
   folderName: normalizedNonblankString,
 });
 export const removeSourceRequest = Type.Object({ removeSourceId: id });
+// Asks for one subscribed source to be fetched now, e.g. after it failed.
+export const refreshSourceRequest = Type.Object({ sourceId: id });
 export const snoozeSourceRequest = Type.Object({
   // Null clears the snooze early; any timestamp (past or future) is stored
   // as-is and evaluated lazily at read time, so a past value reads as

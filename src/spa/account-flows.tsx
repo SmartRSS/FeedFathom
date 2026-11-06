@@ -16,11 +16,44 @@ import type { Turnstile } from "./turnstile.d.ts";
 import { api, messageOf } from "./api.ts";
 import { loginPath, registerPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
+import { type AccountField, accountFieldErrors } from "./account-validation.ts";
+
+type FieldErrors = Partial<Record<AccountField, string>>;
+
+// Checks the fields; when one fails, shows the errors and moves focus to the
+// first invalid field once it is drawn. True when the form may be sent.
+function checkFields(
+  form: HTMLFormElement,
+  values: Partial<Record<AccountField, string>>,
+  show: (errors: FieldErrors) => void,
+) {
+  const errors = accountFieldErrors(values);
+  show(errors);
+  if (Object.keys(errors).length === 0) return true;
+  queueMicrotask(() =>
+    form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+  );
+  return false;
+}
+
+// An error under a field, for the field's aria-describedby.
+function FieldError(props: { id: string; message: string | undefined }) {
+  return (
+    <Show when={props.message}>
+      {(message) => (
+        <p class="field-error" id={props.id} role="alert">
+          {message()}
+        </p>
+      )}
+    </Show>
+  );
+}
 
 export function Login(props: { navigate(to: string): void; next: string }) {
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
+  const [errors, setErrors] = createSignal<FieldErrors>({});
   const [resetEnabled, setResetEnabled] = createSignal(false);
   // With no outgoing mail configured there is no link to deliver, so the
   // route answers as it would for an unknown account and offering it here
@@ -35,8 +68,19 @@ export function Login(props: { navigate(to: string): void; next: string }) {
       setResetEnabled(false);
     }
   });
-  async function submit(event: Event) {
+  async function submit(
+    event: SubmitEvent & { currentTarget: HTMLFormElement },
+  ) {
     event.preventDefault();
+    setError("");
+    if (
+      !checkFields(
+        event.currentTarget,
+        { email: email(), password: password() },
+        setErrors,
+      )
+    )
+      return;
     try {
       await api("/login", loginResponse, {
         body: JSON.stringify({ email: email(), password: password() }),
@@ -45,32 +89,47 @@ export function Login(props: { navigate(to: string): void; next: string }) {
       });
       props.navigate(props.next);
     } catch (cause) {
-      setError(messageOf(cause, "Login failed"));
+      setError(messageOf(cause, "Could not sign in."));
     }
   }
   return (
     <main>
-      <form class="account-form" onSubmit={submit}>
+      <form class="account-form" novalidate onSubmit={submit}>
         <h1>FeedFathom</h1>
         <label>
           Email
           <input
+            aria-describedby={
+              errors().email
+                ? "login-email-error"
+                : error()
+                  ? "login-error"
+                  : undefined
+            }
+            aria-invalid={errors().email || error() ? "true" : undefined}
             type="email"
             value={email()}
             onInput={(event) => setEmail(event.currentTarget.value)}
             required
           />
         </label>
+        <FieldError id="login-email-error" message={errors().email} />
         <PasswordInput
           autocomplete="current-password"
+          error={errors().password}
+          invalidMessageId={error() ? "login-error" : undefined}
           label="Password"
           value={password()}
           onInput={setPassword}
         />
         <Show when={error()}>
-          {(message) => <p role="alert">{message()}</p>}
+          {(message) => (
+            <p id="login-error" role="alert">
+              {message()}
+            </p>
+          )}
         </Show>
-        <button>Login</button>
+        <button class="button-primary">Login</button>
         <Show when={resetEnabled()}>
           <a
             href="/password-reset"
@@ -109,6 +168,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
   const [confirm, setConfirm] = createSignal("");
   const [turnstileToken, setTurnstileToken] = createSignal("");
   const [message, setMessage] = createSignal("");
+  const [errors, setErrors] = createSignal<FieldErrors>({});
   const [registered, setRegistered] = createSignal(false);
 
   function renderTurnstile(sitekey: string) {
@@ -166,12 +226,24 @@ export function Register(props: { navigate(to: string): void; next: string }) {
       turnstileScript?.removeEventListener("load", turnstileLoaded);
   });
 
-  async function submit(event: Event) {
+  async function submit(
+    event: SubmitEvent & { currentTarget: HTMLFormElement },
+  ) {
     event.preventDefault();
-    if (password() !== confirm()) {
-      setMessage("Passwords do not match.");
+    setMessage("");
+    if (
+      !checkFields(
+        event.currentTarget,
+        {
+          confirm: confirm(),
+          email: email(),
+          password: password(),
+          username: username(),
+        },
+        setErrors,
+      )
+    )
       return;
-    }
     const sitekey = registration()?.turnstileSiteKey;
     if (sitekey && !turnstileToken()) {
       setMessage("Please complete the CAPTCHA before submitting.");
@@ -192,7 +264,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
       });
       setRegistered(true);
     } catch (cause) {
-      setMessage(messageOf(cause, "Registration failed"));
+      setMessage(messageOf(cause, "Could not register."));
     }
   }
   return (
@@ -227,7 +299,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
         </Match>
         <Match when={registration()}>
           {(info) => (
-            <form class="account-form" onSubmit={submit}>
+            <form class="account-form" novalidate onSubmit={submit}>
               <h1>
                 {info().registrationStatus === "FIRST_USER"
                   ? "Create administrator account"
@@ -236,15 +308,27 @@ export function Register(props: { navigate(to: string): void; next: string }) {
               <label>
                 Name
                 <input
+                  aria-describedby={
+                    errors().username ? "register-name-error" : undefined
+                  }
+                  aria-invalid={errors().username ? "true" : undefined}
                   autocomplete="nickname"
                   value={username()}
                   onInput={(event) => setUsername(event.currentTarget.value)}
                   required
                 />
               </label>
+              <FieldError
+                id="register-name-error"
+                message={errors().username}
+              />
               <label>
                 Email
                 <input
+                  aria-describedby={
+                    errors().email ? "register-email-error" : undefined
+                  }
+                  aria-invalid={errors().email ? "true" : undefined}
                   autocomplete="email"
                   type="email"
                   value={email()}
@@ -252,14 +336,17 @@ export function Register(props: { navigate(to: string): void; next: string }) {
                   required
                 />
               </label>
+              <FieldError id="register-email-error" message={errors().email} />
               <PasswordInput
                 autocomplete="new-password"
+                error={errors().password}
                 label="Password"
                 value={password()}
                 onInput={setPassword}
               />
               <PasswordInput
                 autocomplete="new-password"
+                error={errors().confirm}
                 label="Confirm password"
                 value={confirm()}
                 onInput={setConfirm}
@@ -270,7 +357,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
               <Show when={message()}>
                 {(text) => <p role="alert">{text()}</p>}
               </Show>
-              <button>Register</button>
+              <button class="button-primary">Register</button>
               <LoginLink navigate={props.navigate} next={props.next} />
             </form>
           )}
@@ -317,7 +404,7 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
       );
       setResult("success");
     } catch (cause) {
-      setMessage(messageOf(cause, "Account activation failed."));
+      setMessage(messageOf(cause, "Could not activate the account."));
       setResult("error");
     }
   }
@@ -341,7 +428,7 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
         >
           <form class="account-form" onSubmit={activate}>
             <p>Activate this FeedFathom account?</p>
-            <button>Activate account</button>
+            <button class="button-primary">Activate account</button>
           </form>
         </Show>
         <LoginLink navigate={props.navigate} />
@@ -354,9 +441,15 @@ export function PasswordReset(props: { navigate(to: string): void }) {
   const [email, setEmail] = createSignal("");
   const [sent, setSent] = createSignal(false);
   const [message, setMessage] = createSignal("");
+  const [errors, setErrors] = createSignal<FieldErrors>({});
 
-  async function submit(event: Event) {
+  async function submit(
+    event: SubmitEvent & { currentTarget: HTMLFormElement },
+  ) {
     event.preventDefault();
+    setMessage("");
+    if (!checkFields(event.currentTarget, { email: email() }, setErrors))
+      return;
     try {
       await api("/password-reset", successResponse, {
         body: JSON.stringify({ email: email() }),
@@ -387,11 +480,15 @@ export function PasswordReset(props: { navigate(to: string): void }) {
           </section>
         }
       >
-        <form class="account-form" onSubmit={submit}>
+        <form class="account-form" novalidate onSubmit={submit}>
           <h1>Reset your password</h1>
           <label>
             Email
             <input
+              aria-describedby={
+                errors().email ? "reset-email-error" : undefined
+              }
+              aria-invalid={errors().email ? "true" : undefined}
               autocomplete="email"
               type="email"
               value={email()}
@@ -399,8 +496,9 @@ export function PasswordReset(props: { navigate(to: string): void }) {
               required
             />
           </label>
+          <FieldError id="reset-email-error" message={errors().email} />
           <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-          <button>Send reset link</button>
+          <button class="button-primary">Send reset link</button>
           <LoginLink navigate={props.navigate} />
         </form>
       </Show>
@@ -416,13 +514,21 @@ export function PasswordResetConfirm(props: {
   const [confirm, setConfirm] = createSignal("");
   const [done, setDone] = createSignal(false);
   const [message, setMessage] = createSignal("");
+  const [errors, setErrors] = createSignal<FieldErrors>({});
 
-  async function submit(event: Event) {
+  async function submit(
+    event: SubmitEvent & { currentTarget: HTMLFormElement },
+  ) {
     event.preventDefault();
-    if (password() !== confirm()) {
-      setMessage("The two passwords do not match.");
+    setMessage("");
+    if (
+      !checkFields(
+        event.currentTarget,
+        { confirm: confirm(), password: password() },
+        setErrors,
+      )
+    )
       return;
-    }
     try {
       await api("/password-reset/confirm", successResponse, {
         body: JSON.stringify({
@@ -454,22 +560,24 @@ export function PasswordResetConfirm(props: {
           </section>
         }
       >
-        <form class="account-form" onSubmit={submit}>
+        <form class="account-form" novalidate onSubmit={submit}>
           <h1>Choose a new password</h1>
           <PasswordInput
             autocomplete="new-password"
+            error={errors().password}
             label="New password"
             value={password()}
             onInput={setPassword}
           />
           <PasswordInput
             autocomplete="new-password"
+            error={errors().confirm}
             label="Confirm password"
             value={confirm()}
             onInput={setConfirm}
           />
           <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-          <button>Set new password</button>
+          <button class="button-primary">Set new password</button>
           <LoginLink navigate={props.navigate} />
         </form>
       </Show>

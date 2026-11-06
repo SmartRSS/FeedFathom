@@ -4,6 +4,9 @@ export type ContextMenuItem =
   | {
       kind: "action";
       label: string;
+      // Removes something: drawn in the error colour, as a destructive
+      // dialog button is.
+      danger?: boolean;
       disabled?: boolean;
       onSelect: () => void;
     }
@@ -124,6 +127,7 @@ export function ContextMenu(props: {
             {(action) => (
               <li role="none">
                 <button
+                  classList={{ "context-menu-danger": action().danger }}
                   disabled={action().disabled}
                   onClick={(event) => {
                     event.stopPropagation();

@@ -18,7 +18,10 @@ export const getDateGroup = (
   boundaryDates: ReturnType<typeof generateBoundaryDates>,
   pubDate: Date,
 ) => {
-  if (pubDate.toDateString() === boundaryDates.today.toDateString()) {
+  // Anything from the start of today on, later dates included: an article
+  // dated ahead of the clock (skew, a publisher's time zone) belongs with
+  // the newest, not in a second "Within the Last Week" above Today.
+  if (pubDate >= boundaryDates.today) {
     return "Today";
   }
 

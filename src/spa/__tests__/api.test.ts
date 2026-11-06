@@ -4,7 +4,13 @@ import {
   folderResponse,
   sessionResponse,
 } from "#shared/contracts/responses.ts";
-import { api, ApiError, isUnauthorizedError } from "../api.ts";
+import {
+  api,
+  ApiError,
+  failureDetails,
+  isUnauthorizedError,
+  messageOf,
+} from "../api.ts";
 
 const exactMessage = Type.Object(
   { message: Type.String() },
@@ -59,25 +65,25 @@ const returnResponse = (response: Response) => {
 };
 
 describe("schema-first SPA API", () => {
-  test("names the offline case when the request never reaches the server", async () => {
+  test("names the connection when the request never reaches the server", async () => {
     await withOnLine(false, async () => {
       const failure = await rejectedApiCall();
       // Not an ApiError: there is no status, and the 401 check must not match.
       expect(isUnauthorizedError(failure)).toBe(false);
       expect(failure).toBeInstanceOf(Error);
       if (!(failure instanceof Error)) return;
-      expect(failure.message).toBe("You are offline. This could not be sent.");
+      expect(failure.message).toBe(
+        "FeedFathom can't reach its server. Check your connection.",
+      );
       expect(failure.cause).toBeInstanceOf(TypeError);
     });
   });
 
-  test("does not blame the network when the browser thinks it is online", async () => {
+  test("says the same when the browser thinks it is online", async () => {
     await withOnLine(true, async () => {
       const failure = await rejectedApiCall();
-      expect(failure).toBeInstanceOf(Error);
-      if (!(failure instanceof Error)) return;
-      expect(failure.message).toBe(
-        "Could not reach the server. It may be restarting.",
+      expect(messageOf(failure, "Could not load your feeds.")).toBe(
+        "FeedFathom can't reach its server. Check your connection.",
       );
     });
   });
@@ -315,7 +321,7 @@ describe("schema-first SPA API", () => {
       [
         "a network failure",
         () => Promise.reject(new TypeError("Failed to fetch")),
-        /Could not reach the server|You are offline/,
+        "FeedFathom can't reach its server. Check your connection.",
       ],
       [
         "invalid JSON",
@@ -336,5 +342,76 @@ describe("schema-first SPA API", () => {
         ).rejects.toThrow(error);
       },
     );
+  });
+});
+
+// What a reader is told when FeedFathom's own API fails: a plain sentence
+// naming what failed, no status code. The status and raw reason are kept for
+// an admin's Details.
+const failedWith = async (response: Response) => {
+  returnResponse(response);
+  return await api("/tree", exactMessage).catch((error: unknown) => error);
+};
+
+test.each([
+  ["an unreadable 500", () => new Response("boom", { status: 500 })],
+  ["a gateway's 502 page", () => new Response("<html>", { status: 502 })],
+  [
+    "the server's own 500",
+    () => Response.json({ error: "Internal Server Error" }, { status: 500 }),
+  ],
+  ["an answer this bundle can't read", () => Response.json({})],
+])("%s blames FeedFathom, not the reader", async (_case, response) => {
+  const cause = await failedWith(response());
+  // The cause, as the feed failures name theirs; whatever was being done.
+  for (const fallback of ["Could not load your feeds.", "Could not create"])
+    expect(messageOf(cause, fallback)).toBe(
+      "The FeedFathom server ran into a problem. Try again in a moment.",
+    );
+});
+
+test("keeps the server's own sentence for a request it refused", async () => {
+  const cause = await failedWith(
+    Response.json({ error: "Folder is not empty" }, { status: 400 }),
+  );
+  expect(messageOf(cause, "Could not delete the folder.")).toBe(
+    "Folder is not empty",
+  );
+  expect(messageOf("thrown string", "Could not load articles.")).toBe(
+    "Could not load articles.",
+  );
+});
+
+test("details carry the status and the raw reason", async () => {
+  expect(
+    failureDetails(await failedWith(new Response("boom", { status: 500 }))),
+  ).toEqual({
+    reason: "Invalid response from /api/tree (500): expected JSON",
+    status: 500,
+  });
+  expect(
+    failureDetails(
+      await failedWith(
+        Response.json({ error: "Internal Server Error" }, { status: 500 }),
+      ),
+    ),
+  ).toEqual({ reason: "Internal Server Error", status: 500 });
+  // A refusal that carries the raw reason behind its sentence shows that.
+  expect(
+    failureDetails(
+      await failedWith(
+        Response.json(
+          {
+            detail: "getaddrinfo ENOTFOUND feed.example",
+            error: "This site can't be found.",
+          },
+          { status: 400 },
+        ),
+      ),
+    ),
+  ).toEqual({ reason: "getaddrinfo ENOTFOUND feed.example", status: 400 });
+  expect(failureDetails(await rejectedApiCall())).toEqual({
+    reason: "TypeError: Failed to fetch",
+    status: undefined,
   });
 });
