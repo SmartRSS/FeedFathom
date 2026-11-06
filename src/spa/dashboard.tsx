@@ -2269,11 +2269,16 @@ export function Dashboard(props: {
                 control that changes which articles the list shows. It is a
                 view option, not an action, so it sits right of the spacer
                 with the reader pane's display-mode dropdown (#767). */}
+            {/* Disabled where no filter could list anything: the feeds still
+                loading or failed, or an empty folder. A caught-up feed keeps
+                it, since All is how its read articles are reached. */}
             <label class="article-filter-field">
               <span class="article-filter-label">Show</span>
               <select
                 class="article-filter"
-                disabled={feedsPending() || feedsUnavailable()}
+                disabled={
+                  feedsPending() || feedsUnavailable() || emptyFolderSelected()
+                }
                 value={articleFilter()}
                 onChange={(event) => {
                   const next = event.currentTarget.value;
