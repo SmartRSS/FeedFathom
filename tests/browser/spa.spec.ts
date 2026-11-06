@@ -1183,7 +1183,7 @@ test("registration success says what to do if no email arrives", async ({
 
 test("a throttled registration says to try again later", async ({ page }) => {
   await openRegistration(page, {
-    json: { error: "Too many attempts. Try again later.", success: false },
+    json: { error: "Too many attempts. Try again later." },
     status: 429,
   });
 

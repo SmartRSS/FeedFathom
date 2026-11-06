@@ -252,7 +252,7 @@ export async function installApiFixture(
         password: "password",
       });
       state.authenticated = true;
-      return respond({ sid: "browser-session" });
+      return respond({ success: true });
     }
 
     if (method === "POST" && url.pathname === "/api/logout") {
