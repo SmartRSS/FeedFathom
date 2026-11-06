@@ -3,7 +3,7 @@ import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 /**
  * A feed found on a page, with whether it advertises a WebSub hub.
  */
-export type DiscoveredFeed = FeedData & { websub: boolean };
+type DiscoveredFeed = FeedData & { websub: boolean };
 
 /**
  * The one thing discovery needs from a parser: does this feed push?

@@ -282,7 +282,7 @@ export const mapFeedToPreview = (
       }),
       description: parsedFeed.description ?? undefined,
       feedUrl: sourceUrl,
-      link: feedHomeUrl(parsedFeed, sourceUrl),
+      link: feedHomeUrl(parsedFeed, baseUrl),
       title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
       truncated,
     },

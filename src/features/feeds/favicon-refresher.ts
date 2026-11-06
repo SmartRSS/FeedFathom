@@ -187,7 +187,7 @@ export class FaviconRefresher {
   public async refreshFavicon(job: RefreshFaviconJob) {
     const source = { ...job, firstRunAt: job.firstRunAt ?? Date.now() };
     // Query the free providers concurrently and keep the smallest valid
-    // image that still meets TARGET_FAVICON_SIZE (falling back to the
+    // image that still meets targetFaviconSize (falling back to the
     // biggest available if none do) -- an earlier one can succeed with a
     // smaller icon while a later one has a bigger one. unavatar.io is
     // capped at 25 requests/day on the free tier, so it's only used as a

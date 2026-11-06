@@ -15,8 +15,7 @@ const servicesWith = (enqueued: { id: number }[]) => ({
     },
   }),
   userSourcesDataService: strictFake<UserSourcesDataService>({
-    getSubscribedSource: async (_userId, sourceId) =>
-      sourceId === 7 ? { id: 7, url: "https://a.example/feed.xml" } : undefined,
+    isSubscribed: async (_userId, sourceId) => sourceId === 7,
   }),
 });
 

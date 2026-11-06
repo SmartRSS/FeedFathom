@@ -92,6 +92,9 @@ export class UserSourcesDataService {
       source = await this.sourcesDataService.findSourceByUrl(sourcePayload.url);
     }
     if (!source) return "refused";
+    // A newsletter address belongs to one account. An email source from
+    // before ownership can have other subscribers too (see migration 0013):
+    // they keep their subscription, so subscribing again is not refused.
     if (
       source.kind === "email" &&
       source.reservedBy !== userId &&
@@ -156,10 +159,7 @@ export class UserSourcesDataService {
     };
   }
 
-  // A newsletter address belongs to one account. An email source from
-  // before ownership can have other subscribers too (see migration 0013):
-  // they keep their subscription, so subscribing again is not refused.
-  private async isSubscribed(userId: number, sourceId: number) {
+  public async isSubscribed(userId: number, sourceId: number) {
     const rows = await this.drizzleConnection
       .select({ id: userSources.id })
       .from(userSources)
@@ -344,23 +344,6 @@ export class UserSourcesDataService {
           id: userSources.sourceId,
           pausedUntil: userSources.pausedUntil,
         })
-    ).at(0);
-  }
-
-  // The source behind one of this user's subscriptions, or undefined when
-  // the user does not subscribe to it.
-  public async getSubscribedSource(userId: number, sourceId: number) {
-    return (
-      await this.drizzleConnection
-        .select({ id: sources.id, url: sources.url })
-        .from(userSources)
-        .innerJoin(sources, eq(sources.id, userSources.sourceId))
-        .where(
-          and(
-            eq(userSources.userId, userId),
-            eq(userSources.sourceId, sourceId),
-          ),
-        )
     ).at(0);
   }
 

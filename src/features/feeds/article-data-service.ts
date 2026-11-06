@@ -259,7 +259,7 @@ export class ArticlesDataService {
     }
 
     let changed = 0;
-    for (const [batchIndex, batch] of batches.entries()) {
+    for (const batch of batches) {
       const sourceId = batch[0]!.sourceId;
       // A subscription sees an article once last_seen_in_feed_at reaches its
       // created_at (userArticleAccessJoin), and OPML import creates
@@ -274,111 +274,100 @@ export class ArticlesDataService {
       // Compared as text: a JS Date drops the microseconds, and the
       // content-change branch below can move updated_at by exactly one.
       const updatedAtText = sql<null | string>`${articles.updatedAt}::text`;
-      try {
-        // RETURNING sees only the new row, so what each row looked like
-        // before is read first. The SET moves updated_at exactly when
-        // fieldChange or timestampAdvance holds, which is what separates a
-        // content change from a bare re-stamp. A concurrent write in between
-        // can only make this over-report, which costs one recount.
-        // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
-        const before = await this.drizzleConnection
-          .select({
-            guid: articles.guid,
-            hidden: sql<boolean>`COALESCE(NOT ${subscriptionSeesArticle(articles.lastSeenInFeedAt, latestSubscription)}, false)`,
-            updatedAt: updatedAtText,
-          })
-          .from(articles)
-          .where(
-            and(
-              eq(articles.sourceId, sourceId),
-              inArray(
-                articles.guid,
-                batch.map((payload) => payload.guid),
-              ),
+      // RETURNING sees only the new row, so what each row looked like
+      // before is read first. The SET moves updated_at exactly when
+      // fieldChange or timestampAdvance holds, which is what separates a
+      // content change from a bare re-stamp. A concurrent write in between
+      // can only make this over-report, which costs one recount.
+      // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
+      const before = await this.drizzleConnection
+        .select({
+          guid: articles.guid,
+          hidden: sql<boolean>`COALESCE(NOT ${subscriptionSeesArticle(articles.lastSeenInFeedAt, latestSubscription)}, false)`,
+          updatedAt: updatedAtText,
+        })
+        .from(articles)
+        .where(
+          and(
+            eq(articles.sourceId, sourceId),
+            inArray(
+              articles.guid,
+              batch.map((payload) => payload.guid),
             ),
-          );
-        const beforeByGuid = new Map(before.map((row) => [row.guid, row]));
+          ),
+        );
+      const beforeByGuid = new Map(before.map((row) => [row.guid, row]));
 
-        // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
-        const written = await this.drizzleConnection
-          .insert(articles)
-          .values(batch)
-          .onConflictDoUpdate({
-            set: {
-              author: sql`excluded.author`,
-              content: sql`excluded.content`,
-              // Not part of fieldChange: an attachment is not a revision of
-              // the text, and rows stored before enclosures existed would all
-              // read as rewritten. Any write, the re-stamp included, refreshes
-              // it.
-              enclosures: sql`excluded.enclosures`,
-              lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
-              publishedAt: sql`
-                CASE
-                  WHEN excluded.updated_at IS NOT NULL THEN excluded.published_at
-                  ELSE ${articles.publishedAt}
-                END
-              `,
-              title: sql`excluded.title`,
-              updatedAt: sql`
-                CASE
-                  WHEN ${fieldChange} THEN
-                    CASE
-                      WHEN ${timestampAdvance} THEN excluded.updated_at
-                      ELSE GREATEST(
-                        excluded.last_seen_in_feed_at,
-                        COALESCE(
-                          ${articles.updatedAt} + INTERVAL '1 microsecond',
-                          '-infinity'::timestamp
-                        )
-                      )
-                    END
-                  WHEN ${timestampAdvance} THEN excluded.updated_at
-                  ELSE ${articles.updatedAt}
-                END
-              `,
-              url: sql`excluded.url`,
-            },
-            // An unchanged row is left alone until its stamp is
-            // lastSeenBumpThrottleHours old (#897). Every write here copies
-            // the whole row, body included, into every index on the table,
-            // and a poll every few minutes made nearly all of them no-ops.
-            // retention.ts explains why the throttle must stay under the
-            // gone-from-feed buffer.
-            setWhere: sql`
-              excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
-              AND (
-                ${fieldChange}
-                OR ${timestampAdvance}
-                OR ${articles.lastSeenInFeedAt} < GREATEST(
-                  excluded.last_seen_in_feed_at - ${lastSeenBumpThrottleHours} * INTERVAL '1 hour',
-                  ${latestSubscription}
-                )
-              )
+      // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
+      const written = await this.drizzleConnection
+        .insert(articles)
+        .values(batch)
+        .onConflictDoUpdate({
+          set: {
+            author: sql`excluded.author`,
+            content: sql`excluded.content`,
+            // Not part of fieldChange: an attachment is not a revision of
+            // the text, and rows stored before enclosures existed would all
+            // read as rewritten. Any write, the re-stamp included, refreshes
+            // it.
+            enclosures: sql`excluded.enclosures`,
+            lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
+            publishedAt: sql`
+              CASE
+                WHEN excluded.updated_at IS NOT NULL THEN excluded.published_at
+                ELSE ${articles.publishedAt}
+              END
             `,
-            target: [articles.sourceId, articles.guid],
-          })
-          .returning({ guid: articles.guid, updatedAt: updatedAtText });
+            title: sql`excluded.title`,
+            updatedAt: sql`
+              CASE
+                WHEN ${fieldChange} THEN
+                  CASE
+                    WHEN ${timestampAdvance} THEN excluded.updated_at
+                    ELSE GREATEST(
+                      excluded.last_seen_in_feed_at,
+                      COALESCE(
+                        ${articles.updatedAt} + INTERVAL '1 microsecond',
+                        '-infinity'::timestamp
+                      )
+                    )
+                  END
+                WHEN ${timestampAdvance} THEN excluded.updated_at
+                ELSE ${articles.updatedAt}
+              END
+            `,
+            url: sql`excluded.url`,
+          },
+          // An unchanged row is left alone until its stamp is
+          // lastSeenBumpThrottleHours old (#897). Every write here copies
+          // the whole row, body included, into every index on the table,
+          // and a poll every few minutes made nearly all of them no-ops.
+          // retention.ts explains why the throttle must stay under the
+          // gone-from-feed buffer.
+          setWhere: sql`
+            excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
+            AND (
+              ${fieldChange}
+              OR ${timestampAdvance}
+              OR ${articles.lastSeenInFeedAt} < GREATEST(
+                excluded.last_seen_in_feed_at - ${lastSeenBumpThrottleHours} * INTERVAL '1 hour',
+                ${latestSubscription}
+              )
+            )
+          `,
+          target: [articles.sourceId, articles.guid],
+        })
+        .returning({ guid: articles.guid, updatedAt: updatedAtText });
 
-        for (const row of written) {
-          const previous = beforeByGuid.get(row.guid);
-          if (
-            previous === undefined ||
-            previous.hidden ||
-            previous.updatedAt !== row.updatedAt
-          ) {
-            changed++;
-          }
+      for (const row of written) {
+        const previous = beforeByGuid.get(row.guid);
+        if (
+          previous === undefined ||
+          previous.hidden ||
+          previous.updatedAt !== row.updatedAt
+        ) {
+          changed++;
         }
-      } catch (error) {
-        console.error(
-          `Error upserting articles batch ${batchIndex + 1}/${batches.length}:`,
-          error,
-        );
-        console.error(
-          `Batch size: ${batch.length}, Total articles: ${articlePayloads.length}`,
-        );
-        throw error;
       }
     }
     return changed;

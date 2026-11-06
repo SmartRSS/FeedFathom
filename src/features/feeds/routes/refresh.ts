@@ -26,11 +26,8 @@ export async function postRefreshSourceHandler(
   >,
 ) {
   await outboundFetchBudget.consume(user.id);
-  const source = await userSourcesDataService.getSubscribedSource(
-    user.id,
-    body.sourceId,
-  );
-  if (!source) return jsonError("Invalid source", 400);
-  await sourceEnqueuer.enqueueSource(source);
+  if (!(await userSourcesDataService.isSubscribed(user.id, body.sourceId)))
+    return jsonError("Invalid source", 400);
+  await sourceEnqueuer.enqueueSource({ id: body.sourceId });
   return json(successResponse, { success: true });
 }

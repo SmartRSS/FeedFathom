@@ -38,8 +38,8 @@ export const extractArticle = (content: null | string | undefined) =>
       // articles bypass it entirely) could otherwise carry an attacker-chosen
       // rel="opener" that actively re-enables window.opener access. Force the
       // safe value on every link unconditionally (harmless on links that don't
-      // open a new tab) rather than trying to detect target="_blank" first --
-      // that match previously missed case variants like target="_BLANK".
+      // open a new tab) rather than trying to detect target="_blank" first,
+      // which would have to match case variants like target="_BLANK".
       a: (tagName, attribs) => ({
         attribs: { ...attribs, rel: "noopener noreferrer" },
         tagName,

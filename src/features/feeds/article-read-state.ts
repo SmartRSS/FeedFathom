@@ -1,4 +1,6 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import type { Static } from "typebox";
+import type { articlesRequest } from "#shared/contracts/requests.ts";
 
 /**
  * Whether a subscription sees an article: the feed listed it at or after the
@@ -15,7 +17,7 @@ export const subscriptionSeesArticle = (
  * The columns an unread test needs, from whichever aliases the caller's query
  * happens to use.
  */
-export type ReadStateColumns = {
+type ReadStateColumns = {
   articleUpdatedAt: SQLWrapper;
   deletedAt: SQLWrapper;
   readAt: SQLWrapper;
@@ -74,8 +76,9 @@ export const readCondition = (columns: ReadStateColumns): SQL =>
     )
   )`;
 
-/** Which articles a list request wants. Unread is what the app has shown all along. */
-export type ArticleFilter = "all" | "read" | "unread";
+export type ArticleFilter = NonNullable<
+  Static<typeof articlesRequest>["filter"]
+>;
 
 export const articleFilterCondition = (
   filter: ArticleFilter,

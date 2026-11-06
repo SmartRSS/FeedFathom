@@ -96,7 +96,7 @@ export class SourceEnqueuer {
   // this is called, and skipping it would re-request what the hub just sent.
   public async enqueueSource(
     source: { id: number },
-    trigger: "manual" | "websub-push" = "manual",
+    trigger: NonNullable<ParseRequest["trigger"]> = "manual",
     skipCache = true,
   ) {
     const payload = { id: source.id, skipCache, trigger };

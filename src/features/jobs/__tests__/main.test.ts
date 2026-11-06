@@ -209,7 +209,6 @@ test("captured processor parses the queued source", async () => {
   expect(parsedSource).toEqual({
     ...source,
     skipCache: true,
-    trigger: "poll",
   });
 });
 
@@ -250,7 +249,7 @@ test("folds requests that arrived mid-run into one more parse", async () => {
   await process(parseJob());
 
   expect(parsed).toEqual([
-    [undefined, "poll"],
+    [undefined, undefined],
     [true, "manual"],
   ]);
 });
@@ -322,7 +321,7 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
   // The retry fulfils the bypass once, with no further follow-up owed.
   await process(deferrable);
   expect(parsed).toEqual([
-    [false, "poll"],
+    [false, undefined],
     [true, "manual"],
     [true, "manual"],
     [true, "manual"],

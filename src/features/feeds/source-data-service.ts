@@ -68,7 +68,7 @@ export const hasSqlState = (
   return "cause" in error && hasSqlState(error.cause, state, depth + 1);
 };
 
-export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
+type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 
 export class SourcesDataService {
   constructor(
@@ -143,7 +143,7 @@ export class SourcesDataService {
 
   // The source mail to `url` is delivered to. One without a subscriber takes
   // mail only within the reservation grace; past it, it is an address its
-  // owner left (a tombstone, see cleanupOrphanedData), and the sender should
+  // owner left (a tombstone, see RetentionService.prune), and the sender should
   // get a bounce rather than mail nobody reads.
   public async findMailRecipient(url: string): Promise<Source | undefined> {
     return (
@@ -216,7 +216,7 @@ export class SourcesDataService {
   // day and undo the reduced cadence.
   public async getSourcesToProcess() {
     return await this.drizzleConnection
-      .select({ id: sources.id, url: sources.url })
+      .select({ id: sources.id })
       .from(sources)
       .where(
         or(
@@ -298,7 +298,7 @@ export class SourcesDataService {
     {
       cached = false,
       homeUrl,
-      notBefore = new Date(Date.now() + pollFloorMs),
+      notBefore,
       observedAt = new Date(),
       trigger = "poll",
     }: {
@@ -309,7 +309,6 @@ export class SourcesDataService {
       trigger?: FetchTrigger;
     } = {},
   ) {
-    const clampedNotBefore = clampToPollFloor(notBefore, Date.now());
     await this.drizzleConnection
       .update(sources)
       .set({
@@ -317,7 +316,7 @@ export class SourcesDataService {
         lastAttempt: observedAt,
         lastFetchTrigger: trigger,
         lastSuccess: observedAt,
-        notBefore: clampedNotBefore,
+        notBefore: clampToPollFloor(notBefore, Date.now()),
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,
       })

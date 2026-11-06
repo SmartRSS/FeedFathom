@@ -43,7 +43,11 @@ const article = (guid: string, expiresAt?: number) => ({
 
 test("alwaysRecount recounts a retried import that changes no row", async () => {
   const { instance, recounted } = importer(0);
-  await instance.importArticles(1, [], { alwaysRecount: true });
+  await instance.recordFetch(1, [], {
+    alwaysRecount: true,
+    cached: false,
+    trigger: "manual",
+  });
   expect(recounted).toEqual([[1]]);
 });
 

@@ -191,13 +191,7 @@ export class MainWorker {
           throw new Error(`Source with ID ${input.data.id} not found`);
         }
         await sourceEnqueuer.runParse(input.data, async (request) => {
-          await feedParser.parseSource({
-            ...source,
-            ...(request.skipCache === undefined
-              ? {}
-              : { skipCache: request.skipCache }),
-            trigger: request.trigger ?? "poll",
-          });
+          await feedParser.parseSource({ ...source, ...request });
         });
         break;
       }
