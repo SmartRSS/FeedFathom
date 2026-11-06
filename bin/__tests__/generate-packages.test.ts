@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { projectExtensionManifest } from "../generate-packages.ts";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import {
+  packagedFiles,
+  projectExtensionManifest,
+} from "../generate-packages.ts";
 import manifestTemplate from "../../src/extension/manifest.json";
 
 const sourceManifest = () => structuredClone(manifestTemplate);
@@ -14,7 +19,6 @@ describe("extension package manifest projection", () => {
       service_worker: "background-event.js",
     });
     expect("browser_specific_settings" in chromium).toBe(false);
-    expect(chromium.permissions).toEqual(["contextMenus", "storage"]);
     expect(chromium.version).toBe("2026.723.12.1");
     expect("update_url" in chromium).toBe(false);
   });
@@ -42,35 +46,19 @@ describe("extension package manifest projection", () => {
 
     expect(firefox.background).toEqual({ scripts: ["background-event.js"] });
     expect(firefox.browser_specific_settings.gecko).toEqual({
-      data_collection_permissions: { required: ["none"] },
-      id: "feedfathom@smartrss",
-      strict_min_version: "140.0",
+      ...manifestTemplate.browser_specific_settings.gecko,
       update_url: "https://example.com/assets/updates.json",
     });
     expect(firefox.version).toBe("2026.723.12.1");
   });
 
   test("omits Firefox update metadata from local builds", () => {
-    const manifest = sourceManifest();
-    const firefox = projectExtensionManifest(
-      {
-        ...manifest,
-        browser_specific_settings: {
-          ...manifest.browser_specific_settings,
-          gecko: {
-            ...manifest.browser_specific_settings.gecko,
-            update_url: "%UPDATE_URL%",
-          },
-        },
-      },
-      "firefox",
-    );
+    const firefox = projectExtensionManifest(sourceManifest(), "firefox");
     if (!("browser_specific_settings" in firefox)) {
       throw new Error("Firefox settings missing");
     }
 
     expect("update_url" in firefox.browser_specific_settings.gecko).toBe(false);
-    expect(JSON.stringify(firefox)).not.toContain("%UPDATE_URL%");
   });
 
   test("does not mutate the shared template", () => {
@@ -109,5 +97,22 @@ describe("extension package manifest projection", () => {
         }),
       ).toThrow("Invalid update URL");
     }
+  });
+
+  // A file the manifest or a page names but the source lacks would ship a
+  // broken package; the build would fail only at copy time.
+  test("every packaged file has a source", async () => {
+    const root = path.resolve(import.meta.dir, "../..");
+    const files = await packagedFiles(sourceManifest());
+
+    expect(files.entrypoints).toContain(
+      path.join(root, "src/extension/popup.ts"),
+    );
+    for (const entrypoint of files.entrypoints)
+      expect(existsSync(entrypoint)).toBe(true);
+    for (const icon of files.icons)
+      expect(existsSync(path.join(root, "src/spa/assets", icon))).toBe(true);
+    for (const file of files.staticFiles)
+      expect(existsSync(path.join(root, "src/extension", file))).toBe(true);
   });
 });

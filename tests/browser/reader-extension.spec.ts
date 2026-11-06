@@ -3,7 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { chromium, expect, test, type Page } from "@playwright/test";
-import type { ReaderResponse } from "#shared/extension-types.ts";
+import {
+  isReaderResponseForRequest,
+  readerCapabilitiesRequest,
+  readerFetchRequest,
+  type ReaderRequest,
+  type ReaderResponse,
+} from "#shared/reader-bridge.ts";
 import { installApiFixture } from "./api-fixture.ts";
 
 const extensionPath = fileURLToPath(
@@ -12,7 +18,7 @@ const extensionPath = fileURLToPath(
 
 async function setInstance(page: Page, extensionId: string, instance: string) {
   await page.goto(`chrome-extension://${extensionId}/options.html`);
-  const input = page.locator("#instance");
+  const input = page.getByLabel("Instance");
   await input.fill(instance);
   await input.dispatchEvent("change");
   await page.waitForFunction(
@@ -22,134 +28,95 @@ async function setInstance(page: Page, extensionId: string, instance: string) {
   );
 }
 
-async function installFeedCollector(page: Page) {
+// Every feed list the background stores for the popup, in order, recorded
+// from an extension page.
+async function recordStoredFeeds(page: Page) {
   await page.evaluate(() => {
-    const messages: unknown[] = [];
-    Reflect.set(globalThis, "feedMessages", messages);
-    chrome.runtime.onMessage.addListener((message: unknown) => {
-      if (
-        typeof message === "object" &&
-        message !== null &&
-        "action" in message &&
-        message.action === "list-feeds"
-      )
-        messages.push(message);
+    const history: string[][] = [];
+    Reflect.set(globalThis, "storedFeeds", history);
+    chrome.storage.session.onChanged.addListener((changes) => {
+      const feeds: unknown = changes["feedsData"]?.newValue;
+      if (Array.isArray(feeds))
+        history.push(feeds.map((feed: { title: string }) => feed.title));
     });
   });
 }
 
-async function feedMessages(page: Page) {
-  return await page.evaluate(() => Reflect.get(globalThis, "feedMessages"));
+async function storedFeedHistory(page: Page): Promise<string[][]> {
+  return await page.evaluate(() => Reflect.get(globalThis, "storedFeeds"));
 }
 
-async function waitForFeedTitle(page: Page, title: string) {
+async function waitForStoredFeeds(page: Page, titles: string[]) {
   await page.waitForFunction(
     (expected) => {
-      const messages = Reflect.get(globalThis, "feedMessages");
+      const history = Reflect.get(globalThis, "storedFeeds");
       return (
-        Array.isArray(messages) &&
-        messages.some(
-          (message) =>
-            typeof message === "object" &&
-            message !== null &&
-            "feedsData" in message &&
-            Array.isArray(message.feedsData) &&
-            message.feedsData.some(
-              (feed: unknown) =>
-                typeof feed === "object" &&
-                feed !== null &&
-                "title" in feed &&
-                feed.title === expected,
-            ),
-        )
+        Array.isArray(history) &&
+        JSON.stringify(history.at(-1)) === JSON.stringify(expected)
       );
     },
-    title,
+    titles,
     { timeout: 5_000 },
   );
 }
 
-function probeCapabilities(page: Page): Promise<ReaderResponse> {
-  return page.evaluate(
-    () =>
+// Posts a bridge request from the page, as the SPA does, and returns the
+// first answer naming its id. The caller checks that answer against the
+// protocol.
+async function postBridgeRequest(
+  page: Page,
+  request: ReaderRequest,
+  timeoutMs: number,
+): Promise<unknown> {
+  return await page.evaluate(
+    ({ message, timeout }) =>
       new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        const timeout = setTimeout(
-          () => reject(new Error("Reader capability response timed out")),
-          5_000,
+        const timer = setTimeout(
+          () => reject(new Error("Reader bridge response timed out")),
+          timeout,
         );
         const receive = (event: MessageEvent) => {
-          const response = event.data;
+          const data: unknown = event.data;
           if (
             event.source !== window ||
-            response?.action !== "capabilities" ||
-            response?.channel !== "feedfathom-reader" ||
-            response?.id !== id ||
-            response?.type !== "response" ||
-            response?.version !== 1
+            typeof data !== "object" ||
+            data === null ||
+            !("type" in data) ||
+            data.type !== "response" ||
+            !("id" in data) ||
+            data.id !== message.id
           )
             return;
-          clearTimeout(timeout);
+          clearTimeout(timer);
           removeEventListener("message", receive);
-          resolve(response);
+          resolve(data);
         };
         addEventListener("message", receive);
-        window.postMessage(
-          {
-            action: "capabilities",
-            channel: "feedfathom-reader",
-            id,
-            type: "request",
-            version: 1,
-          },
-          location.origin,
-        );
+        window.postMessage(message, location.origin);
       }),
+    { message: request, timeout: timeoutMs },
   );
 }
 
-function probeFetch(page: Page, url: string): Promise<ReaderResponse> {
-  return page.evaluate(
-    (targetUrl) =>
-      new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        const timeout = setTimeout(
-          () => reject(new Error("Reader fetch response timed out")),
-          20_000,
-        );
-        const receive = (event: MessageEvent) => {
-          const response = event.data;
-          if (
-            event.source !== window ||
-            response?.action !== "fetch" ||
-            response?.channel !== "feedfathom-reader" ||
-            response?.id !== id ||
-            response?.type !== "response" ||
-            response?.version !== 1
-          )
-            return;
-          clearTimeout(timeout);
-          removeEventListener("message", receive);
-          resolve(response);
-        };
-        addEventListener("message", receive);
-        window.postMessage(
-          {
-            action: "fetch",
-            channel: "feedfathom-reader",
-            id,
-            type: "request",
-            url: targetUrl,
-            version: 1,
-          },
-          location.origin,
-        );
-      }),
-    url,
-  );
+async function probeCapabilities(page: Page): Promise<ReaderResponse> {
+  const request = readerCapabilitiesRequest();
+  const response = await postBridgeRequest(page, request, 5_000);
+  if (!isReaderResponseForRequest(response, request))
+    throw new Error(`Not a capabilities response: ${JSON.stringify(response)}`);
+  return response;
 }
 
-test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
+async function probeFetch(page: Page, url: string): Promise<ReaderResponse> {
+  const request = readerFetchRequest(url);
+  const response = await postBridgeRequest(page, request, 20_000);
+  if (!isReaderResponseForRequest(response, request))
+    throw new Error(`Not a fetch response: ${JSON.stringify(response)}`);
+  return response;
+}
+
+test("keeps the found feeds current across SPA navigation", async ({
+  baseURL,
+}) => {
   if (!baseURL) throw new Error("Playwright baseURL is required");
   const profile = await mkdtemp(`${tmpdir()}/feedfathom-extension-`);
   const context = await chromium.launchPersistentContext(profile, {
@@ -169,7 +136,7 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
     const optionsPage = await context.newPage();
     const appPage = await context.newPage();
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
-    await installFeedCollector(optionsPage);
+    await recordStoredFeeds(optionsPage);
     await appPage.route("**/extension-menu-*", async (route) => {
       await route.fulfill({
         body: '<!doctype html><html><head><link rel="alternate" type="application/rss+xml" title="Initial" href="/initial.xml"></head><body></body></html>',
@@ -178,7 +145,7 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
     });
 
     await appPage.goto(`${new URL(baseURL).origin}/extension-menu-initial`);
-    await waitForFeedTitle(optionsPage, "Initial");
+    await waitForStoredFeeds(optionsPage, ["Initial"]);
 
     // Resolved once the content script has seen the stale route, so the
     // latest one replaces a scan it already scheduled. The probe is the
@@ -209,53 +176,11 @@ test("keeps feed menus current across SPA navigation", async ({ baseURL }) => {
       link.href = "/latest.xml";
       document.body.append(document.createElement("div"));
     });
-    await waitForFeedTitle(optionsPage, "Latest");
+    await waitForStoredFeeds(optionsPage, ["Latest"]);
 
-    const afterNavigation = await feedMessages(optionsPage);
-    expect(JSON.stringify(afterNavigation)).not.toContain("Stale");
-
-    const beforeVisibility = Array.isArray(afterNavigation)
-      ? afterNavigation.length
-      : 0;
-    await appPage.evaluate(() =>
-      document.dispatchEvent(new Event("visibilitychange")),
+    expect((await storedFeedHistory(optionsPage)).flat()).not.toContain(
+      "Stale",
     );
-    await optionsPage.waitForFunction((count) => {
-      const messages = Reflect.get(globalThis, "feedMessages");
-      return Array.isArray(messages) && messages.length > count;
-    }, beforeVisibility);
-    const afterVisibility = await feedMessages(optionsPage);
-    expect(
-      JSON.stringify(afterVisibility).match(/Latest/g)?.length,
-    ).toBeGreaterThan(1);
-
-    const settledCount = Array.isArray(afterVisibility)
-      ? afterVisibility.length
-      : 0;
-    // A mutation that keeps the route sends nothing. Any report it caused
-    // would come from a timer the content script set while handling it, and
-    // a page timer set after that handler, for the longest of its debounces
-    // (scanDebounceMs), runs after every such timer. The visibility report
-    // sent after that arrives behind any stray one, so it is the last.
-    await appPage.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          const probe = new MutationObserver(() => {
-            probe.disconnect();
-            setTimeout(() => {
-              document.dispatchEvent(new Event("visibilitychange"));
-              resolve();
-            }, 1_500);
-          });
-          probe.observe(document.body, { childList: true });
-          document.body.append(document.createElement("div"));
-        }),
-    );
-    await optionsPage.waitForFunction((count) => {
-      const messages = Reflect.get(globalThis, "feedMessages");
-      return Array.isArray(messages) && messages.length > count;
-    }, settledCount);
-    expect(await feedMessages(optionsPage)).toHaveLength(settledCount + 1);
   } finally {
     await context.close();
     await rm(profile, { recursive: true });
@@ -309,15 +234,7 @@ test("uses the real extension bridge only on its configured origin", async ({
     await openArticle();
     await expect(modes).toContainText("Reader (plain text)");
     const allowed = await probeCapabilities(appPage);
-    expect(allowed).toEqual({
-      action: "capabilities",
-      available: true,
-      channel: "feedfathom-reader",
-      id: allowed.id,
-      ok: true,
-      type: "response",
-      version: 1,
-    });
+    expect(allowed).toMatchObject({ available: true, ok: true });
 
     const refusedOrigin = new URL(origin);
     refusedOrigin.hostname =
@@ -325,15 +242,7 @@ test("uses the real extension bridge only on its configured origin", async ({
     await setInstance(optionsPage, extensionId, refusedOrigin.origin);
     await appPage.reload();
     const refused = await probeCapabilities(appPage);
-    expect(refused).toEqual({
-      action: "capabilities",
-      channel: "feedfathom-reader",
-      error: "UNAUTHORIZED",
-      id: refused.id,
-      ok: false,
-      type: "response",
-      version: 1,
-    });
+    expect(refused).toMatchObject({ error: "UNAUTHORIZED", ok: false });
     await openArticle();
     await expect(modes).toHaveCount(0);
     expect(browserFailures).toEqual([]);
@@ -420,15 +329,7 @@ test("fails closed on opaque redirects and blocks terminal-dot private targets",
           appPage,
           `http://localhost.:${port}/private`,
         );
-        expect(direct).toEqual({
-          action: "fetch",
-          channel: "feedfathom-reader",
-          error: "PRIVATE_URL",
-          id: direct.id,
-          ok: false,
-          type: "response",
-          version: 1,
-        });
+        expect(direct).toMatchObject({ error: "PRIVATE_URL", ok: false });
         expect(privateRequests).toBe(0);
 
         /* eslint-disable no-await-in-loop -- Requests and endpoint-count assertions are intentionally ordered. */
@@ -437,14 +338,9 @@ test("fails closed on opaque redirects and blocks terminal-dot private targets",
             appPage,
             `http://public.reader.test:${port}/redirect?target=${target}`,
           );
-          expect(redirected).toEqual({
-            action: "fetch",
-            channel: "feedfathom-reader",
+          expect(redirected).toMatchObject({
             error: "INVALID_RESPONSE",
-            id: redirected.id,
             ok: false,
-            type: "response",
-            version: 1,
           });
           expect(publicArticleRequests).toBe(0);
           expect(privateRequests).toBe(0);

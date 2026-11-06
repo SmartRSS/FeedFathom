@@ -46,8 +46,9 @@ resolved and judged by the same rule, so `../../` is not an escape hatch.
 Co-located `*.test.ts` files are exempt: a test arranges state rather than
 wiring the product, and ships in no bundle. Anything two clients both need is
 `shared` by that same definition, which is where the scanner tree, the
-reader-bridge protocol in `extension-types.ts` and the URL-safety helpers in
-`util/safe-url.ts` live.
+reader-bridge protocol in `reader-bridge.ts` and the URL-safety helpers in
+`util/safe-url.ts` live. Messages and storage that only the extension's own
+scripts exchange stay in `src/extension/` (`messages.ts`, `settings.ts`).
 
 ## Features
 
@@ -211,7 +212,12 @@ Anything that needs a unit test has to come out of the component first.
   per-user read state.
 - **Scanner** — a strategy that inspects a fetched page and reports the feeds it
   advertises. Runs both server-side and inside the extension content script,
-  which is why the scanners live in `shared`.
+  which is why the scanners live in `shared`. Each side builds the page the
+  scanners read with its own extractor from one selector table: the
+  extension from the live `Document`, the server with Bun's `HTMLRewriter`
+  in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
+  scanner: it sends the page address to a third party, so each caller decides
+  whether to offer it.
 - **Feed preview** — a parsed-but-not-subscribed feed held in Redis between the
   discovery request and the subscribe request.
 - **Deferred response** — a 429 telling the client the work is queued and to

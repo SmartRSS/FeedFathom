@@ -1,12 +1,12 @@
 import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { hostIs } from "#shared/scanners/host.ts";
 
 const playlistExpression = /list=([\w-]+)/u;
 const channelExpression = /channel\/(.+)/u;
 const userExpression = /c\/(.+)/u;
 const findYoutubeFeeds = (address: string, page: ScannerPage): FeedData[] => {
   const youtubeFeeds: FeedData[] = [];
-  const addressUrl = new URL(address);
   const userMatch = userExpression.exec(address);
   if (userMatch)
     youtubeFeeds.push({
@@ -19,13 +19,6 @@ const findYoutubeFeeds = (address: string, page: ScannerPage): FeedData[] => {
     youtubeFeeds.push({
       title: "Channel feed",
       url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`,
-    });
-
-  const channelMatch2 = new RegExp(`${addressUrl}\\/(@.+)`, "u").exec(address);
-  if (channelMatch2)
-    youtubeFeeds.push({
-      title: "Channel feed",
-      url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch2[1]}`,
     });
 
   const playlistMatch = playlistExpression.exec(address);
@@ -42,6 +35,6 @@ const findYoutubeFeeds = (address: string, page: ScannerPage): FeedData[] => {
 };
 
 export const scanYoutube = (currentUrl: URL, page: ScannerPage): FeedData[] =>
-  currentUrl.hostname.endsWith("youtube.com")
+  hostIs(currentUrl, "youtube.com")
     ? findYoutubeFeeds(currentUrl.href, page)
     : [];

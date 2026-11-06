@@ -8,8 +8,7 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 import type { RequestDeadline } from "#platform/http/request-deadline.ts";
-
-const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+import { maximumRedirects, redirectStatuses } from "#shared/net/redirects.ts";
 
 export type FetchResult = {
   permanent: boolean;
@@ -35,7 +34,7 @@ export class RedirectPolicy {
     // means the resolved URL could still change back.
     let permanent = true;
     /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
-    for (let redirects = 0; redirects <= 5; redirects++) {
+    for (let redirects = 0; redirects <= maximumRedirects; redirects++) {
       // A hop is a request like any other, and it is a request to a host of
       // its own. Reserving here rather than once per call is also what gives
       // a retry its interval, since every attempt re-enters this loop. The

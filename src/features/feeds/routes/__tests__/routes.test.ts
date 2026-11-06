@@ -227,6 +227,13 @@ test("returns sanitized transient preview articles and rejects parser failures",
   });
 });
 
+// find reads the page as bytes, so it can decode it in the page's charset.
+const htmlPage = (html: string, url: string) => ({
+  data: new TextEncoder().encode(html).buffer,
+  headers: new Headers({ "content-type": "text/html" }),
+  url,
+});
+
 test("preview and find return a dynamic Retry-After when the host is throttled", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -397,7 +404,7 @@ test.each([
     const probed: string[] = [];
     dependencies.httpClient.get = async (url) => {
       fetched.push(url);
-      return { data: html, url: finalUrl };
+      return htmlPage(html, finalUrl);
     };
     dependencies.feedParser.parseUrl = async (url) => {
       probed.push(url);
@@ -423,14 +430,15 @@ test.each([
 test("find marks push feeds and preserves plain or failed candidates", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async (url) => ({
-    data: `<html><head>
+  dependencies.httpClient.get = async (url) =>
+    htmlPage(
+      `<html><head>
       <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
       <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
       <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
     </head></html>`,
-    url,
-  });
+      url,
+    );
   dependencies.feedParser.parseUrl = async (url: string) => {
     if (url.includes("dead")) throw new Error("404");
     return parsedFeed(
@@ -454,16 +462,11 @@ test("find marks push feeds and preserves plain or failed candidates", async () 
   ]);
 });
 
-// scanHtml never returns an empty list -- it appends an OpenRSS suggestion
-// when a page advertises nothing -- so a page with no feeds still produces one
-// candidate, and find's own `if (!feeds.length)` 400 is unreachable today.
 test("find falls back to an OpenRSS suggestion for a page with no feeds", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async (url) => ({
-    data: "<html><head></head><body>nothing here</body></html>",
-    url,
-  });
+  dependencies.httpClient.get = async (url) =>
+    htmlPage("<html><head></head><body>nothing here</body></html>", url);
   dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
   const app = await appFor(dependencies);
 

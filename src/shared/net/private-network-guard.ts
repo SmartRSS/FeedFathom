@@ -138,3 +138,16 @@ const loopbackAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 export const isLoopbackAddress = (address: string): boolean =>
   loopbackAddresses.has(address);
+
+// Whether a WHATWG URL.hostname names this machine: localhost, a
+// *.localhost name, or a loopback IP literal. The extension allows plain
+// http only to such an instance.
+export const isLoopbackHostname = (hostname: string): boolean => {
+  const normalized = normalizeHostname(hostname);
+  if (normalized === "localhost" || normalized.endsWith(".localhost"))
+    return true;
+  const bytes = addressBytes(normalized);
+  if (!bytes) return false;
+  if (bytes.length === 4) return bytes[0] === 127;
+  return bytes.every((byte, index) => byte === (index === 15 ? 1 : 0));
+};

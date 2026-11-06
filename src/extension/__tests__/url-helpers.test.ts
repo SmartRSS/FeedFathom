@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildNewsletterUrl,
-  buildPreviewUrl,
   canonicalizeInstance,
   normalizeFeedAddress,
-  resolveFeedOpenUrl,
+  targetUrl,
 } from "../url-helpers.ts";
 
 describe("canonicalizeInstance", () => {
@@ -17,7 +15,7 @@ describe("canonicalizeInstance", () => {
     ["http://127.0.0.2:3456", "http://127.0.0.2:3456"],
     ["http://[::1]:3456", "http://[::1]:3456"],
   ])("canonicalizes %s", (value, expected) => {
-    expect(canonicalizeInstance(value)).toBe(expected);
+    expect<string | undefined>(canonicalizeInstance(value)).toBe(expected);
   });
 
   test.each([
@@ -60,13 +58,17 @@ describe("normalizeFeedAddress", () => {
   });
 });
 
-describe("buildPreviewUrl", () => {
-  test("preserves the normalized feed address as one search parameter", () => {
-    const address = "feed:https://example.com/feed?a=one&b=%25#section";
-    const result = buildPreviewUrl("https://reader.example:8443", address);
+const instance = canonicalizeInstance("https://reader.example:8443");
+if (!instance) throw new Error("test instance must be canonical");
 
-    expect(result).toBeDefined();
-    const previewUrl = new URL(result!);
+describe("targetUrl", () => {
+  test("previews a feed on the instance, as one search parameter", () => {
+    const result = targetUrl(
+      { feedUrl: "feed:https://example.com/feed?a=one&b=%25#section" },
+      instance,
+    );
+
+    const previewUrl = new URL(result ?? "");
     expect(previewUrl.origin).toBe("https://reader.example:8443");
     expect(previewUrl.pathname).toBe("/preview");
     expect(previewUrl.searchParams.get("feedUrl")).toBe(
@@ -75,43 +77,28 @@ describe("buildPreviewUrl", () => {
     expect(previewUrl.hash).toBe("");
   });
 
-  test("returns undefined for an invalid instance", () => {
-    expect(
-      buildPreviewUrl("https://example.com/path", "https://feed.test"),
-    ).toBeUndefined();
-  });
-});
-
-describe("buildNewsletterUrl", () => {
-  test("opens the instance's preview page in newsletter mode", () => {
-    expect(buildNewsletterUrl("https://example.com:8443")).toBe(
-      "https://example.com:8443/preview?newsletter",
-    );
-  });
-
-  test("returns undefined for an invalid instance", () => {
-    expect(buildNewsletterUrl("file:///tmp/feed")).toBeUndefined();
-  });
-});
-
-describe("resolveFeedOpenUrl", () => {
-  test("routes through the preview page when an instance is configured", () => {
-    expect(
-      resolveFeedOpenUrl("https://reader.example", "https://feed.test/rss"),
-    ).toBe(
-      "https://reader.example/preview?feedUrl=https%3A%2F%2Ffeed.test%2Frss",
-    );
-  });
-
   test("opens the feed address directly with no instance", () => {
-    expect(resolveFeedOpenUrl(null, "feed://feed.test/rss")).toBe(
+    expect(targetUrl({ feedUrl: "feed://feed.test/rss" }, null)).toBe(
       "https://feed.test/rss",
     );
   });
 
-  test("opens the feed address directly when the instance is invalid", () => {
-    expect(resolveFeedOpenUrl("not a url", "https://feed.test/rss")).toBe(
-      "https://feed.test/rss",
+  test("opens the instance's preview page in newsletter mode", () => {
+    expect(targetUrl("newsletter", instance)).toBe(
+      "https://reader.example:8443/preview?newsletter",
     );
   });
+
+  test("opens the dashboard at the instance origin", () => {
+    expect(targetUrl("dashboard", instance)).toBe(
+      "https://reader.example:8443",
+    );
+  });
+
+  test.each(["dashboard", "newsletter"] as const)(
+    "has nowhere to open %s with no instance",
+    (target) => {
+      expect(targetUrl(target, null)).toBeUndefined();
+    },
+  );
 });

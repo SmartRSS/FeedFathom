@@ -1,10 +1,11 @@
 import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { hostIs } from "#shared/scanners/host.ts";
 
 const channelNameFromUrlExpression = /vimeo\.com\/(.+)/u;
 const channelNameTestExpression = /^[A-Za-z]+$/u;
 export const scanVimeo = (currentUrl: URL, page: ScannerPage): FeedData[] => {
-  if (!currentUrl.hostname.endsWith("vimeo.com")) return [];
+  if (!hostIs(currentUrl, "vimeo.com")) return [];
 
   const channelNameFromUrl = channelNameFromUrlExpression.exec(
     currentUrl.href,

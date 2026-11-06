@@ -7,7 +7,7 @@ import { extractReaderContent } from "../reader-extraction.ts";
 // turned the page away before any DOM work began.
 const oversized = `<html><body><article><p>${"Long article text. ".repeat(200_000)}</p></article></body></html>`;
 // The page from #929: 24,000 paragraphs with one link each, under the
-// extension's 5 MiB limit.
+// byte budget.
 const elementHeavy = `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`;
 // #947: "Ж" is one UTF-16 code unit but two UTF-8 bytes, so 1.6M of them sit
 // under the 3 Mi character mark yet over the 3 MiB byte budget -- exactly

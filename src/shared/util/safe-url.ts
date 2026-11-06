@@ -27,3 +27,15 @@ const isNewsletterArticlePath = (value: string) =>
 
 export const safeArticleUrl = (value: string, baseUrl: string): string =>
   isNewsletterArticlePath(value) ? value : safeHttpUrl(value, baseUrl);
+// An absolute http(s) URL with no username or password, resolved against
+// `base` when given; undefined for anything else. Credentials are refused
+// because a URL carrying them would send them to whatever host it names.
+export const httpUrlWithoutCredentials = (
+  value: string,
+  base?: string,
+): URL | undefined => {
+  const url = URL.parse(value, base);
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:"))
+    return undefined;
+  return url.username === "" && url.password === "" ? url : undefined;
+};

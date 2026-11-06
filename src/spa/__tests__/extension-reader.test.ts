@@ -4,7 +4,7 @@ import {
   readerBridgeChannel,
   readerBridgeVersion,
   type ReaderRequest,
-} from "#shared/extension-types.ts";
+} from "#shared/reader-bridge.ts";
 import { createExtensionReaderBridge } from "../extension-reader.ts";
 
 const origin = "https://reader.example";
