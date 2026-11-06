@@ -153,6 +153,14 @@ layout and history, `feed-tree.ts` the tree helpers, `article-selection.ts`
 the list selection algebra. A single shared module would become the new large
 file and would change for several unrelated reasons.
 
+The dashboard is wiring over one controller per concern (`article-list.ts`,
+`session-restore.ts`, `reader-content.ts`, `new-article-signal.ts`,
+`offline-sync.ts`) and one component per pane. A controller takes its
+requests, timers and storage as arguments, so `bun test` drives it with fakes;
+`bun test` runs Solid's server build, where effects never run, so a
+controller's decisions sit in plain methods and only its thin `createX`
+wrapper uses effects.
+
 ## Tests
 
 `test:unit` and CI use Bun's `--parallel=2`, which runs worker processes with

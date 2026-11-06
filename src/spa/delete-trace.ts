@@ -1,6 +1,6 @@
 // Forensics for article deletes. On 2026-10-20 two articles were deleted
 // 0.53 s apart, 17 s after the user's last click, and nothing on the client or
-// the server could say what sent them. Every article DELETE now carries the
+// the server could say what sent them. Every article DELETE carries the
 // event that triggered it and the input this tab saw just before it, and the
 // server logs both with the request. A delete with no triggering event, or
 // one whose recent input shows no click or key at all, then names itself.
