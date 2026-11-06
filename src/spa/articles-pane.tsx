@@ -1,7 +1,11 @@
 import { createMemo, For, Match, Show, Switch } from "solid-js";
 import type { ArticleSummary } from "#shared/contracts/responses.ts";
 import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
-import { emptyListState } from "./article-list.ts";
+import {
+  emptyListState,
+  isArticleFilter,
+  type ArticleFilter,
+} from "./article-list.ts";
 import { generateBoundaryDates, getDateGroup } from "./date-group.ts";
 import { FailingFeedPanel, type RetryState } from "./failure-details.tsx";
 import { isEmptyFolder, type ListNode } from "./feed-tree.ts";
@@ -9,7 +13,6 @@ import { formatDate, formatDay } from "./format-date.ts";
 import { Icon } from "./icon.tsx";
 import { BackButton } from "./page-toolbar.tsx";
 import { articleSearchBox } from "./preferences.ts";
-import { isArticleFilter, type ArticleFilter } from "./reading-session.ts";
 import checkCircleRaw from "./assets/icons/System/check-circle-fill.svg?raw";
 import dotCircleRaw from "./assets/icons/System/dot-circle-fill.svg?raw";
 import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";

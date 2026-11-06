@@ -58,7 +58,6 @@ import {
   takeUpdateReload,
   UPDATE_RELOAD_EVENT,
   type AppSnapshot,
-  type ArticleFilter,
 } from "./reading-session.ts";
 import { restoredSelection, SessionRestore } from "./session-restore.ts";
 import {
@@ -66,7 +65,7 @@ import {
   soleSelectedIndex,
   transitionArticleSelection,
 } from "./article-selection.ts";
-import { ArticleList } from "./article-list.ts";
+import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
 import {
