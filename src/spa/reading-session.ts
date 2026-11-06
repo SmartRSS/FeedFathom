@@ -3,9 +3,9 @@
 //
 // Two layers, one shape: a versioned JSON blob under one key in
 // sessionStorage (survives reload) and the same blob in localStorage
-// (survives across days). There is no IndexedDB in the SPA to lean on -- the
-// service worker's offline queue owns its own and stays internal to sw.ts --
-// and a size-capped blob is all the feature needs. Reading prefers
+// (survives across days). The page has no IndexedDB store of its own -- the
+// worker's removal queue (mutation-queue.ts) owns the only one -- and a
+// size-capped blob is all the feature needs. Reading prefers
 // sessionStorage so a reload picks up the freshest snapshot; a sessionStorage
 // that has expired (new tab days later) falls back to localStorage.
 

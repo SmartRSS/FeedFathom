@@ -163,7 +163,7 @@ exactly that basis: it is pure I/O with the decisions already lifted out, so
 moving it would cost a rewiring across its callers and gain no test.
 
 Extracted SPA logic goes in a module named for what it decides, beside the
-component that uses it: `behavior.ts` holds the routes, `panes.ts` the pane
+component that uses it: `routes.ts` holds the routes, `panes.ts` the pane
 layout and history, `feed-tree.ts` the tree helpers, `article-selection.ts`
 the list selection algebra. A single shared module would become the new large
 file and would change for several unrelated reasons.

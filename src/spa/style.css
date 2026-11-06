@@ -135,7 +135,7 @@
    property uses the variable, which then paints nothing. So the base rule
    holds values every browser can paint, and each newer value sits behind
    an @supports test of that exact value. Every icon in the app is
-   inlined SVG using currentColor directly (see dashboard.tsx / .chevron
+   inlined SVG using currentColor directly (see icon.tsx, tree-item.tsx / .chevron
    svg, .node-icon svg, .icon svg below) rather than a baked-in fill, so
    they need no separate override here -- they already track whatever
    text color surrounds them, including the Field/CanvasText below. */
@@ -1717,7 +1717,7 @@ img.skeleton-row {
 }
 /* The folder chevron/node-icon (never a source row's real favicon --
    that stays a plain <img>) are inlined as raw SVG markup (see
-   dashboard.tsx) rather than loaded as an external <img src>
+   tree-item.tsx) rather than loaded as an external <img src>
    specifically so their fill/stroke="currentColor" resolves against
    this page's own text color -- automatically matching the row's text
    (grey by default, var(--selected-fg) when selected) with no

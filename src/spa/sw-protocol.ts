@@ -62,8 +62,8 @@ export const treePreloadExcludedPaths =
 export const apiCachePrefix = "api-";
 
 // The worker forgets the account's data on every sign-in and logout it sees
-// (#974). The page repeats it for a sign-in or logout made while no worker
-// controls it, as after a hard reload. A sign-in keeps the queued removals
+// (#974). The page repeats it, which covers a page no worker controls, as
+// after a hard reload. A sign-in keeps the queued removals
 // for their account's return, since each carries its owner (#982); a logout
 // drops them.
 export async function forgetAccountData(signedOut: boolean): Promise<void> {
