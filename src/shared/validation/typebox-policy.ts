@@ -9,10 +9,16 @@ type SubscriptionTarget =
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const nonblankString = Type.String({ minLength: 1, pattern: "\\S" });
 
+// Credentials are refused here rather than late in the fetch, which refuses
+// them too.
 function isWebUrl(value: string) {
   try {
-    const protocol = new URL(value.trim()).protocol;
-    return protocol === "http:" || protocol === "https:";
+    const url = new URL(value.trim());
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+    );
   } catch {
     return false;
   }
@@ -56,7 +62,6 @@ export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
 }
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
-export const emailAddressPolicy = Type.Refine(Type.String(), isEmailAddress);
 export const plainTextPolicy = Type.Refine(Type.String(), isPlainText);
 export const jsonDatePolicy = Type.Refine(
   Type.String(),
@@ -107,5 +112,3 @@ export const normalizedSubscriptionTarget = Type.Codec(
       : { kind: "feed", value: normalized };
   })
   .Encode((value) => value.value);
-
-export type { SubscriptionTarget };

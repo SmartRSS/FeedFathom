@@ -17,7 +17,6 @@ export const errorResponse = Type.Object(
   exact,
 );
 
-
 const sessionUser = Type.Object(
   {
     email: Type.String(),

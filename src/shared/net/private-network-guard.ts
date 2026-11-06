@@ -1,9 +1,9 @@
-// The one table of non-global address ranges. The server checks every
-// resolved and literal address against it in
+// The one table of non-global address ranges and local hostnames. The server
+// checks every hostname and every resolved address against it in
 // platform/http/http-native-transport.ts; the extension, which cannot resolve
-// DNS, checks only IP-literal hostnames. Callers pass a WHATWG URL.hostname,
-// which has already turned inet_aton forms ("127.1", "0x7f000001") into a
-// dotted quad and rejected anything that does not parse.
+// DNS, checks the hostname alone. Callers pass a WHATWG URL.hostname, which
+// has already turned inet_aton forms ("127.1", "0x7f000001") into a dotted
+// quad and rejected anything that does not parse.
 const blockedSubnets = [
   "0.0.0.0/8",
   "10.0.0.0/8",
@@ -95,15 +95,39 @@ export const isBlockedAddress = (address: string): boolean => {
   return !bytes || subnets.some((subnet) => inSubnet(bytes, subnet));
 };
 
-export const isBlockedHostname = (hostname: string): boolean => {
-  const normalized = hostname
+// Names that only resolve inside a local network, by convention or by RFC.
+const internalSuffixes = [
+  ".home",
+  ".home.arpa",
+  ".internal",
+  ".lan",
+  ".local",
+  ".localdomain",
+  ".localhost",
+];
+
+/** URL.hostname without IPv6 brackets or trailing dots, lowercased. */
+export const normalizeHostname = (hostname: string): string =>
+  hostname
     .toLowerCase()
     .replace(/^\[|\]$/g, "")
-    .replace(/\.$/, "");
-  if (normalized === "localhost" || normalized.endsWith(".localhost"))
-    return true;
-  if (!normalized.includes(":") && !/^[\d.]+$/.test(normalized)) return false;
-  return isBlockedAddress(normalized);
+    .replace(/\.+$/, "");
+
+export const isIpLiteral = (hostname: string): boolean =>
+  hostname.includes(":") || /^[\d.]+$/.test(hostname);
+
+/**
+ * A hostname that names this machine or a local network: a non-global IP
+ * literal, localhost, a name with no dot, or an internal suffix. True for an
+ * empty name.
+ */
+export const isBlockedHostname = (hostname: string): boolean => {
+  const normalized = normalizeHostname(hostname);
+  if (isIpLiteral(normalized)) return isBlockedAddress(normalized);
+  return (
+    !normalized.includes(".") ||
+    internalSuffixes.some((suffix) => normalized.endsWith(suffix))
+  );
 };
 
 // The inverse question, for the internal healthcheck endpoints: an address is
