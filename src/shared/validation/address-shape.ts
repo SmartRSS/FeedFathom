@@ -1,6 +1,8 @@
 // The shape checks behind the server's email and URL policies, dependency
 // free so a client checks a form field by the same rule before sending it.
 
+import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 // RFC 5321 caps a forward path at 256 octets, brackets included, so no
@@ -11,17 +13,6 @@ export function isEmailAddress(value: string): boolean {
   return emailPattern.test(value.trim());
 }
 
-// Credentials are refused here rather than late in the fetch, which refuses
-// them too.
 export function isWebUrl(value: string): boolean {
-  try {
-    const url = new URL(value.trim());
-    return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
+  return httpUrlWithoutCredentials(value.trim()) !== undefined;
 }

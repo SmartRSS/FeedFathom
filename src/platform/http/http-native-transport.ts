@@ -14,6 +14,7 @@ import {
   isIpLiteral,
   normalizeHostname,
 } from "#shared/net/private-network-guard.ts";
+import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
 
 export class HttpPolicyError extends Error {}
 
@@ -58,18 +59,11 @@ type NativeTransportDependencies = {
 };
 
 export function parseHttpUrl(value: string): URL {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new HttpPolicyError("Invalid URL");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new HttpPolicyError("Only HTTP and HTTPS URLs are allowed");
-  }
-  if (url.username || url.password) {
-    throw new HttpPolicyError("URL credentials are not allowed");
-  }
+  const url = httpUrlWithoutCredentials(value);
+  if (!url)
+    throw new HttpPolicyError(
+      "Only HTTP and HTTPS URLs without credentials are allowed",
+    );
 
   const hostname = normalizeHostname(url.hostname);
   if (!hostname) throw new HttpPolicyError("URL hostname is required");

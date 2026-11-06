@@ -77,10 +77,10 @@ test("does not treat an /article/ prefix deeper in the path as an article link",
 });
 
 test.each([
-  ["https://example.com/story", undefined, "https://example.com/story"],
-  ["/story", "http://example.com/a/", "http://example.com/story"],
-])("httpUrlWithoutCredentials accepts %s", (value, base, expected) => {
-  expect(httpUrlWithoutCredentials(value, base)?.href).toBe(expected);
+  "https://example.com/story",
+  "http://example.com/a?b#c",
+])("httpUrlWithoutCredentials accepts %s", (value) => {
+  expect(httpUrlWithoutCredentials(value)?.href).toBe(value);
 });
 
 test.each([
