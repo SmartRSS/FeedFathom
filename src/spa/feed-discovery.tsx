@@ -26,9 +26,16 @@ import { formatDate } from "./format-date.ts";
 import { ReaderHeader } from "./reader-header.tsx";
 import backRaw from "./assets/icons/Arrows/arrow-left-fill.svg?raw";
 
-export function BackButton(props: { backPane(): void }) {
+// The list's and the reader's way back show only where one pane does;
+// Discover's shows at every width, as Options' and Admin's do, since it
+// replaces the panes it leads back to.
+export function BackButton(props: { always?: boolean; backPane(): void }) {
   return (
-    <button aria-label="back" class="only-mobile" onClick={props.backPane}>
+    <button
+      aria-label="back"
+      classList={{ "only-mobile": !props.always }}
+      onClick={props.backPane}
+    >
       <Icon raw={backRaw} />
     </button>
   );
@@ -377,8 +384,8 @@ export function FeedDiscovery(props: {
         {/* A toolbar like the other panes', so the three top edges line up;
             its title is the pane's heading. */}
         <div class="toolbar">
-          {/* On one pane at a time this bar is the way out, as Cancel is. */}
-          <BackButton backPane={props.close} />
+          {/* This bar's way out, as Cancel is. */}
+          <BackButton always backPane={props.close} />
           <h2 class="toolbar-title">
             {props.editing ? "Edit feed" : "Discover feed"}
           </h2>
