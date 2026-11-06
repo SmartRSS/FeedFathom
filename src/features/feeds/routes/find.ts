@@ -3,8 +3,7 @@ import type { StaticDecode } from "typebox";
 import type { findQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { HttpResponse } from "#platform/http/http-client.ts";
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import { isNoAnswerError } from "#platform/http/http-deferred-error.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { foundFeedsResponse } from "#shared/contracts/responses.ts";
 import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
@@ -35,8 +34,6 @@ export async function getFindHandler(
     };
   },
 ) {
-  // Counted before any outbound work, including a cache hit: the budget is
-  // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   try {
     const response = await httpClient.get(decoded.link, {
@@ -59,16 +56,9 @@ export async function getFindHandler(
       await markWebSubAvailability(feeds, feedParser),
     );
   } catch (error_: unknown) {
-    // A deferral is not this handler's to classify -- the central error hook
-    // turns it into a 429 with a Retry-After. Neither is our own deadline
-    // running out, which is a 504 and not the user's URL being wrong.
     // Anything else here is a failure to fetch a URL the user supplied,
     // which is a client error.
-    if (
-      error_ instanceof HttpDeferredError ||
-      error_ instanceof HttpDeadlineError
-    )
-      throw error_;
+    if (isNoAnswerError(error_)) throw error_;
     return jsonError("Invalid feed url", 400);
   }
 }

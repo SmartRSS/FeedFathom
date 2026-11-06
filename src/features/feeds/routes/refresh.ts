@@ -25,7 +25,6 @@ export async function postRefreshSourceHandler(
     "outboundFetchBudget" | "sourceEnqueuer" | "userSourcesDataService"
   >,
 ) {
-  // Each call is an outbound fetch the user asked for, like find and preview.
   await outboundFetchBudget.consume(user.id);
   const source = await userSourcesDataService.getSubscribedSource(
     user.id,

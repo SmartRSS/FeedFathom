@@ -117,8 +117,7 @@ test("rejects invalid subscription policies before cache or database calls", asy
 test("answers a refused newsletter address exactly as a malformed target", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.config.MAIL_ENABLED = true;
-  dependencies.config.MAIL_DOMAIN = "mail.example";
+  dependencies.config.mailDomain = "mail.example";
   dependencies.userSourcesDataService.addSourceToUser = async () => "refused";
   const app = await appFor(dependencies);
   const answer = async (sourceUrl: string) => {
@@ -1097,7 +1096,7 @@ test("falls back to queueing when inline persistence fails", async () => {
 test("queues URL cache misses and starts WebSub discovery, but never for email subscriptions", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.config.MAIL_ENABLED = true;
+  dependencies.config.mailDomain = "mail.example";
   const discoveryCalls: Parameters<FeedParser["discoverAndSubscribeWebSub"]>[] =
     [];
   dependencies.feedParser.discoverAndSubscribeWebSub = async (...args) => {

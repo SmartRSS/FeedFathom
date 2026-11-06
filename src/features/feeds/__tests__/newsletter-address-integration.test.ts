@@ -8,6 +8,7 @@ import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { invalidRequestMessage } from "#platform/http/json.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
@@ -326,7 +327,7 @@ test("a reserved address belongs to the account that reserved it", async () => {
   );
   const refused = await subscribe(address, other);
   expect(refused.status).toBe(422);
-  expect(await refused.json()).toEqual({ error: "Refine Error" });
+  expect(await refused.json()).toEqual({ error: invalidRequestMessage });
   expect(await subscribers(source!.id)).toEqual([]);
 
   expect((await subscribe(address)).status).toBe(200);

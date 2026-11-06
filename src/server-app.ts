@@ -31,7 +31,7 @@ import { serviceWorkerPathPattern } from "./spa/sw-protocol.ts";
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
-import { jsonError } from "#platform/http/json.ts";
+import { invalidRequestMessage, jsonError } from "#platform/http/json.ts";
 import {
   type MailRelayRejection,
   mailRelayRejectionStatus,
@@ -193,7 +193,7 @@ export async function createServerApp(
     // Elysia's own body is a dump of its internal validation state, not the
     // error envelope clients read.
     if (error instanceof ValidationError) {
-      return jsonError(error.message || "Invalid request.", 422);
+      return jsonError(invalidRequestMessage, 422);
     }
     if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
@@ -209,7 +209,7 @@ export async function createServerApp(
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
-      return jsonError("Invalid request.", 400);
+      return jsonError(invalidRequestMessage, 400);
     }
     // Our own request budget ran out. That is an upstream timeout, not a
     // malformed request, and the handlers that fetch a user-supplied URL
