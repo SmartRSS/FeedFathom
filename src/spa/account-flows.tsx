@@ -12,11 +12,26 @@ import {
   successResponse,
   type Registration,
 } from "#shared/contracts/responses.ts";
+import {
+  loginRequest,
+  passwordResetConfirmRequest,
+  passwordResetRequest,
+  registerRequest,
+} from "#shared/contracts/requests.ts";
+import { passwordResetLifetimeMs } from "#shared/contracts/limits.ts";
+import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import type { Turnstile } from "./turnstile.d.ts";
 import { api, messageOf } from "./api.ts";
 import { loginPath, registerPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
+import { forgetAccountData } from "./sw-protocol.ts";
+
+const resetLinkLifetime = new Intl.NumberFormat("en", {
+  style: "unit",
+  unit: "hour",
+  unitDisplay: "long",
+}).format(passwordResetLifetimeMs / 3_600_000);
 
 type FieldErrors = Partial<Record<AccountField, string>>;
 
@@ -83,10 +98,11 @@ export function Login(props: { navigate(to: string): void; next: string }) {
       return;
     try {
       await api("/login", loginResponse, {
-        body: JSON.stringify({ email: email(), password: password() }),
-        headers: { "Content-Type": "application/json" },
+        json: { email: email(), password: password() },
         method: "POST",
+        request: loginRequest,
       });
+      await forgetAccountData(false);
       props.navigate(props.next);
     } catch (cause) {
       setError(messageOf(cause, "Could not sign in."));
@@ -197,8 +213,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
     if (!turnstileScript) {
       turnstileScript = document.createElement("script");
       turnstileScript.id = "cloudflare-turnstile-script";
-      turnstileScript.src =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      turnstileScript.src = `${turnstileOrigin}/turnstile/v0/api.js?render=explicit`;
       turnstileScript.async = true;
       turnstileScript.defer = true;
     }
@@ -252,15 +267,15 @@ export function Register(props: { navigate(to: string): void; next: string }) {
     try {
       setMessage("");
       await api("/register", successResponse, {
-        body: JSON.stringify({
+        json: {
           email: email(),
           password: password(),
           passwordConfirm: confirm(),
           username: username(),
           ...(sitekey ? { "cf-turnstile-response": turnstileToken() } : {}),
-        }),
-        headers: { "Content-Type": "application/json" },
+        },
         method: "POST",
+        request: registerRequest,
       });
       setRegistered(true);
     } catch (cause) {
@@ -452,9 +467,9 @@ export function PasswordReset(props: { navigate(to: string): void }) {
       return;
     try {
       await api("/password-reset", successResponse, {
-        body: JSON.stringify({ email: email() }),
-        headers: { "Content-Type": "application/json" },
+        json: { email: email() },
         method: "POST",
+        request: passwordResetRequest,
       });
       setSent(true);
     } catch (cause) {
@@ -474,7 +489,7 @@ export function PasswordReset(props: { navigate(to: string): void }) {
                 refuses to. */}
             <p role="status">
               If that address has an account here, a reset link is on its way.
-              The link is good for one hour.
+              The link is good for {resetLinkLifetime}.
             </p>
             <LoginLink navigate={props.navigate} />
           </section>
@@ -531,13 +546,13 @@ export function PasswordResetConfirm(props: {
       return;
     try {
       await api("/password-reset/confirm", successResponse, {
-        body: JSON.stringify({
+        json: {
           password1: password(),
           password2: confirm(),
           token: props.token,
-        }),
-        headers: { "Content-Type": "application/json" },
+        },
         method: "POST",
+        request: passwordResetConfirmRequest,
       });
       setDone(true);
     } catch (cause) {

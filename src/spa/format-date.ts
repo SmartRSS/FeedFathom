@@ -1,14 +1,4 @@
-import { storedPreference } from "./preferences.ts";
-
-// How timestamps render across the app. "locale" is the user's own locale
-// and timezone via Intl; "iso" is fixed UTC YYYY-MM-DD HH:mm for people who
-// want unambiguous machine-style dates. Relative rendering ("2h ago") stays
-// a locale-mode concern; ISO deliberately stays absolute.
-export const dateFormat = storedPreference(
-  "dateFormat",
-  ["locale", "iso"],
-  "locale",
-);
+import { dateFormat } from "./preferences.ts";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 

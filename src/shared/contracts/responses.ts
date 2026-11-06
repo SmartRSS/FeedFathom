@@ -5,6 +5,20 @@ const exact = { additionalProperties: false } as const;
 const id = Type.Integer({ minimum: 1 });
 const jsonDate = jsonDatePolicy;
 
+// Every failure the server explains carries `error`, a sentence for the
+// reader, and sometimes `detail`, the raw reason behind it for an admin.
+export const errorResponse = Type.Union([
+  Type.Object(
+    {
+      detail: Type.Optional(Type.String()),
+      error: Type.String(),
+      success: Type.Optional(Type.Literal(false)),
+    },
+    exact,
+  ),
+  Type.Object({}, exact),
+]);
+
 export const successResponse = Type.Object(
   { success: Type.Literal(true) },
   exact,
@@ -47,7 +61,8 @@ const sessionEntry = Type.Object(
     // one shared timestamp, and it goes stale the moment a browser
     // updates -- activity is what the session list actually shows.
     lastUsedAt: jsonDate,
-    userAgent: Type.String(),
+    // Null for a session whose request carried no User-Agent header.
+    userAgent: Type.Union([Type.String(), Type.Null()]),
   },
   exact,
 );

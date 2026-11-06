@@ -12,29 +12,40 @@ import {
   sessionsResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
+import { todayWindowHours } from "#shared/contracts/limits.ts";
+import { passwordRequest } from "#shared/contracts/requests.ts";
+import { type AccountField, accountFieldErrors } from "./account-validation.ts";
 import { api, messageOf } from "./api.ts";
 import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
   articleSearchBox,
+  backgroundPoll,
+  dateFormat,
   density,
   enclosuresOpen,
   feedFilterBox,
   markReadPolicy,
   mobileListAnchor,
-  type Preference,
+  offlineUnread,
+  prefetchNext,
   readerText,
   readerWidth,
   rememberReadingPosition,
+  type Setting,
   theme,
   todayView,
+  unreadBadge,
   youtubeHost,
   youtubeLoad,
 } from "./preferences.ts";
-import { dateFormat, formatDate } from "./format-date.ts";
+import { formatDate } from "./format-date.ts";
+import {
+  forgetAccountData,
+  offlineArticleLimit,
+  offlineArticleMaxAgeDays,
+} from "./sw-protocol.ts";
 import { describeUserAgent } from "./user-agent.ts";
-import { backgroundPoll, unreadBadge } from "./news-signal.ts";
-import { offlineUnread, prefetchNext } from "./reading-prefetch.ts";
 import { helpDialog } from "./dialog.tsx";
 import { PageToolbar } from "./page-toolbar.tsx";
 
@@ -77,8 +88,7 @@ function sectionFromHash(hash: string): SectionId {
 function PreferenceSelect<T extends boolean | string>(props: {
   hint?: string;
   label: string;
-  options: readonly (readonly [T, string])[];
-  preference: Preference<T>;
+  preference: Setting<T>;
 }) {
   const hintId = createUniqueId();
   return (
@@ -90,11 +100,13 @@ function PreferenceSelect<T extends boolean | string>(props: {
           value={String(props.preference.get())}
           onChange={(event) => {
             const { value } = event.currentTarget;
-            const option = props.options.find(([key]) => String(key) === value);
-            if (option) props.preference.set(option[0]);
+            const choice = props.preference.choices.find(
+              ([key]) => String(key) === value,
+            );
+            if (choice) props.preference.set(choice[0]);
           }}
         >
-          <For each={props.options}>
+          <For each={props.preference.choices}>
             {([value, label]) => <option value={String(value)}>{label}</option>}
           </For>
         </select>
@@ -107,16 +119,6 @@ function PreferenceSelect<T extends boolean | string>(props: {
     </div>
   );
 }
-
-const SHOW_HIDE = [
-  [true, "Show"],
-  [false, "Hide"],
-] as const;
-
-const ON_OFF = [
-  [true, "On"],
-  [false, "Off"],
-] as const;
 
 // Says once per tab where its settings live, since this page mixes the two.
 function Scope(props: { children: string }) {
@@ -145,6 +147,9 @@ export function Options(props: {
   const [passwordLoading, setPasswordLoading] = createSignal(false);
   const [passwordMessage, setPasswordMessage] = createSignal("");
   const [passwordFailed, setPasswordFailed] = createSignal(false);
+  const [passwordErrors, setPasswordErrors] = createSignal<
+    Partial<Record<AccountField, string>>
+  >({});
   const [opmlLoading, setOpmlLoading] = createSignal(false);
   const [opmlMessage, setOpmlMessage] = createSignal("");
   const [opmlFailed, setOpmlFailed] = createSignal(false);
@@ -233,19 +238,7 @@ export function Options(props: {
     setSessionMessage("");
     try {
       await api("/logout", successResponse, { method: "POST" });
-      // The worker clears these on a logout it sees, but a page it doesn't
-      // control (after a hard reload) logs out past it, and the next sign-in
-      // from this page would too. Dropping the API cache here also drops the
-      // queue-owner record, so the next account's removals aren't filed
-      // under this one.
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter((key) => key.startsWith("api-"))
-            .map((key) => caches.delete(key)),
-        );
-      }
+      await forgetAccountData(true);
       props.navigate("/login");
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
@@ -257,22 +250,23 @@ export function Options(props: {
   async function submitPassword(event: Event) {
     event.preventDefault();
     if (passwordLoading()) return;
-    if (password() !== passwordConfirm()) {
-      setPasswordFailed(true);
-      setPasswordMessage("New passwords do not match.");
-      return;
-    }
-    setPasswordLoading(true);
     setPasswordMessage("");
+    const errors = accountFieldErrors({
+      confirm: passwordConfirm(),
+      password: password(),
+    });
+    setPasswordErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setPasswordLoading(true);
     try {
       await api("/options/password", successResponse, {
-        body: JSON.stringify({
+        json: {
           oldPassword: oldPassword(),
           password1: password(),
           password2: passwordConfirm(),
-        }),
-        headers: { "Content-Type": "application/json" },
+        },
         method: "POST",
+        request: passwordRequest,
       });
       setPasswordFailed(false);
       setPasswordMessage("Password changed.");
@@ -344,19 +338,10 @@ export function Options(props: {
                 label="Mark articles read"
                 preference={markReadPolicy}
                 hint="Nothing is marked read unless you choose it here: FeedFathom is built around deleting an article once you are done with it."
-                options={[
-                  ["manual", "Manually (M key or Mark read)"],
-                  ["on-open", "On open (in the All view)"],
-                  ["on-scroll-past", "On scroll-past (after a second in view)"],
-                ]}
               />
               <PreferenceSelect
                 label="Reopen where you left off"
                 preference={rememberReadingPosition}
-                options={[
-                  [true, "On"],
-                  [false, "Off (always start at the top)"],
-                ]}
               />
             </section>
             <section class="options-card">
@@ -364,27 +349,14 @@ export function Options(props: {
               <PreferenceSelect
                 label="Expand attachments"
                 preference={enclosuresOpen}
-                options={[
-                  ["single", "When there is only one"],
-                  ["always", "Always"],
-                  ["never", "Never"],
-                ]}
               />
               <PreferenceSelect
                 label="Load YouTube videos"
                 preference={youtubeLoad}
-                options={[
-                  ["click", "When you click them"],
-                  ["open", "When the article opens"],
-                ]}
               />
               <PreferenceSelect
                 label="Play YouTube from"
                 preference={youtubeHost}
-                options={[
-                  ["nocookie", "youtube-nocookie.com (signed out)"],
-                  ["youtube", "youtube.com (keeps your sign-in)"],
-                ]}
               />
             </section>
             <section class="options-card">
@@ -393,13 +365,11 @@ export function Options(props: {
                 label="Prefetch the next article"
                 preference={prefetchNext}
                 hint="Fetches the next article while you read this one."
-                options={ON_OFF}
               />
               <PreferenceSelect
                 label="Download unread for offline reading"
                 preference={offlineUnread}
-                hint="Keeps up to 500 unread articles from the last 14 days."
-                options={ON_OFF}
+                hint={`Keeps up to ${offlineArticleLimit} unread articles from the last ${offlineArticleMaxAgeDays} days.`}
               />
             </section>
           </section>
@@ -412,18 +382,15 @@ export function Options(props: {
               <PreferenceSelect
                 label="Today view"
                 preference={todayView}
-                hint="Unread articles from the last 24 hours, at the top of the sidebar."
-                options={SHOW_HIDE}
+                hint={`Unread articles from the last ${todayWindowHours} hours, at the top of the sidebar.`}
               />
               <PreferenceSelect
                 label="Feed filter box"
                 preference={feedFilterBox}
-                options={SHOW_HIDE}
               />
               <PreferenceSelect
                 label="Article search box"
                 preference={articleSearchBox}
-                options={SHOW_HIDE}
               />
             </section>
             <section class="options-card">
@@ -432,12 +399,10 @@ export function Options(props: {
                 label="Check for new articles"
                 preference={backgroundPoll}
                 hint="Shows a notice when new articles arrive. Off sends no requests in the background."
-                options={ON_OFF}
               />
               <PreferenceSelect
                 label="Unread count in tab title"
                 preference={unreadBadge}
-                options={SHOW_HIDE}
               />
             </section>
           </section>
@@ -451,57 +416,18 @@ export function Options(props: {
             <Scope>{DEVICE_SCOPE}</Scope>
             <section class="options-card">
               <h2>Display</h2>
-              <PreferenceSelect
-                label="Theme"
-                preference={theme}
-                options={[
-                  ["auto", "Auto (follows your system)"],
-                  ["smart", "Smart"],
-                  ["classic", "Classic"],
-                  ["millennial", "Millennial"],
-                  ["aero", "Aero"],
-                  ["modern", "Modern"],
-                  ["high-contrast", "High contrast"],
-                ]}
-              />
+              <PreferenceSelect label="Theme" preference={theme} />
               <PreferenceSelect
                 label="Density"
                 preference={density}
                 hint="Compact uses smaller rows, controls and spacing, in any theme."
-                options={[
-                  ["comfortable", "Comfortable"],
-                  ["compact", "Compact"],
-                ]}
               />
-              <PreferenceSelect
-                label="Date format"
-                preference={dateFormat}
-                options={[
-                  ["locale", "Your system's format"],
-                  ["iso", "ISO 8601 (UTC)"],
-                ]}
-              />
+              <PreferenceSelect label="Date format" preference={dateFormat} />
             </section>
             <section class="options-card">
               <h2>Article text</h2>
-              <PreferenceSelect
-                label="Text size"
-                preference={readerText}
-                options={[
-                  ["small", "Small"],
-                  ["medium", "Medium"],
-                  ["large", "Large"],
-                ]}
-              />
-              <PreferenceSelect
-                label="Line width"
-                preference={readerWidth}
-                options={[
-                  ["small", "Narrow"],
-                  ["medium", "Medium"],
-                  ["large", "Wide"],
-                ]}
-              />
+              <PreferenceSelect label="Text size" preference={readerText} />
+              <PreferenceSelect label="Line width" preference={readerWidth} />
             </section>
             {/* Only where the single-pane layout exists: style.css shows it
               under the single-pane query (SINGLE_PANE_QUERY in behavior.ts). */}
@@ -511,10 +437,6 @@ export function Options(props: {
                 label="Toolbars"
                 preference={mobileListAnchor}
                 hint="At the bottom, a short article list moves down to meet them."
-                options={[
-                  [true, "At the bottom"],
-                  [false, "At the top"],
-                ]}
               />
             </section>
           </section>
@@ -625,8 +547,7 @@ export function Options(props: {
                         // The raw header survives as hover detail for
                         // anything the parsed label leaves ambiguous.
                         title={
-                          session.userAgent.trim() &&
-                          session.userAgent !== "UNKNOWN"
+                          session.userAgent?.trim()
                             ? session.userAgent
                             : undefined
                         }
@@ -677,11 +598,13 @@ export function Options(props: {
               />
               <PasswordInput
                 autocomplete="new-password"
+                error={passwordErrors().password}
                 label="New password"
                 onInput={setPassword}
               />
               <PasswordInput
                 autocomplete="new-password"
+                error={passwordErrors().confirm}
                 label="Confirm new password"
                 onInput={setPasswordConfirm}
               />

@@ -11,6 +11,12 @@ import {
   type FoundFeed,
   type PreviewArticle,
 } from "#shared/contracts/responses.ts";
+import {
+  newsletterAddressRequest,
+  subscribeRequest,
+  updateSourceRequest,
+} from "#shared/contracts/requests.ts";
+import { isEmailAddress, isWebUrl } from "#shared/validation/address-shape.ts";
 import { readerHidden, type DashboardPane } from "./behavior.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, ApiError, failureDetails, messageOf } from "./api.ts";
@@ -68,7 +74,7 @@ export function FeedDiscovery(props: {
 }) {
   const [link, setLink] = createSignal("");
   const [feedUrl, setFeedUrl] = createSignal("");
-  const isEmail = () => feedUrl().includes("@");
+  const isEmail = () => isEmailAddress(feedUrl());
   const [title, setTitle] = createSignal("");
   const [folderId, setFolderId] = createSignal("");
   const [folders, setFolders] = createSignal<Folder[]>([]);
@@ -128,11 +134,7 @@ export function FeedDiscovery(props: {
       const initialFeedUrl = props.initialFeedUrl;
       if (initialFeedUrl) {
         setFeedUrl(initialFeedUrl);
-        try {
-          const url = new URL(initialFeedUrl);
-          if (url.protocol === "http:" || url.protocol === "https:")
-            void preview(initialFeedUrl);
-        } catch {}
+        if (isWebUrl(initialFeedUrl)) void preview(initialFeedUrl);
       }
     }
     void (async () => {
@@ -191,7 +193,7 @@ export function FeedDiscovery(props: {
       const found = await api(
         `/find?link=${encodeURIComponent(normalizedLink)}`,
         foundFeedsResponse,
-        { signal },
+        { raceWhenStalled: false, signal },
       );
       if (signal.aborted) return;
       setFeeds(found);
@@ -219,7 +221,7 @@ export function FeedDiscovery(props: {
       const result = await api(
         `/preview?feedUrl=${encodeURIComponent(withScheme(url))}`,
         previewResponse,
-        { signal },
+        { raceWhenStalled: false, signal },
       );
       if (signal.aborted) return;
       setFeedUrl(result.feedUrl);
@@ -282,9 +284,9 @@ export function FeedDiscovery(props: {
   async function reserveNewsletterAddress(address: string) {
     try {
       await api("/newsletter-address", successResponse, {
-        body: JSON.stringify({ address }),
-        headers: { "Content-Type": "application/json" },
+        json: { address },
         method: "POST",
+        request: newsletterAddressRequest,
       });
       return true;
     } catch (cause) {
@@ -327,22 +329,22 @@ export function FeedDiscovery(props: {
     try {
       const result = editing
         ? await api("/source", updatedSourceResponse, {
-            body: JSON.stringify({
+            json: {
               sourceFolder: folderId() ? Number(folderId()) : null,
               sourceId: Number(editing.uid),
               sourceName: title(),
-            }),
-            headers: { "Content-Type": "application/json" },
+            },
             method: "PATCH",
+            request: updateSourceRequest,
           })
         : await api("/subscribe", subscriptionResponse, {
-            body: JSON.stringify({
+            json: {
               sourceFolder: folderId() ? Number(folderId()) : null,
               sourceName: title(),
               sourceUrl: withScheme(feedUrl()),
-            }),
-            headers: { "Content-Type": "application/json" },
+            },
             method: "POST",
+            request: subscribeRequest,
           });
       await props.saved(result.sourceId);
     } catch (cause) {
@@ -384,7 +386,6 @@ export function FeedDiscovery(props: {
         {/* A toolbar like the other panes', so the three top edges line up;
             its title is the pane's heading. */}
         <div class="toolbar">
-          {/* This bar's way out, as Cancel is. */}
           <BackButton always backPane={props.close} />
           <h2 class="toolbar-title">
             {props.editing ? "Edit feed" : "Discover feed"}

@@ -31,8 +31,9 @@ import {
   readerText,
   readerWidth,
   resolvedTheme,
+  unreadBadge,
 } from "./preferences.ts";
-import { unreadBadge, unreadTotal } from "./news-signal.ts";
+import { unreadTotal } from "./news-signal.ts";
 import { reloadForUpdate } from "./reading-session.ts";
 import { isWorkerMessage } from "./sw-protocol.ts";
 import "./style.css";

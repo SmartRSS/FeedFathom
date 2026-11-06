@@ -5,8 +5,8 @@
 // Linux -- both platform checks precede the desktop ones they impersonate.
 //
 // Deliberately no dependency and no exhaustive database: a format this
-// parser does not know falls back to the raw header, and blank/UNKNOWN rows
-// written before the header was captured render as "Unknown device".
+// parser does not know falls back to the raw header, and a session with no
+// header renders as "Unknown device".
 
 type Token = { pattern: RegExp; browser: string };
 
@@ -39,9 +39,9 @@ const firstMatch = (userAgent: string, tokens: readonly Token[]) => {
   return undefined;
 };
 
-export function describeUserAgent(userAgent: string): string {
-  const trimmed = userAgent.trim();
-  if (!trimmed || trimmed === "UNKNOWN") return "Unknown device";
+export function describeUserAgent(userAgent: string | null): string {
+  const trimmed = userAgent?.trim();
+  if (!trimmed) return "Unknown device";
   const browser = firstMatch(trimmed, BROWSER_TOKENS);
   const platform = firstMatch(trimmed, PLATFORM_TOKENS);
   if (browser && platform) return `${browser} on ${platform}`;

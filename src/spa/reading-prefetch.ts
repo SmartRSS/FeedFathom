@@ -1,33 +1,27 @@
+import { createEffect, createRoot, on } from "solid-js";
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import { sourceIds } from "./dashboard-behavior.ts";
-import { storedToggle } from "./preferences.ts";
+import { offlineUnread } from "./preferences.ts";
 import { postToWorker } from "./sw-protocol.ts";
 
-// Prefetching the next article's content (#716) costs the server one extra
-// extract-route hit per opened article, and some users count that as waste:
-// so this is off until it is switched on.
-export const prefetchNext = storedToggle("prefetchNext", false);
+// dashboard.tsx still imports the toggles from here.
+export { offlineUnread, prefetchNext } from "./preferences.ts";
 
-// Offline reading (#992) downloads every recent unread body, a far larger
-// bill than one prefetch, so it is off until switched on too. The service
-// worker can't read localStorage: the dashboard sends it the sources with
-// unread articles, and switching off sends none.
-const OFFLINE_UNREAD_KEY = "offlineUnread";
-const offlineUnreadToggle = storedToggle(OFFLINE_UNREAD_KEY, false);
-export const offlineUnread: typeof offlineUnreadToggle = {
-  ...offlineUnreadToggle,
-  set(next) {
-    offlineUnreadToggle.set(next);
-    if (!next) postOfflineSync([]);
-  },
-};
-// Another tab switching it off must stop this one's syncs too, or its next
-// one would download everything again.
-if (typeof window !== "undefined")
-  window.addEventListener("storage", (event) => {
-    if (event.key === OFFLINE_UNREAD_KEY) offlineUnread.reload();
-  });
+// The service worker can't read localStorage: the dashboard sends it the
+// sources with unread articles, and switching offline reading off, here or in
+// another tab, sends none, so the worker drops what it kept.
+createRoot(() =>
+  createEffect(
+    on(
+      offlineUnread.get,
+      (enabled) => {
+        if (!enabled) postOfflineSync([]);
+      },
+      { defer: true },
+    ),
+  ),
+);
 
 // The worker lists and downloads the unread articles of these sources.
 export function postOfflineSync(sources: number[]) {

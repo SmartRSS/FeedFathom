@@ -6,14 +6,20 @@ const storage = {
   getItem: (key: string) => stored.get(key) ?? null,
   setItem: (key: string, value: string) => stored.set(key, value),
 };
-Object.assign(globalThis, { localStorage: storage });
-const { storedPreference, storedToggle } = await import("../preferences.ts");
+// Bun has no window either; this one carries the storage events other tabs
+// would send.
+const window = new EventTarget();
+Object.assign(globalThis, { localStorage: storage, window });
+const { storedPreference } = await import("../preferences.ts");
+const storedToggle = (key: string, fallback: boolean) =>
+  storedPreference(key, [true, false], fallback);
 afterEach(() => {
   stored.clear();
   Object.assign(globalThis, { localStorage: storage });
 });
 afterAll(() => {
   Reflect.deleteProperty(globalThis, "localStorage");
+  Reflect.deleteProperty(globalThis, "window");
 });
 
 test("reads a stored value and falls back on anything else", () => {
@@ -49,12 +55,26 @@ test('toggles store booleans and still read the old "on"/"off" strings', () => {
   expect(storedToggle("a", true).get()).toBe(false);
 });
 
-test("reload picks up a value another tab wrote", () => {
+// What another tab's write looks like here: the storage changes, and a
+// storage event names the key, or none when the storage was cleared.
+const otherTabWrites = (key: string, value: string | undefined) => {
+  if (value === undefined) stored.clear();
+  else stored.set(key, value);
+  window.dispatchEvent(
+    Object.assign(new Event("storage"), {
+      key: value === undefined ? null : key,
+    }),
+  );
+};
+
+test("follows a value another tab writes, or clears", () => {
   const toggle = storedToggle("sync", false);
-  stored.set("sync", "true");
-  expect(toggle.get()).toBe(false);
-  toggle.reload();
+  otherTabWrites("sync", "true");
   expect(toggle.get()).toBe(true);
+  otherTabWrites("other", "false");
+  expect(toggle.get()).toBe(true);
+  otherTabWrites("sync", undefined);
+  expect(toggle.get()).toBe(false);
 });
 
 test("storage that throws falls back without failing", () => {

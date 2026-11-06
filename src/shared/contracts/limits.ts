@@ -9,3 +9,6 @@ export const articlePageSize = 200;
 // The virtual "Today" view (#715) lists unread articles published this many
 // hours back.
 export const todayWindowHours = 24;
+
+// How long a password-reset link stays valid.
+export const passwordResetLifetimeMs = 60 * 60 * 1000;

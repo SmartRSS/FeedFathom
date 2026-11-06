@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { dateFormat, formatDate, formatDay } from "../format-date.ts";
+import { formatDate, formatDay } from "../format-date.ts";
+import { dateFormat } from "../preferences.ts";
 
 const setDateFormat = dateFormat.set;
 afterEach(() => setDateFormat("locale"));
