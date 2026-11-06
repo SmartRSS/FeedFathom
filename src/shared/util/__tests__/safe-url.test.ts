@@ -76,12 +76,12 @@ test("does not treat an /article/ prefix deeper in the path as an article link",
   );
 });
 
-test.each([
-  "https://example.com/story",
-  "http://example.com/a?b#c",
-])("httpUrlWithoutCredentials accepts %s", (value) => {
-  expect(httpUrlWithoutCredentials(value)?.href).toBe(value);
-});
+test.each(["https://example.com/story", "http://example.com/a?b#c"])(
+  "httpUrlWithoutCredentials accepts %s",
+  (value) => {
+    expect(httpUrlWithoutCredentials(value)?.href).toBe(value);
+  },
+);
 
 test.each([
   "ftp://example.com/",

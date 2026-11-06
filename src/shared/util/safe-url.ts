@@ -1,4 +1,5 @@
-const isHttp = (url: URL) => url.protocol === "http:" || url.protocol === "https:";
+const isHttp = (url: URL) =>
+  url.protocol === "http:" || url.protocol === "https:";
 
 // An absolute http(s) URL with no username or password; undefined for
 // anything else. Credentials are refused because a URL carrying them would
