@@ -138,10 +138,7 @@ export class FaviconRefresher {
     const responses = await Promise.all(
       urls.map(async (url) => {
         try {
-          return await this.httpClient.get(url, {
-            priority: "background",
-            responseType: "arrayBuffer",
-          });
+          return await this.httpClient.get(url, { priority: "background" });
         } catch (error: unknown) {
           if (error instanceof HttpDeferredError && !isMiss(error)) {
             deferrals.push({

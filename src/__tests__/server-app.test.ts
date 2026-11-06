@@ -51,9 +51,7 @@ test.each([
     const policy = response.headers.get("content-security-policy") ?? "";
     expect(policy).toStartWith("script-src 'self' 'sha256-");
     expect(policy).not.toContain("default-src");
-    expect(policy.includes(turnstileOrigin)).toBe(
-      turnstileEnabled,
-    );
+    expect(policy.includes(turnstileOrigin)).toBe(turnstileEnabled);
   },
 );
 

@@ -3,6 +3,7 @@ import type {
   WebSubStatus,
 } from "#platform/db/schemas/sources.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
+import type { Priority } from "#platform/http/http-rate-limiter.ts";
 import {
   HttpDeferredError,
   isNoAnswerError,
@@ -123,7 +124,7 @@ export class FeedParser {
       subscribers,
       websub = true,
     }: {
-      priority?: "background" | "interactive";
+      priority?: Priority;
       skipCache?: boolean | undefined;
       // Left undefined by discovery and preview callers -- see buildUserAgent.
       subscribers?: number | undefined;
@@ -134,7 +135,6 @@ export class FeedParser {
     const fetchedUrl = await this.redirectMap.resolveUrl(originalUrl);
     const response = await this.httpClient.get(fetchedUrl, {
       priority,
-      responseType: "arrayBuffer",
       skipCache,
       ...(subscribers === undefined ? {} : { subscribers }),
     });

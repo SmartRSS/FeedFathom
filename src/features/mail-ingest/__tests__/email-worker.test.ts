@@ -7,6 +7,7 @@ import {
   mailRelaySecretHeader,
   maxRawEmailBytes,
 } from "#shared/contracts/mail-relay.ts";
+
 const raw = "Subject: Newsletter\r\n\r\nArticle body";
 
 const environment = (

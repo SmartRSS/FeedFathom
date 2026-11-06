@@ -27,18 +27,13 @@ export async function getFindHandler(
     // The one call find makes: a page's bytes, its headers for the charset,
     // and where it ended up.
     httpClient: {
-      get(
-        url: string,
-        options: { responseType: "arrayBuffer" },
-      ): Promise<Pick<HttpResponse<ArrayBuffer>, "data" | "headers" | "url">>;
+      get(url: string): Promise<Pick<HttpResponse, "data" | "headers" | "url">>;
     };
   },
 ) {
   await outboundFetchBudget.consume(user.id);
   try {
-    const response = await httpClient.get(decoded.link, {
-      responseType: "arrayBuffer",
-    });
+    const response = await httpClient.get(decoded.link);
     const html = decodeHtml(
       new Uint8Array(response.data),
       response.headers.get("content-type"),

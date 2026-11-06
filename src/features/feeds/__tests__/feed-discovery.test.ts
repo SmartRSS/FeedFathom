@@ -99,7 +99,10 @@ describe("markWebSubAvailability", () => {
       ],
       {
         parseUrl: async (url) => ({
-          websub: (await client.get(url)).data === "hub" ? {} : undefined,
+          websub:
+            new TextDecoder().decode((await client.get(url)).data) === "hub"
+              ? {}
+              : undefined,
         }),
       },
     );

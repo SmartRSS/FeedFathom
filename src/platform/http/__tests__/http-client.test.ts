@@ -13,6 +13,9 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 
+const text = (response: { data: ArrayBuffer }) =>
+  new TextDecoder().decode(response.data);
+
 const redis = createFakeHttpRedis;
 
 // Tests that make more than one request to a host cannot sit out the real
@@ -139,7 +142,7 @@ test("caches fresh responses, retries transient failures, and defers background 
     ),
   });
 
-  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(text(await client.get("https://1.1.1.1/feed"))).toBe("feed");
   expect((await client.get("https://1.1.1.1/feed")).cached).toBe(true);
   expect(requests).toBe(2);
 
@@ -185,7 +188,7 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   sentHeaders.length = 0;
 
   const revalidated = await client.get(url, { skipCache: true });
-  expect(revalidated.data).toBe("cached-feed");
+  expect(text(revalidated)).toBe("cached-feed");
   expect(revalidated.cached).toBe(true);
   expect(revalidated.freshUntil).toBeGreaterThan(initialExpiry);
   expect(sentHeaders).toHaveLength(1);
@@ -193,7 +196,7 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   expect(sentHeaders[0]!.get("if-modified-since")).toBe(modified);
 
   const reused = await client.get(url);
-  expect(reused.data).toBe("cached-feed");
+  expect(text(reused)).toBe("cached-feed");
   expect(reused.cached).toBe(true);
   expect(reused.freshUntil).toBe(revalidated.freshUntil);
   expect(sentHeaders).toHaveLength(1);
@@ -227,7 +230,7 @@ test("a 304 with nothing cached fails, stores nothing, and the next request is u
 
   const next = await client.get(url);
   expect(next.status).toBe(200);
-  expect(next.data).toBe("feed");
+  expect(text(next)).toBe("feed");
   expect(sentHeaders.map((headers) => headers.get("if-none-match"))).toEqual([
     null,
     null,
@@ -326,7 +329,7 @@ test("pins a validated DNS address while preserving Host and HTTPS SNI", async (
   const client = new HttpClient(redis(), { transport });
 
   expect(
-    (await client.get("https://feeds.example.com:8443/feed?q=1")).data,
+    text(await client.get("https://feeds.example.com:8443/feed?q=1")),
   ).toBe("feed");
   expect(lookupHostname).toBe("feeds.example.com");
 });
@@ -388,7 +391,7 @@ test("validates and pins every redirect target", async () => {
   const response = await new HttpClient(redis(), { transport }).get(
     "https://feeds.example.com/start",
   );
-  expect(response.data).toBe("feed");
+  expect(text(response)).toBe("feed");
   expect(response.url).toBe("https://cdn.example.net/feed");
   expect(lookedUp).toEqual(["feeds.example.com", "cdn.example.net"]);
   expect(dispatched).toEqual(["93.184.216.34/start", "93.184.216.34/feed"]);
@@ -436,7 +439,7 @@ test("destroys discarded retry bodies", async () => {
     ]),
   });
 
-  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(text(await client.get("https://1.1.1.1/feed"))).toBe("feed");
   expect(destroyed).toBe(1);
 });
 
@@ -472,10 +475,10 @@ test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
     ]),
   });
   const exactResponse = await exactClient.get("https://1.1.1.1/feed");
-  expect(exactResponse.data).toHaveLength(maximumFeedBodyBytes);
+  expect(exactResponse.data.byteLength).toBe(maximumFeedBodyBytes);
   const cachedResponse = await exactClient.get("https://1.1.1.1/feed");
   expect(cachedResponse.cached).toBe(true);
-  expect(cachedResponse.data).toHaveLength(maximumFeedBodyBytes);
+  expect(cachedResponse.data.byteLength).toBe(maximumFeedBodyBytes);
 
   let destroyed = 0;
   const overClient = new HttpClient(redis(), {
@@ -535,7 +538,7 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
     ),
   });
 
-  expect((await client.get("https://1.1.1.1/feed")).data).toBe("feed");
+  expect(text(await client.get("https://1.1.1.1/feed"))).toBe("feed");
   expect(log).toEqual([
     "slot 1.1.1.1",
     "send https://1.1.1.1/feed",
@@ -756,7 +759,7 @@ test("seedCache answers the next get without a request", async () => {
   );
   const response = await client.get(url);
 
-  expect(response.data).toBe("<rss>pushed</rss>");
+  expect(text(response)).toBe("<rss>pushed</rss>");
   expect(response.cached).toBe(true);
   expect(requests).toBe(0);
   expect(response.headers.get("content-type")).toBe("application/rss+xml");
@@ -783,7 +786,7 @@ test("a seeded entry stops being fresh and is revalidated", async () => {
   );
   await Bun.sleep(5);
 
-  expect((await client.get(url)).data).toBe("from the origin");
+  expect(text(await client.get(url))).toBe("from the origin");
 });
 
 test("seedCache refuses an unsafe url", async () => {

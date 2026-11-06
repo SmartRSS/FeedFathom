@@ -8,6 +8,9 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 
+const text = (response: { data: ArrayBuffer }) =>
+  new TextDecoder().decode(response.data);
+
 const redis = createFakeHttpRedis;
 
 function nativeResponse(
@@ -73,7 +76,7 @@ test("deletes malformed cached response projections before use", async () => {
         ]),
       });
 
-      expect((await client.get(url)).data).toBe("fresh");
+      expect(text(await client.get(url))).toBe("fresh");
       expect(fakeRedis.deleted).toEqual([key]);
     }),
   );
@@ -101,7 +104,7 @@ test("deletes oversized Redis wire and base64 cache entries before decoding", as
       transport: queuedTransport([nativeResponse("fresh")]),
     });
 
-    expect((await client.get(url)).data).toBe("fresh");
+    expect(text(await client.get(url))).toBe("fresh");
     expect(fakeRedis.deleted).toContain(key);
   }
   /* eslint-enable no-await-in-loop */
