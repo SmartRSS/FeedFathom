@@ -28,7 +28,7 @@ import {
   healthcheckPath,
 } from "#platform/http/internal-routes.ts";
 import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
-import { serviceWorkerPathPattern } from "./spa/sw-protocol.ts";
+import { serviceWorkerPathPattern } from "#shared/contracts/service-worker-file.ts";
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";

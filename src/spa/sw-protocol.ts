@@ -1,7 +1,6 @@
 // What the page and the service worker (sw.ts) agree on: the messages they
 // exchange, the request conventions only the two of them read, and the
-// storage that holds one account's data. The server knows none of this,
-// except the worker's served filename.
+// storage that holds one account's data. The server knows none of this.
 
 import { queueClear } from "./mutation-queue.ts";
 
@@ -71,9 +70,3 @@ export async function forgetAccountData(signedOut: boolean): Promise<void> {
   // A queue that can't be cleared must not block the logout.
   if (signedOut) await queueClear().catch(() => {});
 }
-
-// The worker is served under a content hash of its bundle (bin/build-spa.ts):
-// a new URL is what moves clients onto a changed file, since Cloudflare can
-// hold a cached copy past what Cache-Control suggests.
-export const serviceWorkerFile = (hash: string) => `sw-${hash}.js`;
-export const serviceWorkerPathPattern = /^\/sw-[a-f0-9]+\.js$/;
