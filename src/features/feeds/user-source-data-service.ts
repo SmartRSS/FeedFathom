@@ -393,7 +393,7 @@ export class UserSourcesDataService {
       })
       .from(userSources)
       .where(eq(userSources.userId, userId))
-      .leftJoin(sources, eq(sources.id, userSources.sourceId))
+      .innerJoin(sources, eq(sources.id, userSources.sourceId))
       .orderBy(userSources.name);
   }
 

@@ -25,10 +25,10 @@ export async function getTreeHandler(
     // keeps accumulating so the backlog survives, but while the pause is
     // active the tree shows none of it -- the same answer the unread article
     // list gives, evaluated lazily here so expiry needs no job.
-    const snoozed = isSnoozed(source.pausedUntil ?? null);
+    const snoozed = isSnoozed(source.pausedUntil);
     return {
       failing:
-        (source.recentFailures ?? 0) >= failingAfter
+        source.recentFailures >= failingAfter
           ? {
               lastSuccess: source.lastSuccess?.toJSON() ?? null,
               reason: source.recentFailureDetails ?? "",
@@ -39,14 +39,14 @@ export async function getTreeHandler(
       favicon: source.faviconFingerprint
         ? `/api/favicon/${source.id}?v=${source.faviconFingerprint}`
         : null,
-      homeUrl: source.homeUrl ?? "",
-      kind: source.kind ?? "feed",
+      homeUrl: source.homeUrl,
+      kind: source.kind,
       name: source.name,
       pausedUntil: source.pausedUntil?.toJSON() ?? null,
       type: "source" as const,
-      uid: source.id?.toString() ?? "",
+      uid: source.id.toString(),
       unreadCount: snoozed ? 0 : source.unreadArticlesCount,
-      xmlUrl: source.url ?? "",
+      xmlUrl: source.url,
     };
   });
   return json(treeResponse, {
