@@ -1185,7 +1185,9 @@ a {
   margin: var(--space-1) 0 0;
   overflow-wrap: anywhere;
 }
-.feed-notice .failure-details,
+/* Closed, Details sits beside the notice's actions on their row; open, it
+   takes a row of its own. */
+.feed-notice .failure-details[open],
 .dashboard-alert .failure-details[open] {
   flex-basis: 100%;
 }
