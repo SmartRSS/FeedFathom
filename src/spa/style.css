@@ -729,7 +729,7 @@ html[data-route="options"] body {
 .options-mobile-layout {
   display: none;
 }
-/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/behavior.ts. */
+/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/panes.ts. */
 @media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
   .options-mobile-layout {
     display: grid;
@@ -2395,7 +2395,7 @@ textarea[aria-invalid="true"]:focus {
   }
 }
 /* Two panes on a landscape touch screen below 1200px (TWO_PANE_QUERY in
-   behavior.ts): three panes of touch-size rows leave each too narrow for
+   panes.ts): three panes of touch-size rows leave each too narrow for
    its names and titles. The feeds stay beside the list, and the reader
    takes the list's place while it is the focused pane; its back button
    returns to the list. The list's options button stands in for the
@@ -2476,7 +2476,7 @@ textarea[aria-invalid="true"]:focus {
     display: block;
   }
 }
-/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/behavior.ts): a
+/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/panes.ts): a
    phone, or a portrait tablet, shows one pane at a time. It changes layout
    only. Type keeps the desktop scale on the user's own root size, because
    no fixed upscale suits both a browser at its default and one the user

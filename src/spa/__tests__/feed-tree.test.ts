@@ -18,7 +18,7 @@ import {
   treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
-} from "../dashboard-behavior.ts";
+} from "../feed-tree.ts";
 
 function source(
   uid: string,

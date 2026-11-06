@@ -1,90 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   loginPath,
-  parseDashboardPane,
   registerPath,
-  removalOutcome,
   resolveRoute,
   safeNextPath,
-  soleSelectedIndex,
-  SINGLE_PANE_QUERY,
-  switchPane,
-  transitionArticleSelection,
-  withDashboardPane,
+  showsPanes,
 } from "../behavior.ts";
-
-describe("dashboard pane history state", () => {
-  test("parses valid pane markers", () => {
-    expect(parseDashboardPane({ feedFathomPane: "sources" })).toBe("sources");
-    expect(parseDashboardPane({ feedFathomPane: "articles" })).toBe("articles");
-    expect(parseDashboardPane({ feedFathomPane: "reader" })).toBe("reader");
-  });
-
-  test("rejects missing or malformed pane markers", () => {
-    for (const state of [
-      undefined,
-      null,
-      "sources",
-      {},
-      { feedFathomPane: "other" },
-      { feedFathomPane: 1 },
-    ])
-      expect(parseDashboardPane(state)).toBeUndefined();
-  });
-
-  test("sets the pane while preserving unrelated object state", () => {
-    const state = { feedFathomPane: "sources", unrelated: { value: 1 } };
-    expect(withDashboardPane(state, "reader")).toEqual({
-      feedFathomPane: "reader",
-      unrelated: { value: 1 },
-    });
-    expect(state.feedFathomPane).toBe("sources");
-  });
-});
-
-// Runs one switch against a host matching `queries`, reporting whether the
-// update ran inside a view transition, outside one, or not at all.
-const switchOnce = (
-  queries: string[],
-  options: { supported?: boolean; browserAnimated?: boolean } = {},
-) => {
-  let ran = "never";
-  let inTransition = false;
-  void switchPane(
-    () => {
-      ran = inTransition ? "animated" : "instant";
-    },
-    {
-      matches: (query) => queries.includes(query),
-      startViewTransition:
-        options.supported === false
-          ? undefined
-          : (update) => {
-              inTransition = true;
-              update();
-              inTransition = false;
-              return { updateCallbackDone: Promise.resolve() };
-            },
-    },
-    options.browserAnimated,
-  );
-  return ran;
-};
-const narrow = SINGLE_PANE_QUERY;
-const reduce = "(prefers-reduced-motion: reduce)";
-
-describe("switchPane", () => {
-  test("animates on the one-pane phone layout", () => {
-    expect(switchOnce([narrow])).toBe("animated");
-  });
-
-  test("stays instant wherever the animation is unwanted or unavailable", () => {
-    expect(switchOnce([])).toBe("instant");
-    expect(switchOnce([narrow, reduce])).toBe("instant");
-    expect(switchOnce([narrow], { supported: false })).toBe("instant");
-    expect(switchOnce([narrow], { browserAnimated: true })).toBe("instant");
-  });
-});
 
 describe("resolveRoute", () => {
   test("matches activation only when the token is the final path segment", () => {
@@ -193,75 +114,9 @@ describe("safe account destinations", () => {
   });
 });
 
-describe("transitionArticleSelection", () => {
-  for (const modifier of ["ctrlKey", "metaKey"] as const) {
-    test(`toggles one article with ${modifier}`, () => {
-      const added = transitionArticleSelection(new Set([0]), 2, 0, {
-        [modifier]: true,
-      });
-      expect(added).toEqual({ anchor: 2, indexes: new Set([0, 2]) });
-
-      const removed = transitionArticleSelection(
-        added.indexes,
-        0,
-        added.anchor,
-        { [modifier]: true },
-      );
-      expect(removed).toEqual({ anchor: 0, indexes: new Set([2]) });
-      expect(soleSelectedIndex(removed.indexes)).toBe(2);
-    });
-  }
-
-  test("selects the inclusive range from the anchor", () => {
-    expect(
-      transitionArticleSelection(new Set([0]), 3, 1, { shiftKey: true }),
-    ).toEqual({ anchor: 1, indexes: new Set([1, 2, 3]) });
-
-    expect(
-      transitionArticleSelection(new Set([0]), 3, 1, {
-        ctrlKey: true,
-        shiftKey: true,
-      }),
-    ).toEqual({ anchor: 1, indexes: new Set([0, 1, 2, 3]) });
-  });
-});
-
-describe("soleSelectedIndex", () => {
-  test("chooses only a sole selection and clears for zero or many", () => {
-    expect(soleSelectedIndex(new Set([2]))).toBe(2);
-    expect(soleSelectedIndex(new Set())).toBeUndefined();
-    expect(soleSelectedIndex(new Set([1, 2]))).toBeUndefined();
-  });
-});
-
-describe("removalOutcome", () => {
-  const items = ["a", "b", "c", "d", "e"];
-
-  test("selects the item that took the removed item's place", () => {
-    expect(removalOutcome(items, new Set([1]))).toEqual({
-      nextIndex: 1,
-      remaining: ["a", "c", "d", "e"],
-    });
-  });
-
-  test("clamps to the last remaining item when the tail is removed", () => {
-    expect(removalOutcome(items, new Set([3, 4]))).toEqual({
-      nextIndex: 2,
-      remaining: ["a", "b", "c"],
-    });
-  });
-
-  test("returns an out-of-range index when every item is removed", () => {
-    expect(removalOutcome(items, new Set([0, 1, 2, 3, 4]))).toEqual({
-      nextIndex: -1,
-      remaining: [],
-    });
-  });
-
-  test("uses the lowest removed index when the selection is non-contiguous", () => {
-    expect(removalOutcome(items, new Set([3, 0]))).toEqual({
-      nextIndex: 0,
-      remaining: ["b", "c", "e"],
-    });
-  });
+test("only the dashboard and Discover show the panes", () => {
+  expect(showsPanes(resolveRoute("/"))).toBe(true);
+  expect(showsPanes(resolveRoute("/preview?feedUrl=x"))).toBe(true);
+  expect(showsPanes(resolveRoute("/options"))).toBe(false);
+  expect(showsPanes(resolveRoute("/nowhere"))).toBe(false);
 });

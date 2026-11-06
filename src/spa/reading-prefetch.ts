@@ -1,6 +1,6 @@
 import { maximumRequestIds } from "#shared/contracts/requests.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
-import { sourceIds } from "./dashboard-behavior.ts";
+import { sourceIds } from "./feed-tree.ts";
 import { storedToggle } from "./preferences.ts";
 
 // Prefetching the next article's content (#716) costs the server one extra

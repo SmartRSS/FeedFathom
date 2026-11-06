@@ -42,7 +42,7 @@ import {
   treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
-} from "./dashboard-behavior.ts";
+} from "./feed-tree.ts";
 import {
   createThrottledRecorder,
   ratioToScrollTop,
@@ -55,11 +55,10 @@ import {
 } from "./reading-session.ts";
 import {
   removalOutcome,
-  readerHidden,
   soleSelectedIndex,
   transitionArticleSelection,
-  type DashboardPane,
-} from "./behavior.ts";
+} from "./article-selection.ts";
+import { readerHidden, type DashboardPane } from "./panes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
 import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
@@ -70,7 +69,8 @@ import {
   type ReaderMode,
 } from "./extension-reader.ts";
 import { ArticleMarkup } from "./article-markup.tsx";
-import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
+import { FeedDiscovery } from "./feed-discovery.tsx";
+import { BackButton } from "./page-toolbar.tsx";
 import { Icon } from "./icon.tsx";
 import { ForEachNode, TreeItem } from "./tree-item.tsx";
 import {

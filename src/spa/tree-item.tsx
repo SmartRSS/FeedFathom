@@ -2,11 +2,7 @@ import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
-import {
-  isSnoozedNode,
-  treeNodeKey,
-  unreadCount,
-} from "./dashboard-behavior.ts";
+import { isSnoozedNode, treeNodeKey, unreadCount } from "./feed-tree.ts";
 import { Icon } from "./icon.tsx";
 import { storedPreference } from "./preferences.ts";
 import feedRaw from "./assets/icons/System/rss-fill.svg?raw";

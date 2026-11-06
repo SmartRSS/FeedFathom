@@ -11,16 +11,14 @@ import {
   Switch,
 } from "solid-js";
 import { render } from "solid-js/web";
+import { loginPath, resolveRoute, showsPanes, type Route } from "./behavior.ts";
 import {
-  loginPath,
   parseDashboardPane,
-  resolveRoute,
   switchPane,
   withDashboardPane,
   type DashboardPane,
   type PaneSwitchHost,
-  type Route,
-} from "./behavior.ts";
+} from "./panes.ts";
 import { Dashboard } from "./dashboard.tsx";
 import { DialogHost } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
@@ -137,15 +135,12 @@ function App() {
     );
   });
 
-  if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
+  if (showsPanes(initialRoute))
     history.replaceState(withDashboardPane(history.state, "sources"), "");
 
   const navigate = (to: string) => {
     const nextRoute = resolveRoute(to);
-    const nextPane =
-      nextRoute.name === "dashboard" || nextRoute.name === "preview"
-        ? "sources"
-        : undefined;
+    const nextPane = showsPanes(nextRoute) ? "sources" : undefined;
     history.pushState(nextPane ? withDashboardPane({}, nextPane) : {}, "", to);
     setPath(to);
     setPane(nextPane ?? "sources");
@@ -296,7 +291,7 @@ function Router(props: {
 }) {
   return (
     <Show
-      when={props.route.name === "dashboard" || props.route.name === "preview"}
+      when={showsPanes(props.route)}
       fallback={
         <Switch>
           <Match when={props.route.name === "register" && props.route}>
