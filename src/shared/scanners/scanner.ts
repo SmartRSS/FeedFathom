@@ -1,7 +1,4 @@
-import {
-  scannerPageFromDocument,
-  type ScannerPage,
-} from "#shared/scanners/scanner-page.ts";
+import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
 import { scanBitchute } from "#shared/scanners/bitchute-scanner.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 import { scanGenerator } from "#shared/scanners/generator-scanner.ts";
@@ -10,7 +7,7 @@ import { scanHead } from "#shared/scanners/head-scanner.ts";
 import { scanHiverss } from "#shared/scanners/hiverss-scanner.ts";
 import { scanLinkFeed } from "#shared/scanners/link-feed-scanner.ts";
 import { scanMicroformats } from "#shared/scanners/microformats-scanner.ts";
-import { scanOdsee } from "#shared/scanners/odsee-scanner.ts";
+import { scanOdysee } from "#shared/scanners/odysee-scanner.ts";
 import { scanVimeo } from "#shared/scanners/vimeo-scanner.ts";
 import { scanXml } from "#shared/scanners/xml-scanner.ts";
 import { scanYoutube } from "#shared/scanners/youtube-scanner.ts";
@@ -21,7 +18,7 @@ const scanners = [
   scanBitchute,
   scanGithub,
   scanHiverss,
-  scanOdsee,
+  scanOdysee,
   scanVimeo,
   scanYoutube,
   scanGenerator,
@@ -46,9 +43,6 @@ export const scanPage = (address: string, page: ScannerPage): FeedData[] => {
 
   return feedDataList;
 };
-
-export const scan = (address: string, document_: Document): FeedData[] =>
-  scanPage(address, scannerPageFromDocument(address, document_));
 
 // A last resort for a page that advertises nothing: OpenRSS builds feeds for
 // some sites that have none. Asking it sends the page address to that third
