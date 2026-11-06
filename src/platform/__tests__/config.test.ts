@@ -15,18 +15,18 @@ describe("loadConfig", () => {
     ).toEqual({
       ALLOWED_EMAILS: [],
       ARTICLE_STALE_AFTER_DAYS: 365,
-      CLEANUP_INTERVAL: 1000,
+      CLEANUP_INTERVAL: 20,
       DATABASE_URL: databaseUrl,
       DB_POOL_MAX: 10,
       ENABLE_REGISTRATION: false,
-      GATHER_JOBS_INTERVAL: 1000,
-      LOCK_DURATION: 1000,
+      GATHER_JOBS_INTERVAL: 20,
+      LOCK_DURATION: 60,
       MAIL_ENABLED: false,
       REDIS_URL: "redis://redis:6379",
       SLOW_REQUEST_MS: 500,
       USER_DORMANT_AFTER_DAYS: 365,
       USER_EXPIRY_DAYS: 730,
-      WORKER_CONCURRENCY: 1,
+      WORKER_CONCURRENCY: 25,
       production: false,
     });
   });
@@ -139,6 +139,19 @@ describe("loadConfig", () => {
     ).toThrow(
       "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
     );
+  });
+
+  // compose.yml passes every variable through as ${X:-}.
+  test("treats a blank value as unset", () => {
+    const defaults = loadConfig({ DATABASE_URL: databaseUrl });
+    expect(
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        DB_POOL_MAX: "",
+        REDIS_URL: "",
+        WORKER_CONCURRENCY: "",
+      }),
+    ).toEqual(defaults);
   });
 
   test("production follows NODE_ENV", () => {

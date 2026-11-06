@@ -20,14 +20,17 @@
 # would otherwise look like arbitrary choices.
 
 # Both application services connect to the same database and answer the same
-# health probe on the same port, so both are defined once here.
+# health probe on the same port, so both are defined once here. Variables the
+# application reads are passed through as ${X:-}: it treats blank as unset,
+# and its own defaults (src/platform/config.ts) are the only ones. The port
+# is containerPort in src/platform/http/internal-routes.ts.
 x-database-env: &database-env
   # Flat on purpose: the legacy Swarm loader cannot parse a nested ${}
   # default and silently produces a malformed URL instead of failing. So
   # this default does not follow POSTGRES_USER/PASSWORD/DB -- change those
   # and you must set DATABASE_URL to match.
   DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/postgres}
-  DB_POOL_MAX: ${DB_POOL_MAX:-10}
+  DB_POOL_MAX: ${DB_POOL_MAX:-}
 
 # Neither application service reports healthy until the schema this build was
 # compiled against is applied: the server does not listen at all until then
@@ -123,7 +126,7 @@ services:
       - "${FEEDFATHOM_PORT:-3456}:3000"
     environment:
       <<: *database-env
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: ${REDIS_URL:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-false}
       # Used for newsletter addresses and for links in outbound email, so it
@@ -159,18 +162,18 @@ services:
     restart: always
     environment:
       <<: *database-env
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: ${REDIS_URL:-}
       DEBUG: "bull:*"
       # WebSub subscribe attempts happen here, not in the server, and the
       # callback URL cannot be built without this.
       FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-localhost:3456}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-25}
-      LOCK_DURATION: ${LOCK_DURATION:-60}
-      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-20}
-      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-20}
-      USER_DORMANT_AFTER_DAYS: ${USER_DORMANT_AFTER_DAYS:-365}
-      ARTICLE_STALE_AFTER_DAYS: ${ARTICLE_STALE_AFTER_DAYS:-365}
-      USER_EXPIRY_DAYS: ${USER_EXPIRY_DAYS:-730}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-}
+      LOCK_DURATION: ${LOCK_DURATION:-}
+      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-}
+      GATHER_JOBS_INTERVAL: ${GATHER_JOBS_INTERVAL:-}
+      USER_DORMANT_AFTER_DAYS: ${USER_DORMANT_AFTER_DAYS:-}
+      ARTICLE_STALE_AFTER_DAYS: ${ARTICLE_STALE_AFTER_DAYS:-}
+      USER_EXPIRY_DAYS: ${USER_EXPIRY_DAYS:-}
     healthcheck: *app-healthcheck
     # start-first rollouts stop a worker only after its replacement is
     # healthy, and SIGTERM triggers the BullMQ graceful close, which waits
