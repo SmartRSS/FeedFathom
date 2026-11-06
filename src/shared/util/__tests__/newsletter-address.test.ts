@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Value } from "typebox/value";
-import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
+import { subscribeRequest } from "#shared/contracts/requests.ts";
 import {
   isMintedNewsletterAddress,
   isNewsletterAddress,
@@ -13,7 +13,13 @@ describe("newsletterAddress", () => {
   // shared email policy does not accept.
   test("mints an address the subscribe contract accepts", () => {
     const address = newsletterAddress("example.com");
-    expect(Value.Check(emailAddressPolicy, address)).toBe(true);
+    expect(
+      Value.Check(subscribeRequest, {
+        sourceFolder: null,
+        sourceName: "Newsletter",
+        sourceUrl: address,
+      }),
+    ).toBe(true);
     expect(address.endsWith("@example.com")).toBe(true);
   });
 

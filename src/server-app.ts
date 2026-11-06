@@ -3,52 +3,72 @@ import { Elysia, NotFound, ValidationError } from "elysia";
 import { DecodeError } from "typebox/value";
 import {
   type AuthRouteServices,
-  createPublicAuthRoutes,
+  createAuthRoutes,
 } from "#features/auth/routes.ts";
 import {
-  createWebSubRoutes,
-  type WebSubRouteServices,
-} from "#features/feeds/routes/websub.ts";
+  createFeedRoutes,
+  type FeedRouteServices,
+} from "#features/feeds/routes.ts";
 import {
   createReaderRoutes,
   type ReaderRouteServices,
 } from "#features/reader/routes.ts";
 import {
   type AdminRouteServices,
-  createAdminOptionsRoutes,
+  createAdminRoutes,
 } from "#features/admin/routes.ts";
 import {
   createMailRoute,
   type MailRouteServices,
 } from "#features/mail-ingest/routes/mail.ts";
 import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
+import type * as reader from "#features/reader/services.ts";
 import {
   createInternalRoutes,
   healthcheckPath,
 } from "#platform/http/internal-routes.ts";
-import { deferredResponse } from "#platform/http/deferred-response.ts";
+import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import { jsonError } from "#platform/http/json.ts";
+import {
+  type MailRelayRejection,
+  mailRelayRejectionStatus,
+} from "#shared/contracts/mail-relay.ts";
 
 // Everything the routes reach, built once per process by the entrypoint.
 export type ServerServices = AuthRouteServices &
+  FeedRouteServices &
   ReaderRouteServices &
   AdminRouteServices &
-  WebSubRouteServices &
-  MailRouteServices;
+  MailRouteServices &
+  Pick<typeof reader, "articleEventHub">;
 
 export type ServerAppOptions = {
-  production?: boolean;
   spaDirectory?: string;
 };
 
 // Bun buffers the whole body before any schema validation runs, so the cap
 // has to sit at the server level, not per-route. The largest legitimate body
-// is a pushed feed document, which the fetch pipeline caps at 24 MiB
-// (http-client's maximumBodyBytes) -- the server cap must not sit below
-// that or valid WebSub pushes get rejected before their own cap runs.
-// Anything larger than this never reaches a handler.
-export const MAX_REQUEST_BODY_BYTES = 24 * 1024 * 1024;
+// is a pushed feed document, which can carry anything a fetch could, so the
+// cap is the fetch pipeline's. Anything larger never reaches a handler.
+export const MAX_REQUEST_BODY_BYTES = maximumFeedBodyBytes;
+
+// The origin is rate limited, or this instance's own politeness interval for
+// the host has not elapsed. The client is meant to come back, and
+// Retry-After says when. Clamped to an hour: retryAt can come from an
+// upstream Retry-After header with no sanity check of its own.
+function deferredResponse(error: HttpDeferredError) {
+  const retryAfterSeconds = Math.min(
+    Math.max(1, Math.ceil((error.retryAt - Date.now()) / 1000)),
+    3_600,
+  );
+  return jsonError(
+    `This feed's server was just checked — try again in ${retryAfterSeconds}s.`,
+    429,
+    { "Retry-After": retryAfterSeconds.toString() },
+  );
+}
 
 // A 404 for a browser navigation (not an API call, not a static asset) means
 // the SolidJS router should handle the path client-side, so serve the SPA
@@ -124,7 +144,7 @@ export async function createServerApp(
   options: ServerAppOptions = {},
 ) {
   const { config } = services;
-  const production = options.production ?? false;
+  const { production } = config;
   const spaDirectory = options.spaDirectory ?? "spa";
   const shellFile = Bun.file(`${spaDirectory}/index.html`);
   const shellHeaders = {
@@ -149,13 +169,12 @@ export async function createServerApp(
             headers: { "Cache-Control": "public, max-age=3600" },
           });
         }
-        // Hashed assets are immutable for 1 year (names change when code changes)
+        // Hashed names change whenever the content does.
         if (filePath.startsWith("/assets/")) {
           return new Response(file, {
             headers: { "Cache-Control": "public, max-age=31536000, immutable" },
           });
         }
-        // index.html is revalidated on every request
         if (filePath === "/index.html") {
           return new Response(file, { headers: shellHeaders });
         }
@@ -178,47 +197,36 @@ export async function createServerApp(
     if (error instanceof NotFound) {
       return undefined;
     }
+    // Elysia's own body is a dump of its internal validation state, not the
+    // error envelope clients read.
     if (error instanceof ValidationError) {
-      // Elysia's own default body (a raw {type, detail, ...} dump of
-      // internal validation state) doesn't match anything the client's
-      // api() helper knows how to read, so every validation failure --
-      // not just one endpoint's -- surfaced as "malformed error payload".
-      return Response.json(
-        { error: error.message || "Invalid request." },
-        { status: 422 },
-      );
+      return jsonError(error.message || "Invalid request.", 422);
     }
-    // Deferral is not a failure: the origin is rate limited, or this
-    // instance's own politeness interval for the host has not elapsed. The
-    // client is meant to come back, and deferredResponse says when.
     if (error instanceof HttpDeferredError) {
       return deferredResponse(error);
     }
     // The sender's fault, not ours: the mail relay bounces it, and spam to
-    // unknown addresses stays out of the error log. `rejected` is the relay's
-    // signal; a plain 422 (a schema failure) is retried.
+    // unknown addresses stays out of the error log.
     if (error instanceof MailRejectedError) {
-      return Response.json(
-        { error: error.message, rejected: true },
-        { status: 422 },
-      );
+      const rejection: MailRelayRejection = {
+        error: error.message,
+        rejected: true,
+      };
+      return Response.json(rejection, { status: mailRelayRejectionStatus });
     }
     if (error instanceof DecodeError) {
       console.error(`Decode error on ${path}:`, JSON.stringify(error.cause));
-      return Response.json({ error: "Invalid request." }, { status: 400 });
+      return jsonError("Invalid request.", 400);
     }
     // Our own request budget ran out. That is an upstream timeout, not a
     // malformed request, and the handlers that fetch a user-supplied URL
     // re-raise it rather than blaming the URL.
     if (error instanceof HttpDeadlineError) {
       console.error(`Deadline exceeded on ${path}`);
-      return Response.json(
-        { error: "This site isn't responding right now." },
-        { status: 504 },
-      );
+      return jsonError("This site isn't responding right now.", 504);
     }
     console.error(`Unhandled error on ${path}:`, error);
-    return Response.json({ error: "Internal Server Error" }, { status: 500 });
+    return jsonError("Internal Server Error", 500);
   }
 
   return (
@@ -250,11 +258,21 @@ export async function createServerApp(
       })
       // Hooks only reach routes registered after them, so the routes come last.
       .use(createInternalRoutes())
-      .use(createPublicAuthRoutes(production, services))
+      .use(createAuthRoutes(services))
+      .use(createFeedRoutes(services))
       .use(createReaderRoutes(services))
-      .use(createAdminOptionsRoutes(services))
-      .use(createWebSubRoutes(services))
+      .use(createAdminRoutes(services))
       .use(createMailRoute(services))
       .use(spaRoutes)
   );
+}
+
+// A graceful stop waits for open responses, and event streams never finish
+// on their own, so the hub ends them first.
+export async function stopServerApp(
+  app: Awaited<ReturnType<typeof createServerApp>>,
+  { articleEventHub }: Pick<ServerServices, "articleEventHub">,
+) {
+  articleEventHub.close();
+  await app.stop();
 }

@@ -1,7 +1,6 @@
 import { Value } from "typebox/value";
 import { expect, test } from "bun:test";
 import {
-  emailAddressPolicy,
   jsonDatePolicy,
   normalizedEmailAddress,
   normalizedSubscriptionTarget,
@@ -10,12 +9,15 @@ import {
 } from "#shared/validation/typebox-policy.ts";
 
 // withMatchingPasswords and withMatchingChangedPasswords are held to their
-// contract at the routes that use them, in server-app.test.ts.
+// contract at the routes that use them.
 test("checks URL, email, plain-text, and internal-address policies", () => {
   expect(Value.Check(webUrlPolicy, "https://feed.example/rss")).toBe(true);
   expect(Value.Check(webUrlPolicy, "javascript:alert(1)")).toBe(false);
-  expect(Value.Check(emailAddressPolicy, "reader@example.com")).toBe(true);
-  expect(Value.Check(emailAddressPolicy, "reader@localhost")).toBe(false);
+  expect(Value.Check(webUrlPolicy, "https://user:pw@feed.example/")).toBe(
+    false,
+  );
+  expect(Value.Check(normalizedEmailAddress, "reader@example.com")).toBe(true);
+  expect(Value.Check(normalizedEmailAddress, "reader@localhost")).toBe(false);
   expect(Value.Check(plainTextPolicy, "plain\ntext")).toBe(true);
   expect(Value.Check(plainTextPolicy, `bad${String.fromCharCode(0)}text`)).toBe(
     false,

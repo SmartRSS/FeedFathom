@@ -5,7 +5,8 @@ import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import type { OpmlNode, OpmlSource } from "#shared/types/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
@@ -14,7 +15,7 @@ import { parseOpml } from "#features/feeds/opml-parser.ts";
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ opml: t.File() });
 
-export async function postOptionsOpmlHandler(
+export async function postOpmlHandler(
   {
     body,
     user,
@@ -25,7 +26,7 @@ export async function postOptionsOpmlHandler(
   { opmlImportService }: Pick<typeof feeds, "opmlImportService">,
 ) {
   if (body.opml.size > maximumOpmlBytes)
-    return json({ error: "File is too large", success: false }, 413);
+    return jsonError("File is too large", 413);
 
   const bytes = new Uint8Array(await body.opml.arrayBuffer());
   let content: string;
@@ -33,15 +34,15 @@ export async function postOptionsOpmlHandler(
   try {
     content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     if (!Value.Check(plainTextPolicy, content))
-      return json({ error: "Invalid file", success: false }, 400);
+      return jsonError("Invalid file", 400);
     tree = parseOpml(content);
   } catch {
-    return json({ error: "Invalid OPML", success: false }, 400);
+    return jsonError("Invalid OPML", 400);
   }
 
   const contentHash = createHash("sha256").update(bytes).digest("hex");
   await opmlImportService.insertTree(user.id, tree, contentHash);
-  return json({ success: true });
+  return json(successResponse, { success: true });
 }
 
 // Newsletter subscriptions are left out. Their "url" is an address this
@@ -84,7 +85,7 @@ function subscriptionTree(
   ];
 }
 
-export async function getOptionsOpmlHandler(
+export async function getOpmlHandler(
   { user }: { user: AuthedUser },
   {
     foldersDataService,

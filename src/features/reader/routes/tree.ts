@@ -1,6 +1,7 @@
 import type * as feeds from "#features/feeds/services.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import { treeResponse } from "#shared/contracts/responses.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { isSnoozed } from "#features/feeds/source-snooze-policy.ts";
 
@@ -42,18 +43,18 @@ export async function getTreeHandler(
       kind: source.kind ?? "feed",
       name: source.name,
       pausedUntil: source.pausedUntil?.toJSON() ?? null,
-      type: "source",
+      type: "source" as const,
       uid: source.id?.toString() ?? "",
       unreadCount: snoozed ? 0 : source.unreadArticlesCount,
       xmlUrl: source.url ?? "",
     };
   });
-  return json({
+  return json(treeResponse, {
     tree: [
       ...folders.map((folder) => ({
         children: children.get(folder.id) ?? [],
         name: folder.name,
-        type: "folder",
+        type: "folder" as const,
         uid: folder.id.toString(),
       })),
       ...roots,

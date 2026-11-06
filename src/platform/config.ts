@@ -1,6 +1,9 @@
 import { Type, type StaticDecode } from "typebox";
 import { Value } from "typebox/value";
+import { newsletterMailDomain } from "#shared/util/newsletter-address.ts";
 
+// Blank is unset: compose.yml passes every variable through as `${X:-}`, so
+// the defaults below are the only ones, and an unset variable arrives as "".
 const integerString = (
   name: string,
   defaultValue: string | undefined,
@@ -10,11 +13,11 @@ const integerString = (
   Type.Codec(
     Type.String({
       ...(defaultValue === undefined ? {} : { default: defaultValue }),
-      pattern: "^\\d+$",
+      pattern: "^\\d*$",
     }),
   )
     .Decode((value) => {
-      const parsed = Number(value);
+      const parsed = Number(value || defaultValue);
       if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum)
         throw new Error(
           `${name} must be an integer from ${minimum} to ${maximum}`,
@@ -45,13 +48,15 @@ const databaseUrl = Type.Codec(Type.String())
   })
   .Encode(String);
 
-const redisUrl = Type.Codec(Type.String({ default: "redis://redis:6379" }))
+const defaultRedisUrl = "redis://redis:6379";
+const redisUrl = Type.Codec(Type.String({ default: defaultRedisUrl }))
   .Decode((value) => {
-    const parsed = new URL(value);
+    const url = value || defaultRedisUrl;
+    const parsed = new URL(url);
     if (!["redis:", "rediss:"].includes(parsed.protocol) || !parsed.hostname) {
       throw new Error("REDIS_URL must be a redis: or rediss: URL with a host");
     }
-    return value;
+    return url;
   })
   .Encode(String);
 
@@ -61,13 +66,14 @@ const configSchema = Type.Object(
       .Decode((value) => value.split(",").filter(Boolean))
       .Encode((value) => value.join(",")),
     ENABLE_REGISTRATION: booleanString(),
-    WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "1", 1, 128),
+    WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "25", 1, 128),
     // Per-process Postgres pool size. Matches Bun's SQL default (10), so it is
     // a no-op until sized against max_connections: roughly
     // 1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX. See docs/running.md.
     DB_POOL_MAX: integerString("DB_POOL_MAX", "10", 1, 100),
-    LOCK_DURATION: integerString("LOCK_DURATION", "1000", 1, 86_400),
-    CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "1000", 20, 2_592_000),
+    // Seconds, as are the two intervals.
+    LOCK_DURATION: integerString("LOCK_DURATION", "60", 1, 86_400),
+    CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "20", 20, 2_592_000),
     // Days since a user's last request before they count as dormant for
     // article-pruning purposes. 0 disables dormancy-based pruning.
     USER_DORMANT_AFTER_DAYS: integerString(
@@ -96,7 +102,7 @@ const configSchema = Type.Object(
     REDIS_URL: redisUrl,
     GATHER_JOBS_INTERVAL: integerString(
       "GATHER_JOBS_INTERVAL",
-      "1000",
+      "20",
       5,
       86_400,
     ),
@@ -106,13 +112,15 @@ const configSchema = Type.Object(
     // lost in the noise.
     SLOW_REQUEST_MS: integerString("SLOW_REQUEST_MS", "500", 1, 600_000),
     MAIL_ENABLED: booleanString(),
-    // The host newsletter addresses are minted at. Distinct from
-    // FEED_FATHOM_DOMAIN, since Cloudflare Email Routing is rarely configured
-    // on the host the app is served from. Falls back to it when they coincide.
+    // The host newsletter addresses are minted at, when it differs from
+    // FEED_FATHOM_DOMAIN: Cloudflare Email Routing is rarely configured on
+    // the host the app is served from. Read through `mailDomain`.
     MAIL_DOMAIN: Type.Optional(Type.String()),
     MAIL_RELAY_SECRET: Type.Optional(Type.String()),
     MAILJET_API_KEY: Type.Optional(Type.String()),
     MAILJET_API_SECRET: Type.Optional(Type.String()),
+    // The public host (and port) the app is served at. Read through
+    // `publicOrigin`.
     FEED_FATHOM_DOMAIN: Type.Optional(Type.String()),
     // Commit this image was built from, baked in by the Dockerfile rather than
     // supplied by the deployment, so it survives a moving tag. Optional: a
@@ -130,7 +138,23 @@ const configSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type AppConfig = StaticDecode<typeof configSchema>;
+export type AppConfig = StaticDecode<typeof configSchema> & {
+  // NODE_ENV=production: Secure cookies, the CSP, and serving the built SPA.
+  production: boolean;
+  // Where mail links point. http only for localhost, whose dev server has no
+  // certificate.
+  publicOrigin?: URL;
+  // The host newsletter addresses are minted at, set only while mail ingest
+  // is enabled.
+  mailDomain?: string;
+};
+
+function publicOrigin(domain: string | undefined): URL | undefined {
+  const host = domain?.trim();
+  if (!host) return undefined;
+  const protocol = host.startsWith("localhost") ? "http" : "https";
+  return new URL(`${protocol}://${host}`);
+}
 
 export function loadConfig(
   environment: Readonly<Record<string, string | undefined>>,
@@ -154,7 +178,18 @@ export function loadConfig(
           "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
         );
     }
-    return parsed;
+    const origin = publicOrigin(parsed.FEED_FATHOM_DOMAIN);
+    if (parsed.MAILJET_API_KEY && parsed.MAILJET_API_SECRET && !origin)
+      throw new Error(
+        "FEED_FATHOM_DOMAIN is required when Mailjet is configured, for the links mail carries",
+      );
+    const mailDomain = newsletterMailDomain(parsed);
+    return {
+      ...parsed,
+      ...(mailDomain ? { mailDomain } : {}),
+      production: environment["NODE_ENV"] === "production",
+      ...(origin ? { publicOrigin: origin } : {}),
+    };
   } catch (cause) {
     const details = cause instanceof Error ? cause.message : String(cause);
     throw new Error(`Invalid config: ${details}`, { cause });

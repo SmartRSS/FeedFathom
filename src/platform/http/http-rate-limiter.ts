@@ -127,6 +127,10 @@ export function rateLimitBlockUntil(
   return resetInstant(Number(resetHeader), now);
 }
 
+// Background work defers when a host is busy; interactive work is a person
+// waiting, and waits out what clears inside its deadline.
+export type Priority = "background" | "interactive";
+
 export class HttpRateLimiter {
   constructor(
     private readonly redis: RateLimitRedis,
@@ -135,7 +139,7 @@ export class HttpRateLimiter {
 
   async reserve(
     hostname: string,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<void> {
     const until = await this.blockedUntil(hostname, deadline);
@@ -207,7 +211,7 @@ export class HttpRateLimiter {
   // or 0 once this call has taken it.
   private async reserveGap(
     hostname: string,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<number> {
     return Number(

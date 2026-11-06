@@ -65,6 +65,15 @@ mail-ingest → feeds
 jobs        → feeds
 ```
 
+Each feature mounts its own routes as one group (`auth/routes.ts`,
+`feeds/routes.ts`, `reader/routes.ts`, `admin/routes.ts`,
+`mail-ingest/routes/mail.ts`), and `server-app.ts` composes the groups. A
+route belongs to the feature that owns its behaviour, whatever its URL:
+`/api/options/opml` is feeds', `/api/options/password` and
+`/api/options/sessions` are auth's. Each handler answers through
+`json(contract, value)` from `platform/http/json.ts`, typed against the
+schema in `#shared/contracts` that clients decode with.
+
 Any edge not on that list is a lint error. The list must also stay acyclic,
 which is checked in review rather than by the rule. That's the point of
 keeping the edges in a config file: adding one is a deliberate act that shows
@@ -84,10 +93,9 @@ up in the diff, instead of arriving as a quiet new import.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
-- **`admin`** — the admin and options routes. Two route groups rather than
-  one, because `/api/options` is per-user and `/api/admin` is not: the admin
-  group carries `createAdminPlugin`, so the authorisation check is a property
-  of the group instead of something each handler has to restate.
+- **`admin`** — the `/api/admin` routes. The group carries
+  `createAdminPlugin`, so the authorisation check is a property of the group
+  instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
   email handler, the email processor, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop.

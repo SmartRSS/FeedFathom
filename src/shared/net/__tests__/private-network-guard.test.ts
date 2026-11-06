@@ -52,6 +52,17 @@ describe("isBlockedHostname", () => {
   });
 
   test.each([
+    "router",
+    "printer.local",
+    "nas.lan",
+    "box.home.arpa",
+    "db.internal",
+    "Printer.Local.",
+  ])("blocks local hostname %s", (hostname) => {
+    expect(isBlockedHostname(hostname)).toBe(true);
+  });
+
+  test.each([
     "example.com",
     "mirror2.example.com",
     "151.101.1.1",

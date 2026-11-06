@@ -119,28 +119,31 @@ test("a success clears the account and refunds one attempt without creating a ke
   expect(await redis.exists(source)).toBe(false);
 });
 
-test("a password change counts on the account counter alone", async () => {
-  const address = `user:${crypto.randomUUID()}`;
+test("a password change is counted per account, whatever the address", async () => {
+  const userId = Math.floor(Math.random() * 1_000_000_000);
   for (let attempt = 0; attempt < 10; attempt++) {
     // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
-    expect(await throttle.attempt("password-change", address, email)).toBe(
-      true,
-    );
+    expect(await throttle.attemptPasswordChange(userId)).toBe(true);
   }
-  expect(await throttle.attempt("password-change", address, email)).toBe(false);
-  expect(await redis.exists(`password-change-source:${address}`)).toBe(false);
+  expect(await throttle.attemptPasswordChange(userId)).toBe(false);
+  expect(await throttle.attemptPasswordChange(userId + 1)).toBe(true);
 
-  await throttle.succeeded("password-change", address, email);
-  expect(await redis.exists(`password-change-fail:${address}:${email}`)).toBe(
-    false,
-  );
+  await throttle.passwordChanged(userId);
+  expect(await throttle.attemptPasswordChange(userId)).toBe(true);
 });
 
 test("counters stop refusing after the window", async () => {
   const { address, source } = scopeKeys();
   await redis.set(source, "50");
-  await redis.send("PEXPIRE", [source, "50"]);
+  await redis.send("EXPIRE", [source, "60"]);
   expect(await throttle.attempt("login", address, email)).toBe(false);
-  await Bun.sleep(100);
+
+  await redis.send("PEXPIRE", [source, "1"]);
+  for (let wait = 0; wait < 100; wait++) {
+    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
+    if (!(await redis.exists(source))) break;
+    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
+    await Bun.sleep(10);
+  }
   expect(await throttle.attempt("login", address, email)).toBe(true);
 });

@@ -43,6 +43,11 @@ const bullmqRedis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 const bullmqQueue = new Queue("tasks", { connection: bullmqRedis });
+// A connection of its own for SUBSCRIBE, which takes it over. Commands wait
+// out an outage rather than failing after a retry budget, so a SUBSCRIBE sent
+// while Redis is down still lands once it is back.
+const createSubscriber = () =>
+  new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 const drizzleConnection = createDrizzleConnection(config.DATABASE_URL, {
   max: config.DB_POOL_MAX,
 });
@@ -74,6 +79,7 @@ export {
   bullmqQueue,
   bullmqRedis,
   close,
+  createSubscriber,
   drizzleConnection,
   httpClient,
   redis,

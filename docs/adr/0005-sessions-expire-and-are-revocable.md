@@ -22,7 +22,7 @@ be revoked with (#695).
   model does not buy back. 365 days was chosen because the cookie already
   promised it — the server now keeps the same promise it always made, so
   no legitimate client observes a change.
-- **Enforcement at the lookup, not at the edges.** `getUserBySid` rejects
+- **Enforcement at the lookup, not at the edges.** `authenticate` rejects
   expired rows. It is the one choke point every request's session flows
   through (both the auth plugin and `GET /api/session`), so no route can
   forget the check and no second description of "valid" can drift from the

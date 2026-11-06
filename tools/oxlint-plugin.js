@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { definePlugin, defineRule } from "@oxlint/plugins";
 
 // Rules for conventions oxlint has no built-in equivalent for. All four use
@@ -213,12 +214,22 @@ function resolveRelative(from, specifier) {
   return segments.join("/");
 }
 
-/** @type {Record<string, string>} */
-const SUBPATH_PREFIXES = {
-  "#features/": "src/features/",
-  "#platform/": "src/platform/",
-  "#shared/": "src/shared/",
-};
+/**
+ * package.json's subpath imports, as specifier prefix to repo-relative
+ * directory: `"#shared/*": "./src/shared/*"` becomes `#shared/` to
+ * `src/shared/`. Read rather than restated, so a new alias is judged too.
+ * @type {Record<string, string>}
+ */
+const SUBPATH_PREFIXES = Object.fromEntries(
+  Object.entries(
+    JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ).imports,
+  ).map(([alias, target]) => [
+    alias.replace(/\*$/, ""),
+    String(target).replace(/^\.\//, "").replace(/\*$/, ""),
+  ]),
+);
 
 /**
  * @param {string} from

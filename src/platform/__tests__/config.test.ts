@@ -15,18 +15,19 @@ describe("loadConfig", () => {
     ).toEqual({
       ALLOWED_EMAILS: [],
       ARTICLE_STALE_AFTER_DAYS: 365,
-      CLEANUP_INTERVAL: 1000,
+      CLEANUP_INTERVAL: 20,
       DATABASE_URL: databaseUrl,
       DB_POOL_MAX: 10,
       ENABLE_REGISTRATION: false,
-      GATHER_JOBS_INTERVAL: 1000,
-      LOCK_DURATION: 1000,
+      GATHER_JOBS_INTERVAL: 20,
+      LOCK_DURATION: 60,
       MAIL_ENABLED: false,
       REDIS_URL: "redis://redis:6379",
       SLOW_REQUEST_MS: 500,
       USER_DORMANT_AFTER_DAYS: 365,
       USER_EXPIRY_DAYS: 730,
-      WORKER_CONCURRENCY: 1,
+      WORKER_CONCURRENCY: 25,
+      production: false,
     });
   });
 
@@ -139,6 +140,77 @@ describe("loadConfig", () => {
       "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
     );
   });
+
+  // compose.yml passes every variable through as ${X:-}.
+  test("treats a blank value as unset", () => {
+    const defaults = loadConfig({ DATABASE_URL: databaseUrl });
+    expect(
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        DB_POOL_MAX: "",
+        REDIS_URL: "",
+        WORKER_CONCURRENCY: "",
+      }),
+    ).toEqual(defaults);
+  });
+
+  test("production follows NODE_ENV", () => {
+    expect(
+      loadConfig({ DATABASE_URL: databaseUrl, NODE_ENV: "production" })
+        .production,
+    ).toBe(true);
+    expect(
+      loadConfig({ DATABASE_URL: databaseUrl, NODE_ENV: "development" })
+        .production,
+    ).toBe(false);
+  });
+
+  test.each([
+    ["localhost:3456", "http://localhost:3456"],
+    ["feeds.example.com", "https://feeds.example.com"],
+    ["feeds.example.com:8443", "https://feeds.example.com:8443"],
+  ])("serves %s at %s", (domain, origin) => {
+    expect(
+      loadConfig({ DATABASE_URL: databaseUrl, FEED_FATHOM_DOMAIN: domain })
+        .publicOrigin?.origin,
+    ).toBe(origin);
+  });
+
+  test("refuses Mailjet credentials with no public origin to link to", () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        MAILJET_API_KEY: "key",
+        MAILJET_API_SECRET: "secret",
+      }),
+    ).toThrow("FEED_FATHOM_DOMAIN is required");
+  });
+
+  // MAIL_DOMAIN is where inbound mail is routed and FEED_FATHOM_DOMAIN is
+  // where the app is served; they coincide only in single-domain setups, so
+  // the app host is a fallback and never an override.
+  test.each([
+    ["false", "feeds.example.com", undefined, undefined],
+    ["true", "", undefined, undefined],
+    ["true", "feeds.example.com:8443", undefined, "feeds.example.com"],
+    ["true", "app.example.com", "mail.example.com", "mail.example.com"],
+    // Blank is unset, not an override: compose.yml always defines MAIL_DOMAIN.
+    ["true", "app.example.com", "", "app.example.com"],
+    ["true", "", "", undefined],
+  ])(
+    "mints newsletter addresses only with mail enabled (%p, %p, %p)",
+    (mailEnabled, domain, mailDomain, expected) => {
+      expect(
+        loadConfig({
+          DATABASE_URL: databaseUrl,
+          FEED_FATHOM_DOMAIN: domain,
+          MAIL_DOMAIN: mailDomain,
+          MAIL_ENABLED: mailEnabled,
+          MAIL_RELAY_SECRET: "relay-secret",
+        }).mailDomain,
+      ).toBe(expected);
+    },
+  );
 
   test("rejects invalid numeric values", () => {
     expect(() =>

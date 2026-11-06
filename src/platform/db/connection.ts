@@ -32,12 +32,31 @@ export function createDrizzleConnection(
 // therefore an exact "is the schema at the version I was compiled for" test,
 // and stays false midway through an upgrade -- probing for a table would not.
 //
-// A missing table and a refused connection both surface as a rejected query,
-// so one loop covers every not-ready state. Waiting forever is deliberate; the
-// log is throttled so a genuinely stuck instance stays readable.
+// Waiting forever is deliberate; the log is throttled so a genuinely stuck
+// instance stays readable.
 // Bundled into each build, so this is the newest migration the running
 // binary was compiled against -- not whatever happens to be on disk.
 const latestMigration = Math.max(...journal.entries.map((entry) => entry.when));
+
+// The schema not there yet, or a database not accepting connections yet. Bun
+// reports an unresolvable host as a refused connection too, which on Swarm
+// can also be a service not scheduled yet. Anything else -- a wrong password,
+// a database that does not exist -- is configuration, and waiting would only
+// hide it.
+const notReadyCodes = new Set([
+  "42P01", // undefined_table
+  "57P03", // cannot_connect_now: the server is starting up
+  "ERR_POSTGRES_CONNECTION_CLOSED",
+  "ERR_POSTGRES_CONNECTION_REFUSED",
+  "ERR_POSTGRES_CONNECTION_TIMEOUT",
+]);
+
+function isNotReady(error: unknown) {
+  return (
+    error instanceof SQL.PostgresError &&
+    (notReadyCodes.has(error.code) || notReadyCodes.has(error.errno ?? ""))
+  );
+}
 
 export async function waitForMigration(
   client: SQL,
@@ -53,7 +72,10 @@ export async function waitForMigration(
           WHERE "created_at" = ${appliedAt}
         ) AS "applied"`
         .then(([row]: { applied: boolean }[]) => row?.applied ?? false)
-        .catch(() => false);
+        .catch((error: unknown) => {
+          if (isNotReady(error)) return false;
+          throw error;
+        });
     if (applied) return;
     if (attempt % 30 === 0)
       console.log(`Waiting for migration ${appliedAt} to be applied`);

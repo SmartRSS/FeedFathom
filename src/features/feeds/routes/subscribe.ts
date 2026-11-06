@@ -3,7 +3,8 @@ import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { subscriptionResponse } from "#shared/contracts/responses.ts";
 import {
   deserializeFeedPreview,
   serializeFeedPreview,
@@ -74,7 +75,7 @@ export async function postSubscribeHandler(
   const { sourceUrl } = body;
   const isEmail = sourceUrl.kind === "email";
   if (!config.MAIL_ENABLED && isEmail)
-    return json({ error: "Email subscriptions are not allowed." }, 400);
+    return jsonError("Email subscriptions are not allowed.", 400);
   let homeUrl = new URL(request.url).origin;
   const cachedPreview = isEmail
     ? undefined
@@ -99,14 +100,14 @@ export async function postSubscribeHandler(
         }
       : { kind: "feed" }),
   });
-  if (!subscription) return json({ error: "Invalid folder" }, 400);
+  if (!subscription) return jsonError("Invalid folder", 400);
   // Another account's newsletter address, or one this instance does not
   // mint. Answered exactly as a malformed target is (the validation error
   // server-app.ts maps), so a refusal says nothing about whether the address
   // exists or whose it is.
-  if (subscription === "refused") return json({ error: "Refine Error" }, 422);
+  if (subscription === "refused") return jsonError("Refine Error", 422);
   if (subscription.initialized === true)
-    return json({ sourceId: subscription.source.id });
+    return json(subscriptionResponse, { sourceId: subscription.source.id });
 
   const preview =
     subscription.initializationSnapshot === null
@@ -186,7 +187,7 @@ export async function postSubscribeHandler(
       },
     );
   if (lease.outcome === "in-progress")
-    return json({ error: "Subscription initialization in progress" }, 409);
+    return jsonError("Subscription initialization in progress", 409);
 
-  return json({ sourceId: subscription.source.id });
+  return json(subscriptionResponse, { sourceId: subscription.source.id });
 }

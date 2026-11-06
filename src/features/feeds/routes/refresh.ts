@@ -2,7 +2,8 @@ import type * as feeds from "#features/feeds/services.ts";
 import type { StaticDecode } from "typebox";
 import type { refreshSourceRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 
 // Fetches one of the user's subscriptions now instead of at its next
 // scheduled poll, which after repeated failures can be over an hour away.
@@ -30,7 +31,7 @@ export async function postRefreshSourceHandler(
     user.id,
     body.sourceId,
   );
-  if (!source) return json({ error: "Invalid source" }, 400);
+  if (!source) return jsonError("Invalid source", 400);
   await sourceEnqueuer.enqueueSource(source);
-  return json({ success: true });
+  return json(successResponse, { success: true });
 }

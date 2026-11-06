@@ -3,11 +3,15 @@ import type { AppConfig } from "#platform/config.ts";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Elysia } from "elysia";
 import {
+  type MailRelayRequest,
+  mailRelayPath,
   mailRelaySecretHeader,
   maxRawEmailBytes,
+  maxRawEmailMebibytes,
 } from "#shared/contracts/mail-relay.ts";
 import { incomingMailRequest } from "#shared/contracts/requests.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 
 function matchesMailRelaySecret(
   expected: string | undefined,
@@ -29,11 +33,11 @@ export type MailRouteServices = Pick<typeof mailIngest, "emailHandler"> & {
 
 export function createMailRoute({ config, emailHandler }: MailRouteServices) {
   return new Elysia().post(
-    "/api/mail",
+    mailRelayPath,
     { body: incomingMailRequest },
-    async ({ body: decoded, request }) => {
+    async ({ body, request }) => {
       if (!config.MAIL_ENABLED) {
-        return json({ error: "Mail ingestion is disabled" }, 404);
+        return jsonError("Mail ingestion is disabled", 404);
       }
       if (
         !matchesMailRelaySecret(
@@ -41,21 +45,20 @@ export function createMailRoute({ config, emailHandler }: MailRouteServices) {
           request.headers.get(mailRelaySecretHeader),
         )
       ) {
-        return json({ error: "Unauthorized" }, 401);
+        return jsonError("Unauthorized", 401);
       }
 
-      // Base64, not UTF-8 text: a MIME message is bytes, and an 8-bit body in
-      // a legacy charset does not survive a round trip through UTF-8.
-      const raw = Buffer.from(decoded.raw, "base64");
+      const relayed: MailRelayRequest = body;
+      const raw = Buffer.from(relayed.raw, "base64");
       if (raw.byteLength > maxRawEmailBytes) {
-        return json({ error: "Raw email exceeds 5 MiB" }, 413);
+        return jsonError(`Raw email exceeds ${maxRawEmailMebibytes} MiB`, 413);
       }
 
       await emailHandler.processEmail(raw, {
-        from: decoded.from,
-        to: decoded.to,
+        from: relayed.from,
+        to: relayed.to,
       });
-      return json({ ok: true });
+      return json(successResponse, { success: true });
     },
   );
 }

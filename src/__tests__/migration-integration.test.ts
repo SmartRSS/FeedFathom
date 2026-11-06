@@ -132,6 +132,19 @@ test("gates startup on this build's newest migration, tolerating a newer databas
   }
 });
 
+test("stops waiting on a database it cannot sign in to", async () => {
+  const databaseUrl = new URL(requireDisposableDatabaseUrl());
+  databaseUrl.password = "not-the-password";
+  const client = new SQL(databaseUrl.href);
+  try {
+    await expect(waitForMigration(client, undefined, 10)).rejects.toThrow(
+      SQL.PostgresError,
+    );
+  } finally {
+    await client.close();
+  }
+});
+
 // An INVALID index is one an interrupted build left behind, which neither
 // answers as present nor as absent, so it fails the test outright.
 async function indexExists(client: SQL, name: string) {

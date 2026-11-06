@@ -213,7 +213,7 @@ The protected `production` GitHub environment deploys the stack only when the re
 
 The Swarm defaults assume a host with room to spare. On a smaller VPS, shrink these together rather than independently:
 
-- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica. The bare-process fallback is `1`, and it's safe to run that low in production too.
+- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica. `1` is safe in production too.
 - `DB_POOL_MAX` — PostgreSQL connections opened per server and worker replica (default `10`, matching Bun's SQL client default).
 - `POSTGRES_MAX_CONNECTIONS` — PostgreSQL's own connection ceiling (`deploy/stack.yml` default `1000`, far more than a small deployment needs). Size it against the other two: roughly `1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX`, which leaves room for connection churn during a rolling update without reserving memory for thousands of unused slots. One server and one worker replica at the `DB_POOL_MAX` default of `10` needs `1.5 * 2 * 10 = 30`.
 
