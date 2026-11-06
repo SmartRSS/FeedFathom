@@ -619,10 +619,59 @@ main {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   align-content: start;
-  /* Wide enough for the five section tabs on one row from a 640px
-     screen up. */
   width: min(100%, 40rem);
   margin: 2rem auto;
+}
+.options-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+/* Tabs keep their own width, each whole, and wrap where a row can't hold
+   them all: none is stretched alone across a row, and none is hidden. A
+   row that filled itself, or scrolled behind a fade, depended on the font
+   to leave no tab stranded or cut to a sliver. */
+.options-nav a {
+  flex: none;
+  white-space: nowrap;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  text-decoration: none;
+}
+.options-nav a[aria-current="true"] {
+  color: var(--selected-fg);
+  background: var(--selected-bg);
+  /* Inset, not a real border, so the chip can't shift when it becomes the
+     current one -- same trick as .source.selected. */
+  box-shadow: inset 0 0 0 1px var(--selected-border);
+}
+/* Wide screens list the tabs down the side, as most settings pages do, so
+   all six stay on show beside a column of the same width as before. The
+   nav spans the alert's row and the section's; with no alert, the section
+   takes the first. */
+@media (min-width: 60rem) {
+  .options-page {
+    grid-template-columns: 11rem minmax(0, 40rem);
+    column-gap: var(--space-8);
+    width: min(100%, 53rem);
+  }
+  .options-nav {
+    position: sticky;
+    top: calc(var(--toolbar-h) + var(--space-4));
+    grid-row: span 2;
+    flex-direction: column;
+    align-self: start;
+  }
+  .options-page > :not(.options-nav) {
+    grid-column: 2;
+  }
+  .options-nav a {
+    justify-content: flex-start;
+    text-align: start;
+  }
 }
 /* The options route is the one page the document itself scrolls: #app is a
    fixed-height shell because the dashboard's panes scroll themselves, but
@@ -656,32 +705,6 @@ html[data-route="options"] body {
    and the empty-tree guidance's #import-opml resolves into the Data group.
    The active chip borrows the selected-row treatment, so every theme (and
    forced colors) follows without a pass of its own. */
-.options-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-/* Tabs keep their own width, each whole, and wrap where a row can't hold
-   them all: none is stretched alone across a row, and none is hidden. A
-   row that filled itself, or scrolled behind a fade, depended on the font
-   to leave no tab stranded or cut to a sliver. */
-.options-nav a {
-  flex: none;
-  white-space: nowrap;
-  justify-content: center;
-  padding: var(--space-2) var(--space-3);
-  border: var(--border);
-  border-radius: var(--radius);
-  text-align: center;
-  text-decoration: none;
-}
-.options-nav a[aria-current="true"] {
-  color: var(--selected-fg);
-  background: var(--selected-bg);
-  /* Inset, not a real border, so the chip can't shift when it becomes the
-     current one -- same trick as .source.selected. */
-  box-shadow: inset 0 0 0 1px var(--selected-border);
-}
 /* The visible section's cards, spaced like the page grid they came from. */
 .options-section {
   display: grid;
@@ -697,10 +720,9 @@ html[data-route="options"] body {
   border: var(--border);
   border-radius: var(--radius);
 }
-/* The Options card about keyboard shortcuts, on a device with nothing but
-   a touch screen. */
+/* The Keyboard tab, on a device with nothing but a touch screen. */
 @media (hover: none) and (pointer: coarse) {
-  .options-keyboard {
+  .options-nav a.options-keyboard {
     display: none;
   }
 }
@@ -720,6 +742,23 @@ html[data-route="options"] body {
 /* The card's 16px gap is the only space between its parts. */
 .options-card p {
   margin: 0;
+}
+/* A setting and the hint under it: one step apart, as a label is from its
+   control, so the hint reads as part of the setting above, not the next. */
+.options-field {
+  display: grid;
+  gap: var(--space-1);
+}
+.options-card .options-hint,
+.options-scope {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+/* The file input keeps the UA's rendering, but not its short box: it is
+   a target like the select above it. */
+.options-card input[type="file"] {
+  min-height: var(--control-h);
 }
 /* One active session per row: the agent string truncates (raw headers,
    kept as the hover title, run long), and the date/current label wraps
