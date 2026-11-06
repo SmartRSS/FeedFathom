@@ -111,7 +111,6 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
   let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   const worker = new MainWorker({
     bullmqQueue: {
-      async add() {},
       async upsertJobScheduler() {},
     },
     config,
@@ -163,7 +162,6 @@ test("initializes scheduled jobs and closes the worker on cleanup", async () => 
   const templates: unknown[] = [];
   const { worker } = await startWorker({
     bullmqQueue: {
-      async add() {},
       async upsertJobScheduler(name, _options, template) {
         scheduled.push(name);
         templates.push(template.opts);
@@ -352,25 +350,21 @@ test("refreshes favicons only for validated job data", async () => {
 
 // A favicon run queues every due source at once, at a priority below the
 // unprioritized ParseSource jobs, and finishes only once every add has.
-test("queues every due favicon refresh concurrently, below feed parsing", async () => {
-  const added = new Map<string, number | undefined>();
-  const bothStarted = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
+test("a favicon gather hands every due source to the refresher's queue", async () => {
+  const due = [
+    { hasFavicon: false, homeUrl: "https://one.example/", id: 1 },
+    { hasFavicon: true, homeUrl: "https://two.example/", id: 2 },
+  ];
+  const enqueued: unknown[] = [];
   const { process } = await startWorker({
-    bullmqQueue: {
-      async add(_name, _data, options) {
-        added.set(options?.jobId ?? "", options?.priority);
-        if (added.size === 2) bothStarted.resolve();
-        await release.promise;
+    faviconRefresher: strictFake<FaviconRefresher>({
+      async enqueueRefreshes(sources) {
+        enqueued.push(...sources);
       },
-      async upsertJobScheduler() {},
-    },
+    }),
     sourcesDataService: strictFake<SourcesDataService>({
       async getSourcesDueFaviconRefresh() {
-        return [
-          { ...source, hasFavicon: false },
-          { ...source, hasFavicon: false, id: 2 },
-        ];
+        return due;
       },
       async getSourcesToProcess() {
         return [];
@@ -378,21 +372,9 @@ test("queues every due favicon refresh concurrently, below feed parsing", async 
     }),
   });
 
-  let finished = false;
-  const processing = process(job(JobName.GatherFaviconJobs, {})).then(() => {
-    finished = true;
-  });
-  // Both adds are in flight before either resolves.
-  await bothStarted.promise;
-  expect(Object.fromEntries(added)).toEqual({
-    [`${JobName.RefreshFavicon}-1`]: 10,
-    [`${JobName.RefreshFavicon}-2`]: 10,
-  });
-  expect(finished).toBe(false);
+  await process(job(JobName.GatherFaviconJobs, {}));
 
-  release.resolve();
-  await processing;
-  expect(finished).toBe(true);
+  expect(enqueued).toEqual(due);
 });
 
 // A fake PNG header: enough for imageDimensions, and stored as-is because
@@ -467,12 +449,6 @@ async function simulateFaviconGather(
   // Each queued refresh and when BullMQ would next hand it to the worker.
   const queued: { data: unknown; runAt: number }[] = [];
   const { process } = await startWorker({
-    bullmqQueue: {
-      async add(_name, data, options) {
-        queued.push({ data, runAt: Date.now() + (options?.delay ?? 0) });
-      },
-      async upsertJobScheduler() {},
-    },
     faviconRefresher: new FaviconRefresher(
       client,
       {
@@ -481,6 +457,11 @@ async function simulateFaviconGather(
         },
       },
       redis,
+      {
+        async addBulk(jobs) {
+          for (const { data } of jobs) queued.push({ data, runAt: Date.now() });
+        },
+      },
     ),
     sourcesDataService: strictFake<SourcesDataService>({
       async getSourcesDueFaviconRefresh() {
@@ -637,11 +618,8 @@ test("rejects malformed and unknown jobs before downstream calls", async () => {
       return value;
     };
   const { process } = await startWorker({
-    bullmqQueue: {
-      add: record("queue.add", undefined),
-      async upsertJobScheduler() {},
-    },
     faviconRefresher: strictFake<FaviconRefresher>({
+      enqueueRefreshes: record("enqueueRefreshes", undefined),
       refreshFavicon: record("refreshFavicon", undefined),
     }),
     feedParser: strictFake<FeedParser>({

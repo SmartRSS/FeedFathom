@@ -59,7 +59,6 @@ export type MainWorkerJob = {
 };
 
 type MainWorkerQueue = {
-  add(name: string, data: unknown, opts?: JobsOptions): Promise<unknown>;
   upsertJobScheduler(
     name: string,
     repeat: { every: number },
@@ -83,7 +82,10 @@ export type MainWorkerServices = {
     processor: (job: MainWorkerJob) => Promise<void>,
     options: { concurrency: number; lockDuration: number },
   ): JobWorker;
-  faviconRefresher: Pick<FaviconRefresher, "refreshFavicon">;
+  faviconRefresher: Pick<
+    FaviconRefresher,
+    "enqueueRefreshes" | "refreshFavicon"
+  >;
   feedParser: Pick<FeedParser, "parseSource">;
   retentionService: Pick<RetentionService, "prune">;
   sourceEnqueuer: Pick<SourceEnqueuer, "enqueueDueSources" | "runParse">;
@@ -153,7 +155,6 @@ export class MainWorker {
 
   private async runJob(job: MainWorkerJob) {
     const {
-      bullmqQueue,
       faviconRefresher,
       feedParser,
       retentionService,
@@ -173,23 +174,8 @@ export class MainWorker {
       }
 
       case JobName.GatherFaviconJobs: {
-        const dueSources =
-          await sourcesDataService.getSourcesDueFaviconRefresh();
-        await Promise.all(
-          dueSources.map((source) =>
-            // No delay: most refreshes are answered from the HTTP cache.
-            // One that a provider defers queues for its own slot (#1087).
-            bullmqQueue.add(JobName.RefreshFavicon, source, {
-              ...finishedJobRetention,
-              // A refresh still delayed by a provider's Retry-After keeps
-              // this id, so the next gather's add does not jump its backoff.
-              jobId: `${JobName.RefreshFavicon}-${source.id}`,
-              // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
-              // GatherJobs) first, so a large favicon run can't crowd out
-              // feed parsing.
-              priority: 10,
-            }),
-          ),
+        await faviconRefresher.enqueueRefreshes(
+          await sourcesDataService.getSourcesDueFaviconRefresh(),
         );
         break;
       }
