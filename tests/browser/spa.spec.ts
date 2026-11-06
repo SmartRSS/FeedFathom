@@ -1251,6 +1251,29 @@ test("the reader steps change the rendered column, not just storage", async ({
 // put a read title back to the selected text colour or it drops under 1.5:1.
 // Weight survives both, which is what the tree already relies on for a source
 // with unread articles.
+test("compact density tightens the tree without touching the theme", async ({
+  page,
+}) => {
+  await openApp(page);
+  const row = page.locator(".source.folder").first();
+  await expect(row).toBeVisible();
+  const comfortable = (await row.boundingBox())!.height;
+
+  await page.goto("/options#appearance");
+  const density = page.getByRole("combobox", { name: "Density" });
+  await expect(density).toHaveValue("comfortable");
+  await density.selectOption("compact");
+  await expect(page.getByRole("combobox", { name: "Theme" })).toHaveValue(
+    "auto",
+  );
+  await page.goto("/");
+  await expect(row).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+  const compact = (await row.boundingBox())!.height;
+  expect(comfortable).toBe(24);
+  expect(compact).toBe(20);
+});
+
 test("tells read from unread by weight, not only colour", async ({ page }) => {
   await openApp(page, { multipleArticles: true });
   await selectSource(page);
