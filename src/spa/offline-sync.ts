@@ -5,7 +5,7 @@ import {
   onCleanup,
   type Accessor,
 } from "solid-js";
-import { maximumRequestIds } from "#shared/contracts/requests.ts";
+import { maximumRequestIds } from "#shared/contracts/limits.ts";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import { sourceIds } from "./feed-tree.ts";
 import { offlineUnread } from "./preferences.ts";

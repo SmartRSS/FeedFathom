@@ -2,10 +2,8 @@ import { createSignal, type Accessor } from "solid-js";
 import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { articlesRequest } from "#shared/contracts/requests.ts";
-import {
-  articlePageSize,
-  type ArticleSummary,
-} from "#shared/contracts/responses.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
+import type { ArticleSummary } from "#shared/contracts/responses.ts";
 import { isEmptyFolder, type ListNode, type ListScope } from "./feed-tree.ts";
 
 const articleFilter = articlesRequest.properties.filter;

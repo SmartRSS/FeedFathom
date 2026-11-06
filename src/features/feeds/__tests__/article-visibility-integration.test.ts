@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { articlePageSize } from "#shared/contracts/responses.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";

@@ -2,6 +2,9 @@
 // Dependency-free, so the service worker bundle can import them without the
 // schema library.
 
+// Most ids one request may name: articles to mark or remove, sources to list.
+export const maximumRequestIds = 500;
+
 // The article list is keyset-paged with at most this many rows. A full page
 // can have more results; request the next page with the last row's ID as cursor.
 export const articlePageSize = 200;

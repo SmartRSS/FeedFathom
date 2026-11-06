@@ -1,6 +1,6 @@
 import { aliasedTable, and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { articlePageSize } from "#shared/contracts/responses.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
 import {
   articleFilterCondition,
   readCondition,

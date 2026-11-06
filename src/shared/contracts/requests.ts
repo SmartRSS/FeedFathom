@@ -14,8 +14,9 @@ import {
   withMatchingPasswords,
 } from "#shared/validation/typebox-policy.ts";
 
+import { maximumRequestIds } from "./limits.ts";
+
 const id = Type.Integer({ minimum: 1 });
-export const maximumRequestIds = 500;
 // RFC 5321 caps both envelope paths, so no deliverable sender is longer
 // than a minted recipient may be.
 const mailEnvelopeValue = Type.String({

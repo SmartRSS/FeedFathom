@@ -8,8 +8,8 @@ import {
 } from "@playwright/test";
 import { Value } from "typebox/value";
 import { articlesRequest } from "#shared/contracts/requests.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
 import {
-  articlePageSize,
   articleResponse,
   articlesResponse,
   errorResponse,
@@ -687,7 +687,6 @@ test("fetches the next article page after a delete empties the list", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = articlePageSize;
   const cursors: (number | undefined)[] = [];
   // Registered after the fixture, so it wins for this one route and falls
   // through to the fixture for every other request the page makes.
@@ -695,8 +694,8 @@ test("fetches the next article page after a delete empties the list", async ({
     if (route.request().method() !== "POST") return await route.fallback();
     const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     cursors.push(body.cursor);
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
     await respond(
       route,
       articlesResponse,
@@ -710,7 +709,7 @@ test("fetches the next article page after a delete empties the list", async ({
   await selectSource(page);
 
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   expect(cursors).toEqual([undefined]);
 
   await page.getByRole("button", { exact: true, name: "select all" }).click();
@@ -719,7 +718,7 @@ test("fetches the next article page after a delete empties the list", async ({
   // The second page arrives without a scroll, because there was nothing left
   // to scroll, and it is asked for with the last row of the first page.
   await expect(rows).toHaveCount(3);
-  expect(cursors).toEqual([undefined, pageSize]);
+  expect(cursors).toEqual([undefined, articlePageSize]);
 });
 
 // Solid only writes the DOM when a binding's value changes, so a mutation
@@ -781,14 +780,13 @@ test("pages the Today view with the view, not its node uid", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = articlePageSize;
   const bodies: { cursor?: number; sources: number[]; view?: string }[] = [];
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
     const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     bodies.push(body);
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
     await respond(
       route,
       articlesResponse,
@@ -800,7 +798,7 @@ test("pages the Today view with the view, not its node uid", async ({
   await selectSource(page, "Today");
 
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
 
   // Same emptying trick as the test above: nothing left to scroll is what
   // makes the app ask for the next page without a scroll gesture.
@@ -810,7 +808,7 @@ test("pages the Today view with the view, not its node uid", async ({
 
   expect(bodies).toHaveLength(2);
   expect(bodies[1]).toMatchObject({
-    cursor: pageSize,
+    cursor: articlePageSize,
     sources: [],
     view: "today",
   });
@@ -3438,7 +3436,6 @@ test("the tree context menu leaves the article paging scope alone", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = articlePageSize;
   const bodies: { cursor?: number; sources: number[] }[] = [];
   let releasePage: (() => void) | undefined;
   await page.route("**/api/articles", async (route) => {
@@ -3447,8 +3444,8 @@ test("the tree context menu leaves the article paging scope alone", async ({
     bodies.push(body);
     if (body.cursor !== undefined)
       await new Promise<void>((release) => (releasePage = release));
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
     await respond(
       route,
       articlesResponse,
@@ -3459,7 +3456,7 @@ test("the tree context menu leaves the article paging scope alone", async ({
   await page.goto("/");
   await selectSource(page);
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
 
   await openRowMenu(page, "Tech Preview");
   await page.keyboard.press("Escape");
@@ -3469,14 +3466,14 @@ test("the tree context menu leaves the article paging scope alone", async ({
     element.scrollTop = element.scrollHeight;
   });
   await expect.poll(() => bodies.length).toBe(2);
-  expect(bodies[1]).toMatchObject({ cursor: pageSize, sources: [3] });
+  expect(bodies[1]).toMatchObject({ cursor: articlePageSize, sources: [3] });
 
   // A menu opened on a folder while that page is in flight changes nothing
   // about where its rows land.
   await openRowMenu(page, "Reading");
   await page.keyboard.press("Escape");
   releasePage!();
-  await expect(rows).toHaveCount(pageSize + 3);
+  await expect(rows).toHaveCount(articlePageSize + 3);
   expect(bodies).toHaveLength(2);
   await expectSelectedRow(page, /Tech News/);
 });
@@ -3489,19 +3486,18 @@ test("switching feeds does not wait on the old feed's next page", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = articlePageSize;
   const pageRequests: number[][] = [];
   const held = new Map<number, () => void>();
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
     const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     const source = body.sources[0]!;
-    const offset = body.cursor === undefined ? 1 : pageSize + 1;
+    const offset = body.cursor === undefined ? 1 : articlePageSize + 1;
     if (body.cursor !== undefined) {
       pageRequests.push(body.sources);
       await new Promise<void>((release) => held.set(source, release));
     }
-    const size = body.cursor === undefined ? pageSize : 3;
+    const size = body.cursor === undefined ? articlePageSize : 3;
     // The app aborts the abandoned page, so its route may be gone by now.
     await respond(
       route,
@@ -3521,13 +3517,13 @@ test("switching feeds does not wait on the old feed's next page", async ({
   await page.goto("/");
 
   await selectSource(page);
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   await scrollToEnd();
   await expect.poll(() => pageRequests).toEqual([[3]]);
 
   await selectSource(page, "Tech Preview");
   await expect(rows.first()).toContainText("Article 9001");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   await scrollToEnd();
   await expect.poll(() => pageRequests).toEqual([[3], [9]]);
 
@@ -3539,7 +3535,7 @@ test("switching feeds does not wait on the old feed's next page", async ({
   });
   await scrollToEnd();
   held.get(9)!();
-  await expect(rows).toHaveCount(pageSize + 3);
+  await expect(rows).toHaveCount(articlePageSize + 3);
   expect(pageRequests).toEqual([[3], [9]]);
 });
 

@@ -154,8 +154,6 @@ const articleSummaryResponse = Type.Object(
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
 
-export { articlePageSize } from "./limits.ts";
-
 // A file the feed attached to an article (RSS <enclosure>, Media RSS,
 // JSON Feed attachments): a podcast episode, a video, an image. Both URLs are
 // http(s) by the time they are stored.

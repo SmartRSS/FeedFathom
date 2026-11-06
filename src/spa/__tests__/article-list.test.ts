@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  articlePageSize,
-  type ArticleSummary,
-} from "#shared/contracts/responses.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
+import type { ArticleSummary } from "#shared/contracts/responses.ts";
 import { ArticleList, emptyListState, type Cursor } from "../article-list.ts";
 
 const row = (id: number): ArticleSummary => ({
