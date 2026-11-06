@@ -960,6 +960,20 @@ label {
   border: var(--field-disabled-border);
   border-style: var(--disabled-edge);
 }
+/* Read-only is not disabled: the field still takes focus and its text can
+   be selected and copied, so its edge stays solid. The dashed edge is for
+   controls that do nothing. */
+:where(
+  input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      :disabled
+    ):read-only,
+  textarea:not(:disabled):read-only
+) {
+  border-style: solid;
+}
 /* Text buttons. A component that draws its own button (tree rows, toolbar
    icons, menu items) sets its own background, border and shadow. */
 :where(button) {

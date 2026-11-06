@@ -1817,8 +1817,9 @@ test("source properties reuses the discovery panel with feed/website locked", as
   page,
 }) => {
   // Editing reuses the exact same left-pane form the "add source" flow
-  // uses (see feed-discovery.tsx), just with feed/home URL disabled and
-  // the website-search/preview steps hidden -- not a separate dialog.
+  // uses (see feed-discovery.tsx), just with feed/home URL read-only --
+  // still selectable and copyable -- and the website-search/preview steps
+  // hidden; not a separate dialog.
   await openApp(page);
   await selectSource(page);
 
@@ -1829,9 +1830,11 @@ test("source properties reuses the discovery panel with feed/website locked", as
   const website = page.getByLabel("Website");
   const feedUrl = page.getByLabel("Feed URL");
   await expect(website).toHaveValue("https://news.example/");
-  await expect(website).toBeDisabled();
+  await expect(website).not.toBeEditable();
+  await expect(website).toBeEnabled();
   await expect(feedUrl).toHaveValue("https://news.example/feed.xml");
-  await expect(feedUrl).toBeDisabled();
+  await expect(feedUrl).not.toBeEditable();
+  await expect(feedUrl).toBeEnabled();
   await expect(page.getByRole("button", { name: "Find feeds" })).toHaveCount(0);
 });
 

@@ -110,7 +110,9 @@ export function FeedDiscovery(props: {
     // The pane that held focus (the toolbar button that opened this) was
     // just unmounted, which drops focus to <body>: start in the form, on the
     // first field that can be typed into (Title when editing).
-    form.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
+    form
+      .querySelector<HTMLInputElement>("input:not([disabled], [readonly])")
+      ?.focus();
     if (props.editing) {
       setFeedUrl(props.editing.xmlUrl);
       setLink(props.editing.homeUrl);
@@ -395,7 +397,7 @@ export function FeedDiscovery(props: {
                 that field's comment. */}
             <input
               ref={websiteInput}
-              disabled={!!props.editing}
+              readOnly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
@@ -456,7 +458,7 @@ export function FeedDiscovery(props: {
             <input
               aria-describedby={previewError() ? "feed-url-error" : undefined}
               aria-invalid={previewError() ? "true" : undefined}
-              disabled={!!props.editing}
+              readOnly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
