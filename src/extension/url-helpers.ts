@@ -1,4 +1,4 @@
-import { previewPath } from "#shared/contracts/preview-route.ts";
+import { previewPath } from "#shared/contracts/spa-routes.ts";
 import { secureOrigin } from "#shared/util/safe-url.ts";
 
 // An instance address that canonicalizeInstance accepted. Everything that builds a URL on the instance takes

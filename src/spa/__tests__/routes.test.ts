@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
+  activationPath,
+  passwordResetPath,
+  previewPath,
+} from "#shared/contracts/spa-routes.ts";
+import {
   loginPath,
   registerPath,
   resolveRoute,
   safeNextPath,
   showsPanes,
+  treePreloadPaths,
 } from "../routes.ts";
 
 describe("resolveRoute", () => {
@@ -43,6 +49,25 @@ describe("resolveRoute", () => {
     expect(resolveRoute("/options/more")).toEqual({ name: "notFound" });
     expect(resolveRoute("/no/such/page")).toEqual({ name: "notFound" });
     expect(resolveRoute("/?feed=1")).toEqual({ name: "dashboard" });
+  });
+});
+
+// The server and the extension build these links; the SPA must route them.
+test("routes every link another program builds", () => {
+  expect(resolveRoute(activationPath("a-token"))).toEqual({
+    name: "activate",
+    token: "a-token",
+  });
+  expect(resolveRoute(passwordResetPath("r-token"))).toEqual({
+    name: "passwordResetConfirm",
+    token: "r-token",
+  });
+  expect(
+    resolveRoute(previewPath({ feedUrl: "https://example.com/f?a=1&b" })),
+  ).toEqual({ feedUrl: "https://example.com/f?a=1&b", name: "preview" });
+  expect(resolveRoute(previewPath({ newsletter: true }))).toEqual({
+    name: "preview",
+    newsletter: true,
   });
 });
 
@@ -119,4 +144,22 @@ test("only the dashboard and Discover show the panes", () => {
   expect(showsPanes(resolveRoute("/preview?feedUrl=x"))).toBe(true);
   expect(showsPanes(resolveRoute("/options"))).toBe(false);
   expect(showsPanes(resolveRoute("/nowhere"))).toBe(false);
+});
+
+// A miss costs the dashboard an unpreloaded /api/tree; an extra one spends
+// a request nothing reads, or a 401 before sign-in.
+test.each([
+  "/",
+  "/preview",
+  "/admin",
+  "/login",
+  "/register",
+  "/options",
+  "/password-reset",
+  "/password-reset/token",
+  "/activate/token",
+  "/no/such/page",
+  "/previews",
+])("preloads the tree for %s exactly when it shows the panes", (path) => {
+  expect(treePreloadPaths.test(path)).toBe(showsPanes(resolveRoute(path)));
 });

@@ -17,6 +17,7 @@ import {
   updateSourceRequest,
 } from "#shared/contracts/requests.ts";
 import { isEmailAddress, isWebUrl } from "#shared/validation/address-shape.ts";
+import { previewPath, previewPathname } from "#shared/contracts/spa-routes.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import { Enclosures } from "./enclosures.tsx";
 import { api, ApiError, failureDetails, messageOf } from "./api.ts";
@@ -252,11 +253,11 @@ export function FeedDiscovery(props: {
   function mintNewsletterAddress(domain: string) {
     const address = newsletterAddress(domain);
     setFeedUrl(address);
-    if (location.pathname === "/preview")
+    if (location.pathname === previewPathname)
       history.replaceState(
         history.state,
         "",
-        `/preview?feedUrl=${encodeURIComponent(address)}`,
+        previewPath({ feedUrl: address }),
       );
     return reserveNewsletterAddress(address);
   }

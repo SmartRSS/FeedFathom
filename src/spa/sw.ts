@@ -28,9 +28,9 @@ import {
   forgetAccountData,
   offlineArticleLimit,
   offlineArticleMaxAgeDays,
-  treePreloadExcludedPaths,
   type WorkerMessage,
 } from "./sw-protocol.ts";
+import { treePreloadPaths } from "./routes.ts";
 
 // The slice of the service worker global scope this file uses. The project's
 // type library is the DOM's, which has no worker scope.
@@ -889,7 +889,7 @@ async function shell(event: ExtendableEvent, path: string) {
       await notifyClients({ type: "shell-updated" });
   });
   event.waitUntil(revalidated.catch(() => {}));
-  if (!treePreloadExcludedPaths.test(path)) {
+  if (treePreloadPaths.test(path)) {
     const preload = fetch("/api/tree", { credentials: "same-origin" });
     treePreload = preload;
     event.waitUntil(preload.catch(() => {}));

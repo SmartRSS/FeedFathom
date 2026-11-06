@@ -50,12 +50,6 @@ export const cursorPublishedAtHeader = "X-Cursor-Published-At";
 // network (#989).
 export const cachedTreeQuery = "cached";
 
-// The routes that never show the dashboard tree, so a navigation to them
-// starts no /api/tree preload: the worker's, or for a page no worker controls
-// yet, index.html's inline script, which vite.config.ts fills in from this.
-export const treePreloadExcludedPaths =
-  /^\/(admin|login|options|password-reset|preview|register|activate\/)/;
-
 // Every cache holding one account's API responses starts with this. The
 // version after it changes only to purge every entry when the caching scheme
 // itself changes.

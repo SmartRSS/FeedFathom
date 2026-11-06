@@ -1,3 +1,10 @@
+import {
+  activationToken,
+  parsePreviewQuery,
+  passwordResetToken,
+  previewPathname,
+} from "#shared/contracts/spa-routes.ts";
+
 const normalizedNextPath = (value: string): string | undefined => {
   if (!value.startsWith("/") || value.startsWith("//")) return undefined;
   try {
@@ -36,10 +43,10 @@ export type Route =
 
 export function resolveRoute(path: string): Route {
   const url = new URL(path, "http://localhost");
-  const activationToken = /^\/activate\/([^/]+)$/.exec(url.pathname)?.[1];
-  if (activationToken) return { name: "activate", token: activationToken };
-  const resetToken = /^\/password-reset\/([^/]+)$/.exec(url.pathname)?.[1];
-  if (resetToken) return { name: "passwordResetConfirm", token: resetToken };
+  const activation = activationToken(url.pathname);
+  if (activation) return { name: "activate", token: activation };
+  const reset = passwordResetToken(url.pathname);
+  if (reset) return { name: "passwordResetConfirm", token: reset };
 
   switch (url.pathname) {
     case "/admin":
@@ -53,14 +60,8 @@ export function resolveRoute(path: string): Route {
       return { name: "options" };
     case "/password-reset":
       return { name: "passwordReset" };
-    case "/preview": {
-      // ?newsletter is how the extension asks for a minted address: the SPA
-      // knows the mail domain, so the address format lives in one place.
-      if (url.searchParams.has("newsletter"))
-        return { name: "preview", newsletter: true };
-      const feedUrl = url.searchParams.get("feedUrl");
-      return feedUrl ? { feedUrl, name: "preview" } : { name: "preview" };
-    }
+    case previewPathname:
+      return { name: "preview", ...parsePreviewQuery(url.searchParams) };
     case "/register":
       return {
         name: "register",
@@ -77,3 +78,8 @@ export function resolveRoute(path: string): Route {
 export function showsPanes(route: Route): boolean {
   return route.name === "dashboard" || route.name === "preview";
 }
+
+// The paths of the routes showsPanes holds for: a navigation to one starts
+// the /api/tree preload, the worker's or, for a page no worker controls yet,
+// index.html's inline script, which vite.config.ts fills in from this.
+export const treePreloadPaths = /^\/(preview)?$/;

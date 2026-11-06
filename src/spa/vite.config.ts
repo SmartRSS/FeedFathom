@@ -1,6 +1,6 @@
 import solid from "vite-plugin-solid";
 import { defineConfig } from "vite";
-import { treePreloadExcludedPaths } from "./sw-protocol.ts";
+import { treePreloadPaths } from "./routes.ts";
 
 // Both default to what a single checkout has always used. They exist so a
 // second one -- a git worktree, a review checkout -- can run its own stack
@@ -18,8 +18,8 @@ export default defineConfig({
       name: "tree-preload-paths",
       transformIndexHtml: (html) =>
         html.replace(
-          "TREE_PRELOAD_EXCLUDED_PATHS",
-          treePreloadExcludedPaths.source,
+          "TREE_PRELOAD_PATHS",
+          treePreloadPaths.source,
         ),
     },
   ],
