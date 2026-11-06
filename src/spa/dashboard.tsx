@@ -29,12 +29,12 @@ import {
   filterTree,
   findNode,
   findParentFolderUid,
+  isEmptyFolder,
   isSnoozedNode,
-  isTodayNode,
   nextPollDelayMs,
   readStateDeltas,
   articleScope,
-  sourceIds,
+  searchScope,
   snoozePresets,
   snoozeUntilIso,
   totalUnread,
@@ -42,11 +42,12 @@ import {
   treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
+  type ListNode,
+  type ListScope,
 } from "./feed-tree.ts";
 import {
   createThrottledRecorder,
   ratioToScrollTop,
-  READING_SESSION_STORAGE_KEY,
   ReadingSessionStore,
   scrollRatio,
   takeUpdateReload,
@@ -158,20 +159,6 @@ const ARTICLE_SKELETON_TITLES = [
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
-// What one article list asks the server for. Its later pages ask the same.
-type ListScope = {
-  folder?: number;
-  query?: string;
-  sources: number[];
-  view?: "today";
-};
-// Today is scoped by `view`, not by an id list: its node uid is the string
-// "today", which as a source id would serialise to [null] and be refused.
-const nodeScope = (node: TreeNode): ListScope =>
-  isTodayNode(node) ? { sources: [], view: "today" } : articleScope(node);
-// Search answers across every subscription, so it names no source.
-const searchScope = (query: string): ListScope => ({ query, sources: [] });
-
 // Only a page the service worker controls asks, since only the worker
 // answers ?cached. only-if-cached keeps the request off the network when
 // something else does answer it, such as a worker from before #989 that
@@ -271,7 +258,7 @@ export function Dashboard(props: {
     const index = soleSelectedIndex(selectedIndexes());
     return index === undefined ? undefined : articles()[index];
   };
-  const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  const [selectedNode, setSelectedNode] = createSignal<ListNode>();
   // "Try again" on a failing feed: the fetch runs in the worker, so the tree
   // is reloaded a little later to show how it went.
   const [retryState, setRetryState] = createSignal<
@@ -305,9 +292,11 @@ export function Dashboard(props: {
   // The feeds are still on their way and there is none from before: as
   // with the skeleton's filter box, nothing to search or filter yet.
   const feedsPending = () => treeLoading() && !tree().length;
-  const emptyFolderSelected = () => {
+  const emptyFolderSelected = () => isEmptyFolder(selectedNode());
+  // The selection a toolbar can edit or delete: Today is neither.
+  const editableNode = () => {
     const node = selectedNode();
-    return node?.type === "folder" && node.children.length === 0;
+    return node?.type === "view" ? undefined : node;
   };
   const failingSelection = () => {
     const node = selectedNode();
@@ -391,6 +380,8 @@ export function Dashboard(props: {
   let pendingReaderScrollId: number | undefined;
   const readingSession = new ReadingSessionStore({
     local: localStorage,
+    remember: rememberReadingPosition.get,
+    resumingUpdate: takeUpdateReload(),
     session: sessionStorage,
   });
   // A restore that cannot apply drops its snapshot, so the next boot does
@@ -399,29 +390,25 @@ export function Dashboard(props: {
     readingSession.clear();
     setRestoringSession(false);
   };
-  const resumingUpdate = takeUpdateReload();
-  const restoreEnabled = () => rememberReadingPosition.get() || resumingUpdate;
-  // With the setting off the snapshot goes to sessionStorage only, so it
-  // survives this one reload and never reaches a later launch.
   const saveForUpdateReload = () => {
     const node = selectedNode();
     if (!node && !activeSearch()) return;
-    const store = rememberReadingPosition.get()
-      ? readingSession
-      : new ReadingSessionStore({ session: sessionStorage });
     const articleId = openedArticle()?.id;
-    store.recordApp({
-      ...listState(),
-      articleFilter: articleFilter(),
-      articleId,
-      listScrollTop:
-        document.querySelector<HTMLElement>(".article-list")?.scrollTop ?? 0,
-      nodeType: node?.type ?? "source",
-      nodeUid: node?.uid ?? "",
-    });
     const reader = document.querySelector<HTMLElement>(".reader");
-    if (articleId !== undefined && reader)
-      store.recordReaderScroll(articleId, scrollRatio(reader));
+    readingSession.saveBeforeReload(
+      {
+        ...listState(),
+        articleFilter: articleFilter(),
+        articleId,
+        listScrollTop:
+          document.querySelector<HTMLElement>(".article-list")?.scrollTop ?? 0,
+        nodeType: node?.type ?? "source",
+        nodeUid: node?.uid ?? "",
+      },
+      articleId !== undefined && reader
+        ? { id: articleId, ratio: scrollRatio(reader) }
+        : undefined,
+    );
   };
   addEventListener(UPDATE_RELOAD_EVENT, saveForUpdateReload);
   onCleanup(() =>
@@ -430,22 +417,15 @@ export function Dashboard(props: {
   const recordAppSnapshot = (
     patch: Parameters<ReadingSessionStore["recordApp"]>[0],
   ) => {
-    if (!rememberReadingPosition.get() || restoringSession()) return;
-    readingSession.recordApp(patch);
+    if (!restoringSession()) readingSession.recordApp(patch);
   };
-  // Throttled scroll recorders: at most one storage write each per interval.
   const recordListScroll = createThrottledRecorder((top: number) => {
     recordAppSnapshot({ listScrollTop: top });
   });
   const recordReaderScroll = createThrottledRecorder((element: HTMLElement) => {
     const id = openedArticle()?.id;
-    if (
-      id === undefined ||
-      !rememberReadingPosition.get() ||
-      restoringSession()
-    )
-      return;
-    readingSession.recordReaderScroll(id, scrollRatio(element));
+    if (id !== undefined && !restoringSession())
+      readingSession.recordReaderScroll(id, scrollRatio(element));
   });
   // Rows are named by id: an index means nothing once the list is refetched.
   const listState = () => {
@@ -783,7 +763,7 @@ export function Dashboard(props: {
   function applyTree(nextTree: TreeNode[]) {
     setTree(nextTree);
     const current = selectedNode();
-    if (current && !isTodayNode(current))
+    if (current && current.type !== "view")
       setSelectedNode(findNode(nextTree, current.type, current.uid));
   }
   const revealTree = () => {
@@ -825,14 +805,8 @@ export function Dashboard(props: {
     // state the tab actually left in, not whatever a faster boot wrote.
     // A preview route opens on its own form: restoring the last reading
     // session would bring its reader forward over it on one pane.
-    const restored =
-      restoreEnabled() && !props.initialDiscovery
-        ? readingSession.snapshot()
-        : undefined;
-    if (!rememberReadingPosition.get())
-      try {
-        sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);
-      } catch {}
+    const snapshot = readingSession.takeSnapshot();
+    const restored = props.initialDiscovery ? undefined : snapshot;
     if (restored) {
       setRestoringSession(true);
       skipObserverFirstPass = true;
@@ -922,7 +896,6 @@ export function Dashboard(props: {
     if (!item || item.article.id !== pendingReaderScrollId) return;
     const id = pendingReaderScrollId;
     pendingReaderScrollId = undefined;
-    if (!restoreEnabled()) return;
     const ratio = readingSession.readerScroll(id);
     if (ratio === undefined) return;
     // A hidden reader measures zero, which would resolve any ratio to the top.
@@ -946,7 +919,7 @@ export function Dashboard(props: {
     articleCursor = undefined;
     return listController;
   }
-  async function select(node: TreeNode, restore?: AppSnapshot) {
+  async function select(node: ListNode, restore?: AppSnapshot) {
     // A feed picked from the cached tree while boot still waits to restore
     // the session (#989) supersedes the snapshot, and is recorded in its place.
     if (!restore && restoringSession()) {
@@ -966,7 +939,7 @@ export function Dashboard(props: {
       nodeUid: node.uid,
     });
     const selection = resetList();
-    if (!isTodayNode(node) && !sourceIds(node).length) {
+    if (isEmptyFolder(node)) {
       setArticles([]);
       void setArticleSelection(new Set<number>(), selection);
       setFocusedIndex(0);
@@ -974,7 +947,7 @@ export function Dashboard(props: {
       if (restore) abandonRestore();
       return;
     }
-    await fetchArticlesForBody(nodeScope(node), selection, restore);
+    await fetchArticlesForBody(articleScope(node), selection, restore);
   }
   // One page of a list, after `cursor` when given. The cursor's publishedAt
   // places it in the offline list (#992) once it has left the kept rows.
@@ -1148,7 +1121,7 @@ export function Dashboard(props: {
     loadingMoreSelection = selection;
     try {
       const nextArticles = await articlesRequest(
-        search || !node ? searchScope(search) : nodeScope(node),
+        search || !node ? searchScope(search) : articleScope(node),
         cursor,
         selection.signal,
       );
@@ -1296,8 +1269,7 @@ export function Dashboard(props: {
       });
       if (announcement) announce(announcement);
       // Marked finished: its half-read position has no future (#718).
-      if (read && rememberReadingPosition.get())
-        readingSession.clearReaderScrolls(ids);
+      if (read) readingSession.clearReaderScrolls(ids);
       await loadTree();
     } catch (cause) {
       reportError(cause, "Could not update read state");
@@ -1391,7 +1363,7 @@ export function Dashboard(props: {
       observer.disconnect();
     });
   });
-  async function showProperties(node = selectedNode()) {
+  async function showProperties(node = editableNode()) {
     if (!node) return;
     if (node.type === "source") {
       setEditingSource(node);
@@ -1427,8 +1399,10 @@ export function Dashboard(props: {
   // Per-source snooze (#725). Parsing and saving continue on the server
   // during the pause; this only stores the timestamp and reloads the tree,
   // whose badges and unread list suppress the source until it lapses.
-  async function snoozeNode(node: TreeNode, pausedUntil: string | null) {
-    if (node.type !== "source" || isTodayNode(node)) return;
+  async function snoozeNode(
+    node: Extract<TreeNode, { type: "source" }>,
+    pausedUntil: string | null,
+  ) {
     setError("");
     try {
       await api("/source/snooze", snoozedSourceResponse, {
@@ -1455,11 +1429,10 @@ export function Dashboard(props: {
   // reading position all belong to the selection, which the menu leaves
   // alone. No re-filing action exists here by design: manual ordering stays
   // a non-feature.
-  function openTreeContext(x: number, y: number, node: TreeNode) {
-    // The virtual Today row is a view, not a feed: it has no feed URL to
-    // copy, no properties to edit, and no subscription to remove, so it
-    // opens no menu at all (the tree item still swallows the native menu).
-    if (isTodayNode(node)) return;
+  function openTreeContext(x: number, y: number, node: ListNode) {
+    // Today has no feed URL to copy, no properties to edit and no
+    // subscription to remove; the tree item still swallows the native menu.
+    if (node.type === "view") return;
     const snoozeItems: ContextMenuItem[] =
       node.type === "source"
         ? [
@@ -1490,7 +1463,7 @@ export function Dashboard(props: {
             },
             {
               danger: true,
-              disabled: Boolean(node.children?.length),
+              disabled: !isEmptyFolder(node),
               kind: "action",
               label: "Delete folder",
               onSelect: () => void removeNode(node),
@@ -1529,9 +1502,9 @@ export function Dashboard(props: {
           ];
     setContextMenu({ items, x, y });
   }
-  async function removeNode(node = selectedNode()) {
+  async function removeNode(node = editableNode()) {
     if (!node) return;
-    if (node.type === "folder" && node.children?.length) {
+    if (node.type === "folder" && !isEmptyFolder(node)) {
       setError("Folder is not empty");
       return;
     }
@@ -1814,8 +1787,7 @@ export function Dashboard(props: {
       .then(() => {
         announce(`${articlesNoun(ids.length)} deleted.`);
         // Deleted articles have no reading position to remember (#718).
-        if (rememberReadingPosition.get())
-          readingSession.clearReaderScrolls(ids);
+        readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
           reportError(cause, "Could not refresh your feeds"),
         );
@@ -2060,14 +2032,14 @@ export function Dashboard(props: {
             </button>
             <button
               aria-label="source properties"
-              disabled={!selectedNode()}
+              disabled={!editableNode()}
               onClick={() => void showProperties()}
             >
               <Icon raw={detailsRaw} />
             </button>
             <button
               aria-label="delete source"
-              disabled={!selectedNode()}
+              disabled={!editableNode()}
               onClick={() => void removeNode()}
             >
               <Icon raw={removeRaw} />

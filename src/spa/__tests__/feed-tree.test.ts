@@ -8,7 +8,6 @@ import {
   findNode,
   findParentFolderUid,
   isSnoozedNode,
-  isTodayNode,
   nextPollDelayMs,
   readStateDeltas,
   sourceIds,
@@ -76,6 +75,11 @@ describe("articleScope", () => {
   });
   test("sends a source as its own id", () => {
     expect(articleScope(source("7"))).toEqual({ sources: [7] });
+  });
+  test("asks for Today by view, never as an id", () => {
+    const [today] = withTodayNode([source("1")], true);
+    expect(articleScope(today!)).toEqual({ sources: [], view: "today" });
+    expect(Value.Check(articlesRequest, articleScope(today!))).toBe(true);
   });
 });
 
@@ -273,9 +277,8 @@ describe("withTodayNode", () => {
     const nodes = [source("1")];
     const next = withTodayNode(nodes, true);
     expect(next).toHaveLength(2);
-    expect(isTodayNode(next[0])).toBe(true);
+    expect(next[0]).toEqual({ name: "Today", type: "view", uid: "today" });
     expect(next[1]).toBe(nodes[0]);
-    expect(next[0]!.type === "source" && next[0]!.name).toBe("Today");
   });
 
   test("leaves an empty tree alone so first-run guidance owns it", () => {

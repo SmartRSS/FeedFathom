@@ -188,19 +188,23 @@ class FakeStorage {
   }
 }
 
+const storages = (remember = true) => ({
+  local: new FakeStorage(),
+  remember: () => remember,
+  session: new FakeStorage(),
+});
+
 describe("ReadingSessionStore", () => {
   test("persists into both storages and prefers sessionStorage on load", () => {
-    const local = new FakeStorage();
-    const session = new FakeStorage();
-    const store = new ReadingSessionStore({ local, session });
-    store.recordApp({
+    const options = storages();
+    new ReadingSessionStore(options).recordApp({
       articleId: 11,
       listScrollTop: 120,
       nodeType: "source",
       nodeUid: "3",
     });
-    expect(JSON.parse(local.dump()!).app.nodeUid).toBe("3");
-    expect(session.dump()).toBe(local.dump());
+    expect(JSON.parse(options.local.dump()!).app.nodeUid).toBe("3");
+    expect(options.session.dump()).toBe(options.local.dump());
 
     const fresher = serializeReadingSession({
       app: {
@@ -212,32 +216,55 @@ describe("ReadingSessionStore", () => {
       },
       reader: [],
     });
-    session.setItem(READING_SESSION_STORAGE_KEY, fresher);
-    expect(
-      new ReadingSessionStore({ local, session }).snapshot()?.nodeUid,
-    ).toBe("9");
+    options.session.setItem(READING_SESSION_STORAGE_KEY, fresher);
+    expect(new ReadingSessionStore(options).takeSnapshot()?.nodeUid).toBe("9");
   });
 
   test("records and reads reader scroll ratios", () => {
-    const options = {
-      local: new FakeStorage(),
-      now: () => 5,
-      session: new FakeStorage(),
-    };
+    const options = { ...storages(), now: () => 5 };
     const store = new ReadingSessionStore(options);
     store.recordReaderScroll(11, 0.75);
     expect(store.readerScroll(11)).toBe(0.75);
     expect(store.readerScroll(12)).toBeUndefined();
     const restored = new ReadingSessionStore(options);
-    restored.load();
+    restored.takeSnapshot();
     expect(restored.readerScroll(11)).toBe(0.75);
   });
 
   test("a corrupt blob boots as no snapshot", () => {
-    const local = new FakeStorage();
-    local.setItem(READING_SESSION_STORAGE_KEY, "{{{");
-    expect(
-      new ReadingSessionStore({ local, session: new FakeStorage() }).snapshot(),
-    ).toBeUndefined();
+    const options = storages();
+    options.local.setItem(READING_SESSION_STORAGE_KEY, "{{{");
+    expect(new ReadingSessionStore(options).takeSnapshot()).toBeUndefined();
+  });
+
+  test("with the setting off nothing is recorded or restored", () => {
+    const options = storages(false);
+    const store = new ReadingSessionStore(options);
+    store.recordApp({ nodeType: "source", nodeUid: "3" });
+    store.recordReaderScroll(11, 0.5);
+    expect(options.local.dump()).toBeNull();
+    expect(options.session.dump()).toBeNull();
+    options.local.setItem(
+      READING_SESSION_STORAGE_KEY,
+      serializeReadingSession(aSession()),
+    );
+    expect(new ReadingSessionStore(options).takeSnapshot()).toBeUndefined();
+  });
+
+  test("an update reload resumes once with the setting off, from this tab only", () => {
+    const options = storages(false);
+    new ReadingSessionStore(options).saveBeforeReload(
+      { nodeType: "folder", nodeUid: "4" },
+      { id: 11, ratio: 0.5 },
+    );
+    expect(options.local.dump()).toBeNull();
+
+    const resumed = new ReadingSessionStore({
+      ...options,
+      resumingUpdate: true,
+    });
+    expect(resumed.takeSnapshot()?.nodeUid).toBe("4");
+    expect(resumed.readerScroll(11)).toBe(0.5);
+    expect(options.session.dump()).toBeNull();
   });
 });
