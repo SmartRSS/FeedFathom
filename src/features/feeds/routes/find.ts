@@ -7,7 +7,9 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import { json } from "#platform/http/json.ts";
 import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
-import { scanHtml } from "#shared/scanners/scanner.ts";
+import { scanHtml } from "#features/feeds/html-scanner.ts";
+import { openRssSuggestion } from "#shared/scanners/scanner.ts";
+import { decodeHtml } from "#shared/util/decode-body.ts";
 
 export async function getFindHandler(
   {
@@ -15,16 +17,20 @@ export async function getFindHandler(
     user,
   }: {
     query: StaticDecode<typeof findQuery>;
-    user: AuthedUser;
+    user: Pick<AuthedUser, "id">;
   },
   {
     feedParser,
     httpClient,
     outboundFetchBudget,
   }: Pick<typeof feeds, "feedParser" | "outboundFetchBudget"> & {
-    // The one call find makes: a page fetched as text, and where it ended up.
+    // The one call find makes: a page's bytes, its headers for the charset,
+    // and where it ended up.
     httpClient: {
-      get(url: string): Promise<Pick<HttpResponse<string>, "data" | "url">>;
+      get(
+        url: string,
+        options: { responseType: "arrayBuffer" },
+      ): Promise<Pick<HttpResponse<ArrayBuffer>, "data" | "headers" | "url">>;
     };
   },
 ) {
@@ -32,11 +38,19 @@ export async function getFindHandler(
   // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   try {
-    const response = await httpClient.get(decoded.link);
-    const feeds = scanHtml(response.url, response.data);
-    // Unreachable while scanHtml falls back to an OpenRSS suggestion for a
-    // page that advertises nothing; live again if that fallback ever goes.
-    if (!feeds.length) return json({ error: "Invalid feed url" }, 400);
+    const response = await httpClient.get(decoded.link, {
+      responseType: "arrayBuffer",
+    });
+    const html = decodeHtml(
+      new Uint8Array(response.data),
+      response.headers.get("content-type"),
+    );
+    const feeds = scanHtml(response.url, html);
+    // For a page that advertises nothing, OpenRSS is offered but not probed:
+    // probing would send the page address to openrss.org before the user
+    // chose to, and previewing the suggestion is that choice.
+    if (!feeds.length)
+      return json([{ ...openRssSuggestion(response.url), websub: false }]);
     return json(await markWebSubAvailability(feeds, feedParser));
   } catch (error_: unknown) {
     // A deferral is not this handler's to classify -- the central error hook

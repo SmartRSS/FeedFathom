@@ -1,9 +1,10 @@
 import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { hostIs } from "#shared/scanners/host.ts";
 
 const channelNameRegexp = /@(.+?):/u;
 export const scanOdsee = (currentUrl: URL, _page: ScannerPage): FeedData[] => {
-  if (!currentUrl.hostname.endsWith("odysee.com")) {
+  if (!hostIs(currentUrl, "odysee.com")) {
     return [];
   }
 

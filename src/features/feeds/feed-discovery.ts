@@ -23,8 +23,8 @@ export type WebSubProbe = {
  * pipeline rather than a bare request, because the discovery list wants to show
  * push availability before the user commits to subscribing.
  *
- * A candidate whose parse fails -- a dead link, or the OpenRSS placeholder the
- * scanner falls back to -- comes back unmarked rather than being dropped. The
+ * A candidate whose parse fails -- a dead link, say -- comes back unmarked
+ * rather than being dropped. The
  * failure surfaces anyway when the user clicks through to preview it, and
  * dropping it here would make the page look like the feed never existed.
  *
