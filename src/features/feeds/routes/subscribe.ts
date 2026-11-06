@@ -10,6 +10,7 @@ import {
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
 import { isMintedNewsletterAddress } from "#shared/util/newsletter-address.ts";
+import { newsletterHomeUrl } from "#features/feeds/routes/newsletter-address.ts";
 import {
   type FeedPreview,
   mapFeedToArticles,
@@ -83,8 +84,7 @@ export async function postSubscribeHandler(
     url: sourceUrl.value,
     ...(isEmail && mailDomain
       ? {
-          // A newsletter has no site of its own; it links back to this app.
-          homeUrl: new URL(request.url).origin,
+          homeUrl: newsletterHomeUrl(config, request),
           kind: "email",
           minted: isMintedNewsletterAddress(sourceUrl.value, mailDomain),
         }

@@ -67,6 +67,7 @@ const config = strictFake<AppConfig>(
     MAIL_DOMAIN: mailDomain,
     MAIL_ENABLED: true,
     mailDomain,
+    publicOrigin: new URL("http://localhost:3456"),
   },
   "config",
 );
@@ -196,6 +197,10 @@ test("mail to a minted address is kept before Subscribe and read after it", asyn
   expect(await sourceRows()).toEqual([
     { id: source!.id, kind: "email", url: address },
   ]);
+  // Links back to the public origin, not the address the request reached.
+  expect((await sourcesDataService.findSourceByUrl(address))?.homeUrl).toBe(
+    "http://localhost:3456",
+  );
 
   await deliver(address, "Confirm your subscription");
   expect(await articleTitles(source!.id)).toEqual([

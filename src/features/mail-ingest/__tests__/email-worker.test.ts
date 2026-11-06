@@ -3,9 +3,10 @@ import {
   createEmailWorker,
   type IncomingEmailMessage,
 } from "#features/mail-ingest/email-worker.ts";
-
-const mailRelaySecretHeader = "x-feedfathom-mail-secret";
-const maxRawEmailBytes = 5 * 1_024 * 1_024;
+import {
+  mailRelaySecretHeader,
+  maxRawEmailBytes,
+} from "#shared/contracts/mail-relay.ts";
 const raw = "Subject: Newsletter\r\n\r\nArticle body";
 
 const environment = (

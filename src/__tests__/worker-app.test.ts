@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import type { MainWorker } from "#features/jobs/main.ts";
+import { healthcheckPath } from "#platform/http/internal-routes.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { runWorker } from "../worker-app.ts";
 
@@ -27,7 +28,7 @@ test("the worker reports healthy only once its job worker is consuming", async (
   });
 
   try {
-    const healthcheck = new URL("/healthcheck", server.url);
+    const healthcheck = new URL(healthcheckPath, server.url);
     const status = async () => (await fetch(healthcheck)).status;
 
     expect(await status()).toBe(503);

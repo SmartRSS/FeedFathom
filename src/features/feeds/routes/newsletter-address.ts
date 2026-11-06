@@ -7,6 +7,16 @@ import { json, jsonError } from "#platform/http/json.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
 import { isNewsletterAddress } from "#shared/util/newsletter-address.ts";
 
+// A newsletter has no site of its own, so it links back to this app: its
+// public origin, or the request's when FEED_FATHOM_DOMAIN is unset. A proxy
+// that rewrites Host would make the request's origin the upstream address.
+export function newsletterHomeUrl(
+  config: Pick<AppConfig, "publicOrigin">,
+  request: Request,
+) {
+  return config.publicOrigin?.origin ?? new URL(request.url).origin;
+}
+
 // Creates the email source for an address the SPA just minted, before any
 // subscription to it, so mail that arrives ahead of Subscribe is stored
 // rather than bounced as an unknown recipient (#1116). Nobody sees that mail
@@ -38,12 +48,11 @@ export async function postNewsletterAddressHandler(
   // this endpoint is not a way to claim an address nothing here mints.
   if (!isNewsletterAddress(body.address, domain))
     return jsonError("Not a newsletter address of this server.", 400);
-  // homeUrl as subscribe sets it for an email source. The address is this
-  // user's from now on: no other account can subscribe to it. An existing
-  // source, and whoever it belongs to, is left as it is, and the answer is
-  // the same, so it reveals nothing about the address.
+  // The address is this user's from now on: no other account can subscribe
+  // to it. An existing source, and whoever it belongs to, is left as it is,
+  // and the answer is the same, so it reveals nothing about the address.
   await sourcesDataService.addSource({
-    homeUrl: new URL(request.url).origin,
+    homeUrl: newsletterHomeUrl(config, request),
     kind: "email",
     reservedBy: user.id,
     url: body.address,

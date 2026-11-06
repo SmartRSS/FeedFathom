@@ -296,18 +296,18 @@ export class SourcesDataService {
   public async successSource(
     sourceId: number,
     {
-      cached = false,
+      cached,
       homeUrl,
       notBefore,
-      observedAt = new Date(),
-      trigger = "poll",
+      observedAt,
+      trigger,
     }: {
-      cached?: boolean;
+      cached: boolean;
       homeUrl?: string | undefined;
       notBefore?: Date | undefined;
-      observedAt?: Date;
-      trigger?: FetchTrigger;
-    } = {},
+      observedAt: Date;
+      trigger: FetchTrigger;
+    },
   ) {
     await this.drizzleConnection
       .update(sources)

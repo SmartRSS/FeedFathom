@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
+import { healthcheckPath } from "#platform/http/internal-routes.ts";
+import { mailRelayPath } from "#shared/contracts/mail-relay.ts";
+import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import { createServerApp } from "../server-app.ts";
 import {
   createDependencies,
@@ -48,7 +51,7 @@ test.each([
     const policy = response.headers.get("content-security-policy") ?? "";
     expect(policy).toStartWith("script-src 'self' 'sha256-");
     expect(policy).not.toContain("default-src");
-    expect(policy.includes("https://challenges.cloudflare.com")).toBe(
+    expect(policy.includes(turnstileOrigin)).toBe(
       turnstileEnabled,
     );
   },
@@ -89,7 +92,7 @@ test.each([
 
 test("rejects synthetic requests to /healthcheck", async () => {
   const app = await appFor(createDependencies());
-  const response = await get(app, "/healthcheck", {
+  const response = await get(app, healthcheckPath, {
     headers: { "x-forwarded-for": "127.0.0.1" },
   });
 
@@ -130,7 +133,7 @@ test("rejects an oversized body before any handler runs", async () => {
 test.each([
   ["/api/login", { email: 1 }, 422],
   ["/api/register", {}, 422],
-  ["/api/mail", {}, 422],
+  [mailRelayPath, {}, 422],
 ])("keeps POST %s public", async (path, body, status) => {
   const app = await appFor(createDependencies());
   const response = await post(app, path, body);
