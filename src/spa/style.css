@@ -2588,22 +2588,22 @@ textarea[aria-invalid="true"]:focus {
     > :first-child:not(.skeleton) {
     margin-top: auto;
   }
-  /* The list pane's content sinks as one stack: rows, an empty or failure
-     state, and the feed's title above them. The list takes only the height
-     its rows need (and scrolls once they overflow), the state only its own,
-     and the free space goes above the title, which carries a top edge so
-     the space reads as the pane's background rather than missing rows. A
-     long list leaves no free space, so its title is at the top as before. */
+  /* A short list sinks as one stack: its rows and the feed's title above
+     them. The list takes only the height its rows need (and scrolls once
+     they overflow), and the free space goes above the title, which carries
+     a top edge so the space reads as the pane's background rather than
+     missing rows. A long list leaves no free space, so its title is at the
+     top as before. */
   html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
     flex: 0 1 auto;
   }
-  html[data-mobile-list-anchor="true"] .articles-pane > .article-list-empty {
-    flex: none;
-  }
-  /* The tree's own messages (no match, or the feeds failing to load) keep
-     their pane's space but rest on the filter field below them, where the
-     reader is typing. */
-  html[data-mobile-list-anchor="true"] .sources-pane > .article-list-empty {
+  /* An empty or failure message instead takes the free space itself, its
+     text and actions resting on the field below, where the reader works;
+     the title stays at the top. The tree's own messages (no match, or the
+     feeds failing to load) do the same above the filter field. */
+  html[data-mobile-list-anchor="true"]
+    :is(.articles-pane, .sources-pane)
+    > .article-list-empty {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
