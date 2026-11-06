@@ -4,7 +4,8 @@ import {
   activationPath,
   passwordResetPath,
 } from "#shared/contracts/account-links.ts";
-import { resetLifetime } from "#features/auth/account-tokens.ts";
+import type * as runtime from "#platform/runtime.ts";
+import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 
 type MailConfig = Pick<
   AppConfig,
@@ -45,9 +46,7 @@ const mailjetEndpoint = "https://api.mailjet.com/v3.1/send";
 export class MailSender {
   constructor(
     private readonly appConfig: MailConfig,
-    private readonly fetcher: (
-      ...args: Parameters<typeof globalThis.fetch>
-    ) => ReturnType<typeof globalThis.fetch> = globalThis.fetch,
+    private readonly fetcher: (typeof runtime)["fetcher"],
   ) {}
 
   public async sendActivationEmail(email: string, token: string) {
@@ -63,7 +62,7 @@ export class MailSender {
     await this.send(
       email,
       "Reset your FeedFathom password",
-      `Reset your password by clicking this link. It expires in ${resetLifetime.words}, and ignoring this message leaves the account as it is`,
+      `Reset your password by clicking this link. It expires in ${passwordResetLifetime.words}, and ignoring this message leaves the account as it is`,
       passwordResetPath(token),
     );
   }
@@ -75,7 +74,7 @@ export class MailSender {
     await this.send(
       email,
       "This address already has a FeedFathom account",
-      `Someone just tried to register this address, but an account already exists here. If that was you, reset the password with this link to sign in. The link expires in ${resetLifetime.words}`,
+      `Someone just tried to register this address, but an account already exists here. If that was you, reset the password with this link to sign in. The link expires in ${passwordResetLifetime.words}`,
       passwordResetPath(token),
     );
   }
