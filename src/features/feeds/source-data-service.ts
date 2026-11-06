@@ -4,7 +4,6 @@ import {
   asc,
   desc,
   eq,
-  exists,
   getTableColumns,
   gt,
   isNull,
@@ -23,7 +22,10 @@ import {
   sources,
 } from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
-import { subscriberlessGraceEnd } from "#features/feeds/retention.ts";
+import {
+  hasSubscriber,
+  inSubscriberlessGrace,
+} from "#features/feeds/retention.ts";
 import {
   clampToPollFloor,
   failureBackoffMaxSteps,
@@ -158,15 +160,7 @@ export class SourcesDataService {
         .where(
           and(
             eq(sources.url, url),
-            or(
-              gt(sources.createdAt, subscriberlessGraceEnd),
-              exists(
-                this.drizzleConnection
-                  .select({ id: userSources.id })
-                  .from(userSources)
-                  .where(eq(userSources.sourceId, sources.id)),
-              ),
-            ),
+            or(inSubscriberlessGrace, hasSubscriber(this.drizzleConnection)),
           ),
         )
     ).at(0);

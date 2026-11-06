@@ -1,9 +1,10 @@
-import { aliasedTable, and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { aliasedTable, and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { articlePageSize } from "#shared/contracts/responses.ts";
 import {
   articleFilterCondition,
   readCondition,
+  subscriptionSeesArticle,
   type ArticleFilter,
 } from "#features/feeds/article-read-state.ts";
 import {
@@ -34,7 +35,7 @@ function userArticleAccessJoin(userId: number) {
   return and(
     eq(userSources.userId, userId),
     eq(userSources.sourceId, articles.sourceId),
-    gte(articles.lastSeenInFeedAt, userSources.createdAt),
+    subscriptionSeesArticle(articles.lastSeenInFeedAt, userSources.createdAt),
   );
 }
 
@@ -164,7 +165,6 @@ export class ArticlesDataService {
                 sql`(${userSources.pausedUntil} IS NULL OR ${userSources.pausedUntil} <= NOW())`,
               ]
             : []),
-          // Ensure the userSources join matched (article appeared after subscription)
           sql`${userSources.createdAt} IS NOT NULL`,
           // Keyset rather than OFFSET: a folder fanning out to hundreds of
           // sources would otherwise make every page rescan everything above
@@ -294,7 +294,7 @@ export class ArticlesDataService {
         const before = await this.drizzleConnection
           .select({
             guid: articles.guid,
-            hidden: sql<boolean>`COALESCE(${articles.lastSeenInFeedAt} < ${latestSubscription}, false)`,
+            hidden: sql<boolean>`COALESCE(NOT ${subscriptionSeesArticle(articles.lastSeenInFeedAt, latestSubscription)}, false)`,
             updatedAt: updatedAtText,
           })
           .from(articles)

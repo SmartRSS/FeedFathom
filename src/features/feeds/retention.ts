@@ -6,7 +6,6 @@ import {
   inArray,
   isNotNull,
   lt,
-  lte,
   min,
   ne,
   not,
@@ -24,6 +23,7 @@ import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { users } from "#platform/db/schemas/users.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { webSubFallbackPollMs } from "#features/feeds/source-schedule-policy.ts";
+import { subscriptionSeesArticle } from "#features/feeds/article-read-state.ts";
 
 // How long an article must go unseen before the feed counts as having dropped
 // it. One fetch omitting an item means nothing -- pagination, reordering and
@@ -66,7 +66,17 @@ const emailRetentionDays = 90;
 
 // How long a source may go without a subscriber: a newsletter address is
 // reserved before anyone subscribes (#1116), and takes mail meanwhile.
-export const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+export const inSubscriberlessGrace = gt(sources.createdAt, subscriberlessGraceEnd);
+export const hasSubscriber = (
+  db: Pick<BunSQLDatabase<typeof schema>, "select">,
+) =>
+  exists(
+    db
+      .select({ id: userSources.id })
+      .from(userSources)
+      .where(eq(userSources.sourceId, sources.id)),
+  );
 
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
@@ -165,14 +175,9 @@ async function deleteUnreachableRows(
   // also covers the gap between addSourceToUser creating a source and
   // subscribing to it.
   const subscriberless = and(
-    lt(sources.createdAt, subscriberlessGraceEnd),
+    not(inSubscriberlessGrace),
     exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
-    notExists(
-      drizzleConnection
-        .select({ id: userSources.id })
-        .from(userSources)
-        .where(eq(userSources.sourceId, sources.id)),
-    ),
+    not(hasSubscriber(drizzleConnection)),
   );
 
   // An owned newsletter address that has had mail stays, as a tombstone:
@@ -217,7 +222,12 @@ async function deleteUnreachableRows(
     .where(
       and(
         isNotNull(earliestSubs.sourceId),
-        lt(articles.lastSeenInFeedAt, earliestSubs.earliestSubscription),
+        not(
+          subscriptionSeesArticle(
+            articles.lastSeenInFeedAt,
+            earliestSubs.earliestSubscription,
+          ),
+        ),
       ),
     );
 
@@ -259,7 +269,10 @@ async function deleteUnreachableRows(
             .where(
               and(
                 eq(userSources.sourceId, articles.sourceId),
-                lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                subscriptionSeesArticle(
+                  articles.lastSeenInFeedAt,
+                  userSources.createdAt,
+                ),
                 notExists(
                   drizzleConnection
                     .select({ userId: userArticles.userId })
@@ -330,7 +343,10 @@ async function deleteUnreachableRows(
               .where(
                 and(
                   eq(userSources.sourceId, articles.sourceId),
-                  lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                  subscriptionSeesArticle(
+                  articles.lastSeenInFeedAt,
+                  userSources.createdAt,
+                ),
                   gt(users.lastSeenAt, daysAgo(userDormantAfterDays)),
                 ),
               ),
