@@ -75,7 +75,9 @@ jobs:
           POSTGRES_DB: feedfathom_migration_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
+        # The test data is thrown away, so keep it in memory and skip disk syncs.
         options: >-
+          --tmpfs /var/lib/postgresql/data
           --health-cmd "pg_isready --username=postgres --dbname=feedfathom_migration_test"
           --health-interval 1s
           --health-timeout 5s
