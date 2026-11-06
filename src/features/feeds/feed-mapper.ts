@@ -6,6 +6,7 @@ import {
   isCapAlertCurrent,
   renderCapAlert,
 } from "#features/feeds/cap-entry.ts";
+import { stripHtmlTags } from "#features/feeds/plain-text.ts";
 
 export type FeedMapperItem = {
   authors: readonly { name: string | null }[];
@@ -168,9 +169,10 @@ export const mapFeedItemToArticle = (
   const homepage =
     safeHttpUrl(parsedFeed.url ?? "", fallbackBase) || fallbackBase;
   const url = safeHttpUrl(item.url ?? "", homepage);
+  // A name that was nothing but markup falls back like a missing one.
+  const authorName = stripHtmlTags(item.authors[0]?.name ?? "") || null;
   return {
-    author:
-      item.authors[0]?.name ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
+    author: authorName ?? parsedFeed.title ?? parsedFeed.url ?? source.url,
     content: rewriteLinks(itemBody(item), url || homepage),
     enclosures: mapEnclosures(item.media ?? [], url || homepage),
     guid: generateArticleGuid(item, parsedFeed, source.url),

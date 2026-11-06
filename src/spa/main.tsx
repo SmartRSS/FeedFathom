@@ -69,12 +69,34 @@ const ROUTE_TITLES: Record<Route["name"], string> = {
   admin: "Admin",
   dashboard: "FeedFathom",
   login: "Login",
+  notFound: "Page not found",
   options: "Options",
   passwordReset: "Reset password",
   passwordResetConfirm: "Reset password",
   preview: "Discover feed",
   register: "Register",
 };
+
+// How the reader last drove the page, on <html> as data-input. The tree and
+// list cursor ring belongs to keyboard use: the app focuses rows on its own
+// (the first tree row on load), and :focus-visible counts that as keyboard
+// focus in Chromium, so the ring showed before anyone had typed anything.
+// A bare modifier is not input; Shift-click is still a pointer.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (!["Alt", "Control", "Meta", "Shift"].includes(event.key))
+      document.documentElement.dataset["input"] = "keyboard";
+  },
+  { capture: true },
+);
+window.addEventListener(
+  "pointerdown",
+  () => {
+    document.documentElement.dataset["input"] = "pointer";
+  },
+  { capture: true },
+);
 
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
@@ -307,6 +329,23 @@ function Router(props: {
               handleUnauthorized={props.handleUnauthorized}
               navigate={props.navigate}
             />
+          </Match>
+          <Match when={props.route.name === "notFound"}>
+            <main>
+              <section class="account-result">
+                <h1>Page not found</h1>
+                <p>There is nothing at this address.</p>
+                <a
+                  href="/"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    props.navigate("/");
+                  }}
+                >
+                  Home
+                </a>
+              </section>
+            </main>
           </Match>
           <Match when={props.route.name === "admin"}>
             <Admin

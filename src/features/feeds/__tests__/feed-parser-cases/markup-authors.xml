@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Modeled on a WordPress feed whose h-card plugin wraps every dc:creator
+     in a span. The last item is a plain "email (name)" author, which has to
+     keep parsing as one. -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Geoff&#39;s blog</title>
+    <link>https://geoff.example</link>
+    <dc:creator><![CDATA[<span class='p-author h-card'>Channel Author</span>]]></dc:creator>
+    <item>
+      <title>Spanned author</title>
+      <link>https://geoff.example/1</link>
+      <dc:creator><![CDATA[<span class='p-author h-card'>Geoff Graham</span>]]></dc:creator>
+    </item>
+    <item>
+      <title>Escaped markup and an entity</title>
+      <link>https://geoff.example/2</link>
+      <dc:creator>&lt;a href="https://geoff.example"&gt;Geoff &amp;amp; Co&lt;/a&gt;</dc:creator>
+    </item>
+    <item>
+      <title>Inherited author</title>
+      <link>https://geoff.example/3</link>
+    </item>
+    <item>
+      <title>Plain contact string</title>
+      <link>https://geoff.example/4</link>
+      <author>jane@geoff.example (Jane Doe)</author>
+    </item>
+  </channel>
+</rss>

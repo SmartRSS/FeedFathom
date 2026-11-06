@@ -213,7 +213,7 @@ export async function createServerApp(
     if (error instanceof HttpDeadlineError) {
       console.error(`Deadline exceeded on ${path}`);
       return Response.json(
-        { error: "Upstream request timed out." },
+        { error: "This site isn't responding right now." },
         { status: 504 },
       );
     }

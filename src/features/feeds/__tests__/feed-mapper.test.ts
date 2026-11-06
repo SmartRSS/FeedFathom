@@ -113,6 +113,21 @@ describe("mapFeedItemToArticle", () => {
     });
   });
 
+  const authorOf = (name: string) =>
+    mapFeedItemToArticle(
+      createMockFeedItem({ authors: [{ name }] }),
+      mockFeed,
+      mockSource,
+    ).author;
+
+  test("keeps only the text of an author name that carries markup", () => {
+    expect(authorOf("<span class='p-author h-card'>Geoff Graham</span>")).toBe(
+      "Geoff Graham",
+    );
+    expect(authorOf("Jane <jane@example.com>")).toBe("Jane <jane@example.com>");
+    expect(authorOf("<span></span>")).toBe("Feed Title");
+  });
+
   test("should handle author fallback chain", () => {
     // When first author has no name, it should fall back to feed title
     const mockItem = createMockFeedItem({

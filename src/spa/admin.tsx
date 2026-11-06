@@ -5,8 +5,23 @@ import {
   removedIdResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
-import { api, messageOf } from "./api.ts";
+import { api, ApiError, messageOf } from "./api.ts";
 import { confirmDialog, promptDialog } from "./dialog.tsx";
+import { formatDate } from "./format-date.ts";
+import { PageToolbar } from "./page-toolbar.tsx";
+
+// A timestamp in the reader's chosen date format, the exact value on hover.
+function Timestamp(props: { iso: string | null }) {
+  return (
+    <Show when={props.iso} fallback="—">
+      {(iso) => (
+        <time datetime={iso()} title={iso()}>
+          {formatDate(iso())}
+        </time>
+      )}
+    </Show>
+  );
+}
 
 type AdminSource = Static<typeof adminSourcesResponse>[number];
 type SourceSort =
@@ -52,6 +67,9 @@ export function Admin(props: {
 }) {
   const [sources, setSources] = createSignal<AdminSource[]>([]);
   const [message, setMessage] = createSignal("");
+  // A signed-in account that isn't an admin: the page says whom it is for
+  // and shows nothing else.
+  const [forbidden, setForbidden] = createSignal(false);
   const [sortBy, setSortBy] = createSignal<SourceSort>("createdAt");
   const [order, setOrder] = createSignal<"asc" | "desc">("asc");
 
@@ -66,10 +84,24 @@ export function Admin(props: {
       );
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Unauthorized"));
+      if (cause instanceof ApiError && cause.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      setMessage(messageOf(cause, "Could not load the sources."));
     }
   }
   onMount(load);
+
+  // The stacked layout's one sort control: a column and a direction.
+  function sortByChoice(value: string) {
+    const [column, direction] = value.split(":");
+    const choice = ADMIN_COLUMNS.find((item) => item.sort === column);
+    if (!choice || (direction !== "asc" && direction !== "desc")) return;
+    setSortBy(choice.sort);
+    setOrder(direction);
+    void load();
+  }
 
   function sortByColumn(column: SourceSort) {
     if (sortBy() === column) setOrder(order() === "asc" ? "desc" : "asc");
@@ -82,11 +114,16 @@ export function Admin(props: {
 
   async function replaceUrl(source: AdminSource) {
     const oldUrl = source.url;
-    const newUrl = await promptDialog("New URL", oldUrl);
+    const newUrl = await promptDialog("Change feed URL", "New URL", {
+      confirmLabel: "Continue",
+      initial: oldUrl,
+    });
     if (!newUrl || newUrl === oldUrl) return;
     if (
       !(await confirmDialog(
-        `Change "${oldUrl}" to "${newUrl}"? This affects ${source.subscriberCount} subscriber(s).`,
+        "Change feed URL?",
+        `"${oldUrl}" becomes "${newUrl}" for its ${source.subscriberCount} subscriber(s).`,
+        { confirmLabel: "Change URL" },
       ))
     )
       return;
@@ -99,15 +136,16 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Could not update URL."));
+      setMessage(messageOf(cause, "Could not update the URL."));
     }
   }
 
   async function removeSource(source: AdminSource) {
     if (
       !(await confirmDialog(
-        `Delete "${source.url}"? This removes it for every subscriber.`,
-        { danger: true },
+        "Delete this feed for everyone?",
+        `"${source.url}" and its articles are removed for every subscriber.`,
+        { confirmLabel: "Delete", danger: true },
       ))
     )
       return;
@@ -120,114 +158,161 @@ export function Admin(props: {
       await load();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
-      setMessage(messageOf(cause, "Could not delete source."));
+      setMessage(messageOf(cause, "Could not delete the source."));
     }
   }
 
   return (
     <main class="admin-page">
-      <h1>Admin</h1>
-      <a
-        href="/"
-        onClick={(event) => {
-          event.preventDefault();
-          props.navigate("/");
-        }}
+      <PageToolbar navigate={props.navigate} title="Admin" />
+      <Show
+        when={!forbidden()}
+        fallback={
+          <section class="account-result admin-forbidden">
+            <p>This page is for administrators.</p>
+            <a
+              href="/"
+              onClick={(event) => {
+                event.preventDefault();
+                props.navigate("/");
+              }}
+            >
+              Back to your feeds
+            </a>
+          </section>
+        }
       >
-        Home
-      </a>
-      <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-      <div
-        aria-label="Feed sources"
-        class="admin-table-scroll"
-        role="region"
-        tabindex="0"
-      >
-        <table aria-label="Feed sources" class="admin-table">
-          <thead>
-            <tr>
-              <For each={ADMIN_COLUMNS}>
-                {(column) => (
-                  <th
-                    scope="col"
-                    aria-sort={
-                      sortBy() === column.sort
-                        ? order() === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <button
-                      type="button"
-                      onClick={() => sortByColumn(column.sort)}
-                    >
-                      {column.label}
-                      {sortBy() === column.sort
-                        ? order() === "asc"
-                          ? " ▲"
-                          : " ▼"
-                        : ""}
-                    </button>
-                  </th>
-                )}
-              </For>
-              <th scope="col">WebSub</th>
-              <th scope="col">Last via</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={sources()}>
-              {(source) => (
-                <tr>
-                  <td>
-                    <a href={source.url} rel="noreferrer" target="_blank">
-                      {source.url}
-                    </a>
-                  </td>
-                  <td>{source.subscriberCount}</td>
-                  <td title={source.recentFailureDetails}>
-                    {source.recentFailures}
-                  </td>
-                  <td>{source.lastAttempt ?? "—"}</td>
-                  <td>{source.lastSuccess ?? "—"}</td>
-                  <td>{source.createdAt}</td>
-                  <td>
-                    <span
-                      class="websub-status"
-                      classList={{
-                        [`websub-status-${source.websubStatus}`]: true,
-                      }}
-                    >
-                      {WEBSUB_STATUS_LABELS[source.websubStatus]}
-                    </span>
-                  </td>
-                  <td>
-                    {source.lastFetchTrigger
-                      ? FETCH_TRIGGER_LABELS[source.lastFetchTrigger]
-                      : "—"}
-                  </td>
-                  <td class="admin-table-actions">
-                    <button
-                      type="button"
-                      onClick={() => void replaceUrl(source)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void removeSource(source)}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
+        <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
+        {/* Where the table stacks, its header row has no columns to head:
+          one control sorts instead (style.css shows one or the other). */}
+        <label class="admin-sort">
+          Sort by
+          <select
+            value={`${sortBy()}:${order()}`}
+            onChange={(event) => sortByChoice(event.currentTarget.value)}
+          >
+            <For each={ADMIN_COLUMNS}>
+              {(column) => (
+                <>
+                  <option value={`${column.sort}:asc`}>
+                    {column.label}, ascending
+                  </option>
+                  <option value={`${column.sort}:desc`}>
+                    {column.label}, descending
+                  </option>
+                </>
               )}
             </For>
-          </tbody>
-        </table>
-      </div>
+          </select>
+        </label>
+        <div
+          aria-label="Feed sources"
+          class="admin-table-scroll"
+          role="region"
+          tabindex="0"
+        >
+          <table aria-label="Feed sources" class="admin-table">
+            <thead>
+              <tr>
+                <For each={ADMIN_COLUMNS}>
+                  {(column) => (
+                    <th
+                      scope="col"
+                      aria-sort={
+                        sortBy() === column.sort
+                          ? order() === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <button
+                        type="button"
+                        onClick={() => sortByColumn(column.sort)}
+                      >
+                        {column.label}
+                        {sortBy() === column.sort
+                          ? order() === "asc"
+                            ? " ▲"
+                            : " ▼"
+                          : ""}
+                      </button>
+                    </th>
+                  )}
+                </For>
+                <th scope="col">WebSub</th>
+                <th scope="col">Last via</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={sources()}>
+                {(source) => (
+                  <tr>
+                    <td>
+                      <a href={source.url} rel="noreferrer" target="_blank">
+                        {source.url}
+                      </a>
+                    </td>
+                    {/* data-label captions each value where the single-pane
+                      layout stacks a row instead of showing the header. */}
+                    <td data-label="Subscribers">{source.subscriberCount}</td>
+                    <td
+                      data-label="Failures"
+                      title={source.recentFailureDetails}
+                    >
+                      {source.recentFailures}
+                    </td>
+                    <td data-label="Last attempt">
+                      <Timestamp iso={source.lastAttempt} />
+                    </td>
+                    <td data-label="Last success">
+                      <Timestamp iso={source.lastSuccess} />
+                    </td>
+                    <td data-label="Created">
+                      <Timestamp iso={source.createdAt} />
+                    </td>
+                    <td data-label="WebSub">
+                      <span
+                        class="websub-status"
+                        classList={{
+                          [`websub-status-${source.websubStatus}`]: true,
+                        }}
+                      >
+                        {WEBSUB_STATUS_LABELS[source.websubStatus]}
+                      </span>
+                    </td>
+                    <td data-label="Last via">
+                      {source.lastFetchTrigger
+                        ? FETCH_TRIGGER_LABELS[source.lastFetchTrigger]
+                        : "—"}
+                    </td>
+                    <td class="admin-table-actions">
+                      {/* The flex row lives inside the cell: a flex <td> is
+                        no longer a table cell and breaks the row rules. */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => void replaceUrl(source)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          class="button-danger-text"
+                          type="button"
+                          onClick={() => void removeSource(source)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </Show>
     </main>
   );
 }

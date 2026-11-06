@@ -5,6 +5,10 @@ import {
 } from "#shared/util/get-date-group.ts";
 
 const cases: [Date, Date, string][] = [
+  // Dated later than now, by clock skew or a publisher's time zone: still
+  // the newest group, never a second "Within the Last Week" above Today.
+  [new Date(2024, 6, 15, 14), new Date(2024, 6, 16, 2), "Today"],
+  [new Date(2024, 6, 15, 14), new Date(2024, 7, 1), "Today"],
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 15), "Today"],
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 15, 23, 59), "Today"],
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 8), "Within the Last Week"],

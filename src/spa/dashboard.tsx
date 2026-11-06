@@ -16,6 +16,7 @@ import {
   removedArticlesResponse,
   removedIdResponse,
   snoozedSourceResponse,
+  successResponse,
   treeResponse,
   updatedFolderResponse,
   type Article,
@@ -23,6 +24,7 @@ import {
   type TreeNode,
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
+import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
   filterTree,
   findNode,
@@ -53,11 +55,13 @@ import {
 } from "./reading-session.ts";
 import {
   removalOutcome,
+  readerHidden,
   soleSelectedIndex,
   transitionArticleSelection,
   type DashboardPane,
 } from "./behavior.ts";
-import { api, messageOf } from "./api.ts";
+import { api, failureDetails, messageOf } from "./api.ts";
+import { createAdminFlag, FailureDetails } from "./failure-details.tsx";
 import { DELETE_TRACE_HEADER, deleteTrace } from "./delete-trace.ts";
 import {
   createExtensionReaderBridge,
@@ -65,6 +69,7 @@ import {
   type ReaderContent,
   type ReaderMode,
 } from "./extension-reader.ts";
+import { ArticleMarkup } from "./article-markup.tsx";
 import { BackButton, FeedDiscovery } from "./feed-discovery.tsx";
 import { Icon } from "./icon.tsx";
 import { ForEachNode, TreeItem } from "./tree-item.tsx";
@@ -77,7 +82,8 @@ import {
   todayView,
 } from "./preferences.ts";
 import { ScrollPastQueue } from "./scroll-past.ts";
-import { formatDate } from "./format-date.ts";
+import { formatDate, formatDay } from "./format-date.ts";
+import { ReaderHeader } from "./reader-header.tsx";
 import { ContextMenu, type ContextMenuItem } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
 import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
@@ -122,7 +128,7 @@ function ReaderBody(props: { content: ReaderContent; article: Article }) {
 
 function ReaderMarkup(props: { content: ReaderContent }) {
   return props.content.kind === "html" ? (
-    <div innerHTML={props.content.content} />
+    <ArticleMarkup html={props.content.content} />
   ) : (
     <div class="reader-plain">{props.content.content}</div>
   );
@@ -224,6 +230,13 @@ export function Dashboard(props: {
     filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
   const [treeLoading, setTreeLoading] = createSignal(true);
+  // Why the tree failed to load, while it has. The first-run guidance says
+  // "No feeds yet", which is false then; the feeds pane says what happened
+  // and offers Try again instead.
+  const [treeFailed, setTreeFailed] = createSignal<{
+    details: ReturnType<typeof failureDetails>;
+    message: string;
+  }>();
   const [articles, setArticles] = createSignal<ArticleSummary[]>([]);
   const [articlesLoading, setArticlesLoading] = createSignal(false);
   // A full page means more articles may be available, not that another page
@@ -259,6 +272,63 @@ export function Dashboard(props: {
     return index === undefined ? undefined : articles()[index];
   };
   const [selectedNode, setSelectedNode] = createSignal<TreeNode>();
+  // "Try again" on a failing feed: the fetch runs in the worker, so the tree
+  // is reloaded a little later to show how it went.
+  const [retryState, setRetryState] = createSignal<
+    "idle" | "queued" | "sending"
+  >("idle");
+  async function retrySelectedSource() {
+    const node = selectedNode();
+    if (node?.type !== "source") return;
+    setRetryState("sending");
+    try {
+      await api("/source/refresh", successResponse, {
+        body: JSON.stringify({ sourceId: Number(node.uid) }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      setRetryState("queued");
+      setTimeout(() => {
+        setRetryState("idle");
+        if (!disposed) void refreshCurrentView();
+      }, 8000);
+    } catch (cause) {
+      setRetryState("idle");
+      reportError(cause, "Could not fetch the feed again");
+    }
+  }
+  const articleFeedName = (article: { sourceId: number }) =>
+    findNode(tree(), "source", String(article.sourceId))?.name;
+  // The feed list failed to load and there is none from before: nothing to
+  // filter or search, so both fields are disabled while the panes say so.
+  const feedsUnavailable = () => Boolean(treeFailed()) && !tree().length;
+  // The feeds are still on their way and there is none from before: as
+  // with the skeleton's filter box, nothing to search or filter yet.
+  const feedsPending = () => treeLoading() && !tree().length;
+  const emptyFolderSelected = () => {
+    const node = selectedNode();
+    return node?.type === "folder" && node.children.length === 0;
+  };
+  const failingSelection = () => {
+    const node = selectedNode();
+    return node?.type === "source" ? (node.failing ?? null) : null;
+  };
+  const failingCause = () => {
+    const failing = failingSelection();
+    return failing ? classifyFetchFailure(failing.reason) : undefined;
+  };
+  // A failing feed that still has articles lists them, under a notice once
+  // it has gone a day without an update: a shorter outage is usually the
+  // next poll's to fix. Only on the feed itself, not Today or its folder.
+  const failingNotice = () => {
+    const failing = failingSelection();
+    return failing?.lastSuccess &&
+      articles().length > 0 &&
+      !activeSearch() &&
+      Date.now() - Date.parse(failing.lastSuccess) > 24 * 60 * 60 * 1000
+      ? failing
+      : undefined;
+  };
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
   // Roving tabindex for the tree: only the last-focused row is a Tab stop,
@@ -286,13 +356,24 @@ export function Dashboard(props: {
   );
   const [readerAvailable, setReaderAvailable] = createSignal(false);
   const [error, setError] = createSignal("");
+  // The details behind the alert, kept with the message they explain: an
+  // alert set from a plain string has none.
+  const [errorDetails, setErrorDetails] = createSignal<{
+    details: ReturnType<typeof failureDetails>;
+    message: string;
+  }>();
   const reportError = (cause: unknown, fallback: string) => {
     if (props.handleUnauthorized(cause)) return;
-    setError(messageOf(cause, fallback));
+    const message = messageOf(cause, fallback);
+    setErrorDetails({ details: failureDetails(cause), message });
+    setError(message);
   };
+  const isAdmin = createAdminFlag();
   const [showDiscovery, setShowDiscovery] = createSignal(
     props.initialDiscovery ?? false,
   );
+  // The folder Discover starts in when it was opened from an empty folder.
+  const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [authenticated, setAuthenticated] = createSignal(false);
   // Reader documents are extension-only; never proxy them through the FeedFathom backend.
   const readerBridge = createExtensionReaderBridge();
@@ -691,6 +772,7 @@ export function Dashboard(props: {
     treeRequestPromise = attempt;
     const nextTree = await attempt;
     if (controller.signal.aborted) return nextTree;
+    setTreeFailed(undefined);
     applyTree(nextTree);
     return nextTree;
   }
@@ -716,7 +798,9 @@ export function Dashboard(props: {
     });
   };
   async function addNewFolder() {
-    const name = await promptDialog("Folder name");
+    const name = await promptDialog("New folder", "Folder name", {
+      confirmLabel: "Create",
+    });
     if (!name?.trim()) return;
     setError("");
     try {
@@ -727,7 +811,7 @@ export function Dashboard(props: {
       });
       await loadTree();
     } catch (cause) {
-      reportError(cause, "Could not create folder");
+      reportError(cause, "Could not create the folder");
     }
   }
   onMount(async () => {
@@ -739,7 +823,12 @@ export function Dashboard(props: {
     void probeReader();
     // Read the snapshot up front (before any await) so a reload restores the
     // state the tab actually left in, not whatever a faster boot wrote.
-    const restored = restoreEnabled() ? readingSession.snapshot() : undefined;
+    // A preview route opens on its own form: restoring the last reading
+    // session would bring its reader forward over it on one pane.
+    const restored =
+      restoreEnabled() && !props.initialDiscovery
+        ? readingSession.snapshot()
+        : undefined;
     if (!rememberReadingPosition.get())
       try {
         sessionStorage.removeItem(READING_SESSION_STORAGE_KEY);
@@ -779,7 +868,10 @@ export function Dashboard(props: {
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
-      reportError(cause, "Unable to load feeds.");
+      setTreeFailed({
+        details: failureDetails(cause),
+        message: messageOf(cause, "Could not load your feeds."),
+      });
     } finally {
       revealTree();
     }
@@ -960,8 +1052,14 @@ export function Dashboard(props: {
       const openIndex = restored ? Math.min(...restoredIndexes) : 0;
       const focusIndex =
         (restored ? restoredAt(restore?.focusedId) : undefined) ?? openIndex;
+      // Beside a visible reader the first row opens at once. Where the
+      // reader is out of sight until an article is opened -- one pane at a
+      // time, or two -- nothing is selected until the reader asks for
+      // something; the keyboard cursor and the selection anchor still start
+      // on the first row.
+      const opensFirst = nextArticles.length > 0 && !readerHidden();
       const nextIndexes = new Set(
-        restored ? restoredIndexes : nextArticles.length ? [openIndex] : [],
+        restored ? restoredIndexes : opensFirst ? [openIndex] : [],
       );
       void setArticleSelection(nextIndexes, selection);
       setSelectionAnchor(
@@ -992,7 +1090,7 @@ export function Dashboard(props: {
       } else {
         recordAppSnapshot({
           articleFilter: articleFilter(),
-          articleId: nextArticles[openIndex]?.id,
+          articleId: opensFirst ? nextArticles[openIndex]?.id : undefined,
           listScrollTop: 0,
         });
       }
@@ -1301,7 +1399,10 @@ export function Dashboard(props: {
       setShowDiscovery(true);
       return;
     }
-    const name = await promptDialog("Folder name", node.name);
+    const name = await promptDialog("Rename folder", "Folder name", {
+      confirmLabel: "Rename",
+      initial: node.name,
+    });
     if (!name?.trim() || name === node.name) return;
     setError("");
     try {
@@ -1312,7 +1413,7 @@ export function Dashboard(props: {
       });
       await loadTree();
     } catch (cause) {
-      reportError(cause, "Could not rename folder");
+      reportError(cause, "Could not rename the folder");
     }
   }
   async function copyToClipboard(url: string, announcement: string) {
@@ -1344,8 +1445,8 @@ export function Dashboard(props: {
       reportError(
         cause,
         pausedUntil === null
-          ? "Could not unsnooze feed"
-          : "Could not snooze feed",
+          ? "Could not unsnooze the feed"
+          : "Could not snooze the feed",
       );
     }
   }
@@ -1388,6 +1489,7 @@ export function Dashboard(props: {
               onSelect: () => void showProperties(node),
             },
             {
+              danger: true,
               disabled: Boolean(node.children?.length),
               kind: "action",
               label: "Delete folder",
@@ -1419,6 +1521,7 @@ export function Dashboard(props: {
             ...snoozeItems,
             { kind: "separator" },
             {
+              danger: true,
               kind: "action",
               label: "Unsubscribe",
               onSelect: () => void removeNode(node),
@@ -1432,7 +1535,15 @@ export function Dashboard(props: {
       setError("Folder is not empty");
       return;
     }
-    if (!(await confirmDialog(`Delete "${node.name}"?`, { danger: true })))
+    if (
+      !(await confirmDialog(
+        `Delete "${node.name}"?`,
+        node.type === "source"
+          ? "You unsubscribe from this feed, and its articles leave your lists."
+          : "The folder is removed. It holds no feeds.",
+        { confirmLabel: "Delete", danger: true },
+      ))
+    )
       return;
     try {
       setError("");
@@ -1482,7 +1593,7 @@ export function Dashboard(props: {
         document.querySelector<HTMLElement>(".sources-pane .source")?.focus(),
       );
     } catch (cause) {
-      reportError(cause, "Could not delete item");
+      reportError(cause, "Could not delete it");
     }
   }
   // In-flight article GETs by id, prefetches and opens alike. A press, a
@@ -1558,7 +1669,7 @@ export function Dashboard(props: {
   // prefetches on its own.
   function scheduleHoverPrefetch(id: number) {
     clearTimeout(hoverPrefetchTimer);
-    if (!matchMedia("(pointer: fine)").matches) return;
+    if (!matchMedia("(pointer: fine) and (hover: hover)").matches) return;
     hoverPrefetchTimer = setTimeout(() => prefetchArticle(id), 150);
   }
   async function open(article: ArticleSummary, selection = listController) {
@@ -1631,7 +1742,7 @@ export function Dashboard(props: {
         );
         return;
       }
-      reportError(cause, "Could not load article");
+      reportError(cause, "Could not load the article");
     } finally {
       if (!body.controller.signal.aborted) setLoadingArticle(false);
     }
@@ -1706,7 +1817,7 @@ export function Dashboard(props: {
         if (rememberReadingPosition.get())
           readingSession.clearReaderScrolls(ids);
         return loadTree().catch((cause) =>
-          reportError(cause, "Could not refresh tree"),
+          reportError(cause, "Could not refresh your feeds"),
         );
       })
       .catch((cause) => {
@@ -1721,7 +1832,7 @@ export function Dashboard(props: {
           setSelectionAnchor(Math.min(...indexes));
         }
         loadTree().catch((reloadCause) =>
-          reportError(reloadCause, "Could not refresh tree"),
+          reportError(reloadCause, "Could not refresh your feeds"),
         );
       });
   }
@@ -1900,6 +2011,17 @@ export function Dashboard(props: {
         {(message) => (
           <div class="dashboard-alert" role="alert">
             <p>{message()}</p>
+            <Show
+              when={
+                errorDetails()?.message === message()
+                  ? errorDetails()
+                  : undefined
+              }
+            >
+              {(shown) => (
+                <FailureDetails admin={isAdmin()} {...shown().details} />
+              )}
+            </Show>
             <button type="button" onClick={() => void refreshCurrentView()}>
               Retry
             </button>
@@ -1962,67 +2084,114 @@ export function Dashboard(props: {
           <Show
             when={!treeLoading()}
             fallback={
-              <ul class="tree skeleton" aria-hidden="true">
-                <For each={[...Array(50).keys()]}>
-                  {(index) => (
-                    <li>
-                      <div class="source">
-                        <span class="node-icon skeleton-row" />
-                        <span class="skeleton-text">
-                          {
-                            TREE_SKELETON_NAMES[
-                              index % TREE_SKELETON_NAMES.length
-                            ]
-                          }
-                        </span>
-                      </div>
-                    </li>
-                  )}
-                </For>
-              </ul>
+              <>
+                {/* The filter row the loaded tree will have, so nothing
+                    moves when it arrives. */}
+                <Show when={feedFilterBox.get()}>
+                  <input
+                    aria-label="Filter feeds"
+                    class="tree-filter"
+                    disabled
+                    placeholder="Filter feeds"
+                    type="search"
+                  />
+                </Show>
+                <ul class="tree skeleton" aria-hidden="true">
+                  <For each={[...Array(50).keys()]}>
+                    {(index) => (
+                      <li>
+                        <div class="source">
+                          <span class="node-icon skeleton-row" />
+                          <span class="skeleton-text">
+                            {
+                              TREE_SKELETON_NAMES[
+                                index % TREE_SKELETON_NAMES.length
+                              ]
+                            }
+                          </span>
+                        </div>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </>
             }
           >
             {/* First-run guidance (#723): only ever visible while the tree
                 is empty, so it dismisses itself the moment a source exists
                 and never needs its own persistence. */}
             <Show
-              when={tree().length > 0}
+              when={tree().length > 0 || treeFailed()}
               fallback={
-                <div class="tree-empty">
-                  <p class="tree-empty-heading">No feeds yet.</p>
-                  <button type="button" onClick={() => setShowDiscovery(true)}>
-                    Add your first feed
-                  </button>
-                  <p>
-                    Moving from another reader?{" "}
-                    <a
-                      href="/options#import-opml"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        props.navigate("/options#import-opml");
-                      }}
+                <Show when={!treeFailed()}>
+                  <div class="tree-empty">
+                    <p class="tree-empty-heading">No feeds yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscovery(true)}
                     >
-                      Import an OPML file
-                    </a>
-                    .
-                  </p>
-                </div>
+                      Add your first feed
+                    </button>
+                    <p>
+                      Moving from another reader?{" "}
+                      <a
+                        href="/options#import-opml"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          props.navigate("/options#import-opml");
+                        }}
+                      >
+                        Import an OPML file
+                      </a>
+                      .
+                    </p>
+                  </div>
+                </Show>
               }
             >
               <Show when={feedFilterBox.get()}>
                 <input
                   aria-label="Filter feeds"
                   class="tree-filter"
+                  disabled={feedsUnavailable()}
                   placeholder="Filter feeds"
                   type="search"
                   value={treeFilter()}
                   onInput={(event) => setTreeFilter(event.currentTarget.value)}
                 />
               </Show>
-              <Show when={treeFilter().trim() && !visibleTree().length}>
-                <p class="tree-empty" role="status">
-                  No feeds match that.
-                </p>
+              <Show when={treeFailed() && !tree().length}>
+                {/* The same look as the list's failing-feed state: one look
+                    for "couldn't load" wherever it appears. */}
+                <div
+                  class="article-list-empty article-list-failing"
+                  role="alert"
+                >
+                  <p>{treeFailed()?.message}</p>
+                  <div class="form-actions">
+                    <button
+                      class="button-primary"
+                      type="button"
+                      onClick={() => void refreshCurrentView()}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                  <Show when={treeFailed()?.details}>
+                    {(details) => (
+                      <FailureDetails admin={isAdmin()} {...details()} />
+                    )}
+                  </Show>
+                </div>
+              </Show>
+              <Show
+                when={
+                  !treeFailed() && treeFilter().trim() && !visibleTree().length
+                }
+              >
+                <div class="article-list-empty" role="status">
+                  <p>No feeds match that.</p>
+                </div>
               </Show>
               <ul
                 aria-busy={treeLoading()}
@@ -2056,6 +2225,7 @@ export function Dashboard(props: {
             <BackButton backPane={props.backPane} />
             <button
               aria-label="select all"
+              disabled={articles().length === 0}
               onClick={() => {
                 // Clicking focuses this button, which sits outside
                 // .article-list, so handleArticleKeys would stop firing.
@@ -2099,10 +2269,16 @@ export function Dashboard(props: {
                 control that changes which articles the list shows. It is a
                 view option, not an action, so it sits right of the spacer
                 with the reader pane's display-mode dropdown (#767). */}
+            {/* Disabled where no filter could list anything: the feeds still
+                loading or failed, or an empty folder. A caught-up feed keeps
+                it, since All is how its read articles are reached. */}
             <label class="article-filter-field">
-              Show
+              <span class="article-filter-label">Show</span>
               <select
                 class="article-filter"
+                disabled={
+                  feedsPending() || feedsUnavailable() || emptyFolderSelected()
+                }
                 value={articleFilter()}
                 onChange={(event) => {
                   const next = event.currentTarget.value;
@@ -2123,6 +2299,11 @@ export function Dashboard(props: {
               <Icon raw={settingsRaw} />
             </button>
           </div>
+          {/* Names the open feed or folder where the list fills the screen
+              and the tree is out of sight; hidden beside a visible tree. */}
+          <Show when={selectedNode()}>
+            {(node) => <h2 class="pane-title">{node().name}</h2>}
+          </Show>
           {/* Its own row rather than a slot in the toolbar: that row is eight
               icon buttons and a dropdown in a pane that is 320px wide, and a
               text input squeezed in there had no room to show what was typed.
@@ -2140,9 +2321,22 @@ export function Dashboard(props: {
                 void runSearch(searchTerms());
               }}
             >
+              {/* Disabled while a selected feed or folder lists nothing and
+                  no search is open, like select-all, mark-read and delete.
+                  With nothing selected it stays: search answers across
+                  every subscription. Kept in place, so the panes'
+                  placeholders still share a top line. */}
               <input
                 aria-label="Search articles"
                 class="article-search"
+                disabled={
+                  feedsUnavailable() ||
+                  feedsPending() ||
+                  (Boolean(selectedNode()) &&
+                    !articlesLoading() &&
+                    !articles().length &&
+                    !activeSearch())
+                }
                 placeholder="Search articles"
                 type="search"
                 value={searchTerms()}
@@ -2154,6 +2348,38 @@ export function Dashboard(props: {
                 }}
               />
             </form>
+          </Show>
+          <Show when={failingNotice()}>
+            {(failing) => (
+              <div class="feed-notice">
+                <p>
+                  Not updated since {formatDay(failing().lastSuccess)}.{" "}
+                  {failingCause()?.sentence}
+                </p>
+                <div class="feed-notice-actions">
+                  <Show when={failingCause()?.editable}>
+                    <button type="button" onClick={() => void showProperties()}>
+                      Edit feed
+                    </button>
+                  </Show>
+                  <button
+                    class="button-primary"
+                    disabled={retryState() !== "idle"}
+                    type="button"
+                    onClick={() => void retrySelectedSource()}
+                  >
+                    {retryState() === "queued"
+                      ? "Fetching again…"
+                      : "Try again"}
+                  </button>
+                </div>
+                <FailureDetails
+                  admin={isAdmin()}
+                  reason={failing().reason}
+                  status={failingCause()?.status}
+                />
+              </div>
+            )}
           </Show>
           <div
             aria-busy={articlesLoading()}
@@ -2167,8 +2393,11 @@ export function Dashboard(props: {
               recordListScroll(event.currentTarget.scrollTop);
             }}
           >
+            {/* The feeds loading is the list loading too, until something
+                is selected: a restored session opens its feed before the
+                tree is revealed, and its rows must be there to take focus. */}
             <Show
-              when={!articlesLoading()}
+              when={!articlesLoading() && !(treeLoading() && !selectedNode())}
               fallback={
                 <div class="article-list skeleton" aria-hidden="true">
                   <div class="date-group" />
@@ -2261,16 +2490,99 @@ export function Dashboard(props: {
                 <Show
                   when={selectedNode()}
                   fallback={
-                    <Show when={authenticated()}>
+                    <Show
+                      when={authenticated()}
+                      fallback={
+                        <Show when={treeFailed()}>
+                          <div class="article-list-empty" role="status">
+                            <p>Nothing to list until the feeds load.</p>
+                          </div>
+                        </Show>
+                      }
+                    >
                       <div class="article-list-empty" role="status">
                         <p>Select a feed to read.</p>
                       </div>
                     </Show>
                   }
                 >
-                  <div class="article-list-empty" role="status">
-                    <p>All caught up.</p>
-                  </div>
+                  <Show
+                    when={failingSelection()}
+                    fallback={
+                      <div
+                        class="article-list-empty"
+                        classList={{
+                          "article-list-prompt": emptyFolderSelected(),
+                        }}
+                        role="status"
+                      >
+                        <p>
+                          {emptyFolderSelected()
+                            ? "This folder is empty. Add a feed or move one here."
+                            : "All caught up."}
+                        </p>
+                        <Show when={emptyFolderSelected()}>
+                          <div class="form-actions">
+                            <button
+                              class="button-primary"
+                              type="button"
+                              onClick={() => {
+                                setDiscoveryFolder(selectedNode()?.uid);
+                                props.focusPane("sources");
+                                setShowDiscovery(true);
+                              }}
+                            >
+                              Add feed
+                            </button>
+                          </div>
+                        </Show>
+                      </div>
+                    }
+                  >
+                    {(failing) => (
+                      <div
+                        class="article-list-empty article-list-failing"
+                        role="status"
+                      >
+                        <p>
+                          {failing().lastSuccess
+                            ? `${selectedNode()?.name ?? "This feed"} hasn't updated since ${formatDay(failing().lastSuccess)}.`
+                            : `${selectedNode()?.name ?? "This feed"} isn't updating.`}
+                        </p>
+                        <p class="article-list-failing-reason">
+                          {failingCause()?.sentence}
+                        </p>
+                        <div class="form-actions">
+                          <Show when={failingCause()?.editable}>
+                            <button
+                              type="button"
+                              onClick={() => void showProperties()}
+                            >
+                              Edit feed
+                            </button>
+                          </Show>
+                          <button
+                            class="button-primary"
+                            disabled={retryState() === "sending"}
+                            type="button"
+                            onClick={() => void retrySelectedSource()}
+                          >
+                            Try again
+                          </button>
+                        </div>
+                        <Show when={retryState() === "queued"}>
+                          <p class="article-list-failing-reason">
+                            Fetching again. This can take a minute.
+                          </p>
+                        </Show>
+                        <FailureDetails
+                          admin={isAdmin()}
+                          reason={failing().reason}
+                          status={failingCause()?.status}
+                        />
+                      </div>
+                    )}
+                  </Show>
                 </Show>
               }
             >
@@ -2365,7 +2677,18 @@ export function Dashboard(props: {
                 <Show
                   when={loadingArticle()}
                   fallback={
-                    <Show when={selected()}>
+                    <Show
+                      when={selected()}
+                      fallback={
+                        <p class="empty-pane">
+                          {treeFailed()
+                            ? "Nothing to read until the feeds load."
+                            : feedsPending()
+                              ? "Loading…"
+                              : "Select an article to read."}
+                        </p>
+                      }
+                    >
                       <p>Reader content unavailable.</p>
                     </Show>
                   }
@@ -2385,15 +2708,16 @@ export function Dashboard(props: {
             >
               {(item) => (
                 <>
-                  <h1>{item().article.title}</h1>
-                  <a
-                    href={safeArticleUrl(
+                  <ReaderHeader
+                    author={item().article.author}
+                    feed={articleFeedName(item().article)}
+                    publishedAt={item().article.publishedAt}
+                    title={item().article.title}
+                    url={safeArticleUrl(
                       item().article.url,
                       window.location.href,
                     )}
-                  >
-                    Original
-                  </a>
+                  />
                   <ReaderBody
                     article={item().article}
                     content={item().content}
@@ -2419,11 +2743,13 @@ export function Dashboard(props: {
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
           initialFeedUrl={props.initialFeedUrl}
+          initialFolder={discoveryFolder()}
           initialNewsletter={props.initialNewsletter ?? false}
           pane={props.pane}
           close={() => {
             const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setDiscoveryFolder(undefined);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             else
@@ -2440,6 +2766,7 @@ export function Dashboard(props: {
           saved={async (sourceId) => {
             const wasEditing = editingSource() !== undefined;
             setShowDiscovery(false);
+            setDiscoveryFolder(undefined);
             setEditingSource(undefined);
             if (props.initialDiscovery) props.navigate("/");
             const savedNode = findNode(

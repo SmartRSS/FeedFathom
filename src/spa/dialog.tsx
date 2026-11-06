@@ -13,14 +13,22 @@ import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 type DialogRequest =
   | {
       kind: "confirm";
+      // Every dialog has a title, its accessible name; a confirm's message
+      // says what will happen and describes it.
+      title: string;
       message: string;
       danger: boolean;
+      // The confirm button's label: the action's verb ("Delete", "Create"),
+      // so the button says what happens. Required, with no "OK" default.
+      confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
   | {
       kind: "prompt";
+      title: string;
       label: string;
       initial: string;
+      confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
   | {
@@ -95,29 +103,35 @@ function show(next: DialogRequest) {
 }
 
 export function confirmDialog(
+  title: string,
   message: string,
-  options?: { danger?: boolean },
+  options: { confirmLabel: string; danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) =>
     show({
-      danger: options?.danger ?? false,
+      confirmLabel: options.confirmLabel,
+      danger: options.danger ?? false,
       kind: "confirm",
       message,
       resolve: (value) => resolve(value === true),
+      title,
     }),
   );
 }
 
 export function promptDialog(
+  title: string,
   label: string,
-  initial = "",
+  options: { confirmLabel: string; initial?: string },
 ): Promise<string | null> {
   return new Promise((resolve) =>
     show({
-      initial,
+      confirmLabel: options.confirmLabel,
+      initial: options.initial ?? "",
       kind: "prompt",
       label,
       resolve: (value) => resolve(typeof value === "string" ? value : null),
+      title,
     }),
   );
 }
@@ -195,6 +209,12 @@ export function DialogHost() {
         ? current.message
         : "";
   };
+  const title = () => {
+    const current = request();
+    return current?.kind === "help"
+      ? "Keyboard shortcuts"
+      : (current?.title ?? "");
+  };
   const promptRequest = () => {
     const current = request();
     return current?.kind === "prompt" ? current : undefined;
@@ -202,6 +222,10 @@ export function DialogHost() {
   const helpRequest = () => {
     const current = request();
     return current?.kind === "help" ? current : undefined;
+  };
+  const confirmLabel = () => {
+    const current = request();
+    return current?.kind === "help" ? "" : (current?.confirmLabel ?? "");
   };
   const danger = () => {
     const current = request();
@@ -213,11 +237,14 @@ export function DialogHost() {
       {(current) => (
         <dialog
           class="app-dialog"
-          // The dialog's accessible name comes from what is already visible:
-          // the cheat sheet's heading, or the prompt/message text (#817).
-          aria-labelledby={
-            current().kind === "help" ? "app-dialog-title" : "app-dialog-prompt"
+          // The shortcut sheet is a table, wider than a form dialog.
+          classList={{ "app-dialog-wide": current().kind === "help" }}
+          // The dialog's accessible name is its visible title (#817); a
+          // confirm's message describes it.
+          aria-describedby={
+            current().kind === "confirm" ? "app-dialog-prompt" : undefined
           }
+          aria-labelledby="app-dialog-title"
           // Esc fires cancel before close; resolving via cancel() keeps the
           // same false/null contract as the Cancel button.
           onCancel={(event) => {
@@ -247,27 +274,30 @@ export function DialogHost() {
               else cancel();
             }}
           >
+            <h2 class="app-dialog-title" id="app-dialog-title">
+              {title()}
+            </h2>
             <Show
               when={helpRequest()}
               fallback={
-                <label>
-                  <span id="app-dialog-prompt">{text()}</span>
-                  <Show when={promptRequest()}>
-                    {(prompt) => (
+                <Show
+                  when={promptRequest()}
+                  fallback={<p id="app-dialog-prompt">{text()}</p>}
+                >
+                  {(prompt) => (
+                    <label>
+                      <span id="app-dialog-prompt">{text()}</span>
                       <input
                         autofocus
                         ref={inputRef}
                         type="text"
                         value={prompt().initial}
                       />
-                    )}
-                  </Show>
-                </label>
+                    </label>
+                  )}
+                </Show>
               }
             >
-              <h2 class="app-dialog-title" id="app-dialog-title">
-                Keyboard shortcuts
-              </h2>
               <Shortcuts />
             </Show>
             <div class="app-dialog-actions">
@@ -277,11 +307,14 @@ export function DialogHost() {
                 </button>
               </Show>
               <button
-                classList={{ "app-dialog-danger": danger() }}
+                classList={{
+                  "app-dialog-danger": danger(),
+                  "button-primary": !danger(),
+                }}
                 ref={confirmRef}
                 type="submit"
               >
-                {helpRequest() ? "Close" : "OK"}
+                {helpRequest() ? "Close" : confirmLabel()}
               </button>
             </div>
           </form>

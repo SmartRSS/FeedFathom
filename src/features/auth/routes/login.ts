@@ -29,7 +29,10 @@ export function createLoginRoute(
       // Same body and status as a wrong password. A distinguishable response
       // would undo the equal-time hashing below by answering "this account
       // exists and someone is guessing at it" for free.
-      const wrongLoginData = json({ error: "Wrong login data" }, 401);
+      const wrongLoginData = json(
+        { error: "Email or password is wrong." },
+        401,
+      );
 
       // Counted before the password is checked, so a burst of parallel
       // guesses cannot all pass; a success takes its attempt back below.

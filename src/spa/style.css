@@ -9,7 +9,9 @@
   --grey-50: #737373;
   --grey-90: #0c0c0d;
   --white: #fff;
-  --border: 1px solid var(--grey-30);
+  /* The hairline's width on its own, for heights that must count it. */
+  --border-w: 1px;
+  --border: var(--border-w) solid var(--grey-30);
   --blue: var(--blue-60);
   --muted: var(--grey-50);
   /* Kept as their own tokens rather than reusing --blue-60 so selection
@@ -19,6 +21,97 @@
   --selected-border: transparent;
   --radius: 0.5rem;
   --font-family: sans-serif;
+  /* One spacing and type scale for the app's own chrome. A one-off value
+     in between two steps is a sign it should snap to one of them. */
+  /* Half a step, for the dense rows a mouse gets. */
+  --space-half: 0.125rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --fs-xs: 0.75rem;
+  /* The smallest step keeps an 11px floor, the same way touch targets keep
+     44px, so dates and counts stay legible when the user scales text
+     down. */
+  --fs-sm: max(0.875rem, 11px);
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  /* Line heights: headings, interface text, and long-form reading. */
+  --lh-tight: 1.25;
+  --lh-body: 1.5;
+  --lh-reading: 1.6;
+  /* Every text control (input, select, textarea, button) shares one height,
+     radius and border, so a form reads as one set of controls. Touch input
+     raises the height to a 44px target. */
+  --control-h: 2.25rem;
+  --control-radius: var(--radius);
+  /* Stronger than --border: a field's edge is its only outline and needs
+     3:1 against the page (WCAG 1.4.11). Row and pane hairlines stay on the
+     quieter --border. --grey-50 is the fallback; the color-mix() below
+     follows the light or dark canvas where it is supported. */
+  --control-border: 1px solid var(--grey-50);
+  /* A text button's fill. The UA's ButtonFace in light schemes; the dark
+     block below swaps in a tone between surface and text, because dark
+     ButtonFace (#6b6b6b) was the brightest surface on the page. */
+  --button-face: ButtonFace;
+  /* A read-only or disabled field's fill: each theme's own panel colour.
+     Under auto+dark that is Field, brighter than the editable fields, so
+     the dark block swaps in a recessed tone. */
+  --field-recessed: var(--grey-10);
+  /* Toolbars and pane headings: the panel tone, set apart from the page. */
+  --surface: var(--grey-10);
+  /* How fields and buttons are drawn. The shared values below are this
+     app's own look; each named theme replaces them with the look of the
+     desktop it imitates, so the shared rules only ever read these. */
+  --field-bg: var(--white);
+  --field-radius: var(--control-radius);
+  --field-shadow: none;
+  --field-disabled-bg: var(--field-recessed);
+  --field-disabled-fg: var(--grey-90);
+  --field-disabled-border: var(--control-border);
+  /* A disabled or read-only edge: dashed here, solid in the named themes. */
+  --disabled-edge: dashed;
+  --button-fg: ButtonText;
+  --button-border: var(--control-border);
+  --button-radius: var(--control-radius);
+  --button-shadow: none;
+  --button-hover-bg: var(--button-face);
+  --button-hover-border: var(--button-border);
+  --button-hover-shadow: var(--button-shadow);
+  --button-disabled-bg: transparent;
+  --button-disabled-fg: GrayText;
+  --button-disabled-border: var(--button-border);
+  --button-disabled-shadow: var(--button-shadow);
+  /* The main action of a form or dialog, and a destructive confirm. */
+  --primary-bg: var(--blue-60);
+  --primary-fg: #fff;
+  --primary-border: 1px solid var(--blue-60);
+  --primary-shadow: none;
+  --danger-bg: var(--error);
+  --danger-fg: var(--white);
+  --danger-border: 1px solid var(--error);
+  /* A toolbar icon button. On :root, not .toolbar, so the update banner can
+     clear a bottom toolbar of this height. */
+  --toolbar-button: 1.75rem;
+  /* A toolbar holds icon buttons and the list filter, which is a field like
+     any other: it is as tall as the taller of the two, plus a step above
+     and below so the field keeps clear of the bar's edges, and its own
+     bottom border, so every pane's toolbar is the same height whatever it
+     holds. */
+  --toolbar-pad: var(--space-1);
+  --toolbar-h: calc(
+    max(var(--toolbar-button), var(--control-h)) + 2 * var(--toolbar-pad) +
+      var(--border-w)
+  );
+  /* The filter or search row above the tree and the list: a field and the
+     space around it. Panes without one offset their placeholder by it. */
+  --search-row-h: calc(var(--control-h) + 2 * var(--space-2));
+  /* A tree row. Dense under a mouse, a full touch target under a finger. */
+  --row-h: 1.25rem;
   --error: #b00020;
   --status-success-fg: #0b6b2c;
   --status-success-bg: #d8f3dc;
@@ -33,13 +126,12 @@
 /* "auto" (the default): CSS system-color keywords, resolved live by the
    browser to the OS's actual current accent/selection color -- not a
    value this app picks, whatever the user's real OS theme says right
-   now. Highlight/HighlightText have been supported since CSS2; the
-   newer AccentColor/AccentColorText are more semantically exact (the
-   OS's chosen accent color specifically, not just "the selection
-   color") so they're declared second, overriding Highlight/HighlightText
-   wherever a browser recognizes them -- an unrecognized keyword makes
-   only that one declaration invalid, leaving the earlier one in effect,
-   so this degrades safely instead of breaking. Every icon in the app is
+   now. A custom property is never validated when it is declared, so
+   listing a newer keyword after an older one is no fallback: the last
+   declaration always wins, and an unsupported keyword only fails where a
+   property uses the variable, which then paints nothing. So the base rule
+   holds values every browser can paint, and each newer value sits behind
+   an @supports test of that exact value. Every icon in the app is
    inlined SVG using currentColor directly (see dashboard.tsx / .chevron
    svg, .node-icon svg, .icon svg below) rather than a baked-in fill, so
    they need no separate override here -- they already track whatever
@@ -51,10 +143,37 @@
      supports both, so an OS/browser dark preference would otherwise be
      ignored entirely by every System Color in this file. */
   color-scheme: light dark;
-  --selected-bg: Highlight;
-  --selected-bg: AccentColor;
-  --selected-fg: HighlightText;
-  --selected-fg: AccentColorText;
+  --selected-bg: var(--blue-60);
+  --selected-fg: #fff;
+  /* One accent: links, selection and primary buttons share it. */
+  --blue: var(--selected-bg);
+  /* One value per role: button text is body text, and a button shares the
+     surface tone toolbars use, instead of the UA's near-identical
+     ButtonText and ButtonFace. #f9f9fa sat too close to the white page
+     for a toolbar or a button to read as a surface; the next grey step
+     does. */
+  --button-fg: var(--grey-90);
+  --surface: var(--grey-20);
+  --button-face: var(--surface);
+  /* Read-only fields: #f9f9fa barely differed from the white page, so only
+     the dashed edge said "read-only"; the surface grey does too. */
+  --field-recessed: var(--grey-20);
+}
+/* The OS accent, where the browser knows it. The bare AccentColor and
+   AccentColorText pair is not used: Chromium resolves it to #0075ff with
+   white text, 4.21:1, which fails AA for row text. Instead the accent's hue
+   is kept and its lightness capped, so white text always clears 4.5:1,
+   whatever accent the OS hands over. Tested on AccentColor itself: a
+   browser can support relative colours and still not know the keyword. */
+@supports (color: oklch(from AccentColor l c h)) {
+  :root[data-theme="auto"] {
+    --selected-bg: oklch(from AccentColor min(l, 0.5) c h);
+  }
+}
+@supports (color: color-mix(in srgb, CanvasText 45%, Canvas)) {
+  :root {
+    --control-border: 1px solid color-mix(in srgb, CanvasText 45%, Canvas);
+  }
 }
 /* Only under an OS/browser dark color scheme: surfaces and text follow
    the same System Color keywords used above for selection, so a dark
@@ -69,35 +188,88 @@
     --grey-90: CanvasText;
     --grey-10: Field;
     --grey-20: Field;
+    /* ButtonBorder resolves to pure white in Chromium's dark scheme, which
+       drew every row and pane edge far louder than the light grid. */
     --grey-30: GrayText;
-    --grey-30: ButtonBorder;
     --grey-40: GrayText;
     --grey-50: GrayText;
     --white: Canvas;
     --blue: LinkText;
+    /* Error text turns light to read on the dark canvas; a destructive
+       button keeps a saturated fill with white text, as the primary does
+       (7.3:1). */
     --error: #ff6b6b;
+    --danger-bg: #b00020;
+    --danger-fg: #fff;
+    --danger-border: 1px solid #b00020;
+    --field-recessed: Canvas;
+    /* Field edges and muted text are one grey here: GrayText, about 5:1 on
+       the dark canvas, clears 4.5:1 for text and 3:1 for an edge. Two
+       tokens a hair apart read as a mistake. */
+    --control-border: 1px solid var(--grey-50);
+    /* Status chips: a deep tone of each hue behind a light one, instead of
+       the light pastels, which were the brightest things on a dark page.
+       Text on each is above 8.5:1. */
+    --status-success-fg: #8fe0a8;
+    --status-success-bg: #12361f;
+    --status-warning-fg: #f2d27a;
+    --status-warning-bg: #3d3010;
+    --status-error-fg: #ffb3b8;
+    --status-error-bg: #4a1a1d;
+  }
+  /* The new-articles banner is the inverse of the page in light; in dark
+     that made it a white slab. It is a raised surface here instead. */
+  :root[data-theme="auto"] .update-banner {
+    background: var(--surface);
+    color: var(--grey-90);
+    border: var(--border);
+  }
+  /* A shadow cannot show on a black page, so a dialog rises by its fill:
+     the same raised surface. */
+  :root[data-theme="auto"] dialog.app-dialog {
+    background: var(--surface);
+  }
+}
+/* Tones between dark surface and text. Without color-mix() the hairlines
+   stay GrayText and buttons keep the UA's ButtonFace. */
+/* Dark links from the same accent hue, lightened until they read on the dark
+   canvas (oklch lightness 0.78 is about 9:1 on #121212). Without relative
+   colours they keep the system LinkText. */
+@supports (color: oklch(from red l c h)) {
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --blue: oklch(from var(--selected-bg) max(l, 0.78) c h);
+    }
+  }
+}
+@supports (color: color-mix(in srgb, CanvasText 22%, Canvas)) {
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --grey-30: color-mix(in srgb, CanvasText 22%, Canvas);
+      /* Panels, toolbars and buttons share one raised tone; --grey-20 sits
+         below it, so the loading shimmer that runs between the two shows. */
+      --grey-10: color-mix(in srgb, CanvasText 14%, Canvas);
+      --surface: var(--grey-10);
+      --grey-20: color-mix(in srgb, CanvasText 8%, Canvas);
+      --button-face: var(--grey-10);
+      --field-recessed: color-mix(in srgb, CanvasText 5%, Canvas);
+    }
   }
 }
 
 /* Selectable themes (Options -> Appearance), one attribute drives all of
-   them: each is a distinct selection color/contrast era from desktop
-   OS history, picked apart wherever the default listbox highlight
-   actually changed. High contrast is its own theme rather than a
-   separate toggle, since it's just another point in the same "which
-   selection/border colors are active" space.
-
-   Beyond the selection color, each also carries its era's characteristic
-   surface color (--grey-10/--grey-20, used for toolbars/cards/panels),
-   border color (--grey-30), corner radius, and system font -- a period-
-   correct selection color alone still read as "off" sitting inside this
-   app's otherwise-unchanged flat modern chrome, so those needed to move
-   too. --grey-90 (body text) is left alone in all of them: every surface
-   color below is light enough that the existing dark text stays legible
-   without a second per-theme contrast pass. Real 3D bevel button edges
-   are the one thing deliberately skipped -- CSS can't cheaply fake those
-   without restructuring every button into per-side border colors, and a
-   flat approximation of the surface/border/font/radius already carries
-   most of the period feel. */
+   them. Each imitates one desktop look from OS history, as close to the
+   original as CSS allows: its selection colour, surfaces, fonts, corner
+   radii, and how its text fields and buttons are drawn -- edges, fills,
+   hover, disabled and read-only states. Values come from that desktop's
+   documented system colours or from samples of genuine screenshots, and
+   are kept even where one falls short of a contrast target: the theme is
+   a deliberate copy. This app's own additions -- rounded controls, dashed
+   disabled edges, mixed tones, the filled blue primary button -- stay out
+   of them; the larger touch targets stay in, since they are about use,
+   not look. High contrast is its own theme rather than a separate toggle,
+   since it's just another point in the same space. --grey-90 (body text)
+   is left alone in all of them. */
 :root[data-theme="classic"] {
   --selected-bg: #000080;
   --selected-fg: #fff;
@@ -106,6 +278,32 @@
   --grey-30: #808080;
   --radius: 0;
   --font-family: "MS Sans Serif", Tahoma, sans-serif;
+  /* Two-pixel bevels drawn with inset shadows: fields sunken, buttons
+     raised, the default button framed in black. */
+  --control-border: none;
+  --field-shadow:
+    inset -1px -1px #fff, inset 1px 1px #808080, inset -2px -2px #dfdfdf,
+    inset 2px 2px #000;
+  --field-disabled-bg: #c0c0c0;
+  --field-disabled-fg: #808080;
+  --field-disabled-border: none;
+  --disabled-edge: none;
+  --button-face: #c0c0c0;
+  --button-fg: #000;
+  --button-border: none;
+  --button-shadow:
+    inset -1px -1px #000, inset 1px 1px #fff, inset -2px -2px #808080,
+    inset 2px 2px #dfdfdf;
+  --button-disabled-bg: #c0c0c0;
+  --button-disabled-fg: #808080;
+  --button-disabled-border: none;
+  --primary-bg: #c0c0c0;
+  --primary-fg: #000;
+  --primary-border: none;
+  --primary-shadow: 0 0 0 1px #000, var(--button-shadow);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
 :root[data-theme="millennial"] {
   --selected-bg: #316ac5;
@@ -115,60 +313,161 @@
   --grey-30: #aca899;
   --radius: 0.35rem;
   --font-family: Tahoma, Verdana, sans-serif;
+  /* Square fields with a single blue-grey edge. */
+  --control-border: 1px solid #7f9db9;
+  --field-radius: 0;
+  --field-disabled-bg: #ece9d8;
+  --field-disabled-fg: #aca899;
+  --disabled-edge: solid;
+  /* Lightly shaded buttons with a dark blue edge and 4px corners; hover
+     lights an orange ring inside the edge, the default button a blue one. */
+  --button-face: linear-gradient(#fff, #f0f0ea 90%);
+  --button-fg: #000;
+  --button-border: 1px solid #003c74;
+  --button-radius: 4px;
+  --button-hover-shadow: inset 0 0 0 2px #f8b73b;
+  --button-disabled-bg: #f5f4ea;
+  --button-disabled-fg: #aca899;
+  --button-disabled-border: 1px solid #c9c7ba;
+  --primary-bg: var(--button-face);
+  --primary-fg: #000;
+  --primary-border: var(--button-border);
+  --primary-shadow: inset 0 0 0 2px #89ade4;
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
-/* Sampled directly from a real Windows 7 screenshot (Start Menu search
-   result selection, a keyboard-focused item rather than a hover/unfocused
-   one -- Windows used a notably more saturated fill for that state than
-   the pale Explorer-listview tone an earlier pass used here): solid fill
-   #309AFE, black text (measured 7.18:1 -- a lighter fill needed the
-   inverse and would have failed at 2.93:1), with a subtle 1px border
-   sampled from the fill/background edge transition. */
+/* The plain list highlight: a blue fill with white text, no border. */
 :root[data-theme="aero"] {
-  --selected-bg: #309afe;
-  --selected-fg: #000;
-  --selected-border: #4598e6;
-  --grey-10: #eaf3fc;
-  --grey-20: #eaf3fc;
+  --selected-bg: #39f;
+  --selected-fg: #fff;
+  --grey-10: #f0f0f0;
+  --grey-20: #f0f0f0;
   --grey-30: #a9c4e0;
   --radius: 0.4rem;
   --font-family: "Segoe UI", Tahoma, sans-serif;
+  /* Fields: a darker top edge fading to pale sides and bottom (set per side
+     below), 1px corners. */
+  --control-border: 1px solid #abadb3;
+  --field-radius: 1px;
+  --field-disabled-bg: #f4f4f4;
+  --field-disabled-fg: #6d6d6d;
+  --field-disabled-border: 1px solid #adb2b5;
+  --disabled-edge: solid;
+  /* Glossy two-tone buttons with a white inner edge, 3px corners, turning
+     light blue under the pointer. */
+  --button-face: linear-gradient(#f3f3f3, #ebebeb 50%, #ddd 50%, #cdcdcd);
+  --button-fg: #000;
+  --button-border: 1px solid #707070;
+  --button-radius: 3px;
+  --button-shadow: inset 0 0 0 1px #fff;
+  --button-hover-bg: linear-gradient(
+    #eaf6fd,
+    #d9f0fc 50%,
+    #bee6fd 50%,
+    #a7d9f5
+  );
+  --button-hover-border: 1px solid #3c7fb1;
+  --button-disabled-bg: #f4f4f4;
+  --button-disabled-fg: #838383;
+  --button-disabled-border: 1px solid #adb2b5;
+  --button-disabled-shadow: none;
+  --primary-bg: var(--button-face);
+  --primary-fg: #000;
+  --primary-border: 1px solid #3c7fb1;
+  --primary-shadow: var(--button-shadow);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
+}
+:root[data-theme="aero"]
+  :where(
+    input:not([type="checkbox"], [type="radio"], [type="file"]),
+    select,
+    textarea
+  ):not(:disabled, :read-only) {
+  border-color: #abadb3 #e2e3ea #e3e9ef;
 }
 :root[data-theme="modern"] {
-  --selected-bg: #0067b8;
+  --selected-bg: #0078d7;
   --selected-fg: #fff;
-  --grey-10: #f2f2f2;
-  --grey-20: #f2f2f2;
+  --grey-10: #f0f0f0;
+  --grey-20: #f0f0f0;
   --grey-30: #c8c8c8;
   --radius: 0;
   --font-family: "Segoe UI", Tahoma, sans-serif;
+  /* Flat and square: grey-edged fields that take the accent when focused,
+     grey buttons, the default button edged in the accent. */
+  --control-border: 1px solid #7a7a7a;
+  --disabled-edge: solid;
+  --field-disabled-fg: #6d6d6d;
+  --button-face: #e1e1e1;
+  --button-fg: #000;
+  --button-border: 1px solid #adadad;
+  --button-disabled-bg: #e1e1e1;
+  --button-disabled-fg: #6d6d6d;
+  --primary-bg: #e1e1e1;
+  --primary-fg: #000;
+  --primary-border: 2px solid #0078d7;
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
+}
+:root[data-theme="modern"]
+  :where(
+    input:not([type="checkbox"], [type="radio"], [type="file"]),
+    select,
+    textarea
+  ):focus {
+  border-color: #0078d7;
 }
 /* Overrides the same custom properties everything else already reads --
    selected rows, borders, focus indicators, and links all follow along
-   automatically instead of needing their own high-contrast variants. */
+   automatically instead of needing their own high-contrast variants.
+   White surfaces, black text and edges, a purple highlight, dark red for
+   disabled text and dark blue for links. */
 :root[data-theme="high-contrast"] {
   --blue-40: #001a4d;
   --blue-50: #001333;
   --blue-60: #000d24;
+  --blue: #00009f;
   --grey-10: #fff;
   --grey-20: #d0d0d0;
   --grey-30: #4d4d4d;
   --grey-40: #1a1a1a;
   --grey-50: #000;
   --grey-90: #000;
-  --border: 2px solid #000;
-  --selected-bg: #000d24;
+  --border-w: 2px;
+  --border: var(--border-w) solid #000;
+  --control-border: var(--border);
+  --selected-bg: #37006e;
   --selected-fg: #fff;
+  --radius: 0;
+  --disabled-edge: solid;
+  --field-disabled-bg: #fff;
+  --field-disabled-fg: #600000;
+  --button-face: #fff;
+  --button-fg: #000;
+  --button-disabled-bg: #fff;
+  --button-disabled-fg: #600000;
+  --primary-bg: #fff;
+  --primary-fg: #000;
+  --primary-border: var(--border);
+  --danger-bg: var(--primary-bg);
+  --danger-fg: var(--primary-fg);
+  --danger-border: var(--primary-border);
 }
 /* A dotted outline drawn just inside the item's edge, not a glow/shadow.
    White dots on selected (navy/dark) rows so the rect stays visible
    there too -- black dots read as invisible on a dark background. */
-:root[data-theme="high-contrast"] .source:focus,
-:root[data-theme="high-contrast"] .article.active {
+:root[data-theme="high-contrast"][data-input="keyboard"] .source:focus,
+:root[data-theme="high-contrast"][data-input="keyboard"] .article.active {
   outline: 2px dotted var(--grey-90);
   outline-offset: -2px;
 }
-:root[data-theme="high-contrast"] .source.selected:focus,
-:root[data-theme="high-contrast"] .article.selected.active {
+:root[data-theme="high-contrast"][data-input="keyboard"] .source.selected:focus,
+:root[data-theme="high-contrast"][data-input="keyboard"]
+  .article.selected.active {
   outline: 2px dotted var(--selected-fg);
   outline-offset: -2px;
 }
@@ -200,20 +499,15 @@ main:focus {
 .update-banner {
   position: fixed;
   z-index: 200;
-  right: 0.5rem;
-  bottom: 0.5rem;
+  right: var(--space-2);
+  bottom: var(--space-2);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   background: var(--grey-90);
   color: var(--white);
   border-radius: var(--radius);
-}
-.update-banner button {
-  padding: 0.3rem 0.6rem;
-  color: inherit;
-  background: var(--blue-60);
 }
 
 .sr-only {
@@ -239,10 +533,21 @@ body,
   min-height: 100%;
   margin: 0;
 }
+/* The root size stays the user's own default (100%, never px) on every
+   viewport, so the browser or OS text-size setting scales the whole app in
+   either direction. Mobile font boosting is switched off for the same
+   reason: it enlarges some blocks and not others, so one text setting could
+   never look right everywhere. Sizes below are rem, or em inside a
+   component, so they move together. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   overflow: hidden;
   background: var(--white);
+  line-height: var(--lh-body);
 }
 
 main {
@@ -259,28 +564,61 @@ main {
   gap: 1rem;
   width: min(100%, 32rem);
   margin: 8vh auto;
-  padding: 2rem;
+  padding: var(--space-8);
   border: var(--border);
   border-radius: var(--radius);
-}
-.account-result {
-  text-align: center;
 }
 .account-result > * {
   margin: 0;
 }
+/* The activate page puts its form inside the result card; one card is
+   enough. */
+.account-result .account-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 /* An input is not stretched by the grid: it keeps its size="20" width, which
-   at the 150% mobile root font is wider than the form on a narrow phone. */
+   is wider than the form on a narrow phone. */
 .account-form input {
   width: 100%;
-  min-width: 0;
+}
+/* Page titles: a step of the type scale, smaller in the single-pane
+   layer (below). Options and Admin carry theirs in a toolbar instead. */
+.account-form h1,
+.account-result h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+}
+/* The page bar of Options and Admin: the panes' toolbar, edge to edge. */
+.page-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.toolbar-link {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--toolbar-button);
+  height: var(--toolbar-button);
+  color: inherit;
+}
+.toolbar-link .icon {
+  width: max(1.25rem, 20px);
+  height: max(1.25rem, 20px);
 }
 
 .options-page {
   display: grid;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
   align-content: start;
-  width: min(100%, 32rem);
+  /* Wide enough for the five section tabs on one row from a 640px
+     screen up. */
+  width: min(100%, 40rem);
   margin: 2rem auto;
 }
 /* The options route is the one page the document itself scrolls: #app is a
@@ -301,8 +639,14 @@ html[data-route="options"] #app {
   min-height: 100%;
   overflow: visible;
 }
-.options-page h1 {
-  margin: 0;
+/* Firefox on Android sizes the document's scroll range to the large
+   viewport, as if its toolbar were hidden, but keeps the toolbar showing
+   while the page scrolls, so the last part of the page stayed under the
+   bottom edge. The difference between the large and the current viewport
+   is exactly what it holds back; where the toolbar does hide (Chrome),
+   that difference is zero at the end of the page. */
+html[data-route="options"] body {
+  padding-bottom: calc(100lvh - 100dvh);
 }
 /* Section tabs: one group renders at a time, keyed to the location hash so
    the page's deep links keep working -- a #section id selects that group,
@@ -314,10 +658,18 @@ html[data-route="options"] #app {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+/* Tabs keep their own width, each whole, and wrap where a row can't hold
+   them all: none is stretched alone across a row, and none is hidden. A
+   row that filled itself, or scrolled behind a fade, depended on the font
+   to leave no tab stranded or cut to a sliver. */
 .options-nav a {
-  padding: 0.35rem 0.75rem;
+  flex: none;
+  white-space: nowrap;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
   border: var(--border);
   border-radius: var(--radius);
+  text-align: center;
   text-decoration: none;
 }
 .options-nav a[aria-current="true"] {
@@ -330,22 +682,40 @@ html[data-route="options"] #app {
 /* The visible section's cards, spaced like the page grid they came from. */
 .options-section {
   display: grid;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
 }
 .options-card {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   margin: 0;
-  padding: 1.5rem;
+  padding: var(--space-6);
   border: var(--border);
   border-radius: var(--radius);
 }
-@media (width > 768px) {
-  .options-mobile-layout {
+/* The Options card about keyboard shortcuts, on a device with nothing but
+   a touch screen. */
+@media (hover: none) and (pointer: coarse) {
+  .options-keyboard {
     display: none;
   }
 }
+.options-mobile-layout {
+  display: none;
+}
+/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/behavior.ts. */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  .options-mobile-layout {
+    display: grid;
+  }
+}
 .options-card h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+/* The card's 16px gap is the only space between its parts. */
+.options-card p {
   margin: 0;
 }
 /* One active session per row: the agent string truncates (raw headers,
@@ -368,7 +738,7 @@ html[data-route="options"] #app {
 }
 .session-row .session-date {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 /* Every other options card's action is a full-width button; the OPML export
    is a link because it downloads a file. ButtonFace/ButtonText are what the
@@ -376,21 +746,44 @@ html[data-route="options"] #app {
    -- so borrowing them keeps the two matching under every theme, the same
    way the System Color keywords elsewhere avoid a per-theme pass. */
 .options-card a.card-action {
-  padding: 0.6rem;
-  background: ButtonFace;
-  color: ButtonText;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  padding: var(--space-1) var(--space-3);
+  background: var(--button-face);
+  color: var(--button-fg);
+  border: var(--button-border);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
   text-decoration: none;
 }
 
+/* A column: the page bar, a message when there is one, and the table,
+   which takes the rest and scrolls. */
 .admin-page {
-  display: grid;
-  grid-template-rows: auto auto auto 1fr;
-  gap: 1rem;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The visible viewport, as the dashboard uses: a bottom page bar must
+     not end under a browser toolbar that stays showing. */
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
 }
+.admin-page > .page-toolbar {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+}
+/* For an account that isn't an admin, the message takes the table's place
+   at its own height, sentence and link together; the space below it goes
+   to its bottom margin, so a page bar anchored at the bottom keeps its
+   edge. */
+.admin-page > .admin-forbidden {
+  margin-bottom: auto;
+}
 .admin-table-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   border: var(--border);
   border-radius: var(--radius);
@@ -402,12 +795,12 @@ html[data-route="options"] #app {
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 .admin-table th,
 .admin-table td {
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
   border-bottom: var(--border);
 }
@@ -421,26 +814,52 @@ html[data-route="options"] #app {
 .admin-table thead {
   position: sticky;
   top: 0;
-  background: var(--grey-10);
+  background: var(--surface);
 }
 .admin-table th button {
+  box-shadow: none;
+  /* The smallest pointer target WCAG 2.5.8 allows; touch raises it. */
+  min-height: 1.5rem;
   padding: 0;
+  border: 0;
   background: transparent;
   font: inherit;
   font-weight: 700;
 }
-.admin-table-actions {
-  display: flex;
-  gap: 0.5rem;
+/* A source URL can be hundreds of characters; it wraps anywhere inside a
+   readable width instead of widening the table past its scroller. */
+.admin-table td:first-child {
+  white-space: normal;
 }
+/* At least a 24px target under a mouse; touch raises it below. */
+.admin-table td:first-child a {
+  display: flex;
+  align-items: center;
+  min-height: max(1.5rem, 24px);
+  min-width: 12rem;
+  max-width: 20rem;
+  overflow-wrap: anywhere;
+}
+.admin-table-actions > div {
+  display: flex;
+  gap: var(--space-2);
+}
+/* Compact under a mouse, but with the text size and side padding every
+   other text button has. */
 .admin-table-actions button {
-  padding: 0.2rem 0.5rem;
-  font: inherit;
+  --control-h: 1.75rem;
+
+  padding: 0 var(--space-3);
+  font-size: var(--fs-md);
 }
 .websub-status {
-  padding: 0.1rem 0.4rem;
+  padding: 0.125rem var(--space-2);
   border-radius: 1rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
+}
+/* No status is a bare dash, not a chip: it lines up with the column. */
+.websub-status-none {
+  padding-inline: 0;
 }
 .websub-status-verified {
   color: var(--status-success-fg);
@@ -457,7 +876,7 @@ html[data-route="options"] #app {
 
 label {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
 /* Label and input keep their own stacked grid; the reveal button is a sibling
    of the label, not a child, because a <label> may not hold interactive
@@ -470,16 +889,134 @@ label {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
-input,
-button {
-  padding: 0.6rem;
+/* The one control style. :where() keeps it at zero specificity, so a
+   component that draws its own control (a tree row, a toolbar icon, the
+   tree filter) overrides it with a single class. A file input keeps the
+   UA rendering: its button part cannot be restyled through the input. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="file"]),
+  select,
+  textarea
+) {
+  min-height: var(--control-h);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
   font: inherit;
+  color: inherit;
+  background: var(--field-bg);
+  border: var(--control-border);
+  border-radius: var(--field-radius);
+  box-shadow: var(--field-shadow);
 }
-button {
-  border: 0;
+/* In the auto theme a select is drawn like the other fields: its text starts
+   at the same inset, and its chevron is the app's own (two gradient halves
+   in the text colour) instead of a different one per browser. The named
+   themes keep their own controls. */
+:root[data-theme="auto"] select {
+  appearance: none;
+  padding-inline-end: calc(var(--space-2) + 1rem);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--space-2) - 0.3125rem) 55%,
+    calc(100% - var(--space-2)) 55%;
+  background-size: 0.3125rem 0.3125rem;
+  background-repeat: no-repeat;
+}
+/* A field the user cannot edit gets a fill and a dashed edge, so it does
+   not read as one waiting for input. Its text stays at full contrast:
+   these hold URLs people read and copy. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="file"]):is(
+      :disabled,
+      :read-only
+    ),
+  select:disabled,
+  textarea:is(:disabled, :read-only)
+) {
+  color: var(--field-disabled-fg);
+  background: var(--field-disabled-bg);
+  border: var(--field-disabled-border);
+  border-style: var(--disabled-edge);
+}
+/* Read-only is not disabled: the field still takes focus and its text can
+   be selected and copied, so its edge stays solid. The dashed edge is for
+   controls that do nothing. */
+:where(
+  input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      :disabled
+    ):read-only,
+  textarea:not(:disabled):read-only
+) {
+  border-style: solid;
+}
+/* Text buttons. A component that draws its own button (tree rows, toolbar
+   icons, menu items) sets its own background, border and shadow. */
+:where(button) {
+  min-width: var(--control-h);
+  min-height: var(--control-h);
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  color: var(--button-fg);
+  background: var(--button-face);
+  border: var(--button-border);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
   cursor: pointer;
+}
+:where(button:hover:not(:disabled)) {
+  background: var(--button-hover-bg);
+  border: var(--button-hover-border);
+  box-shadow: var(--button-hover-shadow);
+}
+/* Disabled is drawn, not faded: opacity took the text down to 2:1 and the
+   button read as an empty field. GrayText is exempt from contrast rules and
+   every theme and forced-colors mode resolve it. */
+:where(button:disabled) {
+  color: var(--button-disabled-fg);
+  background: var(--button-disabled-bg);
+  border: var(--button-disabled-border);
+  border-style: var(--disabled-edge);
+  box-shadow: var(--button-disabled-shadow);
+  cursor: default;
+}
+/* The main action of a form or dialog. --primary-fg is a literal white,
+   not --white: under auto+dark --white turns into Canvas, near-black on
+   this blue (3.34:1). */
+.button-primary,
+.tree-empty button,
+.dashboard-alert button,
+.update-banner button {
+  color: var(--primary-fg);
+  background: var(--primary-bg);
+  border: var(--primary-border);
+  box-shadow: var(--primary-shadow);
+}
+.button-primary:disabled {
+  color: var(--button-disabled-fg);
+  background: var(--button-disabled-bg);
+  border: var(--button-disabled-border);
+  border-style: var(--disabled-edge);
+  box-shadow: var(--button-disabled-shadow);
+}
+/* In the auto theme a primary fill is the selection accent, so a browser
+   that paints the OS accent (a slate, say) has one accent, not two. */
+:root[data-theme="auto"]
+  :is(
+    .button-primary,
+    .tree-empty button,
+    .dashboard-alert button,
+    .update-banner button
+  ):not(:disabled) {
+  color: var(--selected-fg);
+  background: var(--selected-bg);
+  border-color: var(--selected-bg);
 }
 a {
   color: var(--blue);
@@ -492,51 +1029,166 @@ a {
 .dashboard {
   position: relative;
   display: grid;
-  grid-template-columns: 25% 25% 50%;
-  /* viewport-fit=cover lets an installed PWA draw under the status and
-     navigation bars, which swallowed the toolbars; the insets keep them in
-     the visible area, and dvh tracks it rather than the largest viewport. */
+  /* The list gets the width its titles need; the reader keeps its measure
+     either way, so it gives up only empty margin. On a narrower window
+     (below) the two list panes keep a usable width and the reader takes
+     what is left. */
+  grid-template-columns: minmax(13rem, 22%) minmax(22rem, 30%) minmax(0, 1fr);
+  /* The panes take the one stretching row; the load-error alert, when it
+     shows, takes its own full-width row above them instead of covering the
+     toolbars. */
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
+  /* dvh tracks the visible viewport rather than the largest one. */
   height: 100vh;
   height: 100dvh;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: var(--inset-top) var(--inset-right) var(--inset-bottom)
+    var(--inset-left);
   overflow: hidden;
+}
+/* viewport-fit=cover lets an installed app draw under the status and
+   navigation bars, which swallowed the toolbars; the insets keep them in
+   the visible area. Only there: in an ordinary browser tab the page already
+   ends above the bars, yet Firefox still reports a bottom inset, which drew
+   a blank band under the bottom toolbar. */
+:root {
+  --inset-top: 0px;
+  --inset-right: 0px;
+  --inset-bottom: 0px;
+  --inset-left: 0px;
+}
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    --inset-top: env(safe-area-inset-top, 0px);
+    --inset-right: env(safe-area-inset-right, 0px);
+    --inset-bottom: env(safe-area-inset-bottom, 0px);
+    --inset-left: env(safe-area-inset-left, 0px);
+  }
 }
 
 .dashboard-alert {
-  position: absolute;
-  z-index: 10;
-  top: 0.5rem;
-  right: 0.5rem;
-  left: 0.5rem;
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem;
-  border: var(--border);
-  background: var(--white);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  /* Mixed from the theme's own surface and error tokens, so the banner is a
+     pale red in light schemes and a dark red under auto+dark. */
+  background: color-mix(in srgb, var(--error) 12%, var(--white));
+  color: var(--grey-90);
+  box-shadow: inset 0.25rem 0 0 var(--error);
+}
+.dashboard:has(> .dashboard-alert) {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .dashboard-alert p {
   margin: 0;
 }
 .dashboard-alert button {
   flex-shrink: 0;
-  padding: 0.25rem 0.6rem;
-  background: var(--blue-60);
-  color: var(--white);
 }
 /* Empty-list fallbacks (#710): quiet, centered, never read as an error.
    flex: 1 so it (not the now-empty .article-list sibling above it, see
    #933) fills the listbox's old space. */
 .article-list-empty {
   flex: 1;
-  padding: 2rem 1rem;
-  color: var(--grey-60);
+  padding: var(--space-8) var(--space-4);
+  color: var(--muted);
   text-align: center;
 }
 .article-list-empty p {
   margin: 0;
+}
+/* A message with actions under it: a failing feed, or an empty folder's
+   Add feed. */
+.article-list-failing,
+.article-list-prompt {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+.article-list-failing {
+  color: var(--grey-90);
+}
+.article-list-failing .form-actions,
+.article-list-prompt .form-actions {
+  justify-content: center;
+}
+.article-list-failing-reason {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+/* A failing feed that still has articles: one slim line above them in the
+   warning tone, its actions beside it where they fit. */
+.feed-notice {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-block: var(--border);
+  color: var(--status-warning-fg);
+  background: var(--status-warning-bg);
+  font-size: var(--fs-sm);
+}
+.feed-notice p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+/* A list pane too narrow for the sentence and the actions side by side
+   gives the actions their own row, rather than squeezing the sentence. */
+@container (width < 32rem) {
+  .feed-notice p {
+    flex-basis: 100%;
+  }
+}
+.feed-notice-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+/* The same two actions as the failing-feed empty state, in the same look:
+   body-size text, with Try again the primary one. */
+.feed-notice button {
+  font-size: var(--fs-md);
+}
+/* What went wrong underneath, for admins: collapsed, and on a line of its
+   own once open. The summary is the target: 24px tall for a mouse, the
+   touch floor on touch, with its one line centred by line-height so the
+   disclosure triangle stays. */
+.failure-details {
+  font-size: var(--fs-sm);
+}
+.failure-details summary {
+  line-height: max(1.5rem, 24px);
+  cursor: pointer;
+}
+@media (pointer: coarse), (hover: none) {
+  .failure-details summary {
+    line-height: var(--touch);
+  }
+  /* Inset like the rows the notice sits with. */
+  .feed-notice {
+    padding: var(--space-2) var(--space-3);
+  }
+}
+.failure-details p {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+/* Closed, Details sits beside the notice's actions on their row; open, it
+   takes a row of its own. */
+.feed-notice .failure-details[open],
+.dashboard-alert .failure-details[open] {
+  flex-basis: 100%;
+}
+.dashboard-alert {
+  flex-wrap: wrap;
 }
 
 .dashboard-pane {
@@ -552,90 +1204,97 @@ a {
 }
 
 .toolbar {
-  height: 2rem;
-  min-height: 2rem;
+  flex-shrink: 0;
+  min-height: var(--toolbar-h);
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.4rem;
+  gap: var(--space-1);
+  padding: var(--toolbar-pad) var(--space-2);
   border-bottom: var(--border);
-  background: var(--grey-10);
+  background: var(--surface);
 }
 .toolbar > span {
   flex: 1;
 }
-.toolbar button,
-.toolbar select {
-  padding: 0;
-}
 .toolbar button {
+  box-shadow: none;
   display: flex;
-  width: 1.8rem;
-  height: 1.8rem;
+  flex-shrink: 0;
+  width: var(--toolbar-button);
+  height: var(--toolbar-button);
+  min-height: 0;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 0;
   background: transparent;
+}
+/* A select cut to "Unreac" hides its own value; it keeps its width. */
+.toolbar select {
+  flex: none;
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  font-size: var(--fs-md);
 }
 .toolbar button.only-mobile {
   display: none;
 }
 .toolbar button img,
 .toolbar button .icon {
-  width: 1.2rem;
-  height: 1.2rem;
-}
-.toolbar button:disabled {
-  cursor: default;
-  opacity: 0.45;
+  width: max(1.25rem, 20px);
+  height: max(1.25rem, 20px);
 }
 
 .source,
 .article {
+  box-shadow: none;
   width: 100%;
   display: block;
-  padding: 0.2rem 0.5rem;
+  padding: var(--space-1) var(--space-2);
   text-align: left;
   color: inherit;
   background: transparent;
+  border: 0;
+  border-radius: 0;
   border-bottom: var(--border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tree-filter {
-  margin: 0.4rem;
-  padding: 0.4rem;
-  min-width: 0;
-  border: var(--border);
-  border-radius: var(--radius);
+  flex-shrink: 0;
+  margin: var(--space-2);
+}
+/* "No feeds match that." and the load failure stand alone: the empty tree
+   beside them would push them down the pane. */
+.sources-pane .article-list-empty + .tree {
+  display: none;
 }
 .tree-empty {
-  margin: 0 0.4rem;
+  margin: 0 var(--space-2);
   color: var(--grey-50);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 .tree {
   margin: 0;
   flex: 1;
   overflow: auto;
-  /* Without this, an overlay-style scrollbar (macOS, or Windows/Linux in
-     overlay mode) doesn't reserve layout space -- it renders on top of
-     the last few pixels of content instead, which is what made the
-     selection/focus rect look like it ran under (and slightly past) the
-     scrollbar. Reserving space makes rows stop short of it instead.
-     Chromium/Firefox only as of writing; Safari ignores the property and
-     is back to the old (overlay, no reserved gutter) behavior there. */
-  scrollbar-gutter: stable;
+  /* No reserved gutter: a short tree's rows, and their selection, reach
+     the pane edge. A classic scrollbar takes its column only while the
+     tree overflows; an overlay scrollbar never reserves space, stable or
+     not. */
+  scrollbar-gutter: auto;
   /* scrollbar-gutter alone only fixes browsers that support it; styling
      the scrollbar itself directly removes the OS/browser variability
      that scrollbar-gutter can't reach (Safari, or an OS scrollbar
      that's simply wider than the reserved gutter expects). */
   scrollbar-width: thin;
-  padding: 0.5rem 0;
+  /* No top padding: the first row lines up with the list pane's first. */
+  padding: 0 0 var(--space-2);
   list-style: none;
 }
 .tree::-webkit-scrollbar {
-  width: 10px;
+  width: 0.625rem;
 }
 .tree::-webkit-scrollbar-thumb {
   background: var(--grey-40);
@@ -643,6 +1302,12 @@ a {
 }
 .tree::-webkit-scrollbar-track {
   background: transparent;
+}
+/* Where a scrollbar does show, nothing inside the tree can paint under it,
+   so its track takes the panel tone: the column reads as a scrollbar beside
+   a selected row instead of a gap in the selection. */
+:root[data-theme="auto"] .tree {
+  scrollbar-color: var(--grey-40) var(--surface);
 }
 /* Custom context menu (#721). Fixed under the pointer, above every pane.
    Uses the app's own surface/text tokens rather than an inverted native
@@ -655,7 +1320,7 @@ a {
   z-index: 300;
   min-width: 12rem;
   margin: 0;
-  padding: 0.25rem;
+  padding: var(--space-1);
   list-style: none;
   background: var(--white);
   color: var(--grey-90);
@@ -663,13 +1328,23 @@ a {
   border-radius: var(--radius);
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
+/* A menu reads at the size of the rows it was opened on. */
+@media (pointer: fine) and (hover: hover) {
+  .context-menu {
+    font-size: var(--fs-sm);
+  }
+}
 .context-menu button {
+  box-shadow: none;
+  --control-h: 2rem;
+
   width: 100%;
-  padding: 0.35rem 0.6rem;
+  padding: var(--space-1) var(--space-3);
   text-align: left;
   color: inherit;
   background: transparent;
-  border-radius: 0.25rem;
+  border: 0;
+  border-radius: var(--space-1);
 }
 /* :focus, not :focus-visible: the menu focuses its first item
    programmatically, and browsers skip :focus-visible after pointer
@@ -680,101 +1355,127 @@ a {
   background: var(--selected-bg);
   color: var(--selected-fg);
 }
+/* A destructive action's trigger, in a menu or beside harmless buttons,
+   has red text; the red fill is kept for the button that confirms it. */
+.context-menu button.context-menu-danger:not(:hover, :focus),
+.button-danger-text:not(:disabled) {
+  color: var(--error);
+}
 .context-menu button:disabled {
   color: var(--grey-40);
 }
 .context-menu-separator {
   height: 1px;
-  margin: 0.25rem 0.4rem;
-  background: var(--grey-20);
+  margin: var(--space-1) var(--space-2);
+  background: var(--grey-30);
 }
 /* In-app dialog replacements for prompt()/confirm() (#698), hosted once by
    DialogHost. Same token approach as the context menu: surface, text and
    border tokens make it follow every theme (including auto+dark and
    high-contrast) with no per-theme overrides. The dialog element is centered
    by the UA when open via showModal(); it only needs its own surface styling.
-   The form width, not the dialog's, keeps the box modest on phones, where
-   the 150% root font at the 768px breakpoint would otherwise widen it. */
+   The form width keeps the box modest; max-width keeps it on a phone
+   screen whatever its content measures. */
+/* One width for every form dialog, whatever its content, and a wider step
+   for the shortcut sheet; both stay inside a phone's screen. */
 dialog.app-dialog {
-  padding: 1rem;
+  --dialog-w: 24rem;
+
+  width: min(var(--dialog-w), 100vw - 2 * var(--space-4));
+  max-width: none;
+  padding: var(--space-4);
   background: var(--white);
   color: var(--grey-90);
   border: var(--border);
   border-radius: var(--radius);
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
+/* A dialog's fill is the page's own, which under dark leaves almost nothing
+   between them: its edge is a field's edge, 4.74:1 there. Auto only: the
+   named themes draw their own dialog edges. */
+:root[data-theme="auto"] dialog.app-dialog {
+  border: var(--control-border);
+}
 dialog.app-dialog::backdrop {
   background: rgb(0 0 0 / 40%);
+}
+dialog.app-dialog.app-dialog-wide {
+  --dialog-w: 32rem;
 }
 dialog.app-dialog form {
   display: flex;
   flex-flow: column;
-  gap: 1rem;
-  max-width: 24rem;
+  gap: var(--space-4);
 }
 dialog.app-dialog label {
   display: flex;
   flex-flow: column;
-  gap: 0.35rem;
+  gap: var(--space-2);
 }
-dialog.app-dialog input {
-  padding: 0.4rem;
-  font: inherit;
-  color: inherit;
-  background: var(--grey-10);
-  border: var(--border);
-  border-radius: 0.25rem;
-}
-dialog.app-dialog-actions {
+dialog.app-dialog .app-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
+}
+/* OK and Cancel are the same width, whatever their labels. */
+dialog.app-dialog .app-dialog-actions button {
+  min-width: 5rem;
+}
+dialog.app-dialog p {
+  margin: 0;
 }
 /* The keyboard cheat sheet (#709) rides in the same DialogHost dialog: same
    surface, border and text tokens as the form variant, so every theme and
-   the 768px breakpoint come along for free. The list scrolls rather than
+   the single-pane layout come along for free. The list scrolls rather than
    growing the dialog past a phone screen. */
 dialog.app-dialog .app-dialog-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fs-lg);
 }
+/* Keys in one column, each description right beside its key. The row divs
+   step aside (display: contents) so dt and dd land in the shared grid. */
 dialog.app-dialog .app-dialog-shortcuts {
   margin: 0;
-  display: flex;
-  flex-flow: column;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  /* Both cells share the row height, so the rule under them runs straight
+     where a description wraps. */
+  align-items: stretch;
   max-height: 60vh;
   overflow-y: auto;
 }
 dialog.app-dialog .app-dialog-shortcuts div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
+  display: contents;
+}
+/* Cells with their own padding and a rule under each row, like a table. */
+dialog.app-dialog .app-dialog-shortcuts :is(dt, dd) {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: var(--border);
 }
 dialog.app-dialog .app-dialog-shortcuts dt {
   white-space: nowrap;
 }
 dialog.app-dialog .app-dialog-shortcuts dd {
   margin: 0;
-  text-align: right;
 }
 dialog.app-dialog .app-dialog-shortcuts kbd {
   font: inherit;
-  font-size: 0.85em;
-  padding: 0 0.3rem;
-  background: var(--grey-10);
+  font-size: max(0.875em, 11px);
+  padding: 0 var(--space-1);
+  background: var(--surface);
   border: var(--border);
   border-radius: 0.25rem;
 }
 /* Destructive confirms (delete source/folder, admin remove) get the same
-   error color [role="alert"] uses, so the risky button reads as risky in
-   every theme -- --error is re-tokened per theme (e.g. #ff6b6b under
-   auto+dark) already. */
-dialog.app-dialog-actions .app-dialog-danger {
-  color: var(--white);
-  background: var(--error);
-  border: 1px solid var(--error);
+   error color [role="alert"] uses, so the risky button reads as risky --
+   --error is re-tokened under auto+dark (#ff6b6b). The named themes draw
+   it as their default button instead: the desktops they imitate had no
+   red buttons, and its label names the action. */
+dialog.app-dialog .app-dialog-actions .app-dialog-danger {
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: var(--danger-border);
+  box-shadow: var(--primary-shadow);
 }
 /* The long-press menu (#721) starts a text selection mid-hold, so the
    interactive rows suppress it (not the reader pane, where selecting text is
@@ -802,20 +1503,17 @@ button.source {
   overflow: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  padding: 1rem;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: flex-start;
 }
 .tree-empty-heading {
-  margin: 0;
-  font-weight: 600;
+  font-weight: 700;
 }
-.tree-empty button {
-  padding: 0.4rem 0.8rem;
-  background: var(--blue-60);
-  color: var(--white);
+.tree-empty p {
+  margin: 0;
 }
 /* A nested list matches .tree too, so it would otherwise inherit that
    rule's scroll-container treatment and reserve a scrollbar gutter of its
@@ -906,33 +1604,50 @@ img.skeleton-row {
 .source {
   display: flex;
   align-items: center;
-  min-height: 1.2rem;
-  padding: 0 0.5rem 0 1.4rem;
+  min-height: var(--row-h);
+  padding: 0 var(--space-2) 0 var(--space-6);
   border-bottom: 0;
-  gap: 5px;
-  font-size: 0.85rem;
-  line-height: 1.2rem;
+  gap: var(--space-1);
+  font-size: var(--fs-md);
+  line-height: 1.5rem;
 }
+/* The name gives way first, with an ellipsis, so the unread count and the
+   snoozed badge always stay inside the row. */
+.source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The tree and list cursor ring shows only once the keyboard is in use
+   (data-input, set in main.tsx): the app focuses rows on its own, and
+   :focus-visible counts that as keyboard focus, so it lit "Today" on
+   load, touch screens included. */
 .source:focus {
-  outline: 1px dotted var(--grey-90);
-  outline-offset: -1px;
+  outline: none;
+}
+:root[data-input="keyboard"] .source:focus {
+  outline: 2px dotted var(--grey-90);
+  outline-offset: -2px;
 }
 .source.folder {
-  padding-left: 0.1rem;
+  padding-left: var(--space-1);
 }
 .tree.nested .source {
   padding-left: 2rem;
 }
+/* Row icons keep a 14px floor, like the toolbar's 20px one, so a scaled-down
+   tree still shows recognisable glyphs. */
 .chevron {
   display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 1rem;
+  width: max(1rem, 14px);
+  height: max(1rem, 14px);
+  flex: none;
   cursor: pointer;
 }
 .node-icon {
-  width: 1.5cap;
-  height: 1.5cap;
+  width: max(1.5cap, 14px);
+  height: max(1.5cap, 14px);
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -956,20 +1671,36 @@ img.skeleton-row {
 .article-list.skeleton {
   overflow: hidden;
 }
+/* Upright, with figures of one width, so counts line up down the tree. */
 .source .unread-count {
+  flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: 0.8rem;
-  font-style: italic;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* The warning sits right after the name, in the error colour, and turns
+   to the row's own text colour when selected like the other row marks. */
+.source-failing {
+  display: inline-flex;
+  flex: none;
+  color: var(--error);
+}
+.source-failing .icon {
+  width: max(1em, 14px);
+  height: max(1em, 14px);
+}
+.source.selected .source-failing {
+  color: inherit;
 }
 /* A snoozed source (#725) shows no unread badge by design, so the row
    carries a literal "Snoozed" word instead: text, not colour alone, so the
    distinction survives forced-colors mode like .source.unread does. */
 .source .snoozed-badge {
+  flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: 0.8rem;
-  font-style: italic;
+  font-size: var(--fs-sm);
 }
 .source.selected .snoozed-badge {
   color: inherit;
@@ -1018,37 +1749,42 @@ img.skeleton-row {
 .article:focus {
   outline: 0;
 }
-.article.active {
-  outline: 1px dotted var(--grey-90);
-  outline-offset: -1px;
+:root[data-input="keyboard"] .article.active {
+  outline: 2px dotted var(--grey-90);
+  outline-offset: -2px;
 }
 /* The classic focus rect on a selected item used white dots (an
    XOR-drawn pattern CSS can't replicate, but this gets the same
    result): black dots disappear against the navy selected background,
    so the rect needs to switch to the selected-row's own light text
    color there. */
-.source.selected:focus,
-.article.selected.active {
+:root[data-input="keyboard"] .source.selected:focus,
+:root[data-input="keyboard"] .article.selected.active {
   outline-color: var(--selected-fg);
 }
 
 .article {
+  --title-h: 1.375rem;
+  --details-h: 1.25rem;
+  --row-gap: var(--space-1);
+
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.85rem;
-  line-height: 1rem;
+  gap: var(--row-gap);
+  font-size: var(--fs-md);
+  line-height: var(--title-h);
   text-decoration: none;
   white-space: normal;
   /* A page holds 200 rows and keeps appending, so off-screen rows skip
      layout and paint (#990). The placeholder is exact, not a guess: both
-     lines are a fixed 1rem high (.article .title, below) and nowrap, so the
-     content box is always two lines and the gap, with padding and border
-     added around it as for any box. A wrong value would shift a restored
-     scrollTop, and the scrollHeight that paging reads, by the error times
-     every row above. */
+     lines have a fixed height (.article .title and .details, below) and
+     nowrap, so the content box is always the two lines and the gap, with
+     padding and border added around it as for any box. A wrong value would
+     shift a restored scrollTop, and the scrollHeight that paging reads, by
+     the error times every row above. */
   content-visibility: auto;
-  contain-intrinsic-block-size: auto 2.2rem;
+  contain-intrinsic-block-size: auto
+    calc(var(--title-h) + var(--row-gap) + var(--details-h));
 }
 .article-list {
   flex: 1;
@@ -1070,25 +1806,31 @@ img.skeleton-row {
   flex-shrink: 0;
 }
 .article-search {
-  min-width: 0;
   flex: 1;
-  margin: 0.4rem;
-  padding: 0.4rem;
-  border: var(--border);
-  border-radius: var(--radius);
-  font: inherit;
+  margin: var(--space-2);
+}
+/* The toolbar's own width decides whether the filter's visible "Show"
+   fits; the label text stays for screen readers either way. */
+.articles-pane {
+  container-type: inline-size;
+}
+@container (width < 18rem) {
+  .article-filter-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
 }
 .article-filter-field {
   display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-.article-filter {
+  flex-shrink: 1;
   min-width: 0;
-  font: inherit;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 .title,
 .details > span,
@@ -1097,24 +1839,40 @@ img.skeleton-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.title {
-  font-size: 0.8rem;
-}
 /* A fixed line each, so a blank title or byline cannot collapse a row below
    the placeholder size content-visibility reserves for it. */
-.article .title,
+.article .title {
+  height: var(--title-h);
+}
 .article .details {
-  height: 1rem;
+  height: var(--details-h);
+  line-height: var(--details-h);
 }
 .details {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--grey-50);
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
 }
 .details > span {
   flex: 1;
+}
+/* The open feed's name, shown only in the single-pane layer. A title, not
+   another date band: body size, more room, and the page's own surface
+   rather than the bands' grey. */
+.pane-title {
+  display: none;
+  flex-shrink: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  background: var(--white);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  /* A feed's name in full, wrapped: this is where a one-pane layout shows
+     it, and a touch screen has no tooltip for a cut-off one. */
+  overflow-wrap: anywhere;
 }
 .date-group {
   position: sticky;
@@ -1122,13 +1880,21 @@ img.skeleton-row {
   z-index: 1;
   height: 1.5rem;
   border-bottom: var(--border);
-  background: linear-gradient(to bottom, var(--white) 3px, var(--grey-20));
-  font-size: 0.75rem;
+  background: linear-gradient(to bottom, var(--white) 0.2rem, var(--grey-20));
+  font-size: var(--fs-sm);
   font-weight: 700;
   line-height: 1.5rem;
-  text-align: center;
+  /* Lines up with the rows' text, which starts at their padding. */
+  padding-inline: var(--space-2);
+  text-align: start;
 }
 
+/* The reader fills its pane, so a short article starts at the top even where
+   the pane's column is reversed to put the toolbar at the bottom. */
+.reader-pane > .reader {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .dashboard article {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1142,15 +1908,18 @@ img.skeleton-row {
    resolves once, against this element's font-size, and every child inherits
    the same column. It also keeps .reader the full-width scroll container, so
    the scrollbar stays at the pane edge instead of tracking a centred column,
-   and max() leaves the original 30px gutter in place whenever the pane is too
+   and max() leaves the original gutter in place whenever the pane is too
    narrow for the measure to bind -- which is every pane on mobile. */
 .reader {
   --reader-measure: 65ch;
 
   overflow: auto;
-  padding: 20px max(30px, (100% - var(--reader-measure)) / 2);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  padding: var(--space-6)
+    max(var(--space-8), (100% - var(--reader-measure)) / 2);
+  font-size: var(--fs-md);
+  line-height: var(--lh-reading);
+  /* A long URL or unbroken token wraps instead of running past the pane. */
+  overflow-wrap: anywhere;
 }
 /* The two reader steps from #712. Only the off-centre steps need a rule; the
    middle one is the declaration above, which is also what an unset or
@@ -1158,10 +1927,10 @@ img.skeleton-row {
    text size widens the column by the same proportion and the line count per
    paragraph holds -- the two settings stay independent of each other. */
 :root[data-reader-text="small"] .reader {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 :root[data-reader-text="large"] .reader {
-  font-size: 1.05rem;
+  font-size: 1.125rem;
 }
 :root[data-reader-width="small"] .reader {
   --reader-measure: 50ch;
@@ -1171,8 +1940,73 @@ img.skeleton-row {
 }
 .reader h1 {
   margin-top: 0;
-  font-size: 1.4rem;
-  line-height: 1.25;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+}
+.reader-header h1 {
+  margin-bottom: 0;
+}
+/* A feed's own headings rank below the article's title. */
+.reader h2 {
+  font-size: var(--fs-lg);
+}
+.reader :is(h3, h4, h5, h6) {
+  font-size: var(--fs-md);
+}
+/* Their spacing from the scale rather than the browser's em margins:
+   more above than below, so a heading leads into its own section. */
+.reader :is(h2, h3, h4, h5, h6) {
+  margin-block: var(--space-6) var(--space-2);
+}
+/* Feed, author and time wrap in the first column; Original ends the first
+   line in the second, however the first wraps. */
+.reader-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0 var(--space-4);
+  margin: var(--space-1) 0 var(--space-6);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+/* Each item leads with its dot, and the run is shifted back by one dot's
+   width inside a clipped box: the first item of every line has its dot cut
+   off, so no line starts or ends with one. That holds only while every
+   line starts with an item, so an item never wraps: one too long for the
+   line ends in an ellipsis instead. */
+.reader-meta-items {
+  --meta-dot: var(--space-4);
+
+  display: block;
+  overflow: clip;
+}
+.reader-meta-items > span {
+  display: block;
+  margin-inline-start: calc(-1 * var(--meta-dot));
+}
+.reader-meta-items > span > * {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.reader-meta-items > span > *::before {
+  display: inline-block;
+  width: var(--meta-dot);
+  content: "·";
+  text-align: center;
+}
+/* Original is a 24px target under a mouse and a touch target on touch,
+   centred on the first line rather than hanging below it. */
+.reader-meta a {
+  --original-h: max(1.5rem, 24px);
+
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--original-h);
+  margin-block: calc((1lh - var(--original-h)) / 2);
 }
 .reader img,
 .reader video {
@@ -1181,6 +2015,39 @@ img.skeleton-row {
 }
 .reader pre {
   overflow: auto;
+}
+/* Feed content: quotes, code and tables, drawn from the theme's own tokens
+   so every theme carries them. */
+.reader hr {
+  border: 0;
+  border-top: var(--border);
+}
+.reader blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-4);
+  border-left: 0.1875rem solid var(--grey-30);
+  color: var(--muted);
+}
+.reader pre,
+.reader :not(pre) > code {
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+.reader pre {
+  padding: var(--space-3);
+}
+.reader :not(pre) > code {
+  padding: 0 var(--space-1);
+}
+.reader table {
+  border-collapse: collapse;
+}
+.reader th,
+.reader td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--border);
+  text-align: start;
+  vertical-align: top;
 }
 .reader-plain {
   white-space: pre-wrap;
@@ -1201,6 +2068,7 @@ img.skeleton-row {
   border: 0;
 }
 .youtube-cover {
+  box-shadow: none;
   position: relative;
   padding: 0;
   background: #000 center / cover;
@@ -1236,34 +2104,91 @@ img.skeleton-row {
   opacity: 1;
 }
 
+/* Until a preview has articles to list, the Discover/Edit form takes the
+   list's column as well, so addresses and titles show in full; the reader
+   keeps its own column. The single-pane layer puts it back in one. */
+.dashboard > .discovery-wide {
+  grid-column: span 2;
+}
+/* The form scrolls under its pane's toolbar. Its fields stop at 32rem, like
+   the account forms and Options, held by the padding so the scrollbar stays
+   at the pane edge on a wide single-pane screen. */
 .feed-discovery-form {
   display: grid;
-  gap: 1rem;
-  height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
   align-content: start;
   overflow: auto;
-  padding: 1rem;
+  padding: var(--space-4) max(var(--space-4), (100% - 32rem) / 2);
 }
-.feed-discovery-form h2 {
+/* A field's own error, directly under it. */
+.field-error {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--fs-sm);
+}
+/* A field's own action (Find feeds, Load preview) sits under it at its own
+   width, so the form's buttons don't read as equal full-width rows. */
+.feed-discovery-form > .field-action {
+  justify-self: start;
+}
+/* Subscribing by email: its own group after the fields, captioned like a
+   field, its actions side by side. */
+.discovery-email {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
   margin: 0;
+  padding: 0;
+  border: 0;
 }
-.feed-discovery-form select {
-  padding: 0.6rem;
-  font: inherit;
+.discovery-email legend {
+  padding: 0;
 }
-.feed-discovery-form input:disabled {
-  color: var(--muted);
+.discovery-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--error);
+}
+/* Focus must not hide the error: the ring takes the error colour too. */
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus {
+  outline: 2px solid var(--error);
+  outline-offset: 1px;
+}
+/* A pane with nothing to show says so the way the article list does:
+   centred and muted. */
 .empty-pane {
   margin: 0;
-  padding: 1rem;
+  padding: var(--space-8) var(--space-4);
   color: var(--muted);
+  text-align: center;
 }
-.toolbar strong {
-  overflow: hidden;
-  font-size: 0.85rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The reader has no search row, and pads its content by --space-6 already:
+   its placeholder drops by the difference, so it shares a top line with
+   the tree's and the list's beside it. */
+.reader > .empty-pane {
+  padding-top: calc(var(--search-row-h) + var(--space-8) - var(--space-6));
+}
+/* A toolbar's title is a name, shown whole: it wraps rather than ending
+   in an ellipsis that a touch screen can't expand. */
+.toolbar strong,
+.toolbar .toolbar-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.toolbar .toolbar-title {
+  flex: 1;
+  padding-inline: var(--space-1);
 }
 .found-feeds {
   display: grid;
@@ -1272,27 +2197,30 @@ img.skeleton-row {
   border: var(--border);
 }
 .found-feeds button {
+  box-shadow: none;
   display: grid;
-  gap: 0.2rem;
-  padding: 0.5rem;
+  gap: var(--space-1);
+  padding: var(--space-2);
   overflow: hidden;
   text-align: left;
   background: var(--grey-10);
+  border: 0;
+  border-radius: 0;
   border-bottom: var(--border);
 }
 .found-feeds span {
   overflow: hidden;
   color: var(--grey-50);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .websub-badge {
   display: inline-block;
-  margin-left: 0.4rem;
-  padding: 0.05rem 0.4rem;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
   color: var(--status-success-fg);
-  font-size: 0.7rem;
+  font-size: var(--fs-sm);
   font-weight: 400;
   background: var(--status-success-bg);
   border-radius: 1rem;
@@ -1300,19 +2228,19 @@ img.skeleton-row {
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .progress {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0;
   color: var(--grey-50);
 }
 .spinner {
   width: 1rem;
   height: 1rem;
-  border: 2px solid var(--grey-30);
+  border: 0.125rem solid var(--grey-30);
   border-top-color: var(--blue-50);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -1323,12 +2251,280 @@ img.skeleton-row {
   }
 }
 
-@media (max-width: 768px) {
-  html {
-    font-size: 150%;
+/* A mouse gets the dense lists a list-heavy reader wants: the small type
+   step and tight rows, about 17 articles on a 900px-tall screen. Touch
+   keeps the 1rem rows above. */
+@media (pointer: fine) and (hover: hover) {
+  .source,
+  .article {
+    font-size: var(--fs-sm);
+  }
+  /* 24px rows: the smallest target size WCAG 2.5.8 allows for rows
+     stacked without a gap. */
+  .source {
+    line-height: 1.5rem;
+  }
+  /* Title and byline on one ratio, the tight one, so 14px text keeps to
+     two line-heights app-wide: this and the body ratio. */
+  .article {
+    --title-h: calc(var(--fs-sm) * var(--lh-tight));
+    --details-h: var(--title-h);
+    --row-gap: var(--space-half);
+
+    padding-block: var(--space-1);
+  }
+}
+/* Touch sizing follows the input, not the width: a tablet is as much a
+   finger target as a phone. hover: none catches touch browsers that report
+   their primary pointer as fine (Firefox on Android does when a mouse is
+   attached). Targets are floored in px so they stay usable when the user
+   scales text down. */
+@media (pointer: coarse), (hover: none) {
+  /* The feed's name is a line of its own here, wrapping in full, since a
+     touch screen has no tooltip for a cut-off one; author and time follow
+     in the dotted run. Without its dot, and inset by one dot's width, it
+     starts where the run's lines do. */
+  .reader-meta-items > span > .reader-meta-feed {
+    display: block;
+    max-width: none;
+    margin-inline-start: var(--meta-dot);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .reader-meta-items > span > .reader-meta-feed::before {
+    content: none;
+  }
+  :root {
+    --touch: max(2.75rem, 44px);
+    --control-h: var(--touch);
+    --row-h: var(--touch);
+    --toolbar-button: var(--touch);
+  }
+  .toolbar {
+    gap: 0;
+    padding: var(--toolbar-pad) var(--space-1);
+  }
+  .article {
+    padding: var(--space-2) var(--space-3);
+  }
+  /* Three touch-size panes (a landscape tablet): the reader stays the
+     widest pane, the feed pane keeps 15rem for its names, and the list at
+     least 21rem for its 1rem titles, since a fixed row height rules out
+     wrapping them. The narrower layers below override this. */
+  .dashboard {
+    grid-template-columns: minmax(15rem, 26%) minmax(21rem, 30%) minmax(0, 1fr);
+  }
+  .context-menu button,
+  .admin-table th button,
+  .admin-table-actions button {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+  .admin-table td:first-child a {
+    display: flex;
+    align-items: center;
+    min-height: var(--touch);
+  }
+  /* Tabs and the standalone links (Register instead, Login, the reader's
+     Original) are targets too. */
+  .reader-meta a {
+    --original-h: var(--touch);
+
+    min-width: var(--touch);
+  }
+  .options-nav a,
+  .account-form > a,
+  .account-result > a {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+  .date-group {
+    padding-inline: var(--space-3);
+  }
+}
+/* A landscape tablet, or a desktop window this narrow, keeps three panes:
+   the feed pane keeps room for its names, and the list pane for four
+   touch-size buttons and the filter. A portrait tablet falls under the
+   single-pane layer below, which overrides these columns. */
+@media (769px <= width <= 1100px) {
+  .dashboard {
+    grid-template-columns: minmax(15rem, 30%) minmax(17rem, 30%) minmax(0, 1fr);
+  }
+}
+/* Two panes on a landscape touch screen below 1200px (TWO_PANE_QUERY in
+   behavior.ts): three panes of touch-size rows leave each too narrow for
+   its names and titles. The feeds stay beside the list, and the reader
+   takes the list's place while it is the focused pane; its back button
+   returns to the list. The list's options button stands in for the
+   reader's while the reader is out of sight. */
+@media (orientation: landscape) and (769px <= width <= 1199px) and (pointer: coarse),
+  (orientation: landscape) and (769px <= width <= 1199px) and (hover: none) {
+  .dashboard {
+    grid-template-columns: minmax(15rem, 32%) minmax(0, 1fr);
+  }
+  .dashboard > .reader-pane:not(.focused-pane),
+  .dashboard:has(> .reader-pane.focused-pane) > .articles-pane {
+    display: none;
+  }
+  .reader-pane .toolbar button.only-mobile,
+  .articles-pane .toolbar button.only-mobile[aria-label="options"] {
+    display: flex;
+  }
+}
+.admin-sort {
+  display: none;
+}
+/* Below 1200px the admin table stacks: one block per source, each value
+   captioned from its data-label, sorted from one Sort by control. Its nine columns do not fit narrower, and a landscape tablet
+   would lose the actions column off the edge. */
+@media (max-width: 1199px) {
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr {
+    display: block;
+  }
+  .admin-table {
+    white-space: normal;
+  }
+  /* Stacked rows caption their own values, so the header row has nothing
+     to head; the Sort by control above the table replaces it. */
+  .admin-table thead {
+    display: none;
+  }
+  .admin-sort {
+    display: grid;
+    max-width: 20rem;
+  }
+  /* Stacked sources fill the width as a grid of cards, as many per row as
+     fit at 22rem, instead of one wide card per row holding a narrow column
+     of content. */
+  .admin-table tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+  .admin-table tbody tr {
+    padding: var(--space-2) var(--space-3);
+    border: var(--border);
+    border-radius: var(--radius);
+  }
+  .admin-table td,
+  .admin-table td:nth-child(2),
+  .admin-table td:nth-child(3) {
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    text-align: left;
+    border: 0;
+  }
+  .admin-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+  }
+  .admin-table td:first-child {
+    display: block;
+  }
+  .admin-table td:first-child a {
+    max-width: none;
+  }
+  .admin-table td.admin-table-actions {
+    display: block;
+  }
+}
+/* The single-pane layer (SINGLE_PANE_QUERY in src/spa/behavior.ts): a
+   phone, or a portrait tablet, shows one pane at a time. It changes layout
+   only. Type keeps the desktop scale on the user's own root size, because
+   no fixed upscale suits both a browser at its default and one the user
+   has scaled down. */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  /* The feed's name is a line of its own here, wrapping in full, since a
+     touch screen has no tooltip for a cut-off one; author and time follow
+     in the dotted run. Without its dot, and inset by one dot's width, it
+     starts where the run's lines do. */
+  .reader-meta-items > span > .reader-meta-feed {
+    display: block;
+    max-width: none;
+    margin-inline-start: var(--meta-dot);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .reader-meta-items > span > .reader-meta-feed::before {
+    content: none;
+  }
+  .account-form h1,
+  .account-result h1 {
+    font-size: var(--fs-xl);
+  }
+  .pane-title {
+    display: block;
+  }
+  .dashboard > .discovery-wide {
+    grid-column: auto;
+  }
+  /* Bottom-anchored, the page bar of Options and Admin sits at the bottom
+     edge like every pane's toolbar. Options scrolls the document, so its
+     shell becomes a column with the bar last and sticky; Admin's page is
+     a column already. */
+  html[data-mobile-list-anchor="true"][data-route="options"] #app {
+    display: flex;
+    flex-direction: column;
+  }
+  html[data-mobile-list-anchor="true"] .page-toolbar {
+    order: 1;
+    top: auto;
+    bottom: 0;
+    border-top: var(--border);
+    border-bottom: 0;
+  }
+  html[data-mobile-list-anchor="true"] .admin-page > .page-toolbar {
+    margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  }
+  /* With the pane's column reversed, the heading still goes on top. */
+  html[data-mobile-list-anchor="true"] .pane-title {
+    order: 1;
+  }
+  /* With the toolbars at the bottom, the banner sits above them and above
+     the filter or search row that rests on them, instead of covering
+     Refresh, the filter, Options or the field. */
+  html[data-mobile-list-anchor="true"] .update-banner {
+    bottom: calc(
+      var(--inset-bottom) + var(--toolbar-h) + var(--control-h) + 3 *
+        var(--space-2)
+    );
+  }
+  .article-filter-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .account-form,
+  .account-result {
+    margin-block: var(--space-4);
+    padding: var(--space-4);
+    border: 0;
+  }
+  .options-page {
+    margin-block: var(--space-4);
+  }
+  .options-card {
+    padding: var(--space-4);
+  }
+  /* A narrow gutter, but still the reader's measure: a phone zoomed out
+     lays out 600-650px wide, where full-width lines run past 80
+     characters. */
+  .reader {
+    padding: var(--space-4)
+      max(var(--space-4), (100% - var(--reader-measure)) / 2);
   }
   .dashboard {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .dashboard-pane {
     width: 100%;
@@ -1375,6 +2571,30 @@ img.skeleton-row {
     > .article-list
     > :first-child:not(.skeleton) {
     margin-top: auto;
+  }
+  /* A short list sinks as one stack: its rows and the feed's title above
+     them. The list takes only the height its rows need (and scrolls once
+     they overflow), and the free space goes above the title, which carries
+     a top edge so the space reads as the pane's background rather than
+     missing rows. A long list leaves no free space, so its title is at the
+     top as before. */
+  html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
+    flex: 0 1 auto;
+  }
+  /* An empty or failure message instead takes the free space itself, its
+     text and actions resting on the field below, where the reader works;
+     the title stays at the top. The tree's own messages (no match, or the
+     feeds failing to load) do the same above the filter field. */
+  html[data-mobile-list-anchor="true"]
+    :is(.articles-pane, .sources-pane)
+    > .article-list-empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  html[data-mobile-list-anchor="true"] .articles-pane > .pane-title {
+    margin-top: auto;
+    border-top: var(--border);
   }
   .toolbar button.only-mobile {
     display: flex;

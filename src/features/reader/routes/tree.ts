@@ -4,6 +4,10 @@ import { json } from "#platform/http/json.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { isSnoozed } from "#features/feeds/source-snooze-policy.ts";
 
+// One failed fetch is usually a blip the next poll recovers from; two in a
+// row, with the backoff between them, is worth telling the reader about.
+const failingAfter = 2;
+
 export async function getTreeHandler(
   { user }: { user: AuthedUser },
   {
@@ -22,6 +26,13 @@ export async function getTreeHandler(
     // list gives, evaluated lazily here so expiry needs no job.
     const snoozed = isSnoozed(source.pausedUntil ?? null);
     return {
+      failing:
+        (source.recentFailures ?? 0) >= failingAfter
+          ? {
+              lastSuccess: source.lastSuccess?.toJSON() ?? null,
+              reason: source.recentFailureDetails ?? "",
+            }
+          : null,
       // No fingerprint means no favicon (#902): a bare id would still 404,
       // but on every load, so a missing icon gets no URL at all instead.
       favicon: source.faviconFingerprint
