@@ -136,7 +136,6 @@ export const treeResponse = Type.Object(
 const articleSummaryResponse = Type.Object(
   {
     author: Type.String(),
-    group: Type.String(),
     id,
     publishedAt: jsonDate,
     // Decided by the server, with the same expression the read filter uses,

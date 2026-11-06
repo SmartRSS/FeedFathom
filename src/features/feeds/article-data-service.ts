@@ -7,10 +7,6 @@ import {
   subscriptionSeesArticle,
   type ArticleFilter,
 } from "#features/feeds/article-read-state.ts";
-import {
-  generateBoundaryDates,
-  getDateGroup,
-} from "#shared/util/get-date-group.ts";
 import { userSources } from "#platform/db/schema.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { type ArticleInsert, articles } from "#platform/db/schemas/articles.ts";
@@ -205,13 +201,7 @@ export class ArticlesDataService {
       // The join does not keep the subquery's order.
       .orderBy(desc(page.publishedAt), desc(page.id));
 
-    const boundaryDates = generateBoundaryDates();
-    return loadedArticles.map((item) =>
-      Object.assign(
-        { group: getDateGroup(boundaryDates, item.publishedAt) },
-        item,
-      ),
-    );
+    return loadedArticles;
   }
 
   /**

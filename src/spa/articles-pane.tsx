@@ -1,7 +1,8 @@
-import { For, Match, Show, Switch } from "solid-js";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
 import type { ArticleSummary } from "#shared/contracts/responses.ts";
 import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 import { emptyListState } from "./article-list.ts";
+import { generateBoundaryDates, getDateGroup } from "./date-group.ts";
 import { FailingFeedPanel, type RetryState } from "./failure-details.tsx";
 import { isEmptyFolder, type ListNode } from "./feed-tree.ts";
 import { formatDate, formatDay } from "./format-date.ts";
@@ -68,6 +69,13 @@ export function ArticlesPane(props: {
   // nothing selected yet.
   skeleton: boolean;
 }) {
+  // Grouped on the reader's own clock and time zone, so "Today" is theirs.
+  const groups = createMemo(() => {
+    const boundaries = generateBoundaryDates();
+    return props.rows.map((row) =>
+      getDateGroup(boundaries, new Date(row.publishedAt)),
+    );
+  });
   const failing = () =>
     props.selected?.type === "source" ? props.selected.failing : undefined;
   const failingCause = () => {
@@ -272,9 +280,9 @@ export function ArticlesPane(props: {
           <For each={props.rows}>
             {(article, index) => (
               <>
-                <Show when={article.group !== props.rows[index() - 1]?.group}>
+                <Show when={groups()[index()] !== groups()[index() - 1]}>
                   <div aria-hidden="true" class="date-group">
-                    {article.group}
+                    {groups()[index()]}
                   </div>
                 </Show>
                 <a

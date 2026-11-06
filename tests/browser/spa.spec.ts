@@ -120,7 +120,6 @@ async function installReaderResponder(
 // One row of a stubbed article page, in the shape articlesResponse wants.
 const pagedSummary = (id: number) => ({
   author: "Author",
-  group: "Older",
   id,
   publishedAt: "2026-07-20T10:00:00.000Z",
   read: false,
@@ -3899,7 +3898,6 @@ const downloadUnread = async (page: Page) => {
     return route.fulfill({
       json: ["First", "Second", "Third"].map((title, index) => ({
         author: "News Author",
-        group: "Today",
         id: 11 + index,
         publishedAt,
         read: false,

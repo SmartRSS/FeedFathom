@@ -7,7 +7,6 @@ import { ArticleList, emptyListState, type Cursor } from "../article-list.ts";
 
 const row = (id: number): ArticleSummary => ({
   author: "",
-  group: "Today",
   id,
   publishedAt: `2026-01-01T00:00:${String(id % 60).padStart(2, "0")}Z`,
   read: false,

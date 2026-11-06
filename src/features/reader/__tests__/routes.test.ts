@@ -277,7 +277,6 @@ test("lists article revisions only when asked", async () => {
   dependencies.articlesDataService.getUserArticlesForSources = async () => [
     {
       author: "A",
-      group: "Today",
       id: 11,
       publishedAt: new Date("2026-10-06T10:00:00.000Z"),
       read: false,

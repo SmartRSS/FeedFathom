@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  generateBoundaryDates,
-  getDateGroup,
-} from "#shared/util/get-date-group.ts";
+import { generateBoundaryDates, getDateGroup } from "../date-group.ts";
 
 const cases: [Date, Date, string][] = [
   // Dated later than now, by clock skew or a publisher's time zone: still

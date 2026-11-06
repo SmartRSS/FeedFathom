@@ -122,7 +122,6 @@ const newsletterArticle = {
 
 const summary = (item: Article, read = false): ArticleSummary => ({
   author: item.author,
-  group: "Today",
   id: item.id,
   publishedAt: item.publishedAt,
   read,
