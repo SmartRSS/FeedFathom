@@ -430,7 +430,7 @@ export function Options(props: {
               <PreferenceSelect label="Line width" preference={readerWidth} />
             </section>
             {/* Only where the single-pane layout exists: style.css shows it
-              under the single-pane query (SINGLE_PANE_QUERY in behavior.ts). */}
+              under the single-pane query (SINGLE_PANE_QUERY in panes.ts). */}
             <section class="options-card options-mobile-layout">
               <h2>Narrow screens</h2>
               <PreferenceSelect

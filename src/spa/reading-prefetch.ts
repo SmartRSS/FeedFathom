@@ -1,40 +1,6 @@
-import { createEffect, createRoot, on } from "solid-js";
-import { maximumRequestIds } from "#shared/contracts/requests.ts";
-import type { Article, TreeNode } from "#shared/contracts/responses.ts";
-import { sourceIds } from "./feed-tree.ts";
+import type { Article } from "#shared/contracts/responses.ts";
 import { FINE_POINTER_QUERY } from "./panes.ts";
-import { offlineUnread, prefetchNext } from "./preferences.ts";
-import { postToWorker } from "./sw-protocol.ts";
-
-// The service worker can't read localStorage: the dashboard sends it the
-// sources with unread articles, and switching offline reading off, here or in
-// another tab, sends none, so the worker drops what it kept.
-createRoot(() =>
-  createEffect(
-    on(
-      offlineUnread.get,
-      (enabled) => {
-        if (!enabled) postOfflineSync([]);
-      },
-      { defer: true },
-    ),
-  ),
-);
-
-// The worker lists and downloads the unread articles of these sources.
-export function postOfflineSync(sources: number[]) {
-  postToWorker({ sources, type: "offline-sync" });
-}
-
-// Only sources with something unread are asked about. ponytail: one article
-// request accepts 500 source ids, so past that many sources with unread the
-// rest go undownloaded; a server-side "every subscription" unread scope
-// lifts it.
-export function unreadSourceIds(nodes: readonly TreeNode[]): number[] {
-  return nodes
-    .flatMap((node) => sourceIds(node, (source) => source.unreadCount > 0))
-    .slice(0, maximumRequestIds);
-}
+import { prefetchNext } from "./preferences.ts";
 
 // Save Data is the user telling every site to send fewer bytes; a
 // prefetch is exactly what they asked not to receive. Browsers without

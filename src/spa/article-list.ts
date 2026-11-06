@@ -1,9 +1,19 @@
 import { createSignal, type Accessor } from "solid-js";
+import type { Static } from "typebox";
+import { Value } from "typebox/value";
+import { articlesRequest } from "#shared/contracts/requests.ts";
 import {
   articlePageSize,
   type ArticleSummary,
 } from "#shared/contracts/responses.ts";
 import { isEmptyFolder, type ListNode, type ListScope } from "./feed-tree.ts";
+
+const articleFilter = articlesRequest.properties.filter;
+
+export type ArticleFilter = Static<typeof articleFilter>;
+
+export const isArticleFilter = (value: unknown): value is ArticleFilter =>
+  Value.Check(articleFilter, value);
 
 // The cursor is the last row of the last page received, not the last row
 // still on screen. Deleting rows must not move it: deleting the whole page

@@ -26,6 +26,7 @@ import {
   cachedTreeQuery,
   cursorPublishedAtHeader,
   forgetAccountData,
+  isPageMessage,
   offlineArticleLimit,
   offlineArticleMaxAgeDays,
   type WorkerMessage,
@@ -312,12 +313,7 @@ async function replayEntry(
   await queueDelete(key);
   // matchAll/postMessage failing is not a connectivity problem; the caller
   // would read it as "still offline" and stop the queue.
-  await notifyClients({
-    method: value.method,
-    status: response.status,
-    type: "queued-mutation-failed",
-    url: value.url,
-  }).catch(() => {});
+  await notifyClients({ type: "queued-mutation-failed" }).catch(() => {});
   return true;
 }
 
@@ -666,16 +662,9 @@ async function syncOfflineArticles(
   await Promise.allSettled([download(), download()]);
 }
 
-function offlineSyncSources(data: unknown): number[] | undefined {
-  if (typeof data !== "object" || data === null) return undefined;
-  if (!("type" in data) || data.type !== "offline-sync") return undefined;
-  if (!("sources" in data) || !Array.isArray(data.sources)) return undefined;
-  return data.sources.filter(Number.isSafeInteger);
-}
-
 worker.addEventListener("message", (event) => {
-  const sources = offlineSyncSources(event.data);
-  if (!sources) return;
+  if (!isPageMessage(event.data)) return;
+  const { sources } = event.data;
   const generation = accountChanges;
   const sync = ++offlineSyncs;
   // A stalled request would otherwise hold the queue, and a clear behind it.

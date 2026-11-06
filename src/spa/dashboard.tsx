@@ -7,12 +7,14 @@ import {
   onMount,
   Show,
 } from "solid-js";
+import type { Static } from "typebox";
 import {
   articleResponse,
   articlesResponse,
   folderResponse,
   removedArticlesResponse,
   removedIdResponse,
+  sessionResponse,
   snoozedSourceResponse,
   successResponse,
   treeResponse,
@@ -58,7 +60,6 @@ import {
   takeUpdateReload,
   UPDATE_RELOAD_EVENT,
   type AppSnapshot,
-  type ArticleFilter,
 } from "./reading-session.ts";
 import { restoredSelection, SessionRestore } from "./session-restore.ts";
 import {
@@ -66,14 +67,10 @@ import {
   soleSelectedIndex,
   transitionArticleSelection,
 } from "./article-selection.ts";
-import { ArticleList } from "./article-list.ts";
+import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
-import {
-  createAdminFlag,
-  FailureDetails,
-  type RetryState,
-} from "./failure-details.tsx";
+import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
 import { deleteTraceHeader } from "#shared/contracts/headers.ts";
 import { createExtensionReaderBridge } from "./extension-reader.ts";
@@ -92,7 +89,12 @@ import {
 import { observeScrollPast } from "./scroll-past.ts";
 import { ContextMenu, type ContextMenuItem } from "./context-menu.tsx";
 import { shareArticle } from "./share-article.ts";
-import { confirmDialog, helpDialog, promptDialog } from "./dialog.tsx";
+import {
+  confirmDialog,
+  helpDialog,
+  isDialogOpen,
+  promptDialog,
+} from "./dialog.tsx";
 import { isTextEntry, mapArticleKey } from "./keyboard-shortcuts.ts";
 import { ArticleFetches } from "./reading-prefetch.ts";
 import { setUnreadTotal } from "./news-signal.ts";
@@ -122,8 +124,6 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
 
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
-
-const dialogOpen = () => document.querySelector("dialog[open]") !== null;
 
 export function Dashboard(props: {
   backPane(): void;
@@ -170,7 +170,11 @@ export function Dashboard(props: {
     setLiveText("");
     setTimeout(() => setLiveText(message), 100);
   };
-  const isAdmin = createAdminFlag();
+  // Asked once per dashboard: admins see what lies under a failure, and a
+  // mail domain is what lets Discover mint newsletter addresses.
+  const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
+  api("/session", sessionResponse).then(setSession, () => {});
+  const isAdmin = () => session()?.user?.isAdmin ?? false;
 
   // The feeds.
   const [tree, setTree] = createSignal<TreeNode[]>([]);
@@ -962,7 +966,7 @@ export function Dashboard(props: {
     const command = mapArticleKey(event);
     // A showModal() dialog sits on top of the list, so its keys can't reach
     // here; the check covers a non-modal one.
-    if (!command || isTextEntry(event.target) || dialogOpen()) return;
+    if (!command || isTextEntry(event.target) || isDialogOpen()) return;
     switch (command) {
       case "next":
         moveSelection(1, event);
@@ -1034,7 +1038,7 @@ export function Dashboard(props: {
   // scrolls from the keyboard.
   function handleReaderKeys(event: KeyboardEvent) {
     if (mapArticleKey(event) !== "open") return;
-    if (isTextEntry(event.target) || dialogOpen()) return;
+    if (isTextEntry(event.target) || isDialogOpen()) return;
     event.preventDefault();
     backToList();
   }
@@ -1413,6 +1417,7 @@ export function Dashboard(props: {
       </Show>
       <Show when={showDiscovery() && authenticated()}>
         <FeedDiscovery
+          admin={isAdmin()}
           backPane={props.backPane}
           editing={
             editingSource() && {
@@ -1428,6 +1433,7 @@ export function Dashboard(props: {
           initialFeedUrl={props.initialFeedUrl}
           initialFolder={discoveryFolder()}
           initialNewsletter={props.initialNewsletter ?? false}
+          mailDomain={session()?.mailDomain}
           pane={props.pane}
           close={() => {
             const wasEditing = closeDiscovery();

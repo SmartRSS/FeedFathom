@@ -20,7 +20,7 @@ import {
   type PaneSwitchHost,
 } from "./panes.ts";
 import { Dashboard } from "./dashboard.tsx";
-import { DialogHost } from "./dialog.tsx";
+import { DialogHost, isDialogOpen } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
 import { isUnauthorizedError } from "./api.ts";
 import {
@@ -427,8 +427,7 @@ if ("serviceWorker" in navigator) {
     true,
   );
   const hasUnsavedInput = () =>
-    document.querySelector("dialog[open]") !== null ||
-    [...editedFields].some((field) => field.isConnected);
+    isDialogOpen() || [...editedFields].some((field) => field.isConnected);
   document.addEventListener("visibilitychange", () => {
     if (updatePending && document.hidden && !hasUnsavedInput())
       reloadForUpdate();

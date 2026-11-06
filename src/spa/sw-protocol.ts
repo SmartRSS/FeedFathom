@@ -12,15 +12,22 @@ export type WorkerMessage =
   // The server's shell names different assets than the cached one served.
   | { type: "shell-updated" }
   // A removal queued offline was refused once it replayed.
-  | {
-      method: string;
-      status: number;
-      type: "queued-mutation-failed";
-      url: string;
-    };
+  | { type: "queued-mutation-failed" };
 
 export function postToWorker(message: PageMessage): void {
   navigator.serviceWorker?.controller?.postMessage(message);
+}
+
+export function isPageMessage(data: unknown): data is PageMessage {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    data.type === "offline-sync" &&
+    "sources" in data &&
+    Array.isArray(data.sources) &&
+    data.sources.every(Number.isSafeInteger)
+  );
 }
 
 export function isWorkerMessage<K extends WorkerMessage["type"]>(
@@ -55,8 +62,8 @@ export const cachedTreeQuery = "cached";
 export const apiCachePrefix = "api-";
 
 // The worker forgets the account's data on every sign-in and logout it sees
-// (#974). The page repeats it for a sign-in or logout made while no worker
-// controls it, as after a hard reload. A sign-in keeps the queued removals
+// (#974). The page repeats it, which covers a page no worker controls, as
+// after a hard reload. A sign-in keeps the queued removals
 // for their account's return, since each carries its owner (#982); a logout
 // drops them.
 export async function forgetAccountData(signedOut: boolean): Promise<void> {

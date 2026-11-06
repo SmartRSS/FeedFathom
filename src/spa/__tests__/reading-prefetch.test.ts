@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { offlineUnread, prefetchNext } from "../preferences.ts";
-import { neighbours, unreadSourceIds } from "../reading-prefetch.ts";
+import { neighbours } from "../reading-prefetch.ts";
 
 // Both download in the background, so neither may start without consent.
 test("prefetching and offline reading both default to off", () => {
@@ -15,25 +15,4 @@ test("neighbours returns the next then the previous article", () => {
   expect(neighbours(items, 2)).toEqual(["b"]);
   expect(neighbours(["a"], 0)).toEqual([]);
   expect(neighbours(items, undefined)).toEqual([]);
-});
-
-const source = (uid: string, unreadCount: number) => ({
-  favicon: null,
-  homeUrl: "",
-  kind: "feed" as const,
-  name: uid,
-  type: "source" as const,
-  uid,
-  unreadCount,
-  xmlUrl: "",
-});
-
-test("only sources with unread are asked about, folders included", () => {
-  expect(
-    unreadSourceIds([
-      source("1", 2),
-      source("2", 0),
-      { children: [source("3", 1)], name: "f", type: "folder", uid: "9" },
-    ]),
-  ).toEqual([1, 3]);
 });

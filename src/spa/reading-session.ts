@@ -3,19 +3,19 @@
 //
 // Two layers, one shape: a versioned JSON blob under one key in
 // sessionStorage (survives reload) and the same blob in localStorage
-// (survives across days). There is no IndexedDB in the SPA to lean on -- the
-// service worker's offline queue owns its own and stays internal to sw.ts --
-// and a size-capped blob is all the feature needs. Reading prefers
+// (survives across days). The page has no IndexedDB store of its own -- the
+// worker's removal queue (mutation-queue.ts) owns the only one -- and a
+// size-capped blob is all the feature needs. Reading prefers
 // sessionStorage so a reload picks up the freshest snapshot; a sessionStorage
 // that has expired (new tab days later) falls back to localStorage.
+
+import { isArticleFilter, type ArticleFilter } from "./article-list.ts";
 
 export const READING_SESSION_STORAGE_KEY = "feedfathom:reading-session:v1";
 
 const MAX_READER_SCROLL_ENTRIES = 200;
 const READER_SCROLL_THROTTLE_MS = 500;
 const SESSION_VERSION = 1;
-
-export type ArticleFilter = "all" | "read" | "unread";
 
 export type AppSnapshot = {
   articleFilter: ArticleFilter;
@@ -57,9 +57,6 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
-
-export const isArticleFilter = (value: unknown): value is ArticleFilter =>
-  value === "all" || value === "read" || value === "unread";
 
 // No schema library here on purpose: the blob is written and read by this one
 // module, and a hand check keeps a foreign or truncated value a silent
@@ -350,7 +347,7 @@ export class ReadingSessionStore {
 
   #mergeApp(patch: Partial<AppSnapshot>): void {
     const base = this.#current.app ?? {
-      articleFilter: "unread" as ArticleFilter,
+      articleFilter: "unread" as const,
       articleId: undefined,
       listScrollTop: 0,
       nodeType: "source" as const,
