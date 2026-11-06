@@ -204,6 +204,10 @@ async function reserveWhenReady(
   }
 }
 
+// Serialises migrators, so two replicas starting at once apply each
+// migration once.
+const migrationLockKey = "feedfathom:migrations";
+
 export async function migrateDatabase(
   databaseUrl: AppConfig["DATABASE_URL"],
   migrationsFolder = "./drizzle",
@@ -213,7 +217,7 @@ export async function migrateDatabase(
   try {
     let locked = false;
     try {
-      await reserved`SELECT pg_advisory_lock(hashtextextended('feedfathom:migrations', 0))`;
+      await reserved`SELECT pg_advisory_lock(hashtextextended(${migrationLockKey}, 0))`;
       locked = true;
       const pending = await pendingStatements(reserved, migrationsFolder);
       await prebuildIndexesConcurrently(
@@ -234,7 +238,7 @@ export async function migrateDatabase(
         // answer, and this throwing would replace the real error. The lock is
         // session-scoped, so closing the client releases it either way.
         if (locked)
-          await reserved`SELECT pg_advisory_unlock(hashtextextended('feedfathom:migrations', 0))`.catch(
+          await reserved`SELECT pg_advisory_unlock(hashtextextended(${migrationLockKey}, 0))`.catch(
             () => undefined,
           );
       } finally {

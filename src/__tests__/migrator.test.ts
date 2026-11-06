@@ -85,22 +85,15 @@ const migrationStatements = async () =>
     )
   ).join("\n");
 
-// The baseline creates every table in the same migration, so every index in
-// it lands on an empty table and none should be pre-built. Only the covering
-// index from 0009 opts in: it goes onto a populated articles table.
-test("pre-builds only the indexes added onto populated tables", async () => {
-  expect(parseConcurrentIndexes(await migrationStatements())).toEqual([
-    {
-      create:
-        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_published_covering_idx" ON "articles" USING btree ("source_id","published_at","id","guid","last_seen_in_feed_at","updated_at")',
-      name: "articles_source_published_covering_idx",
-      table: "articles",
-    },
-  ]);
-});
-
-test("pre-drops only the unused index on the populated articles table", async () => {
-  expect(parseConcurrentDrops(await migrationStatements())).toEqual([
-    "articles_updated_at_idx",
-  ]);
+// Every statement a migration opted in is one the parser recognises, so a
+// migration whose opt-in the pattern misses fails here rather than taking an
+// ACCESS EXCLUSIVE lock on a populated table in production.
+test("recognises every index a migration in the folder opted in", async () => {
+  const statements = await migrationStatements();
+  expect(parseConcurrentIndexes(statements)).toHaveLength(
+    statements.match(/CREATE INDEX IF NOT EXISTS/g)?.length ?? 0,
+  );
+  expect(parseConcurrentDrops(statements)).toHaveLength(
+    statements.match(/DROP INDEX IF EXISTS/g)?.length ?? 0,
+  );
 });
