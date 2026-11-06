@@ -39,16 +39,18 @@ instead of mocking modules. Constructors marked `@__PURE__` only store
 their arguments; the marker lets the bundler remove unused service instances.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
-rule, which carries the DAG in its `.oxlintrc.json` options. Prose alone did
-not hold. The lint rule is the load-bearing half. Relative specifiers are
-resolved and judged by the same rule, so `../../` is not an escape hatch.
+rule, which carries the DAG in its `.oxlintrc.json` options. Relative
+specifiers are resolved and judged by the same rule, so `../../` is not an
+escape hatch.
 
 Co-located `*.test.ts` files are exempt: a test arranges state rather than
-wiring the product, and ships in no bundle. Anything two clients both need is
-`shared` by that same definition, which is where the scanner tree, the
-reader-bridge protocol in `reader-bridge.ts` and the URL-safety helpers in
-`util/safe-url.ts` live. Messages and storage that only the extension's own
-scripts exchange stay in `src/extension/` (`messages.ts`, `settings.ts`).
+wiring the product, and ships in no bundle. Anything two programs both need
+is `shared` by that same definition: the scanner rules, the reader-bridge
+protocol in `reader-bridge.ts`, the SPA routes the server and the extension
+link to in `contracts/spa-routes.ts`, and the URL rules in `util/safe-url.ts`
+(an http(s) URL without credentials, a secure instance origin). Messages and
+storage that only the extension's own scripts exchange stay in
+`src/extension/` (`messages.ts`, `settings.ts`).
 
 ## Features
 
@@ -163,7 +165,7 @@ exactly that basis: it is pure I/O with the decisions already lifted out, so
 moving it would cost a rewiring across its callers and gain no test.
 
 Extracted SPA logic goes in a module named for what it decides, beside the
-component that uses it: `behavior.ts` holds the routes, `panes.ts` the pane
+component that uses it: `routes.ts` holds the routes, `panes.ts` the pane
 layout and history, `feed-tree.ts` the tree helpers, `article-selection.ts`
 the list selection algebra. A single shared module would become the new large
 file and would change for several unrelated reasons.
@@ -224,8 +226,8 @@ Anything that needs a unit test has to come out of the component first.
   advertises. Runs both server-side and inside the extension content script,
   which is why the scanners live in `shared`. Each side builds the page the
   scanners read with its own extractor from one selector table: the
-  extension from the live `Document`, the server with Bun's `HTMLRewriter`
-  in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
+  extension from the live `Document` in `extension/document-scanner.ts`, the
+  server with Bun's `HTMLRewriter` in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
   scanner: it sends the page address to a third party, so each caller decides
   whether to offer it.
 - **Feed preview** — a parsed-but-not-subscribed feed held in Redis between the

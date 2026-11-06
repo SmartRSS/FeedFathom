@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { definePlugin, defineRule } from "@oxlint/plugins";
 
-// Rules for conventions oxlint has no built-in equivalent for. All four use
+// Rules for conventions oxlint has no built-in equivalent for. Every rule uses
 // `createOnce`, which runs once per lint run, not per file -- per-file state
 // resets in `before()`, never in the `createOnce` body. Node type names are
 // ESTree-standard (`MemberExpression`, not `StaticMemberExpression`).
