@@ -1,25 +1,18 @@
-import { isLoopbackHostname } from "#shared/net/private-network-guard.ts";
 import { previewPath } from "#shared/contracts/preview-route.ts";
-import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
+import { secureOrigin } from "#shared/util/safe-url.ts";
 
-// An instance address that canonicalizeInstance accepted: an http(s) origin
-// with nothing after it. Everything that builds a URL on the instance takes
+// An instance address that canonicalizeInstance accepted. Everything that builds a URL on the instance takes
 // this type, so the address is checked once, where it enters.
 export type InstanceOrigin = string & { readonly brand: "InstanceOrigin" };
 
-// Plain http is accepted only for a loopback development instance.
-const isInstanceOrigin = (value: string): value is InstanceOrigin => {
-  const url = httpUrlWithoutCredentials(value);
-  if (!url || url.origin !== value) return false;
-  return url.protocol === "https:" || isLoopbackHostname(url.hostname);
-};
+const isInstanceOrigin = (value: string): value is InstanceOrigin =>
+  secureOrigin(value) === value;
 
 export const canonicalizeInstance = (
   value: string,
 ): InstanceOrigin | undefined => {
-  const url = URL.parse(value);
-  if (!url || url.href !== `${url.origin}/`) return undefined;
-  return isInstanceOrigin(url.origin) ? url.origin : undefined;
+  const origin = secureOrigin(value) ?? "";
+  return isInstanceOrigin(origin) ? origin : undefined;
 };
 
 export const normalizeFeedAddress = (address: string): string => {

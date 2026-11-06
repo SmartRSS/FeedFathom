@@ -167,6 +167,8 @@ describe("loadConfig", () => {
 
   test.each([
     ["localhost:3456", "http://localhost:3456"],
+    ["127.0.0.1:3456", "http://127.0.0.1:3456"],
+    ["localhost.example.com", "https://localhost.example.com"],
     ["feeds.example.com", "https://feeds.example.com"],
     ["feeds.example.com:8443", "https://feeds.example.com:8443"],
   ])("serves %s at %s", (domain, origin) => {

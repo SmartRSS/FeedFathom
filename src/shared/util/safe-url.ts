@@ -1,3 +1,5 @@
+import { isLoopbackHostname } from "#shared/net/private-network-guard.ts";
+
 const isHttp = (url: URL) =>
   url.protocol === "http:" || url.protocol === "https:";
 
@@ -8,6 +10,17 @@ export const httpUrlWithoutCredentials = (value: string): URL | undefined => {
   const url = URL.parse(value);
   if (!url || !isHttp(url)) return undefined;
   return url.username === "" && url.password === "" ? url : undefined;
+};
+
+// An origin with nothing after it, over https or over plain http to this
+// machine: where a secret or a session may be sent. Undefined otherwise.
+export const secureOrigin = (value: string): string | undefined => {
+  const url = URL.parse(value);
+  if (!url || url.href !== `${url.origin}/`) return undefined;
+  if (url.protocol === "https:") return url.origin;
+  return url.protocol === "http:" && isLoopbackHostname(url.hostname)
+    ? url.origin
+    : undefined;
 };
 
 // Resolve a possibly-relative URL against a base and keep only http(s).
