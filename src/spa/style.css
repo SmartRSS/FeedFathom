@@ -1130,6 +1130,28 @@ a {
 .dashboard-alert p {
   margin: 0;
 }
+/* An alert that belongs to no one page: over whatever is open. */
+.app-alert {
+  position: fixed;
+  z-index: 200;
+  top: var(--space-2);
+  right: var(--space-2);
+  left: var(--space-2);
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--error) 12%, var(--white));
+  color: var(--grey-90);
+  box-shadow:
+    inset 0.25rem 0 0 var(--error),
+    0 0.25rem 1rem rgb(0 0 0 / 15%);
+}
+.app-alert p {
+  margin: 0;
+}
 .dashboard-alert button {
   flex-shrink: 0;
 }

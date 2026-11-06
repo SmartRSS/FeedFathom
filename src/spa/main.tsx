@@ -97,6 +97,11 @@ window.addEventListener(
   { capture: true },
 );
 
+// The service worker reported success for a change made offline, and the
+// server refused it once back online. Nothing else tells the user, so it
+// shows on whichever page is open.
+const [offlineChangeLost, setOfflineChangeLost] = createSignal(false);
+
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
 const paneSwitchHost: PaneSwitchHost = {
@@ -245,6 +250,21 @@ function App() {
       </a>
       {/* One dialog host for every confirm()/prompt() replacement (#698). */}
       <DialogHost />
+      <Show when={offlineChangeLost()}>
+        <div class="app-alert" role="alert">
+          <p>
+            A change made while offline could not be applied and was discarded.
+            Reload to see the current state.
+          </p>
+          <button
+            class="button-primary"
+            type="button"
+            onClick={() => location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      </Show>
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}
       <ErrorBoundary
@@ -424,13 +444,9 @@ if ("serviceWorker" in navigator) {
   // through controllerchange.
   navigator.serviceWorker.addEventListener("message", (event) => {
     const data: unknown = event.data;
-    if (
-      data &&
-      typeof data === "object" &&
-      "type" in data &&
-      data.type === "shell-updated"
-    )
-      markUpdatePending();
+    if (!data || typeof data !== "object" || !("type" in data)) return;
+    if (data.type === "shell-updated") markUpdatePending();
+    else if (data.type === "queued-mutation-failed") setOfflineChangeLost(true);
   });
   void navigator.serviceWorker.register(workerPath);
 }

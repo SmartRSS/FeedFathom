@@ -15,7 +15,7 @@ const MAX_READER_SCROLL_ENTRIES = 200;
 const READER_SCROLL_THROTTLE_MS = 500;
 const SESSION_VERSION = 1;
 
-type ArticleFilter = "all" | "read" | "unread";
+export type ArticleFilter = "all" | "read" | "unread";
 
 export type AppSnapshot = {
   articleFilter: ArticleFilter;
@@ -58,7 +58,7 @@ const isFiniteNumber = (value: unknown): value is number =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const isArticleFilter = (value: unknown): value is ArticleFilter =>
+export const isArticleFilter = (value: unknown): value is ArticleFilter =>
   value === "all" || value === "read" || value === "unread";
 
 // No schema library here on purpose: the blob is written and read by this one

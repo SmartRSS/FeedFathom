@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { shortcutHelp } from "./keyboard-shortcuts.ts";
 
 // In-app replacements for the last native dialogs in the app (#698).
 // Native prompt()/confirm() block the event loop, can be suppressed by the
@@ -41,25 +42,11 @@ type DialogRequest =
 
 // Every shortcut, so the cheat sheet and the handler can't drift apart.
 // Each entry lists the key groups that mean the same thing.
-const SHORTCUTS: [string[][], string][] = [
-  [[["↑"], ["↓"]], "Focus previous / next article"],
-  [[["j"], ["k"]], "Same, the RSS-reader standard keys"],
-  [[["Space"]], "Select the article at the cursor"],
-  [[["Enter"]], "Read the article at the cursor"],
-  [[["v"]], "Open the original in a new tab"],
-  [[["o"]], "Move between the list and the reader pane"],
-  [[["m"]], "Mark read / unread"],
-  [[["Delete"]], "Delete the selection"],
-  [[["Ctrl", "A"]], "Select all articles"],
-  [[["←"]], "Back to the feed list"],
-  [[["r"]], "Refresh"],
-  [[["?"], ["Esc"]], "This cheat sheet / close"],
-];
 
 function Shortcuts() {
   return (
     <dl class="app-dialog-shortcuts">
-      <For each={SHORTCUTS}>
+      <For each={shortcutHelp}>
         {([groups, description]) => (
           <div>
             <dt>
