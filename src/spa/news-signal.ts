@@ -14,8 +14,3 @@ export const backgroundPoll = storedToggle("backgroundPoll", true);
 // the pane. The dashboard resets it to zero when it unmounts (logout).
 const [unreadTotal, setUnreadTotal] = createSignal(0);
 export { unreadTotal, setUnreadTotal };
-
-// How many articles arrived since the user last refreshed, per the
-// background poll; zero means no toast. The dashboard owns both ends.
-const [newArticlesCount, setNewArticlesCount] = createSignal(0);
-export { newArticlesCount, setNewArticlesCount };

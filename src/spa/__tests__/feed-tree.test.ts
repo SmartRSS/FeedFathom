@@ -8,7 +8,6 @@ import {
   findNode,
   findParentFolderUid,
   isSnoozedNode,
-  nextPollDelayMs,
   readStateDeltas,
   sourceIds,
   snoozeUntilIso,
@@ -90,27 +89,6 @@ describe("totalUnread", () => {
       folder("f", [source("2", { unreadCount: 4 })]),
     ];
     expect(totalUnread(nodes)).toBe(7);
-  });
-});
-
-describe("nextPollDelayMs", () => {
-  test("starts at 30 seconds and doubles to a 5-minute ceiling", () => {
-    expect(nextPollDelayMs(0)).toBe(30_000);
-    expect(nextPollDelayMs(1)).toBe(60_000);
-    expect(nextPollDelayMs(2)).toBe(120_000);
-    expect(nextPollDelayMs(3)).toBe(240_000);
-    expect(nextPollDelayMs(4)).toBe(300_000);
-    expect(nextPollDelayMs(5)).toBe(300_000);
-    expect(nextPollDelayMs(50)).toBe(300_000);
-  });
-
-  test("negative attempt counts read as the first interval", () => {
-    expect(nextPollDelayMs(-1)).toBe(30_000);
-  });
-
-  test("an open event stream holds the poll at the ceiling", () => {
-    expect(nextPollDelayMs(0, true)).toBe(300_000);
-    expect(nextPollDelayMs(0, false)).toBe(30_000);
   });
 });
 

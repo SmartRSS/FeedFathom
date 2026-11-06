@@ -31,7 +31,6 @@ import {
   findParentFolderUid,
   isEmptyFolder,
   isSnoozedNode,
-  nextPollDelayMs,
   readStateDeltas,
   articleScope,
   searchScope,
@@ -92,17 +91,12 @@ import { isTextEntry, mapArticleShortcut } from "./keyboard-shortcuts.ts";
 import {
   neighbours,
   offlineUnread,
-  postOfflineSync,
   prefetchNext,
   saveData,
-  unreadSourceIds,
 } from "./reading-prefetch.ts";
-import {
-  backgroundPoll,
-  newArticlesCount,
-  setNewArticlesCount,
-  setUnreadTotal,
-} from "./news-signal.ts";
+import { backgroundPoll, setUnreadTotal } from "./news-signal.ts";
+import { createNewArticleSignal } from "./new-article-signal.ts";
+import { createOfflineSync } from "./offline-sync.ts";
 import { Enclosures } from "./enclosures.tsx";
 // Raw markup, not <img src>: every icon is fill/stroke="currentColor", which
 // only resolves against the row's text color when the SVG is in the page's
@@ -475,166 +469,18 @@ export function Dashboard(props: {
   let disposed = false;
   onCleanup(() => {
     disposed = true;
-    clearTimeout(pollTimer);
     treeAbortController?.abort();
     setUnreadTotal(0);
-    setNewArticlesCount(0);
   });
-  // Background new-article poll (#717). The tree already carries every
-  // source's unread count, so a rise in the total is the whole signal --
-  // and the open article list is never mutated mid-read; the toast asks
-  // instead. Spacing backs off from 30s to a 5-minute ceiling and resets
-  // when the user refreshes, and hidden tabs skip cycles entirely.
-  let pollTimer: ReturnType<typeof setTimeout> | undefined;
-  let pollCycles = 0;
-  let pollDueAt = 0;
-  let lastSeenUnread: number | undefined;
-  const schedulePoll = () => {
-    // A stream signal can run a poll while the timer is pending; one timer.
-    clearTimeout(pollTimer);
-    if (disposed || !backgroundPoll.get()) return;
-    const delay = nextPollDelayMs(pollCycles, streamOpen);
-    pollDueAt = Date.now() + delay;
-    pollTimer = setTimeout(() => {
-      if (document.hidden) {
-        schedulePoll();
-        return;
-      }
-      void pollForNewArticles();
-    }, delay);
-  };
-  // Push signal (#991): the server announces article writes for this user's
-  // sources, and the answer is the same poll, so the toast and unread logic
-  // stay in one place. Signals within two seconds share one tree load, and a
-  // hidden tab leaves them to the timer, as it does every other cycle.
-  // EventSource reconnects on its own; a stream that drops or never opens
-  // (a buffering proxy, a 401) leaves the timer on its 30s backoff.
-  let streamOpen = false;
-  let streamSignalTimer: ReturnType<typeof setTimeout> | undefined;
-  // One poll at a time: loadTree() aborts the request before it, so signals
-  // arriving faster than the tree loads would never let one finish. A signal
-  // during a poll waits for it, then gets one follow-up.
-  let polling = false;
-  let signalDuringPoll = false;
-  const onStreamSignal = () => {
-    if (polling) {
-      signalDuringPoll = true;
-      return;
-    }
-    streamSignalTimer ??= setTimeout(() => {
-      streamSignalTimer = undefined;
-      if (disposed || document.hidden) return;
-      if (polling) signalDuringPoll = true;
-      else void pollForNewArticles();
-    }, 2000);
-  };
-  createEffect(() => {
-    if (!authenticated() || !backgroundPoll.get()) return;
-    const stream = new EventSource("/api/events");
-    stream.addEventListener("open", () => {
-      streamOpen = true;
-    });
-    stream.addEventListener("error", () => {
-      if (!streamOpen) return;
-      streamOpen = false;
-      pollCycles = 0;
-      // Only ever pulls the poll closer: a proxy that accepts the stream and
-      // drops it every reconnect must not keep pushing the poll back.
-      if (Date.now() + nextPollDelayMs(0) < pollDueAt) schedulePoll();
-    });
-    stream.addEventListener("message", onStreamSignal);
-    onCleanup(() => {
-      stream.close();
-      streamOpen = false;
-      clearTimeout(streamSignalTimer);
-      streamSignalTimer = undefined;
-    });
+  const newArticles = createNewArticleSignal({
+    enabled: backgroundPoll.get,
+    hidden: () => document.hidden,
+    listening: () => authenticated() && backgroundPoll.get(),
+    loadTree,
+    // An expired session goes to sign-in like every other tree load (#1122).
+    onPollFailure: (cause) => props.handleUnauthorized(cause),
   });
-  const pollForNewArticles = async () => {
-    // A timer firing mid-poll yields; the running poll reschedules it.
-    if (polling) return;
-    polling = true;
-    try {
-      const nextTree = await loadTree();
-      if (disposed) return;
-      const total = totalUnread(nextTree);
-      if (lastSeenUnread !== undefined && total > lastSeenUnread) {
-        const arrived = total - lastSeenUnread;
-        setNewArticlesCount((count) => Math.max(count, arrived));
-      }
-      lastSeenUnread = total;
-    } catch (cause) {
-      // An expired session goes to sign-in like every other tree load (#1122).
-      // Anything else stays silent: the next cycle retries, and the ordinary
-      // error surfaces already cover the user-visible paths.
-      props.handleUnauthorized(cause);
-    } finally {
-      polling = false;
-      pollCycles += 1;
-      schedulePoll();
-      if (signalDuringPoll) {
-        signalDuringPoll = false;
-        onStreamSignal();
-      }
-    }
-  };
-  // Offline reading (#992): tells the service worker which unread bodies to
-  // keep. Paced by tree loads -- the stream and the poll reload the tree when
-  // articles arrive, and marking read or removing reloads it too -- at most
-  // once a minute, in idle time, and never on Save Data or in a hidden or
-  // offline tab.
-  let offlineSyncTimer: ReturnType<typeof setTimeout> | undefined;
-  let offlineSyncedAt = 0;
-  const runOfflineSync = () => syncOfflineArticles(tree());
-  const syncOfflineInIdleTime = () => {
-    clearTimeout(offlineSyncTimer);
-    if (disposed || !authenticated() || !offlineUnread.get()) return;
-    offlineSyncTimer = setTimeout(
-      () => {
-        if (typeof requestIdleCallback === "function")
-          requestIdleCallback(runOfflineSync);
-        else runOfflineSync();
-      },
-      Math.max(0, offlineSyncedAt + 60_000 - Date.now()),
-    );
-  };
-  createEffect(() => {
-    tree();
-    syncOfflineInIdleTime();
-  });
-  // Retry when the tab or network becomes available. A sync may have started
-  // before it was hidden or disconnected, leaving some bodies undownloaded.
-  const retryOfflineSync = () => {
-    if (offlineUnread.get() && !document.hidden) syncOfflineInIdleTime();
-  };
-  document.addEventListener("visibilitychange", retryOfflineSync);
-  addEventListener("online", retryOfflineSync);
-  navigator.serviceWorker?.addEventListener(
-    "controllerchange",
-    retryOfflineSync,
-  );
-  onCleanup(() => {
-    clearTimeout(offlineSyncTimer);
-    document.removeEventListener("visibilitychange", retryOfflineSync);
-    removeEventListener("online", retryOfflineSync);
-    navigator.serviceWorker?.removeEventListener(
-      "controllerchange",
-      retryOfflineSync,
-    );
-  });
-  function syncOfflineArticles(nodes: TreeNode[]) {
-    if (
-      disposed ||
-      saveData() ||
-      document.hidden ||
-      !navigator.onLine ||
-      !navigator.serviceWorker?.controller ||
-      !offlineUnread.get()
-    )
-      return;
-    offlineSyncedAt = Date.now();
-    postOfflineSync(unreadSourceIds(nodes));
-  }
+  createOfflineSync(tree, authenticated);
   async function shareSelected() {
     const article = selected();
     if (!article) return;
@@ -651,11 +497,8 @@ export function Dashboard(props: {
     }
   }
   async function refreshCurrentView() {
-    setNewArticlesCount(0);
-    pollCycles = 0;
     try {
-      const nextTree = await loadTree();
-      lastSeenUnread = totalUnread(nextTree);
+      await newArticles.refresh();
       const search = activeSearch();
       if (search) {
         await runSearch(search);
@@ -835,10 +678,9 @@ export function Dashboard(props: {
       const nextTree = await fresh;
       if (disposed) return;
       setAuthenticated(true);
-      lastSeenUnread = totalUnread(nextTree);
       // Cleared by select() if a feed was picked from the cached tree.
       if (restored && restoringSession()) await restoreFromSnapshot(restored);
-      schedulePoll();
+      newArticles.start(nextTree);
     } catch (cause) {
       if (disposed || props.handleUnauthorized(cause)) return;
       setRestoringSession(false);
@@ -2000,11 +1842,11 @@ export function Dashboard(props: {
           </div>
         )}
       </Show>
-      <Show when={newArticlesCount() > 0}>
+      <Show when={newArticles.arrived() > 0}>
         <div class="update-banner" role="status">
           <span>
-            {newArticlesCount()} new article
-            {newArticlesCount() === 1 ? "" : "s"}.
+            {newArticles.arrived()} new article
+            {newArticles.arrived() === 1 ? "" : "s"}.
           </span>
           <button type="button" onClick={() => void refreshCurrentView()}>
             Refresh
