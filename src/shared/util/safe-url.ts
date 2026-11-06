@@ -17,7 +17,7 @@ export const safeHttpUrl = (value: string, baseUrl: string): string => {
   return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
 };
 
-// Newsletter articles have no source URL of their own; they are addressed by
-// the app's own /article/ path, which is already safe.
+// Newsletter articles have no page of their own. The mail handler stores
+// them under /article/<guid>, which no route serves, so they get no link.
 export const safeArticleUrl = (value: string, baseUrl: string): string =>
-  value.startsWith("/article/") ? value : safeHttpUrl(value, baseUrl);
+  value.startsWith("/article/") ? "" : safeHttpUrl(value, baseUrl);

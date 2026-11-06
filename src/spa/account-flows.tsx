@@ -51,7 +51,6 @@ function checkFields(
   return false;
 }
 
-// An error under a field, for the field's aria-describedby.
 function FieldError(props: { id: string; message: string | undefined }) {
   return (
     <Show when={props.message}>

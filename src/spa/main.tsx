@@ -250,7 +250,6 @@ function App() {
       >
         Skip to accessibility settings
       </a>
-      {/* One dialog host for every confirm()/prompt() replacement (#698). */}
       <DialogHost />
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}

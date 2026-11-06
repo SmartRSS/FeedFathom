@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 
-// In-app replacements for the last native dialogs in the app (#698).
+// In-app replacements for the native prompt() and confirm() (#698).
 // Native prompt()/confirm() block the event loop, can be suppressed by the
 // browser (after which folder creation silently no-ops), are poor on touch
 // screens, and can't follow the page's theme. A single <dialog> hosted once
@@ -136,7 +136,6 @@ export function promptDialog(
   );
 }
 
-// No value: the cheat sheet only ever resolves through a dismissal.
 export function helpDialog(): Promise<void> {
   return new Promise((resolve) =>
     show({ kind: "help", resolve: () => resolve() }),

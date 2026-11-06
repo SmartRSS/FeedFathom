@@ -1,4 +1,17 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
+import type { Static } from "typebox";
+import type {
+  Article,
+  ArticleSummary,
+  sessionResponse,
+  sessionsResponse,
+  TreeNode,
+} from "#shared/contracts/responses.ts";
+
+// The fixture answers as the server does, so each response shape is checked
+// against the contract the SPA decodes it with.
+type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
+type SessionEntry = Static<typeof sessionsResponse>["sessions"][number];
 
 const user = {
   email: "reader@example.com",
@@ -6,7 +19,7 @@ const user = {
   isAdmin: false,
   name: "Reader",
   status: "active",
-};
+} satisfies SessionUser;
 
 const source = {
   favicon: null,
@@ -17,7 +30,7 @@ const source = {
   uid: "3",
   unreadCount: 2,
   xmlUrl: "https://news.example/feed.xml",
-};
+} satisfies TreeNode;
 
 const subscribedSource = {
   favicon: null,
@@ -28,7 +41,7 @@ const subscribedSource = {
   uid: "9",
   unreadCount: 1,
   xmlUrl: "https://preview.example/feed.xml",
-};
+} satisfies TreeNode;
 
 const article = {
   author: "News Author",
@@ -41,7 +54,7 @@ const article = {
   title: "First article",
   updatedAt: null,
   url: "https://articles.example/first",
-};
+} satisfies Article;
 
 // Two more Tech News articles alongside `article`, only returned when
 // `multipleArticles` is on -- exercises select-all/multi-delete without
@@ -89,7 +102,7 @@ const subscribedArticle = {
   title: "Subscribed article",
   updatedAt: null,
   url: "https://articles.example/subscribed",
-};
+} satisfies Article;
 
 // The confirmation mail a newsletter sends to a minted address, which can
 // arrive before the user subscribes to it (#1116).
@@ -103,10 +116,11 @@ const newsletterArticle = {
   sourceId: 21,
   title: "Confirm your subscription",
   updatedAt: null,
-  url: "/article/article-21",
-};
+  // Newsletter articles have no page of their own (safeArticleUrl).
+  url: "",
+} satisfies Article;
 
-const summary = (item: typeof article, read = false) => ({
+const summary = (item: Article, read = false): ArticleSummary => ({
   author: item.author,
   group: "Today",
   id: item.id,
@@ -251,7 +265,7 @@ export async function installApiFixture(
     // update the list, so the options page can be asserted to shrink.
     if (method === "GET" && url.pathname === "/api/options/sessions") {
       if (!state.authenticated) return respond({ error: "Unauthorized" }, 401);
-      const sessions = [
+      const sessions: SessionEntry[] = [
         {
           createdAt: "2026-09-08T00:00:00.000Z",
           current: true,
