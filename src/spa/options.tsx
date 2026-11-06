@@ -10,6 +10,7 @@ import { loginPath } from "./behavior.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
   articleSearchBox,
+  density,
   enclosuresOpen,
   feedFilterBox,
   markReadPolicy,
@@ -445,6 +446,14 @@ export function Options(props: {
                   ["aero", "Aero"],
                   ["modern", "Modern"],
                   ["high-contrast", "High contrast (accessibility)"],
+                ]}
+              />
+              <PreferenceSelect
+                label="Density"
+                preference={density}
+                options={[
+                  ["comfortable", "Comfortable"],
+                  ["compact", "Compact"],
                 ]}
               />
               <PreferenceSelect
