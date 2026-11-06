@@ -5,6 +5,7 @@ import { simpleParser } from "mailparser";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType } from "#shared/validation/typebox-policy.ts";
+import { newsletterArticlePath } from "#shared/util/safe-url.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
 
@@ -109,7 +110,7 @@ export class EmailHandler {
       sourceId,
       title: email.subject ?? "Untitled",
       updatedAt: date,
-      url: `/article/${guid}`,
+      url: newsletterArticlePath(guid),
     };
   }
 }

@@ -10,7 +10,7 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 
-const maximumBodyBytes = 24 * 1024 * 1024;
+const maximumFeedBodyBytes = 24 * 1024 * 1024;
 
 const redis = createFakeHttpRedis;
 
@@ -446,22 +446,22 @@ test("enforces one deadline through the streamed body and cancels it", async () 
 // before decoding, and `Uint8Array.from` spends seconds on a body this size.
 // The body is single-byte ASCII, so its text length is its byte count.
 test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
-  const exact = Buffer.alloc(maximumBodyBytes, 65);
+  const exact = Buffer.alloc(maximumFeedBodyBytes, 65);
   const exactClient = new HttpClient(redis(), {
     transport: queuedTransport([
       nativeResponse(exact, { headers: { "cache-control": "max-age=60" } }),
     ]),
   });
   const exactResponse = await exactClient.get("https://1.1.1.1/feed");
-  expect(exactResponse.data).toHaveLength(maximumBodyBytes);
+  expect(exactResponse.data).toHaveLength(maximumFeedBodyBytes);
   const cachedResponse = await exactClient.get("https://1.1.1.1/feed");
   expect(cachedResponse.cached).toBe(true);
-  expect(cachedResponse.data).toHaveLength(maximumBodyBytes);
+  expect(cachedResponse.data).toHaveLength(maximumFeedBodyBytes);
 
   let destroyed = 0;
   const overClient = new HttpClient(redis(), {
     transport: queuedTransport([
-      nativeResponse(Buffer.alloc(maximumBodyBytes + 1), {
+      nativeResponse(Buffer.alloc(maximumFeedBodyBytes + 1), {
         onDestroy: () => destroyed++,
       }),
     ]),

@@ -5,7 +5,8 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import type { HttpResponse } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { foundFeedsResponse } from "#shared/contracts/responses.ts";
 import { markWebSubAvailability } from "#features/feeds/feed-discovery.ts";
 import { scanHtml } from "#shared/scanners/scanner.ts";
 
@@ -36,8 +37,11 @@ export async function getFindHandler(
     const feeds = scanHtml(response.url, response.data);
     // Unreachable while scanHtml falls back to an OpenRSS suggestion for a
     // page that advertises nothing; live again if that fallback ever goes.
-    if (!feeds.length) return json({ error: "Invalid feed url" }, 400);
-    return json(await markWebSubAvailability(feeds, feedParser));
+    if (!feeds.length) return jsonError("Invalid feed url", 400);
+    return json(
+      foundFeedsResponse,
+      await markWebSubAvailability(feeds, feedParser),
+    );
   } catch (error_: unknown) {
     // A deferral is not this handler's to classify -- the central error hook
     // turns it into a 429 with a Retry-After. Neither is our own deadline
@@ -49,6 +53,6 @@ export async function getFindHandler(
       error_ instanceof HttpDeadlineError
     )
       throw error_;
-    return json({ error: "Invalid feed url" }, 400);
+    return jsonError("Invalid feed url", 400);
   }
 }

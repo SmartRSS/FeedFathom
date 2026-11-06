@@ -18,6 +18,12 @@ export const safeHttpUrl = (value: string, baseUrl: string): string => {
 };
 
 // Newsletter articles have no source URL of their own; they are addressed by
-// the app's own /article/ path, which is already safe.
+// a path of the app's own, which is already safe.
+const newsletterArticlePrefix = "/article/";
+export const newsletterArticlePath = (guid: string) =>
+  `${newsletterArticlePrefix}${guid}`;
+const isNewsletterArticlePath = (value: string) =>
+  value.startsWith(newsletterArticlePrefix);
+
 export const safeArticleUrl = (value: string, baseUrl: string): string =>
-  value.startsWith("/article/") ? value : safeHttpUrl(value, baseUrl);
+  isNewsletterArticlePath(value) ? value : safeHttpUrl(value, baseUrl);

@@ -3,6 +3,7 @@ import type { StaticDecode } from "typebox";
 import type { previewQuery } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import { errorResponse, previewResponse } from "#shared/contracts/responses.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
 
@@ -31,11 +32,12 @@ export async function getPreviewHandler(
   // admin's Details.
   if ("failure" in source)
     return json(
+      errorResponse,
       { detail: source.failure, error: describeFetchFailure(source.failure) },
       400,
     );
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
-  return json({
+  return json(previewResponse, {
     articles: source.articles.map((article) => ({
       author: article.author,
       content: extractArticle(article.content),

@@ -4,8 +4,13 @@ import Schema from "typebox/schema";
 import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
-import { sessions } from "#platform/db/schemas/sessions.ts";
+import { SESSION_TTL_DAYS, sessions } from "#platform/db/schemas/sessions.ts";
 import { users } from "#platform/db/schemas/users.ts";
+import {
+  digestToken,
+  issueToken,
+  resetLifetime,
+} from "#features/auth/account-tokens.ts";
 
 const authenticatedRowsCheck = Schema.Compile(
   Type.Array(
@@ -64,15 +69,15 @@ export function authenticateStatement(
   `;
 }
 
+// The user_agent column is NOT NULL, so a session no request ever named a
+// User-Agent for stores this, and the session list reports it as null.
+const unknownUserAgent = "UNKNOWN";
+
 export class UsersDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // Annotated rather than inferred: crypto.randomUUID() infers the
-  // `${string}-${string}-...` template literal type, which promises callers
-  // and test doubles a UUID shape nothing depends on.
-  //
   // passwordHash is the stored hash the caller verified. The session is only
   // issued while the row still holds it, checked under the row lock that
   // completePasswordReset's UPDATE also takes: a login that locks first has
@@ -92,8 +97,9 @@ export class UsersDataService {
         .for("update");
       if (!current.length) return undefined;
       await transaction.insert(sessions).values({
+        expiresAt: sql`NOW() + make_interval(days => ${SESSION_TTL_DAYS})`,
         sid: uuid,
-        userAgent: userAgent ?? "UNKNOWN",
+        userAgent: userAgent ?? unknownUserAgent,
         userId,
       });
       return uuid;
@@ -179,16 +185,6 @@ export class UsersDataService {
     ).at(0);
   }
 
-  public async findUserByActivationToken(token: string) {
-    return (
-      await this.drizzleConnection
-        .select()
-        .from(users)
-        .where(eq(users.activationToken, token))
-        .limit(1)
-    ).at(0);
-  }
-
   // A pending registration whose link expired, or was withdrawn after a failed
   // delivery, gets the same address back on the fresh token; the status
   // predicate keeps an already-active account's row untouched -- that path
@@ -230,24 +226,25 @@ export class UsersDataService {
       );
   }
 
-  public async activateUser(userId: number) {
-    await this.drizzleConnection
+  // Only a pending account whose link has not expired. False means the token
+  // matched nothing that may still be activated.
+  public async activate(token: string): Promise<boolean> {
+    const activated = await this.drizzleConnection
       .update(users)
       .set({
         activationToken: null,
         activationTokenExpiresAt: null,
         status: "active",
       })
-      .where(eq(users.id, userId))
-      .execute();
-  }
-
-  // The read-only lookup behind GET /api/session and the events stream's
-  // session recheck, which must not count as activity. The same statement as
-  // authenticate, so an expired sid or an inactive user resolves to nothing
-  // in both.
-  public async getUserBySid(sid: string) {
-    return await this.authenticate(sid, null, false);
+      .where(
+        and(
+          eq(users.activationToken, token),
+          eq(users.status, "inactive"),
+          gt(users.activationTokenExpiresAt, sql`now()`),
+        ),
+      )
+      .returning({ id: users.id });
+    return activated.length > 0;
   }
 
   /**
@@ -259,8 +256,9 @@ export class UsersDataService {
    * Each write guards itself, so most requests write nothing: the session row
    * only when it is more than a minute stale or the User-Agent changed, the
    * user row once a day. COALESCE keeps a missing header from overwriting a
-   * known agent with the UNKNOWN sentinel. An unknown, expired or inactive
-   * sid resolves to no user and writes nothing.
+   * known agent. An unknown, expired or inactive sid resolves to no user and
+   * writes nothing. With touch false it only reads, for GET /api/session and
+   * the events stream's recheck, which must not count as activity.
    */
   public async authenticate(
     sid: string,
@@ -293,7 +291,9 @@ export class UsersDataService {
         expiresAt: sessions.expiresAt,
         id: sessions.id,
         lastUsedAt: sessions.lastUsedAt,
-        userAgent: sessions.userAgent,
+        userAgent: sql<
+          null | string
+        >`NULLIF(${sessions.userAgent}, ${unknownUserAgent})`,
       })
       .from(sessions)
       .where(
@@ -326,26 +326,32 @@ export class UsersDataService {
     return Number(result[0]?.count ?? 0);
   }
 
-  public async startPasswordReset(
-    userId: number,
-    tokenHash: string,
-    expiresAt: Date,
-  ) {
+  // Stores a fresh reset token's digest and returns the token for the mail.
+  public async startPasswordReset(userId: number): Promise<string> {
+    const { expiresAt, token } = issueToken(resetLifetime);
     await this.drizzleConnection
       .update(users)
       .set({
         passwordResetTokenExpiresAt: expiresAt,
-        passwordResetTokenHash: tokenHash,
+        passwordResetTokenHash: digestToken(token),
       })
       .where(eq(users.id, userId));
+    return token;
   }
 
+  // Only an active account whose reset link has not expired.
   public async findUserByPasswordResetToken(tokenHash: string) {
     return (
       await this.drizzleConnection
         .select()
         .from(users)
-        .where(eq(users.passwordResetTokenHash, tokenHash))
+        .where(
+          and(
+            eq(users.passwordResetTokenHash, tokenHash),
+            eq(users.status, "active"),
+            gt(users.passwordResetTokenExpiresAt, sql`now()`),
+          ),
+        )
         .limit(1)
     ).at(0);
   }

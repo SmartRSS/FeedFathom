@@ -22,8 +22,8 @@ import {
 } from "#platform/http/http-native-transport.ts";
 import {
   HttpCacheStore,
-  maximumBodyBytes,
-  maximumBodyMebibytes,
+  maximumFeedBodyBytes,
+  maximumFeedBodyMebibytes,
   type HttpRedis,
 } from "#platform/http/http-cache-store.ts";
 import {
@@ -420,9 +420,9 @@ export class HttpClient {
             }
             const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
             length += chunk.byteLength;
-            if (length > maximumBodyBytes) {
+            if (length > maximumFeedBodyBytes) {
               throw new HttpPolicyError(
-                `Decoded response body exceeds ${maximumBodyMebibytes.toString()} MiB`,
+                `Decoded response body exceeds ${maximumFeedBodyMebibytes.toString()} MiB`,
               );
             }
             chunks.push(chunk);

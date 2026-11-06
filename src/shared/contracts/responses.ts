@@ -10,7 +10,13 @@ export const successResponse = Type.Object(
   exact,
 );
 
-export const loginResponse = Type.Object({ sid: Type.String() }, exact);
+// The body of every JSON error the API answers with. `detail` is the raw
+// reason behind `error`, where the server keeps one for an admin's Details.
+export const errorResponse = Type.Object(
+  { detail: Type.Optional(Type.String()), error: Type.String() },
+  exact,
+);
+
 
 const sessionUser = Type.Object(
   {
@@ -47,7 +53,8 @@ const sessionEntry = Type.Object(
     // one shared timestamp, and it goes stale the moment a browser
     // updates -- activity is what the session list actually shows.
     lastUsedAt: jsonDate,
-    userAgent: Type.String(),
+    // Null when no request on this session sent a User-Agent.
+    userAgent: Type.Union([Type.String(), Type.Null()]),
   },
   exact,
 );
@@ -273,6 +280,9 @@ export const adminSourcesResponse = Type.Array(
     exact,
   ),
 );
+
+// Old feed URL to the URL it permanently redirects to.
+export const redirectsResponse = Type.Record(Type.String(), Type.String());
 
 export type Article = Static<typeof articleResponse>;
 export type ArticleSummary = Static<typeof articleSummaryResponse>;

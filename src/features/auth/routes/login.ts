@@ -3,20 +3,18 @@ import type * as auth from "#features/auth/services.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { Elysia } from "elysia";
 import { loginRequest } from "#shared/contracts/requests.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
 import { sessionHeader } from "#features/auth/routes/session-header.ts";
 
-export function createLoginRoute(
-  secureCookies: boolean,
-  {
-    authThrottle,
-    config,
-    password,
-    usersDataService,
-  }: Pick<typeof auth, "authThrottle" | "usersDataService"> &
-    Pick<typeof runtime, "password"> & { config: AppConfig },
-) {
+export function createLoginRoute({
+  authThrottle,
+  config,
+  password,
+  usersDataService,
+}: Pick<typeof auth, "authThrottle" | "usersDataService"> &
+  Pick<typeof runtime, "password"> & { config: AppConfig }) {
   return new Elysia().post(
     "/api/login",
     { body: loginRequest },
@@ -29,10 +27,7 @@ export function createLoginRoute(
       // Same body and status as a wrong password. A distinguishable response
       // would undo the equal-time hashing below by answering "this account
       // exists and someone is guessing at it" for free.
-      const wrongLoginData = json(
-        { error: "Email or password is wrong." },
-        401,
-      );
+      const wrongLoginData = jsonError("Email or password is wrong.", 401);
 
       // Counted before the password is checked, so a burst of parallel
       // guesses cannot all pass; a success takes its attempt back below.
@@ -51,8 +46,7 @@ export function createLoginRoute(
       }
 
       // Store what the client says it is, so the options page's session list
-      // can tell rows apart; createSession falls back to "UNKNOWN" when the
-      // header is absent. No sid means a password reset replaced the hash
+      // can tell rows apart. No sid means a password reset replaced the hash
       // verified above, which answers like any other wrong password.
       const sid = await usersDataService.createSession(
         user.id,
@@ -61,8 +55,8 @@ export function createLoginRoute(
       );
       if (!sid) return wrongLoginData;
       await authThrottle.succeeded("login", address, parsed.email);
-      return json({ sid }, 200, {
-        "set-cookie": sessionHeader(sid, secureCookies),
+      return json(successResponse, { success: true }, 200, {
+        "set-cookie": sessionHeader(sid, config.production),
       });
     },
   );

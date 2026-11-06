@@ -1,18 +1,19 @@
 import type * as runtime from "#platform/runtime.ts";
 import type * as auth from "#features/auth/services.ts";
 import type { AppConfig } from "#platform/config.ts";
-import { mailConfigured } from "#features/auth/mail-sender.ts";
-import { randomUUID } from "node:crypto";
+import { mailConfigured, sendLater } from "#features/auth/mail-sender.ts";
 import { Elysia } from "elysia";
 import {
   passwordResetConfirmRequest,
   passwordResetRequest,
 } from "#shared/contracts/requests.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
-import { digestToken } from "#features/auth/token-digest.ts";
+import { digestToken } from "#features/auth/account-tokens.ts";
 
-const tokenLifetimeMs = 60 * 60 * 1_000;
+const accepted = () => json(successResponse, { success: true });
+const invalid = () => jsonError("This reset link is no longer valid.", 400);
 
 export function createPasswordResetRoute({
   authThrottle,
@@ -36,7 +37,6 @@ export function createPasswordResetRoute({
         // instance can send mail, or the request was throttled. Telling the
         // caller which would hand back the account list login already
         // withholds.
-        const accepted = json({ success: true });
         const address = clientAddress(
           request,
           server,
@@ -51,53 +51,29 @@ export function createPasswordResetRoute({
           !mailEnabled ||
           !(await authThrottle.attempt("password-reset", address, email))
         ) {
-          return accepted;
+          return accepted();
         }
 
         const user = await usersDataService.findUser(email);
-        if (user?.status !== "active") return accepted;
+        if (user?.status !== "active") return accepted();
 
-        const token = randomUUID();
-        await usersDataService.startPasswordReset(
-          user.id,
-          digestToken(token),
-          new Date(Date.now() + tokenLifetimeMs),
+        const token = await usersDataService.startPasswordReset(user.id);
+        sendLater("Password reset", () =>
+          mailSender.sendPasswordResetEmail(user.email, token),
         );
-        // Not awaited. Mailjet is a round trip to another host, and only an
-        // address with an account reaches it, so waiting for it would make an
-        // account that exists answer hundreds of milliseconds slower than one
-        // that does not -- the enumeration oracle the identical body is here
-        // to close, restated as a stopwatch. A failure is ours to log: the
-        // token is already stored, and telling the caller the send failed
-        // would leak the same thing.
-        void mailSender
-          .sendPasswordResetEmail(user.email, token)
-          .catch((cause: unknown) => {
-            console.error("Password reset email failed to send:", cause);
-          });
-        return accepted;
+        return accepted();
       },
     )
     .post(
       "/api/password-reset/confirm",
       { body: passwordResetConfirmRequest },
       async ({ body: parsed }) => {
-        const invalid = json(
-          { error: "This reset link is no longer valid." },
-          400,
-        );
-        if (!mailEnabled) return invalid;
+        if (!mailEnabled) return invalid();
 
         const user = await usersDataService.findUserByPasswordResetToken(
           digestToken(parsed.token),
         );
-        if (
-          user?.status !== "active" ||
-          !user.passwordResetTokenExpiresAt ||
-          user.passwordResetTokenExpiresAt < new Date()
-        ) {
-          return invalid;
-        }
+        if (!user) return invalid();
 
         // Clearing the token and dropping every session happen with the write
         // itself, so the link is single-use and whoever knew the old password
@@ -110,8 +86,8 @@ export function createPasswordResetRoute({
           digestToken(parsed.token),
           await password.hash(parsed.password1),
         );
-        if (!spent) return invalid;
-        return json({ success: true });
+        if (!spent) return invalid();
+        return json(successResponse, { success: true });
       },
     );
 }

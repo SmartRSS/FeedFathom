@@ -7,7 +7,7 @@ import {
   type NativeHttpTransport,
 } from "#platform/http/http-native-transport.ts";
 
-const maximumBodyBytes = 24 * 1024 * 1024;
+const maximumFeedBodyBytes = 24 * 1024 * 1024;
 
 const redis = createFakeHttpRedis;
 
@@ -86,7 +86,7 @@ test("deletes oversized Redis wire and base64 cache entries before decoding", as
   const entries = [
     "☃".repeat(2_400_000),
     JSON.stringify({
-      body: Buffer.alloc(maximumBodyBytes + 1).toString("base64"),
+      body: Buffer.alloc(maximumFeedBodyBytes + 1).toString("base64"),
       expiresAt: Date.now() + 60_000,
       headers: [],
       status: 200,

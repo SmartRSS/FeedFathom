@@ -7,6 +7,10 @@ import type {
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import {
+  articlesResponse,
+  removedArticlesResponse,
+} from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 
 type ArticleServices = Pick<
@@ -32,7 +36,7 @@ export async function postArticlesHandler(
     !body.query &&
     body.folder === undefined
   )
-    return json([]);
+    return json(articlesResponse, []);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
     user.id,
@@ -50,6 +54,7 @@ export async function postArticlesHandler(
           : { folderId: body.folder },
   );
   return json(
+    articlesResponse,
     articles.map(({ revision, ...article }) =>
       Object.assign(article, body.revision ? { revision } : {}, {
         url: safeArticleUrl(article.url, request.url),
@@ -97,7 +102,7 @@ export async function deleteArticlesHandler(
     }),
   );
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(articleIds);
+  return json(removedArticlesResponse, articleIds);
 }
 
 export async function patchArticlesHandler(
@@ -119,5 +124,5 @@ export async function patchArticlesHandler(
   // Same as the delete path: the badge beside every affected source is
   // recomputed from the store rather than adjusted by a count kept here.
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(articleIds);
+  return json(removedArticlesResponse, articleIds);
 }

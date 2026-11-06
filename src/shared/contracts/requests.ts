@@ -181,6 +181,7 @@ export const passwordRequest = withMatchingChangedPasswords(
     password2: Type.String({ minLength: 1 }),
   }),
 );
+export const sessionParams = Type.Object({ id: idQueryTransform });
 export const passwordResetRequest = Type.Object({
   email: normalizedEmailAddress,
 });

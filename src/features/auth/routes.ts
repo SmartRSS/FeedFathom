@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { createAccountRoutes } from "#features/auth/routes/account.ts";
 import { createActivateRoute } from "#features/auth/routes/activate.ts";
 import { createLoginRoute } from "#features/auth/routes/login.ts";
 import { createLogoutRoute } from "#features/auth/routes/logout.ts";
@@ -15,14 +16,12 @@ export type AuthRouteServices = Pick<
 > &
   Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig };
 
-export const createPublicAuthRoutes = (
-  secureCookies: boolean,
-  services: AuthRouteServices,
-) =>
+export const createAuthRoutes = (services: AuthRouteServices) =>
   new Elysia()
-    .use(createLoginRoute(secureCookies, services))
+    .use(createLoginRoute(services))
     .use(createSessionRoute(services))
-    .use(createLogoutRoute(secureCookies, services))
+    .use(createLogoutRoute(services))
     .use(createRegisterRoute(services))
     .use(createActivateRoute(services))
-    .use(createPasswordResetRoute(services));
+    .use(createPasswordResetRoute(services))
+    .use(createAccountRoutes(services));

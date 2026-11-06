@@ -3,6 +3,7 @@ import type { HttpClient } from "#platform/http/http-client.ts";
 import { Elysia } from "elysia";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import { verifyHubSignature } from "#features/feeds/websub.ts";
 import {
   leaseExpiresAt,
@@ -17,7 +18,7 @@ import {
 const pushedBodyFreshMs = 5 * 60_000;
 
 // Matches the fetch pipeline's ceiling for a feed document
-// (http-client's maximumBodyBytes): a push replaces a fetch, so it can
+// (http-client's maximumFeedBodyBytes): a push replaces a fetch, so it can
 // carry anything a fetch could. The callback is unauthenticated, and the
 // signature only covers bytes we have already buffered, so the cap has to
 // run while streaming the body in -- a declared Content-Length alone is
@@ -142,7 +143,7 @@ export function createWebSubRoutes({
           "websub-push",
           !seeded,
         );
-        return json({ ok: true });
+        return json(successResponse, { success: true });
       },
     );
 }

@@ -53,7 +53,7 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
     // A fresh session resolves, and carries the same window the cookie
     // promises -- roughly a year, not forever and not zero.
-    const fresh = await usersDataService.getUserBySid(browserSid);
+    const fresh = await usersDataService.authenticate(browserSid, null, false);
     expect(fresh?.id).toBe(userId);
     const [window] = await client<{ delta: number }[]>`
       SELECT CAST(EXTRACT(EPOCH FROM (expires_at - created_at)) / 86400 AS int)
@@ -63,7 +63,9 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
     // An inactive account's session resolves to nobody, read-only or not.
     const dormantSid = await issue(dormant!.id, "Dormant");
-    expect(await usersDataService.getUserBySid(dormantSid)).toBeUndefined();
+    expect(
+      await usersDataService.authenticate(dormantSid, null, false),
+    ).toBeUndefined();
     expect(
       await usersDataService.authenticate(dormantSid, "Dormant"),
     ).toBeUndefined();
@@ -73,8 +75,12 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     await client`
       UPDATE sessions SET expires_at = NOW() - INTERVAL '1 day'
       WHERE sid = ${phoneSid}`;
-    expect(await usersDataService.getUserBySid(phoneSid)).toBeUndefined();
-    expect((await usersDataService.getUserBySid(browserSid))?.id).toBe(userId);
+    expect(
+      await usersDataService.authenticate(phoneSid, null, false),
+    ).toBeUndefined();
+    expect(
+      (await usersDataService.authenticate(browserSid, null, false))?.id,
+    ).toBe(userId);
 
     // The list the options page renders enforces the same expiry as the
     // lookup: the aged-out session is not listed as active -- not even as
@@ -137,11 +143,15 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     const [stolenRow] = await client<{ id: number }[]>`
       SELECT id FROM sessions WHERE sid = ${stolenSid}`;
     await usersDataService.deleteSessionById(userId, stolenRow!.id);
-    expect((await usersDataService.getUserBySid(stolenSid))?.id).toBe(otherId);
+    expect(
+      (await usersDataService.authenticate(stolenSid, null, false))?.id,
+    ).toBe(otherId);
 
     // Revoking everything else leaves the current session standing.
     await usersDataService.deleteOtherSessions(userId, browserSid);
-    expect((await usersDataService.getUserBySid(browserSid))?.id).toBe(userId);
+    expect(
+      (await usersDataService.authenticate(browserSid, null, false))?.id,
+    ).toBe(userId);
     expect(
       await usersDataService.listSessions(userId, browserSid),
     ).toHaveLength(1);
@@ -213,7 +223,9 @@ test("authenticate stamps an active session at most once per guard window", asyn
     // events stream still resolves the user and writes nothing: polling the
     // session is not activity.
     const stale = await versions();
-    expect((await usersDataService.getUserBySid(sid))?.id).toBe(userId);
+    expect((await usersDataService.authenticate(sid, null, false))?.id).toBe(
+      userId,
+    );
     expect(await versions()).toEqual(stale);
 
     // One request through the auth plugin stamps both rows; the next writes

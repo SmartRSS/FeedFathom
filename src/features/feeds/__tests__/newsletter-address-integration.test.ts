@@ -20,9 +20,9 @@ import {
   MailRejectedError,
 } from "#features/mail-ingest/email-handler.ts";
 import {
-  createReaderRoutes,
-  type ReaderRouteServices,
-} from "#features/reader/routes.ts";
+  createFeedRoutes,
+  type FeedRouteServices,
+} from "#features/feeds/routes.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
 // A newsletter address is copied to the user before Subscribe, so mail can
@@ -64,11 +64,10 @@ const config = strictFake<AppConfig>(
 );
 // Subscribing an email source fetches and imports nothing, so the feed-only
 // services stay unarranged: reaching one is a failure.
-const reader = createReaderRoutes(
-  strictFake<ReaderRouteServices>(
+const reader = createFeedRoutes(
+  strictFake<FeedRouteServices>(
     {
       articleImporter: strictFake({}, "articleImporter"),
-      articlesDataService,
       config,
       feedParser: strictFake({}, "feedParser"),
       feedPreviewCache: strictFake({}, "feedPreviewCache"),

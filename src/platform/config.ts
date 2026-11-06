@@ -1,5 +1,6 @@
 import { Type, type StaticDecode } from "typebox";
 import { Value } from "typebox/value";
+import { newsletterMailDomain } from "#shared/util/newsletter-address.ts";
 
 const integerString = (
   name: string,
@@ -106,13 +107,15 @@ const configSchema = Type.Object(
     // lost in the noise.
     SLOW_REQUEST_MS: integerString("SLOW_REQUEST_MS", "500", 1, 600_000),
     MAIL_ENABLED: booleanString(),
-    // The host newsletter addresses are minted at. Distinct from
-    // FEED_FATHOM_DOMAIN, since Cloudflare Email Routing is rarely configured
-    // on the host the app is served from. Falls back to it when they coincide.
+    // The host newsletter addresses are minted at, when it differs from
+    // FEED_FATHOM_DOMAIN: Cloudflare Email Routing is rarely configured on
+    // the host the app is served from. Read through `mailDomain`.
     MAIL_DOMAIN: Type.Optional(Type.String()),
     MAIL_RELAY_SECRET: Type.Optional(Type.String()),
     MAILJET_API_KEY: Type.Optional(Type.String()),
     MAILJET_API_SECRET: Type.Optional(Type.String()),
+    // The public host (and port) the app is served at. Read through
+    // `publicOrigin`.
     FEED_FATHOM_DOMAIN: Type.Optional(Type.String()),
     // Commit this image was built from, baked in by the Dockerfile rather than
     // supplied by the deployment, so it survives a moving tag. Optional: a
@@ -130,7 +133,23 @@ const configSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type AppConfig = StaticDecode<typeof configSchema>;
+export type AppConfig = StaticDecode<typeof configSchema> & {
+  // NODE_ENV=production: Secure cookies, the CSP, and serving the built SPA.
+  production: boolean;
+  // Where mail links point. http only for localhost, whose dev server has no
+  // certificate.
+  publicOrigin?: URL;
+  // The host newsletter addresses are minted at, set only while mail ingest
+  // is enabled.
+  mailDomain?: string;
+};
+
+function publicOrigin(domain: string | undefined): URL | undefined {
+  const host = domain?.trim();
+  if (!host) return undefined;
+  const protocol = host.startsWith("localhost") ? "http" : "https";
+  return new URL(`${protocol}://${host}`);
+}
 
 export function loadConfig(
   environment: Readonly<Record<string, string | undefined>>,
@@ -154,7 +173,18 @@ export function loadConfig(
           "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must both be configured",
         );
     }
-    return parsed;
+    const origin = publicOrigin(parsed.FEED_FATHOM_DOMAIN);
+    if (parsed.MAILJET_API_KEY && parsed.MAILJET_API_SECRET && !origin)
+      throw new Error(
+        "FEED_FATHOM_DOMAIN is required when Mailjet is configured, for the links mail carries",
+      );
+    const mailDomain = newsletterMailDomain(parsed);
+    return {
+      ...parsed,
+      ...(mailDomain ? { mailDomain } : {}),
+      production: environment["NODE_ENV"] === "production",
+      ...(origin ? { publicOrigin: origin } : {}),
+    };
   } catch (cause) {
     const details = cause instanceof Error ? cause.message : String(cause);
     throw new Error(`Invalid config: ${details}`, { cause });

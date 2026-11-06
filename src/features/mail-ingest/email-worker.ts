@@ -1,14 +1,18 @@
 import {
+  type MailRelayRequest,
+  mailRelayPath,
+  mailRelayRejectionStatus,
   mailRelaySecretHeader,
   maxRawEmailBytes,
+  maxRawEmailMebibytes,
 } from "#shared/contracts/mail-relay.ts";
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 
 // Deliberately hand-written rather than expressed as schemas: this module is
 // bundled for Cloudflare, and pulling typebox in for three checks over strings
 // and one integer put 372 KB of runtime type registry -- 98.7% of the bundle --
-// on the cold start path. Nothing here is shared with the server: /api/mail
-// validates the request it receives with its own contract.
+// on the cold start path. The wire contract with /api/mail is mail-relay.ts,
+// which is plain TypeScript for that reason.
 type ErrorLogger = {
   error(message: string): void;
 };
@@ -38,7 +42,7 @@ export type IncomingEmailMessage = {
 // form to compare against.
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-const oversizeReason = "Message exceeds 5 MiB";
+const oversizeReason = `Message exceeds ${maxRawEmailMebibytes} MiB`;
 
 function isNonblankString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
@@ -56,9 +60,8 @@ function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
 }
 
 // A bounce can make a newsletter platform drop the subscription, so the
-// worker rejects only on the explicit `rejected: true` that /api/mail sends
-// for a message that is the sender's fault. Anything else -- a proxy's HTML
-// 413, a schema 422 from version skew during a deploy -- is thrown: a
+// worker rejects only on a MailRelayRejection. Anything else -- a proxy's
+// HTML 413, a schema 422 from version skew during a deploy -- is thrown: a
 // temporary failure the sending server may retry.
 function rejectionReason(diagnostic: string): string | undefined {
   let body: unknown;
@@ -135,7 +138,7 @@ function mailEndpoint(domain: string): URL {
     throw new Error("MAIL_ENDPOINT_DOMAIN must be https, or http on loopback");
   }
 
-  endpoint.pathname = "/api/mail";
+  endpoint.pathname = mailRelayPath;
   return endpoint;
 }
 
@@ -168,12 +171,13 @@ export function createEmailWorker(
           return;
         }
 
+        const relayed: MailRelayRequest = {
+          from: envelope.from,
+          raw: toBase64(bytes),
+          to: envelope.to,
+        };
         const response = await fetcher(endpoint, {
-          body: JSON.stringify({
-            from: envelope.from,
-            raw: toBase64(bytes),
-            to: envelope.to,
-          }),
+          body: JSON.stringify(relayed),
           headers: {
             "content-type": "application/json",
             [mailRelaySecretHeader]: env.MAIL_RELAY_SECRET,
@@ -183,7 +187,9 @@ export function createEmailWorker(
         if (!response.ok) {
           const diagnostic = await readResponseDiagnostic(response);
           const reason =
-            response.status === 422 ? rejectionReason(diagnostic) : undefined;
+            response.status === mailRelayRejectionStatus
+              ? rejectionReason(diagnostic)
+              : undefined;
           if (reason !== undefined) {
             message.setReject(reason);
             return;

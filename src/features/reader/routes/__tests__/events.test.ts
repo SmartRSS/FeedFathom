@@ -38,7 +38,7 @@ async function openStream(
         getUserSourceIds: async () => sourceIds(),
       }),
       usersDataService: strictFake<UsersDataService>({
-        getUserBySid: async () => sessionUser(),
+        authenticate: async () => sessionUser(),
       }),
     },
     (ms, tick) => {

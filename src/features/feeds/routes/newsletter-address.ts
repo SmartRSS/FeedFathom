@@ -3,7 +3,8 @@ import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { newsletterAddressRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 import {
   isNewsletterAddress,
   newsletterMailDomain,
@@ -37,12 +38,11 @@ export async function postNewsletterAddressHandler(
   // open: the allowance find, preview and subscribe share bounds that too.
   await outboundFetchBudget.consume(user.id);
   const domain = newsletterMailDomain(config);
-  if (!domain)
-    return json({ error: "Email subscriptions are not allowed." }, 400);
+  if (!domain) return jsonError("Email subscriptions are not allowed.", 400);
   // Only an address in the minted format on this instance's mail domain:
   // this endpoint is not a way to claim an address nothing here mints.
   if (!isNewsletterAddress(body.address, domain))
-    return json({ error: "Not a newsletter address of this server." }, 400);
+    return jsonError("Not a newsletter address of this server.", 400);
   // homeUrl as subscribe sets it for an email source. The address is this
   // user's from now on: no other account can subscribe to it. An existing
   // source, and whoever it belongs to, is left as it is, and the answer is
@@ -53,5 +53,5 @@ export async function postNewsletterAddressHandler(
     reservedBy: user.id,
     url: body.address,
   });
-  return json({ success: true });
+  return json(successResponse, { success: true });
 }

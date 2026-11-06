@@ -191,9 +191,20 @@ test("concurrent recoveries keep the delivered link", async () => {
   expect(await storedToken()).toBe(winner);
 });
 
+test("activation spends a live link once and refuses an expired one", async () => {
+  await pendingAccount(new Date(Date.now() - 60_000));
+  expect(await service.activate("expired-token")).toBe(false);
+  expect((await service.findUser(account(0).email))?.status).toBe("inactive");
+
+  await pendingAccount(tomorrow());
+  expect(await service.activate("expired-token")).toBe(true);
+  expect(await service.activate("expired-token")).toBe(false);
+  expect((await service.findUser(account(0).email))?.status).toBe("active");
+});
+
 test("recovery leaves an active account untouched", async () => {
-  const userId = await pendingAccount(new Date(Date.now() - 60_000));
-  await service.activateUser(userId);
+  const userId = await pendingAccount(tomorrow());
+  expect(await service.activate("expired-token")).toBe(true);
 
   expect(
     await service.refreshActivationToken(userId, "replacement", tomorrow()),
