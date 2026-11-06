@@ -5,31 +5,17 @@ import {
   targetUrl,
 } from "../url-helpers.ts";
 
+// The rule itself is secureOrigin's, tested in safe-url.test.ts.
 describe("canonicalizeInstance", () => {
-  test.each([
-    ["https://example.com", "https://example.com"],
-    ["https://EXAMPLE.com/", "https://example.com"],
-    ["https://example.com:443", "https://example.com"],
-    ["http://localhost:3456", "http://localhost:3456"],
-    ["http://dev.localhost:3456/", "http://dev.localhost:3456"],
-    ["http://127.0.0.2:3456", "http://127.0.0.2:3456"],
-    ["http://[::1]:3456", "http://[::1]:3456"],
-  ])("canonicalizes %s", (value, expected) => {
-    expect<string | undefined>(canonicalizeInstance(value)).toBe(expected);
+  test("keeps a secure origin in its canonical form", () => {
+    expect<string | undefined>(
+      canonicalizeInstance("https://EXAMPLE.com/"),
+    ).toBe("https://example.com");
   });
 
-  test.each([
-    "http://example.com:8080/",
-    "ftp://example.com",
-    "mailto:user@example.com",
-    "https://user@example.com",
-    "https://user:password@example.com",
-    "https://example.com/path",
-    "https://example.com/?query=value",
-    "https://example.com/#fragment",
-    "not a URL",
-  ])("rejects %s", (value) => {
-    expect(canonicalizeInstance(value)).toBeUndefined();
+  test("refuses anything secureOrigin refuses", () => {
+    expect(canonicalizeInstance("http://example.com")).toBeUndefined();
+    expect(canonicalizeInstance("https://example.com/path")).toBeUndefined();
   });
 });
 
