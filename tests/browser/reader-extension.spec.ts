@@ -1,8 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
-import { chromium, expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   isReaderResponseForRequest,
   readerCapabilitiesRequest,
@@ -11,22 +8,7 @@ import {
   type ReaderResponse,
 } from "#shared/reader-bridge.ts";
 import { installApiFixture } from "./api-fixture.ts";
-
-const extensionPath = fileURLToPath(
-  new URL("../../ext/build-ch", import.meta.url),
-);
-
-async function setInstance(page: Page, extensionId: string, instance: string) {
-  await page.goto(`chrome-extension://${extensionId}/options.html`);
-  const input = page.getByLabel("Instance");
-  await input.fill(instance);
-  await input.dispatchEvent("change");
-  await page.waitForFunction(
-    async (expected) =>
-      (await chrome.storage.sync.get("instance"))["instance"] === expected,
-    instance,
-  );
-}
+import { expect, setInstance, test } from "./extension-fixture.ts";
 
 // Every feed list the background stores for the popup, in order, recorded
 // from an extension page.
@@ -116,246 +98,198 @@ async function probeFetch(page: Page, url: string): Promise<ReaderResponse> {
 
 test("keeps the found feeds current across SPA navigation", async ({
   baseURL,
+  extension,
 }) => {
   if (!baseURL) throw new Error("Playwright baseURL is required");
-  const profile = await mkdtemp(`${tmpdir()}/feedfathom-extension-`);
-  const context = await chromium.launchPersistentContext(profile, {
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-    ],
-    channel: "chromium",
-    headless: true,
+  const { context, id: extensionId } = extension;
+  const optionsPage = await context.newPage();
+  const appPage = await context.newPage();
+  await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
+  await recordStoredFeeds(optionsPage);
+  await appPage.route("**/extension-menu-*", async (route) => {
+    await route.fulfill({
+      body: '<!doctype html><html><head><link rel="alternate" type="application/rss+xml" title="Initial" href="/initial.xml"></head><body></body></html>',
+      contentType: "text/html",
+    });
   });
 
-  try {
-    const serviceWorker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
-    const extensionId = new URL(serviceWorker.url()).hostname;
-    const optionsPage = await context.newPage();
-    const appPage = await context.newPage();
-    await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
-    await recordStoredFeeds(optionsPage);
-    await appPage.route("**/extension-menu-*", async (route) => {
-      await route.fulfill({
-        body: '<!doctype html><html><head><link rel="alternate" type="application/rss+xml" title="Initial" href="/initial.xml"></head><body></body></html>',
-        contentType: "text/html",
-      });
-    });
+  await appPage.goto(`${new URL(baseURL).origin}/extension-menu-initial`);
+  await waitForStoredFeeds(optionsPage, ["Initial"]);
 
-    await appPage.goto(`${new URL(baseURL).origin}/extension-menu-initial`);
-    await waitForStoredFeeds(optionsPage, ["Initial"]);
+  // Resolved once the content script has seen the stale route, so the
+  // latest one replaces a scan it already scheduled. The probe is the
+  // newest observer, so its callback runs after the content script's.
+  await appPage.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const link = document.querySelector("link[rel=alternate]");
+        if (!(link instanceof HTMLLinkElement))
+          throw new Error("feed link missing");
+        const probe = new MutationObserver(() => {
+          probe.disconnect();
+          resolve();
+        });
+        probe.observe(document.body, { childList: true });
+        history.pushState({}, "", "/extension-menu-stale");
+        link.title = "Stale";
+        link.href = "/stale.xml";
+        document.body.append(document.createElement("div"));
+      }),
+  );
+  await appPage.evaluate(() => {
+    const link = document.querySelector("link[rel=alternate]");
+    if (!(link instanceof HTMLLinkElement))
+      throw new Error("feed link missing");
+    history.pushState({}, "", "/extension-menu-latest");
+    link.title = "Latest";
+    link.href = "/latest.xml";
+    document.body.append(document.createElement("div"));
+  });
+  await waitForStoredFeeds(optionsPage, ["Latest"]);
 
-    // Resolved once the content script has seen the stale route, so the
-    // latest one replaces a scan it already scheduled. The probe is the
-    // newest observer, so its callback runs after the content script's.
-    await appPage.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          const link = document.querySelector("link[rel=alternate]");
-          if (!(link instanceof HTMLLinkElement))
-            throw new Error("feed link missing");
-          const probe = new MutationObserver(() => {
-            probe.disconnect();
-            resolve();
-          });
-          probe.observe(document.body, { childList: true });
-          history.pushState({}, "", "/extension-menu-stale");
-          link.title = "Stale";
-          link.href = "/stale.xml";
-          document.body.append(document.createElement("div"));
-        }),
-    );
-    await appPage.evaluate(() => {
-      const link = document.querySelector("link[rel=alternate]");
-      if (!(link instanceof HTMLLinkElement))
-        throw new Error("feed link missing");
-      history.pushState({}, "", "/extension-menu-latest");
-      link.title = "Latest";
-      link.href = "/latest.xml";
-      document.body.append(document.createElement("div"));
-    });
-    await waitForStoredFeeds(optionsPage, ["Latest"]);
-
-    expect((await storedFeedHistory(optionsPage)).flat()).not.toContain(
-      "Stale",
-    );
-  } finally {
-    await context.close();
-    await rm(profile, { recursive: true });
-  }
+  expect((await storedFeedHistory(optionsPage)).flat()).not.toContain("Stale");
 });
 
 // The Reader display mode is offered only where the extension answers the
 // page's capability probe: its configured instance, and no other origin.
 test("uses the real extension bridge only on its configured origin", async ({
   baseURL,
+  extension,
 }) => {
   if (!baseURL) throw new Error("Playwright baseURL is required");
-  const profile = await mkdtemp(`${tmpdir()}/feedfathom-extension-`);
-  const context = await chromium.launchPersistentContext(profile, {
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-    ],
-    channel: "chromium",
-    headless: true,
+  const { context, id: extensionId } = extension;
+  const optionsPage = await context.newPage();
+  const appPage = await context.newPage();
+  const browserFailures: string[] = [];
+  appPage.on("pageerror", (error) => browserFailures.push(error.message));
+  appPage.on("console", (message) => {
+    if (message.type() === "error") browserFailures.push(message.text());
+  });
+  // On the context, so it also answers the app's own service worker.
+  await installApiFixture(context);
+  const openArticle = async () => {
+    await appPage
+      .locator("button.source")
+      .filter({ hasText: "Tech News" })
+      .click();
+    await expect(appPage.getByText("Feed article content")).toBeVisible();
+  };
+  const modes = appPage.getByRole("combobox", {
+    name: "Article display mode",
   });
 
-  try {
-    const serviceWorker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
-    const extensionId = new URL(serviceWorker.url()).hostname;
-    const optionsPage = await context.newPage();
-    const appPage = await context.newPage();
-    const browserFailures: string[] = [];
-    appPage.on("pageerror", (error) => browserFailures.push(error.message));
-    appPage.on("console", (message) => {
-      if (message.type() === "error") browserFailures.push(message.text());
-    });
-    // On the context, so it also answers the app's own service worker.
-    await installApiFixture(context);
-    const openArticle = async () => {
-      await appPage
-        .locator("button.source")
-        .filter({ hasText: "Tech News" })
-        .click();
-      await expect(appPage.getByText("Feed article content")).toBeVisible();
-    };
-    const modes = appPage.getByRole("combobox", {
-      name: "Article display mode",
-    });
+  const origin = new URL(baseURL).origin;
+  await setInstance(optionsPage, extensionId, origin);
+  await appPage.goto(origin);
+  await openArticle();
+  await expect(modes).toContainText("Reader (plain text)");
+  const allowed = await probeCapabilities(appPage);
+  expect(allowed).toMatchObject({ available: true, ok: true });
 
-    const origin = new URL(baseURL).origin;
-    await setInstance(optionsPage, extensionId, origin);
-    await appPage.goto(origin);
-    await openArticle();
-    await expect(modes).toContainText("Reader (plain text)");
-    const allowed = await probeCapabilities(appPage);
-    expect(allowed).toMatchObject({ available: true, ok: true });
-
-    const refusedOrigin = new URL(origin);
-    refusedOrigin.hostname =
-      refusedOrigin.hostname === "localhost" ? "127.0.0.1" : "localhost";
-    await setInstance(optionsPage, extensionId, refusedOrigin.origin);
-    await appPage.reload();
-    const refused = await probeCapabilities(appPage);
-    expect(refused).toMatchObject({ error: "UNAUTHORIZED", ok: false });
-    await openArticle();
-    await expect(modes).toHaveCount(0);
-    expect(browserFailures).toEqual([]);
-  } finally {
-    await context.close();
-    await rm(profile, { recursive: true });
-  }
+  const refusedOrigin = new URL(origin);
+  refusedOrigin.hostname =
+    refusedOrigin.hostname === "localhost" ? "127.0.0.1" : "localhost";
+  await setInstance(optionsPage, extensionId, refusedOrigin.origin);
+  await appPage.reload();
+  const refused = await probeCapabilities(appPage);
+  expect(refused).toMatchObject({ error: "UNAUTHORIZED", ok: false });
+  await openArticle();
+  await expect(modes).toHaveCount(0);
+  expect(browserFailures).toEqual([]);
 });
 
-test("fails closed on opaque redirects and blocks terminal-dot private targets", async ({
-  baseURL,
-}) => {
-  if (!baseURL) throw new Error("Playwright baseURL is required");
-
-  let port = 0;
-  let privateRequests = 0;
-  let publicArticleRequests = 0;
-  let publicRedirectRequests = 0;
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? "/", "http://server.invalid");
-    if (url.pathname === "/redirect") {
-      publicRedirectRequests++;
-      const target =
-        url.searchParams.get("target") === "private"
-          ? `http://localhost.:${port}/private`
-          : `http://redirect.reader.test:${port}/article`;
-      response.writeHead(302, { location: target });
-      response.end();
-      return;
-    }
-    if (url.pathname === "/article") {
-      publicArticleRequests++;
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end("<article>Browser redirect</article>");
-      return;
-    }
-    if (url.pathname === "/private") {
-      privateRequests++;
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end("<article>Private endpoint</article>");
-      return;
-    }
-    response.writeHead(404);
-    response.end();
+test.describe(() => {
+  test.use({
+    extensionArgs: [
+      "--host-resolver-rules=MAP public.reader.test 127.0.0.1, MAP redirect.reader.test 127.0.0.1",
+    ],
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  const address = server.address();
-  if (!address || typeof address === "string")
-    throw new Error("Reader test server did not bind a TCP port");
-  port = address.port;
 
-  try {
-    const profile = await mkdtemp(`${tmpdir()}/feedfathom-extension-`);
-    try {
-      const context = await chromium.launchPersistentContext(profile, {
-        args: [
-          `--disable-extensions-except=${extensionPath}`,
-          `--load-extension=${extensionPath}`,
-          "--host-resolver-rules=MAP public.reader.test 127.0.0.1, MAP redirect.reader.test 127.0.0.1",
-        ],
-        channel: "chromium",
-        headless: true,
-      });
-      try {
-        const serviceWorker =
-          context.serviceWorkers()[0] ??
-          (await context.waitForEvent("serviceworker"));
-        const extensionId = new URL(serviceWorker.url()).hostname;
-        const optionsPage = await context.newPage();
-        const appPage = await context.newPage();
-        await installApiFixture(appPage);
+  test("fails closed on opaque redirects and blocks terminal-dot private targets", async ({
+    baseURL,
+    extension,
+  }) => {
+    if (!baseURL) throw new Error("Playwright baseURL is required");
 
-        const origin = new URL(baseURL).origin;
-        await setInstance(optionsPage, extensionId, origin);
-        await appPage.goto(origin);
-
-        const direct = await probeFetch(
-          appPage,
-          `http://localhost.:${port}/private`,
-        );
-        expect(direct).toMatchObject({ error: "PRIVATE_URL", ok: false });
-        expect(privateRequests).toBe(0);
-
-        /* eslint-disable no-await-in-loop -- Requests and endpoint-count assertions are intentionally ordered. */
-        for (const target of ["public", "private"]) {
-          const redirected = await probeFetch(
-            appPage,
-            `http://public.reader.test:${port}/redirect?target=${target}`,
-          );
-          expect(redirected).toMatchObject({
-            error: "INVALID_RESPONSE",
-            ok: false,
-          });
-          expect(publicArticleRequests).toBe(0);
-          expect(privateRequests).toBe(0);
-        }
-        /* eslint-enable no-await-in-loop */
-        expect(publicRedirectRequests).toBe(2);
-      } finally {
-        await context.close();
+    let port = 0;
+    let privateRequests = 0;
+    let publicArticleRequests = 0;
+    let publicRedirectRequests = 0;
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://server.invalid");
+      if (url.pathname === "/redirect") {
+        publicRedirectRequests++;
+        const target =
+          url.searchParams.get("target") === "private"
+            ? `http://localhost.:${port}/private`
+            : `http://redirect.reader.test:${port}/article`;
+        response.writeHead(302, { location: target });
+        response.end();
+        return;
       }
-    } finally {
-      await rm(profile, { recursive: true });
-    }
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+      if (url.pathname === "/article") {
+        publicArticleRequests++;
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end("<article>Browser redirect</article>");
+        return;
+      }
+      if (url.pathname === "/private") {
+        privateRequests++;
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end("<article>Private endpoint</article>");
+        return;
+      }
+      response.writeHead(404);
+      response.end();
     });
-  }
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Reader test server did not bind a TCP port");
+    port = address.port;
+
+    try {
+      const { context, id: extensionId } = extension;
+      const optionsPage = await context.newPage();
+      const appPage = await context.newPage();
+      await installApiFixture(appPage);
+
+      const origin = new URL(baseURL).origin;
+      await setInstance(optionsPage, extensionId, origin);
+      await appPage.goto(origin);
+
+      const direct = await probeFetch(
+        appPage,
+        `http://localhost.:${port}/private`,
+      );
+      expect(direct).toMatchObject({ error: "PRIVATE_URL", ok: false });
+      expect(privateRequests).toBe(0);
+
+      /* eslint-disable no-await-in-loop -- Requests and endpoint-count assertions are intentionally ordered. */
+      for (const target of ["public", "private"]) {
+        const redirected = await probeFetch(
+          appPage,
+          `http://public.reader.test:${port}/redirect?target=${target}`,
+        );
+        expect(redirected).toMatchObject({
+          error: "INVALID_RESPONSE",
+          ok: false,
+        });
+        expect(publicArticleRequests).toBe(0);
+        expect(privateRequests).toBe(0);
+      }
+      /* eslint-enable no-await-in-loop */
+      expect(publicRedirectRequests).toBe(2);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
 });
