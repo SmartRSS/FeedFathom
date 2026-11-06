@@ -145,7 +145,7 @@ export type AppConfig = StaticDecode<typeof configSchema> & {
   publicOrigin?: URL;
   // The host newsletter addresses are minted at, set only while mail ingest
   // is enabled.
-  mailDomain?: string;
+  mailDomain?: string | undefined;
 };
 
 // The host addresses are minted at, or undefined unless this deployment

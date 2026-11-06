@@ -65,6 +65,7 @@ const config = strictFake<AppConfig>(
     FEED_FATHOM_DOMAIN: "localhost:3456",
     MAIL_DOMAIN: mailDomain,
     MAIL_ENABLED: true,
+    mailDomain,
   },
   "config",
 );
@@ -502,7 +503,10 @@ test("refuses to reserve while mail is disabled", async () => {
       user: { id: account.id },
     },
     {
-      config: strictFake<AppConfig>({ MAIL_ENABLED: false }, "config"),
+      config: strictFake<AppConfig>(
+        { MAIL_ENABLED: false, mailDomain: undefined },
+        "config",
+      ),
       outboundFetchBudget,
       sourcesDataService,
     },
