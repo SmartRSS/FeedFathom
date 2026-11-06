@@ -2270,8 +2270,8 @@ textarea[aria-invalid="true"]:focus {
 }
 
 /* A mouse gets the dense lists a list-heavy reader wants: the small type
-   step and tight rows, about 19 articles on a 900px-tall screen. Touch keeps
-   the 1rem rows above. */
+   step and tight rows, about 17 articles on a 900px-tall screen. Touch
+   keeps the 1rem rows above. */
 @media (pointer: fine) and (hover: hover) {
   .source,
   .article {
@@ -2282,12 +2282,14 @@ textarea[aria-invalid="true"]:focus {
   .source {
     line-height: 1.5rem;
   }
+  /* Title and byline on one ratio, the tight one, so 14px text keeps to
+     two line-heights app-wide: this and the body ratio. */
   .article {
-    --title-h: 1.125rem;
-    --details-h: 1rem;
+    --title-h: calc(var(--fs-sm) * var(--lh-tight));
+    --details-h: var(--title-h);
     --row-gap: var(--space-half);
 
-    padding-block: var(--space-half);
+    padding-block: var(--space-1);
   }
 }
 /* Touch sizing follows the input, not the width: a tablet is as much a
