@@ -20,7 +20,11 @@ export function ReaderHeader(props: {
         <span class="reader-meta-items">
           <span>
             <Show when={props.feed}>
-              {(name) => <span title={name()}>{name()}</span>}
+              {(name) => (
+                <span class="reader-meta-feed" title={name()}>
+                  {name()}
+                </span>
+              )}
             </Show>
             <Show when={props.author && props.author !== props.feed}>
               <span title={props.author}>{props.author}</span>

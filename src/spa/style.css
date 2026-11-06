@@ -1863,13 +1863,13 @@ img.skeleton-row {
   flex-shrink: 0;
   margin: 0;
   padding: var(--space-2) var(--space-3);
-  overflow: hidden;
   border-bottom: var(--border);
   background: var(--white);
   font-size: var(--fs-md);
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* A feed's name in full, wrapped: this is where a one-pane layout shows
+     it, and a touch screen has no tooltip for a cut-off one. */
+  overflow-wrap: anywhere;
 }
 .date-group {
   position: sticky;
@@ -2174,14 +2174,14 @@ textarea[aria-invalid="true"]:focus {
 .reader > .empty-pane {
   padding-top: calc(var(--search-row-h) + var(--space-8) - var(--space-6));
 }
+/* A toolbar's title is a name, shown whole: it wraps rather than ending
+   in an ellipsis that a touch screen can't expand. */
 .toolbar strong,
 .toolbar .toolbar-title {
-  overflow: hidden;
   margin: 0;
   font-size: var(--fs-sm);
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .toolbar .toolbar-title {
   flex: 1;
@@ -2275,6 +2275,20 @@ textarea[aria-invalid="true"]:focus {
    attached). Targets are floored in px so they stay usable when the user
    scales text down. */
 @media (pointer: coarse), (hover: none) {
+  /* The feed's name is a line of its own here, wrapping in full, since a
+     touch screen has no tooltip for a cut-off one; author and time follow
+     in the dotted run. Without its dot, and inset by one dot's width, it
+     starts where the run's lines do. */
+  .reader-meta-items > span > .reader-meta-feed {
+    display: block;
+    max-width: none;
+    margin-inline-start: var(--meta-dot);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .reader-meta-items > span > .reader-meta-feed::before {
+    content: none;
+  }
   :root {
     --touch: max(2.75rem, 44px);
     --control-h: var(--touch);
@@ -2423,6 +2437,20 @@ textarea[aria-invalid="true"]:focus {
    no fixed upscale suits both a browser at its default and one the user
    has scaled down. */
 @media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  /* The feed's name is a line of its own here, wrapping in full, since a
+     touch screen has no tooltip for a cut-off one; author and time follow
+     in the dotted run. Without its dot, and inset by one dot's width, it
+     starts where the run's lines do. */
+  .reader-meta-items > span > .reader-meta-feed {
+    display: block;
+    max-width: none;
+    margin-inline-start: var(--meta-dot);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .reader-meta-items > span > .reader-meta-feed::before {
+    content: none;
+  }
   .account-form h1,
   .account-result h1 {
     font-size: var(--fs-xl);
