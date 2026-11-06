@@ -2,7 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
-import { createServerApp, MAX_REQUEST_BODY_BYTES } from "../server-app.ts";
+import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
+import { createServerApp } from "../server-app.ts";
 import {
   createDependencies,
   appFor,
@@ -112,7 +113,7 @@ test("rejects an oversized body before any handler runs", async () => {
   app.listen(0);
   try {
     const origin = `http://127.0.0.1:${app.server?.port}`;
-    const oversized = "x".repeat(MAX_REQUEST_BODY_BYTES + 1);
+    const oversized = "x".repeat(maximumFeedBodyBytes + 1);
 
     const response = await fetch(`${origin}/api/login`, {
       body: JSON.stringify({ email: oversized }),

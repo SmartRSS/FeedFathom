@@ -6,10 +6,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { SESSION_TTL_DAYS, sessions } from "#platform/db/schemas/sessions.ts";
 import { users } from "#platform/db/schemas/users.ts";
-import {
-  digestToken,
-  issueToken,
-} from "#features/auth/account-tokens.ts";
+import { digestToken, issueToken } from "#features/auth/account-tokens.ts";
 import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 
 const authenticatedRowsCheck = Schema.Compile(

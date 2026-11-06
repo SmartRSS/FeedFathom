@@ -328,12 +328,13 @@ export class HttpClient {
         result = await this.redirects.follow(url, headers, priority, deadline);
         // Whatever answered is what gets held back, which after a redirect
         // is not the host the request started at.
-        const answeringHost = hostnameOf(result.response.url) ?? hostname;
+        const answeringHost =
+          URL.parse(result.response.url)?.hostname ?? hostname;
         await this.deferIfLimited(answeringHost, result.response, deadline);
         const lastAttempt = attempt === maxAttempts - 1;
         if (
           priority === "background" ||
-          !this.isRetryable(result.response.status) ||
+          !retryableStatuses.has(result.response.status) ||
           lastAttempt
         ) {
           return result;
@@ -444,17 +445,5 @@ export class HttpClient {
     return options.responseType === "arrayBuffer"
       ? new Uint8Array(body).buffer
       : body.toString();
-  }
-
-  private isRetryable(status: number): boolean {
-    return retryableStatuses.has(status);
-  }
-}
-
-function hostnameOf(url: string): string | undefined {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return undefined;
   }
 }

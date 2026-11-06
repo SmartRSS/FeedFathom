@@ -22,7 +22,6 @@ import {
   type MailRouteServices,
 } from "#features/mail-ingest/routes/mail.ts";
 import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
-import type * as reader from "#features/reader/services.ts";
 import {
   createInternalRoutes,
   healthcheckPath,
@@ -43,18 +42,11 @@ export type ServerServices = AuthRouteServices &
   FeedRouteServices &
   ReaderRouteServices &
   AdminRouteServices &
-  MailRouteServices &
-  Pick<typeof reader, "articleEventHub">;
+  MailRouteServices;
 
 export type ServerAppOptions = {
   spaDirectory?: string;
 };
-
-// Bun buffers the whole body before any schema validation runs, so the cap
-// has to sit at the server level, not per-route. The largest legitimate body
-// is a pushed feed document, which can carry anything a fetch could, so the
-// cap is the fetch pipeline's. Anything larger never reaches a handler.
-export const MAX_REQUEST_BODY_BYTES = maximumFeedBodyBytes;
 
 // The origin is rate limited, or this instance's own politeness interval for
 // the host has not elapsed. The client is meant to come back, and
@@ -231,8 +223,12 @@ export async function createServerApp(
   }
 
   return (
+    // Bun buffers the whole body before any schema validation runs, so the
+    // cap has to sit at the server level, not per-route. The largest
+    // legitimate body is a pushed feed document, which can carry anything a
+    // fetch could, so the cap is the fetch pipeline's.
     new Elysia({
-      serve: { maxRequestBodySize: MAX_REQUEST_BODY_BYTES },
+      serve: { maxRequestBodySize: maximumFeedBodyBytes },
     })
       .onRequest(({ request }) => {
         requestStartedAt.set(request, performance.now());

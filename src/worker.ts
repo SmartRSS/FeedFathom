@@ -8,6 +8,7 @@ import {
   jobQueueName,
 } from "#platform/runtime.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import { containerPort } from "#platform/http/internal-routes.ts";
 import {
   faviconRefresher,
   feedParser,
@@ -36,5 +37,6 @@ await runWorker({
     sourcesDataService,
     webSubSubscriber,
   }),
+  port: containerPort,
   waitForMigration: () => waitForMigration(drizzleConnection.$client),
-});
+}).ready;

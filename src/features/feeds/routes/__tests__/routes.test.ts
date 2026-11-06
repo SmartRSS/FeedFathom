@@ -1272,7 +1272,7 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
     },
     {
       faviconFingerprint: null,
-      homeUrl: null,
+      homeUrl: "https://feedfathom.test",
       id: 2,
       kind: "email",
       lastSuccess: null,

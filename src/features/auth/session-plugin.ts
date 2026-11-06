@@ -19,6 +19,7 @@ export async function userFor(
 export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
 
 const unauthorized: Static<typeof errorResponse> = { error: "Unauthorized" };
+const forbidden: Static<typeof errorResponse> = { error: "Forbidden" };
 
 /**
  * 'plugin' scope: visible to this instance's own routes and to whichever
@@ -37,7 +38,7 @@ function sessionPlugin(
       request.headers.get("user-agent"),
     );
     if (!user) return status(401, unauthorized);
-    if (requireAdmin && !user.isAdmin) return status(403, unauthorized);
+    if (requireAdmin && !user.isAdmin) return status(403, forbidden);
     // The sid rides along so a route that names the current session (the
     // sessions list, the events stream's recheck) does not re-read the cookie.
     return { sid, user };
