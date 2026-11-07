@@ -601,15 +601,11 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      # No step reads the repository's files, so gh is told the repository instead of finding it from a checkout.
+      GH_REPO: ${{ github.repository }}
       EXTENSION_VERSION: ${{ needs.build_extension.outputs.extension_version }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
       - name: Download signed extension artifact
         if: needs.build_extension.outputs.changed == 'true'
         uses: actions/download-artifact@v8
