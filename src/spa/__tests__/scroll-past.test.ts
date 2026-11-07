@@ -80,9 +80,7 @@ describe("ScrollPastQueue", () => {
 
   // The case CI kept catching and a fast machine kept hiding. Rows enter the
   // viewport as the scroll carries them, so their dwells complete in the order
-  // they arrived, not together -- and the batch has to survive that. Note the
-  // clock steps in real increments here: advance(1000) in one jump would carry
-  // time past both deadlines at once and batch them for the wrong reason.
+  // they arrived, not together -- and the batch has to survive that.
   test("rows whose dwells complete a millisecond apart still leave together", () => {
     const clock = fakeTimers();
     const batches: number[][] = [];

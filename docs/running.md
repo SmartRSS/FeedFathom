@@ -108,6 +108,8 @@ feeds.example.com {
 
 Any reverse proxy works. The requirements are TLS termination, forwarding to the published port, and passing the original `Host` header through. No path rewriting or WebSocket handling is needed.
 
+NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. Unless `FEED_FATHOM_DOMAIN` is set, a newsletter subscription's stored home link then falls back to the upstream address instead of the public host name.
+
 Failed logins, password resets and registrations are throttled per client address, and behind a proxy every request arrives from the proxy. (Password changes are throttled per signed-in user instead, so the header does not matter for them.) Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
 
 ```bash

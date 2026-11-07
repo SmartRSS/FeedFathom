@@ -25,6 +25,7 @@ import {
   post,
   authenticated,
 } from "../../../../__tests__/server-harness.ts";
+import { opmlUploadField } from "#shared/contracts/requests.ts";
 
 const subscriptionSource = {
   createdAt: new Date("2026-07-20T12:00:00.000Z"),
@@ -1216,7 +1217,7 @@ test("validates OPML files and checks plain-text content before parsing", async 
   const app = await appFor(dependencies);
   const upload = (file?: File) => {
     const body = new FormData();
-    if (file) body.set("opml", file);
+    if (file) body.set(opmlUploadField, file);
     return app.handle(
       new Request("http://localhost/api/options/opml", {
         body,
