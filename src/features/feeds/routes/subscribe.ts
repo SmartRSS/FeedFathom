@@ -3,18 +3,17 @@ import type { AppConfig } from "#platform/config.ts";
 import type { StaticDecode } from "typebox";
 import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
-import { json } from "#platform/http/json.ts";
+import { invalidRequestMessage, json, jsonError } from "#platform/http/json.ts";
+import { subscriptionResponse } from "#shared/contracts/responses.ts";
 import {
   deserializeFeedPreview,
   serializeFeedPreview,
 } from "#features/feeds/feed-preview-cache.ts";
-import {
-  isMintedNewsletterAddress,
-  newsletterMailDomain,
-} from "#shared/util/newsletter-address.ts";
+import { isMintedNewsletterAddress } from "#shared/util/newsletter-address.ts";
+import { newsletterHomeUrl } from "#features/feeds/routes/newsletter-address.ts";
 import {
   type FeedPreview,
-  mapFeedToPreviewArticles,
+  mapFeedToArticles,
 } from "#features/feeds/feed-mapper.ts";
 
 // A truncated preview holds only a sample of the feed. Its cached parsed feed
@@ -31,7 +30,7 @@ function completePreview({
   if (!feed) return undefined;
   return {
     ...preview,
-    articles: mapFeedToPreviewArticles(feed, preview.feedUrl, {
+    articles: mapFeedToArticles(feed, preview.feedUrl, {
       baseUrl: finalUrl,
     }),
     truncated: false,
@@ -55,7 +54,6 @@ export async function postSubscribeHandler(
     feedPreviewCache,
     outboundFetchBudget,
     sourceEnqueuer,
-    sourcesDataService,
     userSourcesDataService,
   }: Pick<
     typeof feeds,
@@ -64,49 +62,42 @@ export async function postSubscribeHandler(
     | "feedPreviewCache"
     | "outboundFetchBudget"
     | "sourceEnqueuer"
-    | "sourcesDataService"
     | "userSourcesDataService"
   > & { config: AppConfig },
 ) {
-  // Counted before any outbound work, including a cache hit: the budget is
-  // about how often a user can ask us to reach out at all.
   await outboundFetchBudget.consume(user.id);
   const { sourceUrl } = body;
   const isEmail = sourceUrl.kind === "email";
-  if (!config.MAIL_ENABLED && isEmail)
-    return json({ error: "Email subscriptions are not allowed." }, 400);
-  let homeUrl = new URL(request.url).origin;
+  const { mailDomain } = config;
+  if (isEmail && !mailDomain)
+    return jsonError("Email subscriptions are not allowed.", 400);
   const cachedPreview = isEmail
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
-  if (cachedPreview?.link) homeUrl = cachedPreview.link;
   const importablePreview = cachedPreview && completePreview(cachedPreview);
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
-    homeUrl,
     initializationSnapshot: importablePreview
       ? serializeFeedPreview(importablePreview)
       : null,
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
-    ...(isEmail
+    ...(isEmail && mailDomain
       ? {
+          homeUrl: newsletterHomeUrl(config, request),
           kind: "email",
-          minted: isMintedNewsletterAddress(
-            sourceUrl.value,
-            newsletterMailDomain(config) ?? "",
-          ),
+          minted: isMintedNewsletterAddress(sourceUrl.value, mailDomain),
         }
-      : { kind: "feed" }),
+      : { homeUrl: cachedPreview?.link, kind: "feed" }),
   });
-  if (!subscription) return json({ error: "Invalid folder" }, 400);
+  if (!subscription) return jsonError("Invalid folder", 400);
   // Another account's newsletter address, or one this instance does not
   // mint. Answered exactly as a malformed target is (the validation error
   // server-app.ts maps), so a refusal says nothing about whether the address
   // exists or whose it is.
-  if (subscription === "refused") return json({ error: "Refine Error" }, 422);
+  if (subscription === "refused") return jsonError(invalidRequestMessage, 422);
   if (subscription.initialized === true)
-    return json({ sourceId: subscription.source.id });
+    return json(subscriptionResponse, { sourceId: subscription.source.id });
 
   const preview =
     subscription.initializationSnapshot === null
@@ -154,30 +145,21 @@ export async function postSubscribeHandler(
           // worker. Falls back to enqueueing if anything here fails,
           // including an import that committed only some batches.
           try {
-            // A retry imports from the stored snapshot, which can hold an
-            // alert that has expired since.
-            const now = Date.now();
-            await articleImporter.importArticles(
+            await articleImporter.recordFetch(
               subscription.source.id,
-              preview.articles
-                .filter(
-                  (article) =>
-                    article.expiresAt === undefined || article.expiresAt > now,
-                )
-                .map(({ expiresAt: _expiresAt, ...article }) =>
-                  Object.assign(article, {
-                    lastSeenInFeedAt: subscription.subscriptionCreatedAt,
-                  }),
-                ),
-              { alwaysRecount: true },
+              preview.articles,
+              {
+                alwaysRecount: true,
+                cached: true,
+                freshUntil: preview.freshUntil,
+                trigger: "poll",
+              },
             );
-            await sourcesDataService.successSource(subscription.source.id, {
-              cached: true,
-              notBefore: preview.freshUntil
-                ? new Date(preview.freshUntil)
-                : undefined,
-            });
-          } catch {
+          } catch (error) {
+            console.error(
+              `Stored preview import failed for source ${subscription.source.id}; queueing a fetch:`,
+              error,
+            );
             await sourceEnqueuer.enqueueSource(subscription.source);
           }
         } else {
@@ -186,7 +168,7 @@ export async function postSubscribeHandler(
       },
     );
   if (lease.outcome === "in-progress")
-    return json({ error: "Subscription initialization in progress" }, 409);
+    return jsonError("Subscription initialization in progress", 409);
 
-  return json({ sourceId: subscription.source.id });
+  return json(subscriptionResponse, { sourceId: subscription.source.id });
 }

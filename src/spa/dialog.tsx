@@ -1,11 +1,15 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { shortcutHelp } from "./keyboard-shortcuts.ts";
 
-// In-app replacements for the last native dialogs in the app (#698).
+// In-app replacements for the native prompt() and confirm() (#698).
 // Native prompt()/confirm() block the event loop, can be suppressed by the
 // browser (after which folder creation silently no-ops), are poor on touch
 // screens, and can't follow the page's theme. A single <dialog> hosted once
 // in main.tsx serves every call site; showModal() provides the focus trap,
 // the inert background and the Esc-to-dismiss handling for free.
+
+export const isDialogOpen = () =>
+  document.querySelector("dialog[open]") !== null;
 
 // Both variants store one common resolve signature (the broadest of the
 // two), so dismissals can be routed without casting; the public helpers
@@ -41,25 +45,11 @@ type DialogRequest =
 
 // Every shortcut, so the cheat sheet and the handler can't drift apart.
 // Each entry lists the key groups that mean the same thing.
-const SHORTCUTS: [string[][], string][] = [
-  [[["↑"], ["↓"]], "Focus previous / next article"],
-  [[["j"], ["k"]], "Same, the RSS-reader standard keys"],
-  [[["Space"]], "Select the article at the cursor"],
-  [[["Enter"]], "Read the article at the cursor"],
-  [[["v"]], "Open the original in a new tab"],
-  [[["o"]], "Move between the list and the reader pane"],
-  [[["m"]], "Mark read / unread"],
-  [[["Delete"]], "Delete the selection"],
-  [[["Ctrl", "A"]], "Select all articles"],
-  [[["←"]], "Back to the feed list"],
-  [[["r"]], "Refresh"],
-  [[["?"], ["Esc"]], "This cheat sheet / close"],
-];
 
 function Shortcuts() {
   return (
     <dl class="app-dialog-shortcuts">
-      <For each={SHORTCUTS}>
+      <For each={shortcutHelp}>
         {([groups, description]) => (
           <div>
             <dt>
@@ -136,7 +126,6 @@ export function promptDialog(
   );
 }
 
-// No value: the cheat sheet only ever resolves through a dismissal.
 export function helpDialog(): Promise<void> {
   return new Promise((resolve) =>
     show({ kind: "help", resolve: () => resolve() }),

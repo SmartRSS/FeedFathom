@@ -1,8 +1,7 @@
-const defaultLimit = 1_024;
+const limit = 1_024;
 
 export async function readResponseDiagnostic(
   response: Response,
-  limit = defaultLimit,
 ): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";

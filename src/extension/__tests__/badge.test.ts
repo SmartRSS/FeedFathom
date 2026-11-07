@@ -1,8 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import {
-  storedBadgeEnabled,
-  storedOpenRssEnabled,
-} from "#shared/extension-types.ts";
 import { formatBadgeCount } from "../badge.ts";
 
 describe("formatBadgeCount", () => {
@@ -21,34 +17,4 @@ describe("formatBadgeCount", () => {
       expect(formatBadgeCount(count)).toBe("");
     },
   );
-});
-
-describe("storedBadgeEnabled", () => {
-  test("reads the stored value", () => {
-    expect(storedBadgeEnabled({ showBadge: true })).toBe(true);
-    expect(storedBadgeEnabled({ showBadge: false })).toBe(false);
-  });
-
-  test("an unset key means on -- the badge is opt-out", () => {
-    expect(storedBadgeEnabled({})).toBe(true);
-  });
-
-  test("an unreadable storage result means on, not off", () => {
-    for (const value of [
-      null,
-      "off",
-      { showBadge: 0 },
-      { extra: true },
-      { extra: true, showBadge: false },
-    ])
-      expect(storedBadgeEnabled(value)).toBe(true);
-  });
-});
-
-describe("storedOpenRssEnabled", () => {
-  test("only an explicit true turns the OpenRSS suggestion on", () => {
-    expect(storedOpenRssEnabled({ showOpenRss: true })).toBe(true);
-    for (const value of [{}, { showOpenRss: false }, null, "on"])
-      expect(storedOpenRssEnabled(value)).toBe(false);
-  });
 });

@@ -8,7 +8,7 @@ import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const databaseUrl = requireDisposableDatabaseUrl();
-await migrateDatabase(databaseUrl, "./drizzle", 5_000);
+await migrateDatabase(databaseUrl, "./drizzle", { deadline: 5_000 });
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 const websubStateService = new WebSubStateService(drizzleConnection);

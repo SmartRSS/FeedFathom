@@ -20,6 +20,12 @@ describe("withScheme", () => {
     expect(withScheme("me@example.com")).toBe("me@example.com");
   });
 
+  test("prefixes a host whose path has an @ in it", () => {
+    expect(withScheme("medium.com/@writer/feed")).toBe(
+      "https://medium.com/@writer/feed",
+    );
+  });
+
   test("trims, and leaves an empty value empty", () => {
     expect(withScheme("  example.com  ")).toBe("https://example.com");
     expect(withScheme("   ")).toBe("");

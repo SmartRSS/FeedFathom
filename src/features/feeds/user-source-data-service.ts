@@ -8,7 +8,10 @@ import {
   hasSqlState,
   type SourcesDataService,
 } from "#features/feeds/source-data-service.ts";
-import { unreadCondition } from "#features/feeds/article-read-state.ts";
+import {
+  subscriptionSeesArticle,
+  unreadCondition,
+} from "#features/feeds/article-read-state.ts";
 
 type SubscriptionResult = {
   initialized?: boolean;
@@ -21,7 +24,10 @@ type SubscriptionResult = {
 export class UserSourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly sourcesDataService: SourcesDataService,
+    private readonly sourcesDataService: Pick<
+      SourcesDataService,
+      "addSource" | "findSourceByUrl"
+    >,
   ) {}
 
   /**
@@ -33,17 +39,21 @@ export class UserSourcesDataService {
   public async addSourceToUser(
     userId: number,
     sourcePayload: {
-      homeUrl: string;
       initializationSnapshot?: null | string;
-      kind?: "email" | "feed" | undefined;
-      // An email address in a format this instance mints, on its mail
-      // domain. Any other address can only be subscribed to if its source
-      // already exists.
-      minted?: boolean;
       name: string;
       parentId: null | number;
       url: string;
-    },
+    } & (
+      | {
+          homeUrl: string;
+          kind: "email";
+          // An address in a format this instance mints, on its mail domain.
+          // Any other address can only be subscribed to if its source
+          // already exists.
+          minted: boolean;
+        }
+      | { homeUrl?: string | undefined; kind?: "feed" }
+    ),
   ): Promise<"refused" | SubscriptionResult | undefined> {
     if (!(await this.ownsFolder(userId, sourcePayload.parentId))) {
       console.error(
@@ -65,17 +75,26 @@ export class UserSourcesDataService {
     userId: number,
     sourcePayload: Parameters<UserSourcesDataService["addSourceToUser"]>[1],
   ): Promise<"refused" | SubscriptionResult> {
-    const isEmail = sourcePayload.kind === "email";
-    const source =
-      isEmail && !sourcePayload.minted
-        ? await this.sourcesDataService.findSourceByUrl(sourcePayload.url)
-        : await this.sourcesDataService.addSource({
-            homeUrl: sourcePayload.homeUrl,
-            kind: sourcePayload.kind,
-            url: sourcePayload.url,
-            ...(isEmail && { reservedBy: userId }),
-          });
+    let source: Source | undefined;
+    if (sourcePayload.kind !== "email") {
+      source = await this.sourcesDataService.addSource({
+        homeUrl: sourcePayload.homeUrl,
+        url: sourcePayload.url,
+      });
+    } else if (sourcePayload.minted) {
+      source = await this.sourcesDataService.addSource({
+        homeUrl: sourcePayload.homeUrl,
+        kind: "email",
+        reservedBy: userId,
+        url: sourcePayload.url,
+      });
+    } else {
+      source = await this.sourcesDataService.findSourceByUrl(sourcePayload.url);
+    }
     if (!source) return "refused";
+    // A newsletter address belongs to one account. An email source from
+    // before ownership can have other subscribers too (see migration 0013):
+    // they keep their subscription, so subscribing again is not refused.
     if (
       source.kind === "email" &&
       source.reservedBy !== userId &&
@@ -140,10 +159,7 @@ export class UserSourcesDataService {
     };
   }
 
-  // A newsletter address belongs to one account. An email source from
-  // before ownership can have other subscribers too (see migration 0013):
-  // they keep their subscription, so subscribing again is not refused.
-  private async isSubscribed(userId: number, sourceId: number) {
+  public async isSubscribed(userId: number, sourceId: number) {
     const rows = await this.drizzleConnection
       .select({ id: userSources.id })
       .from(userSources)
@@ -331,23 +347,6 @@ export class UserSourcesDataService {
     ).at(0);
   }
 
-  // The source behind one of this user's subscriptions, or undefined when
-  // the user does not subscribe to it.
-  public async getSubscribedSource(userId: number, sourceId: number) {
-    return (
-      await this.drizzleConnection
-        .select({ id: sources.id, url: sources.url })
-        .from(userSources)
-        .innerJoin(sources, eq(sources.id, userSources.sourceId))
-        .where(
-          and(
-            eq(userSources.userId, userId),
-            eq(userSources.sourceId, sourceId),
-          ),
-        )
-    ).at(0);
-  }
-
   public async getUserSourceIds(userId: number): Promise<number[]> {
     const rows = await this.drizzleConnection
       .select({ id: userSources.sourceId })
@@ -377,7 +376,7 @@ export class UserSourcesDataService {
       })
       .from(userSources)
       .where(eq(userSources.userId, userId))
-      .leftJoin(sources, eq(sources.id, userSources.sourceId))
+      .innerJoin(sources, eq(sources.id, userSources.sourceId))
       .orderBy(userSources.name);
   }
 
@@ -407,7 +406,10 @@ export class UserSourcesDataService {
           ON ua.user_id = us.user_id
           AND ua.source_id = us.source_id AND ua.guid = a.guid
         WHERE a.source_id = us.source_id
-          AND a.last_seen_in_feed_at >= us.created_at
+          AND ${subscriptionSeesArticle(
+            sql.raw("a.last_seen_in_feed_at"),
+            sql.raw("us.created_at"),
+          )}
           AND ${unreadCondition({
             articleUpdatedAt: sql.raw("a.updated_at"),
             deletedAt: sql.raw("ua.deleted_at"),

@@ -1,25 +1,6 @@
-import { Type, type StaticDecode, type TSchema } from "typebox";
+import type { StaticDecode, StaticEncode, TSchema } from "typebox";
 import { Value } from "typebox/value";
-
-const exact = { additionalProperties: false } as const;
-const errorResponse = Type.Union([
-  Type.Object(
-    {
-      // The raw reason behind `error`, where the server keeps one for an
-      // admin's details.
-      detail: Type.Optional(Type.String()),
-      error: Type.String(),
-      success: Type.Optional(Type.Literal(false)),
-    },
-    exact,
-  ),
-  Type.Object({ success: Type.Literal(false) }, exact),
-  Type.Object({}, exact),
-]);
-const validationErrorResponse = Type.Object(
-  { message: Type.String(), type: Type.Literal("validation") },
-  { additionalProperties: true },
-);
+import { errorResponse } from "#shared/contracts/responses.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -134,10 +115,12 @@ const unreachable = (cause: unknown): Error =>
 // reaches the origin, which answers in milliseconds; a copy sent meanwhile
 // usually takes another path. A GET still waiting after this long races a
 // second copy, the first answer wins, and the other is aborted. Only a GET:
-// repeating a write could apply it twice.
+// repeating a write could apply it twice. A GET the server answers by
+// fetching another site is slow for that reason, and a copy would fetch that
+// site twice, so its caller turns the race off.
 const raceGetAfterMs = 1000;
 
-function raceGet(url: string, init?: RequestInit): Promise<Response> {
+function raceGet(url: string, init: RequestInit): Promise<Response> {
   return new Promise((resolve, reject) => {
     const controllers: AbortController[] = [];
     let pending = 0;
@@ -145,7 +128,7 @@ function raceGet(url: string, init?: RequestInit): Promise<Response> {
       const controller = new AbortController();
       controllers.push(controller);
       pending++;
-      const signal = init?.signal
+      const signal = init.signal
         ? AbortSignal.any([init.signal, controller.signal])
         : controller.signal;
       fetch(url, { ...init, signal }).then(
@@ -167,40 +150,49 @@ function raceGet(url: string, init?: RequestInit): Promise<Response> {
   });
 }
 
-export async function api<T extends TSchema>(
+type ApiInit<R extends TSchema> = Omit<RequestInit, "body"> & {
+  raceWhenStalled?: false;
+} & (
+    | { body?: BodyInit; json?: never; request?: never }
+    // A JSON body, typed by the schema the server decodes it with.
+    | { json: StaticEncode<R>; request: R }
+  );
+
+function requestInit<R extends TSchema>(init: ApiInit<R>): RequestInit {
+  const { json, raceWhenStalled: _race, request: _request, ...rest } = init;
+  if (json === undefined) return rest;
+  const headers = new Headers(rest.headers);
+  headers.set("Content-Type", "application/json");
+  return { ...rest, body: JSON.stringify(json), headers };
+}
+
+export async function api<T extends TSchema, R extends TSchema = never>(
   path: string,
   schema: T,
-  init?: RequestInit,
+  init: ApiInit<R> = {},
 ): Promise<StaticDecode<T>> {
+  const sent = requestInit(init);
   let response: Response;
   try {
     response =
-      (init?.method ?? "GET") === "GET"
-        ? await raceGet(`/api${path}`, init)
-        : await fetch(`/api${path}`, init);
+      (init.method ?? "GET") === "GET" && init.raceWhenStalled !== false
+        ? await raceGet(`/api${path}`, sent)
+        : await fetch(`/api${path}`, sent);
   } catch (cause) {
-    if (isCancellation(cause, init?.signal)) throw cause;
+    if (isCancellation(cause, init.signal)) throw cause;
     throw unreachable(cause);
   }
-  const payload = await responseJson(path, response, init?.signal);
+  const payload = await responseJson(path, response, init.signal);
 
   if (!response.ok) {
     if (Value.Check(errorResponse, payload))
       throw new ApiError(
-        "error" in payload && payload.error
-          ? payload.error
-          : response.statusText || `Request failed (${response.status})`,
+        payload.error ||
+          response.statusText ||
+          `Request failed (${response.status})`,
         response.status,
-        "detail" in payload ? payload.detail : undefined,
+        payload.detail,
       );
-    if (
-      response.status === 422 &&
-      Value.Check(validationErrorResponse, payload)
-    ) {
-      const message = Reflect.get(Object(payload), "message");
-      if (typeof message === "string")
-        throw new ApiError(message, response.status);
-    }
     throw invalidResponse(path, "malformed error payload", response.status);
   }
 

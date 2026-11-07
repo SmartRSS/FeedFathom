@@ -4,7 +4,11 @@ import { RedisClient } from "bun";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
-import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
+import {
+  FaviconRefresher,
+  type FaviconRefreshQueue,
+} from "#features/feeds/favicon-refresher.ts";
+import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
 // The slot script against a real server: favicon-refresher.test.ts covers the
 // queueing rules through the fake, which does not interpret the Lua.
@@ -55,6 +59,7 @@ test("deferred refreshes take slots one gap apart on every host that deferred th
       },
     },
     redis,
+    strictFake<FaviconRefreshQueue>({}, "queue"),
   );
   const retryAt = async (id: number) => {
     const error = await refresher

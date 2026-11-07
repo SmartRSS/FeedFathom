@@ -5,7 +5,7 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 import { postRefreshSourceHandler } from "#features/feeds/routes/refresh.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
-const servicesWith = (enqueued: { id: number; url: string }[]) => ({
+const servicesWith = (enqueued: { id: number }[]) => ({
   outboundFetchBudget: strictFake<OutboundFetchBudget>({
     consume: async () => {},
   }),
@@ -15,23 +15,22 @@ const servicesWith = (enqueued: { id: number; url: string }[]) => ({
     },
   }),
   userSourcesDataService: strictFake<UserSourcesDataService>({
-    getSubscribedSource: async (_userId, sourceId) =>
-      sourceId === 7 ? { id: 7, url: "https://a.example/feed.xml" } : undefined,
+    isSubscribed: async (_userId, sourceId) => sourceId === 7,
   }),
 });
 
 test("queues a fetch of a source the user subscribes to", async () => {
-  const enqueued: { id: number; url: string }[] = [];
+  const enqueued: { id: number }[] = [];
   const response = await postRefreshSourceHandler(
     { body: { sourceId: 7 }, user: { id: 1 } },
     servicesWith(enqueued),
   );
   expect(response.status).toBe(200);
-  expect(enqueued).toEqual([{ id: 7, url: "https://a.example/feed.xml" }]);
+  expect(enqueued.map(({ id }) => id)).toEqual([7]);
 });
 
 test("refuses a source the user does not subscribe to", async () => {
-  const enqueued: { id: number; url: string }[] = [];
+  const enqueued: { id: number }[] = [];
   const response = await postRefreshSourceHandler(
     { body: { sourceId: 8 }, user: { id: 1 } },
     servicesWith(enqueued),

@@ -55,12 +55,13 @@ describe("OpmlParser", () => {
       );
     });
 
-    test("skips a malformed outline instead of aborting the whole import", () => {
+    test("skips a malformed or credentialed outline instead of aborting the whole import", () => {
       const result = parseOpml(`
         <opml version="2.0">
           <body>
             <outline text="Good feed" type="rss" xmlUrl="https://example.com/feed.xml" />
             <outline text="Bad feed" type="rss" xmlUrl="not-a-valid-url" />
+            <outline text="Credentialed feed" type="rss" xmlUrl="https://user:secret@example.net/feed.xml" />
             <outline text="Another good feed" type="rss" xmlUrl="https://example.org/feed.xml" />
           </body>
         </opml>

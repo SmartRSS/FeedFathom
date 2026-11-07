@@ -5,8 +5,10 @@ import { simpleParser } from "mailparser";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType } from "#shared/validation/typebox-policy.ts";
+import { newsletterArticlePath } from "#shared/util/safe-url.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
+import type { FeedArticle } from "#features/feeds/feed-mapper.ts";
 
 // The fields read off mailparser's result, checked rather than trusted: the
 // parser's types promise more than its runtime guarantees.
@@ -57,9 +59,9 @@ export class EmailHandler {
   constructor(
     private readonly sourcesDataService: Pick<
       SourcesDataService,
-      "findMailRecipient" | "successSource"
+      "findMailRecipient"
     >,
-    private readonly articleImporter: Pick<ArticleImporter, "importArticles">,
+    private readonly articleImporter: Pick<ArticleImporter, "recordFetch">,
     // A seam for the projection check below, which no real message reaches.
     private readonly parse: (raw: Buffer) => Promise<ParsedMail> = simpleParser,
   ) {}
@@ -79,13 +81,11 @@ export class EmailHandler {
     const article = this.createArticleFromEmail(
       email,
       emailGuid(email, raw, source.id),
-      source.id,
       envelope.from,
     );
-    await this.articleImporter.importArticles(source.id, [article], {
+    await this.articleImporter.recordFetch(source.id, [article], {
       alwaysRecount: true,
-    });
-    await this.sourcesDataService.successSource(source.id, {
+      cached: false,
       trigger: "email",
     });
   }
@@ -93,9 +93,8 @@ export class EmailHandler {
   private createArticleFromEmail(
     email: Pick<ParsedMail, "date" | "html" | "subject" | "textAsHtml">,
     guid: string,
-    sourceId: number,
     senderAddress: string,
-  ) {
+  ): FeedArticle {
     const date = email.date ?? new Date();
     return {
       author: senderAddress,
@@ -103,13 +102,12 @@ export class EmailHandler {
         typeof email.html === "string"
           ? email.html
           : (email.textAsHtml ?? "No content."),
+      enclosures: [],
       guid,
-      lastSeenInFeedAt: new Date(),
       publishedAt: date,
-      sourceId,
       title: email.subject ?? "Untitled",
       updatedAt: date,
-      url: `/article/${guid}`,
+      url: newsletterArticlePath(guid),
     };
   }
 }

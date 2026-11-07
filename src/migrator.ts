@@ -3,7 +3,10 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 import type { AppConfig } from "#platform/config.ts";
-import { createDrizzleConnection } from "#platform/db/connection.ts";
+import {
+  createDrizzleConnection,
+  isNotReady,
+} from "#platform/db/connection.ts";
 
 type PendingIndex = { create: string; name: string; table: string };
 
@@ -183,9 +186,14 @@ async function predropIndexesConcurrently(
 const connectRetryDeadline = 120_000;
 const connectRetryInterval = 1_000;
 
+type ConnectRetry = { deadline?: number; interval?: number };
+
 async function reserveWhenReady(
   databaseUrl: AppConfig["DATABASE_URL"],
-  deadline: number,
+  {
+    deadline = connectRetryDeadline,
+    interval = connectRetryInterval,
+  }: ConnectRetry,
 ) {
   const giveUpAt = Date.now() + deadline;
   for (;;) {
@@ -196,24 +204,31 @@ async function reserveWhenReady(
     } catch (cause) {
       // eslint-disable-next-line no-await-in-loop -- Retries are sequential by nature.
       await database.$client.close().catch(() => undefined);
-      if (Date.now() >= giveUpAt) throw cause;
+      if (!isNotReady(cause) || Date.now() >= giveUpAt) throw cause;
       console.log("Database is not accepting connections yet; retrying");
       // eslint-disable-next-line no-await-in-loop -- Retries are sequential by nature.
-      await Bun.sleep(connectRetryInterval);
+      await Bun.sleep(interval);
     }
   }
 }
 
+// Serialises migrators, so two replicas starting at once apply each
+// migration once.
+const migrationLockKey = "feedfathom:migrations";
+
 export async function migrateDatabase(
   databaseUrl: AppConfig["DATABASE_URL"],
   migrationsFolder = "./drizzle",
-  deadline = connectRetryDeadline,
+  connectRetry: ConnectRetry = {},
 ) {
-  const { database, reserved } = await reserveWhenReady(databaseUrl, deadline);
+  const { database, reserved } = await reserveWhenReady(
+    databaseUrl,
+    connectRetry,
+  );
   try {
     let locked = false;
     try {
-      await reserved`SELECT pg_advisory_lock(hashtextextended('feedfathom:migrations', 0))`;
+      await reserved`SELECT pg_advisory_lock(hashtextextended(${migrationLockKey}, 0))`;
       locked = true;
       const pending = await pendingStatements(reserved, migrationsFolder);
       await prebuildIndexesConcurrently(
@@ -234,7 +249,7 @@ export async function migrateDatabase(
         // answer, and this throwing would replace the real error. The lock is
         // session-scoped, so closing the client releases it either way.
         if (locked)
-          await reserved`SELECT pg_advisory_unlock(hashtextextended('feedfathom:migrations', 0))`.catch(
+          await reserved`SELECT pg_advisory_unlock(hashtextextended(${migrationLockKey}, 0))`.catch(
             () => undefined,
           );
       } finally {

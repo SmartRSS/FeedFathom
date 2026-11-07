@@ -2,6 +2,7 @@ import { afterAll, beforeEach, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
@@ -45,6 +46,7 @@ const articleImporter = new ArticleImporter(
   articlesDataService,
   userSourcesDataService,
   { publish() {} },
+  sourcesDataService,
 );
 const reader = createReaderRoutes(
   strictFake<ReaderRouteServices>(
@@ -98,7 +100,7 @@ function feedParserServing(body: string, contentType: string, status = 200) {
       }),
     }),
     sourcesDataService,
-    strictFake({}, "websubStateService"),
+    strictFake<WebSubSubscriber>({ wants: () => false }, "webSubSubscriber"),
     new RedirectMap({
       del: async () => 0,
       get: async () => null,

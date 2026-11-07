@@ -21,6 +21,13 @@ test("checks the email's shape and the two passwords against each other", () => 
   });
 });
 
+test("refuses an address longer than the server accepts", () => {
+  const local = "a".repeat(250);
+  expect(accountFieldErrors({ email: `${local}@example.com` })).toEqual({
+    email: "Enter an email address of at most 254 characters.",
+  });
+});
+
 test("passes complete, matching values and checks only the fields given", () => {
   expect(
     accountFieldErrors({

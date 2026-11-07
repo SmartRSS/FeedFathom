@@ -11,18 +11,16 @@ import {
   Switch,
 } from "solid-js";
 import { render } from "solid-js/web";
+import { loginPath, resolveRoute, showsPanes, type Route } from "./routes.ts";
 import {
-  loginPath,
   parseDashboardPane,
-  resolveRoute,
   switchPane,
   withDashboardPane,
   type DashboardPane,
   type PaneSwitchHost,
-  type Route,
-} from "./behavior.ts";
+} from "./panes.ts";
 import { Dashboard } from "./dashboard.tsx";
-import { DialogHost } from "./dialog.tsx";
+import { DialogHost, isDialogOpen } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
 import { isUnauthorizedError } from "./api.ts";
 import {
@@ -31,9 +29,11 @@ import {
   readerText,
   readerWidth,
   resolvedTheme,
+  unreadBadge,
 } from "./preferences.ts";
-import { unreadBadge, unreadTotal } from "./news-signal.ts";
+import { unreadTotal } from "./news-signal.ts";
 import { reloadForUpdate } from "./reading-session.ts";
+import { isWorkerMessage } from "./sw-protocol.ts";
 import "./style.css";
 
 // Every route but the dashboard loads its chunk on first visit, so a
@@ -99,6 +99,11 @@ window.addEventListener(
   { capture: true },
 );
 
+// The service worker reported success for a change made offline, and the
+// server refused it once back online. Nothing else tells the user, so it
+// shows on whichever page is open.
+const [offlineChangeLost, setOfflineChangeLost] = createSignal(false);
+
 const currentPath = () => location.pathname + location.search;
 const backPane = () => history.back();
 const paneSwitchHost: PaneSwitchHost = {
@@ -137,15 +142,12 @@ function App() {
     );
   });
 
-  if (initialRoute.name === "dashboard" || initialRoute.name === "preview")
+  if (showsPanes(initialRoute))
     history.replaceState(withDashboardPane(history.state, "sources"), "");
 
   const navigate = (to: string) => {
     const nextRoute = resolveRoute(to);
-    const nextPane =
-      nextRoute.name === "dashboard" || nextRoute.name === "preview"
-        ? "sources"
-        : undefined;
+    const nextPane = showsPanes(nextRoute) ? "sources" : undefined;
     history.pushState(nextPane ? withDashboardPane({}, nextPane) : {}, "", to);
     setPath(to);
     setPane(nextPane ?? "sources");
@@ -248,8 +250,22 @@ function App() {
       >
         Skip to accessibility settings
       </a>
-      {/* One dialog host for every confirm()/prompt() replacement (#698). */}
       <DialogHost />
+      <Show when={offlineChangeLost()}>
+        <div class="app-alert" role="alert">
+          <p>
+            A change made while offline could not be applied and was discarded.
+            Reload to see the current state.
+          </p>
+          <button
+            class="button-primary"
+            type="button"
+            onClick={() => location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      </Show>
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}
       <ErrorBoundary
@@ -296,7 +312,7 @@ function Router(props: {
 }) {
   return (
     <Show
-      when={props.route.name === "dashboard" || props.route.name === "preview"}
+      when={showsPanes(props.route)}
       fallback={
         <Switch>
           <Match when={props.route.name === "register" && props.route}>
@@ -367,23 +383,20 @@ function Router(props: {
         focusPane={props.focusPane}
         backPane={props.backPane}
         whenPaneShown={props.whenPaneShown}
-        initialDiscovery={props.route.name === "preview"}
-        initialFeedUrl={
-          props.route.name === "preview" ? props.route.feedUrl : undefined
-        }
-        initialNewsletter={
-          props.route.name === "preview" && props.route.newsletter === true
-        }
+        preview={props.route.name === "preview" ? props.route : undefined}
       />
     </Show>
   );
 }
 
 if ("serviceWorker" in navigator) {
-  // Falls back to the unhashed dev filename: bin/build-spa.ts only injects
-  // VITE_SW_FILENAME for production builds, and Vite's dev server serves
-  // public/ files at their literal path anyway.
-  const workerPath = import.meta.env["VITE_SW_FILENAME"] ?? "/sw.js";
+  // bin/build-spa.ts bundles the worker and names it for a production build.
+  // Vite's dev server serves the source as a module instead, which only
+  // Chromium-based browsers register.
+  const builtWorkerPath: string | undefined = import.meta.env[
+    "VITE_SW_FILENAME"
+  ];
+  const workerPath = builtWorkerPath ?? "/sw.ts";
   // A new deploy is applied the next time the page is hidden, so the user
   // comes back to it without a prompt. By then the worker has cached the new
   // shell with its assets, so the reload is served from cache.
@@ -408,8 +421,7 @@ if ("serviceWorker" in navigator) {
     true,
   );
   const hasUnsavedInput = () =>
-    document.querySelector("dialog[open]") !== null ||
-    [...editedFields].some((field) => field.isConnected);
+    isDialogOpen() || [...editedFields].some((field) => field.isConnected);
   document.addEventListener("visibilitychange", () => {
     if (updatePending && document.hidden && !hasUnsavedInput())
       reloadForUpdate();
@@ -428,16 +440,19 @@ if ("serviceWorker" in navigator) {
   // shell names different assets, which a bundle-only deploy never signals
   // through controllerchange.
   navigator.serviceWorker.addEventListener("message", (event) => {
-    const data: unknown = event.data;
-    if (
-      data &&
-      typeof data === "object" &&
-      "type" in data &&
-      data.type === "shell-updated"
-    )
-      markUpdatePending();
+    if (!isWorkerMessage(event.data)) return;
+    switch (event.data.type) {
+      case "shell-updated":
+        markUpdatePending();
+        break;
+      case "queued-mutation-failed":
+        setOfflineChangeLost(true);
+        break;
+    }
   });
-  void navigator.serviceWorker.register(workerPath);
+  void navigator.serviceWorker.register(workerPath, {
+    type: builtWorkerPath ? "classic" : "module",
+  });
 }
 
 installDeleteTrace();

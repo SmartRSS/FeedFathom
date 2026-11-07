@@ -3,6 +3,7 @@ import {
   base64Pattern,
   maxRelayPayloadChars,
 } from "#shared/contracts/mail-relay.ts";
+import { maxEmailAddressLength } from "#shared/validation/address-shape.ts";
 import {
   jsonDatePolicy,
   normalizedEmailAddress,
@@ -13,10 +14,16 @@ import {
   withMatchingPasswords,
 } from "#shared/validation/typebox-policy.ts";
 
+import { maximumRequestIds } from "./limits.ts";
+
+// The multipart field the OPML import posts its file in.
+export const opmlUploadField = "opml";
+
 const id = Type.Integer({ minimum: 1 });
-export const maximumRequestIds = 500;
+// RFC 5321 caps both envelope paths, so no deliverable sender is longer
+// than a minted recipient may be.
 const mailEnvelopeValue = Type.String({
-  maxLength: 320,
+  maxLength: maxEmailAddressLength,
   minLength: 1,
   pattern: "\\S",
 });
@@ -181,6 +188,7 @@ export const passwordRequest = withMatchingChangedPasswords(
     password2: Type.String({ minLength: 1 }),
   }),
 );
+export const sessionParams = Type.Object({ id: idQueryTransform });
 export const passwordResetRequest = Type.Object({
   email: normalizedEmailAddress,
 });

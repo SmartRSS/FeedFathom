@@ -12,6 +12,7 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
   type HostIntervals,
   HttpRateLimiter,
+  type Priority,
 } from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
@@ -22,8 +23,8 @@ import {
 } from "#platform/http/http-native-transport.ts";
 import {
   HttpCacheStore,
-  maximumBodyBytes,
-  maximumBodyMebibytes,
+  maximumFeedBodyBytes,
+  maximumFeedBodyMebibytes,
   type HttpRedis,
 } from "#platform/http/http-cache-store.ts";
 import {
@@ -31,9 +32,14 @@ import {
   buildUserAgentPrefix,
   type HttpClientIdentity,
 } from "#platform/http/identity.ts";
-import { RedirectPolicy } from "#platform/http/redirect-policy.ts";
+import {
+  type FetchResult,
+  RedirectPolicy,
+} from "#platform/http/redirect-policy.ts";
 
 const requestDeadlineMs = 30_000;
+// One request and two retries, for an interactive caller only.
+const maxAttempts = 3;
 
 const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
 const rateLimitedStatus = 429;
@@ -45,8 +51,7 @@ const notModifiedStatus = 304;
 const seededCacheHeaders = ["content-type", "link"];
 
 type HttpRequestOptions = {
-  priority?: "background" | "interactive";
-  responseType?: "arrayBuffer";
+  priority?: Priority;
   // Skips the local TTL short-circuit but keeps conditional revalidation, so
   // an unchanged origin still answers 304 cheaply. For an explicit user
   // action -- a manual refresh -- where serving a still-fresh entry reads as
@@ -59,10 +64,6 @@ type HttpRequestOptions = {
   subscribers?: number;
 };
 
-type ArrayBufferRequestOptions = HttpRequestOptions & {
-  responseType: "arrayBuffer";
-};
-
 type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
   // The per-host politeness gaps. Only set by tests, which cannot afford to
@@ -71,21 +72,9 @@ type HttpClientOptions = HttpClientIdentity & {
   transport?: NativeHttpTransport;
 };
 
-type FetchResult = {
-  permanent: boolean;
-  response: NativeHttpResponse;
-};
-
-// A POST has no cached body to hand back and no caller here reads one, so
-// this reports only what the origin decided.
-export type HttpPostResponse = {
-  headers: Headers;
-  status: number;
-};
-
-export type HttpResponse<T> = {
+export type HttpResponse = {
   cached: boolean;
-  data: T;
+  data: ArrayBuffer;
   freshUntil?: number | null;
   headers: Headers;
   redirectedPermanently: boolean;
@@ -113,16 +102,8 @@ export class HttpClient {
 
   async get(
     url: string,
-    options: ArrayBufferRequestOptions,
-  ): Promise<HttpResponse<ArrayBuffer>>;
-  async get(
-    url: string,
-    options?: HttpRequestOptions,
-  ): Promise<HttpResponse<string>>;
-  async get(
-    url: string,
     options: HttpRequestOptions = {},
-  ): Promise<HttpResponse<ArrayBuffer | string>> {
+  ): Promise<HttpResponse> {
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
       return await this.getBeforeDeadline(url, options, deadline);
@@ -145,7 +126,7 @@ export class HttpClient {
    * is a one-shot side effect with no retry queue behind it, so sitting out
    * the interval beats dropping the subscription.
    */
-  async post(url: string, body: URLSearchParams): Promise<HttpPostResponse> {
+  async post(url: string, body: URLSearchParams): Promise<{ status: number }> {
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
       const hostname = parseHttpUrl(url).hostname;
@@ -164,21 +145,8 @@ export class HttpClient {
         this.transport(url, headers, deadline.controller.signal, encoded),
       );
       response.destroy();
-      await this.rateLimiter.applyRateLimitHeaders(
-        hostname,
-        response.headers,
-        deadline,
-      );
-      const retryAfter = response.headers.get("retry-after");
-      if (
-        response.status === rateLimitedStatus ||
-        (retryAfter !== null && response.status >= 400)
-      ) {
-        throw new HttpDeferredError(
-          await this.rateLimiter.block(hostname, retryAfter, deadline),
-        );
-      }
-      return { headers: response.headers, status: response.status };
+      await this.deferIfLimited(hostname, response, deadline);
+      return { status: response.status };
     } finally {
       deadline.dispose();
     }
@@ -240,7 +208,7 @@ export class HttpClient {
     url: string,
     options: HttpRequestOptions,
     deadline: RequestDeadline,
-  ): Promise<HttpResponse<ArrayBuffer | string>> {
+  ): Promise<HttpResponse> {
     const lock = await this.cacheStore.acquireCacheLock(url, deadline);
     try {
       return await this.getWhileCacheLocked(url, options, deadline);
@@ -253,11 +221,11 @@ export class HttpClient {
     url: string,
     options: HttpRequestOptions,
     deadline: RequestDeadline,
-  ): Promise<HttpResponse<ArrayBuffer | string>> {
+  ): Promise<HttpResponse> {
     const parsedUrl = parseHttpUrl(url);
     const cached = await this.cacheStore.getCached(url, deadline);
     if (cached && cached.expiresAt > Date.now() && !options.skipCache) {
-      const response = this.fromCached(cached, options);
+      const response = this.fromCached(cached);
       deadline.assertActive();
       return response;
     }
@@ -296,7 +264,6 @@ export class HttpClient {
       else await this.cacheStore.delete(url, deadline);
       const result = this.fromCached(
         retain ? refreshed : { ...refreshed, expiresAt: Date.now() },
-        options,
       );
       deadline.assertActive();
       return result;
@@ -313,7 +280,7 @@ export class HttpClient {
     if (next) await this.cacheStore.saveCached(url, next, deadline);
     else await this.cacheStore.delete(url, deadline);
 
-    const data = this.decodeBody(body, options);
+    const data = copyBody(body);
     deadline.assertActive();
     return {
       cached: false,
@@ -330,7 +297,7 @@ export class HttpClient {
     url: string,
     headers: Headers,
     hostname: string,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     /* eslint-disable no-await-in-loop -- Each retry depends on its response and on re-reserving the host. */
@@ -340,30 +307,14 @@ export class HttpClient {
         result = await this.redirects.follow(url, headers, priority, deadline);
         // Whatever answered is what gets held back, which after a redirect
         // is not the host the request started at.
-        const answeringHost = hostnameOf(result.response.url) ?? hostname;
-        await this.rateLimiter.applyRateLimitHeaders(
-          answeringHost,
-          result.response.headers,
-          deadline,
-        );
-        const retryAfter = result.response.headers.get("retry-after");
-        // Retry-After also applies to errors such as 503 (RFC 9110 10.2.3),
-        // so defer rather than retry immediately. This handles final error
-        // responses, not redirects.
-        if (
-          result.response.status === rateLimitedStatus ||
-          (retryAfter !== null && result.response.status >= 400)
-        ) {
-          result.response.destroy();
-          result = undefined;
-          throw new HttpDeferredError(
-            await this.rateLimiter.block(answeringHost, retryAfter, deadline),
-          );
-        }
+        const answeringHost =
+          URL.parse(result.response.url)?.hostname ?? hostname;
+        await this.deferIfLimited(answeringHost, result.response, deadline);
+        const lastAttempt = attempt === maxAttempts - 1;
         if (
           priority === "background" ||
-          !this.isRetryable(result.response.status) ||
-          attempt === 2
+          !retryableStatuses.has(result.response.status) ||
+          lastAttempt
         ) {
           return result;
         }
@@ -376,7 +327,7 @@ export class HttpClient {
           error instanceof HttpDeadlineError ||
           deadline.controller.signal.aborted ||
           priority === "background" ||
-          attempt === 2
+          attempt === maxAttempts - 1
         ) {
           throw error;
         }
@@ -385,14 +336,36 @@ export class HttpClient {
     /* eslint-enable no-await-in-loop */
   }
 
-  private fromCached(
-    response: CachedResponse,
-    options: HttpRequestOptions,
-  ): HttpResponse<ArrayBuffer | string> {
+  // Records the host's rate-limit headers, and defers on a 429, or on an
+  // error that carries Retry-After, which also applies to errors such as 503
+  // (RFC 9110 10.2.3). The response is destroyed before a deferral is thrown.
+  private async deferIfLimited(
+    hostname: string,
+    response: NativeHttpResponse,
+    deadline: RequestDeadline,
+  ): Promise<void> {
+    await this.rateLimiter.applyRateLimitHeaders(
+      hostname,
+      response.headers,
+      deadline,
+    );
+    const retryAfter = response.headers.get("retry-after");
+    if (
+      response.status === rateLimitedStatus ||
+      (retryAfter !== null && response.status >= 400)
+    ) {
+      response.destroy();
+      throw new HttpDeferredError(
+        await this.rateLimiter.block(hostname, retryAfter, deadline),
+      );
+    }
+  }
+
+  private fromCached(response: CachedResponse): HttpResponse {
     const body = Buffer.from(response.body, "base64");
     return {
       cached: true,
-      data: this.decodeBody(body, options),
+      data: copyBody(body),
       freshUntil: response.expiresAt > Date.now() ? response.expiresAt : null,
       headers: new Headers(response.headers),
       // A cache hit is not a fresh redirect decision; the original fetch
@@ -420,9 +393,9 @@ export class HttpClient {
             }
             const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
             length += chunk.byteLength;
-            if (length > maximumBodyBytes) {
+            if (length > maximumFeedBodyBytes) {
               throw new HttpPolicyError(
-                `Decoded response body exceeds ${maximumBodyMebibytes.toString()} MiB`,
+                `Decoded response body exceeds ${maximumFeedBodyMebibytes.toString()} MiB`,
               );
             }
             chunks.push(chunk);
@@ -437,28 +410,11 @@ export class HttpClient {
       throw error;
     }
   }
-
-  private decodeBody(
-    body: Buffer,
-    options: HttpRequestOptions,
-  ): ArrayBuffer | string {
-    // A copy, so the caller never sees Buffer's shared pool. The constructor
-    // copies in bulk; Uint8Array.from iterates byte by byte, which held
-    // ~440 MiB to copy a 20 MiB body (#1031).
-    return options.responseType === "arrayBuffer"
-      ? new Uint8Array(body).buffer
-      : body.toString();
-  }
-
-  private isRetryable(status: number): boolean {
-    return retryableStatuses.has(status);
-  }
 }
 
-function hostnameOf(url: string): string | undefined {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return undefined;
-  }
+// A copy, so the caller never sees Buffer's shared pool. The constructor
+// copies in bulk; Uint8Array.from iterates byte by byte, which held ~440 MiB
+// to copy a 20 MiB body (#1031).
+function copyBody(body: Buffer): ArrayBuffer {
+  return new Uint8Array(body).buffer;
 }

@@ -1,43 +1,44 @@
 import { Elysia } from "elysia";
 import type * as auth from "#features/auth/services.ts";
+import type { errorResponse } from "#shared/contracts/responses.ts";
+import type { Static } from "typebox";
+import { sessionCookie } from "#features/auth/routes/session-header.ts";
 
 type SessionServices = Pick<typeof auth, "usersDataService">;
 
-// The read-only lookup for GET /api/session, which answers "who is this?"
-// without counting as activity. Routes behind the plugin go through
-// authenticate instead, which resolves and stamps in one statement.
+// Who the cookie names, without counting the lookup as activity.
 export async function userFor(
   sid: unknown,
   { usersDataService }: SessionServices,
 ) {
   if (typeof sid !== "string" || !sid) return null;
-  return (await usersDataService.getUserBySid(sid)) ?? null;
+  return (await usersDataService.authenticate(sid, null, false)) ?? null;
 }
 
-// The shape route handlers see as `user` once createAuthPlugin has run --
-// handler files import this instead of re-deriving it from UsersDataService.
+// The shape route handlers see as `user` once createAuthPlugin has run.
 export type AuthedUser = NonNullable<Awaited<ReturnType<typeof userFor>>>;
+
+const unauthorized: Static<typeof errorResponse> = { error: "Unauthorized" };
+const forbidden: Static<typeof errorResponse> = { error: "Forbidden" };
 
 /**
  * 'plugin' scope: visible to this instance's own routes and to whichever
- * single parent composes it via `.use()` (e.g. reader.ts), but doesn't leak
- * further up into unrelated sibling route groups composed in server-app.ts.
+ * single parent composes it via `.use()`, but doesn't leak further up into
+ * unrelated sibling route groups composed in server-app.ts.
  */
 function sessionPlugin(
   requireAdmin: boolean,
   { usersDataService }: SessionServices,
 ) {
   return new Elysia().derive("plugin", async ({ cookie, request, status }) => {
-    const sid = cookie["sid"]?.value;
-    if (typeof sid !== "string" || !sid)
-      return status(401, { error: "Unauthorized" });
+    const sid = cookie[sessionCookie]?.value;
+    if (typeof sid !== "string" || !sid) return status(401, unauthorized);
     const user = await usersDataService.authenticate(
       sid,
       request.headers.get("user-agent"),
     );
-    if (!user) return status(401, { error: "Unauthorized" });
-    if (requireAdmin && !user.isAdmin)
-      return status(403, { error: "Unauthorized" });
+    if (!user) return status(401, unauthorized);
+    if (requireAdmin && !user.isAdmin) return status(403, forbidden);
     // The sid rides along so a route that names the current session (the
     // sessions list, the events stream's recheck) does not re-read the cookie.
     return { sid, user };

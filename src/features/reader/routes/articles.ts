@@ -7,7 +7,13 @@ import type {
 } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
+import {
+  articlesResponse,
+  removedArticlesResponse,
+} from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
+import { todayWindowHours } from "#shared/contracts/limits.ts";
+import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
 
 type ArticleServices = Pick<
   typeof feeds,
@@ -32,14 +38,14 @@ export async function postArticlesHandler(
     !body.query &&
     body.folder === undefined
   )
-    return json([]);
+    return json(articlesResponse, []);
   const articles = await articlesDataService.getUserArticlesForSources(
     body.sources,
     user.id,
     body.cursor,
     body.filter,
     body.view === "today"
-      ? { allSubscribed: true, publishedWithinHours: 24 }
+      ? { allSubscribed: true, publishedWithinHours: todayWindowHours }
       : // Search (#697) spans every subscription -- what makes it worth
         // having is finding the article whose feed you no longer remember --
         // so subscription authorizes the rows, as it does for Today.
@@ -50,6 +56,7 @@ export async function postArticlesHandler(
           : { folderId: body.folder },
   );
   return json(
+    articlesResponse,
     articles.map(({ revision, ...article }) =>
       Object.assign(article, body.revision ? { revision } : {}, {
         url: safeArticleUrl(article.url, request.url),
@@ -86,18 +93,18 @@ export async function deleteArticlesHandler(
       cfRay: request.headers.get("cf-ray"),
       event: "articles.delete",
       removed: articleIds,
-      replayQueuedAt: request.headers.get("x-feedfathom-replay"),
+      replayQueuedAt: request.headers.get(replayHeader),
       requested: body.removedArticleIdList,
       trace:
         request.headers
-          .get("x-feedfathom-trace")
+          .get(deleteTraceHeader)
           ?.slice(0, MAX_TRACE_LOG_LENGTH) ?? null,
       userAgent: request.headers.get("user-agent"),
       userId: user.id,
     }),
   );
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(articleIds);
+  return json(removedArticlesResponse, articleIds);
 }
 
 export async function patchArticlesHandler(
@@ -119,5 +126,5 @@ export async function patchArticlesHandler(
   // Same as the delete path: the badge beside every affected source is
   // recomputed from the store rather than adjusted by a count kept here.
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(articleIds);
+  return json(removedArticlesResponse, articleIds);
 }

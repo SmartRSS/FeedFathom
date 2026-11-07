@@ -7,10 +7,15 @@ import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-
 // rather than refusing them, as a partition or a vanished host does.
 const upstream = new URL(requireDisposableRedisUrl());
 let muted = false;
+// Connections the proxy accepted while muted and is holding unanswered.
+let heldConnections = 0;
 const links = new Set<[Socket, Socket]>();
 const proxy = createServer((client) => {
   client.on("error", () => {});
-  if (muted) return;
+  if (muted) {
+    heldConnections++;
+    return;
+  }
   const server = connect(Number(upstream.port || 6379), upstream.hostname);
   server.on("error", () => {});
   client.pipe(server).pipe(client);
@@ -36,20 +41,32 @@ afterAll(() => {
   proxy.close();
 });
 
-const pong = async (): Promise<string> =>
-  await redis.ping().catch(async () => {
+// Bounded, so a client that never comes back fails the test rather than
+// hanging it.
+const pong = async (attemptsLeft = 40): Promise<string> =>
+  await redis.ping().catch(async (error: unknown) => {
+    if (attemptsLeft === 0) throw error;
     await Bun.sleep(500);
-    return await pong();
+    return await pong(attemptsLeft - 1);
   });
+
+const waitFor = async (condition: () => boolean) => {
+  for (let wait = 0; !condition(); wait++) {
+    if (wait === 200) throw new Error("Timed out waiting");
+    // eslint-disable-next-line no-await-in-loop -- Polls until the condition holds.
+    await Bun.sleep(50);
+  }
+};
 
 test("the Bun client reconnects after a connect attempt times out", async () => {
   // The Bun client connects before the runtime opens any other connection.
   const [bunLink] = links;
   if (!bunLink) throw new Error("The Bun client never connected");
   muted = true;
+  const held = heldConnections;
   bunLink[0].destroy();
   // The reconnect lands on the muted proxy and waits out its timeout.
-  await Bun.sleep(2_000);
+  await waitFor(() => heldConnections > held);
   muted = false;
 
   expect(await pong()).toBe("PONG");

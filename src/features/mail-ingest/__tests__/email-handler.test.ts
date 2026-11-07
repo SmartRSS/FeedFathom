@@ -42,7 +42,6 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
         lookups.push(address);
         return address === source.url ? source : undefined;
       },
-      async successSource() {},
     },
     new ArticleImporter(
       {
@@ -59,6 +58,7 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
           published.push([sourceId, count]);
         },
       },
+      { async successSource() {} },
     ),
   );
   const raw = Buffer.from(
@@ -106,7 +106,7 @@ type Batch = Parameters<ArticlesDataService["batchUpsertArticles"]>[0];
 function recordingHandler(parse?: (raw: Buffer) => Promise<ParsedMail>) {
   const batches: Batch[] = [];
   const handler = new EmailHandler(
-    { findMailRecipient: async () => source, async successSource() {} },
+    { findMailRecipient: async () => source },
     new ArticleImporter(
       {
         async batchUpsertArticles(articles) {
@@ -116,6 +116,7 @@ function recordingHandler(parse?: (raw: Buffer) => Promise<ParsedMail>) {
       },
       { async recomputeUnreadCounts() {} },
       { publish() {} },
+      { async successSource() {} },
     ),
     parse,
   );

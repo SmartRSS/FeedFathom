@@ -5,12 +5,17 @@ import {
   removedIdResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
+import {
+  type adminQuery,
+  removeSourceRequest,
+  type sourceSortSchema,
+  sourceUrlReplacementRequest,
+} from "#shared/contracts/requests.ts";
 import { api, ApiError, messageOf } from "./api.ts";
 import { confirmDialog, promptDialog } from "./dialog.tsx";
 import { formatDate } from "./format-date.ts";
 import { PageToolbar } from "./page-toolbar.tsx";
 
-// A timestamp in the reader's chosen date format, the exact value on hover.
 function Timestamp(props: { iso: string | null }) {
   return (
     <Show when={props.iso} fallback="—">
@@ -24,13 +29,8 @@ function Timestamp(props: { iso: string | null }) {
 }
 
 type AdminSource = Static<typeof adminSourcesResponse>[number];
-type SourceSort =
-  | "createdAt"
-  | "lastAttempt"
-  | "lastSuccess"
-  | "recentFailures"
-  | "subscriberCount"
-  | "url";
+type SourceSort = Static<typeof sourceSortSchema>;
+type SortOrder = NonNullable<Static<typeof adminQuery>["order"]>;
 
 const ADMIN_COLUMNS: { label: string; sort: SourceSort }[] = [
   { label: "URL", sort: "url" },
@@ -71,17 +71,13 @@ export function Admin(props: {
   // and shows nothing else.
   const [forbidden, setForbidden] = createSignal(false);
   const [sortBy, setSortBy] = createSignal<SourceSort>("createdAt");
-  const [order, setOrder] = createSignal<"asc" | "desc">("asc");
+  const [order, setOrder] = createSignal<SortOrder>("asc");
 
   async function load() {
+    const query = new URLSearchParams({ order: order(), sortBy: sortBy() });
     try {
       setMessage("");
-      setSources(
-        await api(
-          `/admin?sortBy=${sortBy()}&order=${order()}`,
-          adminSourcesResponse,
-        ),
-      );
+      setSources(await api(`/admin?${query}`, adminSourcesResponse));
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
       if (cause instanceof ApiError && cause.status === 403) {
@@ -129,9 +125,9 @@ export function Admin(props: {
       return;
     try {
       await api("/admin", successResponse, {
-        body: JSON.stringify({ newUrl, oldUrl }),
-        headers: { "Content-Type": "application/json" },
+        json: { newUrl, oldUrl },
         method: "POST",
+        request: sourceUrlReplacementRequest,
       });
       await load();
     } catch (cause) {
@@ -151,9 +147,9 @@ export function Admin(props: {
       return;
     try {
       await api("/admin", removedIdResponse, {
-        body: JSON.stringify({ removeSourceId: source.id }),
-        headers: { "Content-Type": "application/json" },
+        json: { removeSourceId: source.id },
         method: "DELETE",
+        request: removeSourceRequest,
       });
       await load();
     } catch (cause) {

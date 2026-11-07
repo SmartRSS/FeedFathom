@@ -108,7 +108,7 @@ feeds.example.com {
 
 Any reverse proxy works. The requirements are TLS termination, forwarding to the published port, and passing the original `Host` header through. No path rewriting or WebSocket handling is needed.
 
-NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. That does not break the application, but a subscription's stored home link falls back to the upstream address instead of the public host name.
+NOTE: Some proxies replace `Host` with the upstream address by default, nginx among them. Unless `FEED_FATHOM_DOMAIN` is set, a newsletter subscription's stored home link then falls back to the upstream address instead of the public host name.
 
 Failed logins, password resets and registrations are throttled per client address, and behind a proxy every request arrives from the proxy. (Password changes are throttled per signed-in user instead, so the header does not matter for them.) Set `TRUSTED_PROXY_HEADER` to the header the proxy writes so the throttle sees the real caller:
 
@@ -213,7 +213,7 @@ The protected `production` GitHub environment deploys the stack only when the re
 
 The Swarm defaults assume a host with room to spare. On a smaller VPS, shrink these together rather than independently:
 
-- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica. The bare-process fallback is `1`, and it's safe to run that low in production too.
+- `WORKER_CONCURRENCY` — max simultaneous feed parses per worker replica. `1` is safe in production too.
 - `DB_POOL_MAX` — PostgreSQL connections opened per server and worker replica (default `10`, matching Bun's SQL client default).
 - `POSTGRES_MAX_CONNECTIONS` — PostgreSQL's own connection ceiling (`deploy/stack.yml` default `1000`, far more than a small deployment needs). Size it against the other two: roughly `1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX`, which leaves room for connection churn during a rolling update without reserving memory for thousands of unused slots. One server and one worker replica at the `DB_POOL_MAX` default of `10` needs `1.5 * 2 * 10 = 30`.
 

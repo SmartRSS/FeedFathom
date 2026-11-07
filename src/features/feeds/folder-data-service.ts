@@ -28,8 +28,7 @@ export class FoldersDataService {
   // Ordered for the same reason getUserSources is: the dashboard renders this
   // list as it arrives. Without an ORDER BY the order is whatever the heap
   // hands back, so renaming a folder -- an UPDATE, which writes a new tuple at
-  // the end -- moved it to the bottom of the tree. It is also what makes an
-  // OPML export of an unchanged tree come back byte-identical.
+  // the end -- moved it to the bottom of the tree.
   public async getUserFolders(userId: number) {
     return await this.drizzleConnection
       .select()

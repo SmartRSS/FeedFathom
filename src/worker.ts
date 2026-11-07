@@ -5,18 +5,18 @@ import {
   bullmqRedis,
   close,
   drizzleConnection,
-  httpClient,
+  jobQueueName,
 } from "#platform/runtime.ts";
 import { waitForMigration } from "#platform/db/connection.ts";
+import { containerPort } from "#platform/http/internal-routes.ts";
 import {
+  faviconRefresher,
   feedParser,
+  retentionService,
   sourceEnqueuer,
   sourcesDataService,
-  userSourcesDataService,
-  websubStateService,
+  webSubSubscriber,
 } from "#features/feeds/services.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
-import { faviconRefresher } from "#features/jobs/services.ts";
 import { MainWorker } from "#features/jobs/main.ts";
 import { runWorker } from "./worker-app.ts";
 
@@ -24,18 +24,19 @@ await runWorker({
   close,
   mainWorker: new MainWorker({
     bullmqQueue,
-    cleanupOrphanedData: (...days) =>
-      cleanupOrphanedData(drizzleConnection, ...days),
     config,
     createWorker: (processor, options) =>
-      new Worker("tasks", processor, { ...options, connection: bullmqRedis }),
+      new Worker(jobQueueName, processor, {
+        ...options,
+        connection: bullmqRedis,
+      }),
     faviconRefresher,
     feedParser,
-    hubPoster: httpClient,
+    retentionService,
     sourceEnqueuer,
     sourcesDataService,
-    userSourcesDataService,
-    websubStateService,
+    webSubSubscriber,
   }),
+  port: containerPort,
   waitForMigration: () => waitForMigration(drizzleConnection.$client),
-});
+}).ready;

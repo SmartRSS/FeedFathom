@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import type { MainWorker } from "#features/jobs/main.ts";
+import { healthcheckPath } from "#platform/http/internal-routes.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { runWorker } from "../worker-app.ts";
 
@@ -8,36 +9,26 @@ test("the worker reports healthy only once its job worker is consuming", async (
   const initializeCalled = Promise.withResolvers<void>();
   const workerConsuming = Promise.withResolvers<void>();
 
-  // The worker binds port 3000; an ephemeral port keeps this test from
-  // colliding with anything else on the machine.
-  const serve = Bun.serve;
-  const listening = Promise.withResolvers<ReturnType<typeof serve>>();
-  const serveSpy = spyOn(Bun, "serve").mockImplementation((options) => {
-    const server = serve(
-      Object.assign(options, { hostname: "127.0.0.1", port: 0 }),
-    );
-    listening.resolve(server);
-    return server;
-  });
   // runWorker registers SIGTERM/SIGINT handlers; left in place they would
   // call this test's fakes if a later file's run were interrupted.
   const onSpy = spyOn(process, "on").mockReturnValue(process);
+  const { ready, server } = runWorker({
+    async close() {},
+    mainWorker: strictFake<MainWorker>(
+      {
+        async initialize() {
+          initializeCalled.resolve();
+          await workerConsuming.promise;
+        },
+      },
+      "mainWorker",
+    ),
+    port: 0,
+    waitForMigration: () => migrated.promise,
+  });
 
   try {
-    const started = runWorker({
-      async close() {},
-      mainWorker: strictFake<MainWorker>(
-        {
-          async initialize() {
-            initializeCalled.resolve();
-            await workerConsuming.promise;
-          },
-        },
-        "mainWorker",
-      ),
-      waitForMigration: () => migrated.promise,
-    });
-    const healthcheck = new URL("/healthcheck", (await listening.promise).url);
+    const healthcheck = new URL(healthcheckPath, server.url);
     const status = async () => (await fetch(healthcheck)).status;
 
     expect(await status()).toBe(503);
@@ -49,11 +40,10 @@ test("the worker reports healthy only once its job worker is consuming", async (
     expect(await status()).toBe(503);
 
     workerConsuming.resolve();
-    await started;
+    await ready;
     expect(await status()).toBe(200);
   } finally {
-    serveSpy.mockRestore();
     onSpy.mockRestore();
-    await (await listening.promise).stop();
+    await server.stop();
   }
 });

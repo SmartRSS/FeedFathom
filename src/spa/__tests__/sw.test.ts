@@ -1,8 +1,19 @@
 import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
+import { articlePageSize } from "#shared/contracts/limits.ts";
+import {
+  offlineArticleLimit,
+  offlineArticleMaxAgeDays,
+} from "../sw-protocol.ts";
 
 const ORIGIN = "https://feedfathom.test";
-const source = await Bun.file(`${import.meta.dir}/../public/sw.js`).text();
+// The worker as bin/build-spa.ts bundles it, run in a fresh context per test.
+const built = await Bun.build({
+  entrypoints: [`${import.meta.dir}/../sw.ts`],
+  format: "iife",
+  target: "browser",
+});
+const source = (await built.outputs[0]?.text()) ?? "";
 
 type FetchEvent = {
   request: Request;
@@ -32,6 +43,19 @@ const offlineRow = (id: number, overrides: Partial<OfflineRow> = {}) => ({
   ...overrides,
 });
 
+// Fires `type` once, on a later microtask, to whatever listens for it then.
+const firing = (type: string) => {
+  const listeners: Callback[] = [];
+  queueMicrotask(() => {
+    for (const listener of listeners) listener?.();
+  });
+  return {
+    addEventListener: (event: string, listener: Callback) => {
+      if (event === type) listeners.push(listener);
+    },
+  };
+};
+
 // The slice of IndexedDB the mutation queue uses: one auto-increment store,
 // with each transaction completing on a later microtask as the real API does.
 const fakeIndexedDb = () => {
@@ -54,21 +78,18 @@ const fakeIndexedDb = () => {
     getAll: () => ({ result: [...rows.values()] }),
     getAllKeys: () => ({ result: [...rows.keys()] }),
   };
-  const transaction = () => {
-    const tx: { oncomplete: Callback } = { oncomplete: undefined };
-    queueMicrotask(() => tx.oncomplete?.());
-    return Object.assign(tx, { objectStore: () => store });
-  };
+  const transaction = () => ({
+    ...firing("complete"),
+    objectStore: () => store,
+  });
   return {
     indexedDB: {
       open: () => {
         opens++;
-        const request: { onsuccess: Callback; result: unknown } = {
-          onsuccess: undefined,
+        return {
+          ...firing("success"),
           result: { close: () => {}, transaction },
         };
-        queueMicrotask(() => request.onsuccess?.());
-        return request;
       },
     },
     opens: () => opens,
@@ -76,12 +97,8 @@ const fakeIndexedDb = () => {
   };
 };
 
-// Lets the fire-and-forget work a handler starts after responding, such as
-// the queue flush and the article cache trim, run to completion.
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-// Runs public/sw.js against an in-memory Cache API, a counting fetch and an
-// in-memory IndexedDB, and hands back its fetch listener.
+// Runs the bundled worker against an in-memory Cache API, a counting fetch
+// and an in-memory IndexedDB, and hands back its fetch listener.
 const loadServiceWorker = (
   network: (
     path: string,
@@ -115,11 +132,16 @@ const loadServiceWorker = (
       entries.set(key(request), response);
     },
   };
+  const cacheNames = new Set<string>();
   const queue = fakeIndexedDb();
   const requests: string[] = [];
+  // Resolves when the network next sees a request, as `requests` lists it.
+  const waiters: { label: string; resolve: () => void }[] = [];
+  const requested = (label: string) =>
+    new Promise<void>((resolve) => waiters.push({ label, resolve }));
   const messages: unknown[] = [];
   // The unread rows the server lists to the worker's offline sync, newest
-  // first, in pages of 200 as articlePageSize has them. A held listing waits
+  // first, in pages of articlePageSize. A held listing waits
   // for its release.
   let listed: OfflineRow[] = [];
   const heldListings: Promise<void>[] = [];
@@ -143,7 +165,7 @@ const loadServiceWorker = (
       cursor === undefined
         ? 0
         : listed.findIndex((row) => row.id === cursor) + 1;
-    return Response.json(listed.slice(start, start + 200));
+    return Response.json(listed.slice(start, start + articlePageSize));
   };
   runInNewContext(source, {
     AbortController,
@@ -157,14 +179,21 @@ const loadServiceWorker = (
         entries.clear();
         return true;
       },
-      keys: async () => [],
-      open: async () => cache,
+      keys: async () => [...cacheNames],
+      open: async (name: string) => {
+        cacheNames.add(name);
+        return cache;
+      },
     },
     fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
       const method =
         init?.method ?? (typeof input === "string" ? "GET" : input.method);
-      requests.push(method === "GET" ? path : `${method} ${path}`);
+      const label = method === "GET" ? path : `${method} ${path}`;
+      requests.push(label);
+      for (const waiter of waiters.splice(0))
+        if (waiter.label === label) waiter.resolve();
+        else waiters.push(waiter);
       const headers = new Headers(
         init?.headers ?? (typeof input === "string" ? {} : input.headers),
       );
@@ -212,7 +241,8 @@ const loadServiceWorker = (
     },
   });
   // `background` settles once the response has and every promise the handler
-  // handed to waitUntil by then has too, such as a shell revalidation.
+  // handed to waitUntil by then has too, such as a shell revalidation, a
+  // cache trim or a queue flush.
   const dispatch = (request: Request) => {
     let handled: Promise<Response> | undefined;
     const pending: Promise<unknown>[] = [];
@@ -284,6 +314,13 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     ).response;
+  // The account the worker files offline removals under, as it records it
+  // after a session lookup.
+  const accountKey = "/sw-queue-account";
+  const recordAccount = (id: number) =>
+    entries.set(accountKey, Response.json({ id }));
+  const recordedAccount = async (): Promise<unknown> =>
+    entries.get(accountKey)?.json();
   const activate = async () => {
     const pending: Promise<unknown>[] = [];
     onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
@@ -301,8 +338,11 @@ const loadServiceWorker = (
     messages,
     navigate,
     queue,
+    recordAccount,
+    recordedAccount,
     remove,
     removeSource,
+    requested,
     requests,
   };
 };
@@ -355,7 +395,6 @@ test("a cached tree request answers from the cache alone, and a miss is a 504", 
   expect(sw.requests).toEqual([]);
 
   await sw.loadTree();
-  await settle();
   const before = sw.requests.length;
   expect(await (await cachedTree()).json()).toEqual(tree);
   expect(sw.requests.slice(before)).toEqual([]);
@@ -479,7 +518,6 @@ test("a tree load drops the favicons it no longer names", async () => {
   for (const key of keepers) sw.entries.set(key, new Response("{}"));
   current = { tree: [{ favicon: "/api/favicon/2?v=new", type: "source" }] };
   await sw.loadTree();
-  await settle();
   await sw.dispatch(new Request(`${ORIGIN}/api/favicon/2?v=new`)).response;
   expect(
     [...sw.entries.keys()].filter((key) => key.startsWith("/api/favicon/")),
@@ -491,9 +529,7 @@ test("each API path keeps only its 20 newest query strings", async () => {
   const sw = loadServiceWorker(articleNetwork);
   for (let id = 1; id <= 30; id++) {
     // oxlint-disable-next-line no-await-in-loop -- lookups made one by one
-    await sw.dispatch(new Request(`${ORIGIN}/api/find?url=${id}`)).response;
-    // oxlint-disable-next-line no-await-in-loop -- let each trim finish
-    await settle();
+    await sw.dispatch(new Request(`${ORIGIN}/api/find?url=${id}`)).background;
   }
   const finds = [...sw.entries.keys()].filter((key) =>
     key.startsWith("/api/find?"),
@@ -549,7 +585,6 @@ test("opening 300 articles keeps only the newest 200 cached", async () => {
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
   }
-  await settle();
   const articles = [...sw.entries.keys()].filter((path) =>
     path.startsWith("/api/article?"),
   );
@@ -577,7 +612,6 @@ test("a downloaded article opens offline with no network request, past the trim"
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
   }
-  await settle();
   online = false;
   sw.requests.length = 0;
   expect(await sw.loadArticle(2)).toMatchObject({
@@ -637,8 +671,9 @@ test("rows posted before a sign-in are dropped, even queued behind a download", 
       answer = () => resolve(articleNetwork(path));
     });
   });
+  const downloading = sw.requested("/api/article?article=2");
   const first = sw.keepOffline([2]);
-  await settle();
+  await downloading;
   const queued = sw.keepOffline([3]);
   await sw.login();
   answer?.();
@@ -651,8 +686,9 @@ test("rows listed before a sign-in are dropped when they answer after it", async
     method === "POST" ? Response.json({ sid: "s" }) : articleNetwork(path),
   );
   const release = sw.holdListing();
+  const listing = sw.requested("POST /api/articles");
   const sync = sw.keepOffline([2]);
-  await settle();
+  await listing;
   await sw.login();
   release();
   await sync;
@@ -663,8 +699,9 @@ test("rows listed before a sign-in are dropped when they answer after it", async
 test("a listing in flight when the option goes off can't undo it", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const release = sw.holdListing();
+  const listing = sw.requested("POST /api/articles");
   const inFlight = sw.keepOffline([2]);
-  await settle();
+  await listing;
   await sw.keepOffline([]);
   release();
   await inFlight;
@@ -674,8 +711,9 @@ test("a listing in flight when the option goes off can't undo it", async () => {
 test("a newer sync's rows win over an older listing still in flight", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const release = sw.holdListing();
+  const listing = sw.requested("POST /api/articles");
   const older = sw.keepOffline([1]);
-  await settle();
+  await listing;
   await sw.keepOffline([1, 2]);
   release();
   await older;
@@ -688,17 +726,26 @@ test("a newer sync's rows win over an older listing still in flight", async () =
 const listings = (requests: string[]) =>
   requests.filter((request) => request === "POST /api/articles");
 
-test("a sync keeps the newest 500 unread rows, none older than 14 days", async () => {
+test("a sync keeps the newest unread rows up to the limit, none past the age limit", async () => {
   const sw = loadServiceWorker(articleNetwork);
-  await sw.keepOffline(Array.from({ length: 600 }, (_, index) => 600 - index));
-  expect(listings(sw.requests)).toHaveLength(3);
+  const listed = offlineArticleLimit + articlePageSize / 2;
+  await sw.keepOffline(
+    Array.from({ length: listed }, (_, index) => listed - index),
+  );
+  expect(listings(sw.requests)).toHaveLength(
+    Math.ceil(offlineArticleLimit / articlePageSize),
+  );
   const kept = storedBodies(sw.entries);
-  expect(kept).toHaveLength(500);
-  expect(kept).toContain("/sw-offline-article?article=600");
-  expect(kept).not.toContain("/sw-offline-article?article=100");
+  expect(kept).toHaveLength(offlineArticleLimit);
+  expect(kept).toContain(`/sw-offline-article?article=${listed}`);
+  expect(kept).not.toContain(
+    `/sw-offline-article?article=${listed - offlineArticleLimit}`,
+  );
 
   sw.requests.length = 0;
-  const stale = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toJSON();
+  const stale = new Date(
+    Date.now() - (offlineArticleMaxAgeDays + 1) * 24 * 60 * 60 * 1000,
+  ).toJSON();
   await sw.keepOffline([2, 1, offlineRow(3, { publishedAt: stale }), 4]);
   expect(listings(sw.requests)).toHaveLength(1);
   expect(storedBodies(sw.entries)).toEqual([
@@ -715,17 +762,18 @@ test("switching off clears at once, even behind a stalled download", async () =>
   });
   await sw.keepOffline([1]);
   stall = true;
+  const stalled = sw.requested("/api/article?article=3");
   void sw.keepOffline([1, 3]);
-  await settle();
+  await stalled;
   await sw.keepOffline([]);
   expect([...sw.entries.keys()]).toEqual([]);
 });
 
 test("an older sync can't prune what a newer one keeps", async () => {
   const sw = loadServiceWorker(articleNetwork);
-  void sw.keepOffline([1]);
+  const older = sw.keepOffline([1]);
   await sw.keepOffline([1, 2]);
-  await settle();
+  await older;
   expect(storedBodies(sw.entries)).toEqual([
     "/sw-offline-article?article=1",
     "/sw-offline-article?article=2",
@@ -762,7 +810,7 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
     offlineRow(4),
   ]);
   online = false;
-  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  sw.recordAccount(1);
   await sw.dispatch(
     new Request(`${ORIGIN}/api/articles`, {
       body: JSON.stringify({ removedArticleIdList: [5] }),
@@ -818,8 +866,9 @@ test("a download answered after a sign-in is not stored", async () => {
       answer = () => resolve(articleNetwork(path));
     });
   });
+  const downloading = sw.requested("/api/article?article=2");
   const sync = sw.keepOffline([2]);
-  await settle();
+  await downloading;
   await sw.login();
   answer?.();
   await sync;
@@ -838,8 +887,6 @@ test("an empty mutation queue is read once, not on every response", async () => 
   for (let id = 1; id <= 5; id++) {
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
-    // oxlint-disable-next-line no-await-in-loop -- let each flush finish
-    await settle();
   }
   expect(sw.queue.opens()).toBe(1);
 });
@@ -854,15 +901,12 @@ test("a failed account lookup is retried, so a later offline removal still repla
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
   await sw.loadTree();
-  await settle();
   sessionUp = true;
   await sw.loadTree();
-  await settle();
   online = false;
   await sw.removeSource().response;
   online = true;
   await sw.loadTree();
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
     "DELETE /api/source",
@@ -884,16 +928,16 @@ test("a removal made while the first account lookup is in flight waits for it", 
     if (path === "/api/session") return session(1);
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
-  await sw.loadTree();
-  await settle();
+  const lookup = sw.requested("/api/session");
+  const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
+  await lookup;
   online = false;
   const removal = sw.removeSource().response;
-  await settle();
   answerLookup?.();
   expect(await (await removal).json()).toBe(3);
+  await firstLoad.background;
   online = true;
   await sw.loadTree();
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
     "DELETE /api/source",
@@ -909,12 +953,10 @@ test("a removal with no known account fails offline instead of being queued", as
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
   await sw.loadTree();
-  await settle();
   online = false;
   const removal = sw.removeSource();
   removal.background.catch(() => {});
   await expect(removal.response).rejects.toThrow("Failed to fetch");
-  await settle();
   expect(sw.queue.rows.size).toBe(0);
 });
 
@@ -940,16 +982,17 @@ const recordAfterOvertakenLookup = async (
     }
     return Response.json({ tree: [] });
   });
-  await sw.loadTree();
-  await settle();
+  const lookup = sw.requested("/api/session");
+  const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
+  await lookup;
   await sw.dispatch(new Request(`${ORIGIN}${change}`, { method: "POST" }))
     .response;
-  await sw.loadTree();
-  await settle();
+  // Its flush waits for the first one to finish.
+  const secondLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
+  await secondLoad.response;
   answerFirstLookup?.();
-  await settle();
-  const record: unknown = await sw.entries.get("/sw-queue-account")?.json();
-  return record;
+  await Promise.all([firstLoad.background, secondLoad.background]);
+  return sw.recordedAccount();
 };
 
 test("a session lookup overtaken by a sign-in doesn't record the previous account", async () => {
@@ -978,16 +1021,14 @@ test("a removal that fails after another account signs in stays account 1's", as
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
   await sw.loadTree();
-  await settle();
+  const sent = sw.requested("DELETE /api/source");
   const removal = sw.removeSource().response;
-  await settle();
+  await sent;
   await sw.login();
   await sw.loadTree();
-  await settle();
   failRemoval?.();
   await removal;
   await sw.loadTree();
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
   ]);
@@ -1009,7 +1050,6 @@ test("a signed-out session answer doesn't erase the owner of later offline remov
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
   await sw.loadTree();
-  await settle();
   account = null;
   await sw.dispatch(new Request(`${ORIGIN}/api/session`)).response;
   online = false;
@@ -1017,7 +1057,6 @@ test("a signed-out session answer doesn't erase the owner of later offline remov
   online = true;
   await sw.login();
   await sw.loadTree();
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
     "DELETE /api/source",
@@ -1033,7 +1072,6 @@ test("a deletion queued offline replays on the next successful request", async (
     return method === "GET" ? articleNetwork(path) : new Response(null);
   });
   await sw.loadArticle(1);
-  await settle();
   online = false;
   const removal = sw.dispatch(
     new Request(`${ORIGIN}/api/articles`, {
@@ -1044,7 +1082,6 @@ test("a deletion queued offline replays on the next successful request", async (
   expect(await (await removal.response).json()).toEqual([7]);
   online = true;
   await sw.loadArticle(2);
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/articles",
     "DELETE /api/articles",
@@ -1062,7 +1099,6 @@ test("a replayed deletion carries its original trace and says it is a replay", a
     return method === "GET" ? articleNetwork(path) : new Response(null);
   });
   await sw.loadArticle(1);
-  await settle();
   online = false;
   const removal = sw.dispatch(
     new Request(`${ORIGIN}/api/articles`, {
@@ -1074,7 +1110,6 @@ test("a replayed deletion carries its original trace and says it is a replay", a
   await removal.response;
   online = true;
   await sw.loadArticle(2);
-  await settle();
   const replay = deletes.at(-1);
   expect(replay?.get("X-FeedFathom-Trace")).toBe(
     '{"trigger":{"type":"click"}}',
@@ -1103,25 +1138,14 @@ test.each([
         : new Response(null);
     });
     await sw.loadArticle(1);
-    await settle();
     online = false;
     await sw.remove("/api/source", { removeSourceId: 1 });
     await sw.remove("/api/articles", { removedArticleIdList: [7] });
     online = true;
     await sw.loadArticle(2);
-    await settle();
 
     expect(sw.messages).toEqual(
-      final
-        ? [
-            {
-              method: "DELETE",
-              status,
-              type: "queued-mutation-failed",
-              url: `${ORIGIN}/api/source`,
-            },
-          ]
-        : [],
+      final ? [{ type: "queued-mutation-failed" }] : [],
     );
     expect(sw.queue.rows.size).toBe(final ? 0 : 2);
   },
@@ -1145,17 +1169,15 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
     }
     return new Response(null, { status: sourceExists ? 400 : 200 });
   });
-  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  sw.recordAccount(1);
   await sw.remove("/api/source", { removeSourceId: 1 });
   await sw.remove("/api/folders", { removeFolderId: 2 });
   online = true;
   await sw.loadTree();
-  await settle();
   expect(sw.queue.rows.size).toBe(2);
   expect(sw.messages).toEqual([]);
   sourceRemovalFails = false;
   await sw.loadTree();
-  await settle();
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
     "DELETE /api/folders",
@@ -1184,17 +1206,18 @@ test("a flush that starts during another doesn't replay its entries twice", asyn
       throw new TypeError("Failed to fetch");
     return new Response(null);
   });
-  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  sw.recordAccount(1);
   await sw.remove("/api/source", { removeSourceId: 1 });
   online = true;
-  await sw.loadTree();
-  await settle();
+  const lookup = sw.requested("/api/session");
+  const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
+  await lookup;
   await sw.remove("/api/folders", { removeFolderId: 2 });
   foldersDown = false;
-  await sw.loadTree();
-  await settle();
+  const secondLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
+  await secondLoad.response;
   answerLookup?.();
-  await settle();
+  await Promise.all([firstLoad.background, secondLoad.background]);
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
     "DELETE /api/folders",
@@ -1221,17 +1244,14 @@ const removeOfflineThenSignIn = async (nextAccount: number) => {
   });
   const deletes = () => sw.requests.filter((path) => path.startsWith("DELETE"));
   await sw.loadTree();
-  await settle();
   online = false;
   await sw.removeSource().response;
   online = true;
   account = null;
   await sw.loadTree();
-  await settle();
   expect(sw.queue.rows.size).toBe(1);
   await sw.login();
   await sw.loadTree();
-  await settle();
   return {
     deletes: deletes(),
     messages: sw.messages,
@@ -1261,23 +1281,13 @@ test("logging out drops the removals waiting to replay, and the API cache", asyn
       ? Response.json({ success: true })
       : Promise.reject(new TypeError("Failed to fetch")),
   );
-  sw.entries.set("/sw-queue-account", Response.json({ id: 1 }));
+  sw.recordAccount(1);
   await sw.removeSource().response;
   expect(sw.queue.rows.size).toBe(1);
   await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
     .response;
   expect(sw.queue.rows.size).toBe(0);
   expect([...sw.entries.keys()]).toEqual([]);
-});
-
-// index.html gates its /api/tree preload on the same route list, so the page
-// and the worker agree on which navigations fetch the tree early (#938).
-test("index.html and sw.js exclude the same routes from the tree preload", async () => {
-  const html = await Bun.file(`${import.meta.dir}/../index.html`).text();
-  const swList = /TREE_PRELOAD_EXCLUDED_PATHS =\s*(\/.+\/);/.exec(source)?.[1];
-  const htmlList = /!(\/.+\/)\.test\(/.exec(html)?.[1];
-  expect(swList).toBeDefined();
-  expect(htmlList).toBe(swList);
 });
 
 test("the event stream passes through the worker untouched", async () => {
@@ -1287,8 +1297,7 @@ test("the event stream passes through the worker untouched", async () => {
         headers: { "Content-Type": "text/event-stream" },
       }),
   );
-  await sw.dispatch(new Request(`${ORIGIN}/api/events`)).response;
-  await settle();
+  await sw.dispatch(new Request(`${ORIGIN}/api/events`)).background;
   expect(sw.requests).toEqual([]);
   expect([...sw.entries.keys()]).toEqual([]);
 });

@@ -8,7 +8,13 @@ import { request as requestHttps } from "node:https";
 import { isIP } from "node:net";
 import { type Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { isBlockedAddress } from "#shared/net/private-network-guard.ts";
+import {
+  isBlockedAddress,
+  isBlockedHostname,
+  isIpLiteral,
+  normalizeHostname,
+} from "#shared/net/private-network-guard.ts";
+import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
 
 export class HttpPolicyError extends Error {}
 
@@ -52,43 +58,21 @@ type NativeTransportDependencies = {
   lookup(hostname: string): Promise<readonly LookupAddress[]>;
 };
 
-const internalSuffixes = [
-  ".home",
-  ".home.arpa",
-  ".internal",
-  ".lan",
-  ".local",
-  ".localdomain",
-  ".localhost",
-];
-
 export function parseHttpUrl(value: string): URL {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new HttpPolicyError("Invalid URL");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new HttpPolicyError("Only HTTP and HTTPS URLs are allowed");
-  }
-  if (url.username || url.password) {
-    throw new HttpPolicyError("URL credentials are not allowed");
-  }
+  const url = httpUrlWithoutCredentials(value);
+  if (!url)
+    throw new HttpPolicyError(
+      "Only HTTP and HTTPS URLs without credentials are allowed",
+    );
 
-  const hostname = hostnameWithoutBrackets(url.hostname);
-  const normalized = hostname.replace(/\.+$/, "").toLowerCase();
-  if (!normalized) throw new HttpPolicyError("URL hostname is required");
-  const family = ipFamily(normalized);
-  if (family) {
-    assertGlobalAddress(normalized, family);
-  } else if (
-    !normalized.includes(".") ||
-    normalized === "localhost" ||
-    internalSuffixes.some((suffix) => normalized.endsWith(suffix))
-  ) {
-    throw new HttpPolicyError("Local and internal hostnames are not allowed");
-  }
+  const hostname = normalizeHostname(url.hostname);
+  if (!hostname) throw new HttpPolicyError("URL hostname is required");
+  if (isBlockedHostname(hostname))
+    throw new HttpPolicyError(
+      isIpLiteral(hostname)
+        ? "Non-global IP addresses are not allowed"
+        : "Local and internal hostnames are not allowed",
+    );
   return url;
 }
 
@@ -100,8 +84,7 @@ export function createNativeHttpTransport(
 ): NativeHttpTransport {
   return async (value, headers, signal, body) => {
     const url = parseHttpUrl(value);
-    const logicalHostname = hostnameWithoutBrackets(url.hostname);
-    const normalizedHostname = logicalHostname.replace(/\.+$/, "");
+    const normalizedHostname = normalizeHostname(url.hostname);
     const literalFamily = ipFamily(normalizedHostname);
     const addresses = literalFamily
       ? [
@@ -134,7 +117,7 @@ export function createNativeHttpTransport(
       path: `${url.pathname}${url.search}`,
       port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80,
       protocol: url.protocol === "https:" ? "https:" : "http:",
-      servername: literalFamily ? undefined : logicalHostname,
+      servername: literalFamily ? undefined : normalizedHostname,
       signal,
       url: url.toString(),
     });
@@ -142,12 +125,6 @@ export function createNativeHttpTransport(
 }
 
 export const nativeHttpTransport = createNativeHttpTransport();
-
-function hostnameWithoutBrackets(hostname: string): string {
-  return hostname.startsWith("[") && hostname.endsWith("]")
-    ? hostname.slice(1, -1)
-    : hostname;
-}
 
 function ipFamily(address: string): 4 | 6 | undefined {
   const family = isIP(address);

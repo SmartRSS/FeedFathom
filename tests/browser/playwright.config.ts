@@ -14,6 +14,8 @@ export default defineConfig({
   projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
   reporter: "list",
   testDir: path.join(root, "tests/browser"),
+  // The production smoke runs only against a deployed instance (test:smoke).
+  testIgnore: externalBaseUrl ? [] : ["**/production-smoke.spec.ts"],
   use: {
     baseURL: externalBaseUrl ?? localBaseUrl,
     screenshot: "only-on-failure",
@@ -25,7 +27,9 @@ export default defineConfig({
         webServer: {
           command: `bun run watch-spa -- --port ${localPort}`,
           cwd: root,
-          reuseExistingServer: true,
+          // A server already on the port may be another checkout's, serving
+          // other code; the run fails instead. PLAYWRIGHT_PORT picks a free one.
+          reuseExistingServer: false,
           url: localBaseUrl,
         },
       }),

@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -36,11 +35,7 @@ export const sessions = pgTable(
     lastUsedAt: timestamp("last_used_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    // The DDL default needs a plain SQL literal, so the interval cannot be
-    // built from SESSION_TTL_DAYS here -- keep the two in step.
-    expiresAt: timestamp("expires_at", { withTimezone: true })
-      .notNull()
-      .default(sql`NOW() + INTERVAL '365 days'`),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   // Every authenticated request resolves its cookie through sid, and the
   // session list and both revocation paths filter by user_id. Built in the

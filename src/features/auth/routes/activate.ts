@@ -1,7 +1,8 @@
 import type * as auth from "#features/auth/services.ts";
 import { Elysia } from "elysia";
 import { activationParams } from "#shared/contracts/requests.ts";
-import { json } from "#platform/http/json.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import { successResponse } from "#shared/contracts/responses.ts";
 
 export function createActivateRoute({
   usersDataService,
@@ -10,19 +11,9 @@ export function createActivateRoute({
     "/api/activate/:token",
     { params: activationParams },
     async ({ params: decoded }) => {
-      const user = await usersDataService.findUserByActivationToken(
-        decoded.token,
-      );
-      if (
-        !user ||
-        user.status === "active" ||
-        !user.activationTokenExpiresAt ||
-        user.activationTokenExpiresAt < new Date()
-      ) {
-        return json({ error: "Invalid activation token." }, 400);
-      }
-      await usersDataService.activateUser(user.id);
-      return json({ success: true });
+      if (!(await usersDataService.activate(decoded.token)))
+        return jsonError("Invalid activation token.", 400);
+      return json(successResponse, { success: true });
     },
   );
 }

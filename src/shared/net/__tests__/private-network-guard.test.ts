@@ -1,24 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   isBlockedHostname,
-  isLoopbackAddress,
+  isLoopbackHostname,
 } from "#shared/net/private-network-guard.ts";
-
-describe("isLoopbackAddress", () => {
-  test.each(["127.0.0.1", "::1", "::ffff:127.0.0.1"])(
-    "accepts loopback address %s",
-    (address) => {
-      expect(isLoopbackAddress(address)).toBe(true);
-    },
-  );
-
-  test.each(["", "127.0.0.2", "192.0.2.1", "::ffff:192.0.2.1"])(
-    "rejects non-loopback address %s",
-    (address) => {
-      expect(isLoopbackAddress(address)).toBe(false);
-    },
-  );
-});
 
 describe("isBlockedHostname", () => {
   test.each([
@@ -48,6 +32,17 @@ describe("isBlockedHostname", () => {
     "[::ffff:7f00:1]",
     "[::ffff:808:808]",
   ])("blocks non-global address %s", (hostname) => {
+    expect(isBlockedHostname(hostname)).toBe(true);
+  });
+
+  test.each([
+    "router",
+    "printer.local",
+    "nas.lan",
+    "box.home.arpa",
+    "db.internal",
+    "Printer.Local.",
+  ])("blocks local hostname %s", (hostname) => {
     expect(isBlockedHostname(hostname)).toBe(true);
   });
 
@@ -91,6 +86,22 @@ describe("isBlockedHostname", () => {
     "blocks malformed IP-ish host %s",
     (hostname) => {
       expect(isBlockedHostname(hostname)).toBe(true);
+    },
+  );
+});
+
+describe("isLoopbackHostname", () => {
+  test.each(["localhost", "dev.localhost", "127.0.0.2", "[::1]", "LOCALHOST."])(
+    "%s is this machine",
+    (hostname) => {
+      expect(isLoopbackHostname(hostname)).toBe(true);
+    },
+  );
+
+  test.each(["example.com", "10.0.0.1", "[::2]", "localhost.example.com"])(
+    "%s is not",
+    (hostname) => {
+      expect(isLoopbackHostname(hostname)).toBe(false);
     },
   );
 });

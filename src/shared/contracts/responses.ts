@@ -10,7 +10,12 @@ export const successResponse = Type.Object(
   exact,
 );
 
-export const loginResponse = Type.Object({ sid: Type.String() }, exact);
+// The body of every JSON error the API answers with. `detail` is the raw
+// reason behind `error`, where the server keeps one for an admin's Details.
+export const errorResponse = Type.Object(
+  { detail: Type.Optional(Type.String()), error: Type.String() },
+  exact,
+);
 
 const sessionUser = Type.Object(
   {
@@ -47,7 +52,8 @@ const sessionEntry = Type.Object(
     // one shared timestamp, and it goes stale the moment a browser
     // updates -- activity is what the session list actually shows.
     lastUsedAt: jsonDate,
-    userAgent: Type.String(),
+    // Null when no request on this session sent a User-Agent.
+    userAgent: Type.Union([Type.String(), Type.Null()]),
   },
   exact,
 );
@@ -130,7 +136,6 @@ export const treeResponse = Type.Object(
 const articleSummaryResponse = Type.Object(
   {
     author: Type.String(),
-    group: Type.String(),
     id,
     publishedAt: jsonDate,
     // Decided by the server, with the same expression the read filter uses,
@@ -148,10 +153,6 @@ const articleSummaryResponse = Type.Object(
   exact,
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
-
-// The article list is keyset-paged with at most this many rows. A full page
-// can have more results; request the next page with the last row's ID as cursor.
-export const articlePageSize = 200;
 
 // A file the feed attached to an article (RSS <enclosure>, Media RSS,
 // JSON Feed attachments): a podcast episode, a video, an image. Both URLs are
@@ -273,6 +274,9 @@ export const adminSourcesResponse = Type.Array(
     exact,
   ),
 );
+
+// Old feed URL to the URL it permanently redirects to.
+export const redirectsResponse = Type.Record(Type.String(), Type.String());
 
 export type Article = Static<typeof articleResponse>;
 export type ArticleSummary = Static<typeof articleSummaryResponse>;

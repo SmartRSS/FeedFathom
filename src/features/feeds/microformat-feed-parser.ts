@@ -6,34 +6,15 @@
 // and ones nested inside an h-feed count.
 import { mf2 } from "microformats-parser";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
+import type {
+  FeedMapperInput,
+  FeedMapperItem,
+} from "#features/feeds/feed-mapper.ts";
 
 type MicroformatRoot = ReturnType<typeof mf2>["items"][number];
 type MicroformatProperty = NonNullable<
   MicroformatRoot["properties"]
 >[string][number];
-
-const htmlDoctypePattern = /^\s*(?:<!doctype html|<html[\s>])/i;
-
-// Origins that serve a perfectly good RSS/Atom document as `text/html` are
-// common enough to matter (WordPress behind a proxy that rewrites the header,
-// static hosts that guess a type from the extension). Believing the header
-// there hands XML to the microformats parser, which finds no h-entry items
-// and fails the whole source. The document's own root element is the more
-// reliable witness, so it wins. An XML declaration alone would not be: XHTML
-// pages carrying microformats open with one too, which is why this looks past
-// it for the root element rather than stopping at `<?xml`.
-const feedRootPattern = /^\s*(?:<\?xml[^>]*\?>\s*)?<(?:rss|feed|rdf:RDF)[\s>]/i;
-
-export function isMicroformatHtml(
-  text: string,
-  contentType: string | null,
-): boolean {
-  if (feedRootPattern.test(text)) return false;
-  return (
-    (contentType?.toLowerCase().includes("html") ?? false) ||
-    htmlDoctypePattern.test(text)
-  );
-}
 
 const isRoot = (value: MicroformatProperty): value is MicroformatRoot =>
   typeof value === "object" && value !== null && "properties" in value;
@@ -60,7 +41,7 @@ function entryAuthors(root: MicroformatRoot) {
   }));
 }
 
-function mapEntry(root: MicroformatRoot) {
+function mapEntry(root: MicroformatRoot): FeedMapperItem {
   const properties = root.properties;
   const published = asText(properties["published"]?.[0]);
   const updated = asText(properties["updated"]?.[0]);
@@ -79,7 +60,10 @@ function mapEntry(root: MicroformatRoot) {
 const hasType = (root: MicroformatRoot, type: string): boolean =>
   root.type?.includes(type) ?? false;
 
-export function parseMicroformatFeed(html: string, baseUrl: string) {
+export function parseMicroformatFeed(
+  html: string,
+  baseUrl: string,
+): FeedMapperInput {
   const { items } = mf2(html, { baseUrl });
   const feeds = items.filter((item) => hasType(item, "h-feed"));
   const feedEntries = feeds.flatMap((feed) =>

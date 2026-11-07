@@ -186,12 +186,21 @@ describe("FeedPreviewCache", () => {
     );
   });
 
-  test("treats Redis errors as cache misses", async () => {
+  test("treats Redis errors as logged cache misses", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);
     redis.failGet = true;
+    const errors = spyOn(console, "error").mockImplementation(() => {});
 
-    expect(await cache.get(7, feedUrl)).toBeUndefined();
+    try {
+      expect(await cache.get(7, feedUrl)).toBeUndefined();
+      expect(errors).toHaveBeenCalledWith(
+        `Failed to read feed preview for ${feedUrl}:`,
+        expect.anything(),
+      );
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   test("a failed save still resolves, but leaves a trace", async () => {

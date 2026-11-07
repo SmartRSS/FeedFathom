@@ -6,7 +6,6 @@ import {
   inArray,
   isNotNull,
   lt,
-  lte,
   min,
   ne,
   not,
@@ -14,6 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { AppConfig } from "#platform/config.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { articles } from "#platform/db/schemas/articles.ts";
 import { sessions } from "#platform/db/schemas/sessions.ts";
@@ -21,6 +21,9 @@ import { sources } from "#platform/db/schemas/sources.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { users } from "#platform/db/schemas/users.ts";
+import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
+import { webSubFallbackPollMs } from "#features/feeds/source-schedule-policy.ts";
+import { subscriptionSeesArticle } from "#features/feeds/article-read-state.ts";
 
 // How long an article must go unseen before the feed counts as having dropped
 // it. One fetch omitting an item means nothing -- pagination, reordering and
@@ -38,7 +41,7 @@ const confirmedGoneFromFeedBuffer = sql`
   GREATEST(
     ${goneFromFeedBufferFloorHours} * INTERVAL '1 hour',
     10 * CASE ${sources.kind}
-      WHEN 'websub' THEN INTERVAL '1 day'
+      WHEN 'websub' THEN ${webSubFallbackPollMs} * INTERVAL '1 millisecond'
       ELSE ${sources.notBefore} - ${sources.lastSuccess}
     END
   )
@@ -63,21 +66,62 @@ const emailRetentionDays = 90;
 
 // How long a source may go without a subscriber: a newsletter address is
 // reserved before anyone subscribes (#1116), and takes mail meanwhile.
-export const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
+export const inSubscriberlessGrace = gt(
+  sources.createdAt,
+  subscriberlessGraceEnd,
+);
+export const hasSubscriber = (
+  db: Pick<BunSQLDatabase<typeof schema>, "select">,
+) =>
+  exists(
+    db
+      .select({ id: userSources.id })
+      .from(userSources)
+      .where(eq(userSources.sourceId, sources.id)),
+  );
 
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
 /**
  * Prunes what nothing can still reach: expired users and sessions,
- * subscriberless sources, and articles past every reader's horizon.
+ * subscriberless sources, and articles past every reader's horizon. Then it
+ * recounts the unread badges of every source it took articles from: the
+ * deletes bypass the data services, so a pruned unread newsletter would keep
+ * its badge until some unrelated event recounted the source (#812).
  *
- * Returns the ids of the sources whose article rows shrank. The deletes here
- * bypass the data services, so `user_sources.unread_count` still counts
- * removed articles until the caller recomputes it for every returned source
- * (#812) -- without that, a pruned unread newsletter keeps its badge until
- * some unrelated event happens to recount the source.
+ * Users and sessions are auth's tables. They are pruned here, first, because
+ * every rule below reads the set of current subscribers, which the cascade
+ * from an expired user shrinks.
  */
-export async function cleanupOrphanedData(
+export class RetentionService {
+  constructor(
+    private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
+    private readonly userSourcesDataService: Pick<
+      UserSourcesDataService,
+      "recomputeUnreadCounts"
+    >,
+    private readonly config: Pick<
+      AppConfig,
+      | "ARTICLE_STALE_AFTER_DAYS"
+      | "USER_DORMANT_AFTER_DAYS"
+      | "USER_EXPIRY_DAYS"
+    >,
+  ) {}
+
+  public async prune() {
+    const prunedSourceIds = await deleteUnreachableRows(
+      this.drizzleConnection,
+      this.config.USER_DORMANT_AFTER_DAYS,
+      this.config.ARTICLE_STALE_AFTER_DAYS,
+      this.config.USER_EXPIRY_DAYS,
+    );
+    await this.userSourcesDataService.recomputeUnreadCounts(prunedSourceIds);
+  }
+}
+
+// Returns the ids of the sources whose article rows shrank.
+async function deleteUnreachableRows(
   drizzleConnection: BunSQLDatabase<typeof schema>,
   userDormantAfterDays: number,
   articleStaleAfterDays: number,
@@ -136,14 +180,9 @@ export async function cleanupOrphanedData(
   // also covers the gap between addSourceToUser creating a source and
   // subscribing to it.
   const subscriberless = and(
-    lt(sources.createdAt, subscriberlessGraceEnd),
+    not(inSubscriberlessGrace),
     exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
-    notExists(
-      drizzleConnection
-        .select({ id: userSources.id })
-        .from(userSources)
-        .where(eq(userSources.sourceId, sources.id)),
-    ),
+    not(hasSubscriber(drizzleConnection)),
   );
 
   // An owned newsletter address that has had mail stays, as a tombstone:
@@ -188,7 +227,12 @@ export async function cleanupOrphanedData(
     .where(
       and(
         isNotNull(earliestSubs.sourceId),
-        lt(articles.lastSeenInFeedAt, earliestSubs.earliestSubscription),
+        not(
+          subscriptionSeesArticle(
+            articles.lastSeenInFeedAt,
+            earliestSubs.earliestSubscription,
+          ),
+        ),
       ),
     );
 
@@ -205,7 +249,7 @@ export async function cleanupOrphanedData(
   // to subscribers who joined before it disappeared; a later subscriber never
   // had the chance to delete it, so their missing row must not block the prune.
   //
-  // A false positive is no longer unrecoverable: user_articles is keyed on
+  // A false positive is recoverable: user_articles is keyed on
   // (source, guid) with no foreign key to articles, so a removal outlives the
   // prune and a re-inserted article stays removed. The buffer stays because
   // re-fetching content is waste, not because being wrong is destructive.
@@ -230,7 +274,10 @@ export async function cleanupOrphanedData(
             .where(
               and(
                 eq(userSources.sourceId, articles.sourceId),
-                lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                subscriptionSeesArticle(
+                  articles.lastSeenInFeedAt,
+                  userSources.createdAt,
+                ),
                 notExists(
                   drizzleConnection
                     .select({ userId: userArticles.userId })
@@ -301,7 +348,10 @@ export async function cleanupOrphanedData(
               .where(
                 and(
                   eq(userSources.sourceId, articles.sourceId),
-                  lte(userSources.createdAt, articles.lastSeenInFeedAt),
+                  subscriptionSeesArticle(
+                    articles.lastSeenInFeedAt,
+                    userSources.createdAt,
+                  ),
                   gt(users.lastSeenAt, daysAgo(userDormantAfterDays)),
                 ),
               ),

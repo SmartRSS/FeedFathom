@@ -1,5 +1,6 @@
 import type { ScannerPage } from "#shared/scanners/scanner-page.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { hostIs } from "#shared/scanners/host.ts";
 
 const feedBase = "https://www.bitchute.com/feeds/rss/channel/";
 
@@ -7,8 +8,7 @@ export const scanBitchute = (
   currentPage: URL,
   page: ScannerPage,
 ): FeedData[] => {
-  const hostname = currentPage.hostname.toLowerCase();
-  if (hostname !== "www.bitchute.com" && hostname !== "bitchute.com") return [];
+  if (!hostIs(currentPage, "bitchute.com")) return [];
   if (page.bitchuteChannelName === undefined) return [];
 
   return [

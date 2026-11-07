@@ -8,8 +8,8 @@ import {
 // which is polite per host but has no notion of "per user" -- nothing stops
 // one account from directing it at thousands of hosts, and registration is
 // open, so anyone can sign up and use FeedFathom as a free crawler from our
-// IP. find, preview and subscribe are the three routes that trigger an
-// outbound fetch on a user's say-so, so they share one allowance.
+// IP. Every route that does outbound work, or adds a source row, on a user's
+// say-so shares one allowance.
 const windowSeconds = 60;
 const requestLimit = 30;
 
@@ -18,7 +18,9 @@ export class OutboundFetchBudget {
 
   // Throws HttpDeferredError once the caller is over budget for the current
   // window, with retryAt taken from the counter's own remaining TTL so the
-  // client is told exactly when the window turns over.
+  // client is told exactly when the window turns over. Call it before any
+  // outbound work, including a cache hit: the budget is about how often a
+  // user can ask us to reach out at all.
   public async consume(userId: number): Promise<void> {
     const { count, ttl } = await countInWindow(
       this.redis,

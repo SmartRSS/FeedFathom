@@ -25,7 +25,7 @@ function parseLinkHeaderRels(value: string): Map<string, string> {
 
 // Plain RSS commonly advertises a hub via an `atom:` namespaced link, and
 // HTMLRewriter is a tag-soup scanner, so it sees a literal "atom:link" tag
-// name and both forms need a selector. Same pattern as scanner-page.ts.
+// name and both forms need a selector.
 function scanFeedBodyRels(xml: string): Map<string, string> {
   const rels = new Map<string, string>();
   new HTMLRewriter()
@@ -76,7 +76,12 @@ export function discoverWebSub(
   return { hubUrl: resolvedHub, topicUrl: resolvedTopic };
 }
 
-export type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
+// The route a hub verifies and pushes to; the routes mount it with ":token".
+export const webSubCallbackPath = <Token extends string>(
+  token: Token,
+): `/api/websub/callback/${Token}` => `/api/websub/callback/${token}`;
+
+type HubSubscriptionResult = { ok: true } | { error: string; ok: false };
 
 // Narrow on purpose: HttpClient satisfies it, and a test does not have to
 // build one. What matters is that the hub POST goes through the same
@@ -93,8 +98,8 @@ export type HubPoster = {
  */
 export async function requestHubSubscription(params: {
   callbackToken: string;
-  // The public host the hub calls back on.
-  domain: string;
+  // Where this instance is reachable; the hub calls back there.
+  publicOrigin: URL;
   hubPoster: HubPoster;
   hubUrl: string;
   secret: string;
@@ -105,7 +110,10 @@ export async function requestHubSubscription(params: {
     return { error: "Hub URL is not a public http or https URL", ok: false };
 
   const body = new URLSearchParams({
-    "hub.callback": `https://${params.domain}/api/websub/callback/${params.callbackToken}`,
+    "hub.callback": new URL(
+      webSubCallbackPath(params.callbackToken),
+      params.publicOrigin,
+    ).href,
     "hub.mode": "subscribe",
     "hub.secret": params.secret,
     "hub.topic": params.topicUrl,

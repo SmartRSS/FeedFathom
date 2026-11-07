@@ -2,6 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-23
+- **Note (2026-11):** `extension-types.ts`, named below, is now
+  `src/shared/reader-bridge.ts`.
 
 ## Context
 

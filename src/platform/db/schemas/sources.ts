@@ -107,3 +107,5 @@ type SourceRow = typeof sources.$inferSelect;
 export type Source = Omit<SourceRow, "notBefore"> & {
   notBefore?: Date;
 };
+export type FetchTrigger = NonNullable<SourceRow["lastFetchTrigger"]>;
+export type WebSubStatus = SourceRow["websubStatus"];
