@@ -10,6 +10,7 @@
 // that has expired (new tab days later) falls back to localStorage.
 
 import { isArticleFilter, type ArticleFilter } from "./article-list.ts";
+import { browserTimers, type Timers } from "./timers.ts";
 
 export const READING_SESSION_STORAGE_KEY = "feedfathom:reading-session:v1";
 
@@ -204,41 +205,29 @@ export function ratioToScrollTop(
 
 // Leading-and-trailing throttle for the scroll recorders: the first event
 // writes immediately, a burst coalesces into one trailing write, and a
-// steady scroll writes at most once per interval. Injectable clock and
-// timers, so tests never sleep.
-type ThrottleOptions = {
-  intervalMs?: number;
-  now?: () => number;
-  schedule?: (callback: () => void, ms: number) => unknown;
-};
-
+// steady scroll writes at most once per interval.
 export function createThrottledRecorder<A>(
   write: (value: A) => void,
-  options: ThrottleOptions = {},
+  timers: Timers = browserTimers,
 ): (value: A) => void {
-  const intervalMs = options.intervalMs ?? READER_SCROLL_THROTTLE_MS;
-  const now = options.now ?? (() => Date.now());
-  const schedule =
-    options.schedule ??
-    ((callback: () => void, ms: number) => setTimeout(callback, ms));
   let lastWriteAt = Number.NEGATIVE_INFINITY;
   let pendingHandle: unknown;
   let latest: A | undefined;
   const flush = () => {
     pendingHandle = undefined;
-    lastWriteAt = now();
+    lastWriteAt = timers.now();
     if (latest !== undefined) write(latest);
     latest = undefined;
   };
   return (value: A) => {
     latest = value;
     if (pendingHandle !== undefined) return;
-    const elapsed = now() - lastWriteAt;
-    if (elapsed >= intervalMs) {
+    const elapsed = timers.now() - lastWriteAt;
+    if (elapsed >= READER_SCROLL_THROTTLE_MS) {
       flush();
       return;
     }
-    pendingHandle = schedule(flush, intervalMs - elapsed);
+    pendingHandle = timers.set(flush, READER_SCROLL_THROTTLE_MS - elapsed);
   };
 }
 

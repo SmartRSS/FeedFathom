@@ -14,7 +14,8 @@ export type WorkerMessage =
   // A removal queued offline was refused once it replayed.
   | { type: "queued-mutation-failed" };
 
-export function postToWorker(message: PageMessage): void {
+export function postOfflineSync(sources: number[]): void {
+  const message: PageMessage = { sources, type: "offline-sync" };
   navigator.serviceWorker?.controller?.postMessage(message);
 }
 
@@ -30,15 +31,12 @@ export function isPageMessage(data: unknown): data is PageMessage {
   );
 }
 
-export function isWorkerMessage<K extends WorkerMessage["type"]>(
-  data: unknown,
-  type: K,
-): data is Extract<WorkerMessage, { type: K }> {
+export function isWorkerMessage(data: unknown): data is WorkerMessage {
   return (
     typeof data === "object" &&
     data !== null &&
     "type" in data &&
-    data.type === type
+    (data.type === "shell-updated" || data.type === "queued-mutation-failed")
   );
 }
 

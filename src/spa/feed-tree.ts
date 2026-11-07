@@ -17,7 +17,7 @@ export function sourceIds(
   keep: (source: Extract<TreeNode, { type: "source" }>) => boolean = () => true,
 ): number[] {
   if (node.type !== "source")
-    return (node.children ?? []).flatMap((child) => sourceIds(child, keep));
+    return node.children.flatMap((child) => sourceIds(child, keep));
   return keep(node) ? [Number(node.uid)] : [];
 }
 

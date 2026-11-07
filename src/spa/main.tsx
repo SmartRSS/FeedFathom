@@ -383,13 +383,7 @@ function Router(props: {
         focusPane={props.focusPane}
         backPane={props.backPane}
         whenPaneShown={props.whenPaneShown}
-        initialDiscovery={props.route.name === "preview"}
-        initialFeedUrl={
-          props.route.name === "preview" ? props.route.feedUrl : undefined
-        }
-        initialNewsletter={
-          props.route.name === "preview" && props.route.newsletter === true
-        }
+        preview={props.route.name === "preview" ? props.route : undefined}
       />
     </Show>
   );
@@ -446,9 +440,15 @@ if ("serviceWorker" in navigator) {
   // shell names different assets, which a bundle-only deploy never signals
   // through controllerchange.
   navigator.serviceWorker.addEventListener("message", (event) => {
-    if (isWorkerMessage(event.data, "shell-updated")) markUpdatePending();
-    else if (isWorkerMessage(event.data, "queued-mutation-failed"))
-      setOfflineChangeLost(true);
+    if (!isWorkerMessage(event.data)) return;
+    switch (event.data.type) {
+      case "shell-updated":
+        markUpdatePending();
+        break;
+      case "queued-mutation-failed":
+        setOfflineChangeLost(true);
+        break;
+    }
   });
   void navigator.serviceWorker.register(workerPath, {
     type: builtWorkerPath ? "classic" : "module",

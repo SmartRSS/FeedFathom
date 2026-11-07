@@ -12,6 +12,7 @@ import {
   serializeReadingSession,
   type ReadingSession,
 } from "../reading-session.ts";
+import { fakeTimers } from "./fake-timers.ts";
 
 const aSession = (overrides: Partial<ReadingSession> = {}): ReadingSession => ({
   app: {
@@ -138,36 +139,26 @@ describe("scroll ratio helpers", () => {
 
 describe("throttled recorder", () => {
   test("writes the first value immediately, then at most once per interval", () => {
-    let time = 0;
+    const timers = fakeTimers();
     const writes: number[] = [];
-    const scheduled: Array<() => void> = [];
     const record = createThrottledRecorder(
       (value: number) => writes.push(value),
-      {
-        intervalMs: 500,
-        now: () => time,
-        schedule: (callback, delayMs) => {
-          expect(delayMs).toBe(500);
-          scheduled.push(callback);
-          return scheduled.length;
-        },
-      },
+      timers,
     );
     record(1);
     expect(writes).toEqual([1]);
     // A burst inside the interval coalesces; nothing writes until the timer.
     record(2);
     record(3);
+    expect(timers.pendingDelays()).toEqual([500]);
+    timers.advance(499);
     expect(writes).toEqual([1]);
-    expect(scheduled).toHaveLength(1);
-    time = 500;
-    scheduled.shift()!();
+    timers.advance(1);
     expect(writes).toEqual([1, 3]);
     // The interval now dates from the trailing write.
     record(4);
     expect(writes).toEqual([1, 3]);
-    time = 1000;
-    scheduled.shift()!();
+    timers.advance(500);
     expect(writes).toEqual([1, 3, 4]);
   });
 });

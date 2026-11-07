@@ -12,7 +12,7 @@ import type {
   TreeNode,
   treeResponse,
 } from "#shared/contracts/responses.ts";
-import { sourceIds } from "./feed-tree.ts";
+import { findNode, sourceIds } from "./feed-tree.ts";
 import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
 import {
   queueAdd,
@@ -677,19 +677,6 @@ worker.addEventListener("message", (event) => {
   event.waitUntil(offlineQueue);
 });
 
-function findFolder(
-  nodes: readonly TreeNode[],
-  uid: string,
-): TreeNode | undefined {
-  for (const node of nodes) {
-    if (node.type !== "folder") continue;
-    if (node.uid === uid) return node;
-    const nested = findFolder(node.children ?? [], uid);
-    if (nested) return nested;
-  }
-  return undefined;
-}
-
 // Articles this account removed offline, still waiting to replay.
 async function queuedRemovals() {
   const account = await cachedAccount();
@@ -749,8 +736,10 @@ async function offlineArticleList(request: Request) {
     const folder =
       body.folder === undefined
         ? undefined
-        : findFolder(tree?.tree ?? [], String(body.folder));
-    const sources = new Set(folder ? sourceIds(folder) : body.sources);
+        : findNode(tree?.tree ?? [], "folder", String(body.folder));
+    const sources = new Set(
+      folder?.type === "folder" ? sourceIds(folder) : body.sources,
+    );
     inScope = (row) => sources.has(row.sourceId);
   }
   const bodies = new Set(
@@ -791,7 +780,7 @@ let treePreload: Promise<Response> | undefined;
 
 function treeFaviconUrls(node: TreeNode): string[] {
   if (node.type === "source") return node.favicon ? [node.favicon] : [];
-  return (node.children ?? []).flatMap(treeFaviconUrls);
+  return node.children.flatMap(treeFaviconUrls);
 }
 
 // A favicon's URL changes with the icon (?v=), and a removed source leaves

@@ -10,7 +10,7 @@ import type { TreeNode } from "#shared/contracts/responses.ts";
 import { sourceIds } from "./feed-tree.ts";
 import { offlineUnread } from "./preferences.ts";
 import { saveData } from "./reading-prefetch.ts";
-import { postToWorker } from "./sw-protocol.ts";
+import { postOfflineSync } from "./sw-protocol.ts";
 import { browserTimers, type Timers } from "./timers.ts";
 
 // The service worker can't read localStorage: the dashboard sends it the
@@ -27,11 +27,6 @@ createRoot(() =>
     ),
   ),
 );
-
-// The worker lists and downloads the unread articles of these sources.
-function postOfflineSync(sources: number[]) {
-  postToWorker({ sources, type: "offline-sync" });
-}
 
 // Only sources with something unread are asked about. ponytail: one article
 // request accepts 500 source ids, so past that many sources with unread the

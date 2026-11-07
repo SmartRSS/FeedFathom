@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   classifyFetchFailure,
-  describeFetchFailure,
+  httpStatusFailure,
 } from "#shared/util/fetch-failure.ts";
 
 const status = (code: number) =>
@@ -50,8 +50,14 @@ test.each([
 ])("%s", (_cause, reasons, sentence, editable) => {
   for (const reason of reasons) {
     expect(classifyFetchFailure(reason)).toMatchObject({ editable, sentence });
-    expect(describeFetchFailure(reason)).toBe(sentence);
   }
+});
+
+test("reads back the status the fetcher writes", () => {
+  expect(
+    classifyFetchFailure(httpStatusFailure("https://example.com/feed", 404))
+      .status,
+  ).toBe(404);
 });
 
 test("keeps the HTTP status for the details, and only that", () => {

@@ -30,7 +30,8 @@ import any layer.
 
 `src/platform/runtime.ts` constructs the shared connections, queue and HTTP
 client once per process. Each feature's `services.ts` constructs its service
-instances from those resources. Only the entrypoints import those instances:
+instances from those resources. Only the entrypoints, and a dependent
+feature's `services.ts` constructing its own, import those instances:
 `server.ts` passes them to `createServerApp` and `worker.ts` to `MainWorker`,
 and each route group and handler takes the services it declares as an
 argument. Routes and jobs import the service modules for their types alone, so

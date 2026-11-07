@@ -5,7 +5,7 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json } from "#platform/http/json.ts";
 import { errorResponse, previewResponse } from "#shared/contracts/responses.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
-import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
+import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 
 export async function getPreviewHandler(
   {
@@ -31,7 +31,10 @@ export async function getPreviewHandler(
   if ("failure" in source)
     return json(
       errorResponse,
-      { detail: source.failure, error: describeFetchFailure(source.failure) },
+      {
+        detail: source.failure,
+        error: classifyFetchFailure(source.failure).sentence,
+      },
       400,
     );
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);

@@ -6,6 +6,7 @@ import {
   createMenuSync,
   newsletterMenuId,
   subscribeMenuId,
+  timerSchedule,
 } from "./menu-sync.ts";
 import { isListFeedsMessage, isVisibilityLostMessage } from "./messages.ts";
 import { handleReaderRequest } from "./reader-fetch.ts";
@@ -66,10 +67,7 @@ onBadgeTurnedOff(() => {
 const menuSync = hasContextMenus
   ? createMenuSync(
       contextMenuOperations(chrome.contextMenus, chrome.runtime),
-      (callback, delayMs) => {
-        const timer = setTimeout(callback, delayMs);
-        return () => clearTimeout(timer);
-      },
+      timerSchedule,
     )
   : undefined;
 

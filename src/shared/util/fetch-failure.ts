@@ -49,6 +49,3 @@ export function classifyFetchFailure(reason: string): FetchFailure {
     status,
   };
 }
-
-export const describeFetchFailure = (reason: string) =>
-  classifyFetchFailure(reason).sentence;

@@ -14,7 +14,9 @@ import {
 } from "#shared/reader-bridge.ts";
 import type { InstanceOrigin } from "./url-helpers.ts";
 
-export type ReaderFetch = (
+// Narrower than typeof fetch, whose static members a test stub would also
+// have to supply.
+export type Fetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
@@ -73,7 +75,7 @@ const readBoundedHtml = async (
 
 const fetchArticle = async (
   request: ReaderFetchRequest,
-  fetchImplementation: ReaderFetch,
+  fetchImplementation: Fetch,
 ): Promise<ReaderResponse> => {
   const validated = validateArticleUrl(request.url);
   if ("error" in validated)
@@ -115,7 +117,7 @@ export const handleReaderRequest = async (
   request: ReaderRequest,
   sender: unknown,
   instance: InstanceOrigin | null,
-  fetchImplementation: ReaderFetch = fetch,
+  fetchImplementation: Fetch = fetch,
 ): Promise<ReaderResponse> => {
   if (!instance) return readerErrorResponse(request, "UNAVAILABLE");
   if (!isReaderSender(sender, instance))

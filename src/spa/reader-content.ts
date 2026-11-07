@@ -4,9 +4,8 @@ import { messageOf } from "./api.ts";
 import {
   ReaderExtensionError,
   type createExtensionReaderBridge,
-  type ReaderContent,
-  type ReaderMode,
 } from "./extension-reader.ts";
+import type { ReaderContent, ReaderMode } from "./reader-extraction.ts";
 import type { ArticleFetches } from "./reading-prefetch.ts";
 
 export type DisplayMode = "FEED" | ReaderMode;

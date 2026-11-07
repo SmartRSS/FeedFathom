@@ -6,6 +6,7 @@ import {
 } from "#shared/reader-bridge.ts";
 import { scanDocument } from "./document-scanner.ts";
 import { isScanRequestMessage, listFeedsMessage } from "./messages.ts";
+import { timerSchedule } from "./menu-sync.ts";
 import { createPageScanner } from "./page-scanner.ts";
 import { readSettings } from "./settings.ts";
 
@@ -67,10 +68,7 @@ const pageScanner = createPageScanner({
   hidden: () => document.hidden,
   href: () => document.location.href,
   scan: scanWithFallback,
-  schedule: (callback, delayMs) => {
-    const timer = setTimeout(callback, delayMs);
-    return () => clearTimeout(timer);
-  },
+  schedule: timerSchedule,
   send: (message) => {
     // Throws or rejects, depending on the browser, once the extension
     // context is invalidated; the page has no one left to report to.

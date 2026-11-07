@@ -5,7 +5,7 @@ import {
   readerMaximumHtmlBytes,
   type ReaderErrorCode,
 } from "#shared/reader-bridge.ts";
-import { handleReaderRequest, type ReaderFetch } from "../reader-fetch.ts";
+import { handleReaderRequest, type Fetch } from "../reader-fetch.ts";
 import { canonicalizeInstance } from "../url-helpers.ts";
 
 const canonical = (value: string) => {
@@ -97,7 +97,7 @@ describe("handleReaderRequest", () => {
 
   test.each(unsafeUrls)("rejects unsafe article URL %s", async (url, error) => {
     let fetchCalls = 0;
-    const fetchImplementation: ReaderFetch = async () => {
+    const fetchImplementation: Fetch = async () => {
       fetchCalls++;
       return new Response();
     };
@@ -114,7 +114,7 @@ describe("handleReaderRequest", () => {
 
   test("fetches credential-free HTML and returns the validated final URL", async () => {
     let capturedOptions: RequestInit | undefined;
-    const fetchImplementation: ReaderFetch = async (_input, options) => {
+    const fetchImplementation: Fetch = async (_input, options) => {
       capturedOptions = options;
       return new Response("<article>Story</article>", {
         headers: { "content-type": "text/html; charset=utf-8" },

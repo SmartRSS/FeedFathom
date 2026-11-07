@@ -70,14 +70,13 @@
     "vite-plugin-solid": "^2.11.15",
     "web-ext": "10.8.0"
   },
-  "peerDependencies": {},
   "overrides": {
     "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
     "linkedom": "file:./vendor/linkedom-shim"
   },
   "packageManager": "bun@1.4.4",
   "knip": {
-    "$schema": "https://unpkg.com/knip@5/schema.json",
+    "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
       "src/migrator.ts",
       "src/spa/sw.ts",
@@ -97,7 +96,6 @@
       "tools/**/*.js",
       "vendor/**/__tests__/*.ts"
     ],
-    "ignoreUnresolved": [],
     "ignoreDependencies": [
       "linkedom"
     ]

@@ -1,3 +1,4 @@
+import type { Fetch } from "./reader-fetch.ts";
 import { readSettings } from "./settings.ts";
 import {
   canonicalizeInstance,
@@ -20,17 +21,13 @@ export const openTarget = async (target: OpenTarget): Promise<void> => {
   else await chrome.runtime.openOptionsPage();
 };
 
-// Narrower than typeof fetch: tests can stub it without Response's full
-// static surface, and the extension only ever calls it with a string URL.
-type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
-
 // The cheapest request that proves the address is a reachable FeedFathom:
 // /api/session answers 200 whether or not anyone is signed in, which is what
 // the options page's "Test connection" button reports on. False rather than a
 // thrown error because "why" is the caller's message to write, not ours.
 export const pingInstance = async (
   instance: InstanceOrigin,
-  fetchImplementation: FetchLike = fetch,
+  fetchImplementation: Fetch = fetch,
 ): Promise<boolean> => {
   try {
     const response = await fetchImplementation(`${instance}/api/session`, {

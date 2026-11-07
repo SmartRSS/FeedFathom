@@ -9,7 +9,7 @@ describe("pingInstance", () => {
   test("fetches /api/session on the instance", async () => {
     let requested = "";
     const ok = await pingInstance(instance, async (input) => {
-      requested = input.toString();
+      requested = input instanceof Request ? input.url : input.toString();
       return new Response(null, { status: 200 });
     });
     expect(ok).toBe(true);

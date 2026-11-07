@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ReaderExtensionError, type ReaderMode } from "../extension-reader.ts";
-import { extractReaderContent } from "../reader-extraction.ts";
+import { ReaderExtensionError } from "../extension-reader.ts";
+import { extractReaderContent, type ReaderMode } from "../reader-extraction.ts";
 
 // Bun has no DOMParser, so reaching the parser would fail with a
 // ReferenceError. A TOO_LARGE rejection therefore also proves the budget

@@ -69,6 +69,7 @@ import {
 } from "./article-selection.ts";
 import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
+import type { Route } from "./routes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
 import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
@@ -129,11 +130,10 @@ export function Dashboard(props: {
   backPane(): void;
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
-  initialDiscovery?: boolean;
-  initialFeedUrl?: string | undefined;
-  initialNewsletter?: boolean;
   navigate(to: string): void;
   pane(): DashboardPane;
+  // Set on the /preview route, which opens Discover over the panes.
+  preview?: Extract<Route, { name: "preview" }> | undefined;
   whenPaneShown(run: () => void): void;
 }) {
   // Unmount is final for this instance: work still in flight when it
@@ -370,10 +370,10 @@ export function Dashboard(props: {
 
   // Discover, over the panes.
   const [showDiscovery, setShowDiscovery] = createSignal(
-    props.initialDiscovery ?? false,
+    props.preview !== undefined,
   );
   createEffect(() => {
-    if (props.initialDiscovery) setShowDiscovery(true);
+    if (props.preview) setShowDiscovery(true);
   });
   // The folder Discover starts in when it was opened from an empty folder.
   const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
@@ -478,7 +478,7 @@ export function Dashboard(props: {
     // route opens on its own form: restoring the last reading session would
     // bring its reader forward over it on one pane.
     const snapshot = restore.store.takeSnapshot();
-    const restored = props.initialDiscovery ? undefined : snapshot;
+    const restored = props.preview ? undefined : snapshot;
     if (restored) restore.begin();
     try {
       // loadTree replaces this array as it applies the fresh tree, so its
@@ -1267,7 +1267,7 @@ export function Dashboard(props: {
     setShowDiscovery(false);
     setDiscoveryFolder(undefined);
     setEditingSource(undefined);
-    if (props.initialDiscovery) props.navigate("/");
+    if (props.preview) props.navigate("/");
     return wasEditing;
   }
 
@@ -1430,14 +1430,14 @@ export function Dashboard(props: {
           }
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
-          initialFeedUrl={props.initialFeedUrl}
+          initialFeedUrl={props.preview?.feedUrl}
           initialFolder={discoveryFolder()}
-          initialNewsletter={props.initialNewsletter ?? false}
+          initialNewsletter={props.preview?.newsletter === true}
           mailDomain={session()?.mailDomain}
           pane={props.pane}
           close={() => {
             const wasEditing = closeDiscovery();
-            if (!props.initialDiscovery)
+            if (!props.preview)
               queueMicrotask(() =>
                 (wasEditing ? propertiesButton : addSourceButton)?.focus(),
               );

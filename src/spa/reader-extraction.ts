@@ -4,14 +4,18 @@
 import { extractFromHtml } from "@extractus/article-extractor";
 import { Readability } from "@mozilla/readability";
 import domPurify from "dompurify";
-import {
-  ReaderExtensionError,
-  type ReaderContent,
-  type ReaderMode,
-} from "./extension-reader.ts";
+import { ReaderExtensionError } from "./extension-reader.ts";
 import { readerMaximumHtmlBytes } from "#shared/reader-bridge.ts";
 import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
 import { mapSrcset } from "#shared/util/srcset.ts";
+
+export type ReaderContent =
+  | { content: string; kind: "html" }
+  | { content: string; kind: "text" };
+export type ReaderMode =
+  | "ARTICLE_EXTRACTOR"
+  | "READABILITY"
+  | "READABILITY_PLAIN";
 
 // Extraction runs on the main thread, so it must stay short enough that a
 // click to switch away is still answered. These budgets send larger pages to

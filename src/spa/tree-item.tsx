@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
-import { describeFetchFailure } from "#shared/util/fetch-failure.ts";
+import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
   isSnoozedNode,
   treeNodeKey,
@@ -208,7 +208,7 @@ export function TreeItem(props: {
           {(state) => (
             <span
               class="source-failing"
-              title={`Not updating. ${describeFetchFailure(state().reason)}`}
+              title={`Not updating. ${classifyFetchFailure(state().reason).sentence}`}
             >
               <Icon raw={alertRaw} />
               <span class="sr-only">Not updating</span>

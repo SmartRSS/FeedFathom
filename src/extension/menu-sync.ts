@@ -7,6 +7,11 @@ export type MenuOperations = {
 
 export type Schedule = (callback: () => void, delayMs: number) => () => void;
 
+export const timerSchedule: Schedule = (callback, delayMs) => {
+  const timer = setTimeout(callback, delayMs);
+  return () => clearTimeout(timer);
+};
+
 export const menuDebounceMs = 300;
 export const subscribeMenuId = "FeedFathom";
 export const newsletterMenuId = "FeedFathom_newsletter";

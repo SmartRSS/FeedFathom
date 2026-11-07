@@ -2,7 +2,7 @@ import { For, Show } from "solid-js";
 import type { Article } from "#shared/contracts/responses.ts";
 import { ArticleMarkup } from "./article-markup.tsx";
 import { Enclosures } from "./enclosures.tsx";
-import type { ReaderContent } from "./extension-reader.ts";
+import type { ReaderContent } from "./reader-extraction.ts";
 import { Icon } from "./icon.tsx";
 import { BackButton } from "./page-toolbar.tsx";
 import { displayModes, type ReaderState } from "./reader-content.ts";

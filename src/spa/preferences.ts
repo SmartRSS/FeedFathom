@@ -71,7 +71,8 @@ const ON_OFF = [
   [false, "Off"],
 ] as const;
 
-// Each value has a block of its own in style.css.
+// Each value other than smart, the base palette, has a block of its own in
+// style.css.
 export const theme = storedSetting(
   "theme",
   [

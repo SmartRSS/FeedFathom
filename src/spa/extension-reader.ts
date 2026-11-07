@@ -44,14 +44,6 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-export type ReaderContent =
-  | { content: string; kind: "html" }
-  | { content: string; kind: "text" };
-export type ReaderMode =
-  | "ARTICLE_EXTRACTOR"
-  | "READABILITY"
-  | "READABILITY_PLAIN";
-
 /**
  * Reader flow: SPA window → content script → extension background → direct
  * extension fetch → validated response. Reader documents must never be

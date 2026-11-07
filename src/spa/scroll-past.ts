@@ -1,39 +1,32 @@
 // Mark read on scroll past (#714): which rows have dwelled in the viewport
 // long enough to count as scrolled past, and how they batch into one
-// request. The queue takes an injectable clock, so the dwell and batch rules
-// are tested without one.
+// request.
+import { browserTimers, type Timers } from "./timers.ts";
 
 type ScrollPastQueueOptions = {
   /** Called with a nonempty, ordered, deduplicated id list. */
   flush: (ids: number[]) => void;
-  /** How long a row must stay ≥50% visible before it counts as read. */
-  dwellMs?: number;
   /** Minimum spacing between flushes, so a long scroll makes one request. */
   flushEveryMs?: number;
   /** Flush immediately once this many ids are waiting. */
   cap?: number;
-  /** Injectable clock/timers, so tests never sleep. */
-  now?: () => number;
-  schedule?: (callback: () => void, ms: number) => unknown;
-  cancelScheduled?: (handle: unknown) => void;
+  timers?: Timers;
 };
 
 const SECOND = 1000;
-// The dwell and the flush spacing agree at about a second: long enough that
-// a row flashed past while jumping around is not marked, short enough that a
-// steady scroll never queues more than a request's worth of rows.
-const DEFAULT_DWELL_MS = SECOND;
+// How long a row must stay ≥50% visible before it counts as read. The dwell
+// and the flush spacing agree at about a second: long enough that a row
+// flashed past while jumping around is not marked, short enough that a steady
+// scroll never queues more than a request's worth of rows.
+const DWELL_MS = SECOND;
 const DEFAULT_FLUSH_EVERY_MS = SECOND;
 const DEFAULT_CAP = 25;
 
 export class ScrollPastQueue {
-  readonly #dwellMs: number;
   readonly #flushEveryMs: number;
   readonly #cap: number;
   readonly #flush: (ids: number[]) => void;
-  readonly #now: () => number;
-  readonly #schedule: (callback: () => void, ms: number) => unknown;
-  readonly #cancelScheduled: (handle: unknown) => void;
+  readonly #timers: Timers;
   // id -> the time it became (re)visible. Leaving the viewport cancels, so a
   // row flashed past on the way down starts its dwell over on the way back.
   #dwelling = new Map<number, number>();
@@ -48,19 +41,10 @@ export class ScrollPastQueue {
   #lastFlushAt = Number.NEGATIVE_INFINITY;
 
   constructor(options: ScrollPastQueueOptions) {
-    this.#dwellMs = options.dwellMs ?? DEFAULT_DWELL_MS;
     this.#flushEveryMs = options.flushEveryMs ?? DEFAULT_FLUSH_EVERY_MS;
     this.#cap = options.cap ?? DEFAULT_CAP;
     this.#flush = options.flush;
-    this.#now = options.now ?? (() => Date.now());
-    this.#schedule = options.schedule ?? ((cb, ms) => setTimeout(cb, ms));
-    // `unknown` handles keep the injectable seam honest (the queue never
-    // inspects what schedule returned); the default hands it straight back
-    // to the platform's clearTimeout, whose parameter type wants a number.
-    this.#cancelScheduled =
-      options.cancelScheduled ??
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      ((handle) => clearTimeout(handle as number | undefined));
+    this.#timers = options.timers ?? browserTimers;
   }
 
   /** A row entered the viewport (≥50% visible). */
@@ -68,7 +52,7 @@ export class ScrollPastQueue {
     // Already dwelled or dwelling: keep the original visibility time rather
     // than restarting the dwell on every observer tick.
     if (this.#pending.includes(id) || this.#dwelling.has(id)) return;
-    this.#dwelling.set(id, this.#now());
+    this.#dwelling.set(id, this.#timers.now());
     this.#arm();
   }
 
@@ -85,7 +69,7 @@ export class ScrollPastQueue {
     const ids = this.#pending;
     this.#pending = [];
     this.#pendingSince = undefined;
-    this.#lastFlushAt = this.#now();
+    this.#lastFlushAt = this.#timers.now();
     this.#flush(ids);
     this.#arm();
   }
@@ -100,7 +84,7 @@ export class ScrollPastQueue {
 
   #disarm() {
     if (this.#handle === undefined) return;
-    this.#cancelScheduled(this.#handle);
+    this.#timers.clear(this.#handle);
     this.#handle = undefined;
   }
 
@@ -108,7 +92,7 @@ export class ScrollPastQueue {
     this.#disarm();
     const delay = this.#nextDelay();
     if (delay === undefined) return;
-    this.#handle = this.#schedule(() => this.#onTimer(), delay);
+    this.#handle = this.#timers.set(() => this.#onTimer(), delay);
   }
 
   /** The time the current batch may go out, or undefined with nothing
@@ -142,10 +126,10 @@ export class ScrollPastQueue {
    *  moment the pending batch is allowed out -- whichever is sooner.
    *  Undefined when there is nothing to wait for. */
   #nextDelay(): number | undefined {
-    const time = this.#now();
+    const time = this.#timers.now();
     let delay: number | undefined;
     for (const since of this.#dwelling.values()) {
-      const remaining = Math.max(0, since + this.#dwellMs - time);
+      const remaining = Math.max(0, since + DWELL_MS - time);
       if (delay === undefined || remaining < delay) delay = remaining;
     }
     const readyAt = this.#readyAt();
@@ -158,9 +142,9 @@ export class ScrollPastQueue {
 
   #onTimer() {
     this.#handle = undefined;
-    const time = this.#now();
+    const time = this.#timers.now();
     for (const [id, since] of this.#dwelling) {
-      if (time - since < this.#dwellMs) continue;
+      if (time - since < DWELL_MS) continue;
       this.#dwelling.delete(id);
       if (!this.#pending.includes(id)) this.#pending.push(id);
       this.#pendingSince ??= time;
@@ -172,7 +156,7 @@ export class ScrollPastQueue {
     // The deadline can fall on the same tick a dwell completes; flush on that
     // tick rather than scheduling a zero-delay timer.
     const readyAt = this.#readyAt();
-    if (readyAt !== undefined && this.#now() >= readyAt) {
+    if (readyAt !== undefined && this.#timers.now() >= readyAt) {
       this.flushNow();
       return;
     }
