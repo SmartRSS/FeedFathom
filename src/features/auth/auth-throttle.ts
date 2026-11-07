@@ -12,35 +12,27 @@ import {
 //   (client address)          -- one source spraying many accounts
 //
 // A distributed attack on one account is out of reach of both, which is the
-// price of not handing anyone a lockout. The window is fixed rather than
-// sliding: the TTL is set when a counter first appears and the whole count
-// expires together, which costs one key per window instead of one per attempt.
-// The increment and its expiry run as one script, so no interruption can leave
-// a counter that never expires, and any counter found without a TTL anyway
-// (one written before that held) is given a fresh window when next counted.
+// price of not handing anyone a lockout. Each counter is a fixed window
+// (redis-window-counter.ts).
 //
 // An attempt is counted before it runs, not after it fails: the whole gate is
 // one script, so every concurrent request sees the count the previous one
-// left and no more than the limit get through however many arrive at once. A check followed by recording the failure
-// after the password hash would let a parallel burst all pass the check. A
-// success then takes its own attempt back -- clearing the account counter and
-// refunding the address counter by one -- so what stays counted is failures,
-// as before.
+// left and no more than the limit get through however many arrive at once. A
+// check followed by recording the failure after the password hash would let a
+// parallel burst all pass the check. A success then takes its own attempt
+// back -- clearing the account counter and refunding the address counter by
+// one -- so what stays counted is failures.
 //
 // The scope keeps each endpoint's budget its own. Sharing them would mean a
 // user who re-requested a password reset a few times -- because the first mail
 // went to spam -- could not then log in with the password they had just set.
 //
-// The password change is counted per user rather than per address, on the
-// account counter alone: only a session holder reaches it, and one who stole
-// the session can change address at will. Keying on the account is safe there
-// because only that account's own sessions can spend the budget, and spending
-// it blocks only the change form, never login.
-export type ThrottleScope =
-  | "login"
-  | "password-change"
-  | "password-reset"
-  | "register";
+// The password change is counted per account alone (attemptPasswordChange):
+// only a session holder reaches it, and one who stole the session can change
+// address at will. Keying on the account is safe there because only that
+// account's own sessions can spend the budget, and spending it blocks only the
+// change form, never login.
+export type ThrottleScope = "login" | "password-reset" | "register";
 
 const windowSeconds = 15 * 60;
 const accountFailureLimit = 10;
@@ -91,19 +83,10 @@ export class AuthThrottle {
     address: string,
     email: string,
   ): Promise<boolean> {
-    const keys =
-      scope === "password-change"
-        ? [accountKey(scope, address, email)]
-        : [accountKey(scope, address, email), addressKey(scope, address)];
-    const allowed = await this.redis.send("EVAL", [
-      attemptScript,
-      keys.length.toString(),
-      ...keys,
-      windowSeconds.toString(),
-      accountFailureLimit.toString(),
-      addressFailureLimit.toString(),
+    return await this.count([
+      accountKey(scope, address, email),
+      addressKey(scope, address),
     ]);
-    return allowed === 1;
   }
 
   // The account counter clears; the address counter only gets this attempt
@@ -115,12 +98,31 @@ export class AuthThrottle {
     email: string,
   ): Promise<void> {
     await this.redis.del(accountKey(scope, address, email));
-    if (scope === "password-change") return;
     await this.redis.send("EVAL", [
       refundScript,
       "1",
       addressKey(scope, address),
     ]);
+  }
+
+  public async attemptPasswordChange(userId: number): Promise<boolean> {
+    return await this.count([passwordChangeKey(userId)]);
+  }
+
+  public async passwordChanged(userId: number): Promise<void> {
+    await this.redis.del(passwordChangeKey(userId));
+  }
+
+  private async count(keys: string[]): Promise<boolean> {
+    const allowed = await this.redis.send("EVAL", [
+      attemptScript,
+      keys.length.toString(),
+      ...keys,
+      windowSeconds.toString(),
+      accountFailureLimit.toString(),
+      addressFailureLimit.toString(),
+    ]);
+    return allowed === 1;
   }
 }
 
@@ -136,4 +138,8 @@ function accountKey(
 
 function addressKey(scope: ThrottleScope, address: string): string {
   return `${scope}-source:${address}`;
+}
+
+function passwordChangeKey(userId: number): string {
+  return `password-change-fail:${userId}`;
 }

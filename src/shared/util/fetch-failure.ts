@@ -4,7 +4,7 @@
 // plain sentence. The URL and the status stay out of the sentence: wherever
 // it shows, the feed is already named, and the status is for an admin's
 // details. `editable` marks the causes a new address can fix.
-export interface FetchFailure {
+interface FetchFailure {
   editable: boolean;
   sentence: string;
   status: number | undefined;
@@ -12,6 +12,11 @@ export interface FetchFailure {
 
 const gone = "This feed seems to have moved or been removed.";
 const down = "This site isn't responding right now.";
+
+// The reason the fetcher stores for an answer other than 200. Stored reasons
+// outlive a deploy, so the wording is part of what classifyFetchFailure reads.
+export const httpStatusFailure = (url: string, status: number): string =>
+  `Failed to load data for ${url}, received status ${status.toString()}`;
 
 export function classifyFetchFailure(reason: string): FetchFailure {
   const status =
@@ -44,6 +49,3 @@ export function classifyFetchFailure(reason: string): FetchFailure {
     status,
   };
 }
-
-export const describeFetchFailure = (reason: string) =>
-  classifyFetchFailure(reason).sentence;

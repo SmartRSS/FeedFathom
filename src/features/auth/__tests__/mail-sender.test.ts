@@ -1,23 +1,12 @@
-import { describe, expect, test } from "bun:test";
-import type { AppConfig } from "#platform/config.ts";
-import { MailSender } from "#features/auth/mail-sender.ts";
+import { describe, expect, spyOn, test } from "bun:test";
+import { MailSender, sendLater } from "#features/auth/mail-sender.ts";
 
-const config = (overrides: Partial<AppConfig> = {}): AppConfig => ({
-  ALLOWED_EMAILS: [],
-  ARTICLE_STALE_AFTER_DAYS: 365,
-  CLEANUP_INTERVAL: 1_000,
-  DATABASE_URL: "postgresql://localhost/feedfathom_test",
-  DB_POOL_MAX: 10,
-  ENABLE_REGISTRATION: false,
-  GATHER_JOBS_INTERVAL: 1_000,
-  LOCK_DURATION: 1_000,
-  MAIL_ENABLED: false,
-  REDIS_URL: "redis://localhost:6379",
-  SLOW_REQUEST_MS: 500,
-  USER_DORMANT_AFTER_DAYS: 365,
-  USER_EXPIRY_DAYS: 730,
-  WORKER_CONCURRENCY: 1,
-  ...overrides,
+const config = (domain = "example.test") => ({
+  MAILJET_API_KEY: "mailjet-key",
+  MAILJET_API_SECRET: "mailjet-secret",
+  publicOrigin: new URL(
+    `${domain.startsWith("localhost") ? "http" : "https"}://${domain}`,
+  ),
 });
 
 describe("MailSender", () => {
@@ -26,11 +15,7 @@ describe("MailSender", () => {
       | { init: RequestInit | undefined; input: RequestInfo | URL }
       | undefined;
     const sender = new MailSender(
-      config({
-        FEED_FATHOM_DOMAIN: "localhost:3456",
-        MAILJET_API_KEY: "mailjet-key",
-        MAILJET_API_SECRET: "mailjet-secret",
-      }),
+      config("localhost:3456"),
       async (input, init) => {
         captured = { init, input };
         return new Response(null, { status: 202 });
@@ -54,7 +39,7 @@ describe("MailSender", () => {
       Messages: [
         {
           From: {
-            Email: "welcome@localhost:3456",
+            Email: "welcome@localhost",
             Name: "FeedFathom",
           },
           HTMLPart:
@@ -75,17 +60,10 @@ describe("MailSender", () => {
     let captured:
       | { init: RequestInit | undefined; input: RequestInfo | URL }
       | undefined;
-    const sender = new MailSender(
-      config({
-        FEED_FATHOM_DOMAIN: "example.test",
-        MAILJET_API_KEY: "mailjet-key",
-        MAILJET_API_SECRET: "mailjet-secret",
-      }),
-      async (input, init) => {
-        captured = { init, input };
-        return new Response(null, { status: 200 });
-      },
-    );
+    const sender = new MailSender(config(), async (input, init) => {
+      captured = { init, input };
+      return new Response(null, { status: 200 });
+    });
 
     await sender.sendAccountExistsEmail("reader@example.com", "reset-token");
 
@@ -111,24 +89,9 @@ describe("MailSender", () => {
     });
   });
 
-  test("does nothing when Mailjet credentials are absent", async () => {
-    let calls = 0;
-    const sender = new MailSender(config(), async () => {
-      calls++;
-      return new Response(null, { status: 200 });
-    });
-    await expect(
-      sender.sendActivationEmail("reader@example.com", "activation-token"),
-    ).resolves.toBeUndefined();
-    expect(calls).toBe(0);
-  });
-
   test("throws a bounded diagnostic for non-success responses", async () => {
     const sender = new MailSender(
-      config({
-        MAILJET_API_KEY: "mailjet-key",
-        MAILJET_API_SECRET: "mailjet-secret",
-      }),
+      config(),
       async () => new Response("x".repeat(10_000), { status: 429 }),
     );
 
@@ -145,18 +108,34 @@ describe("MailSender", () => {
 
   test("propagates network failures", async () => {
     const failure = new Error("network unavailable");
-    const sender = new MailSender(
-      config({
-        MAILJET_API_KEY: "mailjet-key",
-        MAILJET_API_SECRET: "mailjet-secret",
-      }),
-      async () => {
-        throw failure;
-      },
-    );
+    const sender = new MailSender(config(), async () => {
+      throw failure;
+    });
 
     await expect(
       sender.sendActivationEmail("reader@example.com", "activation-token"),
     ).rejects.toBe(failure);
+  });
+});
+
+describe("sendLater", () => {
+  test("logs a failed send and undoes what the mail was for", async () => {
+    const undone = Promise.withResolvers<void>();
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      sendLater(
+        "Activation",
+        async () => {
+          throw new Error("Mailjet unavailable");
+        },
+        async () => undone.resolve(),
+      );
+      await undone.promise;
+      expect(logged.mock.calls[0]?.[0]).toBe(
+        "Activation email failed to send:",
+      );
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

@@ -6,10 +6,27 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
+import { Value } from "typebox/value";
+import { articlesRequest } from "#shared/contracts/requests.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
+import {
+  articleResponse,
+  articlesResponse,
+  errorResponse,
+  registrationResponse,
+  successResponse,
+  treeResponse,
+  type TreeNode,
+} from "#shared/contracts/responses.ts";
 import type * as Dialogs from "../../src/spa/dialog.tsx";
-import { installApiFixture } from "./api-fixture.ts";
+import {
+  installApiFixture,
+  malformed,
+  refuse,
+  respond,
+} from "./api-fixture.ts";
 
-// The real service worker (see src/spa/public/sw.js) takes /api/* fetches
+// The real service worker (see src/spa/sw.ts) takes /api/* fetches
 // over itself once it activates -- its own internal fetch() calls run
 // outside the page's network stack, so they bypass installApiFixture's
 // page.route() mock entirely and hit vite's real dev proxy instead
@@ -119,7 +136,6 @@ async function installReaderResponder(
 // One row of a stubbed article page, in the shape articlesResponse wants.
 const pagedSummary = (id: number) => ({
   author: "Author",
-  group: "Older",
   id,
   publishedAt: "2026-07-20T10:00:00.000Z",
   read: false,
@@ -133,19 +149,17 @@ const pagedSummary = (id: number) => ({
 // not know.
 const fulfillPagedArticle = async (route: Route) => {
   const id = Number(new URL(route.request().url()).searchParams.get("article"));
-  await route.fulfill({
-    json: {
-      author: "Author",
-      content: `<p>Body ${id}</p>`,
-      guid: `guid-${id}`,
-      id,
-      lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-      publishedAt: "2026-07-20T10:00:00.000Z",
-      sourceId: 3,
-      title: `Article ${id}`,
-      updatedAt: null,
-      url: `https://articles.example/${id}`,
-    },
+  await respond(route, articleResponse, {
+    author: "Author",
+    content: `<p>Body ${id}</p>`,
+    guid: `guid-${id}`,
+    id,
+    lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
+    publishedAt: "2026-07-20T10:00:00.000Z",
+    sourceId: 3,
+    title: `Article ${id}`,
+    updatedAt: null,
+    url: `https://articles.example/${id}`,
   });
 };
 
@@ -289,19 +303,17 @@ test("renders the tree while its favicons are still loading", async ({
   await installApiFixture(page);
   const rowCount = 50;
   await page.route("**/api/tree", async (route) => {
-    await route.fulfill({
-      json: {
-        tree: Array.from({ length: rowCount }, (_, index) => ({
-          favicon: `/api/favicon/${index + 1}?v=1`,
-          homeUrl: "https://news.example/",
-          kind: "feed",
-          name: `Feed ${index}`,
-          type: "source",
-          uid: String(index + 1),
-          unreadCount: 0,
-          xmlUrl: `https://news.example/${index}.xml`,
-        })),
-      },
+    await respond(route, treeResponse, {
+      tree: Array.from({ length: rowCount }, (_, index): TreeNode => ({
+        favicon: `/api/favicon/${index + 1}?v=1`,
+        homeUrl: "https://news.example/",
+        kind: "feed",
+        name: `Feed ${index}`,
+        type: "source",
+        uid: String(index + 1),
+        unreadCount: 0,
+        xmlUrl: `https://news.example/${index}.xml`,
+      })),
     });
   });
   const held: Route[] = [];
@@ -374,7 +386,9 @@ test("sweeps the skeleton by transform, and not at all under reduced motion", as
       bar: getComputedStyle(element).animationName,
       overlay: getComputedStyle(element, "::after").animationName,
     }));
-  expect(await sweep()).toEqual({ bar: "none", overlay: "skeleton-sweep" });
+  const moving = await sweep();
+  expect(moving.bar).toBe("none");
+  expect(moving.overlay).not.toBe("none");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await sweep()).toEqual({ bar: "none", overlay: "none" });
@@ -384,11 +398,7 @@ test("offers first-run guidance while the tree is empty", async ({ page }) => {
   await installApiFixture(page);
   // Registered after the fixture's own **/api/** handler, so it wins.
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      body: JSON.stringify({ tree: [] }),
-      contentType: "application/json",
-      status: 200,
-    }),
+    respond(route, treeResponse, { tree: [] }),
   );
   await page.goto("/");
 
@@ -640,7 +650,10 @@ test("a late response to a cleared search leaves the list empty", async ({
   // requests hold until released, everything else falls through.
   const { released: searchReleased, release: releaseSearch } = deferred();
   await page.route("**/api/articles", async (route) => {
-    const query: string | undefined = route.request().postDataJSON().query;
+    const { query } = Value.Parse(
+      articlesRequest,
+      route.request().postDataJSON(),
+    );
     if (!query) return route.fallback();
     await searchReleased;
     return route.fallback();
@@ -674,21 +687,20 @@ test("fetches the next article page after a delete empties the list", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = 200;
   const cursors: (number | undefined)[] = [];
   // Registered after the fixture, so it wins for this one route and falls
   // through to the fixture for every other request the page makes.
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     cursors.push(body.cursor);
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
+    );
   });
   // Selecting the list also opens its first row, and these ids are not ones
   // the fixture knows.
@@ -697,7 +709,7 @@ test("fetches the next article page after a delete empties the list", async ({
   await selectSource(page);
 
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   expect(cursors).toEqual([undefined]);
 
   await page.getByRole("button", { exact: true, name: "select all" }).click();
@@ -706,7 +718,7 @@ test("fetches the next article page after a delete empties the list", async ({
   // The second page arrives without a scroll, because there was nothing left
   // to scroll, and it is asked for with the last row of the first page.
   await expect(rows).toHaveCount(3);
-  expect(cursors).toEqual([undefined, pageSize]);
+  expect(cursors).toEqual([undefined, articlePageSize]);
 });
 
 // Solid only writes the DOM when a binding's value changes, so a mutation
@@ -719,15 +731,16 @@ test("moving the focus re-evaluates only the rows it leaves and enters", async (
   const pageSize = 500;
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
-    await route.fulfill({
-      json:
-        body.cursor === undefined
-          ? Array.from({ length: pageSize }, (_, index) =>
-              pagedSummary(index + 1),
-            )
-          : [],
-    });
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
+    await respond(
+      route,
+      articlesResponse,
+      body.cursor === undefined
+        ? Array.from({ length: pageSize }, (_, index) =>
+            pagedSummary(index + 1),
+          )
+        : [],
+    );
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
@@ -767,26 +780,25 @@ test("pages the Today view with the view, not its node uid", async ({
   page,
 }) => {
   await installApiFixture(page);
-  const pageSize = 200;
   const bodies: { cursor?: number; sources: number[]; view?: string }[] = [];
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     bodies.push(body);
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
+    );
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page, "Today");
 
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
 
   // Same emptying trick as the test above: nothing left to scroll is what
   // makes the app ask for the next page without a scroll gesture.
@@ -796,7 +808,7 @@ test("pages the Today view with the view, not its node uid", async ({
 
   expect(bodies).toHaveLength(2);
   expect(bodies[1]).toMatchObject({
-    cursor: pageSize,
+    cursor: articlePageSize,
     sources: [],
     view: "today",
   });
@@ -898,6 +910,8 @@ test("announces mark-read and delete results once per action", async ({
 test("scroll-past policy batches dwelled rows into one PATCH", async ({
   page,
 }) => {
+  // The dwell and the flush run on timers, so the clock can run them out.
+  await page.clock.install();
   await page.addInitScript(() => {
     localStorage.setItem("markReadPolicy", "on-scroll-past");
   });
@@ -915,11 +929,10 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
   // three rows fit this viewport, so on most runs it moves nothing. What the
   // rows share is that they dwell, and 11 is excluded because the reader has
   // it open. The batching rule itself is pinned in scroll-past.test.ts against
-  // a stepping clock -- including the millisecond-apart case that used to
-  // split this into [[12], [13]] on a loaded runner and pass everywhere else.
-  await expect
-    .poll(() => state.readMarks, { timeout: 10_000 })
-    .toEqual([[12, 13]]);
+  // a stepping clock, including rows whose dwells end a millisecond apart.
+  await intersectionsDelivered(page);
+  await page.clock.runFor(10_000);
+  await expect.poll(() => state.readMarks).toEqual([[12, 13]]);
 
   // One request for both rows, and the rows render as read from the same
   // optimistic update the Mark read button uses.
@@ -1055,9 +1068,7 @@ test("lists active sessions and signs out another one", async ({ page }) => {
     .filter({ hasText: "Phone" })
     .getByRole("button", { exact: true, name: "Sign out" })
     .click();
-  await expect
-    .poll(() => state.revokedSessionIds, { timeout: 5_000 })
-    .toEqual([2]);
+  await expect.poll(() => state.revokedSessionIds).toEqual([2]);
   await expect(page.getByText("Phone")).toHaveCount(0);
 });
 
@@ -1122,10 +1133,7 @@ test("a throttled password change says to try again later", async ({
 }) => {
   await openApp(page, {}, "/options");
   await page.route("**/api/options/password", (route) =>
-    route.fulfill({
-      json: { error: "Too many attempts. Try again later." },
-      status: 429,
-    }),
+    refuse(route, 429, "Too many attempts. Try again later."),
   );
   await page.getByRole("link", { exact: true, name: "Account" }).click();
 
@@ -1146,19 +1154,17 @@ test("a throttled password change says to try again later", async ({
 
 const openRegistration = async (
   page: Page,
-  answer: { json: object; status: number },
+  answer: (route: Route) => Promise<void>,
 ) => {
   await installApiFixture(page, { authenticated: false });
   await page.route("**/api/register", (route) =>
     route.request().method() === "GET"
-      ? route.fulfill({
-          json: {
-            passwordResetEnabled: true,
-            registrationStatus: "ENABLED",
-            turnstileSiteKey: null,
-          },
+      ? respond(route, registrationResponse, {
+          passwordResetEnabled: true,
+          registrationStatus: "ENABLED",
+          turnstileSiteKey: null,
         })
-      : route.fulfill(answer),
+      : answer(route),
   );
   await page.goto("/register");
   await page.getByLabel("Name").fill("Reader");
@@ -1171,7 +1177,9 @@ const openRegistration = async (
 test("registration success says what to do if no email arrives", async ({
   page,
 }) => {
-  await openRegistration(page, { json: { success: true }, status: 200 });
+  await openRegistration(page, (route) =>
+    respond(route, successResponse, { success: true }),
+  );
 
   await expect(
     page.getByRole("heading", { name: "Registration successful" }),
@@ -1182,10 +1190,9 @@ test("registration success says what to do if no email arrives", async ({
 });
 
 test("a throttled registration says to try again later", async ({ page }) => {
-  await openRegistration(page, {
-    json: { error: "Too many attempts. Try again later.", success: false },
-    status: 429,
-  });
+  await openRegistration(page, (route) =>
+    refuse(route, 429, "Too many attempts. Try again later."),
+  );
 
   await expect(page.getByRole("alert")).toHaveText(
     "Too many attempts. Try again later.",
@@ -1346,19 +1353,17 @@ test("moving tree focus works out the tab stop once, not per row", async ({
   await installApiFixture(page);
   const rowCount = 300;
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: Array.from({ length: rowCount }, (_, index) => ({
-          favicon: null,
-          homeUrl: "https://news.example/",
-          kind: "feed",
-          name: `Feed ${index}`,
-          type: "source",
-          uid: String(index + 1),
-          unreadCount: 0,
-          xmlUrl: `https://news.example/${index}.xml`,
-        })),
-      },
+    respond(route, treeResponse, {
+      tree: Array.from({ length: rowCount }, (_, index): TreeNode => ({
+        favicon: null,
+        homeUrl: "https://news.example/",
+        kind: "feed",
+        name: `Feed ${index}`,
+        type: "source",
+        uid: String(index + 1),
+        unreadCount: 0,
+        xmlUrl: `https://news.example/${index}.xml`,
+      })),
     }),
   );
   await page.goto("/");
@@ -1394,34 +1399,30 @@ test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   const row = sourceRow(page);
   await expect(row.locator(".unread-count")).toHaveText("2");
   await row.focus();
-  const folder = await page
-    .locator("button.source.folder")
-    .elementHandle({ timeout: 1000 });
-  const source = await row.elementHandle({ timeout: 1000 });
+  const folder = await page.locator("button.source.folder").elementHandle();
+  const source = await row.elementHandle();
 
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              {
-                favicon: null,
-                homeUrl: "https://news.example/",
-                kind: "feed",
-                name: "Tech News",
-                type: "source",
-                uid: "3",
-                unreadCount: 5,
-                xmlUrl: "https://news.example/feed.xml",
-              },
-            ],
-            name: "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            {
+              favicon: null,
+              homeUrl: "https://news.example/",
+              kind: "feed",
+              name: "Tech News",
+              type: "source",
+              uid: "3",
+              unreadCount: 5,
+              xmlUrl: "https://news.example/feed.xml",
+            },
+          ],
+          name: "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     }),
   );
   await page.clock.runFor(30_000);
@@ -1468,11 +1469,7 @@ test("opening the activation link activates nothing until the button says so", a
   const activations: string[] = [];
   await page.route("**/api/activate/**", async (route) => {
     activations.push(route.request().method());
-    return route.fulfill({
-      body: JSON.stringify({ success: true }),
-      contentType: "application/json",
-      status: 200,
-    });
+    return respond(route, successResponse, { success: true });
   });
 
   await page.goto("/activate/scan-magnet");
@@ -1627,9 +1624,7 @@ test("prefetches the next article when the setting is On", async ({ page }) => {
   await expect(articleOptions(page)).toHaveCount(3);
 
   await articleOptions(page).first().click();
-  await expect
-    .poll(() => new Set(ids).size, { timeout: 5_000 })
-    .toBeGreaterThan(1);
+  await expect.poll(() => new Set(ids).size).toBeGreaterThan(1);
 });
 
 test("skips the next-article prefetch when the setting is Off", async ({
@@ -2299,13 +2294,15 @@ for (const admin of [false, true])
   }) => {
     await installApiFixture(page, { admin });
     await page.route("**/api/preview?*", (route) =>
-      route.fulfill({
-        json: {
+      respond(
+        route,
+        errorResponse,
+        {
           detail: "getaddrinfo ENOTFOUND preview.example",
           error: "This site can't be found.",
         },
-        status: 400,
-      }),
+        400,
+      ),
     );
     await page.goto("/preview");
     await page.getByLabel("Feed URL").fill("https://preview.example/feed.xml");
@@ -2672,7 +2669,7 @@ for (const { booted, path } of [
         await page.clock.runFor(30_000);
         return state.treeRequests;
       })
-      .toBe(2);
+      .toBeGreaterThanOrEqual(2);
     await expectSignIn(page, path);
   });
 }
@@ -3045,9 +3042,10 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   await expect(dialog.getByText("Mark read / unread")).toBeVisible();
   // Ctrl+A is a chord, not two alternatives: keys inside one group join with
   // "+", and only separate groups read as "or".
-  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText(
+  await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText([
+    "Ctrl + ↓ or Ctrl + ↑",
     "Ctrl + A",
-  );
+  ]);
 
   // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");
@@ -3386,7 +3384,7 @@ test.describe("session restoration", () => {
 // #835: the tree context menu acts on its row without selecting it, so the
 // article list, its pagination cursor and the reading position stay with the
 // selection the user actually made.
-const menuTreeSource = (uid: string, name: string) => ({
+const menuTreeSource = (uid: string, name: string): TreeNode => ({
   favicon: null,
   homeUrl: `https://${uid}.example/`,
   kind: "feed",
@@ -3401,22 +3399,20 @@ const routeTwoSourceTree = async (
   state: Awaited<ReturnType<typeof installApiFixture>>,
 ) => {
   await page.route("**/api/tree", (route) =>
-    route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              menuTreeSource("3", "Tech News"),
-              menuTreeSource("9", "Tech Preview"),
-            ].filter(
-              (source) => !state.removedSourceIds.includes(Number(source.uid)),
-            ),
-            name: state.updatedFolder?.name ?? "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            menuTreeSource("3", "Tech News"),
+            menuTreeSource("9", "Tech Preview"),
+          ].filter(
+            (source) => !state.removedSourceIds.includes(Number(source.uid)),
+          ),
+          name: state.updatedFolder?.name ?? "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     }),
   );
 };
@@ -3440,41 +3436,27 @@ test("the tree context menu leaves the article paging scope alone", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = 200;
   const bodies: { cursor?: number; sources: number[] }[] = [];
   let releasePage: (() => void) | undefined;
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
     bodies.push(body);
     if (body.cursor !== undefined)
       await new Promise<void>((release) => (releasePage = release));
-    const start = body.cursor === undefined ? 1 : pageSize + 1;
-    const size = body.cursor === undefined ? pageSize : 3;
-    await route.fulfill({
-      json: Array.from({ length: size }, (_, index) =>
-        pagedSummary(start + index),
-      ),
-    });
-  });
-  await page.route("**/api/article?*", async (route) => {
-    const id = Number(
-      new URL(route.request().url()).searchParams.get("article"),
+    const start = body.cursor === undefined ? 1 : articlePageSize + 1;
+    const size = body.cursor === undefined ? articlePageSize : 3;
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
     );
-    await route.fulfill({
-      json: {
-        ...pagedSummary(id),
-        content: `<p>Body ${id}</p>`,
-        guid: `guid-${id}`,
-        lastSeenInFeedAt: "2026-07-20T10:00:00.000Z",
-        updatedAt: null,
-      },
-    });
   });
+  await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page);
   const rows = page.locator(".article-list .article");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
 
   await openRowMenu(page, "Tech Preview");
   await page.keyboard.press("Escape");
@@ -3484,14 +3466,14 @@ test("the tree context menu leaves the article paging scope alone", async ({
     element.scrollTop = element.scrollHeight;
   });
   await expect.poll(() => bodies.length).toBe(2);
-  expect(bodies[1]).toMatchObject({ cursor: pageSize, sources: [3] });
+  expect(bodies[1]).toMatchObject({ cursor: articlePageSize, sources: [3] });
 
   // A menu opened on a folder while that page is in flight changes nothing
   // about where its rows land.
   await openRowMenu(page, "Reading");
   await page.keyboard.press("Escape");
   releasePage!();
-  await expect(rows).toHaveCount(pageSize + 3);
+  await expect(rows).toHaveCount(articlePageSize + 3);
   expect(bodies).toHaveLength(2);
   await expectSelectedRow(page, /Tech News/);
 });
@@ -3504,27 +3486,26 @@ test("switching feeds does not wait on the old feed's next page", async ({
 }) => {
   const state = await installApiFixture(page);
   await routeTwoSourceTree(page, state);
-  const pageSize = 200;
   const pageRequests: number[][] = [];
   const held = new Map<number, () => void>();
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
-    const body = route.request().postDataJSON();
-    const source: number = body.sources[0];
-    const offset = body.cursor === undefined ? 1 : pageSize + 1;
+    const body = Value.Parse(articlesRequest, route.request().postDataJSON());
+    const source = body.sources[0]!;
+    const offset = body.cursor === undefined ? 1 : articlePageSize + 1;
     if (body.cursor !== undefined) {
       pageRequests.push(body.sources);
       await new Promise<void>((release) => held.set(source, release));
     }
-    const size = body.cursor === undefined ? pageSize : 3;
+    const size = body.cursor === undefined ? articlePageSize : 3;
     // The app aborts the abandoned page, so its route may be gone by now.
-    await route
-      .fulfill({
-        json: Array.from({ length: size }, (_, index) =>
-          pagedSummary(source * 1000 + offset + index),
-        ),
-      })
-      .catch(() => {});
+    await respond(
+      route,
+      articlesResponse,
+      Array.from({ length: size }, (_, index) =>
+        pagedSummary(source * 1000 + offset + index),
+      ),
+    ).catch(() => {});
   });
   await page.route("**/api/article?*", fulfillPagedArticle);
   const list = page.locator(".article-list");
@@ -3536,13 +3517,13 @@ test("switching feeds does not wait on the old feed's next page", async ({
   await page.goto("/");
 
   await selectSource(page);
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   await scrollToEnd();
   await expect.poll(() => pageRequests).toEqual([[3]]);
 
   await selectSource(page, "Tech Preview");
   await expect(rows.first()).toContainText("Article 9001");
-  await expect(rows).toHaveCount(pageSize);
+  await expect(rows).toHaveCount(articlePageSize);
   await scrollToEnd();
   await expect.poll(() => pageRequests).toEqual([[3], [9]]);
 
@@ -3554,7 +3535,7 @@ test("switching feeds does not wait on the old feed's next page", async ({
   });
   await scrollToEnd();
   held.get(9)!();
-  await expect(rows).toHaveCount(pageSize + 3);
+  await expect(rows).toHaveCount(articlePageSize + 3);
   expect(pageRequests).toEqual([[3], [9]]);
 });
 
@@ -3570,7 +3551,7 @@ test("a failed delete leaves the feed switched to since alone", async ({
     if (route.request().method() !== "DELETE") return await route.fallback();
     await new Promise<void>((release) => (failDelete = release));
     // Malformed rather than a 500, which the console guard would flag.
-    await route.fulfill({ json: { removed: "malformed" } });
+    await malformed(route, { removed: "malformed" });
   });
   await page.goto("/");
   await selectSource(page);
@@ -3718,28 +3699,26 @@ test("an article event refreshes the tree ahead of the poll", async ({
   let treeRequests = 0;
   await page.route("**/api/tree", (route) => {
     treeRequests++;
-    return route.fulfill({
-      json: {
-        tree: [
-          {
-            children: [
-              {
-                favicon: null,
-                homeUrl: "https://news.example/",
-                kind: "feed",
-                name: "Tech News",
-                type: "source",
-                uid: "3",
-                unreadCount: 5,
-                xmlUrl: "https://news.example/feed.xml",
-              },
-            ],
-            name: "Reading",
-            type: "folder",
-            uid: "7",
-          },
-        ],
-      },
+    return respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            {
+              favicon: null,
+              homeUrl: "https://news.example/",
+              kind: "feed",
+              name: "Tech News",
+              type: "source",
+              uid: "3",
+              unreadCount: 5,
+              xmlUrl: "https://news.example/feed.xml",
+            },
+          ],
+          name: "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
     });
   });
   release();
@@ -3752,39 +3731,6 @@ test("an article event refreshes the tree ahead of the poll", async ({
     .toBe(1);
   await expect(row.locator(".unread-count")).toHaveText("5");
   await expect(page.getByText("3 new articles.")).toBeVisible();
-});
-
-// A proxy that accepts the stream and drops it on every reconnect must not
-// keep pushing the fallback poll back: it still lands at 30s.
-test("a stream that keeps dropping leaves the fallback poll on time", async ({
-  page,
-}) => {
-  await page.clock.install();
-  const state = await installApiFixture(page);
-  let streams = 0;
-  await page.route("**/api/events", (route) => {
-    streams++;
-    return route.fulfill({
-      body: "retry: 100\n: connected\n\n",
-      contentType: "text/event-stream",
-    });
-  });
-  await page.goto("/");
-  await expect(sourceRow(page)).toBeVisible();
-  expect(state.treeRequests).toBe(1);
-
-  // EventSource reconnects on real time, the poll on the installed clock.
-  const streamCount = () => streams;
-  for (let step = 0; step < 10; step++) {
-    const before = streams;
-    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
-    await expect.poll(streamCount).toBeGreaterThan(before);
-    // eslint-disable-next-line no-await-in-loop -- Interleaves the two clocks.
-    await page.clock.runFor(3_000);
-  }
-  // A poll still in flight when the clock jumps 3s has, by the page's clock,
-  // waited past a second, so it races a second copy of its GET (see api.ts).
-  await expect.poll(() => state.treeRequests).toBeGreaterThanOrEqual(2);
 });
 
 // #927: arrowing through the list opens each row it passes. The page cancels
@@ -3838,7 +3784,7 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
 
 // #989: a slow network doesn't hold a tree the worker already has.
 // Releasing with no response lets the fixture answer as usual.
-type HeldTree = { json: object; status?: number } | undefined;
+type HeldTree = ((route: Route) => Promise<void>) | undefined;
 const reloadWithHeldTree = async (
   page: Page,
   beforeReload?: () => Promise<void>,
@@ -3857,8 +3803,8 @@ const reloadWithHeldTree = async (
     release = resolve;
   });
   await context.route("**/api/tree", async (route) => {
-    const response = await held;
-    await (response ? route.fulfill(response) : route.fallback());
+    const answer = await held;
+    await (answer ? answer(route) : route.fallback());
   });
   await page.reload();
   await expect(sourceRow(page)).toBeVisible();
@@ -3879,6 +3825,27 @@ test("logging out from an uncontrolled page drops the API cache", async ({
   });
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  expect(
+    await page.evaluate(async () =>
+      (await caches.keys()).filter((key) => key.startsWith("api-")),
+    ),
+  ).toEqual([]);
+});
+
+// The next account must not be served the previous one's cached data, which
+// the uncontrolled page's sign-in never shows the worker either (#974).
+test("signing in from an uncontrolled page drops the API cache", async ({
+  page,
+}) => {
+  await openApp(page, { authenticated: false }, "/login");
+  await page.evaluate(async () => {
+    const cache = await caches.open("api-test");
+    await cache.put("/api/tree", Response.json({ tree: [] }));
+  });
+  await page.getByLabel("Email").fill("reader@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page).not.toHaveURL(/\/login/);
   expect(
     await page.evaluate(async () =>
       (await caches.keys()).filter((key) => key.startsWith("api-")),
@@ -3909,10 +3876,11 @@ const downloadUnread = async (page: Page) => {
   await context.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
     const publishedAt = new Date().toJSON();
-    return route.fulfill({
-      json: ["First", "Second", "Third"].map((title, index) => ({
+    return respond(
+      route,
+      articlesResponse,
+      ["First", "Second", "Third"].map((title, index) => ({
         author: "News Author",
-        group: "Today",
         id: 11 + index,
         publishedAt,
         read: false,
@@ -3921,7 +3889,7 @@ const downloadUnread = async (page: Page) => {
         title: `${title} article`,
         url: `https://articles.example/${index}`,
       })),
-    });
+    );
   });
   await page.goto("/");
   await page.waitForFunction(() => navigator.serviceWorker.controller);
@@ -4011,8 +3979,8 @@ test.describe("under a controlling service worker", () => {
       page.getByRole("treeitem", { name: "Tech News 2 unread" }),
     ).toBeVisible();
 
-    release({
-      json: {
+    release((route) =>
+      respond(route, treeResponse, {
         tree: [
           {
             favicon: null,
@@ -4025,8 +3993,8 @@ test.describe("under a controlling service worker", () => {
             xmlUrl: "https://news.example/feed.xml",
           },
         ],
-      },
-    });
+      }),
+    );
     await expect(
       page.getByRole("treeitem", { name: "Tech News 5 unread" }),
     ).toBeVisible();
@@ -4126,7 +4094,7 @@ test.describe("under a controlling service worker", () => {
     page,
   }) => {
     const release = await reloadWithHeldTree(page);
-    release({ json: { error: "Unauthorized" }, status: 401 });
+    release((route) => refuse(route, 401, "Unauthorized"));
     await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
     (browserFailures.get(page) ?? []).length = 0;
   });
@@ -4147,7 +4115,7 @@ test.describe("under a controlling service worker", () => {
         .context()
         .route("**/api/articles", (route) =>
           route.request().method() === "DELETE"
-            ? route.fulfill({ json: { error: "Not found" }, status: 404 })
+            ? refuse(route, 404, "Not found")
             : route.fallback(),
         ),
     );

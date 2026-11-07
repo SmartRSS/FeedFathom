@@ -1,6 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
 import { RedisClient } from "bun";
-import { AuthThrottle } from "#features/auth/auth-throttle.ts";
+import {
+  AuthThrottle,
+  type ThrottleScope,
+} from "#features/auth/auth-throttle.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
 const redis = new RedisClient(requireDisposableRedisUrl());
@@ -119,28 +122,99 @@ test("a success clears the account and refunds one attempt without creating a ke
   expect(await redis.exists(source)).toBe(false);
 });
 
-test("a password change counts on the account counter alone", async () => {
-  const address = `user:${crypto.randomUUID()}`;
+test("a password change is counted per account, whatever the address", async () => {
+  const userId = Math.floor(Math.random() * 1_000_000_000);
   for (let attempt = 0; attempt < 10; attempt++) {
     // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
-    expect(await throttle.attempt("password-change", address, email)).toBe(
-      true,
-    );
+    expect(await throttle.attemptPasswordChange(userId)).toBe(true);
   }
-  expect(await throttle.attempt("password-change", address, email)).toBe(false);
-  expect(await redis.exists(`password-change-source:${address}`)).toBe(false);
+  expect(await throttle.attemptPasswordChange(userId)).toBe(false);
+  expect(await throttle.attemptPasswordChange(userId + 1)).toBe(true);
 
-  await throttle.succeeded("password-change", address, email);
-  expect(await redis.exists(`password-change-fail:${address}:${email}`)).toBe(
-    false,
-  );
+  await throttle.passwordChanged(userId);
+  expect(await throttle.attemptPasswordChange(userId)).toBe(true);
 });
 
 test("counters stop refusing after the window", async () => {
   const { address, source } = scopeKeys();
   await redis.set(source, "50");
-  await redis.send("PEXPIRE", [source, "50"]);
+  await redis.send("EXPIRE", [source, "60"]);
   expect(await throttle.attempt("login", address, email)).toBe(false);
-  await Bun.sleep(100);
+
+  await redis.send("PEXPIRE", [source, "1"]);
+  for (let wait = 0; wait < 100; wait++) {
+    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
+    if (!(await redis.exists(source))) break;
+    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
+    await Bun.sleep(10);
+  }
+  expect(await throttle.attempt("login", address, email)).toBe(true);
+});
+
+async function spend(
+  times: number,
+  scope: ThrottleScope,
+  address: string,
+  account: (attempt: number) => string,
+) {
+  for (let attempt = 0; attempt < times; attempt++) {
+    // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
+    await throttle.attempt(scope, address, account(attempt));
+  }
+}
+
+test("refuses an address grinding one account, and only that pair", async () => {
+  const { address } = scopeKeys();
+  const elsewhere = scopeKeys().address;
+
+  await spend(10, "login", address, () => email);
+
+  expect(await throttle.attempt("login", address, email)).toBe(false);
+  // A second account from the same address is untouched until the address
+  // counter itself fills up, and another address never sees this at all.
+  expect(await throttle.attempt("login", address, "other@example.test")).toBe(
+    true,
+  );
+  expect(await throttle.attempt("login", elsewhere, email)).toBe(true);
+});
+
+test("refuses an address spraying accounts before any one of them locks", async () => {
+  const { address } = scopeKeys();
+  const elsewhere = scopeKeys().address;
+
+  await spend(50, "login", address, (attempt) => `user${attempt}@example.test`);
+
+  expect(
+    await throttle.attempt("login", address, "never-tried@example.test"),
+  ).toBe(false);
+  expect(await throttle.attempt("login", elsewhere, "user0@example.test")).toBe(
+    true,
+  );
+});
+
+// One valid account must not refill the budget an attacker spends from the
+// same address against every other account.
+test("a success refunds the address one attempt, not the lot", async () => {
+  const { address } = scopeKeys();
+  await spend(50, "login", address, (attempt) => `user${attempt}@example.test`);
+
+  await throttle.succeeded("login", address, "user0@example.test");
+
+  expect(
+    await throttle.attempt("login", address, "never-tried@example.test"),
+  ).toBe(true);
+  expect(
+    await throttle.attempt("login", address, "never-tried-2@example.test"),
+  ).toBe(false);
+});
+
+// Asking for a reset ten times -- because the first mail went to spam --
+// must not then refuse the login with the password that reset just set.
+test("keeps each scope's budget to itself", async () => {
+  const { address } = scopeKeys();
+
+  await spend(10, "password-reset", address, () => email);
+
+  expect(await throttle.attempt("password-reset", address, email)).toBe(false);
   expect(await throttle.attempt("login", address, email)).toBe(true);
 });

@@ -157,9 +157,9 @@ describe("requestHubSubscription", () => {
     const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
       callbackToken: "token",
-      domain: "us.example",
       hubPoster: poster,
       hubUrl: "http://169.254.169.254/",
+      publicOrigin: new URL("https://us.example"),
       secret: "x",
       topicUrl: "https://example.com/feed",
     });
@@ -174,9 +174,9 @@ describe("requestHubSubscription", () => {
     const { calls, poster } = recordingPoster(async () => ({ status: 202 }));
     const result = await requestHubSubscription({
       callbackToken: "token",
-      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
+      publicOrigin: new URL("https://us.example"),
       secret: "s3cr3t",
       topicUrl: "https://example.com/feed",
     });
@@ -199,9 +199,9 @@ describe("requestHubSubscription", () => {
     const { poster } = recordingPoster(async () => ({ status: 500 }));
     const result = await requestHubSubscription({
       callbackToken: "token",
-      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
+      publicOrigin: new URL("https://us.example"),
       secret: "x",
       topicUrl: "https://example.com/feed",
     });
@@ -220,9 +220,9 @@ describe("requestHubSubscription", () => {
     });
     const result = await requestHubSubscription({
       callbackToken: "token",
-      domain: "us.example",
       hubPoster: poster,
       hubUrl: "https://hub.example/",
+      publicOrigin: new URL("https://us.example"),
       secret: "x",
       topicUrl: "https://example.com/feed",
     });

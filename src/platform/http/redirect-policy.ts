@@ -1,4 +1,7 @@
-import type { HttpRateLimiter } from "#platform/http/http-rate-limiter.ts";
+import type {
+  HttpRateLimiter,
+  Priority,
+} from "#platform/http/http-rate-limiter.ts";
 import {
   HttpPolicyError,
   type NativeHttpResponse,
@@ -6,7 +9,10 @@ import {
 } from "#platform/http/http-native-transport.ts";
 import type { RequestDeadline } from "#platform/http/request-deadline.ts";
 
-const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+const redirectStatuses: ReadonlySet<number> = new Set([
+  301, 302, 303, 307, 308,
+]);
+const maximumRedirects = 5;
 
 export type FetchResult = {
   permanent: boolean;
@@ -24,7 +30,7 @@ export class RedirectPolicy {
   async follow(
     url: string,
     headers: Headers,
-    priority: "background" | "interactive",
+    priority: Priority,
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;
@@ -32,7 +38,7 @@ export class RedirectPolicy {
     // means the resolved URL could still change back.
     let permanent = true;
     /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
-    for (let redirects = 0; redirects <= 5; redirects++) {
+    for (let redirects = 0; redirects <= maximumRedirects; redirects++) {
       // A hop is a request like any other, and it is a request to a host of
       // its own. Reserving here rather than once per call is also what gives
       // a retry its interval, since every attempt re-enters this loop. The

@@ -3,6 +3,8 @@ import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
+import { digestToken } from "#features/auth/account-tokens.ts";
+import { SESSION_TTL_DAYS } from "#platform/db/schemas/sessions.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
@@ -54,7 +56,7 @@ test("only the first completion of a reset link spends it", async () => {
       "new-password-hash",
     ),
   ).toBe(true);
-  expect(await usersDataService.getUserBySid(sid)).toBeUndefined();
+  expect(await usersDataService.authenticate(sid, null, false)).toBeUndefined();
 
   const [row] = await client<{ password: string; token: null }[]>`
     SELECT password, password_reset_token_hash AS token FROM users WHERE id = ${userId}`;
@@ -91,7 +93,7 @@ test("simultaneous completions of one link let exactly one through", async () =>
     SELECT password, password_reset_token_hash AS token FROM users WHERE id = ${userId}`;
   expect(row!.password).toBe(first ? "first-hash" : "second-hash");
   expect(row!.token).toBeNull();
-  expect(await usersDataService.getUserBySid(sid)).toBeUndefined();
+  expect(await usersDataService.authenticate(sid, null, false)).toBeUndefined();
 });
 
 // A login verifies a hash it read before the reset and issues its session
@@ -196,7 +198,51 @@ test("a password change signs out every other session and keeps the current one"
     ),
   ).toBe(true);
 
-  expect((await usersDataService.getUserBySid(current))?.id).toBe(userId);
-  expect(await usersDataService.getUserBySid(other)).toBeUndefined();
+  expect((await usersDataService.authenticate(current, null, false))?.id).toBe(
+    userId,
+  );
+  expect(
+    await usersDataService.authenticate(other, null, false),
+  ).toBeUndefined();
   expect(await signIn()).toBeUndefined();
+});
+
+// The link carries the token and only its digest is stored, so a dump of the
+// users table is not a set of working reset links; the lookup finds the
+// account by the token's digest until the link expires.
+test("a reset token is stored as a digest and found only while it is live", async () => {
+  const { userId } = await setUp();
+
+  const token = await usersDataService.startPasswordReset(userId);
+  const [row] = await client<{ hash: string }[]>`
+    SELECT password_reset_token_hash AS hash FROM users WHERE id = ${userId}`;
+  expect(row?.hash).toBe(digestToken(token));
+  expect(row?.hash).not.toBe(token);
+  expect(
+    (await usersDataService.findUserByPasswordResetToken(digestToken(token)))
+      ?.id,
+  ).toBe(userId);
+
+  await client`UPDATE users SET password_reset_token_expires_at = NOW() - INTERVAL '1 second'`;
+  expect(
+    await usersDataService.findUserByPasswordResetToken(digestToken(token)),
+  ).toBeUndefined();
+});
+
+test("a session expires a year after it opens", async () => {
+  const { signIn } = await setUp();
+  const sid = await signIn();
+  const [row] = await client<{ days: number }[]>`
+    SELECT EXTRACT(DAY FROM expires_at - created_at)::int AS days
+    FROM sessions WHERE sid = ${sid ?? ""}`;
+  expect(row?.days).toBe(SESSION_TTL_DAYS);
+});
+
+test("a session opened without a User-Agent lists none", async () => {
+  const { userId } = await setUp();
+  const sid =
+    (await usersDataService.createSession(userId, "old-password-hash", null)) ??
+    "";
+  const [session] = await usersDataService.listSessions(userId, sid);
+  expect(session?.userAgent).toBeNull();
 });

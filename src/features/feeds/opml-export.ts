@@ -1,5 +1,5 @@
-import type { OpmlNode } from "#shared/types/opml-types.ts";
-import { xmlSafeText } from "#platform/xml.ts";
+import type { OpmlNode } from "#features/feeds/opml-types.ts";
+import { xmlSafeText } from "#features/feeds/xml.ts";
 
 type XmlNode = {
   attributes?: Record<string, string>;

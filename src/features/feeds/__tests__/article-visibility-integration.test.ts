@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { fileURLToPath } from "node:url";
-import { articlePageSize } from "#shared/contracts/responses.ts";
+import { articlePageSize } from "#shared/contracts/limits.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { migrateDatabase } from "../../../migrator.ts";
@@ -70,7 +70,7 @@ test("a removal survives its article row being pruned and re-listed", async () =
 
     expect(await listedIds(source!.id, user!.id)).toEqual([kept]);
 
-    // What cleanupOrphanedData does to an article every subscriber has
+    // What RetentionService.prune does to an article every subscriber has
     // removed and the feed appears to have dropped, followed by the feed
     // listing that same guid again.
     await client`DELETE FROM articles WHERE id = ${removed}`;

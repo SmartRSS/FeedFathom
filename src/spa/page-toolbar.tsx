@@ -25,3 +25,18 @@ export function PageToolbar(props: {
     </div>
   );
 }
+
+// The list's and the reader's way back show only where one pane does;
+// Discover's shows at every width, as Options' and Admin's do, since it
+// replaces the panes it leads back to.
+export function BackButton(props: { always?: boolean; backPane(): void }) {
+  return (
+    <button
+      aria-label="back"
+      classList={{ "only-mobile": !props.always }}
+      onClick={props.backPane}
+    >
+      <Icon raw={backRaw} />
+    </button>
+  );
+}

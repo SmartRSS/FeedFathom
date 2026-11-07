@@ -1,3 +1,4 @@
+import { Elysia } from "elysia";
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { RedisClient, SQL } from "bun";
 import { fileURLToPath } from "node:url";
@@ -7,11 +8,12 @@ import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import type { AppConfig } from "#platform/config.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import { invalidRequestMessage } from "#platform/http/json.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
-import { cleanupOrphanedData } from "#features/feeds/retention.ts";
+import { RetentionService } from "#features/feeds/retention.ts";
 import { postNewsletterAddressHandler } from "#features/feeds/routes/newsletter-address.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
@@ -19,6 +21,10 @@ import {
   EmailHandler,
   MailRejectedError,
 } from "#features/mail-ingest/email-handler.ts";
+import {
+  createFeedRoutes,
+  type FeedRouteServices,
+} from "#features/feeds/routes.ts";
 import {
   createReaderRoutes,
   type ReaderRouteServices,
@@ -52,6 +58,7 @@ const articleImporter = new ArticleImporter(
   articlesDataService,
   userSourcesDataService,
   { publish() {} },
+  sourcesDataService,
 );
 const emailHandler = new EmailHandler(sourcesDataService, articleImporter);
 const config = strictFake<AppConfig>(
@@ -59,29 +66,35 @@ const config = strictFake<AppConfig>(
     FEED_FATHOM_DOMAIN: "localhost:3456",
     MAIL_DOMAIN: mailDomain,
     MAIL_ENABLED: true,
+    mailDomain,
+    publicOrigin: new URL("http://localhost:3456"),
   },
   "config",
 );
 // Subscribing an email source fetches and imports nothing, so the feed-only
 // services stay unarranged: reaching one is a failure.
-const reader = createReaderRoutes(
-  strictFake<ReaderRouteServices>(
-    {
-      articleImporter: strictFake({}, "articleImporter"),
-      articlesDataService,
-      config,
-      feedParser: strictFake({}, "feedParser"),
-      feedPreviewCache: strictFake({}, "feedPreviewCache"),
-      foldersDataService: strictFake({}, "foldersDataService"),
-      outboundFetchBudget,
-      sourceEnqueuer: strictFake({}, "sourceEnqueuer"),
-      sourcesDataService,
-      userSourcesDataService,
-      usersDataService,
-    },
-    "readerServices",
-  ),
+const services = strictFake<FeedRouteServices & ReaderRouteServices>(
+  {
+    articleEventHub: strictFake({}, "articleEventHub"),
+    articleImporter: strictFake({}, "articleImporter"),
+    articlesDataService,
+    config,
+    feedParser: strictFake({}, "feedParser"),
+    feedPreviewCache: strictFake({}, "feedPreviewCache"),
+    foldersDataService: strictFake({}, "foldersDataService"),
+    httpClient: strictFake({}, "httpClient"),
+    outboundFetchBudget,
+    sourceEnqueuer: strictFake({}, "sourceEnqueuer"),
+    sourcesDataService,
+    userSourcesDataService,
+    usersDataService,
+    websubStateService: strictFake({}, "websubStateService"),
+  },
+  "routeServices",
 );
+const feedRoutes = new Elysia()
+  .use(createReaderRoutes(services))
+  .use(createFeedRoutes(services));
 
 afterAll(async () => {
   redis.close();
@@ -112,7 +125,7 @@ beforeEach(async () => {
 });
 
 const post = (path: string, body: object, as = account) =>
-  reader.handle(
+  feedRoutes.handle(
     new Request(`http://localhost/api${path}`, {
       body: JSON.stringify(body),
       headers: { "content-type": "application/json", cookie: as.cookie },
@@ -165,7 +178,13 @@ const articleTitles = async (sourceId: number) =>
       SELECT title FROM articles WHERE source_id = ${sourceId} ORDER BY id`
   ).map(({ title }) => title);
 
-const cleanup = () => cleanupOrphanedData(drizzleConnection, 0, 0, 0);
+const prune = (USER_EXPIRY_DAYS: number) =>
+  new RetentionService(drizzleConnection, userSourcesDataService, {
+    ARTICLE_STALE_AFTER_DAYS: 0,
+    USER_DORMANT_AFTER_DAYS: 0,
+    USER_EXPIRY_DAYS,
+  }).prune();
+const cleanup = () => prune(0);
 
 test("mail to a minted address is kept before Subscribe and read after it", async () => {
   const reserved = await post("/newsletter-address", {
@@ -178,6 +197,10 @@ test("mail to a minted address is kept before Subscribe and read after it", asyn
   expect(await sourceRows()).toEqual([
     { id: source!.id, kind: "email", url: address },
   ]);
+  // Links back to the public origin, not the address the request reached.
+  expect((await sourcesDataService.findSourceByUrl(address))?.homeUrl).toBe(
+    "http://localhost:3456",
+  );
 
   await deliver(address, "Confirm your subscription");
   expect(await articleTitles(source!.id)).toEqual([
@@ -309,7 +332,7 @@ test("a reserved address belongs to the account that reserved it", async () => {
   );
   const refused = await subscribe(address, other);
   expect(refused.status).toBe(422);
-  expect(await refused.json()).toEqual({ error: "Refine Error" });
+  expect(await refused.json()).toEqual({ error: invalidRequestMessage });
   expect(await subscribers(source!.id)).toEqual([]);
 
   expect((await subscribe(address)).status).toBe(200);
@@ -372,7 +395,7 @@ test("an older shared address passes to its next subscriber when its owner expir
   await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE url = ${owned}`;
   await client`UPDATE users SET last_seen_at = NOW() - INTERVAL '10 days' WHERE id = ${account.id}`;
 
-  await cleanupOrphanedData(drizzleConnection, 0, 0, 5);
+  await prune(5);
 
   expect((await sourceRows()).map(({ url }) => url)).toEqual([address]);
   expect(await subscribers(legacy!.id)).toEqual([other.id]);
@@ -486,7 +509,10 @@ test("refuses to reserve while mail is disabled", async () => {
       user: { id: account.id },
     },
     {
-      config: strictFake<AppConfig>({ MAIL_ENABLED: false }, "config"),
+      config: strictFake<AppConfig>(
+        { MAIL_ENABLED: false, mailDomain: undefined },
+        "config",
+      ),
       outboundFetchBudget,
       sourcesDataService,
     },

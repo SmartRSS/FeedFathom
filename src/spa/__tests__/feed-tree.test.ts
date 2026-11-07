@@ -1,0 +1,299 @@
+import { describe, expect, test } from "bun:test";
+import { Value } from "typebox/value";
+import { articlesRequest } from "#shared/contracts/requests.ts";
+import type { TreeNode } from "#shared/contracts/responses.ts";
+import {
+  articleScope,
+  filterTree,
+  findNode,
+  findParentFolderUid,
+  isSnoozedNode,
+  readStateDeltas,
+  sourceIds,
+  snoozeUntilIso,
+  totalUnread,
+  treeNodeKey,
+  treeTabStopKey,
+  withDecrementedUnread,
+  withTodayNode,
+} from "../feed-tree.ts";
+
+function source(
+  uid: string,
+  overrides: Partial<Extract<TreeNode, { type: "source" }>> = {},
+): TreeNode {
+  return {
+    favicon: null,
+    homeUrl: `https://${uid}.example`,
+    kind: "feed",
+    name: uid,
+    type: "source",
+    uid,
+    unreadCount: 0,
+    xmlUrl: `https://${uid}.example/feed`,
+    ...overrides,
+  };
+}
+
+function folder(uid: string, children: TreeNode[]): TreeNode {
+  return { children, name: uid, type: "folder", uid };
+}
+
+describe("treeNodeKey", () => {
+  test("qualifies the uid with the node type", () => {
+    expect(treeNodeKey(source("7"))).toBe("source:7");
+    expect(treeNodeKey(folder("7", []))).toBe("folder:7");
+  });
+});
+
+describe("sourceIds", () => {
+  test("collects source IDs in order through nested and empty folders", () => {
+    expect(
+      sourceIds(
+        folder("f", [
+          source("2"),
+          folder("nested", [source("9")]),
+          folder("empty", []),
+        ]),
+      ),
+    ).toEqual([2, 9]);
+    expect(sourceIds(folder("empty", []))).toEqual([]);
+  });
+});
+
+describe("articleScope", () => {
+  // #976: a folder used to be sent as its source ids, and the request schema
+  // caps id lists at 500, so a folder of 501 feeds could not be browsed.
+  test("names a folder by id however many sources it holds", () => {
+    const big = folder(
+      "3",
+      Array.from({ length: 501 }, (_, index) => source(String(index + 1))),
+    );
+    expect(articleScope(big)).toEqual({ folder: 3, sources: [] });
+    expect(Value.Check(articlesRequest, articleScope(big))).toBe(true);
+  });
+  test("sends a source as its own id", () => {
+    expect(articleScope(source("7"))).toEqual({ sources: [7] });
+  });
+  test("asks for Today by view, never as an id", () => {
+    const [today] = withTodayNode([source("1")], true);
+    expect(articleScope(today!)).toEqual({ sources: [], view: "today" });
+    expect(Value.Check(articlesRequest, articleScope(today!))).toBe(true);
+  });
+});
+
+describe("totalUnread", () => {
+  test("sums every root, folders included", () => {
+    const nodes = [
+      source("1", { unreadCount: 3 }),
+      folder("f", [source("2", { unreadCount: 4 })]),
+    ];
+    expect(totalUnread(nodes)).toBe(7);
+  });
+});
+
+describe("withDecrementedUnread", () => {
+  test("decrements nested sources, clamps at zero, and preserves untouched branches", () => {
+    const untouched = folder("keep", [source("3", { unreadCount: 2 })]);
+    const nodes = [
+      folder("f", [
+        source("1", { unreadCount: 5 }),
+        source("2", { unreadCount: 1 }),
+      ]),
+      untouched,
+    ];
+    const next = withDecrementedUnread(
+      nodes,
+      new Map([
+        ["1", 2],
+        ["2", 9],
+      ]),
+    );
+    expect(next).toEqual([
+      folder("f", [
+        source("1", { unreadCount: 3 }),
+        source("2", { unreadCount: 0 }),
+      ]),
+      untouched,
+    ]);
+    expect(next).not.toBe(nodes);
+    expect(next[1]).toBe(untouched);
+    expect(totalUnread(nodes)).toBe(8);
+  });
+
+  // The component diffs on identity to decide whether to re-render, so an
+  // update that changes nothing must hand back the very same array.
+  test("returns the identical array when no delta applies", () => {
+    const nodes = [folder("f", [source("1", { unreadCount: 4 })])];
+    expect(withDecrementedUnread(nodes, new Map([["9", 1]]))).toBe(nodes);
+  });
+
+  test("a zero delta counts as no change", () => {
+    const nodes = [source("1", { unreadCount: 4 })];
+    expect(withDecrementedUnread(nodes, new Map([["1", 0]]))).toBe(nodes);
+  });
+});
+
+const article = (id: number, sourceId: number, read: boolean) => ({
+  id,
+  read,
+  sourceId,
+});
+
+describe("readStateDeltas", () => {
+  test("marking unread increments its source", () => {
+    const items = [article(1, 10, true)];
+    expect(readStateDeltas(items, [1], false)).toEqual(new Map([["10", -1]]));
+  });
+
+  test("a mixed batch only counts the rows that flip, grouped by source", () => {
+    const items = [
+      article(1, 10, false), // flips read: +1
+      article(2, 10, true), // already read: no change
+      article(3, 20, false), // flips read: +1
+      article(4, 30, true), // not selected: ignored
+    ];
+    expect(readStateDeltas(items, [1, 2, 3], true)).toEqual(
+      new Map([
+        ["10", 1],
+        ["20", 1],
+      ]),
+    );
+  });
+});
+
+describe("findNode", () => {
+  test("finds a source nested inside a folder", () => {
+    const nodes = [folder("f", [source("1")])];
+    expect(findNode(nodes, "source", "1")?.name).toBe("1");
+  });
+
+  test("matches on type as well as uid", () => {
+    const nodes = [folder("7", []), source("7")];
+    expect(findNode(nodes, "source", "7")?.type).toBe("source");
+  });
+
+  test("returns undefined when nothing matches", () => {
+    expect(findNode([source("1")], "source", "2")).toBeUndefined();
+  });
+});
+
+describe("findParentFolderUid", () => {
+  test("names the folder holding the source", () => {
+    const nodes = [folder("inbox", [source("1")])];
+    expect(findParentFolderUid(nodes, "1")).toBe("inbox");
+  });
+
+  test("a source at the root has no parent folder", () => {
+    expect(findParentFolderUid([source("1")], "1")).toBeUndefined();
+  });
+});
+
+describe("filterTree", () => {
+  const tree = [
+    folder("News", [
+      source("bbc", { name: "BBC World" }),
+      source("ap", { name: "Associated Press" }),
+    ]),
+    folder("Tech", [source("lwn", { name: "LWN" })]),
+    source("loose", { name: "Daily Newsletter" }),
+  ];
+
+  test("keeps a matching source and the folder it lives in", () => {
+    expect(filterTree(tree, "lwn")).toEqual([
+      folder("Tech", [source("lwn", { name: "LWN" })]),
+    ]);
+  });
+
+  test("keeps every child of a folder whose own name matches", () => {
+    // Narrowing to the one child that repeats the folder's word would hide
+    // the rest of a folder the user just named, which is not what "filter to
+    // News" asks for.
+    expect(filterTree(tree, "news")).toEqual([
+      folder("News", [
+        source("bbc", { name: "BBC World" }),
+        source("ap", { name: "Associated Press" }),
+      ]),
+      source("loose", { name: "Daily Newsletter" }),
+    ]);
+  });
+
+  test("drops a folder no descendant matches, and returns the tree unfiltered for a blank query", () => {
+    expect(filterTree(tree, "nothing here")).toEqual([]);
+    expect(filterTree(tree, "   ")).toBe(tree);
+  });
+});
+
+describe("treeTabStopKey", () => {
+  const tree = [
+    folder("News", [source("bbc")]),
+    folder("Tech", [source("lwn")]),
+  ];
+
+  test("keeps the focused row as the tab stop while it is still shown", () => {
+    expect(treeTabStopKey(tree, "source:lwn")).toBe("source:lwn");
+    expect(treeTabStopKey(tree, "folder:News")).toBe("folder:News");
+  });
+
+  test("falls back to the first row when the focused one is filtered away", () => {
+    // The tree is a roving tabindex: exactly one row is a tab stop. Filtering
+    // out the row that had it would otherwise leave none, and Tab would skip
+    // the whole tree.
+    expect(
+      treeTabStopKey([folder("News", [source("bbc")])], "source:lwn"),
+    ).toBe("folder:News");
+    expect(treeTabStopKey(tree, undefined)).toBe("folder:News");
+  });
+
+  test("has no tab stop to offer for an empty tree", () => {
+    expect(treeTabStopKey([], "source:lwn")).toBeUndefined();
+  });
+});
+
+describe("withTodayNode", () => {
+  test("prepends the virtual node ahead of the user's tree", () => {
+    const nodes = [source("1")];
+    const next = withTodayNode(nodes, true);
+    expect(next).toHaveLength(2);
+    expect(next[0]).toEqual({ name: "Today", type: "view", uid: "today" });
+    expect(next[1]).toBe(nodes[0]);
+  });
+
+  test("leaves an empty tree alone so first-run guidance owns it", () => {
+    expect(withTodayNode([], true)).toEqual([]);
+  });
+
+  test("disabled drops the node entirely", () => {
+    expect(withTodayNode([source("1")], false)).toHaveLength(1);
+  });
+});
+
+describe("source snooze", () => {
+  const now = new Date("2026-09-09T12:00:00.000Z").getTime();
+
+  test("a future pausedUntil reads as snoozed", () => {
+    expect(
+      isSnoozedNode(
+        source("1", { pausedUntil: "2026-09-10T12:00:00.000Z" }),
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  test("a missing or past pausedUntil reads as not snoozed", () => {
+    expect(isSnoozedNode(source("1"), now)).toBe(false);
+    expect(isSnoozedNode(source("1", { pausedUntil: null }), now)).toBe(false);
+    expect(
+      isSnoozedNode(
+        source("1", { pausedUntil: "2026-09-08T12:00:00.000Z" }),
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  // The only check on what the snooze menu sends: no browser spec drives it.
+  test("converts snooze durations from hours to absolute timestamps", () => {
+    expect(snoozeUntilIso(24, now)).toBe("2026-09-10T12:00:00.000Z");
+    expect(snoozeUntilIso(168, now)).toBe("2026-09-16T12:00:00.000Z");
+  });
+});

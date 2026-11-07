@@ -1,26 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createContextMenu,
-  type ContextMenuOperations,
-  removeAllContextMenus,
-  type RuntimeErrors,
-} from "../context-menu.ts";
+import { contextMenuOperations } from "../context-menu.ts";
 
-class ContextMenusFake implements ContextMenuOperations {
-  readonly calls: string[] = [];
+// Holds each browser callback until the test releases it, as the real API
+// answers asynchronously.
+class ContextMenusFake {
   readonly callbacks: Array<() => void> = [];
 
   create(
     properties: chrome.contextMenus.CreateProperties,
     callback: () => void,
   ): number | string {
-    this.calls.push(`create:${properties.id}`);
     this.callbacks.push(callback);
-    return properties.id ?? this.calls.length;
+    return properties.id ?? this.callbacks.length;
   }
 
   removeAll(callback: () => void): void {
-    this.calls.push("removeAll");
     this.callbacks.push(callback);
   }
 
@@ -31,34 +25,29 @@ class ContextMenusFake implements ContextMenuOperations {
   }
 }
 
-const menu = (id: string): chrome.contextMenus.CreateProperties => ({
-  id,
-  title: id,
-});
-
-describe("context-menu callbacks", () => {
+describe("contextMenuOperations", () => {
   test("settles only after the browser callback", async () => {
-    const operations = new ContextMenusFake();
+    const api = new ContextMenusFake();
     let settled = false;
-    const pending = createContextMenu(menu("parent"), operations, {}).then(
-      () => {
+    const pending = contextMenuOperations(api, {})
+      .create({ id: "parent", title: "parent" })
+      .then(() => {
         settled = true;
-      },
-    );
+      });
 
     await Promise.resolve();
     expect(settled).toBe(false);
-    operations.completeNext();
+    api.completeNext();
     await pending;
     expect(settled).toBe(true);
   });
 
   test("rejects runtime errors observed inside the callback", async () => {
-    const operations = new ContextMenusFake();
-    const runtime: RuntimeErrors = { lastError: { message: "duplicate id" } };
-    const pending = removeAllContextMenus(operations, runtime);
+    const api = new ContextMenusFake();
+    const runtime = { lastError: { message: "duplicate id" } };
+    const pending = contextMenuOperations(api, runtime).removeAll();
 
-    operations.completeNext();
+    api.completeNext();
     await expect(pending).rejects.toThrow("duplicate id");
   });
 });

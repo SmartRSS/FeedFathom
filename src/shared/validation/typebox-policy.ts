@@ -1,26 +1,16 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { isPlainText } from "#shared/util/is-plain-text.ts";
+import {
+  isEmailAddress,
+  isWebUrl,
+  maxEmailAddressLength,
+} from "./address-shape.ts";
 
 type SubscriptionTarget =
   | { kind: "email"; value: string }
   | { kind: "feed"; value: string };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const nonblankString = Type.String({ minLength: 1, pattern: "\\S" });
-
-function isWebUrl(value: string) {
-  try {
-    const protocol = new URL(value.trim()).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isEmailAddress(value: string) {
-  return emailPattern.test(value.trim());
-}
 
 // typebox dropped the non-JSON-Schema Type.Date() builtin; this replicates
 // its runtime `instanceof Date` check for in-memory (not over-the-wire)
@@ -56,8 +46,12 @@ export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
 }
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
-export const emailAddressPolicy = Type.Refine(Type.String(), isEmailAddress);
-export const plainTextPolicy = Type.Refine(Type.String(), isPlainText);
+// Control characters other than tab, line feed and carriage return.
+const nonPrintablePattern = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/u;
+export const plainTextPolicy = Type.Refine(
+  Type.String(),
+  (value) => !nonPrintablePattern.test(value),
+);
 export const jsonDatePolicy = Type.Refine(
   Type.String(),
   (value) =>
@@ -75,12 +69,9 @@ export const normalizedWebUrl = Type.Codec(
   .Decode((value) => value.trim())
   .Encode((value) => value);
 
-// RFC 5321 caps a forward path at 256 octets, brackets included, so no
-// deliverable address is longer than 254. The cap matters beyond mail: the
-// address is part of the auth throttle's Redis keys, and an unbounded one lets
-// each request park up to the body limit in Redis.
-const maxEmailAddressLength = 254;
-
+// The cap matters beyond mail: the address is part of the auth throttle's
+// Redis keys, and an unbounded one lets each request park up to the body limit
+// in Redis.
 export const normalizedEmailAddress = Type.Codec(
   Type.Refine(
     nonblankString,
@@ -107,5 +98,3 @@ export const normalizedSubscriptionTarget = Type.Codec(
       : { kind: "feed", value: normalized };
   })
   .Encode((value) => value.value);
-
-export type { SubscriptionTarget };

@@ -2,7 +2,7 @@ import { createSignal, createUniqueId, Show } from "solid-js";
 
 // A password field you cannot read back is the one input in the app where a
 // typo is invisible until the server rejects it -- and on login that rejection
-// now costs one of a bounded number of attempts. The toggle sits beside the
+// costs one of a bounded number of attempts. The toggle sits beside the
 // label rather than inside it: a <label> may not contain interactive content
 // other than its own control, and a button there would also pick up the
 // label's click-forwarding. An error shows under the field, which is marked

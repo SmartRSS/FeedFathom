@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { renderCapAlert } from "#features/feeds/cap-entry.ts";
 import {
   type FeedMapperItem,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
-import { parseXmlFeed } from "#features/feeds/feed-parser.ts";
+import { parseXmlFeed } from "#features/feeds/feed-document.ts";
 
-const casesDir = "src/features/feeds/__tests__/cap-entry-cases";
-const fixture = (name: string) => Bun.file(`${casesDir}/${name}`).text();
+const fixture = (name: string) =>
+  Bun.file(join(import.meta.dir, "cap-entry-cases", name)).text();
 
 // The instant the fixtures were fetched. The MeteoAlarm fixture keeps the one
 // entry still current then, one already expired, and one expired entry edited

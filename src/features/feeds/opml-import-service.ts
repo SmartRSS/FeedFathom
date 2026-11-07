@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { OpmlNode } from "#shared/types/opml-types.ts";
+import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
 import type { Source } from "#platform/db/schemas/sources.ts";

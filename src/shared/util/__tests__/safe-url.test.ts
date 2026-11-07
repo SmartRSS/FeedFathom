@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { safeArticleUrl, safeHttpUrl } from "#shared/util/safe-url.ts";
+import {
+  httpUrlWithoutCredentials,
+  safeArticleUrl,
+  safeHttpUrl,
+  secureOrigin,
+} from "#shared/util/safe-url.ts";
 
 const BASE = "https://example.com/feed/page";
 
@@ -51,8 +56,9 @@ test("rejects a URL whose resolved scheme is not http(s)", () => {
   expect(safeHttpUrl("file.txt", "ftp://example.com/dir")).toBe("");
 });
 
-test("keeps the app's own /article/ paths verbatim", () => {
-  expect(safeArticleUrl("/article/abc-123", BASE)).toBe("/article/abc-123");
+// No route serves these, so a link to one would open "Page not found".
+test("gives a newsletter article's /article/ path no link", () => {
+  expect(safeArticleUrl("/article/abc-123", BASE)).toBe("");
 });
 
 test("falls back to safeHttpUrl for anything not starting with /article/", () => {
@@ -69,4 +75,46 @@ test("does not treat an /article/ prefix deeper in the path as an article link",
   expect(safeArticleUrl("blog/article/x", BASE)).toBe(
     "https://example.com/feed/blog/article/x",
   );
+});
+
+test.each(["https://example.com/story", "http://example.com/a?b#c"])(
+  "httpUrlWithoutCredentials accepts %s",
+  (value) => {
+    expect(httpUrlWithoutCredentials(value)?.href).toBe(value);
+  },
+);
+
+test.each([
+  "ftp://example.com/",
+  "javascript:alert(1)",
+  "https://user@example.com/",
+  "https://user:secret@example.com/",
+  "/relative-without-base",
+])("httpUrlWithoutCredentials refuses %s", (value) => {
+  expect(httpUrlWithoutCredentials(value)).toBeUndefined();
+});
+
+test.each([
+  ["https://example.com", "https://example.com"],
+  ["https://EXAMPLE.com:443/", "https://example.com"],
+  ["http://localhost:3456", "http://localhost:3456"],
+  ["http://dev.localhost:3456/", "http://dev.localhost:3456"],
+  ["http://127.0.0.2:3456", "http://127.0.0.2:3456"],
+  ["http://[::1]:3456", "http://[::1]:3456"],
+])("secureOrigin accepts %s", (value, expected) => {
+  expect(secureOrigin(value)).toBe(expected);
+});
+
+test.each([
+  "http://example.com",
+  "http://localhost.example.com",
+  "ftp://example.com",
+  "mailto:user@example.com",
+  "https://user:password@example.com",
+  "https://example.com/path",
+  "https://example.com/?",
+  "https://example.com/#fragment",
+  "not a URL",
+])("secureOrigin refuses %s", (value) => {
+  expect(secureOrigin(value)).toBeUndefined();
 });

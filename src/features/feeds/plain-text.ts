@@ -16,3 +16,10 @@ export const stripHtmlTags = (text: string) =>
 // been XML-decoded. The feed library gives every feed title exactly this
 // pass, so a title imported from OPML gets the same one.
 export const decodeHtmlReferences = (text: string) => decode(text);
+
+// Plain text as article HTML: escaped, so literal markup and entities survive,
+// with its line breaks kept.
+export const asHtmlText = (text: null | string | undefined): string | null =>
+  typeof text === "string"
+    ? Bun.escapeHTML(text).replaceAll(/\r\n?|\n/gu, "<br>")
+    : null;

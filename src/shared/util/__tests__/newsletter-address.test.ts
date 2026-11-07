@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Value } from "typebox/value";
-import { emailAddressPolicy } from "#shared/validation/typebox-policy.ts";
+import { subscribeRequest } from "#shared/contracts/requests.ts";
 import {
   isMintedNewsletterAddress,
   isNewsletterAddress,
   newsletterAddress,
-  newsletterMailDomain,
 } from "../newsletter-address.ts";
 
 describe("newsletterAddress", () => {
@@ -13,7 +12,13 @@ describe("newsletterAddress", () => {
   // shared email policy does not accept.
   test("mints an address the subscribe contract accepts", () => {
     const address = newsletterAddress("example.com");
-    expect(Value.Check(emailAddressPolicy, address)).toBe(true);
+    expect(
+      Value.Check(subscribeRequest, {
+        sourceFolder: null,
+        sourceName: "Newsletter",
+        sourceUrl: address,
+      }),
+    ).toBe(true);
     expect(address.endsWith("@example.com")).toBe(true);
   });
 
@@ -59,26 +64,5 @@ describe("isMintedNewsletterAddress", () => {
     ["a UUID on another domain", `${crypto.randomUUID()}@other.example`],
   ])("refuses %s", (_, address) => {
     expect(isMintedNewsletterAddress(address, "mail.example")).toBe(false);
-  });
-});
-
-describe("newsletterMailDomain", () => {
-  test("is absent while mail is disabled", () => {
-    expect(
-      newsletterMailDomain({
-        MAIL_DOMAIN: "mail.example",
-        MAIL_ENABLED: false,
-      }),
-    ).toBeUndefined();
-  });
-
-  test("falls back past a blank MAIL_DOMAIN and drops the port", () => {
-    expect(
-      newsletterMailDomain({
-        FEED_FATHOM_DOMAIN: "localhost:3456",
-        MAIL_DOMAIN: " ",
-        MAIL_ENABLED: true,
-      }),
-    ).toBe("localhost");
   });
 });

@@ -1,32 +1,18 @@
-const isLoopbackHostname = (hostname: string) => {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    normalized === "localhost" ||
-    normalized.endsWith(".localhost") ||
-    normalized === "::1"
-  )
-    return true;
-  const parts = normalized.split(".");
-  return (
-    parts.length === 4 &&
-    parts.every((part) => /^\d+$/.test(part) && Number(part) <= 255) &&
-    Number(parts[0]) === 127
-  );
-};
-export const canonicalizeInstance = (value: string): string | undefined => {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "https:" ||
-      (url.protocol === "http:" && isLoopbackHostname(url.hostname))) &&
-      url.username === "" &&
-      url.password === "" &&
-      url.pathname === "/" &&
-      url.href === `${url.origin}/`
-      ? url.origin
-      : undefined;
-  } catch {
-    return undefined;
-  }
+import { previewPath } from "#shared/contracts/spa-routes.ts";
+import { secureOrigin } from "#shared/util/safe-url.ts";
+
+// An instance address that canonicalizeInstance accepted. Everything that builds a URL on the instance takes
+// this type, so the address is checked once, where it enters.
+export type InstanceOrigin = string & { readonly brand: "InstanceOrigin" };
+
+const isInstanceOrigin = (value: string): value is InstanceOrigin =>
+  secureOrigin(value) === value;
+
+export const canonicalizeInstance = (
+  value: string,
+): InstanceOrigin | undefined => {
+  const origin = secureOrigin(value) ?? "";
+  return isInstanceOrigin(origin) ? origin : undefined;
 };
 
 export const normalizeFeedAddress = (address: string): string => {
@@ -45,32 +31,22 @@ export const normalizeFeedAddress = (address: string): string => {
   return address;
 };
 
-export const buildPreviewUrl = (
-  instance: string,
-  address: string,
+export type OpenTarget = "dashboard" | "newsletter" | { feedUrl: string };
+
+// Undefined when the target needs an instance and none is configured.
+export const targetUrl = (
+  target: OpenTarget,
+  instance: InstanceOrigin | null,
 ): string | undefined => {
-  const origin = canonicalizeInstance(instance);
-  if (!origin) {
-    return undefined;
+  if (typeof target === "object") {
+    const feedUrl = normalizeFeedAddress(target.feedUrl);
+    // With no configured instance there's nowhere to preview through, so the
+    // feed address itself is the best we can open.
+    return instance ? `${instance}${previewPath({ feedUrl })}` : feedUrl;
   }
-
-  const previewUrl = new URL("/preview", origin);
-  previewUrl.searchParams.set("feedUrl", normalizeFeedAddress(address));
-  return previewUrl.href;
-};
-
-// With no configured instance there's nowhere to preview through, so the
-// feed address itself is the best we can open.
-export const resolveFeedOpenUrl = (
-  instance: null | string,
-  feedUrl: string,
-): string =>
-  (instance && buildPreviewUrl(instance, feedUrl)) ??
-  normalizeFeedAddress(feedUrl);
-
-// The SPA mints the address itself, at the mail domain the instance
-// advertises, so the extension only opens the page that does it.
-export const buildNewsletterUrl = (instance: string): string | undefined => {
-  const origin = canonicalizeInstance(instance);
-  return origin ? new URL("/preview?newsletter", origin).href : undefined;
+  if (!instance) return undefined;
+  if (target === "dashboard") return instance;
+  // The SPA mints the address itself, at the mail domain the instance
+  // advertises, so the extension only opens the page that does it.
+  return `${instance}${previewPath({ newsletter: true })}`;
 };

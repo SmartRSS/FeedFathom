@@ -11,9 +11,17 @@ const databaseUrl = requireDisposableDatabaseUrl();
 // of retrying -- right for a container racing PostgreSQL's first boot, and
 // two minutes of nothing for a developer who simply has no PostgreSQL
 // running.
-await migrateDatabase(databaseUrl, "./drizzle", 5_000);
+await migrateDatabase(databaseUrl, "./drizzle", { deadline: 5_000 });
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
+
+// A fresh, uncached poll, so each test states only the fact it varies.
+const fetched = (facts: { notBefore?: Date; observedAt?: Date } = {}) => ({
+  cached: false,
+  observedAt: new Date(),
+  trigger: "poll" as const,
+  ...facts,
+});
 
 async function addFeedSource(url: string) {
   return await sourcesDataService.addSource({
@@ -28,7 +36,10 @@ test("successSource clamps notBefore to the 5-minute floor even for a shorter ca
     "https://source-scheduling.test/short-cache",
   );
   const before = Date.now();
-  await sourcesDataService.successSource(source.id, { notBefore: new Date() });
+  await sourcesDataService.successSource(
+    source.id,
+    fetched({ notBefore: new Date() }),
+  );
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBeGreaterThanOrEqual(
@@ -41,7 +52,7 @@ test("successSource honors a cache lifetime longer than the floor", async () => 
     "https://source-scheduling.test/long-cache",
   );
   const notBefore = new Date(Date.now() + 60 * 60_000);
-  await sourcesDataService.successSource(source.id, { notBefore });
+  await sourcesDataService.successSource(source.id, fetched({ notBefore }));
 
   const refreshed = await sourcesDataService.findSourceById(source.id);
   expect(refreshed?.notBefore?.getTime()).toBe(notBefore.getTime());
@@ -72,9 +83,10 @@ test("getSourcesToProcess only returns feed sources whose notBefore has passed",
   const notYetDue = await addFeedSource(
     "https://source-scheduling.test/not-due",
   );
-  await sourcesDataService.successSource(notYetDue.id, {
-    notBefore: new Date(Date.now() + 60 * 60_000),
-  });
+  await sourcesDataService.successSource(
+    notYetDue.id,
+    fetched({ notBefore: new Date(Date.now() + 60 * 60_000) }),
+  );
 
   const result = await sourcesDataService.getSourcesToProcess();
   const ids = result.map((row) => row.id);
@@ -119,13 +131,15 @@ test("findSourceById and listAllSources count a source's subscribers", async () 
 
 test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily run", async () => {
   const hoursAgo = await addFeedSource("https://source-scheduling.test/hours");
-  await sourcesDataService.successSource(hoursAgo.id, {
-    observedAt: new Date(Date.now() - 6 * 60 * 60_000),
-  });
+  await sourcesDataService.successSource(
+    hoursAgo.id,
+    fetched({ observedAt: new Date(Date.now() - 6 * 60 * 60_000) }),
+  );
   const daysAgo = await addFeedSource("https://source-scheduling.test/days");
-  await sourcesDataService.successSource(daysAgo.id, {
-    observedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000),
-  });
+  await sourcesDataService.successSource(
+    daysAgo.id,
+    fetched({ observedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000) }),
+  );
   const neverFetched = await addFeedSource(
     "https://source-scheduling.test/never",
   );
@@ -134,7 +148,7 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
     kind: "email",
     url: "newsletter@source-scheduling.test",
   });
-  await sourcesDataService.successSource(email.id);
+  await sourcesDataService.successSource(email.id, fetched());
 
   const dueIds = new Set(
     (await sourcesDataService.getSourcesDueFaviconRefresh()).map(
@@ -149,7 +163,7 @@ test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily r
 
 test("getSourcesDueFaviconRefresh lists sources without an icon first", async () => {
   const withIcon = await addFeedSource("https://source-scheduling.test/icon");
-  await sourcesDataService.successSource(withIcon.id);
+  await sourcesDataService.successSource(withIcon.id, fetched());
   await sourcesDataService.updateFavicon(
     withIcon.id,
     Buffer.from("icon"),
@@ -158,7 +172,7 @@ test("getSourcesDueFaviconRefresh lists sources without an icon first", async ()
   const withoutIcon = await addFeedSource(
     "https://source-scheduling.test/no-icon",
   );
-  await sourcesDataService.successSource(withoutIcon.id);
+  await sourcesDataService.successSource(withoutIcon.id, fetched());
 
   const due = (await sourcesDataService.getSourcesDueFaviconRefresh()).filter(
     ({ id }) => id === withIcon.id || id === withoutIcon.id,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { OpmlNode } from "#shared/types/opml-types.ts";
+import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";
 

@@ -1,3 +1,8 @@
+import {
+  isEmailAddress,
+  maxEmailAddressLength,
+} from "#shared/validation/address-shape.ts";
+
 // One set of rules for every account form, checked before anything is
 // sent, so login, registration and both password-reset steps report a
 // missing or malformed field the same way: in a sentence under the field.
@@ -12,8 +17,6 @@ const missing: Record<AccountField, string> = {
   username: "Enter a name.",
 };
 
-const emailShape = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
-
 export function accountFieldErrors(
   values: Partial<Record<AccountField, string>>,
 ): Partial<Record<AccountField, string>> {
@@ -25,8 +28,11 @@ export function accountFieldErrors(
     const given =
       field === "password" || field === "confirm" ? value : value.trim();
     if (!given) errors[field] = missing[field];
-    else if (field === "email" && !emailShape.test(given))
+    else if (field === "email" && !isEmailAddress(given))
       errors[field] = "Enter an email address like name@example.com.";
+    else if (field === "email" && given.length > maxEmailAddressLength)
+      errors[field] =
+        `Enter an email address of at most ${maxEmailAddressLength} characters.`;
   }
   if (
     !errors.password &&

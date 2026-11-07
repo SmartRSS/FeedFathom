@@ -1,3 +1,5 @@
+import { type Static, Type } from "typebox";
+import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import { type HttpClient } from "#platform/http/http-client.ts";
 import {
   HttpDeferredError,
@@ -11,6 +13,17 @@ import {
   targetFaviconSize,
 } from "#features/feeds/favicon-selection.ts";
 import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
+import {
+  finishedJobRetention,
+  JobDeferral,
+  JobName,
+} from "#features/feeds/queued-job.ts";
+
+// How often every live source's favicon is refreshed. The gather takes each
+// source fetched within the window: the previous run, plus an hour of slack
+// for a daily poll landing late.
+export const faviconGatherIntervalMs = 24 * 60 * 60_000;
+export const faviconGatherWindowMs = faviconGatherIntervalMs + 60 * 60_000;
 
 // A refresh that a provider blocks waits at most this long past the first
 // block. That rides out the hour-long Retry-After that providers commonly
@@ -21,9 +34,33 @@ import { normalizeFavicon } from "#features/feeds/favicon-normalization.ts";
 export const faviconDeferralHorizonMs = 2 * 60 * 60_000;
 
 // Past this long after a job's first run, every deferral is a miss, pacing
-// included, so each job completes, and frees its jobId, before the next daily
+// included, so each job completes, and frees its jobId, before the next
 // gather.
-export const faviconRefreshBackstopMs = 20 * 60 * 60_000;
+export const faviconRefreshBackstopMs =
+  faviconGatherIntervalMs - 4 * 60 * 60_000;
+
+// `firstRunAt` is when this refresh first ran and `deferredSince` when a
+// provider first blocked it, both carried across deferrals in the job data.
+// Only `hasFavicon: false` lets a deferred refresh store an icon: job data
+// from before the field existed may belong to a source that has one.
+export const refreshFaviconJobData = Type.Object({
+  deferredSince: Type.Optional(Type.Integer({ minimum: 0 })),
+  firstRunAt: Type.Optional(Type.Integer({ minimum: 0 })),
+  hasFavicon: Type.Optional(Type.Boolean()),
+  homeUrl: Type.Intersect([Type.String({ minLength: 1 }), webUrlPolicy]),
+  id: Type.Integer({ minimum: 1 }),
+});
+type RefreshFaviconJob = Static<typeof refreshFaviconJobData>;
+
+export type FaviconRefreshQueue = {
+  addBulk(
+    jobs: {
+      data: RefreshFaviconJob;
+      name: JobName;
+      opts: typeof finishedJobRetention & { jobId: string; priority: number };
+    }[],
+  ): Promise<unknown>;
+};
 
 // Deferred refreshes queue up behind one another, one slot per background
 // interval plus slack for start jitter and the round trips of a job's own
@@ -66,7 +103,29 @@ export class FaviconRefresher {
     private readonly redis: {
       send(command: "EVAL", args: string[]): Promise<unknown>;
     },
+    private readonly queue: FaviconRefreshQueue,
   ) {}
+
+  // No delay: most refreshes are answered from the HTTP cache. One that a
+  // provider defers queues for its own slot (#1087).
+  public async enqueueRefreshes(sources: readonly RefreshFaviconJob[]) {
+    await this.queue.addBulk(
+      sources.map((source) => ({
+        data: source,
+        name: JobName.RefreshFavicon,
+        opts: {
+          ...finishedJobRetention,
+          // A refresh still delayed by a provider's Retry-After keeps this
+          // id, so the next gather's add does not jump its backoff.
+          jobId: `${JobName.RefreshFavicon}-${source.id}`,
+          // BullMQ runs unprioritized jobs (ParseSource, Cleanup,
+          // GatherJobs) first, so a large favicon run can't crowd out feed
+          // parsing.
+          priority: 10,
+        },
+      })),
+    );
+  }
 
   // The best answer, and the providers whose deferral is not a miss: those
   // may still hold a better icon, so the caller defers rather than settle. An
@@ -80,10 +139,7 @@ export class FaviconRefresher {
     const responses = await Promise.all(
       urls.map(async (url) => {
         try {
-          return await this.httpClient.get(url, {
-            priority: "background",
-            responseType: "arrayBuffer",
-          });
+          return await this.httpClient.get(url, { priority: "background" });
         } catch (error: unknown) {
           if (error instanceof HttpDeferredError && !isMiss(error)) {
             deferrals.push({
@@ -123,32 +179,19 @@ export class FaviconRefresher {
   }
 
   /**
-   * `firstRunAt` is when this refresh first ran and `deferredSince` when a
-   * provider first blocked it, both carried across deferrals in the job data.
-   * The refresher sets `deferredSince` and `hasFavicon` on `source` itself,
-   * for the caller to write back before it defers. Only `hasFavicon: false`
-   * lets a deferred refresh store an icon: job data from before the field
-   * existed may belong to a source that has one.
+   * Throws a JobDeferral, carrying the job data its retry needs, when a
+   * provider that may still hold a better icon asks to be retried later.
    */
-  public async refreshFavicon(source: {
-    deferredSince?: number;
-    firstRunAt: number;
-    hasFavicon?: boolean;
-    homeUrl: string;
-    id: number;
-  }) {
+  public async refreshFavicon(job: RefreshFaviconJob) {
+    const source = { ...job, firstRunAt: job.firstRunAt ?? Date.now() };
     // Query the free providers concurrently and keep the smallest valid
-    // image that still meets TARGET_FAVICON_SIZE (falling back to the
+    // image that still meets targetFaviconSize (falling back to the
     // biggest available if none do) -- an earlier one can succeed with a
     // smaller icon while a later one has a bigger one. unavatar.io is
     // capped at 25 requests/day on the free tier, so it's only used as a
     // last resort when nothing else has an icon.
-    let hostname: string;
-    try {
-      hostname = new URL(source.homeUrl).hostname;
-    } catch {
-      return;
-    }
+    const hostname = URL.parse(source.homeUrl)?.hostname;
+    if (hostname === undefined) return;
     const isMiss = (deferral: HttpDeferredError) => {
       const now = Date.now();
       if (now > source.firstRunAt + faviconRefreshBackstopMs) return true;
@@ -197,7 +240,7 @@ export class FaviconRefresher {
       source.hasFavicon = true;
     }
     if (found.deferrals.length > 0) {
-      throw new HttpDeferredError(await this.reserveSlot(found.deferrals));
+      throw new JobDeferral(await this.reserveSlot(found.deferrals), source);
     }
   }
 

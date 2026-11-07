@@ -20,7 +20,7 @@
     "watch-worker": "bun --watch ./src/worker.ts",
     "build-spa": "bun ./bin/build-spa.ts",
     "watch-spa": "vite --config src/spa/vite.config.ts",
-    "watch-spa-api": "PORT=3001 bun --watch src/server.ts",
+    "watch-spa-api": "PORT=${FEEDFATHOM_DEV_API_PORT:-3001} bun --watch src/server.ts",
     "test:unit": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/feedfathom_test} bun test --parallel=2 --path-ignore-patterns='tests/browser/**' --path-ignore-patterns='**/*-integration.test.ts'",
     "test:integration": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/feedfathom_test} REDIS_TEST_URL=${REDIS_TEST_URL:-redis://127.0.0.1:6379/15} bun test -- -integration.test.ts",
     "test:browser": "bun run build-extension && playwright test --config tests/browser/playwright.config.ts",
@@ -70,16 +70,16 @@
     "vite-plugin-solid": "^2.11.15",
     "web-ext": "10.8.0"
   },
-  "peerDependencies": {},
   "overrides": {
     "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
     "linkedom": "file:./vendor/linkedom-shim"
   },
   "packageManager": "bun@1.4.4",
   "knip": {
-    "$schema": "https://unpkg.com/knip@5/schema.json",
+    "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
       "src/migrator.ts",
+      "src/spa/sw.ts",
       "src/features/mail-ingest/email-worker.ts",
       "src/extension/{background-event,content-script,options,popup}.ts",
       "tests/browser/**/*.ts",
@@ -96,7 +96,6 @@
       "tools/**/*.js",
       "vendor/**/__tests__/*.ts"
     ],
-    "ignoreUnresolved": [],
     "ignoreDependencies": [
       "linkedom"
     ]

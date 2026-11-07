@@ -137,7 +137,7 @@ describe("cacheable", () => {
       body,
       url,
     );
-    expect(entry?.body).toBe(body.toString("base64"));
+    expect(Buffer.from(entry?.body ?? "", "base64")).toEqual(body);
     expect(entry?.status).toBe(200);
   });
 

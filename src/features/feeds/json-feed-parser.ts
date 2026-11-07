@@ -4,7 +4,11 @@
 // grammar, there's no real parsing to do here, just field renaming.
 
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
-import type { FeedItemMedia } from "#features/feeds/feed-mapper.ts";
+import type {
+  FeedItemMedia,
+  FeedMapperInput,
+} from "#features/feeds/feed-mapper.ts";
+import { asHtmlText } from "#features/feeds/plain-text.ts";
 
 type JsonFeedAuthor = { name?: unknown };
 type JsonFeedAttachment = {
@@ -36,21 +40,8 @@ type JsonFeedDocument = {
   title?: unknown;
 };
 
-export function isJsonFeedText(text: string): boolean {
-  return text.trimStart().startsWith("{");
-}
-
 const asString = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
-
-// content_text and summary are plain text, but articles carry HTML: escape
-// them so literal markup and entities survive, and keep their line breaks.
-export const asHtmlText = (value: unknown): string | null => {
-  const text = asString(value);
-  return text === null
-    ? null
-    : Bun.escapeHTML(text).replaceAll(/\r\n?|\n/gu, "<br>");
-};
 
 const asDate = (value: unknown): Date | null =>
   typeof value === "string" ? parseFeedDate(value) : null;
@@ -109,7 +100,9 @@ function websubHubUrl(hubs: unknown): string | undefined {
   );
 }
 
-export function parseJsonFeed(text: string) {
+export function parseJsonFeed(
+  text: string,
+): FeedMapperInput & { websubHubUrl: string | undefined } {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("The JSON document could not be parsed as a feed");
@@ -125,8 +118,10 @@ export function parseJsonFeed(text: string) {
       const item = (rawItem ?? {}) as JsonFeedItem;
       return {
         authors: itemAuthors(item, feed.authors),
-        content: asString(item.content_html) ?? asHtmlText(item.content_text),
-        description: asHtmlText(item.summary),
+        content:
+          asString(item.content_html) ??
+          asHtmlText(asString(item.content_text)),
+        description: asHtmlText(asString(item.summary)),
         id: asString(item.id),
         media: itemMedia(item),
         published: asDate(item.date_published),

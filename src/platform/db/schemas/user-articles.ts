@@ -10,11 +10,10 @@ import { users } from "#platform/db/schemas/users.ts";
 
 // Deliberately keyed on the article's natural identity -- (source, guid) --
 // rather than on articles.id, and with no foreign key to articles at all.
-// Pruning an article used to cascade its removals away, so the reading that
-// decided an article was gone for good only had to be wrong once (a feed
-// window that shrinks for a day is enough) to forget that anyone had removed
-// it -- and the next fetch listing that guid again brought it back unread
-// under a fresh id. Now the removal outlives the article row: the re-inserted
+// A cascade from articles would forget a removal as soon as pruning misjudged
+// a feed window once (a window that shrinks for a day is enough): the next
+// fetch listing that guid again would bring it back unread under a fresh id.
+// Keyed this way, the removal outlives the article row, and the re-inserted
 // article matches the same (source, guid) and comes back already removed.
 //
 // ponytail: a removal for a guid the feed never lists again is kept forever

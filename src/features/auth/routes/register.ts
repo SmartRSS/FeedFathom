@@ -1,28 +1,29 @@
 import type * as runtime from "#platform/runtime.ts";
 import type * as auth from "#features/auth/services.ts";
 import type { AppConfig } from "#platform/config.ts";
-import { mailConfigured } from "#features/auth/mail-sender.ts";
-import { randomUUID } from "node:crypto";
+import { mailConfigured, sendLater } from "#features/auth/mail-sender.ts";
 import { Elysia } from "elysia";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { Value } from "typebox/value";
 import { isDisposableEmail } from "disposable-email-domains-js";
 import { registerRequest } from "#shared/contracts/requests.ts";
-import { json } from "#platform/http/json.ts";
+import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
+import { json, jsonError } from "#platform/http/json.ts";
+import {
+  registrationResponse,
+  successResponse,
+} from "#shared/contracts/responses.ts";
 import { clientAddress } from "#features/auth/routes/client-address.ts";
-import { digestToken } from "#features/auth/token-digest.ts";
+import {
+  activationLifetimeMs,
+  issueToken,
+} from "#features/auth/account-tokens.ts";
 
 const turnstileResponse = Type.Object(
   { success: Type.Boolean() },
   { additionalProperties: true },
 );
 const turnstileResponseCheck = Schema.Compile(turnstileResponse);
-
-// The same windows the links themselves promise: a day for activation, an
-// hour for a reset.
-const activationLifetimeMs = 24 * 60 * 60 * 1_000;
-const resetLifetimeMs = 60 * 60 * 1_000;
 
 async function validateCaptcha(
   token: string | undefined,
@@ -32,7 +33,7 @@ async function validateCaptcha(
   if (!token) return false;
   try {
     const response = await fetchFn(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      new URL("/turnstile/v0/siteverify", turnstileOrigin),
       {
         body: JSON.stringify({ response: token, secret }),
         headers: { "content-type": "application/json" },
@@ -43,13 +44,17 @@ async function validateCaptcha(
     return (
       response.ok && turnstileResponseCheck.Check(result) && result.success
     );
-  } catch {
+  } catch (error) {
+    // Fails closed: a Turnstile outage refuses every registration, and this
+    // log is how an operator tells that from a wave of bad tokens.
+    console.error("Turnstile verification failed:", error);
     return false;
   }
 }
 
 const registrationDisabled = () =>
-  json({ error: "Registration is currently disabled", success: false }, 403);
+  jsonError("Registration is currently disabled", 403);
+const accepted = () => json(successResponse, { success: true });
 
 export function createRegisterRoute({
   authThrottle,
@@ -60,34 +65,23 @@ export function createRegisterRoute({
   usersDataService,
 }: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
   Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig }) {
-  // Not awaited, on every path, for the reason the reset route gives: only an
-  // address the caller named reaches a send, so waiting on Mailjet would time
-  // one kind of account apart from another. If delivery fails, withdraw the
-  // stored token so the next registration attempt for this address is
-  // treated as an expired link and sends a fresh one, rather than waiting out
-  // a link nobody received. The failure is logged, not answered, for the same
-  // reason.
+  // If delivery fails, the stored token is withdrawn, so the next
+  // registration attempt for this address is treated as an expired link and
+  // sends a fresh one rather than waiting out a link nobody received.
   const sendActivation = (email: string, token: string) => {
-    void mailSender
-      .sendActivationEmail(email, token)
-      .catch(async (error: unknown) => {
-        console.error("Activation email failed to send:", error);
-        await usersDataService.withdrawActivationToken(token);
-      })
-      .catch((error: unknown) => {
-        console.error("Activation token withdrawal failed:", error);
-      });
+    sendLater(
+      "Activation",
+      () => mailSender.sendActivationEmail(email, token),
+      () => usersDataService.withdrawActivationToken(token),
+    );
   };
 
-  const allowedEmailPolicy = Type.String(
-    config.ALLOWED_EMAILS.length ? { enum: config.ALLOWED_EMAILS } : {},
-  );
   const useEmailActivation = mailConfigured(config);
 
   return new Elysia()
     .get("/api/register", async () => {
       const count = await usersDataService.getUserCount();
-      return json({
+      return json(registrationResponse, {
         passwordResetEnabled: useEmailActivation,
         registrationStatus:
           count === 0
@@ -110,15 +104,18 @@ export function createRegisterRoute({
             fetcher,
           ))
         ) {
-          return json({ error: "Invalid CAPTCHA", success: false }, 400);
+          return jsonError("Invalid CAPTCHA", 400);
         }
         const userCount = await usersDataService.getUserCount();
         if (userCount > 0 && !config.ENABLE_REGISTRATION)
           return registrationDisabled();
-        if (!Value.Check(allowedEmailPolicy, request.email)) {
-          return json({ error: "", success: false }, 403);
+        if (
+          config.ALLOWED_EMAILS.length > 0 &&
+          !config.ALLOWED_EMAILS.includes(request.email)
+        ) {
+          return jsonError("This email address may not register", 403);
         }
-        if (isDisposableEmail(request.email)) return json({ success: true });
+        if (isDisposableEmail(request.email)) return accepted();
 
         // Counted before any mail or password hashing, with or without email
         // activation: each attempt costs a hash either way. Exempt first-user
@@ -133,10 +130,7 @@ export function createRegisterRoute({
           // address's attempts whether or not the account exists, so being
           // refused says nothing about who has one.
           if (!(await authThrottle.attempt("register", address, request.email)))
-            return json(
-              { error: "Too many attempts. Try again later.", success: false },
-              429,
-            );
+            return jsonError("Too many attempts. Try again later.", 429);
         }
 
         // Hashed before the lookup so an existing address costs what a new
@@ -151,53 +145,41 @@ export function createRegisterRoute({
           // activation links unchanged.
           if (useEmailActivation) {
             if (existing.status === "inactive") {
-              const expired =
-                !existing.activationTokenExpiresAt ||
-                existing.activationTokenExpiresAt < new Date();
-              if (expired) {
-                const activationToken = randomUUID();
-                const activationTokenExpiresAt = new Date(
-                  Date.now() + activationLifetimeMs,
-                );
-                // Persist the replacement token before sending a link to it.
-                if (
-                  await usersDataService.refreshActivationToken(
-                    existing.id,
-                    activationToken,
-                    activationTokenExpiresAt,
-                  )
+              // Stored only while the current link is missing or expired, and
+              // persisted before a link to it is sent.
+              const { expiresAt, token } = issueToken(activationLifetimeMs);
+              if (
+                await usersDataService.refreshActivationToken(
+                  existing.id,
+                  token,
+                  expiresAt,
                 )
-                  sendActivation(existing.email, activationToken);
-              }
+              )
+                sendActivation(existing.email, token);
             } else {
-              const resetToken = randomUUID();
-              await usersDataService.startPasswordReset(
+              const resetToken = await usersDataService.startPasswordReset(
                 existing.id,
-                digestToken(resetToken),
-                new Date(Date.now() + resetLifetimeMs),
               );
-              void mailSender
-                .sendAccountExistsEmail(existing.email, resetToken)
-                .catch((cause: unknown) => {
-                  console.error("Account-exists email failed to send:", cause);
-                });
+              sendLater("Account-exists", () =>
+                mailSender.sendAccountExistsEmail(existing.email, resetToken),
+              );
             }
           }
-          return json({ success: true });
+          return accepted();
         }
 
-        const activationToken = useEmailActivation ? randomUUID() : null;
+        const activation = useEmailActivation
+          ? issueToken(activationLifetimeMs)
+          : undefined;
         const outcome = await usersDataService.createUser(
           {
             email: request.email,
             name: request.username,
             passwordHash,
-            ...(activationToken
+            ...(activation
               ? {
-                  activationToken,
-                  activationTokenExpiresAt: new Date(
-                    Date.now() + activationLifetimeMs,
-                  ),
+                  activationToken: activation.token,
+                  activationTokenExpiresAt: activation.expiresAt,
                   status: "inactive",
                 }
               : { status: "active" }),
@@ -206,10 +188,10 @@ export function createRegisterRoute({
         );
         if (outcome === "closed") return registrationDisabled();
         // Lost a same-address race: the same answer an existing account gets.
-        if (outcome === "exists") return json({ success: true });
+        if (outcome === "exists") return accepted();
         // Mail only once the row holding its token is committed.
-        if (activationToken) sendActivation(request.email, activationToken);
-        return json({ success: true });
+        if (activation) sendActivation(request.email, activation.token);
+        return accepted();
       },
     );
 }

@@ -31,9 +31,9 @@ const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 // limit (50 and 750 MiB in production), which only works because a single
 // source exceeds 5 MiB. Add per-source budgets if a second heavyweight shows
 // up.
-export const maximumBodyBytes = 24 * 1024 * 1024;
-export const maximumBodyMebibytes = maximumBodyBytes / (1024 * 1024);
-const maximumBase64Characters = Math.ceil(maximumBodyBytes / 3) * 4;
+export const maximumFeedBodyBytes = 24 * 1024 * 1024;
+export const maximumFeedBodyMebibytes = maximumFeedBodyBytes / (1024 * 1024);
+const maximumBase64Characters = Math.ceil(maximumFeedBodyBytes / 3) * 4;
 const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
 
 const releaseCacheLockScript =
@@ -45,7 +45,7 @@ function isBoundedBase64(value: string): boolean {
   return (
     value.length <= maximumBase64Characters &&
     value.length % 4 === 0 &&
-    decodedBase64Length(value) <= maximumBodyBytes &&
+    decodedBase64Length(value) <= maximumFeedBodyBytes &&
     base64Pattern.test(value)
   );
 }

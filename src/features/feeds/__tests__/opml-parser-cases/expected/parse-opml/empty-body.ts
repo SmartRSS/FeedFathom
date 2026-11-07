@@ -1,3 +1,3 @@
-import type { OpmlFolder, OpmlSource } from "#shared/types/opml-types.ts";
+import type { OpmlFolder, OpmlSource } from "#features/feeds/opml-types.ts";
 
 export const expected: Array<OpmlFolder | OpmlSource> = [];

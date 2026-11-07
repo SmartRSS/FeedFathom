@@ -1,10 +1,11 @@
-import type { OpmlFolder, OpmlNode } from "#shared/types/opml-types.ts";
+import type { OpmlFolder, OpmlNode } from "#features/feeds/opml-types.ts";
 import {
   attribute,
   childElements,
   isXmlElement,
   parseXml,
-} from "#platform/xml.ts";
+} from "#features/feeds/xml.ts";
+import { isWebUrl } from "#shared/validation/address-shape.ts";
 import { decodeHtmlReferences } from "#features/feeds/plain-text.ts";
 
 const maximumDepth = 32;
@@ -15,17 +16,6 @@ type PendingOutline = {
   depth: number;
   target: OpmlNode[];
   value: unknown;
-};
-
-const webUrl = (value: string): URL | undefined => {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url
-      : undefined;
-  } catch {
-    return undefined;
-  }
 };
 
 export function parseOpml(opml: string): OpmlNode[] {
@@ -70,14 +60,10 @@ function processOutlines(outlines: unknown[]): OpmlNode[] {
     const xmlUrl = attribute(outline, "xmlUrl");
 
     if (sourceTypes.has(type) || xmlUrl) {
-      const parsedXmlUrl = webUrl(xmlUrl);
-      // A single malformed feed URL shouldn't abort the whole import --
-      // skip just this outline and keep processing the rest of the file.
-      if (!parsedXmlUrl) continue;
+      if (!isWebUrl(xmlUrl)) continue;
       const homeUrl = attribute(outline, "htmlUrl");
-      const parsedHomeUrl = webUrl(homeUrl);
       current.target.push({
-        homeUrl: parsedHomeUrl ? homeUrl : parsedXmlUrl.origin,
+        homeUrl: isWebUrl(homeUrl) ? homeUrl : new URL(xmlUrl).origin,
         name: title,
         type: "source",
         xmlUrl,

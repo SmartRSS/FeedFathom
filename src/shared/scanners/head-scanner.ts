@@ -9,11 +9,5 @@ const getFeeds = function* (page: ScannerPage): Generator<FeedData> {
   }
 };
 
-export const scanHead = (_currentUrl: URL, page: ScannerPage): FeedData[] => {
-  if (!page.baseUrl) {
-    console.error("Document does not have a valid baseURI.");
-    return [];
-  }
-
-  return Array.from(getFeeds(page));
-};
+export const scanHead = (_currentUrl: URL, page: ScannerPage): FeedData[] =>
+  Array.from(getFeeds(page));

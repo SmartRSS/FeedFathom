@@ -4,7 +4,6 @@ import {
   asc,
   desc,
   eq,
-  exists,
   getTableColumns,
   gt,
   isNull,
@@ -17,13 +16,23 @@ import {
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { sourceSortSchema } from "#shared/contracts/requests.ts";
 import type * as schema from "#platform/db/schema.ts";
-import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import {
+  type FetchTrigger,
+  type Source,
+  sources,
+} from "#platform/db/schemas/sources.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
-import { subscriberlessGraceEnd } from "#features/feeds/retention.ts";
+import {
+  hasSubscriber,
+  inSubscriberlessGrace,
+} from "#features/feeds/retention.ts";
 import {
   clampToPollFloor,
+  failureBackoffMaxSteps,
   pollFloorMs,
+  webSubFallbackPollMs,
 } from "#features/feeds/source-schedule-policy.ts";
+import { faviconGatherWindowMs } from "#features/feeds/favicon-refresher.ts";
 
 // Bound each gathering pass when an outage makes many sources due at once.
 // notBefore staggers normal arrivals; the cap does not scale with backlog size.
@@ -59,28 +68,30 @@ export const hasSqlState = (
   return "cause" in error && hasSqlState(error.cause, state, depth + 1);
 };
 
-export type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
+type SourceUrlUpdateResult = "conflict" | "not-found" | "updated";
 
-/**
- * Sources repository: CRUD on the sources table plus the poll-schedule
- * bookkeeping (lastAttempt/lastSuccess/notBefore/recentFailures) written by
- * the fetch pipeline, and the favicon data URL written by the favicon refresher
- * and read back by the /api/favicon route. WebSub lease state lives in
- * WebSubStateService, and ParseSource enqueueing in SourceEnqueuer.
- */
 export class SourcesDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // `db` lets a caller's transaction, such as the OPML import's, add it.
+  // `db` lets a caller's transaction, such as the OPML import's, add it. A
+  // feed without a known homepage links to its own origin until a fetch
+  // names one (successSource); an email address has no origin to fall back to.
   public async addSource(
-    payload: {
-      homeUrl: string;
-      kind?: "email" | "feed" | undefined;
-      reservedBy?: number;
-      url: string;
-    },
+    {
+      homeUrl,
+      kind,
+      reservedBy,
+      url,
+    }:
+      | { homeUrl: string; kind: "email"; reservedBy?: number; url: string }
+      | {
+          homeUrl?: string | undefined;
+          kind?: "feed" | undefined;
+          reservedBy?: undefined;
+          url: string;
+        },
     db: Pick<
       BunSQLDatabase<typeof schema>,
       "insert" | "select"
@@ -89,14 +100,19 @@ export class SourcesDataService {
     const inserted = (
       await db
         .insert(sources)
-        .values(payload)
+        .values({
+          homeUrl: homeUrl ?? new URL(url).origin,
+          kind,
+          reservedBy,
+          url,
+        })
         .onConflictDoNothing({ target: sources.url })
         .returning()
     ).at(0);
     if (inserted) return inserted;
 
     const existing = (
-      await db.select().from(sources).where(eq(sources.url, payload.url))
+      await db.select().from(sources).where(eq(sources.url, url))
     ).at(0);
     if (!existing) throw new Error("Source conflict resolved without a row");
     return existing;
@@ -127,7 +143,7 @@ export class SourcesDataService {
 
   // The source mail to `url` is delivered to. One without a subscriber takes
   // mail only within the reservation grace; past it, it is an address its
-  // owner left (a tombstone, see cleanupOrphanedData), and the sender should
+  // owner left (a tombstone, see RetentionService.prune), and the sender should
   // get a bounce rather than mail nobody reads.
   public async findMailRecipient(url: string): Promise<Source | undefined> {
     return (
@@ -137,26 +153,17 @@ export class SourcesDataService {
         .where(
           and(
             eq(sources.url, url),
-            or(
-              gt(sources.createdAt, subscriberlessGraceEnd),
-              exists(
-                this.drizzleConnection
-                  .select({ id: userSources.id })
-                  .from(userSources)
-                  .where(eq(userSources.sourceId, sources.id)),
-              ),
-            ),
+            or(inSubscriberlessGrace, hasSubscriber(this.drizzleConnection)),
           ),
         )
     ).at(0);
   }
 
-  // Every feed fetched in the past day, missing icon or not: the window
-  // covers GatherFaviconJobs' daily run (an hour of slack for a daily poll
-  // landing just late), so each live source gets a job per run, mostly
-  // answered from the HTTP cache, and a dead one stops costing provider
-  // requests. Email sources are skipped: their homeUrl is the app's own
-  // origin, whose icon would replace the mail glyph.
+  // Every feed fetched since the previous gather, missing icon or not, with
+  // an hour of slack for a poll landing just late: each live source gets a
+  // job per run, mostly answered from the HTTP cache, and a dead one stops
+  // costing provider requests. Email sources are skipped: their homeUrl is
+  // the app's own origin, whose icon would replace the mail glyph.
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
@@ -167,7 +174,10 @@ export class SourcesDataService {
       .from(sources)
       .where(
         and(
-          gt(sources.lastSuccess, sql`NOW() - INTERVAL '25 hours'`),
+          gt(
+            sources.lastSuccess,
+            sql`NOW() - ${faviconGatherWindowMs} * INTERVAL '1 millisecond'`,
+          ),
           ne(sources.kind, "email"),
         ),
       )
@@ -206,7 +216,7 @@ export class SourcesDataService {
   // day and undo the reduced cadence.
   public async getSourcesToProcess() {
     return await this.drizzleConnection
-      .select({ id: sources.id, url: sources.url })
+      .select({ id: sources.id })
       .from(sources)
       .where(
         or(
@@ -215,7 +225,10 @@ export class SourcesDataService {
             eq(sources.kind, "websub"),
             or(
               isNull(sources.lastAttempt),
-              lt(sources.lastAttempt, sql`NOW() - INTERVAL '1 day'`),
+              lt(
+                sources.lastAttempt,
+                sql`NOW() - ${webSubFallbackPollMs} * INTERVAL '1 millisecond'`,
+              ),
             ),
           ),
         ),
@@ -276,55 +289,52 @@ export class SourcesDataService {
     }
   }
 
+  // observedAt must equal the last_seen_in_feed_at written for the same
+  // fetch's articles (see ArticleImporter.recordFetch); otherwise the two
+  // differ by this call's latency and retention cannot tell "not in this
+  // fetch" from "just fetched".
   public async successSource(
     sourceId: number,
     {
-      cached = false,
-      notBefore = new Date(Date.now() + pollFloorMs),
-      // parseSource passes its own observedAt so this matches the
-      // last_seen_in_feed_at written for the same fetch's articles exactly;
-      // otherwise the two differ by this call's latency and
-      // cleanupOrphanedData cannot tell "not in this fetch" from "just
-      // fetched".
-      observedAt = new Date(),
-      trigger = "poll",
+      cached,
+      homeUrl,
+      notBefore,
+      observedAt,
+      trigger,
     }: {
-      cached?: boolean;
+      cached: boolean;
+      homeUrl?: string | undefined;
       notBefore?: Date | undefined;
-      observedAt?: Date;
-      trigger?: "email" | "manual" | "poll" | "websub-push";
-    } = {},
+      observedAt: Date;
+      trigger: FetchTrigger;
+    },
   ) {
-    const clampedNotBefore = clampToPollFloor(notBefore, Date.now());
     await this.drizzleConnection
       .update(sources)
       .set({
+        ...(homeUrl === undefined ? {} : { homeUrl }),
         lastAttempt: observedAt,
         lastFetchTrigger: trigger,
         lastSuccess: observedAt,
-        notBefore: clampedNotBefore,
+        notBefore: clampToPollFloor(notBefore, Date.now()),
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,
       })
       .where(eq(sources.id, sourceId));
   }
 
+  // Stored on failure so the read side is just "notBefore <= NOW()".
+  // recentFailures is incremented in the same statement this reads, so +1
+  // counts the failure being recorded now.
   public async failSource(sourceId: number, reason = "") {
-    try {
-      // Stored on failure so the read side is just "notBefore <= NOW()".
-      // recentFailures is incremented in the same expression this reads, so
-      // +1 accounts for the failure being recorded now.
-      await this.drizzleConnection
-        .update(sources)
-        .set({
-          lastAttempt: new Date(),
-          notBefore: sql`NOW() + INTERVAL '5 minutes' * LEAST(${sources.recentFailures} + 1, 15)`,
-          recentFailureDetails: reason,
-          recentFailures: sql`${sources.recentFailures} + 1`,
-        })
-        .where(eq(sources.id, sourceId));
-    } catch (error) {
-      console.error("fail source", error);
-    }
+    await this.drizzleConnection
+      .update(sources)
+      .set({
+        lastAttempt: new Date(),
+        notBefore: sql`NOW() + ${pollFloorMs} * INTERVAL '1 millisecond' * LEAST(${sources.recentFailures} + 1, ${failureBackoffMaxSteps})`,
+        recentFailureDetails: reason,
+        recentFailures: sql`${sources.recentFailures} + 1`,
+      })
+      .where(eq(sources.id, sourceId));
   }
 }

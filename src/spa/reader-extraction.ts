@@ -4,22 +4,27 @@
 import { extractFromHtml } from "@extractus/article-extractor";
 import { Readability } from "@mozilla/readability";
 import domPurify from "dompurify";
-import {
-  ReaderExtensionError,
-  type ReaderContent,
-  type ReaderMode,
-} from "./extension-reader.ts";
+import { ReaderExtensionError } from "./extension-reader.ts";
+import { readerMaximumHtmlBytes } from "#shared/reader-bridge.ts";
+import { httpUrlWithoutCredentials } from "#shared/util/safe-url.ts";
+import { mapSrcset } from "#shared/util/srcset.ts";
+
+export type ReaderContent =
+  | { content: string; kind: "html" }
+  | { content: string; kind: "text" };
+export type ReaderMode =
+  | "ARTICLE_EXTRACTOR"
+  | "READABILITY"
+  | "READABILITY_PLAIN";
 
 // Extraction runs on the main thread, so it must stay short enough that a
-// click to switch away is still answered. The extension already refuses
-// documents over 5 MiB; these tighter budgets send larger pages to Feed mode
-// before any parsing starts. The largest Wikipedia articles (about 2.8 MB and
-// 23,000 elements) still fit; a 3.8 MB page of 24,000 linked paragraphs,
-// which held the thread for about 465 ms, does not.
-// UTF-8 bytes, measured with TextEncoder rather than html.length, so a
-// non-Latin-script page (Polish, Cyrillic, CJK) is budgeted by its real
-// transfer size instead of its UTF-16 code-unit count.
-const maximumHtmlBytes = 3 * 1024 * 1024;
+// click to switch away is still answered. These budgets send larger pages to
+// Feed mode before any parsing starts. The largest Wikipedia articles (about
+// 2.8 MB and 23,000 elements) still fit; a 3.8 MB page of 24,000 linked
+// paragraphs, which held the thread for about 465 ms, does not.
+// The byte budget counts UTF-8 bytes, measured with TextEncoder rather than
+// html.length, so a non-Latin-script page (Polish, Cyrillic, CJK) is budgeted
+// by its real size instead of its UTF-16 code-unit count.
 const maximumElements = 30_000;
 const textEncoder = new TextEncoder();
 
@@ -35,7 +40,7 @@ const exceedsElementBudget = (html: string): boolean => {
 
 const assertWithinBudget = (html: string): void => {
   if (
-    textEncoder.encode(html).byteLength > maximumHtmlBytes ||
+    textEncoder.encode(html).byteLength > readerMaximumHtmlBytes ||
     exceedsElementBudget(html)
   )
     throw new ReaderExtensionError("TOO_LARGE");
@@ -60,35 +65,17 @@ const rewriteDocumentUrls = (root: ParentNode, base: URL): void => {
 
   for (const element of root.querySelectorAll("[srcset]")) {
     const value = element.getAttribute("srcset");
-    if (!value || value.includes("data:")) continue;
-    element.setAttribute(
-      "srcset",
-      value
-        .split(",")
-        .map((candidate) => {
-          const [url, ...descriptor] = candidate.trim().split(/\s+/);
-          return url
-            ? [rewriteUrl(url, base), ...descriptor].join(" ")
-            : candidate;
-        })
-        .join(", "),
-    );
+    if (value)
+      element.setAttribute(
+        "srcset",
+        mapSrcset(value, (url) => rewriteUrl(url, base)),
+      );
   }
 };
 
 const validatedBaseUrl = (value: string): URL => {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ReaderExtensionError("INVALID_RESPONSE");
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== ""
-  )
-    throw new ReaderExtensionError("INVALID_RESPONSE");
+  const url = httpUrlWithoutCredentials(value);
+  if (!url) throw new ReaderExtensionError("INVALID_RESPONSE");
   return url;
 };
 

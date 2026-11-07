@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import {
   migrateDatabase,
@@ -22,20 +22,26 @@ test("lists every SQL migration in the Drizzle journal", async () => {
 // than exiting on the first refused connection -- compose.yml and
 // deploy/stack.yml both depend on that, and Swarm arranges no ordering at
 // all. Nothing is listening on this port, so every attempt is refused
-// immediately; taking longer than one interval proves it retried instead of
-// giving up, and still rejecting proves it gives up eventually.
+// immediately.
 test("retries an unreachable database until its deadline, then fails", async () => {
-  const started = Date.now();
+  const log = spyOn(console, "log").mockImplementation(() => {});
 
-  await expect(
-    migrateDatabase(
-      "postgresql://postgres:postgres@127.0.0.1:1/absent",
-      "./drizzle",
-      2_500,
-    ),
-  ).rejects.toThrow();
+  try {
+    await expect(
+      migrateDatabase(
+        "postgresql://postgres:postgres@127.0.0.1:1/absent",
+        "./drizzle",
+        { deadline: 200, interval: 10 },
+      ),
+    ).rejects.toThrow();
 
-  expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    const retries = log.mock.calls.filter(([line]) =>
+      String(line).includes("retrying"),
+    );
+    expect(retries.length).toBeGreaterThan(1);
+  } finally {
+    log.mockRestore();
+  }
 });
 
 // The prebuild pass exists so a populated table does not take an ACCESS
@@ -85,22 +91,15 @@ const migrationStatements = async () =>
     )
   ).join("\n");
 
-// The baseline creates every table in the same migration, so every index in
-// it lands on an empty table and none should be pre-built. Only the covering
-// index from 0009 opts in: it goes onto a populated articles table.
-test("pre-builds only the indexes added onto populated tables", async () => {
-  expect(parseConcurrentIndexes(await migrationStatements())).toEqual([
-    {
-      create:
-        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "articles_source_published_covering_idx" ON "articles" USING btree ("source_id","published_at","id","guid","last_seen_in_feed_at","updated_at")',
-      name: "articles_source_published_covering_idx",
-      table: "articles",
-    },
-  ]);
-});
-
-test("pre-drops only the unused index on the populated articles table", async () => {
-  expect(parseConcurrentDrops(await migrationStatements())).toEqual([
-    "articles_updated_at_idx",
-  ]);
+// Every statement a migration opted in is one the parser recognises, so a
+// migration whose opt-in the pattern misses fails here rather than taking an
+// ACCESS EXCLUSIVE lock on a populated table in production.
+test("recognises every index a migration in the folder opted in", async () => {
+  const statements = await migrationStatements();
+  expect(parseConcurrentIndexes(statements)).toHaveLength(
+    statements.match(/CREATE INDEX IF NOT EXISTS/g)?.length ?? 0,
+  );
+  expect(parseConcurrentDrops(statements)).toHaveLength(
+    statements.match(/DROP INDEX IF EXISTS/g)?.length ?? 0,
+  );
 });

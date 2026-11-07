@@ -1,16 +1,12 @@
-import {
-  storedBadgeEnabled,
-  storedInstance,
-  storedOpenRssEnabled,
-} from "#shared/extension-types.ts";
 import { pingInstance } from "./instance.ts";
+import { clearInstance, readSettings, writeSettings } from "./settings.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
 // Every listener is attached before the first await. Reading storage is a
 // round trip to the extension process, and `load` fires the moment this
-// script starts, not when that read lands -- so a change arriving in between
-// used to reach no listener at all and be dropped in silence. The stored
-// values are filled in afterwards.
+// script starts, not when that read lands, so a change arriving in between
+// would otherwise reach no listener. The stored values are filled in
+// afterwards.
 void (async () => {
   const instanceInput = document.querySelector("#instance");
   if (!(instanceInput instanceof HTMLInputElement)) {
@@ -22,8 +18,8 @@ void (async () => {
 
   // An inline message rather than alert(): a browser can offer to suppress
   // repeat dialogs, and once it does the field just silently reverts to the
-  // old value with nothing said. It also names the rule, which "bad URL" did
-  // not -- plain http being loopback-only is the rejection people hit.
+  // old value with nothing said. It names the rule people hit most: plain
+  // http is accepted only for loopback.
   const rejectionMessage =
     "Enter the full address of your FeedFathom instance, such as " +
     "https://feeds.example.com. Plain http:// is accepted only for localhost.";
@@ -73,7 +69,7 @@ void (async () => {
       showStatus("");
       const value = instanceInput.value;
       if (value.trim() === "") {
-        await chrome.storage.sync.remove("instance");
+        await clearInstance();
         displayedValue = "";
         instanceInput.value = displayedValue;
         return;
@@ -86,7 +82,7 @@ void (async () => {
         return;
       }
 
-      await chrome.storage.sync.set({ instance: canonicalInstance });
+      await writeSettings({ instance: canonicalInstance });
       displayedValue = canonicalInstance;
       instanceInput.value = displayedValue;
     })();
@@ -98,29 +94,23 @@ void (async () => {
   const badgeToggle = document.querySelector("#show-badge");
   if (badgeToggle instanceof HTMLInputElement) {
     badgeToggle.addEventListener("change", () => {
-      void chrome.storage.sync.set({ showBadge: badgeToggle.checked });
+      void writeSettings({ showBadge: badgeToggle.checked });
     });
   }
 
   const openRssToggle = document.querySelector("#show-openrss");
   if (openRssToggle instanceof HTMLInputElement) {
     openRssToggle.addEventListener("change", () => {
-      void chrome.storage.sync.set({ showOpenRss: openRssToggle.checked });
+      void writeSettings({ showOpenRss: openRssToggle.checked });
     });
   }
 
-  const storedValue =
-    storedInstance(await chrome.storage.sync.get("instance")) ?? "";
+  const settings = await readSettings();
+  const storedValue = settings.instance ?? "";
   displayedValue = canonicalizeInstance(storedValue) ?? storedValue;
   instanceInput.value = displayedValue;
-  if (badgeToggle instanceof HTMLInputElement) {
-    badgeToggle.checked = storedBadgeEnabled(
-      await chrome.storage.sync.get("showBadge"),
-    );
-  }
-  if (openRssToggle instanceof HTMLInputElement) {
-    openRssToggle.checked = storedOpenRssEnabled(
-      await chrome.storage.sync.get("showOpenRss"),
-    );
-  }
+  if (badgeToggle instanceof HTMLInputElement)
+    badgeToggle.checked = settings.showBadge;
+  if (openRssToggle instanceof HTMLInputElement)
+    openRssToggle.checked = settings.showOpenRss;
 })();

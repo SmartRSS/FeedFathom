@@ -114,12 +114,12 @@ test("importing a different tree merges same-named folders and leaves existing s
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const connection = createDrizzleConnection(databaseUrl);
-  const queued: string[] = [];
+  const queued: number[] = [];
   const importer = new OpmlImportService(
     connection,
     {
       async enqueueSource(source) {
-        queued.push(source.url);
+        queued.push(source.id);
       },
     },
     new SourcesDataService(connection),
@@ -204,7 +204,13 @@ test("importing a different tree merges same-named folders and leaves existing s
     expect(fresh!.parent_id).toBe(news!.id);
     expect(await client`SELECT * FROM user_sources`).toHaveLength(5);
     expect(await client`SELECT * FROM sources`).toHaveLength(5);
-    expect(queued.toSorted()).toEqual([
+    const urlOf = async (id: number) =>
+      (
+        await client<
+          { url: string }[]
+        >`SELECT url FROM sources WHERE id = ${id}`
+      ).at(0)?.url ?? "";
+    expect((await Promise.all(queued.map(urlOf))).toSorted()).toEqual([
       "https://fresh.test/feed",
       "https://tech.test/feed",
     ]);

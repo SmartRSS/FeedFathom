@@ -30,7 +30,8 @@ import any layer.
 
 `src/platform/runtime.ts` constructs the shared connections, queue and HTTP
 client once per process. Each feature's `services.ts` constructs its service
-instances from those resources. Only the entrypoints import those instances:
+instances from those resources. Only the entrypoints, and a dependent
+feature's `services.ts` constructing its own, import those instances:
 `server.ts` passes them to `createServerApp` and `worker.ts` to `MainWorker`,
 and each route group and handler takes the services it declares as an
 argument. Routes and jobs import the service modules for their types alone, so
@@ -39,15 +40,18 @@ instead of mocking modules. Constructors marked `@__PURE__` only store
 their arguments; the marker lets the bundler remove unused service instances.
 
 `tools/oxlint-plugin.js` enforces this with the `feedfathom/layer-boundaries`
-rule, which carries the DAG in its `.oxlintrc.json` options. Prose alone did
-not hold. The lint rule is the load-bearing half. Relative specifiers are
-resolved and judged by the same rule, so `../../` is not an escape hatch.
+rule, which carries the DAG in its `.oxlintrc.json` options. Relative
+specifiers are resolved and judged by the same rule, so `../../` is not an
+escape hatch.
 
 Co-located `*.test.ts` files are exempt: a test arranges state rather than
-wiring the product, and ships in no bundle. Anything two clients both need is
-`shared` by that same definition, which is where the scanner tree, the
-reader-bridge protocol in `extension-types.ts` and the URL-safety helpers in
-`util/safe-url.ts` live.
+wiring the product, and ships in no bundle. Anything two programs both need
+is `shared` by that same definition: the scanner rules, the reader-bridge
+protocol in `reader-bridge.ts`, the SPA routes the server and the extension
+link to in `contracts/spa-routes.ts`, and the URL rules in `util/safe-url.ts`
+(an http(s) URL without credentials, a secure instance origin). Messages and
+storage that only the extension's own scripts exchange stay in
+`src/extension/` (`messages.ts`, `settings.ts`).
 
 ## Features
 
@@ -65,6 +69,15 @@ mail-ingest → feeds
 jobs        → feeds
 ```
 
+Each feature mounts its own routes as one group (`auth/routes.ts`,
+`feeds/routes.ts`, `reader/routes.ts`, `admin/routes.ts`,
+`mail-ingest/routes/mail.ts`), and `server-app.ts` composes the groups. A
+route belongs to the feature that owns its behaviour, whatever its URL:
+`/api/options/opml` is feeds', `/api/options/password` and
+`/api/options/sessions` are auth's. Each handler answers through
+`json(contract, value)` from `platform/http/json.ts`, typed against the
+schema in `#shared/contracts` that clients decode with.
+
 Any edge not on that list is a lint error. The list must also stay acyclic,
 which is checked in review rather than by the rule. That's the point of
 keeping the edges in a config file: adding one is a deliberate act that shows
@@ -78,19 +91,25 @@ up in the diff, instead of arriving as a quiet new import.
   test rather than a second plugin.
 - **`feeds`** — getting content and the store it lands in: feed parsing
   (RSS/Atom, JSON Feed, microformats), OPML import and export, discovery and
-  preview,
-  subscription, WebSub, favicons, article extraction and link rewriting, and
-  the sources, articles, user-sources and folders data services.
+  preview, subscription, WebSub, favicons, article extraction and link
+  rewriting, retention, and the sources, articles, user-sources and folders
+  data services. It also owns what its jobs carry and how they run: the
+  ParseSource payload, job id and follow-up parse live in `source-enqueue.ts`,
+  the favicon job's in `favicon-refresher.ts`, each cadence beside the query
+  it bounds. Retention deletes expired users and sessions, which are `auth`'s
+  tables, first: every other rule reads the set of current subscribers, which
+  the cascade from an expired user shrinks.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.
-- **`admin`** — the admin and options routes. Two route groups rather than
-  one, because `/api/options` is per-user and `/api/admin` is not: the admin
-  group carries `createAdminPlugin`, so the authorisation check is a property
-  of the group instead of something each handler has to restate.
+- **`admin`** — the `/api/admin` routes. The group carries
+  `createAdminPlugin`, so the authorisation check is a property of the group
+  instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
-  email handler, the email processor, and the Cloudflare email worker.
-- **`jobs`** — the worker main loop.
+  email handler, and the Cloudflare email worker.
+- **`jobs`** — the worker main loop: validates each job and hands it to the
+  `feeds` service that runs it, and turns what is thrown into BullMQ's
+  acknowledge-or-delay.
 
 ## Imports
 
@@ -107,8 +126,8 @@ specifiers keep their `.ts` suffix.
 
 An error type with a canonical HTTP representation is mapped once, in the
 composition root's error hook, next to the types already mapped there —
-`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError` and
-`MailRejectedError`.
+`NotFound`, `ValidationError`, `DecodeError`, `HttpDeferredError`,
+`HttpDeadlineError` and `MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
 mapping could not. `find` is the example: it knows the URL it just failed to
@@ -142,14 +161,23 @@ The criterion is testability, not line count. A long file whose decisions are
 all extracted is finished. Splitting it further buys a smaller file and
 nothing else.
 
-Two clusters were deliberately left in place on exactly that basis: the WebSub
-lifecycle methods on the sources data service, and the cache read/write half of
-the HTTP client. Both are pure I/O with the decisions already lifted out, so
-moving them would cost a rewiring across their callers and gain no test.
+The cache read/write half of the HTTP client was deliberately left in place on
+exactly that basis: it is pure I/O with the decisions already lifted out, so
+moving it would cost a rewiring across its callers and gain no test.
 
-Extracted SPA logic goes in one behaviour module per view — `behavior.ts` keeps
-only genuinely cross-view concerns. A single shared module would become the new
-large file and would change for several unrelated reasons.
+Extracted SPA logic goes in a module named for what it decides, beside the
+component that uses it: `routes.ts` holds the routes, `panes.ts` the pane
+layout and history, `feed-tree.ts` the tree helpers, `article-selection.ts`
+the list selection algebra. A single shared module would become the new large
+file and would change for several unrelated reasons.
+
+The dashboard is wiring over one controller per concern (`article-list.ts`,
+`session-restore.ts`, `reader-content.ts`, `new-article-signal.ts`,
+`offline-sync.ts`) and one component per pane. A controller takes its
+requests, timers and storage as arguments, so `bun test` drives it with fakes;
+`bun test` runs Solid's server build, where effects never run, so a
+controller's decisions sit in plain methods and only its thin `createX`
+wrapper uses effects.
 
 ## Tests
 
@@ -197,7 +225,12 @@ Anything that needs a unit test has to come out of the component first.
   per-user read state.
 - **Scanner** — a strategy that inspects a fetched page and reports the feeds it
   advertises. Runs both server-side and inside the extension content script,
-  which is why the scanners live in `shared`.
+  which is why the scanners live in `shared`. Each side builds the page the
+  scanners read with its own extractor from one selector table: the
+  extension from the live `Document` in `extension/document-scanner.ts`, the
+  server with Bun's `HTMLRewriter` in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
+  scanner: it sends the page address to a third party, so each caller decides
+  whether to offer it.
 - **Feed preview** — a parsed-but-not-subscribed feed held in Redis between the
   discovery request and the subscribe request.
 - **Deferred response** — a 429 telling the client the work is queued and to

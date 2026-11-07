@@ -3,9 +3,11 @@ import {
   createEmailWorker,
   type IncomingEmailMessage,
 } from "#features/mail-ingest/email-worker.ts";
+import {
+  mailRelaySecretHeader,
+  maxRawEmailBytes,
+} from "#shared/contracts/mail-relay.ts";
 
-const mailRelaySecretHeader = "x-feedfathom-mail-secret";
-const maxRawEmailBytes = 5 * 1_024 * 1_024;
 const raw = "Subject: Newsletter\r\n\r\nArticle body";
 
 const environment = (
@@ -113,9 +115,7 @@ describe("Cloudflare email worker", () => {
         message(),
         environment({ MAIL_ENDPOINT_DOMAIN: "http://reader.example" }),
       ),
-    ).rejects.toThrow(
-      "MAIL_ENDPOINT_DOMAIN must be https, or http on loopback",
-    );
+    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must be an https origin");
     await expect(
       worker.email(
         message(),
@@ -127,7 +127,7 @@ describe("Cloudflare email worker", () => {
         message(),
         environment({ MAIL_ENDPOINT_DOMAIN: "https://reader.example/path" }),
       ),
-    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must contain only a URL origin");
+    ).rejects.toThrow("MAIL_ENDPOINT_DOMAIN must be an https origin");
 
     expect(endpoints).toEqual([
       "http://localhost:3456/api/mail",

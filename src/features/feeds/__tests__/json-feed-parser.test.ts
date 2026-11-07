@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { validateParsedFeed } from "#features/feeds/feed-parser.ts";
-import {
-  isJsonFeedText,
-  parseJsonFeed,
-} from "#features/feeds/json-feed-parser.ts";
+import { feedFormat } from "#features/feeds/feed-document.ts";
+import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 import { mapFeedToPreview } from "#features/feeds/feed-mapper.ts";
 
@@ -32,16 +29,15 @@ const feedText = JSON.stringify({
 
 describe("JSON Feed detection", () => {
   test("recognizes JSON documents and rejects XML ones", () => {
-    expect(isJsonFeedText(feedText)).toBe(true);
-    expect(isJsonFeedText(' \n {"items":[]}')).toBe(true);
-    expect(isJsonFeedText('<?xml version="1.0"?><rss></rss>')).toBe(false);
+    expect(feedFormat(feedText, null)).toBe("json");
+    expect(feedFormat(' \n {"items":[]}', null)).toBe("json");
+    expect(feedFormat('<?xml version="1.0"?><rss></rss>', null)).toBe("xml");
   });
 });
 
 describe("JSON Feed parsing", () => {
   test("maps fields onto the shared feed projection", () => {
     const parsed = parseJsonFeed(feedText);
-    expect(() => validateParsedFeed(parsed)).not.toThrow();
     expect(parsed.title).toBe("Feed");
     expect(parsed.url).toBe("https://example.com/");
     expect(parsed.items).toHaveLength(2);

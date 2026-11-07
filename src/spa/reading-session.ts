@@ -1,30 +1,29 @@
 // Session restoration (#718). What the app remembers about where you were,
-// and the storage it lives in. The decisions are pure and tested here; the
-// dashboard owns when they fire (selection, scroll, restore).
+// and the storage it lives in.
 //
 // Two layers, one shape: a versioned JSON blob under one key in
 // sessionStorage (survives reload) and the same blob in localStorage
-// (survives across days). There is no IndexedDB in the SPA to lean on -- the
-// service worker's offline queue owns its own and stays internal to sw.js --
-// and a size-capped blob is all the feature needs. Reading prefers
+// (survives across days). The page has no IndexedDB store of its own -- the
+// worker's removal queue (mutation-queue.ts) owns the only one -- and a
+// size-capped blob is all the feature needs. Reading prefers
 // sessionStorage so a reload picks up the freshest snapshot; a sessionStorage
 // that has expired (new tab days later) falls back to localStorage.
 
+import { isArticleFilter, type ArticleFilter } from "./article-list.ts";
+import { browserTimers, type Timers } from "./timers.ts";
+
 export const READING_SESSION_STORAGE_KEY = "feedfathom:reading-session:v1";
 
-// Cap the reader scroll map to bound snapshot size.
 const MAX_READER_SCROLL_ENTRIES = 200;
 const READER_SCROLL_THROTTLE_MS = 500;
 const SESSION_VERSION = 1;
-
-type ArticleFilter = "all" | "read" | "unread";
 
 export type AppSnapshot = {
   articleFilter: ArticleFilter;
   // The article open in the reader pane when the snapshot was written.
   articleId: number | undefined;
   listScrollTop: number;
-  nodeType: "folder" | "source";
+  nodeType: "folder" | "source" | "view";
   nodeUid: string;
   // The list around the open article. Optional, so a snapshot written before
   // they existed still restores the article alone.
@@ -37,7 +36,7 @@ export type AppSnapshot = {
   selectedIds?: number[] | undefined;
 };
 
-export type ReaderScrollEntry = {
+type ReaderScrollEntry = {
   at: number;
   id: number;
   ratio: number;
@@ -59,9 +58,6 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
-
-const isArticleFilter = (value: unknown): value is ArticleFilter =>
-  value === "all" || value === "read" || value === "unread";
 
 // No schema library here on purpose: the blob is written and read by this one
 // module, and a hand check keeps a foreign or truncated value a silent
@@ -109,7 +105,9 @@ function parseAppSnapshot(value: unknown): AppSnapshot | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) return undefined;
   if (
-    (value["nodeType"] !== "source" && value["nodeType"] !== "folder") ||
+    (value["nodeType"] !== "source" &&
+      value["nodeType"] !== "folder" &&
+      value["nodeType"] !== "view") ||
     typeof value["nodeUid"] !== "string" ||
     !isArticleFilter(value["articleFilter"]) ||
     !isFiniteNumber(value["listScrollTop"])
@@ -207,71 +205,125 @@ export function ratioToScrollTop(
 
 // Leading-and-trailing throttle for the scroll recorders: the first event
 // writes immediately, a burst coalesces into one trailing write, and a
-// steady scroll writes at most once per interval. Injectable clock and
-// timers, so tests never sleep.
-export type ThrottleOptions = {
-  intervalMs?: number;
-  now?: () => number;
-  schedule?: (callback: () => void, ms: number) => unknown;
-};
-
+// steady scroll writes at most once per interval.
 export function createThrottledRecorder<A>(
   write: (value: A) => void,
-  options: ThrottleOptions = {},
+  timers: Timers = browserTimers,
 ): (value: A) => void {
-  const intervalMs = options.intervalMs ?? READER_SCROLL_THROTTLE_MS;
-  const now = options.now ?? (() => Date.now());
-  const schedule =
-    options.schedule ??
-    ((callback: () => void, ms: number) => setTimeout(callback, ms));
   let lastWriteAt = Number.NEGATIVE_INFINITY;
   let pendingHandle: unknown;
   let latest: A | undefined;
   const flush = () => {
     pendingHandle = undefined;
-    lastWriteAt = now();
+    lastWriteAt = timers.now();
     if (latest !== undefined) write(latest);
     latest = undefined;
   };
   return (value: A) => {
     latest = value;
     if (pendingHandle !== undefined) return;
-    const elapsed = now() - lastWriteAt;
-    if (elapsed >= intervalMs) {
+    const elapsed = timers.now() - lastWriteAt;
+    if (elapsed >= READER_SCROLL_THROTTLE_MS) {
       flush();
       return;
     }
-    pendingHandle = schedule(flush, intervalMs - elapsed);
+    pendingHandle = timers.set(flush, READER_SCROLL_THROTTLE_MS - elapsed);
   };
 }
 
 const emptySession = (): ReadingSession => ({ app: undefined, reader: [] });
 
-export type ReadingSessionStoreOptions = {
-  session?: StorageLike;
-  local?: StorageLike;
+type ReadingSessionStoreOptions = {
+  local: StorageLike;
   now?: () => number;
+  // The "remember reading position" setting. Off, nothing is recorded.
+  remember: () => boolean;
+  // The first boot after reloadForUpdate(): its snapshot restores whatever
+  // the setting says.
+  resumingUpdate?: boolean;
+  session: StorageLike;
 };
 
 /** Owns the in-memory session and mirrors it into both storages on change. */
 export class ReadingSessionStore {
-  readonly #sessionStorage: StorageLike | undefined;
-  readonly #localStorage: StorageLike | undefined;
+  readonly #sessionStorage: StorageLike;
+  readonly #localStorage: StorageLike;
   readonly #now: () => number;
+  readonly #remember: () => boolean;
+  readonly #resumingUpdate: boolean;
   #current: ReadingSession = emptySession();
 
-  constructor(options: ReadingSessionStoreOptions = {}) {
+  constructor(options: ReadingSessionStoreOptions) {
     this.#sessionStorage = options.session;
     this.#localStorage = options.local;
     this.#now = options.now ?? (() => Date.now());
+    this.#remember = options.remember;
+    this.#resumingUpdate = options.resumingUpdate ?? false;
+  }
+
+  /** The snapshot boot restores. With the setting off, the copy an update
+   *  reload left in sessionStorage is spent once read. */
+  takeSnapshot(): AppSnapshot | undefined {
+    const remember = this.#remember();
+    const app =
+      remember || this.#resumingUpdate ? this.#load()?.app : undefined;
+    if (!remember) this.#remove(this.#sessionStorage);
+    return app;
+  }
+
+  readerScroll(id: number): number | undefined {
+    return this.#current.reader.find((entry) => entry.id === id)?.ratio;
+  }
+
+  recordApp(patch: Partial<AppSnapshot>): void {
+    if (!this.#remember()) return;
+    this.#mergeApp(patch);
+    this.#persist();
+  }
+
+  recordReaderScroll(id: number, ratio: number): void {
+    if (!this.#remember()) return;
+    this.#current = recordReaderScroll(this.#current, id, ratio, this.#now());
+    this.#persist();
+  }
+
+  clearReaderScrolls(ids: readonly number[]): void {
+    if (!this.#remember()) return;
+    this.#current = clearReaderScrolls(this.#current, ids);
+    this.#persist();
+  }
+
+  /** The full snapshot an update reload resumes. With the setting off it goes
+   *  to sessionStorage only, so it survives this one reload and never reaches
+   *  a later launch. */
+  saveBeforeReload(
+    patch: Partial<AppSnapshot>,
+    reader: { id: number; ratio: number } | undefined,
+  ): void {
+    this.#mergeApp(patch);
+    if (reader)
+      this.#current = recordReaderScroll(
+        this.#current,
+        reader.id,
+        reader.ratio,
+        this.#now(),
+      );
+    this.#persist(true);
+  }
+
+  clear(): void {
+    this.#current = emptySession();
+    // An empty snapshot is no snapshot: "nothing stored" holds on disk too.
+    this.#remove(this.#sessionStorage);
+    this.#remove(this.#localStorage);
   }
 
   /** sessionStorage (freshest, this tab) first, localStorage underneath. */
-  load(): ReadingSession | undefined {
+  #load(): ReadingSession | undefined {
     for (const storage of [this.#sessionStorage, this.#localStorage]) {
       let raw: string | null = null;
       try {
-        raw = storage?.getItem(READING_SESSION_STORAGE_KEY) ?? null;
+        raw = storage.getItem(READING_SESSION_STORAGE_KEY);
       } catch {}
       const parsed = parseReadingSession(raw);
       if (parsed) {
@@ -282,56 +334,35 @@ export class ReadingSessionStore {
     return undefined;
   }
 
-  snapshot(): AppSnapshot | undefined {
-    return this.load()?.app;
-  }
-
-  readerScroll(id: number): number | undefined {
-    return this.#current.reader.find((entry) => entry.id === id)?.ratio;
-  }
-
-  /** Merge a partial app snapshot and persist. */
-  recordApp(patch: Partial<AppSnapshot>): void {
+  #mergeApp(patch: Partial<AppSnapshot>): void {
     const base = this.#current.app ?? {
-      articleFilter: "unread" as ArticleFilter,
+      articleFilter: "unread" as const,
       articleId: undefined,
       listScrollTop: 0,
       nodeType: "source" as const,
       nodeUid: "",
     };
     this.#current = { ...this.#current, app: { ...base, ...patch } };
-    this.#persist();
   }
 
-  recordReaderScroll(id: number, ratio: number): void {
-    this.#current = recordReaderScroll(this.#current, id, ratio, this.#now());
-    this.#persist();
-  }
-
-  clearReaderScrolls(ids: readonly number[]): void {
-    this.#current = clearReaderScrolls(this.#current, ids);
-    this.#persist();
-  }
-
-  clear(): void {
-    this.#current = emptySession();
-    this.#persist();
-    // An empty snapshot is no snapshot: drop the keys so "nothing stored"
-    // stays true on disk, not just in memory.
-    for (const storage of [this.#sessionStorage, this.#localStorage]) {
-      try {
-        storage?.removeItem(READING_SESSION_STORAGE_KEY);
-      } catch {}
-    }
-  }
-
-  #persist(): void {
+  #persist(force = false): void {
     const raw = serializeReadingSession(this.#current);
-    for (const storage of [this.#sessionStorage, this.#localStorage]) {
+    const storages = this.#remember()
+      ? [this.#sessionStorage, this.#localStorage]
+      : force
+        ? [this.#sessionStorage]
+        : [];
+    for (const storage of storages) {
       try {
-        storage?.setItem(READING_SESSION_STORAGE_KEY, raw);
+        storage.setItem(READING_SESSION_STORAGE_KEY, raw);
       } catch {}
     }
+  }
+
+  #remove(storage: StorageLike): void {
+    try {
+      storage.removeItem(READING_SESSION_STORAGE_KEY);
+    } catch {}
   }
 }
 

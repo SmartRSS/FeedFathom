@@ -17,17 +17,13 @@ export const scanLinkFeed = (
   const feeds: FeedData[] = [];
 
   for (const anchor of page.anchors) {
-    if (!anchor.href) continue;
-
-    try {
-      const feedUrl = new URL(anchor.href, currentUrl.href);
-      if (feedUrl.hostname !== currentUrl.hostname) continue;
-      if (isFeedUrl(feedUrl.pathname))
-        feeds.push({
-          title: anchor.text.trim() || "Untitled Feed",
-          url: feedUrl.href,
-        });
-    } catch {}
+    const feedUrl = anchor.href && URL.parse(anchor.href, page.baseUrl);
+    if (!feedUrl || feedUrl.hostname !== currentUrl.hostname) continue;
+    if (isFeedUrl(feedUrl.pathname))
+      feeds.push({
+        title: anchor.text.trim() || "Untitled Feed",
+        url: feedUrl.href,
+      });
   }
 
   return feeds;
