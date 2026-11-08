@@ -2686,7 +2686,9 @@ textarea[aria-invalid="true"]:focus {
    denser layout this app had before its spacing and targets were
    enlarged. Every step of the spacing scale halves, rows drop to 20px
    with the browser's own line height, and controls shrink with them,
-   under a finger too: the reader chose it on this device. */
+   under a finger too: the reader chose it on this device. The single-pane
+   layout scales all of it by 1.5, the way phones did, so rows, text and
+   gaps keep the desktop's proportions at a size a thumb can use. */
 :root[data-density="compact"] {
   --space-half: 1px;
   --space-1: 0.125rem;
@@ -2704,6 +2706,16 @@ textarea[aria-invalid="true"]:focus {
   --row-h: 1.25rem;
   --row-lh: 1.25rem;
 }
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  :root[data-density="compact"] {
+    font-size: 150%;
+  }
+}
+/* Rows take the small type step under a finger too, as under a mouse. */
+:root[data-density="compact"] .source,
+:root[data-density="compact"] .article {
+  font-size: var(--fs-sm);
+}
 :root[data-density="compact"] .context-menu button,
 :root[data-density="compact"] .admin-table-actions button {
   --control-h: 1.5rem;
@@ -2719,14 +2731,9 @@ textarea[aria-invalid="true"]:focus {
   padding-left: 2rem;
 }
 :root[data-density="compact"] .article {
-  --title-h: calc(var(--fs-md) * var(--lh-tight));
+  --title-h: calc(var(--fs-sm) * var(--lh-tight));
   --details-h: var(--title-h);
   --row-gap: var(--space-half);
-}
-@media (pointer: fine) and (hover: hover) {
-  :root[data-density="compact"] .article {
-    --title-h: calc(var(--fs-sm) * var(--lh-tight));
-  }
 }
 :root[data-density="compact"] .source .unread-count,
 :root[data-density="compact"] .source .snoozed-badge {
