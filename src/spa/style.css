@@ -40,6 +40,11 @@
   --fs-lg: 1.25rem;
   --fs-xl: 1.5rem;
   --fs-2xl: 2rem;
+  /* Every list's rows share one pair: the line itself (a feed name, an
+     article title) and its secondary text (counts, bylines, dates, date
+     bands). The row heights stay; these fill them. */
+  --fs-row: 1.25rem;
+  --fs-row-meta: 1.0625rem;
   /* Line heights: headings, interface text, and long-form reading. */
   --lh-tight: 1.25;
   --lh-body: 1.5;
@@ -1199,7 +1204,7 @@ a {
   border-block: var(--border);
   color: var(--status-warning-fg);
   background: var(--status-warning-bg);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
 }
 .feed-notice p {
   flex: 1 1 14rem;
@@ -1226,7 +1231,7 @@ a {
    touch floor on touch, with its one line centred by line-height so the
    disclosure triangle stays. */
 .failure-details {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
 }
 .failure-details summary {
   line-height: max(1.5rem, 24px);
@@ -1672,7 +1677,7 @@ img.skeleton-row {
   padding: 0 var(--space-2) 0 var(--space-6);
   border-bottom: 0;
   gap: var(--space-1);
-  font-size: var(--fs-md);
+  font-size: var(--fs-row);
   line-height: var(--row-lh);
 }
 /* The name gives way first, with an ellipsis, so the unread count and the
@@ -1704,14 +1709,14 @@ img.skeleton-row {
    tree still shows recognisable glyphs. */
 .chevron {
   display: inline-block;
-  width: max(1rem, 14px);
-  height: max(1rem, 14px);
+  width: max(0.8em, 14px);
+  height: max(0.8em, 14px);
   flex: none;
   cursor: pointer;
 }
 .node-icon {
-  width: max(1.5cap, 14px);
-  height: max(1.5cap, 14px);
+  width: max(0.85em, 14px);
+  height: max(0.85em, 14px);
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -1740,7 +1745,7 @@ img.skeleton-row {
   flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
   font-variant-numeric: tabular-nums;
 }
 /* The warning sits right after the name, in the error colour, and turns
@@ -1764,7 +1769,7 @@ img.skeleton-row {
   flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
 }
 .source.selected .snoozed-badge {
   color: inherit;
@@ -1828,14 +1833,14 @@ img.skeleton-row {
 }
 
 .article {
-  --title-h: 1.375rem;
-  --details-h: 1.25rem;
+  --title-h: calc(var(--fs-row) * var(--lh-tight));
+  --details-h: calc(var(--fs-row-meta) * var(--lh-tight));
   --row-gap: var(--space-1);
 
   display: flex;
   flex-direction: column;
   gap: var(--row-gap);
-  font-size: var(--fs-md);
+  font-size: var(--fs-row);
   line-height: var(--title-h);
   text-decoration: none;
   white-space: normal;
@@ -1917,7 +1922,7 @@ img.skeleton-row {
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--grey-50);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
 }
 .details > span {
   flex: 1;
@@ -1932,7 +1937,7 @@ img.skeleton-row {
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border);
   background: var(--white);
-  font-size: var(--fs-md);
+  font-size: var(--fs-row);
   font-weight: 700;
   /* A feed's name in full, wrapped: this is where a one-pane layout shows
      it, and a touch screen has no tooltip for a cut-off one. */
@@ -1945,7 +1950,7 @@ img.skeleton-row {
   height: 1.5rem;
   border-bottom: var(--border);
   background: linear-gradient(to bottom, var(--white) 0.2rem, var(--grey-20));
-  font-size: var(--fs-sm);
+  font-size: var(--fs-row-meta);
   font-weight: 700;
   line-height: 1.5rem;
   /* Lines up with the rows' text, which starts at their padding. */
@@ -2315,22 +2320,12 @@ textarea[aria-invalid="true"]:focus {
   }
 }
 
-/* A mouse gets the dense lists a list-heavy reader wants: the small type
-   step and tight rows, about 17 articles on a 900px-tall screen. Touch
-   keeps the 1rem rows above. */
+/* A mouse gets tight rows: the same text as touch, with less air. */
 @media (pointer: fine) and (hover: hover) {
-  .source,
-  .article {
-    font-size: var(--fs-sm);
-  }
   .source {
     line-height: var(--row-lh);
   }
-  /* Title and byline on one ratio, the tight one, so 14px text keeps to
-     two line-heights app-wide: this and the body ratio. */
   .article {
-    --title-h: calc(var(--fs-sm) * var(--lh-tight));
-    --details-h: var(--title-h);
     --row-gap: var(--space-half);
 
     padding-block: var(--space-1);
@@ -2687,8 +2682,8 @@ textarea[aria-invalid="true"]:focus {
    enlarged. Every step of the spacing scale halves, rows drop to 20px
    with the browser's own line height, and controls shrink with them,
    under a finger too: the reader chose it on this device. The single-pane
-   layout scales all of it by 1.5, the way phones did, so rows, text and
-   gaps keep the desktop's proportions at a size a thumb can use. */
+   layout keeps the full spacing scale and 32px rows, so a thumb can still
+   hit them; the text is the same in both densities. */
 :root[data-density="compact"] {
   --space-half: 1px;
   --space-1: 0.125rem;
@@ -2705,16 +2700,7 @@ textarea[aria-invalid="true"]:focus {
   --touch: var(--control-h);
   --row-h: 1.25rem;
   --row-lh: 1.25rem;
-}
-@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
-  :root[data-density="compact"] {
-    font-size: 150%;
-  }
-}
-/* Rows take the small type step under a finger too, as under a mouse. */
-:root[data-density="compact"] .source,
-:root[data-density="compact"] .article {
-  font-size: var(--fs-sm);
+  --fs-row-meta: 1rem;
 }
 :root[data-density="compact"] .context-menu button,
 :root[data-density="compact"] .admin-table-actions button {
@@ -2731,8 +2717,6 @@ textarea[aria-invalid="true"]:focus {
   padding-left: 2rem;
 }
 :root[data-density="compact"] .article {
-  --title-h: calc(var(--fs-sm) * var(--lh-tight));
-  --details-h: var(--title-h);
   --row-gap: var(--space-half);
 }
 :root[data-density="compact"] .source .unread-count,
@@ -2750,4 +2734,20 @@ textarea[aria-invalid="true"]:focus {
 }
 :root[data-density="compact"] .tree {
   scrollbar-gutter: stable;
+}
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  :root[data-density="compact"] {
+    --space-half: 0.125rem;
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --control-h: 2.25rem;
+    --toolbar-button: var(--control-h);
+    --touch: var(--control-h);
+    --row-h: 2rem;
+    --row-lh: 2rem;
+  }
 }
