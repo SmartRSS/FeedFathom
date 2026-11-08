@@ -1280,9 +1280,10 @@ test("compact density tightens the tree without touching the theme", async ({
   expect(comfortable).toBe(24);
   expect(compact).toBe(20);
 
-  // A phone-width page scales the compact layout by 1.5, as it used to.
+  // A phone-width page keeps the text and gives the rows room for a thumb.
   await page.setViewportSize({ height: 844, width: 390 });
-  await expect(page.locator("html")).toHaveCSS("font-size", "24px");
+  await expect(page.locator("html")).toHaveCSS("font-size", "16px");
+  await expect.poll(async () => (await row.boundingBox())?.height).toBe(32);
 });
 
 test("tells read from unread by weight, not only colour", async ({ page }) => {
