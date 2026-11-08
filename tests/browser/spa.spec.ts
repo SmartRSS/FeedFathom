@@ -1281,7 +1281,7 @@ test("compact density tightens the tree without touching the theme", async ({
   expect(compact).toBe(20);
 
   // A phone-width page scales the compact layout by 1.5, as it used to.
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await expect(page.locator("html")).toHaveCSS("font-size", "24px");
 });
 
