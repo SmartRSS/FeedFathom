@@ -1757,9 +1757,7 @@ test("select all preserves scroll and moves focus so Delete works immediately", 
   await expect(
     page.getByRole("option", { name: /Third article/ }),
   ).toHaveAttribute("aria-selected", "true");
-  expect(
-    await page.evaluate(() => document.activeElement?.getAttribute("role")),
-  ).toBe("option");
+  await expect(page.locator(":focus")).toHaveAttribute("role", "option");
 
   await page.keyboard.press("Delete");
   await expect(articleOptions(page)).toHaveCount(0);
@@ -2922,21 +2920,13 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   await expect(
     page.getByRole("option", { name: /Second article/ }),
   ).toHaveAttribute("aria-selected", "true");
-  expect(
-    await page.evaluate(() =>
-      document.activeElement?.getAttribute("data-index"),
-    ),
-  ).toBe("1");
+  await expect(page.locator(":focus")).toHaveAttribute("data-index", "1");
 
   await page.keyboard.press("k");
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toHaveAttribute("aria-selected", "true");
-  expect(
-    await page.evaluate(() =>
-      document.activeElement?.getAttribute("data-index"),
-    ),
-  ).toBe("0");
+  await expect(page.locator(":focus")).toHaveAttribute("data-index", "0");
 });
 
 // `o` carries focus with the pane switch (#816): on a narrow screen the
@@ -3050,9 +3040,7 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  expect(
-    await page.evaluate(() => document.activeElement?.getAttribute("role")),
-  ).toBe("option");
+  await expect(page.locator(":focus")).toHaveAttribute("role", "option");
 });
 
 // The dialog host shows one request at a time. A second one replaces the
