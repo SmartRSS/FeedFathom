@@ -190,6 +190,10 @@ export class MainWorker {
         if (!source) {
           throw new Error(`Source with ID ${input.data.id} not found`);
         }
+        // Mail delivers a newsletter's articles; its address is not a URL,
+        // so a fetch would only record a failure and mark it broken. A
+        // refresh request ("Try again") can still queue one.
+        if (source.kind === "email") break;
         await sourceEnqueuer.runParse(input.data, async (request) => {
           await feedParser.parseSource({ ...source, ...request });
         });
