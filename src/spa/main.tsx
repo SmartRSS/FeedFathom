@@ -110,7 +110,14 @@ const paneSwitchHost: PaneSwitchHost = {
   matches: (query) => matchMedia(query).matches,
   startViewTransition:
     "startViewTransition" in document
-      ? (update) => document.startViewTransition(update)
+      ? (update) => {
+          const transition = document.startViewTransition(update);
+          // A second switch in the frame before this one's animation starts
+          // skips it, which rejects `ready`. Nothing waits on the animation:
+          // the switch itself still lands, through updateCallbackDone.
+          transition.ready.catch(() => {});
+          return transition;
+        }
       : undefined,
 };
 
