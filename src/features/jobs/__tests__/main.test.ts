@@ -212,6 +212,29 @@ test("captured processor parses the queued source", async () => {
   });
 });
 
+test("a queued email source is not fetched", async () => {
+  let parsed = false;
+  const { process } = await startWorker({
+    feedParser: strictFake<FeedParser>({
+      async parseSource() {
+        parsed = true;
+      },
+    }),
+    sourcesDataService: strictFake<SourcesDataService>({
+      async findSourceById() {
+        return { ...source, kind: "email", url: "abc@mail.example" };
+      },
+      async getSourcesToProcess() {
+        return [];
+      },
+    }),
+  });
+
+  await process(parseJob());
+
+  expect(parsed).toBe(false);
+});
+
 test("moves deferred validated jobs with their BullMQ token", async () => {
   const delays: [number, string | undefined][] = [];
   const retryAt = Date.now() + 60_000;

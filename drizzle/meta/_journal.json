@@ -113,6 +113,13 @@
       "when": 1794007446273,
       "tag": "0015_drop_session_expiry_default",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794222712703,
+      "tag": "0016_clear_email_fetch_failures",
+      "breakpoints": true
     }
   ]
 }
