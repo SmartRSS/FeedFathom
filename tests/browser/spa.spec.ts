@@ -1500,8 +1500,8 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("Options · FeedFathom");
   await page.getByRole("link", { name: "Lists" }).click();
   await page
-    .getByRole("combobox", { name: "Unread count in tab title" })
-    .selectOption("false");
+    .getByRole("checkbox", { name: "Show the unread count in the tab title" })
+    .uncheck();
   // The effect reruns wherever the app is, not only over the dashboard.
   await expect(page).toHaveTitle("Options · FeedFathom");
 
@@ -1539,8 +1539,8 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("button", { name: "options" }).first().click();
   await page.getByRole("link", { name: "Lists" }).click();
   await page
-    .getByRole("combobox", { name: "Feed filter box" })
-    .selectOption("false");
+    .getByRole("checkbox", { name: "Show the feed filter box" })
+    .uncheck();
   await page.getByRole("link", { name: "Home" }).click();
 
   await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
@@ -1550,8 +1550,8 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("button", { name: "options" }).first().click();
   await page.getByRole("link", { name: "Lists" }).click();
   await page
-    .getByRole("combobox", { name: "Article search box" })
-    .selectOption("false");
+    .getByRole("checkbox", { name: "Show the article search box" })
+    .uncheck();
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 
@@ -4062,10 +4062,10 @@ test.describe("under a controlling service worker", () => {
     await downloadUnread(page);
     await page.goto("/options");
     await page
-      .getByRole("combobox", {
-        name: "Download unread for offline reading",
+      .getByRole("checkbox", {
+        name: "Download unread articles for offline reading",
       })
-      .selectOption("false");
+      .uncheck();
     await expect.poll(() => downloaded(page)).toEqual([]);
 
     // The init script switches it back on.

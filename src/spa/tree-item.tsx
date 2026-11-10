@@ -51,6 +51,8 @@ export function ForEachNode(props: {
 }
 
 export function TreeItem(props: {
+  // The key of the row an open context menu acts on.
+  contextKey: string | undefined;
   focused: boolean;
   focusedKey: string | undefined;
   node: ListNode;
@@ -142,6 +144,7 @@ export function TreeItem(props: {
         aria-selected={isSelected()}
         class="source"
         classList={{
+          "context-target": props.contextKey === treeNodeKey(props.node),
           folder: isFolder(),
           selected: isSelected(),
           unread: unread() > 0,
@@ -188,20 +191,26 @@ export function TreeItem(props: {
             </Show>
           }
         >
+          {/* The chevron and the folder icon fold the folder as one target,
+              from the row's edge to its name: the chevron alone is too
+              small for a finger. The rest of the row selects the folder. */}
           <span
             aria-hidden="true"
-            class="chevron"
-            innerHTML={open() ? arrowDownRaw : arrowRightRaw}
+            class="folder-toggle"
             onClick={(event) => {
               event.stopPropagation();
               toggle();
             }}
-          />
-          <span
-            aria-hidden="true"
-            class="node-icon"
-            innerHTML={open() ? folderOpenedRaw : folderRaw}
-          />
+          >
+            <span
+              class="chevron"
+              innerHTML={open() ? arrowDownRaw : arrowRightRaw}
+            />
+            <span
+              class="node-icon"
+              innerHTML={open() ? folderOpenedRaw : folderRaw}
+            />
+          </span>
         </Show>
         <span class="source-name">{props.node.name}</span>
         <Show when={failing()}>
@@ -240,6 +249,7 @@ export function TreeItem(props: {
           <ForEachNode each={children()}>
             {(child) => (
               <TreeItem
+                contextKey={props.contextKey}
                 focused={props.focusedKey === treeNodeKey(child())}
                 focusedKey={props.focusedKey}
                 node={child()}

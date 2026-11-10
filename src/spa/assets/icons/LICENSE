@@ -11,11 +11,11 @@ name follows each one:
   System/add-box-fill.svg           square-plus
   System/alert-fill.svg             triangle-alert
   System/check-circle-fill.svg      circle-check
-  System/check-double-fill.svg      check-check
   System/delete-bin-7-fill.svg      trash-2
   System/dot-circle-fill.svg        circle-dot
-  System/information-fill.svg       info
+  System/list-check-fill.svg        list-checks
   System/mail-fill.svg              mail
+  System/pencil-fill.svg            pencil
   System/rss-fill.svg               rss
   System/settings-5-fill.svg        settings
   System/refresh-fill.svg           refresh-cw
@@ -24,9 +24,9 @@ name follows each one:
 Lucide is ISC-licensed. Some of these glyphs descend from Feather and carry a
 second MIT notice; both are reproduced verbatim below, straight from upstream,
 because the ISC and MIT terms each require their notice to travel with the
-copies. arrow-left, chevron-down, chevron-right, info, rss, square-plus,
-trash-2 and triangle-alert (Feather's alert-triangle) are the Feather-derived
-ones here.
+copies. arrow-left, chevron-down, chevron-right, rss, square-plus, trash-2
+and triangle-alert (Feather's alert-triangle) are the Feather-derived ones
+here.
 
 --------------------------------------------------------------------------
 
