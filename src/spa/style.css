@@ -1,3 +1,19 @@
+/* The aero and modern themes name their system font first; Selawik is the
+   open-licensed font drawn to its metrics, for every device that lacks it.
+   A browser fetches it only when text on the page uses it. */
+@font-face {
+  font-family: Selawik;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/selawik.woff2") format("woff2");
+}
+@font-face {
+  font-family: Selawik;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/selawik-bold.woff2") format("woff2");
+}
+
 :root {
   --blue-40: #45a1ff;
   --blue-50: #0a84ff;
@@ -328,10 +344,58 @@
   --primary-bg: #c0c0c0;
   --primary-fg: #000;
   --primary-border: none;
-  --primary-shadow: 0 0 0 1px #000, var(--button-shadow);
+  /* The default button's black frame is inside its own box, so it is as
+     big as the buttons beside it; the bevel steps in a pixel for it. */
+  --primary-shadow:
+    inset -2px -2px #000, inset 1px 1px #000, inset 2px 2px #fff,
+    inset -3px -3px #808080, inset 3px 3px #dfdfdf;
   --danger-bg: var(--primary-bg);
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
+  /* A window: grey, raised by the button's bevel, with a navy caption
+     fading to blue inside the frame. Nothing dims the page behind it. */
+  --face: #c0c0c0;
+  --window-bg: var(--face);
+  --window-border: none;
+  --window-radius: 0;
+  --window-shadow: var(--button-shadow);
+  --window-frame: 3px;
+  --window-body-bg: var(--face);
+  --window-body-border: none;
+  --window-body-shadow: none;
+  --caption-inset: 3px;
+  --caption-h: 1.375rem;
+  --caption-bg: linear-gradient(90deg, #000080, #1084d0);
+  --caption-fg: #fff;
+  --caption-radius: 0;
+  --caption-font: 700 var(--fs-sm) / 1 var(--font-family);
+  --caption-text-shadow: none;
+  --list-edge: none;
+  --list-shadow: var(--field-shadow);
+  /* A group box's etched edge is a grey line and a white one, both in the
+     border (a fieldset leaves its caption's gap only in the border). */
+  --group-edge-w: 2px;
+  --group-edge: 2px solid #808080;
+  --group-edge-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5'%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M0 0h5v5H0V2h2v1h1V2H0'/%3E%3Cpath fill='%23808080' fill-rule='evenodd' d='M0 0h4v4H0V1h1v2h2V1H0'/%3E%3C/svg%3E")
+    2;
+  --group-radius: 0;
+  --group-caption-fg: inherit;
+  /* Tabs: raised like a button on three sides, the open one two pixels
+     taller and joined to a raised page. */
+  --tab-bg: var(--face);
+  --tab-edge: none;
+  --tab-radius: 3px 3px 0 0;
+  --tab-shadow:
+    inset -1px 0 #000, inset 1px 1px #dfdfdf, inset -2px 0 #808080,
+    inset 2px 2px #fff;
+  --tab-open-bg: var(--face);
+  --tab-open-edge: none;
+  --tab-open-shadow: var(--tab-shadow);
+  --tab-hover-shadow: var(--tab-shadow);
+  --tab-page-bg: var(--face);
+  --tab-page-edge: none;
+  --tab-page-shadow: var(--button-shadow);
+  --tab-join: 2px;
 }
 :root[data-theme="millennial"] {
   --selected-bg: #316ac5;
@@ -364,6 +428,56 @@
   --danger-bg: var(--primary-bg);
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
+  /* A window: a beige body in a blue frame, under a tall blue caption with
+     rounded top corners. */
+  --face: #ece9d8;
+  --window-bg: var(--face);
+  --window-border: none;
+  --window-radius: 8px 8px 0 0;
+  --window-shadow:
+    inset -1px -1px #00138c, inset 1px 1px #0831d9, inset -2px -2px #001ea0,
+    inset 2px 2px #166aee, inset -3px -3px #003bda, inset 3px 3px #0855dd;
+  --window-frame: 3px;
+  --window-body-bg: var(--face);
+  --window-body-border: none;
+  --window-body-shadow: none;
+  --caption-inset: 0px;
+  --caption-h: 1.875rem;
+  --caption-bg: linear-gradient(
+    #0997ff,
+    #0053ee 8%,
+    #0050ee 40%,
+    #06f 88%,
+    #06f 93%,
+    #005bff 95%,
+    #003dd7 96%,
+    #003dd7
+  );
+  --caption-fg: #fff;
+  --caption-radius: 8px 8px 0 0;
+  --caption-font: 700 0.8125rem / 1 "Trebuchet MS", Verdana, sans-serif;
+  --caption-text-shadow: 1px 1px #0f1089;
+  --list-edge: var(--control-border);
+  --list-shadow: none;
+  --group-edge-w: 1px;
+  --group-edge: 1px solid #d0d0bf;
+  --group-edge-image: none;
+  --group-radius: 4px;
+  --group-caption-fg: #0046d5;
+  /* Tabs: pale and shaded, the one under the pointer and the open one
+     lit by an orange line along the top; the page a near-white panel. */
+  --tab-bg: linear-gradient(#fff, #fafaf9 26%, #f0f0ea 95%, #ecebe5);
+  --tab-edge: 1px solid #91a7b4;
+  --tab-radius: 3px 3px 0 0;
+  --tab-shadow: none;
+  --tab-open-bg: #fcfcfe;
+  --tab-open-edge: 1px solid #919b9c;
+  --tab-open-shadow: inset 0 2px #ffc73c;
+  --tab-hover-shadow: inset 0 2px #ffc73c;
+  --tab-page-bg: #fcfcfe;
+  --tab-page-edge: 1px solid #919b9c;
+  --tab-page-shadow: 1px 2px 2px rgb(208 206 191 / 75%);
+  --tab-join: 1px;
 }
 /* The plain list highlight: a blue fill with white text, no border. */
 :root[data-theme="aero"] {
@@ -373,7 +487,7 @@
   --grey-20: #f0f0f0;
   --grey-30: #a9c4e0;
   --radius: 0.4rem;
-  --font-family: "Segoe UI", Tahoma, sans-serif;
+  --font-family: "Segoe UI", Selawik, Tahoma, sans-serif;
   /* Fields: a darker top edge fading to pale sides and bottom (set per side
      below), 1px corners. */
   --control-border: 1px solid #abadb3;
@@ -407,6 +521,49 @@
   --danger-bg: var(--primary-bg);
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
+  /* A window: a frame of blue glass with its diagonal sheen, blurring what
+     is behind it, around a white body. The caption is the glass itself. */
+  --face: #f0f0f0;
+  --window-bg:
+    linear-gradient(transparent 20%, #ffffff4d 40%, transparent 41%),
+    linear-gradient(90deg, #ffffff40, #0000000f, #ffffff20),
+    rgb(69 128 196 / 60%);
+  --window-border: 1px solid rgb(0 0 0 / 70%);
+  --window-radius: 6px;
+  --window-shadow: inset 0 0 0 1px #fffa, 2px 2px 10px 1px rgb(0 0 0 / 50%);
+  --window-frame: 7px;
+  --window-body-bg: #fff;
+  --window-body-border: 1px solid rgb(0 0 0 / 70%);
+  --window-body-shadow: 0 0 0 1px #fff9;
+  --caption-inset: 0px;
+  --caption-h: 1.75rem;
+  --caption-bg: transparent;
+  --caption-fg: #000;
+  --caption-radius: 6px 6px 0 0;
+  --caption-font: 400 var(--fs-sm) / 1 var(--font-family);
+  --caption-text-shadow: 0 0 10px #fff, 0 0 6px #fff;
+  --list-edge: var(--control-border);
+  --list-shadow: none;
+  --group-edge-w: 1px;
+  --group-edge: 1px solid #cdd7db;
+  --group-edge-image: none;
+  --group-radius: 3px;
+  --group-caption-fg: inherit;
+  /* Tabs: shaded like the buttons, the open one white and joined to a
+     white page. */
+  --tab-bg: var(--button-face);
+  --tab-edge: 1px solid #898c95;
+  --tab-radius: 2px 2px 0 0;
+  --tab-shadow: inset 0 0 0 1px #fff;
+  --tab-open-bg: #fff;
+  --tab-open-edge: 1px solid #898c95;
+  --tab-open-shadow: none;
+  --tab-hover-bg: var(--button-hover-bg);
+  --tab-hover-shadow: inset 0 0 0 1px #fff;
+  --tab-page-bg: #fff;
+  --tab-page-edge: 1px solid #898c95;
+  --tab-page-shadow: none;
+  --tab-join: 1px;
 }
 :root[data-theme="aero"]
   :where(
@@ -684,16 +841,26 @@ main {
 /* Wide screens list the tabs down the side, as most settings pages do, so
    all six stay on show beside a column of the same width as before. The
    nav spans the alert's row and the section's; with no alert, the section
-   takes the first. */
+   takes the first. The windowed themes keep their tabs on top. */
 @media (min-width: 60rem) {
-  .options-page {
+  :root:not(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-page {
     grid-template-columns: 11rem minmax(0, 40rem);
     column-gap: var(--space-8);
     width: min(100%, 53rem);
   }
   /* Down the side the strip is a list box: one frame, a row line under
      each tab but the last. */
-  .options-nav {
+  :root:not(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-nav {
     position: sticky;
     top: calc(var(--toolbar-h) + var(--space-4));
     grid-row: span 2;
@@ -702,17 +869,35 @@ main {
     padding: 0;
     border: var(--frame);
   }
-  .options-page > :not(.options-nav) {
+  :root:not(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-page
+    > :not(.options-nav) {
     grid-column: 2;
   }
-  .options-nav a {
+  :root:not(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-nav
+    a {
     justify-content: flex-start;
     margin: 0;
     border: 0;
     border-bottom: var(--border);
     text-align: start;
   }
-  .options-nav a:last-child {
+  :root:not(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-nav
+    a:last-child {
     border-bottom: 0;
   }
 }
@@ -878,6 +1063,103 @@ html[data-route="options"] body {
   border-radius: var(--button-radius);
   box-shadow: var(--button-shadow);
   text-decoration: none;
+}
+
+/* The windowed themes draw Options as their own settings window: the
+   window's face around a row of tabs, the open tab two pixels taller and
+   joined to its page (--tab-join is the page edge it covers), and each
+   group a group box with its caption on the line. A message moves above
+   the tabs so nothing comes between a tab and its page. */
+:root:is(
+    [data-theme="classic"],
+    [data-theme="millennial"],
+    [data-theme="aero"]
+  )[data-route="options"]
+  body {
+  background: var(--face);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-page
+  > [role="alert"] {
+  order: -1;
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-nav {
+  position: relative;
+  z-index: 1;
+  align-items: flex-end;
+  margin-bottom: calc(-1 * var(--space-4));
+  padding: 0 var(--space-1);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-nav
+  a {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--button-fg);
+  background: var(--tab-bg);
+  border: var(--tab-edge);
+  border-bottom: 0;
+  border-radius: var(--tab-radius);
+  box-shadow: var(--tab-shadow);
+}
+@media (pointer: fine) and (hover: hover) {
+  :root:is(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-nav
+    a:hover {
+    background: var(--tab-hover-bg, var(--tab-bg));
+    box-shadow: var(--tab-hover-shadow);
+  }
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-nav
+  a[aria-current="true"] {
+  position: relative;
+  z-index: 1;
+  margin: -2px calc(-1 * var(--space-half)) calc(-1 * var(--tab-join));
+  padding: calc(var(--space-1) + 2px) calc(var(--space-2) + var(--space-half))
+    calc(var(--space-1) + var(--tab-join));
+  color: var(--button-fg);
+  background: var(--tab-open-bg);
+  border: var(--tab-open-edge);
+  border-bottom: 0;
+  box-shadow: var(--tab-open-shadow);
+}
+@media (pointer: coarse), (hover: none) {
+  :root:is(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    .options-nav
+    a[aria-current="true"] {
+    min-height: calc(var(--touch) + 2px + var(--tab-join));
+  }
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-section {
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  background: var(--tab-page-bg);
+  border: var(--tab-page-edge);
+  box-shadow: var(--tab-page-shadow);
+}
+/* The caption sits across the group's top edge, its middle on the line,
+   on the page's colour so the line stops either side of it. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .options-card
+  > h2:first-child {
+  justify-self: start;
+  margin: calc(-1 * (var(--space-3) + var(--group-edge-w) / 2) - 0.5lh) 0 0
+    calc(var(--space-2) - var(--space-4));
+  padding: 0 var(--space-1);
+  color: var(--group-caption-fg);
+  font-weight: 400;
+  background: var(--tab-page-bg);
 }
 
 /* A column: the page bar, a message when there is one, and the table,
@@ -1676,6 +1958,346 @@ dialog.app-dialog .app-dialog-actions .app-dialog-danger {
   border: var(--danger-border);
   box-shadow: var(--primary-shadow);
 }
+/* The caption's close box: only the windowed themes draw one (below). */
+dialog.app-dialog .app-dialog-close {
+  display: none;
+}
+
+/* The windowed themes (classic, millennial, aero) draw a dialog as a
+   window of the desktop they copy: a frame (--window-*) around a body, the
+   title in a caption band across the top of the frame (--caption-*), and
+   nothing dimming the page behind. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  dialog.app-dialog {
+  padding: calc(var(--caption-h) + var(--caption-inset) + 1px)
+    var(--window-frame) var(--window-frame);
+  background: var(--window-bg);
+  border: var(--window-border);
+  border-radius: var(--window-radius);
+  box-shadow: var(--window-shadow);
+}
+:root[data-theme="aero"] dialog.app-dialog {
+  backdrop-filter: blur(4px);
+}
+:root:is(
+    [data-theme="classic"],
+    [data-theme="millennial"],
+    [data-theme="aero"],
+    [data-theme="high-contrast"]
+  )
+  dialog.app-dialog::backdrop {
+  background: transparent;
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  dialog.app-dialog
+  form {
+  padding: var(--space-4);
+  background: var(--window-body-bg);
+  border: var(--window-body-border);
+  box-shadow: var(--window-body-shadow);
+}
+/* The title, and an account page's heading, move into the caption. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  dialog.app-dialog
+  .app-dialog-title,
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  :is(.account-form, .account-result)
+  > h1:first-child {
+  position: absolute;
+  top: var(--caption-inset);
+  left: var(--caption-inset);
+  right: var(--caption-inset);
+  display: flex;
+  align-items: center;
+  height: var(--caption-h);
+  margin: 0;
+  padding: 0 2.5rem 0 var(--space-2);
+  overflow: hidden;
+  color: var(--caption-fg);
+  font: var(--caption-font);
+  text-shadow: var(--caption-text-shadow);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--caption-bg);
+  border-radius: var(--caption-radius);
+}
+/* The close box is a mouse's: too small for a finger, which has Cancel
+   and a tap outside the dialog. */
+@media (pointer: fine) and (hover: hover) {
+  :root:is(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    )
+    dialog.app-dialog
+    .app-dialog-close {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    font: 700 1rem / 1 sans-serif;
+  }
+}
+:root[data-theme="classic"] dialog.app-dialog .app-dialog-close {
+  top: calc(var(--caption-inset) + (var(--caption-h) - 1rem) / 2);
+  right: calc(var(--caption-inset) + 2px);
+  width: 1.125rem;
+  height: 1rem;
+  color: #000;
+  background: var(--face);
+  border: 0;
+  border-radius: 0;
+  box-shadow: var(--button-shadow);
+}
+:root[data-theme="millennial"] dialog.app-dialog .app-dialog-close {
+  top: calc((var(--caption-h) - 1.3125rem) / 2);
+  right: 5px;
+  width: 1.3125rem;
+  height: 1.3125rem;
+  color: #fff;
+  background: radial-gradient(
+    circle at 90% 90%,
+    #cc4600,
+    #dc6527 55%,
+    #cd7546 70%,
+    #ffccb2 90%,
+    #fff
+  );
+  border: 1px solid #fff;
+  border-radius: 3px;
+  box-shadow: none;
+}
+:root[data-theme="aero"] dialog.app-dialog .app-dialog-close {
+  top: 0;
+  right: 6px;
+  width: 2.6875rem;
+  height: 1.125rem;
+  color: #fff;
+  text-shadow: 0 0 2px #000;
+  background: linear-gradient(
+    #e8a493,
+    #d0715f 45%,
+    #b2391a 50%,
+    #ce6043 75%,
+    #e8a493
+  );
+  border: 1px solid rgb(0 0 0 / 70%);
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+  box-shadow: inset 0 0 0 1px #fff6;
+}
+/* Aero sets a dialog's buttons on a grey strip under its white body. */
+:root[data-theme="aero"] dialog.app-dialog .app-dialog-actions {
+  margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4);
+  background: var(--face);
+  border-top: 1px solid #dfdfdf;
+}
+/* Modern draws its content dialog: no caption, a one-pixel accent edge, a
+   larger title, buttons sharing the row, and a white veil over the page. */
+:root[data-theme="modern"] dialog.app-dialog {
+  padding: var(--space-6);
+  border: 1px solid #0078d7;
+  box-shadow: none;
+}
+:root[data-theme="modern"] dialog.app-dialog::backdrop {
+  background: rgb(255 255 255 / 60%);
+}
+:root[data-theme="modern"] dialog.app-dialog .app-dialog-title {
+  font-weight: 400;
+}
+:root[data-theme="modern"] dialog.app-dialog .app-dialog-actions {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  margin-top: var(--space-2);
+}
+/* High contrast: the two-pixel edge is the dialog's outline, so no shadow;
+   a rule sets its title apart. */
+:root[data-theme="high-contrast"] dialog.app-dialog {
+  box-shadow: none;
+}
+:root[data-theme="high-contrast"] dialog.app-dialog .app-dialog-title {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: var(--border);
+}
+
+/* An account page's card is a window too, titled by its heading. Classic
+   and millennial bodies are the frame's own colour; aero's glass is the
+   card's border, its white body the padding box. */
+:root:is([data-theme="classic"], [data-theme="millennial"])
+  :is(.account-form, .account-result):has(> h1:first-child) {
+  position: relative;
+  padding: calc(var(--caption-h) + var(--caption-inset) + var(--space-6))
+    var(--space-6) var(--space-6);
+  background: var(--window-bg);
+  border: var(--window-border);
+  border-radius: var(--window-radius);
+  box-shadow: var(--window-shadow);
+}
+:root[data-theme="aero"]
+  :is(.account-form, .account-result):has(> h1:first-child) {
+  position: relative;
+  padding: var(--space-6);
+  background: var(--window-body-bg) padding-box;
+  border: var(--window-frame) solid rgb(69 128 196 / 60%);
+  border-top-width: var(--caption-h);
+  border-radius: var(--window-radius);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 70%),
+    inset 0 0 0 1px rgb(0 0 0 / 70%),
+    2px 2px 10px 1px rgb(0 0 0 / 50%);
+}
+:root[data-theme="aero"] :is(.account-form, .account-result) > h1:first-child {
+  top: calc(-1 * var(--caption-h));
+}
+
+/* The Discover and Edit feed form is set on the window's body colour, its
+   list of found feeds a white list box, and its email group a group box. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .feed-discovery-form {
+  background: var(--window-body-bg);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .found-feeds {
+  padding: 2px;
+  background: #fff;
+  border: var(--list-edge);
+  box-shadow: var(--list-shadow);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .found-feeds
+  button {
+  background: #fff;
+}
+/* Hints and the scope line are body text on a grey face: the muted grey
+   is too faint there. */
+:root[data-theme="classic"] :is(.feed-discovery-form, .options-section) {
+  --muted: var(--grey-90);
+}
+/* A group box: the theme's edge, its caption on the line. A fieldset
+   leaves the caption's gap in its border by itself. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  :is(.discovery-email, .options-card) {
+  border: var(--group-edge);
+  border-image: var(--group-edge-image);
+  border-radius: var(--group-radius);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .discovery-email {
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  .discovery-email
+  legend {
+  padding: 0 var(--space-1);
+  color: var(--group-caption-fg);
+}
+:root[data-theme="modern"] .discovery-email legend {
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-lg);
+}
+/* Aero's form is a wizard page: its Cancel and Subscribe sit on a grey
+   command strip at the foot of the pane, there even while the fields
+   scroll. A column of flex items rather than grid rows, so the strip can
+   take the free space above it. */
+:root[data-theme="aero"] .feed-discovery-form {
+  --gutter: max(var(--space-4), (100cqi - 32rem) / 2);
+
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+:root[data-theme="aero"] .feed-discovery-form > * {
+  flex: none;
+}
+:root[data-theme="aero"] .feed-discovery-form > .field-action {
+  align-self: flex-start;
+}
+:root[data-theme="aero"] .feed-discovery-form > .form-actions {
+  position: sticky;
+  bottom: 0;
+  margin: auto calc(-1 * var(--gutter)) 0;
+  padding: var(--space-3) var(--gutter);
+  background: var(--face);
+  border-top: 1px solid #dfdfdf;
+}
+
+/* Classic's text buttons are drawn as its own are. One is 50 by 14 dialog
+   units, 6.8 times the system font's size across, whatever its label, so
+   a row of them lines up. */
+:root[data-theme="classic"]
+  :is(
+    .app-dialog-actions,
+    .form-actions,
+    .discovery-email-actions,
+    .password-field,
+    .feed-discovery-form,
+    .options-card
+  )
+  > :is(button, a.card-action) {
+  min-width: 6.8em;
+}
+/* Pressed, the bevel turns inside out and the label moves a pixel down
+   and right. Zero specificity, like the button rule it follows, so a
+   button that draws its own keeps its look. */
+:where(:root[data-theme="classic"] button:not(:disabled):active) {
+  padding: calc(var(--space-1) + 1px) calc(var(--space-3) - 1px)
+    calc(var(--space-1) - 1px) calc(var(--space-3) + 1px);
+  box-shadow:
+    inset -1px -1px #fff,
+    inset 1px 1px #000,
+    inset -2px -2px #dfdfdf,
+    inset 2px 2px #808080;
+}
+:root[data-theme="classic"]
+  :is(
+    .button-primary,
+    .app-dialog-danger,
+    .tree-empty button,
+    .dashboard-alert button,
+    .update-banner button
+  ):not(:disabled):active {
+  box-shadow:
+    inset 2px 2px #000,
+    inset -1px -1px #000,
+    inset -2px -2px #fff,
+    inset 3px 3px #808080,
+    inset -3px -3px #dfdfdf;
+}
+/* Focus is a dotted rectangle inside the bevel; a disabled label is
+   etched, a white copy a pixel under the grey. */
+:where(:root[data-theme="classic"] button:focus-visible) {
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
+:where(:root[data-theme="classic"] button:disabled) {
+  text-shadow: 1px 1px 0 #fff;
+}
+/* Single-pane layout: SINGLE_PANE_QUERY in src/spa/panes.ts. A dialog's
+   buttons share its row in equal parts, as a phone's own dialogs' do, and
+   an account window's body keeps a narrower margin. */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 1100px) {
+  :root:not([data-theme="auto"]) dialog.app-dialog .app-dialog-actions {
+    display: grid;
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+  }
+  :root:is([data-theme="classic"], [data-theme="millennial"])
+    :is(.account-form, .account-result):has(> h1:first-child) {
+    padding: calc(var(--caption-h) + var(--caption-inset) + var(--space-4))
+      var(--space-4) var(--space-4);
+  }
+  :root[data-theme="aero"]
+    :is(.account-form, .account-result):has(> h1:first-child) {
+    padding: var(--space-4);
+  }
+}
 /* The long-press menu (#721) starts a text selection mid-hold, so the
    interactive rows suppress it (not the reader pane, where selecting text is
    the point). Tree rows are buttons with no platform menu to lose. */
@@ -2356,6 +2978,9 @@ img.skeleton-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+  /* Rows at their content's height: the found-feeds list scrolls, so as
+     an auto row it shrank to nothing in a form taller than its pane. */
+  grid-auto-rows: max-content;
   flex: 1;
   min-height: 0;
   align-content: start;

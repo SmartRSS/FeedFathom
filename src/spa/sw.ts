@@ -830,18 +830,19 @@ async function completeCachedShell(cache: Cache) {
 }
 
 // Hash-named assets would otherwise pile up, a set per deploy. What the
-// served shell can load stays: the assets its HTML names, and the lazy chunks
-// its scripts name in turn (as "assets/<file>"). A newer shell's assets are
-// stored after this runs, so the cache holds the served deploy and the next.
+// served shell can load stays: the assets its HTML names, and what its
+// scripts and stylesheets name in turn (as "assets/<file>"): lazy chunks,
+// fonts. A newer shell's assets are stored after this runs, so the cache
+// holds the served deploy and the next.
 async function pruneShell(cache: Cache, assetUrls: string[]) {
   const keep = new Set(assetUrls);
-  for (const url of assetUrls.filter((asset) => asset.endsWith(".js"))) {
-    // oxlint-disable-next-line no-await-in-loop -- a handful of entry scripts
-    const script = await cache.match(url);
-    if (!script) return; // its chunks can't be told from a past deploy's
-    // oxlint-disable-next-line no-await-in-loop -- a handful of entry scripts
-    for (const [chunk] of (await script.text()).matchAll(/assets\/[\w.-]+/g))
-      keep.add(`/${chunk}`);
+  for (const url of assetUrls.filter((asset) => /\.(?:js|css)$/.test(asset))) {
+    // oxlint-disable-next-line no-await-in-loop -- a handful of entry files
+    const file = await cache.match(url);
+    if (!file) return; // what it names can't be told from a past deploy's
+    // oxlint-disable-next-line no-await-in-loop -- a handful of entry files
+    for (const [named] of (await file.text()).matchAll(/assets\/[\w.-]+/g))
+      keep.add(`/${named}`);
   }
   await deleteWhere(
     cache,
