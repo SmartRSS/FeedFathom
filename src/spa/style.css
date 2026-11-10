@@ -321,7 +321,12 @@
   --grey-20: #c0c0c0;
   --grey-30: #808080;
   --radius: 0;
-  --font-family: "MS Sans Serif", Tahoma, sans-serif;
+  /* Without the system's own fonts, an Arial-shaped grotesque, which they
+     resemble: the generic sans-serif is whatever the desktop chose, often
+     a round, wide face that looks nothing like them. */
+  --font-family:
+    "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Arial, "Liberation Sans",
+    Arimo, sans-serif;
   /* Two-pixel bevels drawn with inset shadows: fields sunken, buttons
      raised, the default button framed in black. */
   --control-border: none;
