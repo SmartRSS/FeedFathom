@@ -8,7 +8,7 @@ import { feedFilterBox } from "./preferences.ts";
 import { ForEachNode, TreeItem } from "./tree-item.tsx";
 import addFolderRaw from "./assets/icons/Document/folder-add-fill.svg?raw";
 import addRaw from "./assets/icons/System/add-box-fill.svg?raw";
-import detailsRaw from "./assets/icons/System/information-fill.svg?raw";
+import editRaw from "./assets/icons/System/pencil-fill.svg?raw";
 import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
 
@@ -27,6 +27,8 @@ export type FeedsFailure = {
 export function SourcesPane(props: {
   addSourceRef(element: HTMLButtonElement): void;
   admin: boolean;
+  // The row an open context menu acts on, which need not be the selection.
+  contextKey: string | undefined;
   // The selection the toolbar can edit or delete.
   editable: boolean;
   failure: FeedsFailure | undefined;
@@ -67,36 +69,49 @@ export function SourcesPane(props: {
       <div class="toolbar">
         <button
           aria-label="add source"
+          title="Add feed"
           ref={props.addSourceRef}
           onClick={() => props.onAddSource()}
         >
           <Icon raw={addRaw} />
+          <span class="toolbar-label">Add feed</span>
         </button>
-        <button aria-label="add folder" onClick={() => props.onAddFolder()}>
+        <button
+          aria-label="add folder"
+          title="Add folder"
+          onClick={() => props.onAddFolder()}
+        >
           <Icon raw={addFolderRaw} />
+          <span class="toolbar-label">Add folder</span>
         </button>
         <button
           aria-label="source properties"
+          title="Edit"
           disabled={!props.editable}
           ref={props.propertiesRef}
           onClick={() => props.onProperties()}
         >
-          <Icon raw={detailsRaw} />
+          <Icon raw={editRaw} />
+          <span class="toolbar-label">Edit</span>
         </button>
         <button
           aria-label="delete source"
+          title="Delete"
           disabled={!props.editable}
           onClick={() => props.onDelete()}
         >
           <Icon raw={removeRaw} />
+          <span class="toolbar-label">Delete</span>
         </button>
         <span />
         <button
           aria-label="options"
+          title="Options"
           class="only-mobile"
           onClick={() => props.onOptions()}
         >
           <Icon raw={settingsRaw} />
+          <span class="toolbar-label">Options</span>
         </button>
       </div>
       <Show
@@ -198,6 +213,7 @@ export function SourcesPane(props: {
             <ForEachNode each={props.visibleTree}>
               {(node) => (
                 <TreeItem
+                  contextKey={props.contextKey}
                   focused={tabStop() === treeNodeKey(node())}
                   onContext={props.onContext}
                   focusedKey={tabStop()}

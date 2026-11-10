@@ -9,7 +9,7 @@ import {
 import { generateBoundaryDates, getDateGroup } from "./date-group.ts";
 import { FailingFeedPanel, type RetryState } from "./failure-details.tsx";
 import { isEmptyFolder, type ListNode } from "./feed-tree.ts";
-import { formatDate, formatDay } from "./format-date.ts";
+import { formatDate, formatDay, formatRowDate } from "./format-date.ts";
 import { Icon } from "./icon.tsx";
 import { BackButton } from "./page-toolbar.tsx";
 import { articleSearchBox } from "./preferences.ts";
@@ -17,7 +17,7 @@ import checkCircleRaw from "./assets/icons/System/check-circle-fill.svg?raw";
 import dotCircleRaw from "./assets/icons/System/dot-circle-fill.svg?raw";
 import refreshRaw from "./assets/icons/System/refresh-fill.svg?raw";
 import removeRaw from "./assets/icons/System/delete-bin-7-fill.svg?raw";
-import selectAllRaw from "./assets/icons/System/check-double-fill.svg?raw";
+import selectAllRaw from "./assets/icons/System/list-check-fill.svg?raw";
 import settingsRaw from "./assets/icons/System/settings-5-fill.svg?raw";
 
 const ARTICLE_SKELETON_TITLES = [
@@ -125,10 +125,12 @@ export function ArticlesPane(props: {
         <BackButton backPane={props.backPane} />
         <button
           aria-label="select all"
+          title="Select all"
           disabled={props.rows.length === 0}
           onClick={() => props.onSelectAll()}
         >
           <Icon raw={selectAllRaw} />
+          <span class="toolbar-label">Select all</span>
         </button>
         <button
           aria-label={props.allSelectedRead ? "Mark unread" : "Mark read"}
@@ -140,16 +142,29 @@ export function ArticlesPane(props: {
               will produce, so the glyph flips with it (#766). Reader
               convention, not email's: neither reads as a mail action. */}
           <Icon raw={props.allSelectedRead ? dotCircleRaw : checkCircleRaw} />
+          <span class="toolbar-label">
+            {props.allSelectedRead ? "Mark unread" : "Mark read"}
+          </span>
         </button>
+        {/* Delete stands apart from the harmless actions on either side. */}
+        <span aria-hidden="true" class="toolbar-separator" />
         <button
           aria-label="delete articles"
+          title="Delete selected"
           disabled={props.selectedCount === 0}
           onClick={(event) => props.onDelete(event)}
         >
           <Icon raw={removeRaw} />
+          <span class="toolbar-label">Delete</span>
         </button>
-        <button aria-label="refresh" onClick={() => props.onRefresh()}>
+        <span aria-hidden="true" class="toolbar-separator" />
+        <button
+          aria-label="refresh"
+          title="Refresh"
+          onClick={() => props.onRefresh()}
+        >
           <Icon raw={refreshRaw} />
+          <span class="toolbar-label">Refresh</span>
         </button>
         <span />
         {/* A visible label, not just an aria-label: among icon buttons a bare
@@ -177,10 +192,12 @@ export function ArticlesPane(props: {
         </label>
         <button
           aria-label="options"
+          title="Options"
           class="only-mobile"
           onClick={() => props.onOptions()}
         >
           <Icon raw={settingsRaw} />
+          <span class="toolbar-label">Options</span>
         </button>
       </div>
       {/* Names the open feed or folder where the list fills the screen and
@@ -272,7 +289,7 @@ export function ArticlesPane(props: {
                     </span>
                     <span class="details">
                       <span class="skeleton-text">Jane Doe</span>
-                      <time class="skeleton-text">Jan 1, 2026</time>
+                      <time class="skeleton-text">Jan 1</time>
                     </span>
                   </div>
                 )}
@@ -318,8 +335,13 @@ export function ArticlesPane(props: {
                   <span class="title">{article.title}</span>
                   <span class="details">
                     <span>{article.author}</span>
-                    <time datetime={article.publishedAt || undefined}>
-                      {formatDate(article.publishedAt)}
+                    {/* Short in the row, where the date band above already
+                        names the period; the full stamp is the tooltip. */}
+                    <time
+                      datetime={article.publishedAt || undefined}
+                      title={formatDate(article.publishedAt)}
+                    >
+                      {formatRowDate(article.publishedAt)}
                     </time>
                   </span>
                 </a>

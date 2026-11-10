@@ -379,8 +379,9 @@ export function Dashboard(props: {
   const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
+  // `key` names the row the menu was opened on, so the tree can mark it.
   const [contextMenu, setContextMenu] = createSignal<
-    { items: ContextMenuItem[]; x: number; y: number } | undefined
+    { items: ContextMenuItem[]; key: string; x: number; y: number } | undefined
   >();
 
   // "Try again" on a failing feed: the fetch runs in the worker, so the tree
@@ -1201,7 +1202,7 @@ export function Dashboard(props: {
               onSelect: () => void removeNode(node),
             },
           ];
-    setContextMenu({ items, x, y });
+    setContextMenu({ items, key: treeNodeKey(node), x, y });
   }
   async function removeNode(node = editableNode()) {
     if (!node) return;
@@ -1315,6 +1316,7 @@ export function Dashboard(props: {
         <SourcesPane
           addSourceRef={(element) => (addSourceButton = element)}
           admin={isAdmin()}
+          contextKey={contextMenu()?.key}
           editable={Boolean(editableNode())}
           failure={treeFailed()}
           filter={treeFilter()}

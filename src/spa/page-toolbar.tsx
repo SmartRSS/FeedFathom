@@ -12,6 +12,7 @@ export function PageToolbar(props: {
     <div class="toolbar page-toolbar">
       <a
         aria-label="Home"
+        title="Back to feeds"
         class="toolbar-link"
         href="/"
         onClick={(event) => {
@@ -33,10 +34,12 @@ export function BackButton(props: { always?: boolean; backPane(): void }) {
   return (
     <button
       aria-label="back"
+      title="Back"
       classList={{ "only-mobile": !props.always }}
       onClick={props.backPane}
     >
       <Icon raw={backRaw} />
+      <span class="toolbar-label">Back</span>
     </button>
   );
 }

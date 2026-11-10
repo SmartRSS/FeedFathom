@@ -12,6 +12,10 @@
   /* The hairline's width on its own, for heights that must count it. */
   --border-w: 1px;
   --border: var(--border-w) solid var(--grey-30);
+  /* The edge of a structure: a pane, a bar, a menu, a group of settings.
+     Each theme draws it with the line it already has; the auto theme
+     alone gives it a field's stronger edge, below. */
+  --frame: var(--border);
   --blue: var(--blue-60);
   --muted: var(--grey-50);
   /* Kept as their own tokens rather than reusing --blue-60 so selection
@@ -19,7 +23,7 @@
   --selected-bg: var(--blue-60);
   --selected-fg: var(--grey-10);
   --selected-border: transparent;
-  --radius: 0.5rem;
+  --radius: 0.1875rem;
   --font-family: sans-serif;
   /* One spacing and type scale for the app's own chrome. A one-off value
      in between two steps is a sign it should snap to one of them. */
@@ -111,13 +115,19 @@
      bottom border, so every pane's toolbar is the same height whatever it
      holds. */
   --toolbar-pad: var(--space-1);
+  /* The list filter's height inside a toolbar. A mouse in comfortable
+     density gets it at the icon buttons' height, below, so the bar is no
+     taller than they need. */
+  --toolbar-control-h: var(--control-h);
   --toolbar-h: calc(
-    max(var(--toolbar-button), var(--control-h)) + 2 * var(--toolbar-pad) +
-      var(--border-w)
+    max(var(--toolbar-button), var(--toolbar-control-h)) + 2 *
+      var(--toolbar-pad) + var(--border-w)
   );
   /* The filter or search row above the tree and the list: a field and the
-     space around it. Panes without one offset their placeholder by it. */
-  --search-row-h: calc(var(--control-h) + 2 * var(--space-2));
+     space above and below it. Panes without one offset their placeholder
+     by it. */
+  --search-row-pad: var(--space-2);
+  --search-row-h: calc(var(--control-h) + 2 * var(--search-row-pad));
   /* A tree row under a mouse: 28px, 16px text with room around it. Touch
      raises it to a full target. */
   --row-h: 1.75rem;
@@ -168,6 +178,11 @@
   /* Read-only fields: #f9f9fa barely differed from the white page, so only
      the dashed edge said "read-only"; the surface grey does too. */
   --field-recessed: var(--grey-20);
+  /* Row lines one grey step darker than the base palette's, and structural
+     edges as strong as a field's (3:1 on the page): a pane or a bar is
+     told from its neighbour by its line, not by a faint change of fill. */
+  --border: var(--border-w) solid var(--grey-40);
+  --frame: var(--control-border);
 }
 /* The OS accent, where the browser knows it. The bare AccentColor and
    AccentColorText pair is not used: Chromium resolves it to #0075ff with
@@ -217,6 +232,9 @@
        the dark canvas, clears 4.5:1 for text and 3:1 for an edge. Two
        tokens a hair apart read as a mistake. */
     --control-border: 1px solid var(--grey-50);
+    /* --grey-40 is that same grey here; row lines take the quieter tone
+       between surface and text. */
+    --border: var(--border-w) solid var(--grey-30);
     /* Status chips: a deep tone of each hue behind a light one, instead of
        the light pastels, which were the brightest things on a dark page.
        Text on each is above 8.5:1. */
@@ -575,7 +593,7 @@ main {
   width: min(100%, 32rem);
   margin: 8vh auto;
   padding: var(--space-8);
-  border: var(--border);
+  border: var(--frame);
   border-radius: var(--radius);
 }
 .account-result > * {
@@ -615,6 +633,8 @@ main {
   width: var(--toolbar-button);
   height: var(--toolbar-button);
   color: inherit;
+  border: 1px solid transparent;
+  border-radius: var(--button-radius);
 }
 .toolbar-link .icon {
   width: max(1.25rem, 20px);
@@ -624,27 +644,33 @@ main {
 .options-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-6);
+  gap: var(--space-4);
   align-content: start;
   width: min(100%, 40rem);
-  margin: 2rem auto;
+  /* One step from the page bar, as the side tabs keep when they stick. */
+  margin: var(--space-4) auto;
 }
 .options-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  /* Room for the tabs' overlap (below), so the strip's own box holds
+     every tab whole. */
+  padding: var(--border-w) 0 0 var(--border-w);
 }
 /* Tabs keep their own width, each whole, and wrap where a row can't hold
    them all: none is stretched alone across a row, and none is hidden. A
    row that filled itself, or scrolled behind a fade, depended on the font
-   to leave no tab stranded or cut to a sliver. */
+   to leave no tab stranded or cut to a sliver. They are one control, so
+   they are drawn as one strip: square, and each drawn over the edge of
+   the tab before it and the row above it, so a single line runs between
+   two tabs. */
 .options-nav a {
   flex: none;
   white-space: nowrap;
   justify-content: center;
+  margin: calc(-1 * var(--border-w)) 0 0 calc(-1 * var(--border-w));
   padding: var(--space-2) var(--space-3);
-  border: var(--border);
-  border-radius: var(--radius);
+  border: var(--frame);
   text-align: center;
   text-decoration: none;
 }
@@ -665,19 +691,29 @@ main {
     column-gap: var(--space-8);
     width: min(100%, 53rem);
   }
+  /* Down the side the strip is a list box: one frame, a row line under
+     each tab but the last. */
   .options-nav {
     position: sticky;
     top: calc(var(--toolbar-h) + var(--space-4));
     grid-row: span 2;
     flex-direction: column;
     align-self: start;
+    padding: 0;
+    border: var(--frame);
   }
   .options-page > :not(.options-nav) {
     grid-column: 2;
   }
   .options-nav a {
     justify-content: flex-start;
+    margin: 0;
+    border: 0;
+    border-bottom: var(--border);
     text-align: start;
+  }
+  .options-nav a:last-child {
+    border-bottom: 0;
   }
 }
 /* The options route is the one page the document itself scrolls: #app is a
@@ -712,19 +748,20 @@ html[data-route="options"] body {
    and the empty-tree guidance's #import-opml resolves into the Data group.
    The active chip borrows the selected-row treatment, so every theme (and
    forced colors) follows without a pass of its own. */
-/* The visible section's cards, spaced like the page grid they came from. */
+/* The visible section's groups, spaced like the page grid they came from. */
 .options-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
+/* A group of settings: a frame with a caption, as tight as a form. */
 .options-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin: 0;
-  padding: var(--space-6);
-  border: var(--border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: var(--frame);
   border-radius: var(--radius);
 }
 /* The Keyboard tab, on a device with nothing but a touch screen. */
@@ -744,11 +781,46 @@ html[data-route="options"] body {
 }
 .options-card h2 {
   margin: 0;
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
 }
-/* The card's 16px gap is the only space between its parts. */
+/* The group's gap is the only space between its parts. */
 .options-card p {
   margin: 0;
+}
+/* A dropdown and a button are as wide as what they say, not as the group:
+   a stretched one reads as a text field or a banner. */
+.options-card select {
+  justify-self: start;
+  min-width: 12rem;
+  max-width: 100%;
+}
+.options-card > button,
+.options-card a.card-action {
+  justify-self: start;
+}
+/* An on/off setting: the box and its label on one line, the whole line the
+   target, as tall as a row of the tree: a full target under a finger, and
+   under a mouse close enough that a run of them reads as one list. */
+.options-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+}
+.options-check input {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+/* The tick takes the selection accent; the named themes keep the
+   browser's own check box. */
+:root[data-theme="auto"] .options-check input {
+  accent-color: var(--selected-bg);
+}
+/* Its hint starts under the label's text, not under the box. */
+.options-card .options-check + .options-hint {
+  margin-left: calc(1rem + var(--space-2));
 }
 /* A setting and the hint under it: one step apart, as a label is from its
    control, so the hint reads as part of the setting above, not the next. */
@@ -789,8 +861,8 @@ html[data-route="options"] body {
   color: var(--muted);
   font-size: var(--fs-sm);
 }
-/* Every other options card's action is a full-width button; the OPML export
-   is a link because it downloads a file. ButtonFace/ButtonText are what the
+/* Every other options group's action is a button; the OPML export is a
+   link because it downloads a file. ButtonFace/ButtonText are what the
    UA paints a bare <button> with here -- no rule in this file overrides them
    -- so borrowing them keeps the two matching under every theme, the same
    way the System Color keywords elsewhere avoid a per-theme pass. */
@@ -834,7 +906,7 @@ html[data-route="options"] body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border: var(--border);
+  border: var(--frame);
   border-radius: var(--radius);
 }
 .admin-table-scroll:focus-visible {
@@ -903,7 +975,7 @@ html[data-route="options"] body {
 }
 .websub-status {
   padding: 0.125rem var(--space-2);
-  border-radius: 1rem;
+  border-radius: var(--radius);
   font-size: var(--fs-sm);
 }
 /* No status is a bare dash, not a chip: it lines up with the column. */
@@ -1262,12 +1334,16 @@ a {
   flex-wrap: wrap;
 }
 
+/* Each pane is a size container: its toolbar shows what its own width has
+   room for (labels, separators, the filter's caption), whatever the
+   viewport. */
 .dashboard-pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  border-right: var(--border);
+  border-right: var(--frame);
+  container-type: inline-size;
 }
 
 .reader-pane {
@@ -1281,12 +1357,23 @@ a {
   align-items: center;
   gap: var(--space-1);
   padding: var(--toolbar-pad) var(--space-2);
-  border-bottom: var(--border);
+  border-bottom: var(--frame);
   background: var(--surface);
 }
 .toolbar > span {
   flex: 1;
 }
+/* A line between two groups of buttons. Hidden where the bar has no room
+   for it (below). */
+.toolbar > .toolbar-separator {
+  flex: none;
+  width: 0;
+  height: 1.25rem;
+  margin-inline: var(--space-1);
+  border-left: var(--frame);
+}
+/* An icon button is flat until it is pointed at or pressed. Its border is
+   there all along, transparent, so the frame that appears moves nothing. */
 .toolbar button {
   box-shadow: none;
   display: flex;
@@ -1297,13 +1384,48 @@ a {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
+}
+/* Pointed at or pressed, it is drawn as the theme draws a button under the
+   pointer. The auto theme's button fill is the bar's own, so there the
+   frame gets the page's fill, and a press a darker one. */
+@media (pointer: fine) and (hover: hover) {
+  .toolbar button:hover:not(:disabled),
+  .toolbar-link:hover {
+    background: var(--button-hover-bg);
+    border: var(--button-hover-border);
+    box-shadow: var(--button-hover-shadow);
+  }
+  :root[data-theme="auto"] .toolbar button:hover:not(:disabled),
+  :root[data-theme="auto"] .toolbar-link:hover {
+    background: var(--field-bg);
+    border: var(--frame);
+  }
+}
+.toolbar button:active:not(:disabled),
+.toolbar-link:active {
+  background: var(--button-hover-bg);
+  border: var(--button-hover-border);
+  box-shadow: var(--button-hover-shadow);
+}
+:root[data-theme="auto"] .toolbar button:active:not(:disabled),
+:root[data-theme="auto"] .toolbar-link:active {
+  background: var(--grey-30);
+  border: var(--frame);
+}
+/* A button's name in words, shown where its pane's bar has the room
+   (below); elsewhere the icon stands alone with the name as its tooltip. */
+.toolbar-label {
+  display: none;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 /* A select cut to "Unreac" hides its own value; it keeps its width. */
 .toolbar select {
   flex: none;
-  height: var(--control-h);
+  height: var(--toolbar-control-h);
+  min-height: 0;
   padding: 0 var(--space-2);
   font-size: var(--fs-md);
 }
@@ -1334,7 +1456,7 @@ a {
 }
 .tree-filter {
   flex-shrink: 0;
-  margin: var(--space-2);
+  margin: var(--search-row-pad) var(--space-2);
 }
 /* "No feeds match that." and the load failure stand alone: the empty tree
    beside them would push them down the pane. */
@@ -1355,30 +1477,35 @@ a {
      tree overflows; an overlay scrollbar never reserves space, stable or
      not. */
   scrollbar-gutter: auto;
-  /* scrollbar-gutter alone only fixes browsers that support it; styling
-     the scrollbar itself directly removes the OS/browser variability
-     that scrollbar-gutter can't reach (Safari, or an OS scrollbar
-     that's simply wider than the reserved gutter expects). */
-  scrollbar-width: thin;
   /* No top padding: the first row lines up with the list pane's first. */
   padding: 0 0 var(--space-2);
   list-style: none;
 }
-.tree::-webkit-scrollbar {
-  width: 0.625rem;
+/* A line closes the rows off from the filter or search row above them.
+   Where a list follows its bar, its heading or a notice directly, that
+   one's own edge is the line. */
+.tree:not(.nested),
+.article-list:not(.skeleton) {
+  border-top: var(--border);
 }
-.tree::-webkit-scrollbar-thumb {
-  background: var(--grey-40);
-  border-radius: 0.25rem;
+.toolbar + .tree,
+:is(.toolbar, .pane-title, .feed-notice) + .article-list {
+  border-top: 0;
 }
-.tree::-webkit-scrollbar-track {
-  background: transparent;
-}
-/* Where a scrollbar does show, nothing inside the tree can paint under it,
-   so its track takes the panel tone: the column reads as a scrollbar beside
-   a selected row instead of a gap in the selection. */
-:root[data-theme="auto"] .tree {
-  scrollbar-color: var(--grey-40) var(--surface);
+/* Every pane scrolls with the same bar: the browser's own, at its own
+   width. In the auto theme its track takes the panel tone, so beside a
+   selected row the column reads as a scrollbar, not a gap in the
+   selection, and the thumb the muted grey, 4:1 on that track. */
+:root[data-theme="auto"]
+  :is(
+    .tree,
+    .tree-empty,
+    .article-list,
+    .reader,
+    .feed-discovery-form,
+    .admin-table-scroll
+  ) {
+  scrollbar-color: var(--grey-50) var(--surface);
 }
 /* Custom context menu (#721). Fixed under the pointer, above every pane.
    Uses the app's own surface/text tokens rather than an inverted native
@@ -1391,11 +1518,12 @@ a {
   z-index: 300;
   min-width: 12rem;
   margin: 0;
-  padding: var(--space-1);
+  /* No side padding: an item's highlight runs from edge to edge. */
+  padding: var(--space-half) 0;
   list-style: none;
   background: var(--white);
   color: var(--grey-90);
-  border: var(--border);
+  border: var(--frame);
   border-radius: var(--radius);
   box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
 }
@@ -1415,7 +1543,7 @@ a {
   color: inherit;
   background: transparent;
   border: 0;
-  border-radius: var(--space-1);
+  border-radius: 0;
 }
 /* :focus, not :focus-visible: the menu focuses its first item
    programmatically, and browsers skip :focus-visible after pointer
@@ -1437,7 +1565,7 @@ a {
 }
 .context-menu-separator {
   height: 1px;
-  margin: var(--space-1) var(--space-2);
+  margin: var(--space-half) 0;
   background: var(--grey-30);
 }
 /* In-app dialog replacements for prompt()/confirm() (#698), hosted once by
@@ -1535,7 +1663,7 @@ dialog.app-dialog .app-dialog-shortcuts kbd {
   padding: 0 var(--space-1);
   background: var(--surface);
   border: var(--border);
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
 }
 /* Destructive confirms (delete source/folder, admin remove) get the same
    error color [role="alert"] uses, so the risky button reads as risky --
@@ -1573,7 +1701,6 @@ button.source {
   flex: 1;
   overflow: auto;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
@@ -1673,10 +1800,18 @@ img.skeleton-row {
   }
 }
 .source {
+  /* Row icons keep a 14px floor, like the toolbar's 20px one, so a
+     scaled-down tree still shows recognisable glyphs. */
+  --chevron-size: max(0.8em, 14px);
+  --node-size: max(0.85em, 16px);
+  /* Where a folder's own icon starts, after its chevron. */
+  --folder-icon-x: calc(var(--space-1) + var(--chevron-size) + var(--icon-gap));
+
   display: flex;
   align-items: center;
   min-height: var(--row-h);
-  padding: 0 var(--space-2) 0 var(--space-6);
+  /* A row outside any folder lines its icon up with the folders' icons. */
+  padding: 0 var(--space-2) 0 var(--folder-icon-x);
   border-bottom: 0;
   gap: var(--icon-gap);
   font-size: var(--fs-row);
@@ -1701,24 +1836,47 @@ img.skeleton-row {
   outline: 2px dotted var(--grey-90);
   outline-offset: -2px;
 }
+/* The row an open context menu acts on, which need not be the selected
+   one: the thin dotted rectangle a cursor row has. */
+.source.context-target {
+  outline: 1px dotted var(--grey-90);
+  outline-offset: -1px;
+}
+.source.selected.context-target {
+  outline-color: var(--selected-fg);
+}
 .source.folder {
   padding-left: var(--space-1);
 }
+/* A feed inside a folder starts its icon under the folder's name, a whole
+   icon further in than the folder's own: the indent is what says
+   "inside". */
 .tree.nested .source {
-  padding-left: 2rem;
+  padding-left: calc(var(--folder-icon-x) + var(--node-size) + var(--icon-gap));
 }
-/* Row icons keep a 14px floor, like the toolbar's 20px one, so a scaled-down
-   tree still shows recognisable glyphs. */
-.chevron {
-  display: inline-block;
-  width: max(0.8em, 14px);
-  height: max(0.8em, 14px);
-  flex: none;
+/* The chevron and the folder's icon fold the folder together. The target
+   runs the row's full height, from its left edge to the start of the
+   name, by taking up the row's padding and the gap on either side. */
+.folder-toggle {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--icon-gap);
+  margin-right: calc(-1 * var(--icon-gap));
+  margin-left: calc(-1 * var(--space-1));
+  padding-right: var(--icon-gap);
+  padding-left: var(--space-1);
   cursor: pointer;
 }
+.chevron {
+  display: inline-block;
+  width: var(--chevron-size);
+  height: var(--chevron-size);
+  flex: none;
+}
 .node-icon {
-  width: max(0.85em, 16px);
-  height: max(0.85em, 16px);
+  width: var(--node-size);
+  height: var(--node-size);
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -1742,13 +1900,21 @@ img.skeleton-row {
 .article-list.skeleton {
   overflow: hidden;
 }
-/* Upright, with figures of one width, so counts line up down the tree. */
+/* Upright, with figures of one width, so counts line up down the tree, and
+   at regular weight: weight sets a count apart from an unread row's bold
+   name. */
 .source .unread-count {
   flex: none;
   margin-left: auto;
   color: var(--muted);
   font-size: var(--fs-row-meta);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+/* In the auto theme a count is the smallest text in its row, so it keeps
+   the text colour rather than giving up size and contrast at once. */
+:root[data-theme="auto"] .source:not(.selected) .unread-count {
+  color: var(--grey-90);
 }
 /* The warning sits right after the name, in the error colour, and turns
    to the row's own text colour when selected like the other row marks. */
@@ -1878,13 +2044,11 @@ img.skeleton-row {
 }
 .article-search {
   flex: 1;
-  margin: var(--space-2);
+  margin: var(--search-row-pad) var(--space-2);
 }
 /* The toolbar's own width decides whether the filter's visible "Show"
-   fits; the label text stays for screen readers either way. */
-.articles-pane {
-  container-type: inline-size;
-}
+   fits; the label text stays for screen readers either way. Touch-size
+   buttons need a wider bar for it (below). */
 @container (width < 18rem) {
   .article-filter-label {
     position: absolute;
@@ -1929,6 +2093,10 @@ img.skeleton-row {
 .details > span {
   flex: 1;
 }
+/* Figures of one width, so short dates line up down the list. */
+.details > time {
+  font-variant-numeric: tabular-nums;
+}
 /* The open feed's name, shown only in the single-pane layer. A title, not
    another date band: body size, more room, and the page's own surface
    rather than the bands' grey. */
@@ -1937,7 +2105,7 @@ img.skeleton-row {
   flex-shrink: 0;
   margin: 0;
   padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border);
+  border-bottom: var(--frame);
   background: var(--white);
   font-size: var(--fs-row);
   font-weight: 700;
@@ -2265,7 +2433,7 @@ textarea[aria-invalid="true"]:focus {
   display: grid;
   max-height: 12rem;
   overflow: auto;
-  border: var(--border);
+  border: var(--frame);
 }
 .found-feeds button {
   box-shadow: none;
@@ -2294,7 +2462,7 @@ textarea[aria-invalid="true"]:focus {
   font-size: var(--fs-sm);
   font-weight: 400;
   background: var(--status-success-bg);
-  border-radius: 1rem;
+  border-radius: var(--radius);
 }
 .form-actions {
   display: flex;
@@ -2322,8 +2490,16 @@ textarea[aria-invalid="true"]:focus {
   }
 }
 
-/* A mouse gets tight rows: the same text as touch, with less air. */
+/* A mouse gets tight rows and tight chrome: the same text as touch, with
+   less air. The list filter is as tall as the icon buttons beside it, and
+   the filter and search rows keep one step above and below their field,
+   so the bars above the first row take no more height than their
+   controls need. */
 @media (pointer: fine) and (hover: hover) {
+  :root {
+    --toolbar-control-h: var(--toolbar-button);
+    --search-row-pad: var(--space-1);
+  }
   .source {
     line-height: var(--row-lh);
   }
@@ -2331,6 +2507,45 @@ textarea[aria-invalid="true"]:focus {
     --row-gap: var(--space-half);
 
     padding-block: var(--space-1);
+  }
+}
+/* Labelled buttons, per pane, where that pane's bar is wide enough for all
+   of its words: the reader's has three or four buttons, the list's six and
+   a filter. A labelled button is as wide as its text. */
+@container (min-width: 30rem) {
+  .reader-pane .toolbar-label {
+    display: inline;
+  }
+  .reader-pane .toolbar button {
+    width: auto;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+}
+@container (min-width: 34rem) {
+  .sources-pane .toolbar-label {
+    display: inline;
+  }
+  .sources-pane .toolbar button {
+    width: auto;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+}
+@container (min-width: 50rem) {
+  .articles-pane .toolbar-label {
+    display: inline;
+  }
+  .articles-pane .toolbar button {
+    width: auto;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+}
+/* The list bar's separators need the room of two more gaps. */
+@container (width < 22rem) {
+  .toolbar-separator {
+    display: none;
   }
 }
 /* Touch sizing follows the input, not the width: a tablet is as much a
@@ -2366,6 +2581,42 @@ textarea[aria-invalid="true"]:focus {
     gap: 0;
     padding: var(--toolbar-pad) var(--space-1);
   }
+  /* A finger cannot hover, so a button shows its frame all the time: drawn
+     as the theme draws a button, with the page's fill in the auto theme,
+     whose button fill is the bar's own. A disabled one stays a bare
+     glyph. */
+  .toolbar button:not(:disabled),
+  .toolbar-link {
+    background: var(--button-face);
+    border: var(--button-border);
+    box-shadow: var(--button-shadow);
+  }
+  :root[data-theme="auto"] .toolbar button:not(:disabled),
+  :root[data-theme="auto"] .toolbar-link {
+    background: var(--field-bg);
+    border: var(--frame);
+  }
+  /* Framed buttons stand a step apart where the bar can hold the gaps. The
+     list's six buttons and its filter take 22.75rem edge to edge, which is
+     all the narrowest phones have; the bar's seven gaps share what is
+     left, up to a step each. */
+  .dashboard-pane > .toolbar {
+    gap: clamp(0px, (100cqi - 22.75rem) / 7, var(--space-1));
+  }
+  /* Touch-size buttons leave the filter's caption and the separators no
+     room on a phone-width bar. */
+  @container (width < 30rem) {
+    .article-filter-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+    .toolbar-separator {
+      display: none;
+    }
+  }
   .article {
     padding: var(--space-2) var(--space-3);
   }
@@ -2395,6 +2646,7 @@ textarea[aria-invalid="true"]:focus {
     min-width: var(--touch);
   }
   .options-nav a,
+  .options-card > a,
   .account-form > a,
   .account-result > a {
     display: inline-flex;
@@ -2532,15 +2784,23 @@ textarea[aria-invalid="true"]:focus {
      edge like every pane's toolbar. Options scrolls the document, so its
      shell becomes a column with the bar last and sticky; Admin's page is
      a column already. */
+  /* The shell is at least as tall as the visible viewport and the page
+     takes what its content leaves, so the bar rests on the bottom edge
+     however short the open tab is. */
   html[data-mobile-list-anchor="true"][data-route="options"] #app {
     display: flex;
     flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  html[data-mobile-list-anchor="true"][data-route="options"] .options-page {
+    flex: 1 0 auto;
   }
   html[data-mobile-list-anchor="true"] .page-toolbar {
     order: 1;
     top: auto;
     bottom: 0;
-    border-top: var(--border);
+    border-top: var(--frame);
     border-bottom: 0;
   }
   html[data-mobile-list-anchor="true"] .admin-page > .page-toolbar {
@@ -2559,24 +2819,16 @@ textarea[aria-invalid="true"]:focus {
         var(--space-2)
     );
   }
-  .article-filter-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-  }
   .account-form,
   .account-result {
     margin-block: var(--space-4);
     padding: var(--space-4);
     border: 0;
   }
-  .options-page {
-    margin-block: var(--space-4);
-  }
-  .options-card {
-    padding: var(--space-4);
+  /* Byline and date at body size: with the pane to itself the reader has
+     the room, and they are its smallest text. */
+  .reader-meta {
+    font-size: var(--fs-md);
   }
   /* A narrow gutter, but still the reader's measure: a phone zoomed out
      lays out 600-650px wide, where full-width lines run past 80
@@ -2593,7 +2845,7 @@ textarea[aria-invalid="true"]:focus {
     min-width: 100%;
     max-width: 100%;
     border-right: 0;
-    border-bottom: var(--border);
+    border-bottom: var(--frame);
   }
   /* The bottom-anchored mobile layout is opt-in via the mobile-layout
      setting: column-reverse moves every pane's toolbar to the bottom edge
@@ -2601,6 +2853,27 @@ textarea[aria-invalid="true"]:focus {
      desktop order -- toolbars on top -- merely made responsive. */
   html[data-mobile-list-anchor="true"] .dashboard-pane {
     flex-flow: column-reverse;
+    border-bottom: 0;
+  }
+  /* A bar at the bottom has the pane above it, so its edge is its top one;
+     a line under it would lie on the screen's edge. --toolbar-h still
+     counts one border. */
+  html[data-mobile-list-anchor="true"] .dashboard-pane > .toolbar {
+    border-top: var(--frame);
+    border-bottom: 0;
+  }
+  /* The rows end above the filter or search row here, so the line that
+     closes them off is under them. */
+  html[data-mobile-list-anchor="true"] .tree:not(.nested),
+  html[data-mobile-list-anchor="true"] .article-list:not(.skeleton) {
+    border-top: 0;
+    border-bottom: var(--border);
+  }
+  html[data-mobile-list-anchor="true"] .toolbar + .tree,
+  html[data-mobile-list-anchor="true"]
+    :is(.toolbar, .pane-title, .feed-notice)
+    + .article-list {
+    border-bottom: 0;
   }
   .dashboard .reader-pane {
     display: flex;
@@ -2686,8 +2959,8 @@ textarea[aria-invalid="true"]:focus {
    rows and controls with text sized to fill them. The spacing scale stays
    the same in both densities, so gaps between an icon and its label, or a
    button and the bar's edge, never drop below 4px. Under a mouse that is
-   the pre-rework tree, 14px names in 20px rows; under a finger, 20px names
-   in 32px rows. */
+   14px names in 20px tree rows; under a finger, 16px names in 32px rows.
+   The tree's indent is built from its icons and gaps, so it follows. */
 :root[data-density="compact"] {
   /* calc() needs a number, so headings take normal's usual ratio. */
   --lh-tight: 1.2;
@@ -2699,38 +2972,50 @@ textarea[aria-invalid="true"]:focus {
   --fs-row: 0.875rem;
   --fs-row-meta: 0.75rem;
   --icon-gap: 0.25rem;
+  /* The list filter keeps the height of compact's own fields. */
+  --toolbar-control-h: var(--control-h);
 }
+/* Under a mouse the chrome shrinks with the rows: 24px icon buttons, the
+   smallest target WCAG 2.5.8 allows, and article rows with half a step
+   above and below their two lines. */
+@media (pointer: fine) and (hover: hover) {
+  :root[data-density="compact"] {
+    --toolbar-button: 1.5rem;
+  }
+  :root[data-density="compact"] .article {
+    padding-block: var(--space-half);
+  }
+}
+/* Under a finger the heights are a finger's, so the type is what gives:
+   rows read at the size of the article text they lead to, with one step
+   of padding where comfortable has two. That is what puts more of them
+   on a screen. */
 @media (pointer: coarse), (hover: none) {
   :root[data-density="compact"] {
     --control-h: 2.25rem;
     --toolbar-button: var(--control-h);
     --row-h: 2rem;
     --row-lh: 2rem;
-    --fs-row: 1.25rem;
-    --fs-row-meta: 1rem;
+    --fs-row: 1rem;
+    --fs-row-meta: 0.875rem;
     --icon-gap: 0.375rem;
+  }
+  :root[data-density="compact"] .article {
+    padding: var(--space-1) var(--space-2);
+  }
+  :root[data-density="compact"] .date-group {
+    padding-inline: var(--space-2);
+  }
+  :root[data-density="compact"] .pane-title {
+    padding: var(--space-1) var(--space-2);
   }
 }
 :root[data-density="compact"] .context-menu button,
 :root[data-density="compact"] .admin-table-actions button {
   --control-h: 1.5rem;
 }
-/* The tree keeps its indent, which carries the hierarchy, not air. */
-:root[data-density="compact"] .source {
-  padding-left: 1.375rem;
-}
-:root[data-density="compact"] .source.folder {
-  padding-left: var(--space-1);
-}
-:root[data-density="compact"] .tree.nested .source {
-  padding-left: 2rem;
-}
 :root[data-density="compact"] .article {
   --row-gap: var(--space-half);
-}
-:root[data-density="compact"] .source .unread-count,
-:root[data-density="compact"] .source .snoozed-badge {
-  font-style: italic;
 }
 /* The thin dotted ring follows a click too, and the tree keeps its
    scrollbar's column whether or not it scrolls. */

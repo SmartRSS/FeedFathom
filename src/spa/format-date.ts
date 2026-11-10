@@ -16,6 +16,7 @@ const localeDateTime = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
+const localeTime = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const localeDate = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 const localeDayOfYear = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
@@ -42,4 +43,25 @@ export function formatDay(iso: null | string | undefined): string {
   return date.getFullYear() === new Date().getFullYear()
     ? localeDayOfYear.format(date)
     : localeDate.format(date);
+}
+
+// A list row's date, as short as it can be said: the time for today, the
+// day for this year, the full date before that. The date band over the rows
+// already names the period, and the row keeps formatDate's full stamp as
+// its tooltip. ISO keeps its fixed UTC frame, so "today" is the UTC day.
+export function formatRowDate(
+  iso: null | string | undefined,
+  now = new Date(),
+): string {
+  const full = formatDate(iso);
+  if (!full) return "";
+  if (dateFormat.get() === "iso") {
+    const today = now.toISOString().slice(0, 10);
+    return full.startsWith(today) ? full.slice(11) : full.slice(0, 10);
+  }
+  const date = new Date(iso ?? "");
+  if (date.getFullYear() !== now.getFullYear()) return localeDate.format(date);
+  const sameDay =
+    date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  return sameDay ? localeTime.format(date) : localeDayOfYear.format(date);
 }
