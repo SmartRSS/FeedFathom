@@ -13,9 +13,12 @@ import {
 import { render } from "solid-js/web";
 import { loginPath, resolveRoute, showsPanes, type Route } from "./routes.ts";
 import {
+  isDiscoveryEntry,
   parseDashboardPane,
+  previousPath,
   switchPane,
   withDashboardPane,
+  withDiscovery,
   type DashboardPane,
   type PaneSwitchHost,
 } from "./panes.ts";
@@ -126,6 +129,7 @@ function App() {
   const initialRoute = resolveRoute(initialPath);
   const [path, setPath] = createSignal(initialPath);
   const [pane, setPane] = createSignal<DashboardPane>("sources");
+  const [discovery, setDiscovery] = createSignal(false);
 
   createEffect(() => {
     document.documentElement.dataset["theme"] = resolvedTheme();
@@ -149,15 +153,32 @@ function App() {
     );
   });
 
+  // A reload starts on the feeds: Discover's half-filled form is gone, so
+  // its entry would only reopen it empty.
   if (showsPanes(initialRoute))
-    history.replaceState(withDashboardPane(history.state, "sources"), "");
+    history.replaceState(
+      withDiscovery(withDashboardPane(history.state, "sources"), false),
+      "",
+    );
 
   const navigate = (to: string) => {
+    // Only off the panes: a pane switch copies its entry's state, return
+    // address included, so there Back would land on the previous pane.
+    if (!showsPanes(route()) && to === previousPath(history.state)) {
+      history.back();
+      return;
+    }
     const nextRoute = resolveRoute(to);
     const nextPane = showsPanes(nextRoute) ? "sources" : undefined;
-    history.pushState(nextPane ? withDashboardPane({}, nextPane) : {}, "", to);
+    const state = { feedFathomFrom: currentPath() };
+    history.pushState(
+      nextPane ? withDashboardPane(state, nextPane) : state,
+      "",
+      to,
+    );
     setPath(to);
     setPane(nextPane ?? "sources");
+    setDiscovery(false);
   };
   const handleUnauthorized = (cause: unknown) => {
     if (!isUnauthorizedError(cause)) return false;
@@ -187,10 +208,46 @@ function App() {
     history.pushState(withDashboardPane(history.state, next), "");
     showPane(() => setPane(next));
   };
+  // Discover opens on the feeds pane; Back from it returns to whichever
+  // pane it was opened over.
+  const openDiscovery = () => {
+    if (isDiscoveryEntry(history.state)) return;
+    if ((parseDashboardPane(history.state) ?? pane()) !== "sources")
+      showPane(() => setPane("sources"));
+    history.pushState(
+      withDiscovery(withDashboardPane(history.state, "sources"), true),
+      "",
+    );
+    setDiscovery(true);
+  };
+  // Set while a close steps Back through Discover's entries: each preview
+  // article it opened on a phone pushed one more. Those steps change
+  // nothing on screen, since Discover is already gone.
+  let leavingDiscovery: (() => void) | undefined;
+  // Closes at once, and settles once history is back on the entry Discover
+  // opened over, so a pane switch that follows is not the one Back undoes.
+  const closeDiscovery = () => {
+    setDiscovery(false);
+    if (!isDiscoveryEntry(history.state)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      leavingDiscovery = resolve;
+      history.back();
+    });
+  };
   const popstate = (event: PopStateEvent) => {
+    const inDiscovery = isDiscoveryEntry(event.state);
+    if (leavingDiscovery) {
+      if (inDiscovery) {
+        history.back();
+        return;
+      }
+      leavingDiscovery();
+      leavingDiscovery = undefined;
+    }
     showPane(() => {
       setPath(currentPath());
       setPane(parseDashboardPane(event.state) ?? "sources");
+      setDiscovery(inDiscovery);
     }, event.hasUAVisualTransition);
   };
   const route = () => resolveRoute(path());
@@ -296,6 +353,9 @@ function App() {
                 pane={pane}
                 focusPane={focusPane}
                 backPane={backPane}
+                discovery={discovery}
+                openDiscovery={openDiscovery}
+                closeDiscovery={closeDiscovery}
                 whenPaneShown={whenPaneShown}
               />
             }
@@ -310,9 +370,12 @@ function App() {
 
 function Router(props: {
   backPane(): void;
+  closeDiscovery(): Promise<void>;
+  discovery(): boolean;
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
+  openDiscovery(): void;
   pane(): DashboardPane;
   route: Route;
   whenPaneShown(run: () => void): void;
@@ -389,6 +452,9 @@ function Router(props: {
         pane={props.pane}
         focusPane={props.focusPane}
         backPane={props.backPane}
+        discovery={props.discovery}
+        openDiscovery={props.openDiscovery}
+        closeDiscovery={props.closeDiscovery}
         whenPaneShown={props.whenPaneShown}
         preview={props.route.name === "preview" ? props.route : undefined}
       />
