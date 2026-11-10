@@ -64,17 +64,21 @@ export function ReaderPane(props: {
         <BackButton backPane={props.backPane} />
         <button
           aria-label="delete article"
+          title="Delete article"
           disabled={!props.hasArticle}
           onClick={(event) => props.onDelete(event)}
         >
           <Icon raw={removeRaw} />
+          <span class="toolbar-label">Delete</span>
         </button>
         <button
           aria-label="share article"
+          title="Share"
           disabled={!props.hasArticle}
           onClick={() => props.onShare()}
         >
           <Icon raw={shareRaw} />
+          <span class="toolbar-label">Share</span>
         </button>
         <span />
         <Show when={props.reader.available()}>
@@ -99,8 +103,13 @@ export function ReaderPane(props: {
             </For>
           </select>
         </Show>
-        <button aria-label="options" onClick={() => props.onOptions()}>
+        <button
+          aria-label="options"
+          title="Options"
+          onClick={() => props.onOptions()}
+        >
           <Icon raw={settingsRaw} />
+          <span class="toolbar-label">Options</span>
         </button>
       </div>
       <div

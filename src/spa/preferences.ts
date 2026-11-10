@@ -61,15 +61,10 @@ function storedSetting<const T extends boolean | string>(
   return { ...storedPreference(key, values, fallback), choices };
 }
 
-const SHOW_HIDE = [
-  [true, "Show"],
-  [false, "Hide"],
-] as const;
-
-const ON_OFF = [
-  [true, "On"],
-  [false, "Off"],
-] as const;
+// A setting that is on or off, which the Options page shows as a check box.
+function storedToggle(key: string, fallback: boolean): Preference<boolean> {
+  return storedPreference(key, [true, false], fallback);
+}
 
 // Each value other than smart, the base palette, has a block of its own in
 // style.css.
@@ -173,7 +168,7 @@ export const markReadPolicy = storedSetting(
 // The virtual "Today" view in the sidebar (#715). Opt-out rather than
 // opt-in: it is one extra row, but pure source navigation is a legitimate
 // preference and the maintainer wants the choice to exist.
-export const todayView = storedSetting("todayView", SHOW_HIDE, true);
+export const todayView = storedToggle("todayView", true);
 
 // The two search boxes: the sidebar's feed filter and the article list's
 // search. Each is one row of a pane that has little vertical space to spare,
@@ -181,23 +176,15 @@ export const todayView = storedSetting("todayView", SHOW_HIDE, true);
 // are separate settings because they do different work -- the filter narrows
 // what is already loaded, search asks the server -- and wanting one without
 // the other is a reasonable position.
-export const feedFilterBox = storedSetting("feedFilterBox", SHOW_HIDE, true);
-export const articleSearchBox = storedSetting(
-  "articleSearchBox",
-  SHOW_HIDE,
-  true,
-);
+export const feedFilterBox = storedToggle("feedFilterBox", true);
+export const articleSearchBox = storedToggle("articleSearchBox", true);
 
 // Session restoration (#718). Opt-out rather than opt-in, per the issue:
 // "reopening the app should feel like you never left" is the behaviour a
 // reader expects, and the toggle exists for the people who always want to
 // start at the top. Off means no snapshot is written and none is restored.
-export const rememberReadingPosition = storedSetting(
+export const rememberReadingPosition = storedToggle(
   "rememberReadingPosition",
-  [
-    [true, "On"],
-    [false, "Off (always start at the top)"],
-  ],
   true,
 );
 
@@ -277,18 +264,18 @@ export const youtubeHost = storedSetting(
 // Prefetching the next article's content (#716) costs the server one extra
 // extract-route hit per opened article, and some users count that as waste:
 // so this is off until it is switched on.
-export const prefetchNext = storedSetting("prefetchNext", ON_OFF, false);
+export const prefetchNext = storedToggle("prefetchNext", false);
 
 // Offline reading (#992) downloads every recent unread body, a far larger
 // bill than one prefetch, so it is off until switched on too.
-export const offlineUnread = storedSetting("offlineUnread", ON_OFF, false);
+export const offlineUnread = storedToggle("offlineUnread", false);
 
 // The new-article signal (#717), two toggles kept independent on purpose: a
 // badge is free, but background polling costs server load, and an operator
 // who wants zero background traffic can turn that off without losing the
 // tab-title count.
-export const unreadBadge = storedSetting("unreadBadge", SHOW_HIDE, true);
-export const backgroundPoll = storedSetting("backgroundPoll", ON_OFF, true);
+export const unreadBadge = storedToggle("unreadBadge", true);
+export const backgroundPoll = storedToggle("backgroundPoll", true);
 
 // How timestamps render across the app (format-date.ts). "locale" is the
 // user's own locale and timezone via Intl; "iso" is fixed UTC

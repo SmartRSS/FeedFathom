@@ -31,6 +31,7 @@ import {
   markReadPolicy,
   mobileListAnchor,
   offlineUnread,
+  type Preference,
   prefetchNext,
   readerText,
   readerWidth,
@@ -84,10 +85,41 @@ function sectionFromHash(hash: string): SectionId {
   return section?.id ?? sectionAliases[id] ?? "reading";
 }
 
-// The option values are String(value), which is also how the preference
-// stores them, so a boolean toggle's options are "true" and "false". A hint
-// sits under the select, outside the label so it stays out of the select's
-// name, and describes it.
+// A setting that is on or off is a check box, its label saying what on
+// means: the state shows without opening anything, and one press changes
+// it. The whole line is the target. The hint describes it from outside the
+// label, as a select's does.
+function PreferenceCheckbox(props: {
+  hint?: string;
+  label: string;
+  preference: Preference<boolean>;
+}) {
+  const hintId = createUniqueId();
+  return (
+    <div class="options-field">
+      <label class="options-check">
+        <input
+          aria-describedby={props.hint ? hintId : undefined}
+          checked={props.preference.get()}
+          type="checkbox"
+          onChange={(event) =>
+            props.preference.set(event.currentTarget.checked)
+          }
+        />
+        <span>{props.label}</span>
+      </label>
+      <Show when={props.hint}>
+        <p class="options-hint" id={hintId}>
+          {props.hint}
+        </p>
+      </Show>
+    </div>
+  );
+}
+
+// A setting with several values. The option values are String(value), which
+// is also how the preference stores them. A hint sits under the select,
+// outside the label so it stays out of the select's name, and describes it.
 function PreferenceSelect<T extends boolean | string>(props: {
   hint?: string;
   label: string;
@@ -342,9 +374,10 @@ export function Options(props: {
                 preference={markReadPolicy}
                 hint="Nothing is marked read unless you choose it here: FeedFathom is built around deleting an article once you are done with it."
               />
-              <PreferenceSelect
+              <PreferenceCheckbox
                 label="Reopen where you left off"
                 preference={rememberReadingPosition}
+                hint="When off, the app always starts at the top."
               />
             </section>
             <section class="options-card">
@@ -364,13 +397,13 @@ export function Options(props: {
             </section>
             <section class="options-card">
               <h2>Loading ahead</h2>
-              <PreferenceSelect
+              <PreferenceCheckbox
                 label="Prefetch the next article"
                 preference={prefetchNext}
                 hint="Fetches the next article while you read this one."
               />
-              <PreferenceSelect
-                label="Download unread for offline reading"
+              <PreferenceCheckbox
+                label="Download unread articles for offline reading"
                 preference={offlineUnread}
                 hint={`Keeps up to ${offlineArticleLimit} unread articles from the last ${offlineArticleMaxAgeDays} days.`}
               />
@@ -382,29 +415,29 @@ export function Options(props: {
             <Scope>{DEVICE_SCOPE}</Scope>
             <section class="options-card">
               <h2>Sidebar and article list</h2>
-              <PreferenceSelect
-                label="Today view"
+              <PreferenceCheckbox
+                label="Show the Today view"
                 preference={todayView}
                 hint={`Unread articles from the last ${todayWindowHours} hours, at the top of the sidebar.`}
               />
-              <PreferenceSelect
-                label="Feed filter box"
+              <PreferenceCheckbox
+                label="Show the feed filter box"
                 preference={feedFilterBox}
               />
-              <PreferenceSelect
-                label="Article search box"
+              <PreferenceCheckbox
+                label="Show the article search box"
                 preference={articleSearchBox}
               />
             </section>
             <section class="options-card">
               <h2>New articles</h2>
-              <PreferenceSelect
-                label="Check for new articles"
+              <PreferenceCheckbox
+                label="Check for new articles in the background"
                 preference={backgroundPoll}
-                hint="Shows a notice when new articles arrive. Off sends no requests in the background."
+                hint="Shows a notice when new articles arrive. When off, nothing is requested in the background."
               />
-              <PreferenceSelect
-                label="Unread count in tab title"
+              <PreferenceCheckbox
+                label="Show the unread count in the tab title"
                 preference={unreadBadge}
               />
             </section>
