@@ -2020,6 +2020,58 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
+// The system Back (a phone's back gesture) closes Discover the way its
+// toolbar button does, instead of popping the page before the dashboard.
+test("Back closes Discover onto the feeds, not the page before", async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.setViewportSize({ height: 844, width: 390 });
+  const entries = () => page.evaluate(() => history.length);
+  const discover = page.getByRole("heading", { name: "Discover feed" });
+
+  // Options' way home is a Back too: it leaves no second dashboard entry
+  // with Options under it.
+  const before = await entries();
+  await page.getByRole("button", { name: "options" }).first().click();
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/");
+  await page.goForward();
+  await expect(page).toHaveURL(/\/options$/);
+  await page.goBack();
+  expect(await entries()).toBe(before + 1);
+
+  await page.getByRole("button", { name: "add source" }).click();
+  await expect(discover).toBeVisible();
+  await page.goBack();
+  await expect(discover).toHaveCount(0);
+  await expect(page.locator(".sources-pane")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/");
+
+  // Closing from the toolbar leaves no Discover entry behind for Back to
+  // land on, and a reload over one does not reopen it.
+  await page.getByRole("button", { name: "add source" }).click();
+  await page.getByRole("button", { name: "back" }).click();
+  await expect(discover).toHaveCount(0);
+  await page.goForward();
+  await expect(discover).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".sources-pane")).toBeVisible();
+  await expect(discover).toHaveCount(0);
+
+  // Pane entries copy the return address; Options must still open after a
+  // pane switch on a dashboard reached from a loaded Options page.
+  await page.goto("/options");
+  await page.getByRole("link", { name: "Home" }).click();
+  await selectSource(page);
+  await page
+    .locator(".articles-pane")
+    .getByRole("button", { name: "options" })
+    .click();
+  await expect(page).toHaveURL(/\/options$/);
+});
+
 // #990: the switch cross-fades only on the phone layout, and never under
 // reduced motion. Counting calls rather than watching pixels keeps it cheap.
 test("cross-fades mobile pane switches unless motion is reduced", async ({
