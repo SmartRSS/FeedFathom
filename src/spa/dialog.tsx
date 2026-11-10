@@ -266,6 +266,18 @@ export function DialogHost() {
             <h2 class="app-dialog-title" id="app-dialog-title">
               {title()}
             </h2>
+            {/* The caption's close box, which only the windowed themes show
+                (style.css). Out of the tab order: Esc and Cancel already
+                close the dialog from the keyboard. */}
+            <button
+              aria-label="Close"
+              class="app-dialog-close"
+              tabIndex={-1}
+              type="button"
+              onClick={cancel}
+            >
+              ×
+            </button>
             <Show
               when={helpRequest()}
               fallback={

@@ -128,9 +128,12 @@ const articlesNoun = (count: number) =>
 
 export function Dashboard(props: {
   backPane(): void;
+  closeDiscovery(): Promise<void>;
+  discovery(): boolean;
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   navigate(to: string): void;
+  openDiscovery(): void;
   pane(): DashboardPane;
   // Set on the /preview route, which opens Discover over the panes.
   preview?: Extract<Route, { name: "preview" }> | undefined;
@@ -368,13 +371,10 @@ export function Dashboard(props: {
   });
   createOfflineSync(tree, authenticated);
 
-  // Discover, over the panes.
-  const [showDiscovery, setShowDiscovery] = createSignal(
-    props.preview !== undefined,
-  );
-  createEffect(() => {
-    if (props.preview) setShowDiscovery(true);
-  });
+  // Discover, over the panes: on the /preview route, or on the history
+  // entry opening it pushed. What it starts with outlives a close, so
+  // Forward back into its entry opens the same form again.
+  const showDiscovery = () => props.preview !== undefined || props.discovery();
   // The folder Discover starts in when it was opened from an empty folder.
   const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [editingSource, setEditingSource] =
@@ -1079,16 +1079,18 @@ export function Dashboard(props: {
       reportError(cause, "Could not create the folder");
     }
   }
-  function openDiscovery(folder?: string) {
+  function openDiscovery(
+    folder?: string,
+    editing?: Extract<TreeNode, { type: "source" }>,
+  ) {
     setDiscoveryFolder(folder);
-    props.focusPane("sources");
-    setShowDiscovery(true);
+    setEditingSource(editing);
+    props.openDiscovery();
   }
   async function showProperties(node = editableNode()) {
     if (!node) return;
     if (node.type === "source") {
-      setEditingSource(node);
-      openDiscovery();
+      openDiscovery(undefined, node);
       return;
     }
     const name = await promptDialog("Rename folder", "Folder name", {
@@ -1263,13 +1265,10 @@ export function Dashboard(props: {
     }
   }
 
-  function closeDiscovery(): boolean {
-    const wasEditing = editingSource() !== undefined;
-    setShowDiscovery(false);
-    setDiscoveryFolder(undefined);
-    setEditingSource(undefined);
-    if (props.preview) props.navigate("/");
-    return wasEditing;
+  function closeDiscovery(): Promise<void> {
+    if (!props.preview) return props.closeDiscovery();
+    props.navigate("/");
+    return Promise.resolve();
   }
 
   return (
@@ -1438,14 +1437,16 @@ export function Dashboard(props: {
           mailDomain={session()?.mailDomain}
           pane={props.pane}
           close={() => {
-            const wasEditing = closeDiscovery();
+            const wasEditing = editingSource() !== undefined;
+            void closeDiscovery();
             if (!props.preview)
               queueMicrotask(() =>
                 (wasEditing ? propertiesButton : addSourceButton)?.focus(),
               );
           }}
           saved={async (sourceId) => {
-            const wasEditing = closeDiscovery();
+            const wasEditing = editingSource() !== undefined;
+            await closeDiscovery();
             const savedNode = findNode(
               await loadTree(),
               "source",

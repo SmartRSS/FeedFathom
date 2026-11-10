@@ -504,6 +504,34 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
   expect(await sw.entries.get("/")?.text()).toBe(shellHtml("index-new"));
 });
 
+// A font is named by the stylesheet, not the HTML.
+test("a font the served stylesheet names is kept", async () => {
+  let bundle = "old";
+  const sw = loadServiceWorker((path) => {
+    if (path === "/")
+      return new Response(
+        `<link rel="stylesheet" href="/assets/index-${bundle}.css">`,
+      );
+    if (path.startsWith("/assets/index-"))
+      return new Response(`@font-face{src:url(/assets/font-${bundle}.woff2)}`);
+    return path === "/api/tree"
+      ? Response.json({ tree: [] })
+      : new Response("asset");
+  });
+  const assets = () =>
+    [...sw.entries.keys()].filter((key) => key.startsWith("/assets/"));
+  await sw.navigate("/").background;
+  await sw.dispatch(new Request(`${ORIGIN}/assets/font-old.woff2`)).response;
+  bundle = "new";
+  await sw.navigate("/").background;
+  await sw.dispatch(new Request(`${ORIGIN}/assets/font-new.woff2`)).response;
+  await sw.navigate("/").background;
+  expect(assets().toSorted()).toEqual([
+    "/assets/font-new.woff2",
+    "/assets/index-new.css",
+  ]);
+});
+
 test("a tree load drops the favicons it no longer names", async () => {
   let current = tree;
   const sw = loadServiceWorker((path) =>
