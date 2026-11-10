@@ -29,6 +29,45 @@ export function withDashboardPane(
   };
 }
 
+// Discover opened over the panes is a history entry of its own, so Back
+// closes it rather than leaving for the page before the dashboard. It is
+// a flag beside the pane rather than a fourth pane: Discover switches
+// between panes of its own, and withDashboardPane keeps the flag on those.
+const discoveryHistoryStateSchema = Type.Object(
+  { feedFathomDiscovery: Type.Literal(true) },
+  { additionalProperties: true },
+);
+
+export function isDiscoveryEntry(state: unknown): boolean {
+  return Value.Check(discoveryHistoryStateSchema, state);
+}
+
+export function withDiscovery(
+  state: unknown,
+  open: boolean,
+): Record<string, unknown> {
+  const copy: Record<string, unknown> =
+    typeof state === "object" && state !== null ? { ...state } : {};
+  if (open) copy["feedFathomDiscovery"] = true;
+  else delete copy["feedFathomDiscovery"];
+  return copy;
+}
+
+// The address an in-app navigation left from. Navigating from a page
+// outside the panes straight back to it is a Back, so Options' way home
+// does not stack a second dashboard entry over Options for the system Back
+// to step through.
+const fromHistoryStateSchema = Type.Object(
+  { feedFathomFrom: Type.String() },
+  { additionalProperties: true },
+);
+
+export function previousPath(state: unknown): string | undefined {
+  return Value.Check(fromHistoryStateSchema, state)
+    ? state.feedFathomFrom
+    : undefined;
+}
+
 export type PaneSwitchHost = {
   matches(query: string): boolean;
   startViewTransition:

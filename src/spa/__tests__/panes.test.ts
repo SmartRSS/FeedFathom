@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isDiscoveryEntry,
   parseDashboardPane,
+  previousPath,
   SINGLE_PANE_QUERY,
   switchPane,
   withDashboardPane,
+  withDiscovery,
 } from "../panes.ts";
 
 describe("dashboard pane history state", () => {
@@ -32,6 +35,28 @@ describe("dashboard pane history state", () => {
       unrelated: { value: 1 },
     });
     expect(state.feedFathomPane).toBe("sources");
+  });
+});
+
+describe("Discover and return-path history state", () => {
+  test("marks and clears a Discover entry, keeping the pane", () => {
+    const opened = withDiscovery({ feedFathomPane: "articles" }, true);
+    expect(isDiscoveryEntry(opened)).toBe(true);
+    expect(parseDashboardPane(withDashboardPane(opened, "reader"))).toBe(
+      "reader",
+    );
+    expect(isDiscoveryEntry(withDashboardPane(opened, "reader"))).toBe(true);
+    expect(withDiscovery(opened, false)).toEqual({
+      feedFathomPane: "articles",
+    });
+    for (const state of [null, {}, { feedFathomDiscovery: "yes" }])
+      expect(isDiscoveryEntry(state)).toBe(false);
+  });
+
+  test("reads the address a navigation left from", () => {
+    expect(previousPath({ feedFathomFrom: "/" })).toBe("/");
+    for (const state of [null, {}, { feedFathomFrom: 1 }])
+      expect(previousPath(state)).toBeUndefined();
   });
 });
 
