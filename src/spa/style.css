@@ -1,6 +1,5 @@
 /* The aero and modern themes name their system font first; Selawik is the
    open-licensed font drawn to its metrics, for every device that lacks it.
-   Classic falls back to it too, as the nearest screen face to its own.
    A browser fetches it only when text on the page uses it. */
 @font-face {
   font-family: Selawik;
@@ -322,11 +321,10 @@
   --grey-20: #c0c0c0;
   --grey-30: #808080;
   --radius: 0;
-  /* Without the system's own fonts, the bundled Selawik: a humanist face
-     drawn for screen text, like Tahoma, so classic looks the same on every
-     device instead of in whatever the desktop's generic sans-serif is. */
-  --font-family:
-    "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Selawik, sans-serif;
+  /* Without the system's own fonts, the desktop's UI font: it is tuned for
+     the screen it runs on. Arial clones and the unhinted, light Selawik
+     both rendered worse than it at 1x on a Linux OLED laptop. */
+  --font-family: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, sans-serif;
   /* Two-pixel bevels drawn with inset shadows: fields sunken, buttons
      raised, the default button framed in black. */
   --control-border: none;
