@@ -188,6 +188,33 @@ const capFeedGuids = (lang: string) =>
     <entry xml:lang="${lang}"><id>x</id><category term="language=en"/></entry>
   </feed>`);
 
+describe("malformed feeds seen in the wild", () => {
+  const itemXml = `<item><title>Drew Armstrong & Trace Mayer</title><link>https://example.com/1</link></item>`;
+  const feedXml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Caf&eacute;</title>${itemXml}</channel></rss>`;
+
+  test.each([
+    ["a bare ampersand and an HTML entity", feedXml],
+    ["whitespace before the XML declaration", `\n  ${feedXml}`],
+    [
+      "a script after the root element",
+      `${feedXml}<script>var beacon = {};</script>`,
+    ],
+    ["a control character", feedXml.replace("Drew", "Drew\u000c")],
+  ])("parses a feed with %s", (_, text) => {
+    const parsed = parseXmlFeed(text);
+    expect(parsed.title).toBe("Caf\u00e9");
+    expect(parsed.items.map(({ title }) => title)).toEqual([
+      "Drew Armstrong & Trace Mayer",
+    ]);
+  });
+
+  test("still rejects a feed whose structure is broken", () => {
+    expect(() => parseXmlFeed(feedXml.replace("</title>", "</titel>"))).toThrow(
+      SyntaxError,
+    );
+  });
+});
+
 test("resolves relative entry links against a redirected feed URL", async () => {
   const parsedFixtureFeed = parseXmlFeed(
     await fixture("relative-links-after-redirect.xml"),

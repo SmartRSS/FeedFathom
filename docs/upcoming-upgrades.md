@@ -223,12 +223,14 @@ decoding entities, so an encoded `&#xA;` used to survive the trim.
 `Bun.XML` is a conforming processor: well-formed or `SyntaxError`, no
 recovery. `fast-xml-parser` was deliberately tolerant.
 
-That did not cost anything on the feed corpus, but it is a real change for
-OPML: an export containing an undeclared HTML entity (`&nbsp;`) or a bare `&`
-in a title now fails the **whole import**, where before those outlines
-imported fine. This has not been measured against real OPML uploads — the
-`opml_imports` table in production is the place to check if imports start
-failing.
+That cost nothing on the production feeds, but it did on feeds nobody had
+subscribed to yet: 7 of 675 public feeds (1.0%) failed, on a bare `&`,
+whitespace before `<?xml`, a `<script>` after the root, or a control
+character. An OPML export with `&nbsp;` or a bare `&` failed the whole
+import. `parseRepairingXml` in `src/features/feeds/xml.ts` now retries a
+rejected feed or OPML document once after repairing exactly those defects;
+see [the feed parser research note](research/feed-parser-libraries.md).
+Broken structure (mismatched or missing end tags) still fails.
 
 `Bun.XML.parse` takes one option, `compact`. Other keys are accepted silently
 and ignored, so treat the output shape as fixed.
