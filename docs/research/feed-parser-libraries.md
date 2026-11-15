@@ -208,9 +208,11 @@ public feeds fail with the same messages. Across all three corpora,
 production output does not differ by a single field.
 
 Asking Bun for a recovery mode would be a feature request against a stated
-contract, not a bug report. The repair belongs on our side. The `SyntaxError`
-carries `line` and `column`, so a repair pass can fix the reported position
-instead of rewriting the whole document.
+contract, not a bug report. The repair belongs on our side. It has to work
+on the whole document: the `SyntaxError`'s `line` and `column` are the
+JavaScript call site, not a position in the XML, and it carries no offset.
+Importing the same document as a `.xml` file does report the XML position,
+so the parser has it.
 
 ## Recommendation
 
