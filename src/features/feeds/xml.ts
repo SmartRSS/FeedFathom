@@ -1,14 +1,16 @@
 /**
  * Bun's native XML parser (Bun 1.4+), wrapped for our own parsing. Feed XML
- * does not come through here -- @rowanmanning/feed-parser needs
- * fast-xml-parser's ordered shape, which vendor/fast-xml-parser-shim provides
- * on top of the same Bun.XML.
+ * is parsed by @rowanmanning/feed-parser instead, through
+ * vendor/fast-xml-parser-shim on top of the same Bun.XML; it shares only
+ * parseRepairingXml from here.
  *
  * Bun.XML.parse's default "compact" shape has three quirks worth hiding:
  * attributes live on the element itself under an "@" prefix, a lone child
  * collapses to a single object instead of a one-element array, and an element
  * with no attributes or child elements is a bare string rather than an object.
  */
+
+import { decodeEntity } from "html-entities";
 
 /** A parsed XML element: "@"-prefixed attributes plus nested children. */
 export type XmlElement = Record<string, unknown>;
@@ -29,14 +31,74 @@ export const rejectXmlEntityDeclarations = (xml: string): void => {
   }
 };
 
+const xmlEntityNames = new Set(["amp", "lt", "gt", "quot", "apos"]);
+const rootNamePattern =
+  /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE\b[^[>]*>)*<([A-Za-z_][\w.:-]*)/;
+// A CDATA section or comment matches whole and is kept as is: a bare `&` is
+// legal inside both.
+const ampersandPattern =
+  /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|&(?:(#\d+|#x[\da-fA-F]+|[A-Za-z][A-Za-z\d]*);)?/g;
+
 /**
- * Throws on malformed XML. Bun.XML is a conforming processor, so this also
- * covers what fast-xml-parser needed a separate XMLValidator pass for -- at
- * the cost of rejecting documents the tolerant parser used to recover from.
+ * `xml` with the defects real feeds and OPML exports ship repaired: anything
+ * before the first tag, characters XML cannot hold, anything after the root
+ * element's end tag (a WordPress cache plugin appends a `<script>`), a bare
+ * `&`, and HTML named entities such as `&eacute;`. None of these edits can
+ * change what a well-formed document parses to, so a feed that was fine
+ * before is unaffected. Mismatched or missing end tags are not repaired:
+ * that would mean guessing at the structure.
+ */
+export const repairXml = (xml: string): string => {
+  let repaired = xmlSafeText(xml.trimStart());
+  const root = rootNamePattern.exec(repaired)?.[1];
+  const close = root ? repaired.lastIndexOf(`</${root}`) : -1;
+  const end = close === -1 ? -1 : repaired.indexOf(">", close);
+  if (end !== -1) repaired = repaired.slice(0, end + 1);
+  return repaired.replaceAll(
+    ampersandPattern,
+    (match, reference: string | undefined) => {
+      if (!match.startsWith("&")) return match;
+      if (reference === undefined) return "&amp;";
+      if (reference.startsWith("#") || xmlEntityNames.has(reference))
+        return match;
+      const decoded = decodeEntity(match, { level: "html5" });
+      // An unknown name, or one that decodes to markup (`&LT;`), stays text.
+      if (decoded === match || /[&<>]/.test(decoded))
+        return `&amp;${reference};`;
+      return decoded;
+    },
+  );
+};
+
+/**
+ * `parse(xml)`, or, when Bun.XML rejects the document as malformed,
+ * `parse(repairXml(xml))`. If the repaired document fails too, the original
+ * error is the one thrown, since it describes the document as fetched.
+ */
+export const parseRepairingXml = <T>(
+  xml: string,
+  parse: (xml: string) => T,
+): T => {
+  try {
+    return parse(xml);
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    try {
+      return parse(repairXml(xml));
+    } catch {
+      throw error;
+    }
+  }
+};
+
+/**
+ * Throws on XML that is malformed beyond what repairXml fixes. Bun.XML is a
+ * conforming processor, so this also covers what fast-xml-parser needed a
+ * separate XMLValidator pass for.
  */
 export const parseXml = (xml: string): XmlElement => {
   rejectXmlEntityDeclarations(xml);
-  const parsed: unknown = Bun.XML.parse(xml);
+  const parsed: unknown = parseRepairingXml(xml, (text) => Bun.XML.parse(text));
   if (!isXmlElement(parsed)) throw new Error("Invalid XML document");
   return parsed;
 };

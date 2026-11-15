@@ -3,7 +3,10 @@ import { parseContactString } from "@rowanmanning/feed-parser/lib/utils/parse-co
 import { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import Schema from "typebox/schema";
 import { decodeXml } from "#shared/util/decode-body.ts";
-import { rejectXmlEntityDeclarations } from "#features/feeds/xml.ts";
+import {
+  parseRepairingXml,
+  rejectXmlEntityDeclarations,
+} from "#features/feeds/xml.ts";
 import {
   inCapScope,
   mentionsCapNamespace,
@@ -79,7 +82,7 @@ const mediaDescription = (element: XmlElement) =>
  */
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
-  const feed = parseFeed(text);
+  const feed = parseRepairingXml(text, parseFeed);
   const feedAuthors = authorsWithoutMarkup(feed.element);
   if (feedAuthors)
     Object.defineProperty(feed, "authors", { value: feedAuthors });
