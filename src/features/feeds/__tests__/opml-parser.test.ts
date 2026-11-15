@@ -49,6 +49,20 @@ describe("OpmlParser", () => {
       );
     });
 
+    test("imports an export with a bare ampersand and an HTML entity", () => {
+      expect(
+        parseOpml(
+          `<opml version="2.0"><body><outline text="Tom & Jerry&nbsp;news" type="rss" xmlUrl="https://example.com/feed?a=1&b=2" /></body></opml>\n`,
+        ),
+      ).toMatchObject([
+        {
+          name: "Tom & Jerry\u00a0news",
+          type: "source",
+          xmlUrl: "https://example.com/feed?a=1&b=2",
+        },
+      ]);
+    });
+
     test("rejects a non-OPML root", () => {
       expect(() => parseOpml("<different-root />")).toThrow(
         "Invalid OPML document",
