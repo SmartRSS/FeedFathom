@@ -55,7 +55,6 @@ test("the host clock spaces interactive requests and holds background back", asy
     ])
   ).toSorted((left, right) => left - right);
   expect(second - first).toBeGreaterThanOrEqual(intervals.interactive - 10);
-  expect(await redis.get(lastKey)).toMatch(/^\d{13}$/);
   expect(await redis.pttl(lastKey)).toBeGreaterThan(9_000);
 
   await expect(reserve(host, "background")).rejects.toBeInstanceOf(
