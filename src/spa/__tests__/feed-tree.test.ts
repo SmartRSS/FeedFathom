@@ -271,24 +271,14 @@ describe("withTodayNode", () => {
 describe("source snooze", () => {
   const now = new Date("2026-09-09T12:00:00.000Z").getTime();
 
-  test("a future pausedUntil reads as snoozed", () => {
+  test("a source reads its own pausedUntil; a folder is never snoozed", () => {
     expect(
       isSnoozedNode(
         source("1", { pausedUntil: "2026-09-10T12:00:00.000Z" }),
         now,
       ),
     ).toBe(true);
-  });
-
-  test("a missing or past pausedUntil reads as not snoozed", () => {
-    expect(isSnoozedNode(source("1"), now)).toBe(false);
-    expect(isSnoozedNode(source("1", { pausedUntil: null }), now)).toBe(false);
-    expect(
-      isSnoozedNode(
-        source("1", { pausedUntil: "2026-09-08T12:00:00.000Z" }),
-        now,
-      ),
-    ).toBe(false);
+    expect(isSnoozedNode(folder("f", [source("1")]), now)).toBe(false);
   });
 
   // The only check on what the snooze menu sends: no browser spec drives it.
