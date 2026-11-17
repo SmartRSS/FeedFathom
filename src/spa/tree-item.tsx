@@ -1,4 +1,11 @@
-import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  For,
+  Show,
+  untrack,
+  type Element,
+} from "solid-js";
 import { longPressHandlers } from "./context-menu.tsx";
 import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 import {
@@ -37,7 +44,7 @@ function moveTreeFocus(current: HTMLElement, offset: number) {
 // focus drops to <body> and every favicon replays its skeleton. Keying rows
 // on treeNodeKey keeps each row mounted and updates its node in place.
 export function ForEachNode(props: {
-  children: (node: () => ListNode) => JSX.Element;
+  children: (node: () => ListNode) => Element;
   each: ListNode[];
 }) {
   const byKey = createMemo(
@@ -70,9 +77,10 @@ export function TreeItem(props: {
     props.onContext(x, y, props.node),
   );
   // Persisted per folder. Only "closed" collapses one: an absent, older or
-  // corrupted entry reads as open, so a bad entry can never hide feeds.
+  // corrupted entry reads as open, so a bad entry can never hide feeds. Read
+  // once: ForEachNode keys each row on its node, so the uid never changes.
   const folderState = storedPreference(
-    `folder:${props.node.uid}`,
+    `folder:${untrack(() => props.node.uid)}`,
     ["open", "closed"],
     "open",
   );
@@ -139,16 +147,18 @@ export function TreeItem(props: {
   return (
     <li role="none">
       <button
-        aria-expanded={isFolder() ? open() : undefined}
+        aria-expanded={isFolder() ? (open() ? "true" : "false") : undefined}
         aria-owns={isFolder() && open() ? groupId() : undefined}
-        aria-selected={isSelected()}
-        class="source"
-        classList={{
-          "context-target": props.contextKey === treeNodeKey(props.node),
-          folder: isFolder(),
-          selected: isSelected(),
-          unread: unread() > 0,
-        }}
+        aria-selected={isSelected() ? "true" : "false"}
+        class={[
+          "source",
+          {
+            "context-target": props.contextKey === treeNodeKey(props.node),
+            folder: isFolder(),
+            selected: isSelected(),
+            unread: unread() > 0,
+          },
+        ]}
         data-tree-key={treeNodeKey(props.node)}
         onClick={() => props.select(props.node)}
         onContextMenu={(event) => {
@@ -158,7 +168,7 @@ export function TreeItem(props: {
         onKeyDown={handleKeyDown}
         {...longPress}
         role="treeitem"
-        tabIndex={props.focused ? 0 : -1}
+        tabindex={props.focused ? 0 : -1}
         onFocus={() => props.onFocus(props.node)}
       >
         <Show
@@ -179,8 +189,7 @@ export function TreeItem(props: {
             >
               <img
                 alt=""
-                class="node-icon"
-                classList={{ "skeleton-row": !faviconLoaded() }}
+                class={["node-icon", { "skeleton-row": !faviconLoaded() }]}
                 src={favicon()!}
                 onLoad={() => setFaviconLoaded(true)}
                 onError={() => {

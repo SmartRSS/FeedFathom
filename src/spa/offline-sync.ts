@@ -1,8 +1,8 @@
 import {
   createEffect,
   createRoot,
-  on,
   onCleanup,
+  untrack,
   type Accessor,
 } from "solid-js";
 import { maximumRequestIds } from "#shared/contracts/limits.ts";
@@ -18,13 +18,11 @@ import { browserTimers, type Timers } from "./timers.ts";
 // another tab, sends none, so the worker drops what it kept.
 createRoot(() =>
   createEffect(
-    on(
-      offlineUnread.get,
-      (enabled) => {
-        if (!enabled) postOfflineSync([]);
-      },
-      { defer: true },
-    ),
+    offlineUnread.get,
+    (enabled) => {
+      if (!enabled) postOfflineSync([]);
+    },
+    { defer: true },
   ),
 );
 
@@ -109,10 +107,11 @@ export function createOfflineSync(
     sync: () => postOfflineSync(unreadSourceIds(tree())),
     wanted: () => signedIn() && offlineUnread.get(),
   });
-  createEffect(() => {
-    tree();
-    pacer.request();
-  });
+  // Also re-asked when sign-in or the preference turns syncing on.
+  createEffect(
+    () => [tree(), signedIn(), offlineUnread.get()],
+    () => untrack(() => pacer.request()),
+  );
   const retry = () => pacer.request();
   document.addEventListener("visibilitychange", retry);
   addEventListener("online", retry);

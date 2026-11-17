@@ -162,17 +162,20 @@ export function createNewArticleSignal(
   options: NewArticleSignalOptions & { listening(): boolean },
 ): NewArticleSignal {
   const signal = new NewArticleSignal(options);
-  createEffect(() => {
-    if (!options.listening()) return;
-    const stream = new EventSource("/api/events");
-    stream.addEventListener("open", () => signal.streamOpened());
-    stream.addEventListener("error", () => signal.streamFailed());
-    stream.addEventListener("message", () => signal.streamSignal());
-    onCleanup(() => {
-      stream.close();
-      signal.streamClosed();
-    });
-  });
+  createEffect(
+    () => options.listening(),
+    (listening) => {
+      if (!listening) return undefined;
+      const stream = new EventSource("/api/events");
+      stream.addEventListener("open", () => signal.streamOpened());
+      stream.addEventListener("error", () => signal.streamFailed());
+      stream.addEventListener("message", () => signal.streamSignal());
+      return () => {
+        stream.close();
+        signal.streamClosed();
+      };
+    },
+  );
   onCleanup(() => signal.dispose());
   return signal;
 }

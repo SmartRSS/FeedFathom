@@ -20,8 +20,15 @@ export function storedPreference<const T extends boolean | string>(
   key: string,
   values: readonly T[],
   fallback: T,
-): Preference<T> {
-  const read = (): T => {
+): Preference<T>;
+// Not generic itself: createSignal can't see that a generic T is never a
+// function, which its initial value has to be.
+export function storedPreference(
+  key: string,
+  values: readonly (boolean | string)[],
+  fallback: boolean | string,
+): Preference<boolean | string> {
+  const read = () => {
     try {
       const stored = localStorage.getItem(key);
       const migrated =
@@ -31,7 +38,7 @@ export function storedPreference<const T extends boolean | string>(
       return fallback;
     }
   };
-  const [get, setSignal] = createSignal<T>(read());
+  const [get, setSignal] = createSignal(read());
   // A null key means another tab cleared the whole storage.
   const follow = (event: StorageEvent) => {
     if (event.key === key || event.key === null) setSignal(() => read());
@@ -43,7 +50,7 @@ export function storedPreference<const T extends boolean | string>(
   }
   return {
     get,
-    set(value: T) {
+    set(value) {
       setSignal(() => value);
       try {
         localStorage.setItem(key, String(value));

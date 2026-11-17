@@ -213,7 +213,7 @@ export comes from tests structure rather than behaviour. Delete the assertion.
 
 There is no component test harness. No test imports a `.tsx`: `bun test`
 resolves `.tsx` against React's JSX runtime rather than the configured
-`solid-js` one, and the SPA's `.svg?raw` imports are a Vite feature the test
+`@solidjs/web` one, and the SPA's `.svg?raw` imports are a Vite feature the test
 runner cannot resolve. Component behaviour is covered by the Playwright specs.
 Anything that needs a unit test has to come out of the component first.
 

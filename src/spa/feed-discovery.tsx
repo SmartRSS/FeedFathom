@@ -1,11 +1,12 @@
 import {
   createEffect,
   createSignal,
+  flush,
   For,
-  on,
   onCleanup,
-  onMount,
+  onSettled,
   Show,
+  untrack,
 } from "solid-js";
 import {
   foldersResponse,
@@ -68,10 +69,18 @@ export function FeedDiscovery(props: {
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
-  const [link, setLink] = createSignal("");
-  const [feedUrl, setFeedUrl] = createSignal("");
+  // Seeded once from what Discover opened on; the fields are the user's
+  // from then on.
+  const [link, setLink] = createSignal(
+    untrack(() => props.editing?.homeUrl ?? ""),
+  );
+  const [feedUrl, setFeedUrl] = createSignal(
+    untrack(() => props.editing?.xmlUrl ?? props.initialFeedUrl ?? ""),
+  );
   const isEmail = () => isEmailAddress(feedUrl());
-  const [title, setTitle] = createSignal("");
+  const [title, setTitle] = createSignal(
+    untrack(() => props.editing?.name ?? ""),
+  );
   const [folderId, setFolderId] = createSignal("");
   const [folders, setFolders] = createSignal<Folder[]>([]);
   const [feeds, setFeeds] = createSignal<FoundFeed[]>([]);
@@ -111,24 +120,16 @@ export function FeedDiscovery(props: {
     requests.abort();
   });
 
-  onMount(() => {
+  onSettled(() => {
     // The pane that held focus (the toolbar button that opened this) was
     // just unmounted, which drops focus to <body>: start in the form, on the
     // first field that can be typed into (Title when editing).
     form
       .querySelector<HTMLInputElement>("input:not([disabled], [readonly])")
       ?.focus();
-    if (props.editing) {
-      setFeedUrl(props.editing.xmlUrl);
-      setLink(props.editing.homeUrl);
-      setTitle(props.editing.name);
-    } else {
-      const initialFeedUrl = props.initialFeedUrl;
-      if (initialFeedUrl) {
-        setFeedUrl(initialFeedUrl);
-        if (isWebUrl(initialFeedUrl)) void preview(initialFeedUrl);
-      }
-    }
+    const initialFeedUrl = props.initialFeedUrl;
+    if (!props.editing && initialFeedUrl && isWebUrl(initialFeedUrl))
+      void preview(initialFeedUrl);
     void (async () => {
       try {
         const loadedFolders = await api("/folders", foldersResponse);
@@ -152,9 +153,10 @@ export function FeedDiscovery(props: {
   // The session may still be loading when the panel opens, so this waits
   // for the domain rather than reading it once at mount.
   createEffect(
-    on(
-      () => props.mailDomain,
-      (domain) => {
+    () => props.mailDomain,
+    // Only the domain re-runs this; the rest is read as it stands then.
+    (domain) =>
+      untrack(() => {
         if (!domain || props.editing) return;
         if (props.initialNewsletter && !feedUrl())
           void mintNewsletterAddress(domain).then(reportUnreserved);
@@ -162,8 +164,7 @@ export function FeedDiscovery(props: {
         // recovers one whose first reservation failed.
         else if (isNewsletterAddress(feedUrl(), domain))
           void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
-      },
-    ),
+      }),
   );
 
   function websiteIsValid() {
@@ -174,7 +175,11 @@ export function FeedDiscovery(props: {
 
   async function findFeeds() {
     const normalizedLink = withScheme(link());
-    if (normalizedLink !== link()) setLink(normalizedLink);
+    if (normalizedLink !== link()) {
+      setLink(normalizedLink);
+      // The validity check below reads the input the write updates.
+      flush();
+    }
     if (!websiteIsValid()) return;
     const signal = startRequest();
     setLoading(true);
@@ -297,6 +302,8 @@ export function FeedDiscovery(props: {
     const reserved = mintNewsletterAddress(props.mailDomain ?? "");
     setArticles([]);
     setSelectedIndex(undefined);
+    // The copy reads the address just minted.
+    flush();
     await copyAddress();
     // After the copy's own message, which would otherwise hide this one.
     reportUnreserved(await reserved);
@@ -367,11 +374,13 @@ export function FeedDiscovery(props: {
       </Show>
       <aside
         aria-label={props.editing ? "Edit feed" : "Discover feed"}
-        class="dashboard-pane sources-pane"
-        classList={{
-          "discovery-wide": !articles().length,
-          "focused-pane": props.pane() === "sources",
-        }}
+        class={[
+          "dashboard-pane sources-pane",
+          {
+            "discovery-wide": !articles().length,
+            "focused-pane": props.pane() === "sources",
+          },
+        ]}
       >
         {/* A toolbar like the other panes', so the three top edges line up;
             its title is the pane's heading. */}
@@ -395,7 +404,7 @@ export function FeedDiscovery(props: {
                 that field's comment. */}
             <input
               ref={websiteInput}
-              readOnly={!!props.editing}
+              readonly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
@@ -456,7 +465,7 @@ export function FeedDiscovery(props: {
             <input
               aria-describedby={previewError() ? "feed-url-error" : undefined}
               aria-invalid={previewError() ? "true" : undefined}
-              readOnly={!!props.editing}
+              readonly={!!props.editing}
               title={
                 props.editing
                   ? "Shared with every subscriber to this feed"
@@ -484,8 +493,10 @@ export function FeedDiscovery(props: {
               one primary action shows at a time. */}
           <Show when={!props.editing && !isEmail()}>
             <button
-              class="field-action"
-              classList={{ "button-primary": Boolean(feedUrl()) && !title() }}
+              class={[
+                "field-action",
+                { "button-primary": Boolean(feedUrl()) && !title() },
+              ]}
               type="button"
               disabled={loading() || !feedUrl()}
               onClick={() => void preview()}
@@ -564,8 +575,10 @@ export function FeedDiscovery(props: {
       <Show when={articles().length}>
         <section
           aria-label="Preview articles"
-          class="dashboard-pane articles-pane"
-          classList={{ "focused-pane": props.pane() === "articles" }}
+          class={[
+            "dashboard-pane articles-pane",
+            { "focused-pane": props.pane() === "articles" },
+          ]}
         >
           <div class="toolbar">
             <BackButton backPane={props.backPane} />
@@ -583,8 +596,10 @@ export function FeedDiscovery(props: {
                       aria-current={
                         selectedIndex() === index() ? "true" : undefined
                       }
-                      class="article"
-                      classList={{ selected: selectedIndex() === index() }}
+                      class={[
+                        "article",
+                        { selected: selectedIndex() === index() },
+                      ]}
                       href={article.url || undefined}
                       onClick={(event) => selectPreviewArticle(index(), event)}
                     >
@@ -611,8 +626,10 @@ export function FeedDiscovery(props: {
       </Show>
       <article
         aria-label="Preview reader"
-        class="dashboard-pane reader-pane"
-        classList={{ "focused-pane": props.pane() === "reader" }}
+        class={[
+          "dashboard-pane reader-pane",
+          { "focused-pane": props.pane() === "reader" },
+        ]}
       >
         <div class="toolbar">
           <BackButton backPane={props.backPane} />

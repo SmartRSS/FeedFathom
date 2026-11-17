@@ -118,8 +118,10 @@ export function ArticlesPane(props: {
   return (
     <section
       aria-label="Articles"
-      class="dashboard-pane articles-pane"
-      classList={{ "focused-pane": props.focused }}
+      class={[
+        "dashboard-pane articles-pane",
+        { "focused-pane": props.focused },
+      ]}
     >
       <div class="toolbar">
         <BackButton backPane={props.backPane} />
@@ -263,7 +265,7 @@ export function ArticlesPane(props: {
         )}
       </Show>
       <div
-        aria-busy={props.loading}
+        aria-busy={props.loading ? "true" : "false"}
         aria-label="Articles"
         aria-multiselectable="true"
         class="article-list"
@@ -306,12 +308,14 @@ export function ArticlesPane(props: {
                   </div>
                 </Show>
                 <a
-                  class="article"
-                  classList={{
-                    active: props.isFocused(index()),
-                    read: article.read,
-                    selected: props.isSelected(index()),
-                  }}
+                  class={[
+                    "article",
+                    {
+                      active: props.isFocused(index()),
+                      read: article.read,
+                      selected: props.isSelected(index()),
+                    },
+                  ]}
                   data-index={index()}
                   href={article.url}
                   // Starts the GET before the click lands; opening awaits
@@ -329,8 +333,8 @@ export function ArticlesPane(props: {
                   // the only way to get one on a phone, plus copy link
                   // address and whatever the reader's extensions add.
                   role="option"
-                  tabIndex={props.isFocused(index()) ? 0 : -1}
-                  aria-selected={props.isSelected(index())}
+                  tabindex={props.isFocused(index()) ? 0 : -1}
+                  aria-selected={props.isSelected(index()) ? "true" : "false"}
                 >
                   <span class="title">{article.title}</span>
                   <span class="details">
