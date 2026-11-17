@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, For, Show } from "solid-js";
+import { createSignal, onSettled, For, Show, untrack } from "solid-js";
 
 export type ContextMenuItem =
   | {
@@ -30,9 +30,12 @@ export function ContextMenu(props: {
   // edge is the common case on touch, and an unclamped menu renders its
   // items off-screen there.
   const menuMargin = 8;
-  const [pos, setPos] = createSignal({ x: props.x + 2, y: props.y + 2 });
+  // Read once, at open.
+  const [pos, setPos] = createSignal(
+    untrack(() => ({ x: props.x + 2, y: props.y + 2 })),
+  );
 
-  onMount(() => {
+  onSettled(() => {
     invoker = document.activeElement;
     const rect = list?.getBoundingClientRect();
     if (rect) {
@@ -53,10 +56,9 @@ export function ContextMenu(props: {
     );
     first?.focus();
     document.addEventListener("pointerdown", onOutsidePointerDown);
+    return () =>
+      document.removeEventListener("pointerdown", onOutsidePointerDown);
   });
-  onCleanup(() =>
-    document.removeEventListener("pointerdown", onOutsidePointerDown),
-  );
 
   // Captured at mount, before any menu interaction can move focus.
   const returnFocus = () => {
@@ -127,14 +129,14 @@ export function ContextMenu(props: {
             {(action) => (
               <li role="none">
                 <button
-                  classList={{ "context-menu-danger": action().danger }}
+                  class={{ "context-menu-danger": action().danger }}
                   disabled={action().disabled}
                   onClick={(event) => {
                     event.stopPropagation();
                     runItem(action());
                   }}
                   role="menuitem"
-                  tabIndex={-1}
+                  tabindex={-1}
                   type="button"
                 >
                   {action().label}

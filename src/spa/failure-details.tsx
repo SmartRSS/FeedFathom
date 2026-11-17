@@ -1,4 +1,4 @@
-import { Show, type JSX } from "solid-js";
+import { Show, type Element } from "solid-js";
 
 // What went wrong underneath a failure's plain sentence, for admins only:
 // everyone else gets the sentence alone.
@@ -29,7 +29,7 @@ export type RetryState = "idle" | "queued" | "sending";
 // its articles or in place of them, and a feed list that did not load.
 export function FailingFeedPanel(props: {
   admin: boolean;
-  children: JSX.Element;
+  children: Element;
   details: { reason: string; status: number | undefined } | undefined;
   // A slim line above a list that still has rows, or a block in its place.
   layout: "block" | "notice";

@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { flush, For, Show } from "solid-js";
 import type { Article } from "#shared/contracts/responses.ts";
 import { ArticleMarkup } from "./article-markup.tsx";
 import { Enclosures } from "./enclosures.tsx";
@@ -54,11 +54,10 @@ export function ReaderPane(props: {
   return (
     <article
       aria-label="Reader"
-      class="dashboard-pane reader-pane"
-      classList={{ "focused-pane": props.focused }}
+      class={["dashboard-pane reader-pane", { "focused-pane": props.focused }]}
       onKeyDown={(event) => props.onKeyDown(event)}
       ref={props.ref}
-      tabIndex={-1}
+      tabindex={-1}
     >
       <div class="toolbar">
         <BackButton backPane={props.backPane} />
@@ -91,6 +90,8 @@ export function ReaderPane(props: {
                 displayModes.find((option) => option.mode === value)?.mode ??
                   "FEED",
               );
+              // Reopening reads the mode it opens in.
+              flush();
               props.onModeChange();
             }}
           >
@@ -113,10 +114,12 @@ export function ReaderPane(props: {
         </button>
       </div>
       <div
-        class="reader"
-        classList={{
-          skeleton: props.reader.loading() && !props.reader.displayed(),
-        }}
+        class={[
+          "reader",
+          {
+            skeleton: props.reader.loading() && !props.reader.displayed(),
+          },
+        ]}
         ref={props.readerRef}
         onScroll={(event) => props.onScroll(event.currentTarget)}
       >

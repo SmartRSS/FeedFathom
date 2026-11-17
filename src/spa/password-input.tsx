@@ -14,7 +14,9 @@ export function PasswordInput(props: {
   error?: string | undefined;
   label: string;
   onInput(value: string): void;
-  value?: string;
+  // Required: the binding re-applies whenever the element's other bindings
+  // change, so a field bound to nothing would be wiped as the user types.
+  value: string;
 }) {
   const [shown, setShown] = createSignal(false);
   const id = createUniqueId();
@@ -35,7 +37,7 @@ export function PasswordInput(props: {
             id={id}
             autocomplete={props.autocomplete}
             type={shown() ? "text" : "password"}
-            value={props.value ?? ""}
+            value={props.value}
             onInput={(event) => props.onInput(event.currentTarget.value)}
             required
           />

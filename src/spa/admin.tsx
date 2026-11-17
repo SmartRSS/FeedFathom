@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onSettled, Show } from "solid-js";
 import type { Static } from "typebox";
 import {
   adminSourcesResponse,
@@ -73,8 +73,10 @@ export function Admin(props: {
   const [sortBy, setSortBy] = createSignal<SourceSort>("createdAt");
   const [order, setOrder] = createSignal<SortOrder>("asc");
 
-  async function load() {
-    const query = new URLSearchParams({ order: order(), sortBy: sortBy() });
+  // A sort passes the column and direction it just set: the signals read the
+  // old ones until Solid's next flush.
+  async function load(column = sortBy(), direction = order()) {
+    const query = new URLSearchParams({ order: direction, sortBy: column });
     try {
       setMessage("");
       setSources(await api(`/admin?${query}`, adminSourcesResponse));
@@ -87,7 +89,7 @@ export function Admin(props: {
       setMessage(messageOf(cause, "Could not load the sources."));
     }
   }
-  onMount(load);
+  onSettled(() => void load());
 
   // The stacked layout's one sort control: a column and a direction.
   function sortByChoice(value: string) {
@@ -96,16 +98,14 @@ export function Admin(props: {
     if (!choice || (direction !== "asc" && direction !== "desc")) return;
     setSortBy(choice.sort);
     setOrder(direction);
-    void load();
+    void load(choice.sort, direction);
   }
 
   function sortByColumn(column: SourceSort) {
-    if (sortBy() === column) setOrder(order() === "asc" ? "desc" : "asc");
-    else {
-      setSortBy(column);
-      setOrder("asc");
-    }
-    void load();
+    const direction = sortBy() === column && order() === "asc" ? "desc" : "asc";
+    setSortBy(column);
+    setOrder(direction);
+    void load(column, direction);
   }
 
   async function replaceUrl(source: AdminSource) {
@@ -270,10 +270,10 @@ export function Admin(props: {
                     </td>
                     <td data-label="WebSub">
                       <span
-                        class="websub-status"
-                        classList={{
-                          [`websub-status-${source.websubStatus}`]: true,
-                        }}
+                        class={[
+                          "websub-status",
+                          `websub-status-${source.websubStatus}`,
+                        ]}
                       >
                         {WEBSUB_STATUS_LABELS[source.websubStatus]}
                       </span>

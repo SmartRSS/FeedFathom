@@ -32,6 +32,10 @@ export function restoredSelection(
 export class SessionRestore {
   readonly store: ReadingSessionStore;
   readonly #restoring = createSignal(false);
+  // The same state for the synchronous checks here: a write to the signal
+  // shows in its reads only after Solid's next flush, and select() cancels
+  // then records in one go.
+  #active = false;
   #passiveFirstPass = false;
   #readerScrollId: number | undefined;
 
@@ -43,7 +47,7 @@ export class SessionRestore {
 
   begin(): void {
     this.#passiveFirstPass = true;
-    this.#restoring[1](true);
+    this.#setRestoring(true);
   }
 
   /** The stored scroll is applied. The rows on screen at that position got
@@ -51,26 +55,31 @@ export class SessionRestore {
    *  they become eligible once they leave and re-enter the viewport. */
   finish(): void {
     this.#passiveFirstPass = true;
-    this.#restoring[1](false);
+    this.#setRestoring(false);
   }
 
   /** Something else took over, such as a feed picked from the cached tree
    *  (#989), and is recorded in the snapshot's place. */
   cancel(): void {
-    if (!this.restoring()) return;
+    if (!this.#active) return;
     this.#passiveFirstPass = false;
-    this.#restoring[1](false);
+    this.#setRestoring(false);
   }
 
   /** The snapshot cannot apply. Dropping it keeps the next boot from trying
    *  it again. */
   abandon(): void {
     this.store.clear();
-    this.#restoring[1](false);
+    this.#setRestoring(false);
   }
 
   record(patch: Partial<AppSnapshot>): void {
-    if (!this.restoring()) this.store.recordApp(patch);
+    if (!this.#active) this.store.recordApp(patch);
+  }
+
+  #setRestoring(active: boolean): void {
+    this.#active = active;
+    this.#restoring[1](active);
   }
 
   /** True once after finish(): whether the next observer's first pass only

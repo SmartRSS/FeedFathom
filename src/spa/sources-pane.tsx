@@ -62,8 +62,7 @@ export function SourcesPane(props: {
   return (
     <aside
       aria-label="Feeds"
-      class="dashboard-pane sources-pane"
-      classList={{ "focused-pane": props.focused }}
+      class={["dashboard-pane sources-pane", { "focused-pane": props.focused }]}
       ref={props.ref}
     >
       <div class="toolbar">

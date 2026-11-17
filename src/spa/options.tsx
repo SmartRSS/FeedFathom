@@ -1,11 +1,4 @@
-import {
-  createSignal,
-  createUniqueId,
-  For,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { createSignal, createUniqueId, For, onSettled, Show } from "solid-js";
 import type { Static } from "typebox";
 import {
   sessionResponse,
@@ -205,10 +198,13 @@ export function Options(props: {
     setActive(next);
     queueMicrotask(scrollToHashTarget);
   };
-  onMount(() => addEventListener("hashchange", onHashChange));
-  onCleanup(() => removeEventListener("hashchange", onHashChange));
+  onSettled(() => {
+    addEventListener("hashchange", onHashChange);
+    return () => removeEventListener("hashchange", onHashChange);
+  });
 
-  onMount(async () => {
+  onSettled(() => void loadAccount());
+  async function loadAccount() {
     try {
       const session = await api("/session", sessionResponse);
       if (!session.user) {
@@ -224,7 +220,7 @@ export function Options(props: {
     // The SPA navigation never scrolls on its own, so honour the hash once
     // the section it picked is rendered.
     if (location.hash) queueMicrotask(scrollToHashTarget);
-  });
+  }
 
   async function loadSessions() {
     try {
@@ -630,18 +626,21 @@ export function Options(props: {
               <PasswordInput
                 autocomplete="current-password"
                 label="Current password"
+                value={oldPassword()}
                 onInput={setOldPassword}
               />
               <PasswordInput
                 autocomplete="new-password"
                 error={passwordErrors().password}
                 label="New password"
+                value={password()}
                 onInput={setPassword}
               />
               <PasswordInput
                 autocomplete="new-password"
                 error={passwordErrors().confirm}
                 label="Confirm new password"
+                value={passwordConfirm()}
                 onInput={setPasswordConfirm}
               />
               <button class="button-primary" disabled={passwordLoading()}>

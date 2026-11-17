@@ -1,11 +1,14 @@
 import {
   createEffect,
   createMemo,
-  createSelector,
+  createProjection,
   createSignal,
+  flush,
   onCleanup,
-  onMount,
+  onSettled,
   Show,
+  untrack,
+  type Accessor,
 } from "solid-js";
 import type { Static } from "typebox";
 import {
@@ -98,7 +101,7 @@ import {
 } from "./dialog.tsx";
 import { isTextEntry, mapArticleKey } from "./keyboard-shortcuts.ts";
 import { ArticleFetches } from "./reading-prefetch.ts";
-import { setUnreadTotal } from "./news-signal.ts";
+import { showUnreadTotal } from "./news-signal.ts";
 import { createNewArticleSignal } from "./new-article-signal.ts";
 import { createOfflineSync } from "./offline-sync.ts";
 import { SourcesPane, type FeedsFailure } from "./sources-pane.tsx";
@@ -125,6 +128,18 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
 
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
+
+// One flag per list row, so a change notifies only the rows whose flag flips,
+// not every row of a list infinite scroll grows without bound.
+function createRowFlags(indexes: Accessor<ReadonlySet<number>>) {
+  const flags = createProjection<Record<number, boolean>>((draft) => {
+    const next = indexes();
+    for (const key of Object.keys(draft))
+      if (!next.has(Number(key))) delete draft[Number(key)];
+    for (const index of next) draft[index] = true;
+  }, {});
+  return (index: number) => flags[index] === true;
+}
 
 export function Dashboard(props: {
   backPane(): void;
@@ -230,25 +245,24 @@ export function Dashboard(props: {
   // Hiding a box must not leave what it held in force: an invisible filter
   // still narrowing the tree, or search results with nothing on screen to
   // explain or undo them.
-  createEffect(() => {
-    if (!feedFilterBox.get() && treeFilter()) setTreeFilter("");
-  });
-  createEffect(() => {
-    if (!articleSearchBox.get()) {
-      setSearchTerms("");
-      void exitSearch();
-    }
+  createEffect(
+    () => !feedFilterBox.get() && Boolean(treeFilter()),
+    (stale) => {
+      if (stale) setTreeFilter("");
+    },
+  );
+  createEffect(articleSearchBox.get, (shown) => {
+    if (shown) return;
+    setSearchTerms("");
+    untrack(() => void exitSearch());
   });
 
-  // The selection within the list. Selectors notify only the rows whose
-  // state flips, not every row of a list infinite scroll grows without bound.
+  // The selection within the list.
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
-  const isFocused = createSelector(focusedIndex);
-  const isSelected = createSelector(selectedIndexes, (index: number, indexes) =>
-    indexes.has(index),
-  );
+  const isFocused = createRowFlags(() => new Set([focusedIndex()]));
+  const isSelected = createRowFlags(selectedIndexes);
   const selected = () => {
     const index = soleSelectedIndex(selectedIndexes());
     return index === undefined ? undefined : list.rows()[index];
@@ -276,7 +290,8 @@ export function Dashboard(props: {
   const restore = new SessionRestore(
     new ReadingSessionStore({
       local: localStorage,
-      remember: rememberReadingPosition.get,
+      // Checked at each write, wherever it happens, so never tracked.
+      remember: () => untrack(rememberReadingPosition.get),
       resumingUpdate: takeUpdateReload(),
       session: sessionStorage,
     }),
@@ -296,10 +311,15 @@ export function Dashboard(props: {
   };
   // Nothing to record before a list exists; recording then would overwrite
   // the snapshot boot is about to restore.
-  createEffect(() => {
-    const state = listState();
-    if (selectedNode() || state.search) restore.record(state);
-  });
+  createEffect(
+    () => {
+      const state = listState();
+      return selectedNode() || state.search ? state : undefined;
+    },
+    (state) => {
+      if (state) restore.record(state);
+    },
+  );
   const recordListScroll = createThrottledRecorder((top: number) =>
     restore.record({ listScrollTop: top }),
   );
@@ -333,8 +353,7 @@ export function Dashboard(props: {
   // A restored reader resumes its ratio once that article has rendered.
   // Content height varies (images, Reader extraction), so the stored value
   // is a ratio, resolved against the rendered document.
-  createEffect(() => {
-    const item = reader.displayed();
+  createEffect(reader.displayed, (item) => {
     if (!item) return;
     const ratio = restore.takeReaderScroll(item.article.id);
     if (ratio === undefined) return;
@@ -351,15 +370,14 @@ export function Dashboard(props: {
     );
   });
 
-  // The tab-title badge reads the total (main.tsx); it is reset on unmount
-  // so a logged-out tab does not keep a stale count.
-  createEffect(() => setUnreadTotal(totalUnread(tree())));
+  // The tab-title badge reads the total (main.tsx).
+  const unreadTotal = createMemo(() => totalUnread(tree()));
+  onSettled(() => showUnreadTotal(unreadTotal));
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
   onCleanup(() => {
     disposed = true;
     treeAbortController?.abort();
-    setUnreadTotal(0);
   });
   const newArticles = createNewArticleSignal({
     enabled: backgroundPoll.get,
@@ -379,6 +397,21 @@ export function Dashboard(props: {
   const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
+  // A memo rather than an inline expression: Discover reads it from
+  // onSettled and event handlers, where an inline conditional's per-read
+  // memo would be created outside any owner.
+  const editedSource = createMemo(() => {
+    const source = editingSource();
+    return (
+      source && {
+        homeUrl: source.homeUrl,
+        name: source.name,
+        parentUid: findParentFolderUid(tree(), source.uid),
+        uid: source.uid,
+        xmlUrl: source.xmlUrl,
+      }
+    );
+  });
   // `key` names the row the menu was opened on, so the tree can mark it.
   const [contextMenu, setContextMenu] = createSignal<
     { items: ContextMenuItem[]; key: string; x: number; y: number } | undefined
@@ -472,7 +505,8 @@ export function Dashboard(props: {
     });
   };
 
-  onMount(async () => {
+  onSettled(() => void boot());
+  async function boot() {
     void reader.probe();
     // Read up front, before any await, so a reload restores the state the
     // tab actually left in, not whatever a faster boot wrote. A preview
@@ -528,7 +562,7 @@ export function Dashboard(props: {
           ),
         2000,
       );
-  });
+  }
 
   // The snapshot names a tree node, and the tree is the source of truth: a
   // source deleted since then isn't found, the snapshot is dropped and the
@@ -546,6 +580,8 @@ export function Dashboard(props: {
       return;
     }
     setArticleFilter(snapshot.articleFilter);
+    // The list request below reads the filter.
+    flush();
     if (search) {
       if (node) setSelectedNode(node);
       setSearchTerms(search);
@@ -554,10 +590,12 @@ export function Dashboard(props: {
   }
 
   // Selecting one row opens it in the reader; any other selection closes it.
-  function selectRows(indexes: Set<number>) {
+  // A caller that just replaced the rows passes them: list.rows() reads the
+  // old ones until Solid's next flush.
+  function selectRows(indexes: Set<number>, rows = list.rows()) {
     setSelectedIndexes(indexes);
     const index = soleSelectedIndex(indexes);
-    const article = index === undefined ? undefined : list.rows()[index];
+    const article = index === undefined ? undefined : rows[index];
     if (!article) {
       reader.close();
       return;
@@ -607,11 +645,13 @@ export function Dashboard(props: {
     if (!rows) return;
     const resumed = snapshot && restoredSelection(rows, snapshot);
     if (snapshot && resumed) {
-      selectRows(new Set(resumed.indexes));
+      const indexes = new Set(resumed.indexes);
+      selectRows(indexes, rows);
       setSelectionAnchor(resumed.anchor);
       queueMicrotask(() => focusArticleAt(resumed.focus));
       // A multi-row selection opens no article, so the list keeps focus.
-      const opened = selected();
+      const index = soleSelectedIndex(indexes);
+      const opened = index === undefined ? undefined : rows[index];
       if (opened) {
         restore.resumeReaderAt(opened.id);
         props.focusPane("reader");
@@ -632,7 +672,7 @@ export function Dashboard(props: {
     // the reader asks for something; the keyboard cursor and the selection
     // anchor still start on the first row.
     const opensFirst = rows.length > 0 && !readerHidden();
-    selectRows(new Set(opensFirst ? [0] : []));
+    selectRows(new Set(opensFirst ? [0] : []), rows);
     setSelectionAnchor(rows.length ? 0 : undefined);
     queueMicrotask(() => focusArticleAt(0));
     restore.record({
@@ -675,7 +715,11 @@ export function Dashboard(props: {
     // unread default would answer it with an empty list. Only entering
     // search moves the dropdown: re-running the same terms under a filter
     // the user then chose keeps that choice.
-    if (!activeSearch() && !snapshot) setArticleFilter("all");
+    if (!activeSearch() && !snapshot) {
+      setArticleFilter("all");
+      // The list request below reads the filter.
+      flush();
+    }
     setActiveSearch(query);
     props.focusPane("articles");
     clearProblem();
@@ -696,6 +740,8 @@ export function Dashboard(props: {
   function changeArticleFilter(next: ArticleFilter) {
     if (next === articleFilter()) return;
     setArticleFilter(next);
+    // The list request below reads the filter.
+    flush();
     const search = activeSearch();
     const node = selectedNode();
     if (search) void runSearch(search);
@@ -747,7 +793,7 @@ export function Dashboard(props: {
     const next = remaining[nextIndex] ? nextIndex : undefined;
     list.setRows(remaining);
     topUpArticles();
-    selectRows(new Set(next === undefined ? [] : [next]));
+    selectRows(new Set(next === undefined ? [] : [next]), remaining);
     setSelectionAnchor(next);
     queueMicrotask(() => focusArticleAt(next ?? 0));
   }
@@ -852,7 +898,7 @@ export function Dashboard(props: {
         // undoes the optimistic unread counts either way.
         if (!listSignal.aborted) {
           list.setRows(rows);
-          selectRows(new Set(indexes));
+          selectRows(new Set(indexes), rows);
           setFocusedIndex(Math.min(...indexes));
           setSelectionAnchor(Math.min(...indexes));
         }
@@ -866,34 +912,39 @@ export function Dashboard(props: {
   // so every other reader pays nothing. The effect re-runs whenever the list
   // changes, because the rows it watches are the ones this render put in the
   // DOM. Batches ride the same markArticlesRead the `m` key uses.
-  createEffect(() => {
-    if (markReadPolicy.get() !== "on-scroll-past") return;
-    // A restore is about to scroll this list to the stored position, which
-    // must not count as the user scrolling past rows (#718). Reading the
-    // signal re-runs the effect when the restore finishes.
-    if (restore.restoring()) return;
-    const rows = list.rows();
-    if (list.loading() || !rows.length || !articleListElement) return;
-    const stop = observeScrollPast({
-      // Already-read rows and the article the reader holds are never queued:
-      // re-marking the one being read would pull its row out from under it
-      // in the unread view. The selection says which row that is, not the
-      // opened article, which fills in only once its body lands, after the
-      // observer's first pass.
-      eligible: (id) => {
-        const article = rows.find((row) => row.id === id);
-        return article !== undefined && !article.read && selected()?.id !== id;
-      },
-      flush: (ids) => void markArticlesRead(ids, true),
-      list: articleListElement,
-      passiveFirstPass: restore.takePassiveFirstPass(),
-      rowId: (row) =>
-        row instanceof HTMLElement
-          ? rows[Number(row.dataset["index"])]?.id
-          : undefined,
-    });
-    onCleanup(stop);
-  });
+  createEffect(
+    () =>
+      markReadPolicy.get() === "on-scroll-past" &&
+      // A restore is about to scroll this list to the stored position, which
+      // must not count as the user scrolling past rows (#718). Reading the
+      // signal re-runs the effect when the restore finishes.
+      !restore.restoring() &&
+      !list.loading() &&
+      list.rows(),
+    (rows) => {
+      if (!rows || !rows.length || !articleListElement) return undefined;
+      return observeScrollPast({
+        // Already-read rows and the article the reader holds are never queued:
+        // re-marking the one being read would pull its row out from under it
+        // in the unread view. The selection says which row that is, not the
+        // opened article, which fills in only once its body lands, after the
+        // observer's first pass.
+        eligible: (id) => {
+          const article = rows.find((row) => row.id === id);
+          return (
+            article !== undefined && !article.read && selected()?.id !== id
+          );
+        },
+        flush: (ids) => void markArticlesRead(ids, true),
+        list: articleListElement,
+        passiveFirstPass: restore.takePassiveFirstPass(),
+        rowId: (row) =>
+          row instanceof HTMLElement
+            ? rows[Number(row.dataset["index"])]?.id
+            : undefined,
+      });
+    },
+  );
 
   // Real DOM focus with the same roving tabindex as the tree, so the browser
   // announces the focused row itself.
@@ -1420,15 +1471,7 @@ export function Dashboard(props: {
         <FeedDiscovery
           admin={isAdmin()}
           backPane={props.backPane}
-          editing={
-            editingSource() && {
-              homeUrl: editingSource()!.homeUrl,
-              name: editingSource()!.name,
-              parentUid: findParentFolderUid(tree(), editingSource()!.uid),
-              uid: editingSource()!.uid,
-              xmlUrl: editingSource()!.xmlUrl,
-            }
-          }
+          editing={editedSource()}
           focusPane={props.focusPane}
           handleUnauthorized={props.handleUnauthorized}
           initialFeedUrl={props.preview?.feedUrl}
