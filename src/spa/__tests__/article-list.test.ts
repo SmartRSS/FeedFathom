@@ -84,7 +84,7 @@ describe("ArticleList", () => {
     const list = new ArticleList(async () => {
       throw new Error("offline");
     });
-    expect(list.load({ sources: [1] })).rejects.toThrow("offline");
+    await expect(list.load({ sources: [1] })).rejects.toThrow("offline");
   });
 
   test("clearing stops paging", async () => {
