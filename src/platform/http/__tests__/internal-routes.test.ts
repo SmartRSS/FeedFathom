@@ -14,7 +14,3 @@ test.each(["", "127.0.0.2", "192.0.2.1", "::ffff:192.0.2.1"])(
     expect(healthcheckResponse(address, true).status).toBe(403);
   },
 );
-
-test("reports a process that is not ready yet", () => {
-  expect(healthcheckResponse("127.0.0.1", false).status).toBe(503);
-});

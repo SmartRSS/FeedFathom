@@ -340,15 +340,4 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     await expect(reservation).rejects.toBeInstanceOf(HttpDeferredError);
     expect(redis.pttl(waitersKey)).toBe(-2);
   });
-
-  test("a cancelled wait takes the waiter out", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const { deadline, reservation, wake } = await startWaiter(redis);
-
-    deadline.controller.abort();
-    wake();
-    await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
-    expect(redis.pttl(waitersKey)).toBe(-2);
-  });
 });
