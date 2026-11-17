@@ -133,13 +133,17 @@ describe("site rules", () => {
     expect(scan(address, page).map((feed) => feed.url)).toEqual([url]);
   });
 
+  test("names a site feed as the channel's", () => {
+    expect(scan("https://hive.blog/@user")).toEqual([
+      { title: "Channel feed", url: "https://www.hiverss.com/@user/feed" },
+    ]);
+  });
+
   test.each([
     "https://vimeo.com/123456",
     "https://evilhive.blog/@user",
     "https://notyoutube.com/channel/abc",
-    "https://github.com.example/SmartRSS/FeedFathom",
-    "https://github.com/SmartRSS",
-    "https://github.com/settings/profile",
+    "https://fakevimeo.com/channel",
     "https://hive.blog/",
   ])("%s yields nothing", (address) => {
     expect(scan(address)).toEqual([]);

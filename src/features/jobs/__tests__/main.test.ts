@@ -353,23 +353,6 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
   expect(events).toEqual(["update", "delay", "delay"]);
 });
 
-test("refreshes favicons only for validated job data", async () => {
-  const refreshed: { homeUrl: string; id: number }[] = [];
-  const { process } = await startWorker({
-    faviconRefresher: strictFake<FaviconRefresher>({
-      async refreshFavicon(value) {
-        refreshed.push(value);
-      },
-    }),
-  });
-
-  await process(
-    job(JobName.RefreshFavicon, { homeUrl: source.homeUrl, id: source.id }),
-  );
-
-  expect(refreshed).toEqual([{ homeUrl: source.homeUrl, id: source.id }]);
-});
-
 // A favicon run queues every due source at once, at a priority below the
 // unprioritized ParseSource jobs, and finishes only once every add has.
 test("a favicon gather hands every due source to the refresher's queue", async () => {

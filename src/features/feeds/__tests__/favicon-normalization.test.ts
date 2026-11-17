@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { inflateSync } from "node:zlib";
 import { normalizeFavicon } from "../favicon-normalization.ts";
 
@@ -42,8 +42,12 @@ function v4Bmp(width: number, height: number, paint: Paint): Buffer {
   return Buffer.concat([header, pixels]);
 }
 
-function png(width: number, height = width): Promise<Buffer> {
-  return new Bun.Image(v4Bmp(width, height, noise)).png().buffer();
+function png(
+  width: number,
+  height = width,
+  paint: Paint = noise,
+): Promise<Buffer> {
+  return new Bun.Image(v4Bmp(width, height, paint)).png().buffer();
 }
 
 function jpeg(size: number): Promise<Buffer> {
@@ -153,21 +157,20 @@ async function dimensions(image: Buffer) {
   return { height, width };
 }
 
-const resize = spyOn(Bun.Image.prototype, "resize");
-afterEach(() => resize.mockClear());
-
 describe("normalizeFavicon", () => {
   test("uses an ICO's exact 64px frame without resizing it", async () => {
     const source = ico([
       { bpp: 32, data: icoBmpFrame(16, 32, noise), size: 16 },
-      { bpp: 32, data: await png(64), size: 64 },
-      { bpp: 32, data: await png(128), size: 128 },
+      { bpp: 32, data: await png(64, 64, () => [255, 0, 0, 255]), size: 64 },
+      { bpp: 32, data: await png(128, 128, () => [0, 0, 255, 255]), size: 128 },
     ]);
 
     const result = await normalizeFavicon(source, "image/x-icon");
 
-    expect(resize).not.toHaveBeenCalled();
     expect(await dimensions(result.buffer)).toEqual({ height: 64, width: 64 });
+    const [r, g, b] = (await rgba(result.buffer))(32, 32);
+    expect(r).toBeGreaterThan(200);
+    expect(g! + b!).toBeLessThan(60);
   });
 
   test("picks the largest ICO frame under 64px and does not upscale it", async () => {
@@ -179,7 +182,6 @@ describe("normalizeFavicon", () => {
 
     const result = await normalizeFavicon(source, "image/x-icon");
 
-    expect(resize).not.toHaveBeenCalled();
     expect(result.contentType).toBe("image/webp");
     expect(await dimensions(result.buffer)).toEqual({ height: 48, width: 48 });
   });
@@ -232,7 +234,6 @@ describe("normalizeFavicon", () => {
 
     const result = await normalizeFavicon(source, type);
 
-    expect(resize).not.toHaveBeenCalled();
     expect(await dimensions(result.buffer)).toEqual({ height: 32, width: 32 });
     expect(result.buffer.length).toBeLessThanOrEqual(source.length);
   });

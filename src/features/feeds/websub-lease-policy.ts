@@ -2,7 +2,7 @@ import type { WebSubStatus } from "#platform/db/schemas/sources.ts";
 
 // What a hub is assumed to have granted when it verifies a subscription
 // without naming a lease, or names one that makes no sense.
-export const defaultLeaseSeconds = 24 * 60 * 60;
+const defaultLeaseSeconds = 24 * 60 * 60;
 
 /**
  * How long a verified WebSub subscription lasts.
