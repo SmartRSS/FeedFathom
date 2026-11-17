@@ -17,7 +17,6 @@ import {
 // lands on a queued poll must still refresh like it asked.
 const fakeRedis = (initial: Record<string, string> = {}) => {
   const store = new Map(Object.entries(initial));
-  const sets: [string, string, string | undefined][] = [];
   const redis: SourceParseRedis = {
     async eval() {
       return 1;
@@ -28,13 +27,12 @@ const fakeRedis = (initial: Record<string, string> = {}) => {
       return value;
     },
     async set(key, value, mode) {
-      sets.push([key, value, mode]);
       if (mode === "NX" && store.has(key)) return null;
       store.set(key, value);
       return "OK";
     },
   };
-  return { redis, sets };
+  return { redis };
 };
 
 const holderFor = (state: string): SourceParseJobHandle => ({
@@ -81,7 +79,7 @@ describe("SourceEnqueuer", () => {
 
   test("adds directly when no job holds the source's id", async () => {
     const { queue, adds } = fakeQueue(null);
-    const { redis, sets } = fakeRedis();
+    const { redis } = fakeRedis();
     const enqueuer = new SourceEnqueuer(queue, redis);
 
     await enqueuer.enqueueSource(source);
@@ -98,7 +96,7 @@ describe("SourceEnqueuer", () => {
         },
       ],
     ]);
-    expect(sets).toEqual([]);
+    expect(await parsesOf(enqueuer)).toEqual([{ id: 3 }]);
   });
 
   // A request landing on a running job is answered by one follow-up once the

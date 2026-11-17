@@ -6,7 +6,7 @@ describe("clampToPollFloor", () => {
 
   test("pushes a request in the past out to the floor", () => {
     expect(clampToPollFloor(new Date(now - 86_400_000), now).getTime()).toBe(
-      now + pollFloorMs,
+      now + 300_000,
     );
   });
 

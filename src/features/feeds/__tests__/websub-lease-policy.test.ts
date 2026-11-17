@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import {
-  defaultLeaseSeconds,
   resolveLeaseSeconds,
   shouldAttemptWebSubSubscribe,
 } from "../websub-lease-policy.ts";
@@ -20,7 +19,7 @@ test.each([
   ["a negative lease", "-60"],
   ["a lease that would never expire", "Infinity"],
 ])("falls back on %s", (_case, lease) => {
-  expect(resolveLeaseSeconds(lease)).toBe(defaultLeaseSeconds);
+  expect(resolveLeaseSeconds(lease)).toBe(86_400);
 });
 
 // Subscribing again is idempotent from the hub's perspective, so retrying a
