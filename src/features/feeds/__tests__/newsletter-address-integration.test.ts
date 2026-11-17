@@ -467,13 +467,12 @@ test("a source the cleanup deletes mid-subscribe is created afresh", async () =>
   expect(await subscribers(source!.id)).toEqual([account.id]);
 });
 
-test.each([
-  ["another domain", `0123456789abcdef@other.example.test`],
-  ["a subdomain of the mail domain", `0123456789abcdef@sub.${mailDomain}`],
-  ["a chosen local part", `editor@${mailDomain}`],
-  ["a malformed local part", `0123456789abcdeg@${mailDomain}`],
-])("refuses to reserve %s", async (_case, refused) => {
-  const response = await post("/newsletter-address", { address: refused });
+// Which addresses are refused is isNewsletterAddress's table; this checks the
+// route holds a reservation to it, against this instance's mail domain.
+test("refuses to reserve an address on another domain", async () => {
+  const response = await post("/newsletter-address", {
+    address: "0123456789abcdef@other.example.test",
+  });
 
   expect(response.status).toBe(400);
   expect(await sourceRows()).toEqual([]);

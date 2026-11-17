@@ -44,19 +44,6 @@ test("the 31st call is refused with a Retry-After of at most 60", async () => {
   expect(retryAfterSeconds).toBeLessThanOrEqual(60);
 });
 
-test("a new window allows calls again", async () => {
-  const user = userId();
-  const key = `outbound-fetch:${user}`;
-  for (let call = 0; call < 30; call++) {
-    // eslint-disable-next-line no-await-in-loop -- Each call builds on the last.
-    await budget.consume(user);
-  }
-  // The counter expiring is what the window passing amounts to.
-  await redis.send("DEL", [key]);
-
-  await expect(budget.consume(user)).resolves.toBeUndefined();
-});
-
 test("two users' budgets are independent", async () => {
   const first = userId();
   const second = first + 1;

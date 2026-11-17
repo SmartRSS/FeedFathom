@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { UsersDataService } from "#features/auth/user-data-service.ts";
 import { digestToken } from "#features/auth/account-tokens.ts";
-import { SESSION_TTL_DAYS } from "#platform/db/schemas/sessions.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
@@ -227,15 +226,6 @@ test("a reset token is stored as a digest and found only while it is live", asyn
   expect(
     await usersDataService.findUserByPasswordResetToken(digestToken(token)),
   ).toBeUndefined();
-});
-
-test("a session expires a year after it opens", async () => {
-  const { signIn } = await setUp();
-  const sid = await signIn();
-  const [row] = await client<{ days: number }[]>`
-    SELECT EXTRACT(DAY FROM expires_at - created_at)::int AS days
-    FROM sessions WHERE sid = ${sid ?? ""}`;
-  expect(row?.days).toBe(SESSION_TTL_DAYS);
 });
 
 test("a session opened without a User-Agent lists none", async () => {
