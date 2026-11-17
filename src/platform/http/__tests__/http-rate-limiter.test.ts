@@ -303,7 +303,7 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     redis.seed(lastKey, String(Date.now()), intervals.background);
   }
 
-  test("keeps the waiter visible for the whole request deadline", async () => {
+  test("keeps the waiter visible for the whole request deadline, and a cancelled wait takes it out", async () => {
     const redis = createFakeHttpRedis();
     requestedJustNow(redis);
     const { deadline, reservation, wake } = await startWaiter(redis);

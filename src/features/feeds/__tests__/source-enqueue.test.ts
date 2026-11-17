@@ -32,7 +32,7 @@ const fakeRedis = (initial: Record<string, string> = {}) => {
       return "OK";
     },
   };
-  return { redis };
+  return redis;
 };
 
 const holderFor = (state: string): SourceParseJobHandle => ({
@@ -79,7 +79,7 @@ describe("SourceEnqueuer", () => {
 
   test("adds directly when no job holds the source's id", async () => {
     const { queue, adds } = fakeQueue(null);
-    const { redis } = fakeRedis();
+    const redis = fakeRedis();
     const enqueuer = new SourceEnqueuer(queue, redis);
 
     await enqueuer.enqueueSource(source);
@@ -111,7 +111,7 @@ describe("SourceEnqueuer", () => {
     "requests %p on a running job leave the follow-up %p",
     async (skipCaches, followUp) => {
       const { queue, adds } = fakeQueue(holderFor("active"));
-      const enqueuer = new SourceEnqueuer(queue, fakeRedis().redis);
+      const enqueuer = new SourceEnqueuer(queue, fakeRedis());
 
       for (const skipCache of skipCaches) {
         // eslint-disable-next-line no-await-in-loop -- Arrival order is the case.
@@ -128,7 +128,7 @@ describe("SourceEnqueuer", () => {
 
   test("adds a refresh if the queued job disappeared before merging", async () => {
     const { queue, adds } = fakeQueue(holderFor("waiting"));
-    const { redis } = fakeRedis();
+    const redis = fakeRedis();
     redis.eval = async () => 0;
 
     await new SourceEnqueuer(queue, redis).enqueueSource(source);
@@ -138,7 +138,7 @@ describe("SourceEnqueuer", () => {
 
   test("a run answers the requests that piled up during it once", async () => {
     const { queue } = fakeQueue(null);
-    const { redis } = fakeRedis({ [pendingKey]: "1" });
+    const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
 
     expect(await parsesOf(enqueuer)).toEqual([
@@ -154,7 +154,7 @@ describe("SourceEnqueuer", () => {
   // retry would parse the original request and lose the bypass (#847).
   test("a deferred follow-up hands its intent to the retry", async () => {
     const { queue } = fakeQueue(null);
-    const { redis } = fakeRedis({ [pendingKey]: "1" });
+    const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
     const retryAt = Date.now() + 60_000;
 
@@ -175,9 +175,7 @@ describe("SourceEnqueuer", () => {
 
   test("queues each due source behind explicit requests", async () => {
     const { queue, adds } = fakeQueue(null);
-    await new SourceEnqueuer(queue, fakeRedis().redis).enqueueDueSources([
-      source,
-    ]);
+    await new SourceEnqueuer(queue, fakeRedis()).enqueueDueSources([source]);
     expect(adds).toEqual([
       [
         JobName.ParseSource,

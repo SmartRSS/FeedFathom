@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clampToPollFloor, pollFloorMs } from "../source-schedule-policy.ts";
+import { clampToPollFloor } from "../source-schedule-policy.ts";
 
 describe("clampToPollFloor", () => {
   const now = Date.UTC(2026, 0, 1);
@@ -10,10 +10,11 @@ describe("clampToPollFloor", () => {
     );
   });
 
-  test("a request exactly at the floor is unchanged", () => {
-    const requested = new Date(now + pollFloorMs);
-    expect(clampToPollFloor(requested, now).getTime()).toBe(
-      requested.getTime(),
-    );
+  test("a request at or past the floor is unchanged", () => {
+    for (const requested of [now + 300_000, now + 3_600_000]) {
+      expect(clampToPollFloor(new Date(requested), now).getTime()).toBe(
+        requested,
+      );
+    }
   });
 });

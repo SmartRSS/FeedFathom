@@ -140,6 +140,7 @@ describe("scanHtml", () => {
       results.some((result) => result.title === "This page (h-entry)"),
     ).toBe(false);
   });
+
   // Matches the extension's querySelector, which takes the first element.
   test("reads the first of repeated single-valued elements", () => {
     expect(

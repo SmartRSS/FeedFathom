@@ -336,13 +336,13 @@ test.each([
 // it. That asymmetry is the case for giving discovery its own dependency.
 type ParsedFeed = Awaited<ReturnType<ServerServices["feedParser"]["parseUrl"]>>;
 
-function parsedFeed(url: string, hubUrl?: string): ParsedFeed {
+function parsedFeed(url: string, hubUrl: string): ParsedFeed {
   return {
     cached: false,
     feed: { description: null, items: [], title: null, url },
     finalUrl: url,
     freshUntil: null,
-    websub: hubUrl === undefined ? undefined : { hubUrl, topicUrl: url },
+    websub: { hubUrl, topicUrl: url },
   };
 }
 
