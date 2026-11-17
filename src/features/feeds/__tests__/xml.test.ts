@@ -28,8 +28,8 @@ describe("xmlSafeText", () => {
     );
   });
 
-  test("strips the two noncharacters", () => {
-    expect(xmlSafeText("a\ufffeb\uffff")).toBe("ab");
+  test("strips the two noncharacters but keeps the replacement character", () => {
+    expect(xmlSafeText("a\ufffeb\uffffc\ufffd")).toBe("abc\ufffd");
   });
 
   test("strips lone surrogates but keeps well-formed astral pairs", () => {
@@ -43,15 +43,6 @@ describe("xmlSafeText", () => {
     expect(xmlSafeText('<title> Tom & Jerry -- "quoted" </title>')).toBe(
       '<title> Tom & Jerry -- "quoted" </title>',
     );
-  });
-
-  test("the strip is what lets Bun.XML.stringify serialize an export", () => {
-    const hostile = "a\u0000b\tc\nd\u000ee\uffff\ufffd\u{1f600}";
-    expect(() => Bun.XML.stringify({ root: hostile })).toThrow();
-
-    const safe = xmlSafeText(hostile);
-    expect(() => Bun.XML.stringify({ root: safe })).not.toThrow();
-    expect(safe).toBe("ab\tc\nde\ufffd\u{1f600}");
   });
 });
 

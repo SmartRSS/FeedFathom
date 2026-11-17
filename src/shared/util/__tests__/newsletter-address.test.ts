@@ -44,6 +44,7 @@ describe("isNewsletterAddress", () => {
     ["a chosen local part", "editor@mail.example"],
     ["a short local part", "0123456789abcde@mail.example"],
     ["a long local part", "0123456789abcdef0@mail.example"],
+    ["a non-hex local part", "0123456789abcdeg@mail.example"],
     ["a second @", "0123456789abcdef@mail.example@other.example"],
   ])("refuses %s", (_, address) => {
     expect(isNewsletterAddress(address, "mail.example")).toBe(false);

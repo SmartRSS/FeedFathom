@@ -43,35 +43,50 @@ describe("queued refresh merging with BullMQ", () => {
     await connection.quit();
   });
 
+  // [queued job's skipCache, the request's, pending follow-up, merged result]:
+  // a bypass from any of the three wins.
+  const merges: [boolean | undefined, boolean, string | null, boolean][] = [
+    [undefined, false, null, false],
+    [undefined, false, "0", false],
+    [undefined, false, "1", true],
+    [undefined, true, null, true],
+    [undefined, true, "0", true],
+    [undefined, true, "1", true],
+    [false, false, null, false],
+    [false, false, "0", false],
+    [false, false, "1", true],
+    [false, true, null, true],
+    [false, true, "0", true],
+    [false, true, "1", true],
+    [true, false, null, true],
+    [true, false, "0", true],
+    [true, false, "1", true],
+    [true, true, null, true],
+    [true, true, "0", true],
+    [true, true, "1", true],
+  ];
+
   for (const delay of [0, 60_000]) {
-    for (const existing of [undefined, false, true]) {
-      for (const incoming of [false, true]) {
-        for (const pending of [null, "0", "1"]) {
-          test(`merges delay=${delay} existing=${existing} incoming=${incoming} pending=${pending}`, async () => {
-            await queue.add(
-              JobName.ParseSource,
-              {
-                ...source,
-                ...(existing === undefined ? {} : { skipCache: existing }),
-              },
-              { delay, jobId },
-            );
-            if (pending !== null) await connection.set(pendingKey, pending);
+    for (const [existing, incoming, pending, merged] of merges) {
+      test(`merges delay=${delay} existing=${existing} incoming=${incoming} pending=${pending}`, async () => {
+        await queue.add(
+          JobName.ParseSource,
+          {
+            ...source,
+            ...(existing === undefined ? {} : { skipCache: existing }),
+          },
+          { delay, jobId },
+        );
+        if (pending !== null) await connection.set(pendingKey, pending);
 
-            await enqueuer.enqueueSource(source, "websub-push", incoming);
+        await enqueuer.enqueueSource(source, "websub-push", incoming);
 
-            const job = await queue.getJob(jobId);
-            expect(job?.data.skipCache).toBe(
-              existing === true || incoming || pending === "1",
-            );
-            expect(await job?.getState()).toBe(delay ? "delayed" : "waiting");
-            expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(
-              1,
-            );
-            expect(await followUp()).toBeNull();
-          });
-        }
-      }
+        const job = await queue.getJob(jobId);
+        expect(job?.data.skipCache).toBe(merged);
+        expect(await job?.getState()).toBe(delay ? "delayed" : "waiting");
+        expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(1);
+        expect(await followUp()).toBeNull();
+      });
     }
 
     test(`stale handles cannot downgrade a concurrent bypass with delay=${delay}`, async () => {

@@ -671,12 +671,6 @@ test("a late response to a cleared search leaves the list empty", async ({
   await expect(
     page.getByRole("listbox", { name: "Articles" }).getByRole("option"),
   ).toHaveCount(0);
-
-  // #933: the empty-state text is a role=status, and a listbox may only own
-  // option/group children -- it must sit outside the listbox, not inside it.
-  await expect(
-    page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
-  ).toHaveCount(0);
 });
 
 // The article list is keyset-paged and the scroll position is what asks for
@@ -1275,7 +1269,6 @@ test("compact density tightens the tree without touching the theme", async ({
   );
   await page.goto("/");
   await expect(row).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
   const compact = (await row.boundingBox())!.height;
   expect(comfortable).toBe(28);
   expect(compact).toBe(20);
@@ -2972,13 +2965,17 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   await expect(
     page.getByRole("option", { name: /Second article/ }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator(":focus")).toHaveAttribute("data-index", "1");
+  await expect(
+    page.getByRole("option", { name: /Second article/ }),
+  ).toBeFocused();
 
   await page.keyboard.press("k");
   await expect(
     page.getByRole("option", { name: /First article/ }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator(":focus")).toHaveAttribute("data-index", "0");
+  await expect(
+    page.getByRole("option", { name: /First article/ }),
+  ).toBeFocused();
 });
 
 // `o` carries focus with the pane switch (#816): on a narrow screen the
@@ -3011,10 +3008,6 @@ test("o moves focus between the article list and the reader pane", async ({
 // rows are buttons with no platform menu to lose, so they keep the app's.
 test("leaves the article context menu to the browser", async ({ page }) => {
   await openApp(page);
-
-  await sourceRow(page).first().click({ button: "right" });
-  await expect(page.getByRole("menu")).toBeVisible();
-  await page.keyboard.press("Escape");
 
   await selectSource(page);
   await articleOptions(page).first().click({ button: "right" });

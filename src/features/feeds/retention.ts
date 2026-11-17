@@ -36,7 +36,7 @@ import { subscriptionSeesArticle } from "#features/feeds/article-read-state.ts";
 // the origin asked for (both written by the same successSource UPDATE), and
 // websub ignores that column, so it gets the flat daily fallback. Every
 // degenerate case lands on a LARGER buffer, erring towards keeping.
-export const goneFromFeedBufferFloorHours = 24;
+const goneFromFeedBufferFloorHours = 24;
 const confirmedGoneFromFeedBuffer = sql`
   GREATEST(
     ${goneFromFeedBufferFloorHours} * INTERVAL '1 hour',

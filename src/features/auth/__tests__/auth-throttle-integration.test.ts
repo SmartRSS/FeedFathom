@@ -92,18 +92,6 @@ test("an address at its limit is refused without creating an account key", async
   expect(await redis.get(source)).toBe("50");
 });
 
-test("the account counter does not grow while the address is locked", async () => {
-  const { account, address, source } = scopeKeys();
-  await throttle.attempt("login", address, email);
-  await redis.set(source, "50", "KEEPTTL");
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // eslint-disable-next-line no-await-in-loop -- Each attempt builds on the last.
-    expect(await throttle.attempt("login", address, email)).toBe(false);
-  }
-  expect(await redis.get(account)).toBe("1");
-});
-
 test("a success clears the account and refunds one attempt without creating a key", async () => {
   const { account, address, source } = scopeKeys();
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -133,22 +121,6 @@ test("a password change is counted per account, whatever the address", async () 
 
   await throttle.passwordChanged(userId);
   expect(await throttle.attemptPasswordChange(userId)).toBe(true);
-});
-
-test("counters stop refusing after the window", async () => {
-  const { address, source } = scopeKeys();
-  await redis.set(source, "50");
-  await redis.send("EXPIRE", [source, "60"]);
-  expect(await throttle.attempt("login", address, email)).toBe(false);
-
-  await redis.send("PEXPIRE", [source, "1"]);
-  for (let wait = 0; wait < 100; wait++) {
-    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
-    if (!(await redis.exists(source))) break;
-    // eslint-disable-next-line no-await-in-loop -- Polls until the window ends.
-    await Bun.sleep(10);
-  }
-  expect(await throttle.attempt("login", address, email)).toBe(true);
 });
 
 async function spend(

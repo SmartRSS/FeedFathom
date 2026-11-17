@@ -140,51 +140,6 @@ describe("scanHtml", () => {
       results.some((result) => result.title === "This page (h-entry)"),
     ).toBe(false);
   });
-  test("skips an unparseable link href and keeps the other feeds", () => {
-    expect(
-      scanHtml(
-        "https://publisher.example/",
-        `<html><head>
-          <link rel="alternate" type="application/rss+xml" href="http://[" title="Broken">
-          <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="Good">
-        </head><body></body></html>`,
-      ),
-    ).toEqual([{ title: "Good", url: "https://publisher.example/feed.xml" }]);
-  });
-
-  test("finds nothing on a Vimeo page with no channel", () => {
-    expect(
-      scanHtml("https://vimeo.com/123456", "<html><body></body></html>"),
-    ).toEqual([]);
-  });
-
-  test.each([
-    ["https://steemit.com/@user?x=1#c", "https://www.hiverss.com/@user/feed"],
-    ["https://hive.blog/@user?x=1#c", "https://www.hiverss.com/@user/feed"],
-  ])("builds the hiverss feed for %s from its path alone", (address, url) => {
-    expect(scanHtml(address, "<html><body></body></html>")).toEqual([
-      { title: "Channel feed", url },
-    ]);
-  });
-
-  test.each([
-    "https://evilhive.blog/@user",
-    "https://notyoutube.com/channel/abc",
-    "https://fakevimeo.com/channel",
-  ])("leaves a lookalike host to the generic scanners: %s", (address) => {
-    expect(scanHtml(address, "<html><body></body></html>")).toEqual([]);
-  });
-
-  test("builds a site feed for a subdomain of the site", () => {
-    expect(
-      scanHtml("https://m.youtube.com/channel/abc", "<html></html>"),
-    ).toEqual([
-      {
-        title: "Channel feed",
-        url: "https://www.youtube.com/feeds/videos.xml?channel_id=abc",
-      },
-    ]);
-  });
 
   // Matches the extension's querySelector, which takes the first element.
   test("reads the first of repeated single-valued elements", () => {

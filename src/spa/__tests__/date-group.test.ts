@@ -36,12 +36,43 @@ const cases: [Date, Date, string][] = [
   ],
   [new Date(2024, 1, 29, 12), new Date(2023, 2, 1), "Within the Last Year"],
   [new Date(2024, 1, 29, 12), new Date(2023, 1, 28, 23, 59), "Older"],
+  [new Date(2024, 2, 31, 12), new Date(2024, 2, 24), "Within the Last Week"],
+  [
+    new Date(2024, 2, 31, 12),
+    new Date(2024, 2, 23, 23, 59),
+    "Within the Last Month",
+  ],
   [new Date(2024, 2, 31, 12), new Date(2024, 2, 2), "Within the Last Month"],
   [
     new Date(2024, 2, 31, 12),
     new Date(2024, 2, 1, 23, 59),
     "Within the Last Year",
   ],
+  [new Date(2024, 2, 31, 12), new Date(2023, 2, 31), "Within the Last Year"],
+  [new Date(2024, 2, 31, 12), new Date(2023, 2, 30, 23, 59), "Older"],
+  // New Year's Day: every boundary falls in the previous year.
+  [
+    new Date(2023, 0, 1, 23, 59),
+    new Date(2022, 11, 25),
+    "Within the Last Week",
+  ],
+  [
+    new Date(2023, 0, 1, 23, 59),
+    new Date(2022, 11, 24, 23, 59),
+    "Within the Last Month",
+  ],
+  [
+    new Date(2023, 0, 1, 23, 59),
+    new Date(2022, 11, 1),
+    "Within the Last Month",
+  ],
+  [
+    new Date(2023, 0, 1, 23, 59),
+    new Date(2022, 10, 30, 23, 59),
+    "Within the Last Year",
+  ],
+  [new Date(2023, 0, 1, 23, 59), new Date(2022, 0, 1), "Within the Last Year"],
+  [new Date(2023, 0, 1, 23, 59), new Date(2021, 11, 31, 23, 59), "Older"],
 ];
 
 test("groups explicit local dates across calendar boundaries", () => {

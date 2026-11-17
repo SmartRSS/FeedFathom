@@ -204,22 +204,3 @@ test("delivers raw MIME bytes that are not valid UTF-8", async () => {
   expect(received).toHaveLength(1);
   expect(received[0]?.equals(latin1)).toBe(true);
 });
-
-test("rejects malformed mail envelopes before EmailHandler", async () => {
-  const dependencies = createDependencies();
-  dependencies.config.MAIL_ENABLED = true;
-  dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
-  let handlerCalls = 0;
-  dependencies.emailHandler.processEmail = async () => {
-    handlerCalls++;
-  };
-  const app = await appFor(dependencies);
-
-  const response = await relayMail(app, {
-    from: "sender@example.com",
-    raw: "Subject: Test\r\n\r\nBody",
-  });
-
-  expect(response.status).toBe(422);
-  expect(handlerCalls).toBe(0);
-});

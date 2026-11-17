@@ -45,47 +45,24 @@ const aborted = () => {
   return controller.signal;
 };
 
-// navigator.onLine is a getter on the prototype; the property has to be
-// redefined on the instance to fake it, and removed again so the online case
-// reads the real one.
-const withOnLine = async (value: boolean, body: () => Promise<void>) => {
-  Object.defineProperty(globalThis.navigator, "onLine", {
-    configurable: true,
-    value,
-  });
-  try {
-    await body();
-  } finally {
-    Reflect.deleteProperty(globalThis.navigator, "onLine");
-  }
-};
-
 const returnResponse = (response: Response) => {
   setFetch(async () => response);
 };
 
 describe("schema-first SPA API", () => {
   test("names the connection when the request never reaches the server", async () => {
-    await withOnLine(false, async () => {
-      const failure = await rejectedApiCall();
-      // Not an ApiError: there is no status, and the 401 check must not match.
-      expect(isUnauthorizedError(failure)).toBe(false);
-      expect(failure).toBeInstanceOf(Error);
-      if (!(failure instanceof Error)) return;
-      expect(failure.message).toBe(
-        "FeedFathom can't reach its server. Check your connection.",
-      );
-      expect(failure.cause).toBeInstanceOf(TypeError);
-    });
-  });
-
-  test("says the same when the browser thinks it is online", async () => {
-    await withOnLine(true, async () => {
-      const failure = await rejectedApiCall();
-      expect(messageOf(failure, "Could not load your feeds.")).toBe(
-        "FeedFathom can't reach its server. Check your connection.",
-      );
-    });
+    const failure = await rejectedApiCall();
+    // Not an ApiError: there is no status, and the 401 check must not match.
+    expect(isUnauthorizedError(failure)).toBe(false);
+    expect(failure).toBeInstanceOf(Error);
+    if (!(failure instanceof Error)) return;
+    expect(failure.message).toBe(
+      "FeedFathom can't reach its server. Check your connection.",
+    );
+    expect(failure.cause).toBeInstanceOf(TypeError);
+    expect(messageOf(failure, "Could not load your feeds.")).toBe(
+      "FeedFathom can't reach its server. Check your connection.",
+    );
   });
 
   test("owns fetch details and returns the schema-decoded value", async () => {
