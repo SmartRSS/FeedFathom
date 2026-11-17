@@ -60,6 +60,9 @@ describe("schema-first SPA API", () => {
       "FeedFathom can't reach its server. Check your connection.",
     );
     expect(failure.cause).toBeInstanceOf(TypeError);
+    expect(messageOf(failure, "Could not load your feeds.")).toBe(
+      "FeedFathom can't reach its server. Check your connection.",
+    );
   });
 
   test("owns fetch details and returns the schema-decoded value", async () => {
