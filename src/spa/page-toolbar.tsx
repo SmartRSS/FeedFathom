@@ -35,7 +35,7 @@ export function BackButton(props: { always?: boolean; backPane(): void }) {
     <button
       aria-label="back"
       title="Back"
-      classList={{ "only-mobile": !props.always }}
+      class={{ "only-mobile": !props.always }}
       onClick={props.backPane}
     >
       <Icon raw={backRaw} />

@@ -2,7 +2,7 @@ import {
   createSignal,
   Match,
   onCleanup,
-  onMount,
+  onSettled,
   Show,
   Switch,
 } from "solid-js";
@@ -66,7 +66,8 @@ export function Login(props: { navigate(to: string): void; next: string }) {
   // route answers as it would for an unknown account and offering it here
   // would only send people somewhere that cannot help them. A failure to
   // load leaves the link hidden, which is the same harmless outcome.
-  onMount(async () => {
+  onSettled(() => void loadResetEnabled());
+  async function loadResetEnabled() {
     try {
       setResetEnabled(
         (await api("/register", registrationResponse)).passwordResetEnabled,
@@ -74,7 +75,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
     } catch {
       setResetEnabled(false);
     }
-  });
+  }
   async function submit(
     event: SubmitEvent & { currentTarget: HTMLFormElement },
   ) {
@@ -214,7 +215,8 @@ export function Register(props: { navigate(to: string): void; next: string }) {
     turnstileLoaded();
   }
 
-  onMount(async () => {
+  onSettled(() => void loadRegistration());
+  async function loadRegistration() {
     try {
       const info = await api("/register", registrationResponse);
       if (disposed) return;
@@ -226,7 +228,7 @@ export function Register(props: { navigate(to: string): void; next: string }) {
       setRegistration(null);
       setMessage(messageOf(cause, "Could not load registration."));
     }
-  });
+  }
   onCleanup(() => {
     disposed = true;
     if (turnstileLoaded)

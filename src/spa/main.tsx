@@ -1,16 +1,16 @@
 import {
   createEffect,
+  createMemo,
   createSignal,
-  ErrorBoundary,
+  Errored,
   lazy,
+  Loading,
   Match,
-  onCleanup,
-  onMount,
+  onSettled,
   Show,
-  Suspense,
   Switch,
 } from "solid-js";
-import { render } from "solid-js/web";
+import { render } from "@solidjs/web";
 import { loginPath, resolveRoute, showsPanes, type Route } from "./routes.ts";
 import {
   isDiscoveryEntry,
@@ -131,26 +131,23 @@ function App() {
   const [pane, setPane] = createSignal<DashboardPane>("sources");
   const [discovery, setDiscovery] = createSignal(false);
 
-  createEffect(() => {
-    document.documentElement.dataset["theme"] = resolvedTheme();
+  const { dataset } = document.documentElement;
+  createEffect(resolvedTheme, (theme) => {
+    dataset["theme"] = theme;
   });
   // On the same element as the theme, so the reader rules can key off either
-  // without a second host to reason about. One effect each rather than one
-  // for both: each attribute follows exactly one signal, which is the shape
-  // Solid 2.0's compute-then-apply split wants (docs/upcoming-upgrades.md).
-  createEffect(() => {
-    document.documentElement.dataset["readerText"] = readerText.get();
+  // without a second host to reason about.
+  createEffect(readerText.get, (text) => {
+    dataset["readerText"] = text;
   });
-  createEffect(() => {
-    document.documentElement.dataset["density"] = density.get();
+  createEffect(density.get, (value) => {
+    dataset["density"] = value;
   });
-  createEffect(() => {
-    document.documentElement.dataset["readerWidth"] = readerWidth.get();
+  createEffect(readerWidth.get, (width) => {
+    dataset["readerWidth"] = width;
   });
-  createEffect(() => {
-    document.documentElement.dataset["mobileListAnchor"] = String(
-      mobileListAnchor.get(),
-    );
+  createEffect(mobileListAnchor.get, (anchor) => {
+    dataset["mobileListAnchor"] = String(anchor);
   });
 
   // A reload starts on the feeds: Discover's half-filled form is gone, so
@@ -196,9 +193,11 @@ function App() {
       if (paneShown === shown) paneShown = undefined;
     });
   };
+  // Without a transition the switch is a signal write, and the pane shows
+  // at Solid's flush, which a microtask queued now runs after.
   const whenPaneShown = (run: () => void) => {
     if (paneShown) void paneShown.then(run);
-    else run();
+    else queueMicrotask(run);
   };
   const focusPane = (next: DashboardPane) => {
     // history.state, not pane(): a pushed switch still waiting on its
@@ -256,39 +255,44 @@ function App() {
     return current.name === "login" ? current : undefined;
   };
 
-  createEffect(() => {
-    const title = ROUTE_TITLES[route().name];
-    const base = title === "FeedFathom" ? title : `${title} · FeedFathom`;
-    // The tab-title unread badge (#717). Only the dashboard produces a
-    // count; elsewhere it reads whatever the last dashboard left behind,
-    // and zero (badge hidden) once the dashboard is gone.
-    const badge =
-      unreadBadge.get() && unreadTotal() > 0 ? `(${unreadTotal()}) ` : "";
-    document.title = `${badge}${base}`;
-  });
+  createEffect(
+    () => {
+      const title = ROUTE_TITLES[route().name];
+      const base = title === "FeedFathom" ? title : `${title} · FeedFathom`;
+      // The tab-title unread badge (#717). Only the dashboard produces a
+      // count; elsewhere it reads whatever the last dashboard left behind,
+      // and zero (badge hidden) once the dashboard is gone.
+      const badge =
+        unreadBadge.get() && unreadTotal() > 0 ? `(${unreadTotal()}) ` : "";
+      return `${badge}${base}`;
+    },
+    (title) => {
+      document.title = title;
+    },
+  );
 
-  // Skips the first render (nothing was replaced yet). Pane changes keep the
-  // same path, and setPath's === check means the signal doesn't fire for
-  // them, so moving between panes never steals focus. Landing on <main>
-  // rather than a heading works for every route without each page needing
-  // its own focus target; the dashboard's own tree focus (see its onMount)
-  // runs later and wins where it applies.
-  let firstRoute = true;
-  createEffect(() => {
-    path();
-    if (firstRoute) {
-      firstRoute = false;
-      return;
-    }
-    queueMicrotask(() => {
-      const main = document.querySelector("main");
-      if (!main) return;
-      main.tabIndex = -1;
-      main.focus();
-    });
+  // Deferred past the first render (nothing was replaced yet). Pane changes
+  // keep the same path, and setPath's === check means the signal doesn't
+  // fire for them, so moving between panes never steals focus. Landing on
+  // <main> rather than a heading works for every route without each page
+  // needing its own focus target; the dashboard's own tree focus (see its
+  // onSettled) runs later and wins where it applies.
+  createEffect(
+    path,
+    () => {
+      queueMicrotask(() => {
+        const main = document.querySelector("main");
+        if (!main) return;
+        main.tabIndex = -1;
+        main.focus();
+      });
+    },
+    { defer: true },
+  );
+  onSettled(() => {
+    addEventListener("popstate", popstate);
+    return () => removeEventListener("popstate", popstate);
   });
-  onMount(() => addEventListener("popstate", popstate));
-  onCleanup(() => removeEventListener("popstate", popstate));
 
   // The options route is the one page the document scrolls (its settings run
   // past a viewport, and a scroll trapped inside the centered column read as
@@ -296,11 +300,13 @@ function App() {
   // dashboard's panes scroll themselves. Leaving it also drops the page
   // scroll -- hidden overflow would otherwise trap the viewport wherever
   // the options page left it.
-  createEffect(() => {
-    const name = route().name;
-    document.documentElement.dataset["route"] = name;
-    if (name !== "options") window.scrollTo(0, 0);
-  });
+  createEffect(
+    () => route().name,
+    (name) => {
+      dataset["route"] = name;
+      if (name !== "options") window.scrollTo(0, 0);
+    },
+  );
 
   return (
     <>
@@ -332,7 +338,7 @@ function App() {
       </Show>
       {/* A lazy route's chunk fails to load offline before its first visit,
           or after a deploy removed the old build's chunks. */}
-      <ErrorBoundary
+      <Errored
         fallback={
           <main>
             <p>This page could not load. Check your connection.</p>
@@ -342,7 +348,7 @@ function App() {
           </main>
         }
       >
-        <Suspense>
+        <Loading>
           <Show
             when={loginRoute()}
             fallback={
@@ -362,8 +368,8 @@ function App() {
           >
             {(login) => <Login navigate={navigate} next={login().next} />}
           </Show>
-        </Suspense>
-      </ErrorBoundary>
+        </Loading>
+      </Errored>
     </>
   );
 }
@@ -380,39 +386,47 @@ function Router(props: {
   route: Route;
   whenPaneShown(run: () => void): void;
 }) {
+  // A memo rather than an inline ternary: the Dashboard reads this prop
+  // from onSettled and event handlers, where an inline conditional's
+  // per-read memo would be created outside any owner.
+  const preview = createMemo(() =>
+    props.route.name === "preview" ? props.route : undefined,
+  );
   return (
     <Show
       when={showsPanes(props.route)}
       fallback={
         <Switch>
-          <Match when={props.route.name === "register" && props.route}>
-            {(route) =>
-              route().name === "register" && (
-                <Register next={route().next} navigate={props.navigate} />
-              )
-            }
+          <Match
+            when={props.route.name === "register" ? props.route : undefined}
+          >
+            {(route) => (
+              <Register next={route().next} navigate={props.navigate} />
+            )}
           </Match>
-          <Match when={props.route.name === "activate" && props.route}>
-            {(route) =>
-              route().name === "activate" && (
-                <Activate token={route().token} navigate={props.navigate} />
-              )
-            }
+          <Match
+            when={props.route.name === "activate" ? props.route : undefined}
+          >
+            {(route) => (
+              <Activate token={route().token} navigate={props.navigate} />
+            )}
           </Match>
           <Match when={props.route.name === "passwordReset"}>
             <PasswordReset navigate={props.navigate} />
           </Match>
           <Match
-            when={props.route.name === "passwordResetConfirm" && props.route}
-          >
-            {(route) =>
-              route().name === "passwordResetConfirm" && (
-                <PasswordResetConfirm
-                  token={route().token}
-                  navigate={props.navigate}
-                />
-              )
+            when={
+              props.route.name === "passwordResetConfirm"
+                ? props.route
+                : undefined
             }
+          >
+            {(route) => (
+              <PasswordResetConfirm
+                token={route().token}
+                navigate={props.navigate}
+              />
+            )}
           </Match>
           <Match when={props.route.name === "options"}>
             <Options
@@ -456,7 +470,7 @@ function Router(props: {
         openDiscovery={props.openDiscovery}
         closeDiscovery={props.closeDiscovery}
         whenPaneShown={props.whenPaneShown}
-        preview={props.route.name === "preview" ? props.route : undefined}
+        preview={preview()}
       />
     </Show>
   );

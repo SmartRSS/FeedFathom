@@ -1,13 +1,13 @@
 # Upcoming major upgrades: Bun 1.4, Elysia 2.0, Solid 2.0
 
-Researched 2026-08-16, versions rechecked 2026-09-07.
+Researched 2026-08-16, versions rechecked 2026-09-07; Solid rows 2026-11-17.
 
 | Package           | We use       | `latest` | `next` / prerelease |
 | ----------------- | ------------ | -------- | ------------------- |
 | bun               | 1.4.4        | 1.4.4    | —                   |
 | elysia            | 2.0.0-rc.0   | 1.4.30   | 2.0.0-rc.0          |
-| solid-js          | 1.9.17       | 1.9.17   | 2.0.0-rc.6          |
-| vite-plugin-solid | 2.11.14      | 2.11.14  | 3.0.0-next.27       |
+| solid-js          | 2.0.0        | 2.0.0    | —                   |
+| @solidjs/vite-plugin | 3.0.1     | 3.0.1    | —                   |
 | typebox           | 1.4.2        | 1.4.2    | —                   |
 
 `npm-check-updates` resolves elysia to its `experimental` dist-tag
@@ -54,112 +54,57 @@ Worth evaluating once stable, both opt-in and both currently unused here:
 
 ## Solid 2.0
 
-**Blocked on the toolchain, not on us. Rechecked 2026-09-07 by actually
-installing it.**
+Done: `solid-js` and `@solidjs/web` 2.0.0, built by `@solidjs/vite-plugin`
+3.0.1 (the renamed `vite-plugin-solid`), since 2026-11-17. Solid 2.0 went
+stable on 2026-11-16 ("The Long Hold" release post); the plugin's 3.0
+release the next day ended the toolchain mismatch that blocked this.
 
-`solid-js@2.0.0-rc.6` with `vite-plugin-solid@3.0.0-next.27` — the newest of
-each — does not build at all, and not because of anything in this repo:
+The type checker caught the API changes: split `createEffect`,
+`onMount` → `onSettled`, `classList` → `class` arrays and objects, no `on()`,
+`createSelector` → `createProjection`, `Suspense`/`ErrorBoundary` →
+`Loading`/`Errored`, lowercase `tabindex`/`readonly`, and the `JSX` types
+moving to `@solidjs/web`. What follows is what it did not catch. The browser
+suite runs on the Vite dev server, where Solid 2.0 reports these as coded
+diagnostics; it passes with none.
 
-```
-"./web" is not exported under the conditions ["solid","module","browser",
-"production","import"] from package solid-js
-```
+**Writes are deferred.** A setter queues its write: the signal, every memo
+over it, and the DOM keep the old value until Solid's next flush, a
+microtask later. Code that sets a signal and then reads it, directly or
+through a helper, sees the old value. The migration fixed 13 such sites, and
+the fixes take three forms:
 
-The plugin still resolves `solid-js/web`, which 2.0 no longer exports under
-those conditions. Nothing in `src/` can fix that; it is the build plugin and
-the framework prerelease disagreeing with each other. Typechecking is a
-separate wall — `onMount` is no longer exported from `solid-js`, the JSX
-runtime types do not resolve, and `Show` now requires a children *callback*
-(`ConditionalRenderCallback`), so every plain-children `<Show>` is an error.
+- Pass the value just computed instead of re-reading it (`selectRows(…,
+  rows)`, `load(column, direction)` in `admin.tsx`).
+- Call `flush()` after the write, in an event handler or after an `await`.
+  It throws inside `onSettled` and does nothing in an effect's apply phase.
+- Keep a plain field beside the signal for synchronous checks
+  (`SessionRestore`).
 
-So there is no version of this to do today, however small the surface. Recheck
-when `vite-plugin-solid` 3.0 and `solid-js` 2.0 both reach stable, or at least
-reach prereleases that agree on the `solid-js/web` export. Everything below is
-still the plan for when that happens.
+Focus that waits for a pane to show goes through `whenPaneShown`, which
+queues a microtask behind the flush.
 
-Solid 2.0 is a large breaking release, but our surface is
-small — seven `.tsx` files import from Solid at all, and only these imports:
+**Inline conditional props make a memo on every read.** A prop given a
+ternary or `&&` expression compiles to a getter that creates a memo. Reading
+it inside `onSettled` or an effect's apply phase throws
+(`PRIMITIVE_IN_FORBIDDEN_SCOPE`, `PRIMITIVE_IN_EFFECT_CALLBACK`). Give such a
+prop a memo at the call site (`preview` in `main.tsx`, `editedSource` in
+`dashboard.tsx`).
 
-`createSignal`, `createEffect`, `For`, `Show`, `Switch`, `Match`, `onMount`,
-`onCleanup`, `render`.
+**Reads outside a tracking scope warn.** A component body, a `<For>`/`<Show>`
+callback body, and an effect's apply phase do not track. A read there that is
+meant to happen once goes in `untrack()`. A read that should re-run something
+belongs in an effect's compute function.
 
-No stores, no `createResource`, no context, no `Index`, no `use:` directives,
-no `Suspense`/`ErrorBoundary`, no `batch`, no `on()`, no `mergeProps`/`splitProps`.
-Most of the migration guide simply doesn't apply.
+**Boolean attributes are presence or absence.** `aria-expanded={false}`
+removes the attribute. ARIA states take the strings `"true"`/`"false"`.
 
-### What breaks
+**A `value` binding re-applies whenever its element's other bindings
+change.** An input whose `value` is not written on every `onInput` loses what
+the user typed. `PasswordInput` therefore requires `value`.
 
-**Imports and JSX source** — `solid-js/web` → `@solidjs/web`
-(`src/spa/main.tsx:10`), and `tsconfig.json` `jsxImportSource` from `"solid-js"`
-to `"@solidjs/web"`.
-
-**`classList` is removed** — replaced by object/array forms of `class`.
-12 sites: `dashboard.tsx` (5), `feed-discovery.tsx` (4), `tree-item.tsx` (2),
-`admin.tsx` (1). Line numbers move; `grep -n classList src/spa/*.tsx` finds them.
-
-```jsx
-// now
-<div class="card" classList={{ active: isActive() }} />
-// 2.0
-<div class={["card", { active: isActive() }]} />
-```
-
-**`createEffect` splits into compute → apply** — 10 sites (`main.tsx` ×5,
-`dashboard.tsx` ×4, `dialog.tsx` ×1).
-
-```js
-createEffect(() => { document.documentElement.dataset.theme = resolvedTheme(); });
-// 2.0
-createEffect(resolvedTheme, (theme) => { document.documentElement.dataset.theme = theme; });
-```
-
-**`onMount` → `onSettled`, `onCleanup` folds into the returned cleanup** —
-9 `onMount` and 8 `onCleanup` calls. The paired ones (`main.tsx`,
-`feed-discovery.tsx`, `dashboard.tsx`, `account-flows.tsx`, `context-menu.tsx`)
-collapse into one call:
-
-```js
-onMount(() => addEventListener("popstate", popstate));
-onCleanup(() => removeEventListener("popstate", popstate));
-// 2.0
-onSettled(() => {
-  addEventListener("popstate", popstate);
-  return () => removeEventListener("popstate", popstate);
-});
-```
-
-**Deferred setter visibility** — the silent one. Setters no longer change what
-reads return until the microtask batch flushes (or `flush()` is called), so any
-synchronous read-after-set in an event handler silently reads stale state.
-
-Audited all 74 signals; one real site, already fixed on this branch:
-`dashboard.tsx` read `tree()` right after `setTree(...)` to re-resolve the
-selected node. Now computes the next tree once and uses that value for both.
-The fix is correct under 1.9 as well, so it needs no follow-up at upgrade time.
-
-### What does *not* break
-
-- `<Show>` / `<Match>` function children already use the accessor form
-  (`{(msg) => <p>{msg()}</p>}`) everywhere — that's the 2.0 signature.
-- `<For>` keeps raw item values by default; only `keyed={false}` (the `Index`
-  replacement) hands you an accessor, and we don't use `Index`.
-- `<Switch>`/`<For>` otherwise unchanged.
-
-### Blocker
-
-`vite-plugin-solid` 3.x is still `next`-only (`3.0.0-next.27`). Wait for a
-stable 3.0 before starting — the migration is mechanical enough that doing it
-against a moving prerelease compiler buys nothing.
-
-### Suggested order, when it's time
-
-1. Bump `solid-js`, `@solidjs/web`, `vite-plugin-solid`; fix imports and
-   `jsxImportSource`. Compile errors then map the rest.
-2. `classList` → `class` (12 sites, purely mechanical).
-3. `onMount`/`onCleanup` → `onSettled` (11 calls).
-4. `createEffect` split (4 sites).
-5. Re-run the read-after-set audit — the scan is a `createSignal` regex plus a
-   7-line lookahead for a matching read; it caught the one real case here.
+The shared runtime chunk grew from 33 KB to 88 KB minified (+21 KB gzipped
+across the SPA). No dev diagnostics leak into it: this is the 2.0 runtime
+itself.
 
 ## XML parsing: on `Bun.XML`
 
@@ -245,5 +190,4 @@ and ignored, so treat the output shape as fixed.
 - Removed the hand-run `Value.Decode()` calls from the route handlers. Every
   2.0 prerelease from beta.1 on decodes Codec fields in `body`, `query` and
   `params` before the handler runs, so the handlers decoded a second time.
-- Fixed the one Solid-2.0-hostile read-after-set in `dashboard.tsx`.
 - Replaced `fast-xml-parser` with `Bun.XML` on both the OPML and feed paths.

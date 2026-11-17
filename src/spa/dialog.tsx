@@ -144,8 +144,7 @@ export function DialogHost() {
     invoker = null;
   };
 
-  createEffect(() => {
-    const current = request();
+  createEffect(request, (current) => {
     if (!current) return;
     // A request replacing an open one reuses its dialog, and its invoker:
     // focus is inside that dialog by now.
@@ -225,9 +224,11 @@ export function DialogHost() {
     <Show when={request()}>
       {(current) => (
         <dialog
-          class="app-dialog"
           // The shortcut sheet is a table, wider than a form dialog.
-          classList={{ "app-dialog-wide": current().kind === "help" }}
+          class={[
+            "app-dialog",
+            { "app-dialog-wide": current().kind === "help" },
+          ]}
           // The dialog's accessible name is its visible title (#817); a
           // confirm's message describes it.
           aria-describedby={
@@ -272,7 +273,7 @@ export function DialogHost() {
             <button
               aria-label="Close"
               class="app-dialog-close"
-              tabIndex={-1}
+              tabindex={-1}
               type="button"
               onClick={cancel}
             >
@@ -308,7 +309,7 @@ export function DialogHost() {
                 </button>
               </Show>
               <button
-                classList={{
+                class={{
                   "app-dialog-danger": danger(),
                   "button-primary": !danger(),
                 }}
