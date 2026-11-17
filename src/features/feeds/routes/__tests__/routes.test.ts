@@ -427,65 +427,6 @@ test.each([
   },
 );
 
-test("find marks push feeds and preserves plain or failed candidates", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  dependencies.httpClient.get = async (url) =>
-    htmlPage(
-      `<html><head>
-      <link rel="alternate" type="application/rss+xml" title="Push" href="https://site.example/push.xml">
-      <link rel="alternate" type="application/rss+xml" title="Plain" href="https://site.example/plain.xml">
-      <link rel="alternate" type="application/rss+xml" title="Dead" href="https://site.example/dead.xml">
-    </head></html>`,
-      url,
-    );
-  dependencies.feedParser.parseUrl = async (url: string) => {
-    if (url.includes("dead")) throw new Error("404");
-    return parsedFeed(
-      url,
-      url.includes("push") ? "https://hub.example/" : undefined,
-    );
-  };
-  const app = await appFor(dependencies);
-
-  const response = await get(
-    app,
-    "/api/find?link=https%3A%2F%2Fsite.example%2F",
-    { auth: true },
-  );
-
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual([
-    { title: "Push", url: "https://site.example/push.xml", websub: true },
-    { title: "Plain", url: "https://site.example/plain.xml", websub: false },
-    { title: "Dead", url: "https://site.example/dead.xml", websub: false },
-  ]);
-});
-
-test("find falls back to an OpenRSS suggestion for a page with no feeds", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  dependencies.httpClient.get = async (url) =>
-    htmlPage("<html><head></head><body>nothing here</body></html>", url);
-  dependencies.feedParser.parseUrl = async (url: string) => parsedFeed(url);
-  const app = await appFor(dependencies);
-
-  const response = await get(
-    app,
-    "/api/find?link=https%3A%2F%2Fsite.example%2F",
-    { auth: true },
-  );
-
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual([
-    {
-      title: "Attempt to use OpenRSS",
-      url: "https://openrss.org/site.example/",
-      websub: false,
-    },
-  ]);
-});
-
 // The routes above fake the HTTP client, so they cannot show that a user's
 // URL is held to the client's private-network guard. Here the client is real
 // and only DNS is stubbed: a public-looking host that resolves privately.

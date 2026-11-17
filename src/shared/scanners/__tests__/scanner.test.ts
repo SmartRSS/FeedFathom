@@ -137,6 +137,7 @@ describe("site rules", () => {
     "https://vimeo.com/123456",
     "https://evilhive.blog/@user",
     "https://notyoutube.com/channel/abc",
+    "https://fakevimeo.com/channel",
     "https://github.com.example/SmartRSS/FeedFathom",
     "https://github.com/SmartRSS",
     "https://github.com/settings/profile",
