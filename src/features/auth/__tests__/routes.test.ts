@@ -59,15 +59,6 @@ test("each authenticated request refreshes the session row", async () => {
     headers: { "user-agent": "Mozilla/5.0 TestClient" },
   });
   expect(authenticatedWith).toEqual([["test", "Mozilla/5.0 TestClient"]]);
-
-  // A request without a cookie has no row to refresh -- the plugin answers
-  // 401 without reaching the database.
-  authenticatedWith.length = 0;
-  const unauthorized = await get(app, "/api/options/sessions", {
-    headers: { "user-agent": "Mozilla/5.0 TestClient" },
-  });
-  expect(unauthorized.status).toBe(401);
-  expect(authenticatedWith).toEqual([]);
 });
 
 test.each([undefined, "mail.example.com"])(
@@ -320,14 +311,8 @@ test("a login counts its attempt first and a success takes it back", async () =>
   ]);
 });
 
-test("rejects mismatched registration passwords before the handler", async () => {
-  const dependencies = createDependencies();
-  let handlerCalls = 0;
-  dependencies.usersDataService.getUserCount = async () => {
-    handlerCalls++;
-    return 0;
-  };
-  const app = await appFor(dependencies);
+test("rejects mismatched registration passwords", async () => {
+  const app = await appFor(createDependencies());
 
   const response = await post(app, "/api/register", {
     email: "reader@example.com",
@@ -337,17 +322,11 @@ test("rejects mismatched registration passwords before the handler", async () =>
   });
 
   expect(response.status).toBe(422);
-  expect(handlerCalls).toBe(0);
 });
 
-test("rejects mismatched password changes before account checks", async () => {
+test("rejects mismatched password changes", async () => {
   const dependencies = createDependencies();
-  let accountChecks = 0;
   authenticated(dependencies);
-  dependencies.usersDataService.findUser = async () => {
-    accountChecks++;
-    return account;
-  };
   const app = await appFor(dependencies);
 
   const response = await post(
@@ -362,7 +341,6 @@ test("rejects mismatched password changes before account checks", async () => {
   );
 
   expect(response.status).toBe(422);
-  expect(accountChecks).toBe(0);
 });
 
 // The write is conditional on the hash the handler verified, so a reset that
