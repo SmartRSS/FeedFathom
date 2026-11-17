@@ -9,14 +9,17 @@ USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/bun"]
 
 # --- Installer (shared dependencies) ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-alpine AS installer
+# glibc rather than Alpine for the build stages: the SPA's compiler
+# (@solidjs/compiler) ships no musl binary, and its WASI fallback does not
+# load under Bun. Only the build output reaches the release images.
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-slim AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY vendor/ /app/vendor/
 RUN bun install --frozen-lockfile
 
 # --- Builder Base ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-alpine AS builder-base
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-slim AS builder-base
 WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
