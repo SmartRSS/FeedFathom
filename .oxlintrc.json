@@ -31,6 +31,7 @@
   "rules": {
     "array-callback-return": "error",
     "default-case-last": "error",
+    "eqeqeq": "error",
     "guard-for-in": "error",
     "import/extensions": [
       "error",
@@ -51,14 +52,19 @@
     "logical-assignment-operators": "error",
     "max-depth": ["error", 5],
     "max-nested-callbacks": ["error", 4],
+    "no-array-constructor": "error",
+    "no-case-declarations": "error",
     "no-constructor-return": "error",
     "no-control-regex": "off",
     "no-else-return": "error",
+    "no-fallthrough": "error",
     "no-lonely-if": "error",
     "no-loop-func": "error",
     "no-multi-assign": "error",
+    "no-new-wrappers": "error",
     "no-object-constructor": "error",
     "no-param-reassign": "error",
+    "no-prototype-builtins": "error",
     "no-return-assign": "error",
     "no-self-compare": "error",
     "no-sequences": "error",
@@ -102,6 +108,7 @@
     "prefer-arrow-callback": "error",
     "prefer-const": "error",
     "prefer-object-has-own": "error",
+    "prefer-promise-reject-errors": "error",
     "prefer-regex-literals": "error",
     "prefer-rest-params": "error",
     "prefer-spread": "error",
@@ -125,9 +132,21 @@
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": ["error", { "ignoreVoid": true }],
     "typescript/no-inferrable-types": "error",
+    // JSX event handlers may be async. Solid ignores the promise a handler
+    // returns, so an async handler has to catch its own failures. Every other
+    // void-return position still has to handle the promise.
+    "typescript/no-misused-promises": [
+      "error",
+      { "checksVoidReturn": { "attributes": false } }
+    ],
     "typescript/no-non-null-asserted-nullish-coalescing": "error",
     "typescript/no-require-imports": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
     "typescript/no-unsafe-function-type": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
     "typescript/non-nullable-type-assertion-style": "error",
     "typescript/prefer-find": "error",
     "typescript/prefer-for-of": "error",
@@ -138,9 +157,11 @@
     "typescript/prefer-string-starts-ends-with": "error",
     "typescript/prefer-ts-expect-error": "error",
     "typescript/restrict-template-expressions": "off",
+    "typescript/return-await": ["error", "error-handling-correctness-only"],
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/unbound-method": "off",
     "typescript/unified-signatures": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
     "unicorn/consistent-date-clone": "error",
     "unicorn/consistent-existence-index-check": "error",
     "unicorn/error-message": "error",
@@ -190,6 +211,19 @@
       // exists to prevent cannot occur there.
       "files": ["**/__tests__/**", "tests/**"],
       "rules": { "feedfathom/schema-compile-module-scope": "off" }
+    },
+    {
+      // Tests read response bodies and page.evaluate results, which are
+      // untyped, and assert on them directly. The expect call is the check, so
+      // narrowing the value first would only repeat it.
+      "files": ["**/__tests__/**", "tests/**"],
+      "rules": {
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off"
+      }
     }
   ]
 }

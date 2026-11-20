@@ -41,6 +41,7 @@ export async function countInWindow(
     key,
     windowSeconds.toString(),
   ]);
-  const [count, ttl]: unknown[] = Array.isArray(result) ? result : [];
+  const reply: unknown[] = Array.isArray(result) ? result : [];
+  const [count, ttl] = reply;
   return { count: Number(count ?? 0), ttl: Number(ttl ?? windowSeconds) };
 }

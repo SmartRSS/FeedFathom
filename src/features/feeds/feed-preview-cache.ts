@@ -110,31 +110,29 @@ const decodePreview = (
   // another feed's preview under this URL.
   if (value.feedUrl !== expectedUrl) return undefined;
 
-  return Object.assign(
-    {
-      // A preview cached before enclosures or updatedAt existed lacks them;
-      // subscribe imported such an article without enclosures, updated when
-      // it was published.
-      articles: value.articles.map(
-        ({ enclosures = [], publishedAt, updatedAt, ...article }) => ({
-          ...article,
-          enclosures,
-          publishedAt: new Date(publishedAt),
-          updatedAt: dateOrNull(
-            updatedAt === undefined ? publishedAt : updatedAt,
-          ),
-        }),
-      ),
-      description: value.description,
-      feedUrl: value.feedUrl,
-      link: value.link,
-      title: value.title,
-    },
-    value.freshUntil === undefined ? {} : { freshUntil: value.freshUntil },
-    value.truncated === undefined ? {} : { truncated: value.truncated },
-    value.feed === undefined ? {} : { feed: decodeFeed(value.feed) },
-    value.finalUrl === undefined ? {} : { finalUrl: value.finalUrl },
-  );
+  return {
+    // A preview cached before enclosures or updatedAt existed lacks them;
+    // subscribe imported such an article without enclosures, updated when
+    // it was published.
+    articles: value.articles.map(
+      ({ enclosures = [], publishedAt, updatedAt, ...article }) => ({
+        ...article,
+        enclosures,
+        publishedAt: new Date(publishedAt),
+        updatedAt: dateOrNull(
+          updatedAt === undefined ? publishedAt : updatedAt,
+        ),
+      }),
+    ),
+    description: value.description,
+    feedUrl: value.feedUrl,
+    link: value.link,
+    title: value.title,
+    ...(value.freshUntil === undefined ? {} : { freshUntil: value.freshUntil }),
+    ...(value.truncated === undefined ? {} : { truncated: value.truncated }),
+    ...(value.feed === undefined ? {} : { feed: decodeFeed(value.feed) }),
+    ...(value.finalUrl === undefined ? {} : { finalUrl: value.finalUrl }),
+  };
 };
 
 export const serializeFeedPreview = ({

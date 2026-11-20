@@ -52,14 +52,21 @@ export async function queueAdd(entry: QueuedMutation): Promise<void> {
   await queueTransaction("readwrite", (store) => store.add(entry));
 }
 
+// IndexedDB returns stored values untyped. Only queueAdd writes this store.
+function storedMutations(request: IDBRequest): QueuedMutation[] {
+  // oxlint-disable-next-line typescript/no-unsafe-return -- see above
+  return request.result;
+}
+
 export async function queueAll(): Promise<QueueEntry[]> {
   const [keys, values] = await queueTransaction(
     "readonly",
     (store) => [store.getAllKeys(), store.getAll()] as const,
   );
   const entries: QueueEntry[] = [];
+  const stored = storedMutations(values);
   keys.result.forEach((key, index) => {
-    const value: QueuedMutation | undefined = values.result[index];
+    const value = stored[index];
     if (value) entries.push({ key, value });
   });
   return entries;
