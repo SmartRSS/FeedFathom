@@ -887,11 +887,11 @@ export function Dashboard(props: {
         announce(`${articlesNoun(ids.length)} deleted.`);
         // Deleted articles have no reading position to remember (#718).
         restore.store.clearReaderScrolls(ids);
-        return loadTree().catch((cause) =>
+        return loadTree().catch((cause: unknown) =>
           reportError(cause, "Could not refresh your feeds"),
         );
       })
-      .catch((cause) => {
+      .catch((cause: unknown) => {
         reportError(cause, "Could not delete articles");
         // The rows go back only into the list they left. A list loaded since
         // already shows what the server holds, and the tree reload below
@@ -902,7 +902,7 @@ export function Dashboard(props: {
           setFocusedIndex(Math.min(...indexes));
           setSelectionAnchor(Math.min(...indexes));
         }
-        loadTree().catch((reloadCause) =>
+        loadTree().catch((reloadCause: unknown) =>
           reportError(reloadCause, "Could not refresh your feeds"),
         );
       });

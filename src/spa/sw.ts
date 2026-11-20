@@ -80,6 +80,16 @@ type OfflineRow = Pick<
   "id" | "publishedAt" | "revision" | "sourceId"
 >;
 
+// The worker reads back only JSON its own origin produced: the server's
+// answers, the page's requests and its own cache entries. It takes them at
+// their contract types unchecked, because checking them against the
+// contracts would pull typebox's runtime in and grow the worker ninefold.
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- the cast
+function uncheckedJson<T>(text: string): T {
+  // oxlint-disable-next-line typescript/no-unsafe-return -- see above
+  return JSON.parse(text);
+}
+
 // Bump only to force-purge every cached entry when the caching scheme itself
 // changes.
 const CACHE_VERSION = "v7";
@@ -114,7 +124,7 @@ function queueableRemoval(path: string): keyof Removals | undefined {
 }
 
 function echoedRemoval(path: keyof Removals, body: string): unknown {
-  const parsed: Record<string, unknown> = JSON.parse(body);
+  const parsed = uncheckedJson<Record<string, unknown>>(body);
   return parsed[QUEUEABLE_REMOVALS[path]];
 }
 
@@ -219,7 +229,9 @@ const ACCOUNT_KEY = "/sw-queue-account";
 async function cachedAccount(): Promise<number | undefined> {
   try {
     const cached = await (await caches.open(API_CACHE)).match(ACCOUNT_KEY);
-    const record: { id?: number } | undefined = await cached?.json();
+    const record = cached
+      ? uncheckedJson<{ id?: number }>(await cached.text())
+      : undefined;
     return record?.id;
   } catch {
     return undefined;
@@ -245,7 +257,9 @@ async function sessionAccount(generation: number) {
   try {
     const response = await fetch(SESSION_PATH, { credentials: "same-origin" });
     if (!response.ok) return undefined;
-    const session: Static<typeof sessionResponse> = await response.json();
+    const session = uncheckedJson<Static<typeof sessionResponse>>(
+      await response.text(),
+    );
     const id = session.user?.id;
     const cache = await caches.open(API_CACHE);
     if (generation !== accountChanges) return undefined;
@@ -577,7 +591,7 @@ async function listOfflineRows(sources: number[], signal: AbortSignal) {
     });
     if (!response.ok) throw new Error(`article list ${response.status}`);
     // oxlint-disable-next-line no-await-in-loop -- keyset pages are sequential
-    const page: OfflineRow[] = await response.json();
+    const page = uncheckedJson<OfflineRow[]>(await response.text());
     const stale = page.findIndex((row) => Date.parse(row.publishedAt) < cutoff);
     rows.push(...(stale === -1 ? page : page.slice(0, stale)));
     if (
@@ -688,7 +702,7 @@ async function queuedRemovals() {
   );
   return new Set(
     removals.flatMap(({ value }) => {
-      const body: Removals["/api/articles"] = JSON.parse(value.body);
+      const body = uncheckedJson<Removals["/api/articles"]>(value.body);
       return body.removedArticleIdList;
     }),
   );
@@ -702,14 +716,14 @@ async function offlineArticleList(request: Request) {
   const cache = await caches.open(API_CACHE);
   const stored = await cache.match(OFFLINE_LIST_KEY);
   if (!stored) return undefined;
-  const body: ArticlesRequest = await request.json();
+  const body = uncheckedJson<ArticlesRequest>(await request.text());
   if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
   // A page continues with the rows after its cursor in the server's order,
   // (publishedAt, id) newest first (article-data-service.ts) -- whether the
   // page before came from here or the network. The page sends the cursor's
   // publishedAt, which places it even once it has left the kept rows, read or
   // removed since.
-  const rows: OfflineRow[] = await stored.json();
+  const rows = uncheckedJson<OfflineRow[]>(await stored.text());
   let after = (_row: OfflineRow, _index: number) => true;
   const { cursor } = body;
   if (cursor !== undefined) {
@@ -731,8 +745,9 @@ async function offlineArticleList(request: Request) {
     inScope = (row) => Date.parse(row.publishedAt) >= since;
   } else {
     const storedTree = await cache.match("/api/tree");
-    const tree: Static<typeof treeResponse> | undefined =
-      await storedTree?.json();
+    const tree = storedTree
+      ? uncheckedJson<Static<typeof treeResponse>>(await storedTree.text())
+      : undefined;
     const folder =
       body.folder === undefined
         ? undefined
@@ -786,7 +801,9 @@ function treeFaviconUrls(node: TreeNode): string[] {
 // A favicon's URL changes with the icon (?v=), and a removed source leaves
 // its icon behind: only the icons the latest tree names stay cached.
 async function pruneFavicons(response: Response) {
-  const { tree }: Partial<Static<typeof treeResponse>> = await response.json();
+  const { tree } = uncheckedJson<Partial<Static<typeof treeResponse>>>(
+    await response.text(),
+  );
   if (!Array.isArray(tree)) return;
   const named = new Set(tree.flatMap(treeFaviconUrls));
   await deleteWhere(
