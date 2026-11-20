@@ -13,9 +13,6 @@ import { saveData } from "./reading-prefetch.ts";
 import { postOfflineSync } from "./sw-protocol.ts";
 import { browserTimers, type Timers } from "./timers.ts";
 
-// The service worker can't read localStorage: the dashboard sends it the
-// sources with unread articles, and switching offline reading off, here or in
-// another tab, sends none, so the worker drops what it kept.
 createRoot(() =>
   createEffect(
     offlineUnread.get,
@@ -26,26 +23,16 @@ createRoot(() =>
   ),
 );
 
-// Only sources with something unread are asked about. ponytail: one article
-// request accepts 500 source ids, so past that many sources with unread the
-// rest go undownloaded; a server-side "every subscription" unread scope
-// lifts it.
 export function unreadSourceIds(nodes: readonly TreeNode[]): number[] {
   return nodes
     .flatMap((node) => sourceIds(node, (source) => source.unreadCount > 0))
     .slice(0, maximumRequestIds);
 }
 
-// Offline reading (#992) tells the service worker which unread bodies to
-// keep. Tree loads pace it: the stream and the poll reload the tree when
-// articles arrive, and marking read or removing reloads it too. It runs at
-// most once a minute, in idle time.
 const minimumSpacingMs = 60_000;
 
 type OfflineSyncOptions = {
-  // Whether this tab may sync at all.
   wanted(): boolean;
-  // Whether a sync can run at this moment.
   ready(): boolean;
   sync(): void;
   idle?(run: () => void): void;
@@ -87,8 +74,6 @@ export class OfflineSyncPacer {
   }
 }
 
-/** Syncs after each tree change, and again when the tab, the network or
- *  the worker comes back: a sync may have stopped short when it went. */
 export function createOfflineSync(
   tree: Accessor<TreeNode[]>,
   signedIn: Accessor<boolean>,
@@ -98,7 +83,6 @@ export function createOfflineSync(
       if (typeof requestIdleCallback === "function") requestIdleCallback(run);
       else run();
     },
-    // Save Data, a hidden or offline tab, or no worker to receive it.
     ready: () =>
       !saveData() &&
       !document.hidden &&
@@ -107,7 +91,6 @@ export function createOfflineSync(
     sync: () => postOfflineSync(unreadSourceIds(tree())),
     wanted: () => signedIn() && offlineUnread.get(),
   });
-  // Also re-asked when sign-in or the preference turns syncing on.
   createEffect(
     () => [tree(), signedIn(), offlineUnread.get()],
     () => untrack(() => pacer.request()),

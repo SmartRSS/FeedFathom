@@ -44,12 +44,6 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-/**
- * Reader flow: SPA window → content script → extension background → direct
- * extension fetch → validated response. Reader documents must never be
- * proxied through the FeedFathom backend; availability also proves that the
- * extension is configured for this SPA origin.
- */
 export const createExtensionReaderBridge = (windowObject: Window = window) => {
   const pending = new Map<string, PendingRequest>();
 

@@ -16,11 +16,6 @@ export const menuDebounceMs = 300;
 export const subscribeMenuId = "FeedFathom";
 export const newsletterMenuId = "FeedFathom_newsletter";
 
-// Keeps the toolbar icon's context menu in step with the feeds the current
-// page reported. The browser builds menus asynchronously, so rebuilds run one
-// at a time and each starts from the latest request: a report or a clear
-// arriving mid-rebuild is applied by the next pass rather than interleaved
-// with this one.
 export const createMenuSync = (menus: MenuOperations, schedule: Schedule) => {
   let wanted: FeedData[] | null = null;
   let dirty = false;
@@ -41,8 +36,6 @@ export const createMenuSync = (menus: MenuOperations, schedule: Schedule) => {
       }),
     ]);
     if (dirty) return;
-    // create() rejects on a duplicate id and feed.url is the id, so a page
-    // listing the same feed twice would otherwise lose that entry.
     const uniqueFeeds = new Map(feeds.map((feed) => [feed.url, feed]));
     await Promise.all(
       Array.from(uniqueFeeds.values(), (feed) =>

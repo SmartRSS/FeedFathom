@@ -18,8 +18,6 @@ import {
   type Dependencies,
 } from "../../../__tests__/server-harness.ts";
 
-// Records what a route asks the throttle, answering every count with
-// `allow`.
 function recordThrottle(dependencies: Dependencies, allow: boolean) {
   const calls: string[] = [];
   dependencies.authThrottle = strictFake<AuthThrottle>({
@@ -41,10 +39,6 @@ function recordThrottle(dependencies: Dependencies, allow: boolean) {
   return calls;
 }
 
-// The session row's activity stamp and device label are refreshed by the
-// auth plugin on every request that resolves the cookie -- if the plugin
-// stops passing the User-Agent along, the options list quietly reverts to
-// login-time snapshots and nothing else in the app would notice.
 test("each authenticated request refreshes the session row", async () => {
   const dependencies = createDependencies();
   const authenticatedWith: Parameters<UsersDataService["authenticate"]>[] = [];
@@ -158,18 +152,12 @@ test("authenticates only active users without revealing account state", async ()
   });
 
   expect(response.status).toBe(200);
-  // The session id travels only in the HttpOnly cookie, out of page script's
-  // reach.
   expect(await response.json()).toEqual({ success: true });
   expect(response.headers.get("set-cookie")).toBe(
     "sid=test-session; HttpOnly; Max-Age=31536000; Path=/; SameSite=Lax",
   );
 });
 
-// The options page's session list is only as distinguishable as the stored
-// agents: the route must hand the request's own User-Agent to createSession
-// instead of a hardcoded blank. A missing header stays null here -- the
-// "UNKNOWN" fallback is the data layer's decision.
 test("login stores the request's user agent on the created session", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.findUser = async () => account;
@@ -211,9 +199,6 @@ test("login stores the request's user agent on the created session", async () =>
   ]);
 });
 
-// The session is issued against the hash the route verified. When a reset
-// replaced it in between, the store issues nothing and the login is answered
-// like any wrong password: no cookie, and the failure still counts (#843).
 test("login refuses when the verified password was replaced before issuance", async () => {
   const dependencies = createDependencies();
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
@@ -245,15 +230,9 @@ test("login refuses when the verified password was replaced before issuance", as
     error: "Email or password is wrong.",
   });
   expect(response.headers.get("set-cookie")).toBeNull();
-  // Counted and never taken back: it stays a failure.
   expect(throttled).toEqual(["attempt"]);
 });
 
-// Equal-time hashing on a miss closes the enumeration oracle but buys little
-// on its own: an attacker who cannot tell accounts apart can still try
-// passwords as fast as the box answers. The README's reverse-proxy setup adds
-// no rate limiting of its own, so this cannot be left to the deployment.
-// How the counters are keyed and limited is auth-throttle-integration's.
 test("a throttled login answers like a wrong password without checking it", async () => {
   const dependencies = createDependencies();
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
@@ -273,8 +252,6 @@ test("a throttled login answers like a wrong password without checking it", asyn
     { headers: { "x-forwarded-for": "203.0.113.7" } },
   );
 
-  // Same body and status as a wrong password, so the throttle does not become
-  // the enumeration signal the equal-time hashing was there to avoid.
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({
     error: "Email or password is wrong.",
@@ -283,9 +260,6 @@ test("a throttled login answers like a wrong password without checking it", asyn
   expect(throttle).toEqual([`attempt login 203.0.113.7 ${account.email}`]);
 });
 
-// Counted before the password is checked, so a parallel burst cannot all
-// pass; what stays counted is failures, so the right password takes its own
-// attempt back.
 test("a login counts its attempt first and a success takes it back", async () => {
   const dependencies = createDependencies();
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
@@ -343,9 +317,6 @@ test("rejects mismatched password changes", async () => {
   expect(response.status).toBe(422);
 });
 
-// The write is conditional on the hash the handler verified, so a reset that
-// committed while the replacement was hashing wins and the change is refused
-// rather than reported as done (#977).
 test("refuses a password change whose verified password was replaced", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.authenticate = async () => sessionUser;
@@ -380,8 +351,6 @@ test("refuses a password change whose verified password was replaced", async () 
   });
 });
 
-// A stolen session must not be a way to grind the account's real password.
-// Counted per user, so changing address does not reset the budget.
 test("a throttled password change is refused unchecked", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -405,7 +374,6 @@ test("a throttled password change is refused unchecked", async () => {
     { auth: true },
   );
 
-  // The caller is signed in, so the refusal can say what it is.
   expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({
     error: "Too many attempts. Try again later.",
@@ -481,8 +449,6 @@ test("creates active users without registration integrations", async () => {
   expect(mailCalls).toBe(0);
 });
 
-// With Mailjet configured an existing address gets a notice instead; see
-// the account-exists and expired-link tests further down.
 test.each(["active", "inactive"] as const)(
   "returns generic success without mutating an existing %s account when mail is off",
   async (status) => {
@@ -522,16 +488,10 @@ test.each(["active", "inactive"] as const)(
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
-    // The hash a new address would pay for, so the two answer in equal time.
     expect(calls).toEqual(["hash"]);
   },
 );
 
-// Registration with mail configured is a way to send a message from this
-// instance's domain to an address a stranger chose. ENABLE_REGISTRATION and
-// ALLOWED_EMAILS say who may hold an account; neither bounds how many mails
-// an open form will emit. Turnstile is the documented answer and this is the
-// floor under a deployment that has not set it.
 test("stops an open signup form from mailing strangers on demand", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
@@ -561,8 +521,6 @@ test("stops an open signup form from mailing strangers on demand", async () => {
     { headers: { "x-forwarded-for": "203.0.113.7" } },
   );
 
-  // Counted per address whether or not the account exists, so saying so
-  // answers nothing about who has one -- and no mail leaves.
   expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({
     error: "Too many attempts. Try again later.",
@@ -573,8 +531,6 @@ test("stops an open signup form from mailing strangers on demand", async () => {
   ]);
 });
 
-// Without mail there is nothing to send, but every attempt still costs a
-// password hash, so the form is bounded the same way.
 test("throttles registration when email activation is off", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
@@ -594,13 +550,10 @@ test("throttles registration when email activation is off", async () => {
     username: "Stranger",
   });
 
-  // Not the success it would otherwise claim: no account was made.
   expect(blocked.status).toBe(429);
   expect(hashCalls).toBe(0);
 });
 
-// A failed account-exists notice answers like a sent one; the failure is
-// logged instead of returned.
 test("a failed account-exists notice still answers generic success", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
@@ -629,9 +582,6 @@ test("a failed account-exists notice still answers generic success", async () =>
   }
 });
 
-// Only an address the caller named reaches a send, so waiting on Mailjet
-// would time a pending or active account apart from a new one. A mail that
-// never settles must not hold any of the three answers.
 test.each([
   ["a new address", undefined],
   [
@@ -663,7 +613,6 @@ test.each([
     };
     const app = await appFor(dependencies);
 
-    // A route that awaited the mail would hang here until the test times out.
     const response = await post(app, "/api/register", {
       email: account.email,
       password: "password",
@@ -700,10 +649,6 @@ test("answers a disposable address with generic success and no account", async (
   expect(created).toBe(0);
 });
 
-// A fresh install answers registration regardless of ENABLE_REGISTRATION, and
-// answers it identically whether or not it worked. Someone fumbling their way
-// into their own empty instance must not be able to lock themselves out of it
-// for fifteen minutes with no way to tell that is what happened.
 test("never throttles the first operator of an empty instance", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
@@ -840,9 +785,6 @@ test("creates inactive users and sends one activation email with Mailjet", async
   expect(events).toEqual(["create", "send"]);
 });
 
-// Mail goes out only for a committed row, so a failed delivery cannot leave a
-// link to a token that was never stored. The row stays, and withdrawing its
-// token turns the next registration attempt into an expired-link resend.
 test("withdraws the stored activation token when delivery fails", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
@@ -873,8 +815,6 @@ test("withdraws the stored activation token when delivery fails", async () => {
       username: "Inactive user",
     });
 
-    // Logged, not answered: an existing address whose send fails answers
-    // success, so a new one must too.
     expect(response.status).toBe(200);
     expect(logged).toHaveBeenCalledTimes(1);
   } finally {
@@ -883,9 +823,6 @@ test("withdraws the stored activation token when delivery fails", async () => {
   expect(events).toEqual(["create", "send", "withdraw-stored"]);
 });
 
-// A same-address registration that lost the race to the insert gets the
-// answer an existing account gets, and a failed insert mails nothing: every
-// link sent points at a committed row (#848).
 const lostRace: ServerServices["usersDataService"]["createUser"] = async () =>
   "exists";
 
@@ -925,9 +862,6 @@ test.each([
   },
 );
 
-// The store, not the route's earlier count, has the last word on whether
-// registration is open: a request that lost the bootstrap race is refused
-// like any other while registration is disabled, and nothing is mailed.
 test.each([false, true])(
   "refuses a registration the store closed, with Mailjet=%s",
   async (useMailjet) => {
@@ -964,8 +898,6 @@ test.each([false, true])(
   },
 );
 
-// The recovery path a forgotten password needs, and every way it must refuse
-// to say more than it should.
 test("resets a password without admitting whether the account exists", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "key";
@@ -996,8 +928,6 @@ test("resets a password without admitting whether the account exists", async () 
   expect(sent).toEqual([{ email: target.email, token: "issued-token" }]);
   expect(started).toEqual([target.id]);
 
-  // The send is deliberately not awaited, so a Mailjet outage cannot make a
-  // known address answer differently -- or more slowly -- than an unknown one.
   dependencies.mailSender.sendPasswordResetEmail = async () => {
     throw new Error("Mailjet unavailable");
   };
@@ -1006,8 +936,6 @@ test("resets a password without admitting whether the account exists", async () 
   expect(await undelivered.json()).toEqual(unknownBody);
 });
 
-// The reset form mails an address the caller names, so it is bounded like
-// the login form: per (address, account), with the same 200 either way.
 test("stops a reset form from mailing one account on demand", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "key";
@@ -1082,9 +1010,6 @@ test("spends a reset token once and refuses one the store does not hold", async 
   ]);
 });
 
-// The spend must be part of the write itself (#809): a double that answers
-// false stands in for the transaction losing the race, and the route has to
-// answer the loser with the same refusal an unknown token gets.
 test("a confirmation that loses the race for its link is refused", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.findUserByPasswordResetToken = async (
@@ -1128,8 +1053,6 @@ test("has no reset flow at all when outgoing mail is not configured", async () =
     token: "anything",
   });
 
-  // The login view hides the link on this flag, and the request route still
-  // answers exactly as it does for an account that does not exist.
   expect(await info.json()).toMatchObject({ passwordResetEnabled: false });
   expect(requested.status).toBe(200);
   expect(confirmed.status).toBe(400);
@@ -1159,9 +1082,6 @@ test("activates a token the store accepts and refuses any other", async () => {
   expect(tokenLookups).toEqual(["valid", "expired"]);
 });
 
-// Re-registering over a half-made account renews an expired activation link,
-// which is otherwise a dead end (#810). The route answers success either way
-// -- the mailbox is what changes.
 test("registering an address with an expired link sends a fresh one", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
@@ -1200,20 +1120,15 @@ test("registering an address with an expired link sends a fresh one", async () =
   expect(activationSends).toEqual(["pending@example.com"]);
   expect(refreshed).toHaveLength(1);
   expect(refreshed[0]!.userId).toBe(account.id);
-  // A fresh link promises a day, like the first one did.
   expect(refreshed[0]!.expiresAt.getTime()).toBeGreaterThan(
     Date.now() + 23 * 60 * 60 * 1_000,
   );
 });
 
-// A replacement link whose mail failed is withdrawn, so the next attempt
-// sends another at once instead of finding an unexpired token and staying
-// silent for a day (#849). A recovery that stored nothing sends nothing.
 test("a failed replacement activation mail is retried on the next attempt", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
   dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
-  // An object, so the closures' writes are not narrowed away at the reads.
   const row: { token: null | string } = { token: null };
   let mailUp = false;
   const delivered: (null | string)[] = [];
@@ -1248,8 +1163,6 @@ test("a failed replacement activation mail is retried on the next attempt", asyn
       username: "Pending user",
     });
 
-  // The same answer as a delivered mail: a 500 here and not for an unknown
-  // address would say which addresses hold accounts.
   const logged = spyOn(console, "error").mockImplementation(() => {});
   try {
     const failed = await register();
@@ -1267,16 +1180,11 @@ test("a failed replacement activation mail is retried on the next attempt", asyn
   expect(await retried.json()).toEqual({ success: true });
   expect(delivered).toEqual([row.token]);
 
-  // The delivered link is live now, so a further attempt stores and sends
-  // nothing and still answers the generic success.
   const again = await register();
   expect(await again.json()).toEqual({ success: true });
   expect(delivered).toHaveLength(1);
 });
 
-// An active account is not a half-made one, so no new activation -- the
-// notice carries a reset link instead, the way in that never assumes the
-// password still works.
 test("registering an active address sends the account-exists reset notice", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAILJET_API_KEY = "mailjet-key";
@@ -1309,8 +1217,6 @@ test("registering an active address sends the account-exists reset notice", asyn
   expect(resets).toEqual([account.id]);
 });
 
-// Revocation is scoped by the signed-in user, never by anything the request
-// names; sessions-integration covers that the data service honours the scope.
 test("any signed-in user can revoke one of their sessions or all the others", async () => {
   const dependencies = createDependencies();
   dependencies.usersDataService.authenticate = async () => ({

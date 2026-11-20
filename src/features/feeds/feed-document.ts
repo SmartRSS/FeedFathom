@@ -26,10 +26,6 @@ import {
 } from "#features/feeds/plain-text.ts";
 
 const parsedFeedCheck = Schema.Compile(parsedFeedSchema);
-// feed-parser reads every RSS and Atom date, on items and on the feed, through
-// this one getter, which hands the text to a bare `new Date`. Replacing the
-// getter routes them all through parseFeedDate; the date-zones fixtures fail
-// if a feed-parser release stops reading dates through it.
 Object.defineProperty(Element.prototype, "textContentAsDate", {
   get(this: Element) {
     return parseFeedDate(this.textContent);
@@ -38,14 +34,6 @@ Object.defineProperty(Element.prototype, "textContentAsDate", {
 
 type XmlElement = ReturnType<typeof parseFeed>["items"][number]["element"];
 
-// The library splits an RSS author or dc:creator as "Name <email>" and drops
-// any word's outer angle brackets, so a name wrapped in markup (WordPress
-// h-card plugins wrap dc:creator in a span) came out as
-// "span class='p-author h-card'>Name</span". Where the raw text holds a tag,
-// the tags are stripped before the same split, over the same elements the
-// library reads. Undefined leaves the library's own reading in place, which
-// is always the case for Atom: its <author> has child elements and is not
-// split this way.
 function authorsWithoutMarkup(element: XmlElement) {
   const raw = ["managingeditor", "author", "creator"]
     .flatMap((name) => element.findElementsWithName(name))
@@ -63,33 +51,18 @@ const isMediaRss = (element: XmlElement) =>
   element.namespaceUri === "http://search.yahoo.com/mrss/" ||
   element.namespaceUri === "https://search.yahoo.com/mrss/";
 
-// Media RSS's description, on the entry or its media:group. It is plain text.
 const mediaDescription = (element: XmlElement) =>
   [element, ...element.findElementsWithName("group").filter(isMediaRss)]
     .flatMap((parent) => parent.findElementsWithName("description"))
     .find((child) => isMediaRss(child) && child.textContent.trim())
     ?.textContent;
 
-/**
- * Parses an RSS or Atom feed. Each entry in CAP namespace scope also gets its
- * alert fields, if any, as `cap`, and its `xml:lang`, else the
- * `language=en-CA` category NAAD uses, else "", as `language`; see
- * generateArticleGuid. An entry with no body of its own,
- * such as every YouTube video, takes its Media RSS description instead.
- *
- * The result is checked against the parsed-feed schema: the library is
- * untyped JavaScript, so its runtime shape is not something to trust.
- */
 export const parseXmlFeed = (text: string) => {
   rejectXmlEntityDeclarations(text);
   const feed = parseRepairingXml(text, parseFeed);
   const feedAuthors = authorsWithoutMarkup(feed.element);
   if (feedAuthors)
     Object.defineProperty(feed, "authors", { value: feedAuthors });
-  // An item without its own url, authors or categories falls back to the
-  // feed's, which the library recomputes on every read by wrapping each child
-  // of the channel, items included. Pinned once, reading every item is linear
-  // in the item count instead of quadratic (#1031).
   for (const key of ["authors", "categories", "url"] as const) {
     Object.defineProperty(feed, key, { value: feed[key] });
   }
@@ -100,7 +73,6 @@ export const parseXmlFeed = (text: string) => {
   for (const item of feed.items) {
     if (item.content !== null || item.description !== null) continue;
     const description = asHtmlText(mediaDescription(item.element));
-    // The prototype's getter has no setter, so plain assignment would throw.
     if (description)
       Object.defineProperty(item, "description", { value: description });
   }
@@ -126,14 +98,6 @@ export const parseXmlFeed = (text: string) => {
 
 const htmlDoctypePattern = /^\s*(?:<!doctype html|<html[\s>])/i;
 
-// Origins that serve a perfectly good RSS/Atom document as `text/html` are
-// common enough to matter (WordPress behind a proxy that rewrites the header,
-// static hosts that guess a type from the extension). Believing the header
-// there hands XML to the microformats parser, which finds no h-entry items
-// and fails the whole source. The document's own root element is the more
-// reliable witness, so it wins. An XML declaration alone would not be: XHTML
-// pages carrying microformats open with one too, which is why this looks past
-// it for the root element rather than stopping at `<?xml`.
 const feedRootPattern = /^\s*(?:<\?xml[^>]*\?>\s*)?<(?:rss|feed|rdf:RDF)[\s>]/i;
 
 export function feedFormat(
@@ -150,11 +114,6 @@ export function feedFormat(
   return "xml";
 }
 
-/**
- * A fetched feed document, whatever its format, as the parsed feed mapping
- * reads. `text` is the decoded body, which WebSub discovery scans, and
- * `websubHubUrl` the hub a JSON Feed names in its own `hubs` array.
- */
 export function parseFeedDocument(
   body: ArrayBuffer,
   contentType: string | null,

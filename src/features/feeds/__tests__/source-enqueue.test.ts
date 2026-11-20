@@ -11,10 +11,6 @@ import {
   SourceEnqueuer,
 } from "#features/feeds/source-enqueue.ts";
 
-// The per-source job id is BullMQ's dedupe key, so how the enqueuer treats a
-// source whose job already exists is the whole feature (#813): a request that
-// lands on a running job must be answered with a follow-up, and one that
-// lands on a queued poll must still refresh like it asked.
 const fakeRedis = (initial: Record<string, string> = {}) => {
   const store = new Map(Object.entries(initial));
   const redis: SourceParseRedis = {
@@ -41,7 +37,6 @@ const holderFor = (state: string): SourceParseJobHandle => ({
   },
 });
 
-// The requests one run of the source's job parses.
 const parsesOf = async (enqueuer: SourceEnqueuer) => {
   const parsed: ParseRequest[] = [];
   await enqueuer.runParse({ id: 3 }, async (request) => {
@@ -99,10 +94,6 @@ describe("SourceEnqueuer", () => {
     expect(await parsesOf(enqueuer)).toEqual([{ id: 3 }]);
   });
 
-  // A request landing on a running job is answered by one follow-up once the
-  // job finishes; a cache bypass wins over a plain refresh in either order.
-  // Merging into a waiting or delayed job runs against real Redis in
-  // source-enqueue-integration.test.ts.
   test.each([
     [[false], { skipCache: false }],
     [[false, true], { skipCache: true }],
@@ -145,13 +136,9 @@ describe("SourceEnqueuer", () => {
       { id: source.id },
       { id: source.id, skipCache: true, trigger: "manual" },
     ]);
-    // The take is the consume: the same burst cannot be answered twice.
     expect(await parsesOf(enqueuer)).toEqual([{ id: source.id }]);
   });
 
-  // The follow-up runs on intent already taken off the marker, and a deferred
-  // job retries from its data -- so the deferral carries that intent, or the
-  // retry would parse the original request and lose the bypass (#847).
   test("a deferred follow-up hands its intent to the retry", async () => {
     const { queue } = fakeQueue(null);
     const redis = fakeRedis({ [pendingKey]: "1" });

@@ -1,7 +1,5 @@
 import { Show, type Element } from "solid-js";
 
-// What went wrong underneath a failure's plain sentence, for admins only:
-// everyone else gets the sentence alone.
 export function FailureDetails(props: {
   admin: boolean;
   reason: string;
@@ -12,7 +10,6 @@ export function FailureDetails(props: {
       <details class="failure-details">
         <summary>Details</summary>
         <p>
-          {/* The status leads unless the raw reason already names it. */}
           {props.status && !props.reason.includes(String(props.status))
             ? `HTTP ${props.status}. `
             : ""}
@@ -25,13 +22,10 @@ export function FailureDetails(props: {
 
 export type RetryState = "idle" | "queued" | "sending";
 
-// "Couldn't load" wherever it appears: a feed that stopped updating, above
-// its articles or in place of them, and a feed list that did not load.
 export function FailingFeedPanel(props: {
   admin: boolean;
   children: Element;
   details: { reason: string; status: number | undefined } | undefined;
-  // A slim line above a list that still has rows, or a block in its place.
   layout: "block" | "notice";
   onEdit?: (() => void) | undefined;
   onRetry(): void;

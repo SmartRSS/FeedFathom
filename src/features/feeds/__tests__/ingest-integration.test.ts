@@ -22,11 +22,6 @@ import {
 } from "#features/reader/routes.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
-// One feed of each kind, from the bytes on the wire to what a signed-in
-// reader gets back from /api/articles and /api/article: the real parser,
-// importer, data services, session check and routes over a real database.
-// Only the network is a stand-in.
-
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
@@ -72,7 +67,6 @@ beforeEach(async () => {
   await migrateDatabase(databaseUrl, migrationsFolder);
 });
 
-// A source with one active subscriber and that subscriber's session cookie.
 async function subscribed(url: string, kind: "email" | "feed" = "feed") {
   const [source] = await client<{ id: number }[]>`
     INSERT INTO sources (url, home_url, kind)
@@ -216,7 +210,6 @@ test.each([
     ],
   ],
   [
-    // An expired alert and a Test alert are not news; only the live one lands.
     "CAP",
     "application/atom+xml",
     `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"
@@ -287,8 +280,6 @@ test("a newsletter is stored and listed for its subscriber", async () => {
   expect(article?.content).toBe("<p>Letter body</p>");
 });
 
-// The worker acknowledges every job (BullMQ keeps no failure state), so a
-// failed fetch or parse is recorded on the source row or it is lost.
 test.each([
   ["a server error", "<html>down</html>", "text/html", 500],
   ["a body that is no feed", "not a feed at all", "text/plain", 200],

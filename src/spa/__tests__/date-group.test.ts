@@ -2,8 +2,6 @@ import { expect, test } from "bun:test";
 import { generateBoundaryDates, getDateGroup } from "../date-group.ts";
 
 const cases: [Date, Date, string][] = [
-  // Dated later than now, by clock skew or a publisher's time zone: still
-  // the newest group, never a second "Within the Last Week" above Today.
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 16, 2), "Today"],
   [new Date(2024, 6, 15, 14), new Date(2024, 7, 1), "Today"],
   [new Date(2024, 6, 15, 14), new Date(2024, 6, 15), "Today"],
@@ -50,7 +48,6 @@ const cases: [Date, Date, string][] = [
   ],
   [new Date(2024, 2, 31, 12), new Date(2023, 2, 31), "Within the Last Year"],
   [new Date(2024, 2, 31, 12), new Date(2023, 2, 30, 23, 59), "Older"],
-  // New Year's Day: every boundary falls in the previous year.
   [
     new Date(2023, 0, 1, 23, 59),
     new Date(2022, 11, 25),

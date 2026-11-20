@@ -12,8 +12,6 @@ type RuntimeErrors = {
   readonly lastError?: { message?: string } | undefined;
 };
 
-// chrome.contextMenus reports failure only through runtime.lastError inside
-// the callback, so each operation settles there.
 const callbackPromise = (
   operation: (callback: () => void) => void,
   runtime: RuntimeErrors,

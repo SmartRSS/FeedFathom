@@ -99,8 +99,6 @@ describe("extension package manifest projection", () => {
     }
   });
 
-  // A file the manifest or a page names but the source lacks would ship a
-  // broken package; the build would fail only at copy time.
   test("every packaged file has a source", async () => {
     const root = path.resolve(import.meta.dir, "../..");
     const files = await packagedFiles(sourceManifest());

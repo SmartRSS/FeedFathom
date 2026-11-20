@@ -11,8 +11,6 @@ const throttle = new AuthThrottle(redis);
 const email = "victim@example.test";
 const window = 15 * 60;
 
-// Each test gets its own address so no counter outlives the test it came from
-// into the next one.
 function scopeKeys() {
   const address = `198.51.100.${crypto.randomUUID()}`;
   return {
@@ -33,10 +31,8 @@ test("every counter a burst of concurrent attempts creates carries the window", 
     Array.from({ length: 25 }, () => throttle.attempt("login", address, email)),
   );
 
-  // Atomic INCR: exactly the limit get through, however many race.
   expect(allowed.filter(Boolean)).toHaveLength(10);
   expect(await redis.get(account)).toBe("25");
-  // Only the attempts the account counter let through reach the address one.
   expect(await redis.get(source)).toBe("10");
   for (const ttl of await Promise.all([
     redis.ttl(account),
@@ -50,7 +46,6 @@ test("every counter a burst of concurrent attempts creates carries the window", 
 test("later attempts keep the window the first one opened", async () => {
   const { account, address } = scopeKeys();
   await throttle.attempt("login", address, email);
-  // Stands in for most of the window having passed.
   await redis.expire(account, 5);
 
   await Promise.all(
@@ -65,7 +60,6 @@ test("counters left without expiry recover a bounded lifetime", async () => {
   const { account, address, source } = scopeKeys();
   await redis.set(source, "50");
 
-  // Over the address limit, so refused -- and repaired without being counted.
   expect(await throttle.attempt("login", address, email)).toBe(false);
   expect(await redis.get(source)).toBe("50");
   expect(await redis.ttl(source)).toBe(window);
@@ -104,7 +98,6 @@ test("a success clears the account and refunds one attempt without creating a ke
   expect(await redis.get(source)).toBe("2");
   expect(await redis.ttl(source)).toBeGreaterThan(0);
 
-  // A refund after the window ran out must not leave a -1 with no expiry.
   await redis.del(source);
   await throttle.succeeded("login", address, email);
   expect(await redis.exists(source)).toBe(false);
@@ -142,8 +135,6 @@ test("refuses an address grinding one account, and only that pair", async () => 
   await spend(10, "login", address, () => email);
 
   expect(await throttle.attempt("login", address, email)).toBe(false);
-  // A second account from the same address is untouched until the address
-  // counter itself fills up, and another address never sees this at all.
   expect(await throttle.attempt("login", address, "other@example.test")).toBe(
     true,
   );
@@ -164,8 +155,6 @@ test("refuses an address spraying accounts before any one of them locks", async 
   );
 });
 
-// One valid account must not refill the budget an attacker spends from the
-// same address against every other account.
 test("a success refunds the address one attempt, not the lot", async () => {
   const { address } = scopeKeys();
   await spend(50, "login", address, (attempt) => `user${attempt}@example.test`);
@@ -180,8 +169,6 @@ test("a success refunds the address one attempt, not the lot", async () => {
   ).toBe(false);
 });
 
-// Asking for a reset ten times -- because the first mail went to spam --
-// must not then refuse the login with the password that reset just set.
 test("keeps each scope's budget to itself", async () => {
   const { address } = scopeKeys();
 

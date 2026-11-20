@@ -74,12 +74,8 @@ export function resolveRoute(path: string): Route {
   }
 }
 
-// The routes that render the dashboard's panes: Discover opens over them.
 export function showsPanes(route: Route): boolean {
   return route.name === "dashboard" || route.name === "preview";
 }
 
-// The paths of the routes showsPanes holds for: a navigation to one starts
-// the /api/tree preload, the worker's or, for a page no worker controls yet,
-// index.html's inline script, which vite.config.ts fills in from this.
 export const treePreloadPaths = /^\/(preview)?$/;

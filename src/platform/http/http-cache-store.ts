@@ -22,15 +22,6 @@ export type HttpRedis = {
 const cachePrefix = "http-cache:";
 const cacheLockPrefix = "http-cache-lock:";
 const cacheRetentionMs = 7 * 24 * 60 * 60_000;
-// Sized off the largest feed actually polled, not a round number: Project
-// Zero inlines full exploit writeups (12.6 MiB, +1.3 MiB per post). The rest
-// of a 227-source corpus fits under 1 MiB.
-//
-// ponytail: one global ceiling, not a per-source budget. Worst case is
-// WORKER_CONCURRENCY downloads all at the cap against the worker's memory
-// limit (50 and 750 MiB in production), which only works because a single
-// source exceeds 5 MiB. Add per-source budgets if a second heavyweight shows
-// up.
 export const maximumFeedBodyBytes = 24 * 1024 * 1024;
 export const maximumFeedBodyMebibytes = maximumFeedBodyBytes / (1024 * 1024);
 const maximumBase64Characters = Math.ceil(maximumFeedBodyBytes / 3) * 4;
@@ -56,8 +47,6 @@ function decodedBase64Length(value: string): number {
   return (value.length / 4) * 3 - padding;
 }
 
-// The Redis side of the HTTP cache: the base64 wire format, the wire-size
-// cap, and the lock that keeps one fetch per URL at a time.
 export class HttpCacheStore {
   constructor(
     private readonly redis: HttpRedis,
@@ -100,9 +89,7 @@ export class HttpCacheStore {
           lock.token,
         ]),
       );
-    } catch {
-      // The lock expires shortly after the request deadline.
-    }
+    } catch {}
   }
 
   async getCached(

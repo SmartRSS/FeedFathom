@@ -30,12 +30,6 @@ export class UserSourcesDataService {
     >,
   ) {}
 
-  /**
-   * Subscribes the user, creating the source if needed. Returns undefined for
-   * a folder the user does not own, and "refused" for a newsletter address
-   * that belongs to another account (see sources.reservedBy) or that only
-   * `minted` lets a subscription create.
-   */
   public async addSourceToUser(
     userId: number,
     sourcePayload: {
@@ -47,9 +41,6 @@ export class UserSourcesDataService {
       | {
           homeUrl: string;
           kind: "email";
-          // An address in a format this instance mints, on its mail domain.
-          // Any other address can only be subscribed to if its source
-          // already exists.
           minted: boolean;
         }
       | { homeUrl?: string | undefined; kind?: "feed" }
@@ -64,8 +55,6 @@ export class UserSourcesDataService {
     try {
       return await this.subscribe(userId, sourcePayload);
     } catch (error) {
-      // addSource can return an orphan the cleanup deletes before the
-      // subscription row lands. Once more creates the source afresh.
       if (!hasSqlState(error, "23503")) throw error;
       return await this.subscribe(userId, sourcePayload);
     }
@@ -92,9 +81,6 @@ export class UserSourcesDataService {
       source = await this.sourcesDataService.findSourceByUrl(sourcePayload.url);
     }
     if (!source) return "refused";
-    // A newsletter address belongs to one account. An email source from
-    // before ownership can have other subscribers too (see migration 0013):
-    // they keep their subscription, so subscribing again is not refused.
     if (
       source.kind === "email" &&
       source.reservedBy !== userId &&
@@ -102,14 +88,6 @@ export class UserSourcesDataService {
     )
       return "refused";
 
-    // created_at is where a subscription starts seeing articles. A newsletter
-    // address is reserved before anyone subscribes (#1116), and the mail it
-    // takes in meanwhile -- typically the confirmation the subscription
-    // depends on -- has to be readable to the account that reserved it, so
-    // that account's subscription sees the source from its creation. That
-    // also keeps the retention rule for articles from before the first
-    // subscription off it. Another subscriber of an older shared address
-    // does not qualify: its earlier mail is the owner's.
     const backdated = source.kind === "email" && source.reservedBy === userId;
     const inserted = (
       await this.drizzleConnection
@@ -145,8 +123,6 @@ export class UserSourcesDataService {
 
     if (!userSource)
       throw new Error("Subscription conflict resolved without a row");
-    // The mail already stored counts as unread from the start; a feed's
-    // articles are counted when its first import lands.
     if (inserted && backdated)
       await this.recomputeUnreadCounts([source.id], userId);
 
@@ -170,13 +146,6 @@ export class UserSourcesDataService {
     return rows.length > 0;
   }
 
-  /**
-   * Runs `work` under the subscription's initialization lease: claim, run
-   * work, then complete (or release on failure). Returns "in-progress" when
-   * another caller currently holds the lease, "already-initialized" when the
-   * subscription was already initialized before this call, or the result of
-   * `work` when this call claimed and completed the lease itself.
-   */
   public async withSubscriptionInitializationLease<T>(
     subscriptionId: number,
     work: () => Promise<T>,
@@ -272,13 +241,6 @@ export class UserSourcesDataService {
       );
   }
 
-  /**
-   * Renames a subscription and/or moves it between folders -- both live on
-   * user_sources, one row per subscriber, so this never touches the shared
-   * `sources` row (url/homeUrl) other subscribers depend on. Returns
-   * undefined for an unowned folder (mirrors addSourceToUser) or a source
-   * the user isn't actually subscribed to.
-   */
   public async updateUserSource(
     userId: number,
     sourceId: number,
@@ -299,7 +261,6 @@ export class UserSourcesDataService {
     ).at(0);
   }
 
-  // The root (null) is everyone's; any other folder must be the user's own.
   private async ownsFolder(userId: number, folderId: null | number) {
     if (!folderId) return true;
     const owned = await this.drizzleConnection
@@ -318,13 +279,6 @@ export class UserSourcesDataService {
       );
   }
 
-  /**
-   * Snoozes (or un-snoozes, with null) one user's subscription to a source --
-   * a per-user, per-source timestamp and nothing else (#725). Parsing and
-   * saving continue unchanged during the pause; suppression happens at read
-   * time, so this write touches no article state and no unread count.
-   * Returns undefined for a source the user isn't subscribed to.
-   */
   public async setSourceSnooze(
     userId: number,
     sourceId: number,
@@ -358,9 +312,6 @@ export class UserSourcesDataService {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
-        // Content fingerprint, not the icon itself -- lets the favicon URL
-        // change exactly when RefreshFavicon changes the icon, so the SW and
-        // browser can cache the response forever instead of re-asking.
         faviconFingerprint: sql<string | null>`md5(${sources.favicon})`,
         homeUrl: sources.homeUrl,
         id: sources.id,
@@ -380,20 +331,10 @@ export class UserSourcesDataService {
       .orderBy(userSources.name);
   }
 
-  /**
-   * Recomputes and stores unreadCount for subscriptions to the given
-   * sources -- for every subscriber when `userId` is omitted (call after
-   * articles change for those sources), or for just that user's own
-   * subscriptions when given (call after their read/delete state changes).
-   */
   public async recomputeUnreadCounts(sourceIds: number[], userId?: number) {
     if (sourceIds.length === 0) return;
     const userFilter =
       userId === undefined ? sql`` : sql`AND us.user_id = ${userId}`;
-    // One correlated count per subscription, so user_articles is read by its
-    // primary-key prefix (user_id, source_id) for that subscription alone. As
-    // a single join across every subscriber the planner hash-joined it, and
-    // each feed fetch sequentially scanned every user's read state (#1035).
     await this.drizzleConnection.execute(sql`
       UPDATE user_sources us
       SET unread_count = (

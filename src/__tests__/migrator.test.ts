@@ -18,11 +18,6 @@ test("lists every SQL migration in the Drizzle journal", async () => {
   expect(journalTags).toEqual(migrations);
 });
 
-// The migrator must survive losing the startup race with PostgreSQL rather
-// than exiting on the first refused connection -- compose.yml and
-// deploy/stack.yml both depend on that, and Swarm arranges no ordering at
-// all. Nothing is listening on this port, so every attempt is refused
-// immediately.
 test("retries an unreachable database until its deadline, then fails", async () => {
   const log = spyOn(console, "log").mockImplementation(() => {});
 
@@ -44,13 +39,6 @@ test("retries an unreachable database until its deadline, then fails", async () 
   }
 });
 
-// The prebuild pass exists so a populated table does not take an ACCESS
-// EXCLUSIVE lock for the length of an index build, and it is driven entirely
-// by which migrations were written with `CREATE INDEX IF NOT EXISTS`. Pinned
-// against a fixture rather than the migration folder, because the folder is
-// squashed to a baseline that legitimately has nothing to pre-build -- a
-// pattern that silently stopped matching would sail past a test asserting
-// "no results" on it.
 test("recognises only the statements a migration opted in", () => {
   const parsed = parseConcurrentIndexes(`
     CREATE TABLE "widgets" ("id" serial PRIMARY KEY NOT NULL);
@@ -91,9 +79,6 @@ const migrationStatements = async () =>
     )
   ).join("\n");
 
-// Every statement a migration opted in is one the parser recognises, so a
-// migration whose opt-in the pattern misses fails here rather than taking an
-// ACCESS EXCLUSIVE lock on a populated table in production.
 test("recognises every index a migration in the folder opted in", async () => {
   const statements = await migrationStatements();
   expect(parseConcurrentIndexes(statements)).toHaveLength(

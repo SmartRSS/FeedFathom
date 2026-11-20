@@ -24,13 +24,8 @@ export function createLoginRoute({
         server,
         config.TRUSTED_PROXY_HEADER,
       );
-      // Same body and status as a wrong password. A distinguishable response
-      // would undo the equal-time hashing below by answering "this account
-      // exists and someone is guessing at it" for free.
       const wrongLoginData = jsonError("Email or password is wrong.", 401);
 
-      // Counted before the password is checked, so a burst of parallel
-      // guesses cannot all pass; a success takes its attempt back below.
       if (!(await authThrottle.attempt("login", address, parsed.email))) {
         return wrongLoginData;
       }
@@ -45,9 +40,6 @@ export function createLoginRoute({
         return wrongLoginData;
       }
 
-      // Store what the client says it is, so the options page's session list
-      // can tell rows apart. No sid means a password reset replaced the hash
-      // verified above, which answers like any other wrong password.
       const sid = await usersDataService.createSession(
         user.id,
         user.password,

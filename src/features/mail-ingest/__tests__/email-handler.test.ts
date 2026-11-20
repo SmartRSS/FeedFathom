@@ -102,7 +102,6 @@ test("routes by the trusted envelope and rejects unknown envelope recipients", a
 
 type Batch = Parameters<ArticlesDataService["batchUpsertArticles"]>[0];
 
-// A handler over the real importer, recording each stored batch.
 function recordingHandler(parse?: (raw: Buffer) => Promise<ParsedMail>) {
   const batches: Batch[] = [];
   const handler = new EmailHandler(
@@ -155,9 +154,6 @@ test("a message with no body or subject is still stored, as placeholders", async
   });
 });
 
-// The guid is the dedupe key: a relay that delivers the same message twice,
-// re-encoded, must not make two articles, and two different messages without
-// a Message-ID must not collapse into one.
 test("dedupes by Message-ID, and by the raw bytes when there is none", async () => {
   const { batches, deliver } = recordingHandler();
   const guids = () => batches.map((batch) => batch[0]?.guid);

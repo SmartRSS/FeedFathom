@@ -52,7 +52,6 @@ const returnResponse = (response: Response) => {
 describe("schema-first SPA API", () => {
   test("names the connection when the request never reaches the server", async () => {
     const failure = await rejectedApiCall();
-    // Not an ApiError: there is no status, and the 401 check must not match.
     expect(isUnauthorizedError(failure)).toBe(false);
     expect(failure).toBeInstanceOf(Error);
     if (!(failure instanceof Error)) return;
@@ -180,8 +179,6 @@ describe("schema-first SPA API", () => {
     );
   });
 
-  // An edge proxy sometimes holds a request for seconds before passing it on;
-  // a second copy sent meanwhile usually takes another path and answers.
   describe("racing a slow GET", () => {
     type Attempt = {
       answer(response: Response): void;
@@ -327,9 +324,6 @@ describe("schema-first SPA API", () => {
   });
 });
 
-// What a reader is told when FeedFathom's own API fails: a plain sentence
-// naming what failed, no status code. The status and raw reason are kept for
-// an admin's Details.
 const failedWith = async (response: Response) => {
   returnResponse(response);
   return await api("/tree", exactMessage).catch((error: unknown) => error);
@@ -345,7 +339,6 @@ test.each([
   ["an answer this bundle can't read", () => Response.json({})],
 ])("%s blames FeedFathom, not the reader", async (_case, response) => {
   const cause = await failedWith(response());
-  // The cause, as the feed failures name theirs; whatever was being done.
   for (const fallback of ["Could not load your feeds.", "Could not create"])
     expect(messageOf(cause, fallback)).toBe(
       "The FeedFathom server ran into a problem. Try again in a moment.",
@@ -378,7 +371,6 @@ test("details carry the status and the raw reason", async () => {
       ),
     ),
   ).toEqual({ reason: "Internal Server Error", status: 500 });
-  // A refusal that carries the raw reason behind its sentence shows that.
   expect(
     failureDetails(
       await failedWith(

@@ -1,8 +1,5 @@
 const VIDEO_ID = /^[\w-]{11}$/;
 
-// The video a URL points at, or undefined when it is not a YouTube video.
-// YouTube's own feeds link watch?v= and attach /v/; the other shapes cover
-// feeds that relay YouTube links.
 export function youtubeVideoId(url: null | string | undefined) {
   let parsed: URL;
   try {

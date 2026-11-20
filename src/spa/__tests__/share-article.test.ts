@@ -8,7 +8,6 @@ const clipboard = {
   },
 };
 
-// Each test reads the clipboard in isolation.
 function freshClipboard() {
   clipboardWrites.length = 0;
   return clipboard;

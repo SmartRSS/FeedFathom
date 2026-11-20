@@ -1,11 +1,5 @@
 import { expect, test } from "./extension-fixture.ts";
 
-// Chromium always has chrome.contextMenus, so this can't exercise the
-// missing-API path that makes background-event.ts fall back to
-// action.setPopup (that's Firefox-for-Android-only and untestable here).
-// It instead covers popup.html/popup.ts directly -- the UI mobile actually
-// falls back to -- against the chrome.storage.session cache the background
-// script keeps regardless of contextMenus support.
 test("mobile popup lists a cached feed and opens its preview URL", async ({
   baseURL,
   extension,
@@ -18,10 +12,6 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
   await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
   const input = optionsPage.getByLabel("Instance");
 
-  // A plain-http address that is not loopback is the rejection people
-  // actually hit, and it must be said inline: a browser can offer to
-  // suppress repeat alert() dialogs, after which the field would revert
-  // with nothing said at all.
   await input.fill("http://feeds.example.com");
   await input.dispatchEvent("change");
   await expect(optionsPage.getByRole("alert")).toContainText(
@@ -48,12 +38,7 @@ test("mobile popup lists a cached feed and opens its preview URL", async ({
   await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
   const feedButton = popupPage.getByRole("button", { name: "Popup Feed" });
   await expect(feedButton).toBeVisible();
-  // The URL under the title is what tells apart feeds whose titles share a
-  // long prefix and clip to the same words.
   await expect(feedButton).toContainText("https://feed.test/rss");
-  // The manifest's extension_pages CSP sets no style-src, so it falls back
-  // to default-src 'self' and an inline <style> is dropped outright. A row
-  // laid out as a grid shows extension.css was applied.
   await expect(feedButton).toHaveCSS("display", "grid");
 
   const [openedPage] = await Promise.all([
@@ -73,8 +58,6 @@ test("mobile popup scans the active tab live, ahead of the on-load cache", async
   if (!baseURL) throw new Error("Playwright baseURL is required");
   const { context, id: extensionId } = extension;
 
-  // No chrome.storage.session cache is seeded here -- the popup can only
-  // pass by asking the page's content script for a fresh scan.
   const feedPage = await context.newPage();
   await feedPage.goto(baseURL);
   await feedPage.evaluate(() => {

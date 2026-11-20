@@ -19,7 +19,10 @@ Tests live in a `__tests__/` subdirectory next to the module they cover, in
 Playwright specs. A test that needs a real PostgreSQL takes the
 `*-integration.test.ts` suffix, which keeps it out of `test:unit`.
 
-Decisions live in `docs/adr/`.
+Decisions live in `docs/adr/`. Source files carry no prose comments
+(`feedfathom/no-comments`, ADR 0023): a reason that would have been a comment
+becomes an entry in the area ADR (0008–0022), and a workaround becomes an issue.
+`/delete-comment` audits code that still has comments.
 
 ## Agent skills
 

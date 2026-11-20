@@ -13,8 +13,6 @@ import { type ArticleInsert, articles } from "#platform/db/schemas/articles.ts";
 import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { lastSeenBumpThrottleHours } from "#features/feeds/retention.ts";
 
-// user_articles is keyed on the article's (source, guid) rather than its id,
-// so a removal survives the article row being pruned -- see the schema.
 function userArticleStateJoin(userId: number) {
   return and(
     eq(userArticles.userId, userId),
@@ -23,8 +21,6 @@ function userArticleStateJoin(userId: number) {
   );
 }
 
-// The page cursor names a row rather than carrying its timestamp, so the
-// query has to look at articles twice.
 const cursorRow = aliasedTable(articles, "cursor_row");
 
 function userArticleAccessJoin(userId: number) {
@@ -40,9 +36,6 @@ export class ArticlesDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // Columns are listed rather than selecting the whole row: articles carries
-  // a generated tsvector for search (#697), and neither the reader nor the
-  // article response has any use for a copy of the body split into lexemes.
   public async getUserArticle(articleId: number, userId: number) {
     return (
       await this.drizzleConnection
@@ -72,20 +65,9 @@ export class ArticlesDataService {
     cursor?: number,
     filter: ArticleFilter = "unread",
     options: {
-      // Scope to every source the user subscribes to instead of an explicit
-      // id list -- the userSources join is what authorizes the rows, so
-      // this is safe with sources left empty.
       allSubscribed?: boolean;
-      // Scope to the user's subscriptions filed in this folder (#976). As
-      // with allSubscribed, the userSources join authorizes the rows, so a
-      // folder id that is not the user's matches nothing.
       folderId?: number;
-      // Only articles published within this many hours of now.
       publishedWithinHours?: number;
-      // Full-text search (#697): matched against the stored tsvector over
-      // title and body. An empty or stopword-only query matches nothing,
-      // which is what an empty tsquery does rather than something special
-      // here.
       query?: string;
     } = {},
   ) {
@@ -103,18 +85,10 @@ export class ArticlesDataService {
       readAt: userArticles.readAt,
       userId: userArticles.userId,
     };
-    // Two passes: the page is chosen reading only columns the covering index
-    // carries (articles_source_published_covering_idx), and the body-sized
-    // columns are fetched afterwards for the page alone. In one pass Postgres
-    // fetched the heap row of every candidate -- every visible article in the
-    // folder -- to carry author, title and url through the sort, and a
-    // 20-source folder read 27k heap pages per listing.
     const page = this.drizzleConnection
       .select({
         id: articles.id,
         publishedAt: articles.publishedAt,
-        // Answered by the same expression that filters, so the "all" view
-        // cannot mark a row read that the "read" view would not have listed.
         read: sql<boolean>`${readCondition(readStateColumns)}`.as("read"),
       })
       .from(articles)
@@ -122,9 +96,6 @@ export class ArticlesDataService {
       .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
-          // The time window rides the same index as the source filter
-          // (articles_source_published_covering_idx), so the Today query
-          // stays a plain range scan.
           ...(options.allSubscribed
             ? []
             : options.folderId === undefined
@@ -135,40 +106,18 @@ export class ArticlesDataService {
                 sql`${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`,
               ]
             : []),
-          // Search rides the GIN index on the same generated column the
-          // schema defines, and stays inside the keyset paging above rather
-          // than ordering by ts_rank: a rank order has no cursor, and the
-          // list this feeds pages by (published_at, id).
-          // ponytail: newest-first, not best-first. Rank ordering needs a
-          // cursor over (rank, id) before it can page.
           ...(options.query
             ? [
                 sql`${articles.searchVector} @@ plainto_tsquery('english', ${options.query})`,
               ]
             : []),
-          // Unread is shared with recomputeUnreadCounts, so the list and the
-          // badge beside the source cannot disagree about what it means. A
-          // removal is terminal and hidden in every filter -- exactly as
-          // recomputeUnreadCounts scores it.
           articleFilterCondition(filter, readStateColumns),
-          // Snoozed sources (#725) never surface as unread while the pause
-          // is active. The timestamp is tested lazily here at read time, so
-          // expiry needs no job: the backlog accumulated during the pause
-          // is still stored unread and reappears on its own. The "all" and
-          // "read" views are unsuppressed, so the backlog stays reachable.
           ...(filter === "unread"
             ? [
                 sql`(${userSources.pausedUntil} IS NULL OR ${userSources.pausedUntil} <= NOW())`,
               ]
             : []),
           sql`${userSources.createdAt} IS NOT NULL`,
-          // Keyset rather than OFFSET: a folder fanning out to hundreds of
-          // sources would otherwise make every page rescan everything above
-          // it, and a page-sized LIMIT is the only thing bounding what this
-          // loads into memory and serialises. The cursor row's timestamp is
-          // read back here so it keeps full microsecond precision; a value
-          // round-tripped through the client's JSON date is milliseconds and
-          // lands inside the batch it was meant to sit after.
           cursor
             ? sql`(${articles.publishedAt}, ${articles.id}) < (
                 (SELECT ${cursorRow.publishedAt} FROM ${articles} ${cursorRow} WHERE ${cursorRow.id} = ${cursor}),
@@ -177,8 +126,6 @@ export class ArticlesDataService {
             : undefined,
         ),
       )
-      // id breaks the tie: published_at is not unique, and a keyset cursor on
-      // an ambiguous ordering repeats or skips rows across pages.
       .orderBy(desc(articles.publishedAt), desc(articles.id))
       .limit(articlePageSize)
       .as("page");
@@ -189,8 +136,6 @@ export class ArticlesDataService {
         id: articles.id,
         publishedAt: articles.publishedAt,
         read: page.read,
-        // Bumped when a feed rewrites the article, so a body downloaded for
-        // offline reading (#992) can tell it is out of date.
         revision: sql<null | string>`${articles.updatedAt}::text`,
         sourceId: articles.sourceId,
         title: articles.title,
@@ -198,25 +143,14 @@ export class ArticlesDataService {
       })
       .from(page)
       .innerJoin(articles, eq(articles.id, page.id))
-      // The join does not keep the subquery's order.
       .orderBy(desc(page.publishedAt), desc(page.id));
 
     return loadedArticles;
   }
 
-  /**
-   * Returns how many rows a recount of the unread badge could now see
-   * differently: articles inserted, articles whose content or timestamps
-   * changed, and articles a newer subscription could not see until this
-   * write re-stamped them. Zero means nothing a badge counts has moved.
-   */
   public async batchUpsertArticles(
     articlePayloads: ArticleInsert[],
   ): Promise<number> {
-    // A feed can list the same (sourceId, guid) twice in one fetch (republishing,
-    // pagination overlap, feed-generator bugs). Postgres rejects an ON CONFLICT
-    // DO UPDATE batch that targets the same row twice, so dedupe first, keeping
-    // the last occurrence as the freshest data.
     const deduped = [
       ...new Map(
         articlePayloads.map((payload) => [
@@ -243,11 +177,7 @@ export class ArticlesDataService {
         OR excluded.updated_at > ${articles.updatedAt}
       )
     `;
-    // At 11 columns a row this is about 1100 bind parameters, far under
-    // Postgres's 65535, and puts a typical feed in one round trip.
     const BATCH_SIZE = 100;
-    // Split per source so the latest-subscription lookup below is an
-    // uncorrelated subquery, which Postgres evaluates once per statement.
     const batches = [];
     for (const sourcePayloads of Map.groupBy(
       deduped,
@@ -261,24 +191,12 @@ export class ArticlesDataService {
     let changed = 0;
     for (const batch of batches) {
       const sourceId = batch[0]!.sourceId;
-      // A subscription sees an article once last_seen_in_feed_at reaches its
-      // created_at (userArticleAccessJoin), and OPML import creates
-      // subscriptions without writing any article. A stamp older than the
-      // newest subscription is therefore moved regardless of the throttle,
-      // or that subscriber would wait up to the throttle to see the feed.
       const latestSubscription = sql`(
         SELECT MAX(${userSources.createdAt})
         FROM ${userSources}
         WHERE ${userSources.sourceId} = ${sourceId}
       )`;
-      // Compared as text: a JS Date drops the microseconds, and the
-      // content-change branch below can move updated_at by exactly one.
       const updatedAtText = sql<null | string>`${articles.updatedAt}::text`;
-      // RETURNING sees only the new row, so what each row looked like
-      // before is read first. The SET moves updated_at exactly when
-      // fieldChange or timestampAdvance holds, which is what separates a
-      // content change from a bare re-stamp. A concurrent write in between
-      // can only make this over-report, which costs one recount.
       // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
       const before = await this.drizzleConnection
         .select({
@@ -306,10 +224,6 @@ export class ArticlesDataService {
           set: {
             author: sql`excluded.author`,
             content: sql`excluded.content`,
-            // Not part of fieldChange: an attachment is not a revision of
-            // the text, and rows stored before enclosures existed would all
-            // read as rewritten. Any write, the re-stamp included, refreshes
-            // it.
             enclosures: sql`excluded.enclosures`,
             lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
             publishedAt: sql`
@@ -338,12 +252,6 @@ export class ArticlesDataService {
             `,
             url: sql`excluded.url`,
           },
-          // An unchanged row is left alone until its stamp is
-          // lastSeenBumpThrottleHours old (#897). Every write here copies
-          // the whole row, body included, into every index on the table,
-          // and a poll every few minutes made nearly all of them no-ops.
-          // retention.ts explains why the throttle must stay under the
-          // gone-from-feed buffer.
           setWhere: sql`
             excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
             AND (
@@ -373,10 +281,6 @@ export class ArticlesDataService {
     return changed;
   }
 
-  /**
-   * Marks articles read or unread for one user. `deleted_at` is left alone --
-   * read and removed are different states, and a removal outranks either.
-   */
   public async setUserArticlesRead(
     articleIdList: number[],
     userId: number,
@@ -396,9 +300,6 @@ export class ArticlesDataService {
     });
   }
 
-  // Writes one user_articles column for the articles this user may see:
-  // article ids are a guessable serial primary key, so the caller's list is
-  // filtered down to articles whose source the user is subscribed to first.
   private async markUserArticles(
     articleIdList: number[],
     userId: number,

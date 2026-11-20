@@ -61,7 +61,6 @@ test("an accepted request leaves the subscription to the hub's verification", as
   expect(failed).toEqual([]);
 });
 
-// Without a public origin no hub could reach the callback.
 test("without a public origin nothing is asked of any hub", async () => {
   const { posted, subscriber } = subscriberWith(202);
   expect(subscriber.wants("none")).toBe(false);

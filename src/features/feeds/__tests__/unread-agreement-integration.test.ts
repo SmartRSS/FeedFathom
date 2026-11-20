@@ -12,11 +12,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// The article list and the unread badge are two queries answering the same
-// question, and a disagreement between them is an unread count with nothing
-// behind it -- the failure that is hardest to notice. They now share one
-// expression (article-read-state.ts); this holds them to it across every state
-// a user_articles row can be in.
 test("the article list and the unread count agree in every read state", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -44,7 +39,6 @@ test("the article list and the unread count agree in every read state", async ()
       INSERT INTO user_sources (user_id, source_id, name, created_at)
       VALUES (${user!.id}, ${source!.id}, 'sub', NOW() - INTERVAL '60 days')`;
 
-    // updated_at NULL is the ordinary case: only an edit sets it.
     const addArticle = async (guid: string, updatedAt: null | string) => {
       const [article] = await client<{ id: string }[]>`
         INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
@@ -67,9 +61,6 @@ test("the article list and the unread count agree in every read state", async ()
 
     const untouched = await addArticle("untouched", null);
     const removed = await addArticle("removed", null);
-    // A state row that is neither removed nor read. Nothing wrote one before
-    // read state existed, and it is exactly the row the old list query lost:
-    // `updated_at > NULL` is NULL, which made the whole condition NULL.
     const stateOnly = await addArticle("state-only", null);
     const read = await addArticle("read", null);
     const readThenEdited = await addArticle("read-then-edited", "1 hour");
@@ -78,9 +69,7 @@ test("the article list and the unread count agree in every read state", async ()
     await setState("removed", "now", null);
     await setState("state-only", null, null);
     await setState("read", null, "1 minute");
-    // Edited an hour ago, read two hours ago: unread again.
     await setState("read-then-edited", null, "2 hours");
-    // Edited three hours ago, read two: still read.
     await setState("read-after-edit", null, "2 hours");
 
     const listed = (
@@ -112,9 +101,6 @@ test("the article list and the unread count agree in every read state", async ()
   }
 });
 
-// Read and unread partition what is not removed: every article that is still
-// listable is in exactly one of them, and a removal is in neither. If that
-// ever stops holding, "all" gains or loses rows that neither other view shows.
 test("marking read moves an article between the filters and nowhere else", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -161,13 +147,10 @@ test("marking read moves an article between the filters and nowhere else", async
 
     expect(await listed("unread")).toEqual([second!]);
     expect(await listed("read")).toEqual([first!]);
-    // A removal is terminal in every filter, "all" included.
     expect(await listed("all")).toEqual(
       [first!, second!].toSorted((left, right) => left - right),
     );
 
-    // The flag the client renders comes from the same expression the filter
-    // uses, so the "all" view cannot disagree with the "read" view.
     const all = await articlesDataService.getUserArticlesForSources(
       [source!.id],
       user!.id,
@@ -184,7 +167,6 @@ test("marking read moves an article between the filters and nowhere else", async
     );
     expect(await listed("read")).toEqual([]);
 
-    // Marking a removed article read must not resurrect it.
     await articlesDataService.setUserArticlesRead([third!], user!.id, true);
     expect(await listed("all")).toEqual(
       [first!, second!].toSorted((left, right) => left - right),
@@ -195,8 +177,6 @@ test("marking read moves an article between the filters and nowhere else", async
   }
 });
 
-// A subscription with no articles at all: the LEFT JOIN leaves ua.user_id
-// NULL, which reads as unread unless the article row itself is tested for.
 test("an empty subscription counts zero unread", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);

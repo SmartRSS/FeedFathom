@@ -25,17 +25,6 @@ import type { UserSourcesDataService } from "#features/feeds/user-source-data-se
 import { webSubFallbackPollMs } from "#features/feeds/source-schedule-policy.ts";
 import { subscriptionSeesArticle } from "#features/feeds/article-read-state.ts";
 
-// How long an article must go unseen before the feed counts as having dropped
-// it. One fetch omitting an item means nothing -- pagination, reordering and
-// truncation all do that -- so the buffer must span many of the source's own
-// cycles. A flat interval can't: a feed advertising a long max-age parks days
-// out and websub only polls daily, so one flat day is less than one cycle.
-// That false positive once destroyed 89k articles' deletion records.
-//
-// Scaled by cadence instead: not_before - last_success is the refresh interval
-// the origin asked for (both written by the same successSource UPDATE), and
-// websub ignores that column, so it gets the flat daily fallback. Every
-// degenerate case lands on a LARGER buffer, erring towards keeping.
 const goneFromFeedBufferFloorHours = 24;
 const confirmedGoneFromFeedBuffer = sql`
   GREATEST(
@@ -47,25 +36,10 @@ const confirmedGoneFromFeedBuffer = sql`
   )
 `;
 
-// A parse re-stamps last_seen_in_feed_at on an unchanged article only once
-// its stamp is this old (#897): rewriting every row on every poll to move one
-// timestamp made nearly every article write a no-op. The buffer above must
-// absorb the staleness this allows: right after a parse, a present article
-// sits at most this far behind last_success. Raising it to the buffer's floor
-// would have the gone-from-feed rule delete articles still in the feed.
 export const lastSeenBumpThrottleHours = 1;
 
-// Email deliveries have no feed to go absent from, so the gone-from-feed
-// reading does not apply to them. Their retention is flat delivery age, the
-// same bound every other article's lifetime has: an article is an article,
-// and a delivery nobody deletes must still age out, or one active subscriber
-// who never removes anything would accumulate rows forever. 90 days is
-// several times the dormancy thresholds' default order and comfortably past
-// any "read the newsletter eventually" window.
 const emailRetentionDays = 90;
 
-// How long a source may go without a subscriber: a newsletter address is
-// reserved before anyone subscribes (#1116), and takes mail meanwhile.
 const subscriberlessGraceEnd = sql`NOW() - INTERVAL '1 day'`;
 export const inSubscriberlessGrace = gt(
   sources.createdAt,
@@ -83,17 +57,6 @@ export const hasSubscriber = (
 
 const daysAgo = (days: number) => sql`NOW() - (${days} * INTERVAL '1 day')`;
 
-/**
- * Prunes what nothing can still reach: expired users and sessions,
- * subscriberless sources, and articles past every reader's horizon. Then it
- * recounts the unread badges of every source it took articles from: the
- * deletes bypass the data services, so a pruned unread newsletter would keep
- * its badge until some unrelated event recounted the source (#812).
- *
- * Users and sessions are auth's tables. They are pruned here, first, because
- * every rule below reads the set of current subscribers, which the cascade
- * from an expired user shrinks.
- */
 export class RetentionService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
@@ -120,7 +83,6 @@ export class RetentionService {
   }
 }
 
-// Returns the ids of the sources whose article rows shrank.
 async function deleteUnreachableRows(
   drizzleConnection: BunSQLDatabase<typeof schema>,
   userDormantAfterDays: number,
@@ -131,16 +93,8 @@ async function deleteUnreachableRows(
   const rememberPrunedFrom = (removed: { sourceId: number }[]) => {
     for (const row of removed) prunedSourceIds.add(row.sourceId);
   };
-  // Runs first: the cascade on user_sources shrinks the "current subscriber"
-  // set before every rule below evaluates it, so no rule needs to special-case
-  // expired users.
   if (userExpiryDays > 0) {
-    // One cutoff for both statements, so no user expires between them.
     const cutoff = new Date(Date.now() - userExpiryDays * 86_400_000);
-    // An email source from before ownership can have other subscribers (see
-    // migration 0013): it passes to the earliest of them, so the address
-    // stays owned. An owner's unshared source loses its owner instead (the
-    // reserved_by SET NULL) and goes in the orphan delete below.
     await drizzleConnection.execute(sql`
       UPDATE sources s SET reserved_by = (
         SELECT us.user_id FROM user_sources us
@@ -160,43 +114,20 @@ async function deleteUnreachableRows(
     await drizzleConnection.delete(users).where(lt(users.lastSeenAt, cutoff));
   }
 
-  // Expired sessions are dead weight, not data: enforcement lives in the
-  // session lookup itself, so these rows are unreachable the moment they
-  // age out and only the delete is left to do.
   await drizzleConnection
     .delete(sessions)
     .where(lt(sessions.expiresAt, sql`NOW()`));
 
-  // "Delete sources nobody subscribes to" means "delete every source" when
-  // user_sources is empty -- correct if the last subscription was just
-  // removed, catastrophic if the table is empty for any transient reason.
-  // This can't tell those apart, so guard on the whole table existing, in the
-  // same statement to leave no check-then-delete race.
-  //
-  // A source younger than a day is kept even so. A newsletter address is
-  // reserved as a source before anyone subscribes (#1116), and this is the
-  // grace it has to be subscribed in. The grace applies to every kind rather
-  // than email alone: it costs an abandoned new feed a day of polling, and it
-  // also covers the gap between addSourceToUser creating a source and
-  // subscribing to it.
   const subscriberless = and(
     not(inSubscriberlessGrace),
     exists(drizzleConnection.select({ id: userSources.id }).from(userSources)),
     not(hasSubscriber(drizzleConnection)),
   );
 
-  // An owned newsletter address that has had mail stays, as a tombstone:
-  // deleted, it would be free for any account to create and receive its
-  // owner's mail. One that never had any goes, or every Generate click would
-  // leave a row behind for good. Email delivery is the only writer of an
-  // email source's last_success.
   const tombstone = sql`(${sources.reservedBy} IS NOT NULL AND ${sources.lastSuccess} IS NOT NULL)`;
   await drizzleConnection
     .delete(sources)
     .where(and(subscriberless, not(tombstone)));
-  // A tombstone bounces new mail (see findMailRecipient), but keeps what its
-  // owner left behind on unsubscribing, which an owner subscribing again
-  // would see. That goes, so nothing but the row accumulates.
   await drizzleConnection
     .delete(articles)
     .where(
@@ -243,18 +174,6 @@ async function deleteUnreachableRows(
       .returning({ sourceId: articles.sourceId }),
   );
 
-  // The complement of the rule above: articles current subscribers COULD see,
-  // but which are gone for good -- absent past confirmedGoneFromFeedBuffer and
-  // deleted by everyone who could have seen them. "Could have seen" is scoped
-  // to subscribers who joined before it disappeared; a later subscriber never
-  // had the chance to delete it, so their missing row must not block the prune.
-  //
-  // A false positive is recoverable: user_articles is keyed on
-  // (source, guid) with no foreign key to articles, so a removal outlives the
-  // prune and a re-inserted article stays removed. The buffer stays because
-  // re-fetching content is waste, not because being wrong is destructive.
-  //
-  // Email sources are excluded; they prune separately below.
   const articlesUnreachableByAnyone = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -304,12 +223,6 @@ async function deleteUnreachableRows(
       .returning({ sourceId: articles.sourceId }),
   );
 
-  // Email sources prune separately: they have no feed to be absent from, and
-  // each delivery stamps last_success, which would make every earlier
-  // newsletter look dropped if read as an absence. Instead they age out on
-  // flat delivery age (see emailRetentionDays), deletion records not
-  // gating it: a delivery is an article like any other, and an active
-  // subscriber's missing deletion would otherwise hold every row forever.
   const emailArticlesPastRetention = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
@@ -328,11 +241,6 @@ async function deleteUnreachableRows(
       .returning({ sourceId: articles.sourceId }),
   );
 
-  // Neither rule above accounts for dormancy -- a subscriber who hasn't made a
-  // request in months still counts as current. This catches articles old
-  // enough that no subscriber who could have seen them is still active,
-  // regardless of deletions. Either threshold at 0 disables the rule; 0 never
-  // means "no requirement".
   if (userDormantAfterDays > 0 && articleStaleAfterDays > 0) {
     const articlesOnlyDormantCouldSee = drizzleConnection
       .select({ id: articles.id })

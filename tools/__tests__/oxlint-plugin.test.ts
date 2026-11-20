@@ -3,15 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-// oxlint's own `RuleTester` needs raw-transfer support, which Bun does not
-// provide, so these run the real linter against fixtures written to a temp
-// directory instead. That also exercises plugin loading end to end, and keeps
-// the deliberately-broken fixtures out of the repo's own lint run.
-
 const pluginPath = resolve(import.meta.dir, "../oxlint-plugin.js");
-// Resolved absolutely rather than via `bunx`: these run with `cwd` set to a
-// temp directory, where `bunx` cannot see the project's node_modules and would
-// try to fetch its own copy of oxlint instead.
 const oxlintBin = resolve(import.meta.dir, "../../node_modules/.bin/oxlint");
 let directory = "";
 
@@ -26,18 +18,16 @@ const config = {
       "error",
       { allow: ["src/platform/db/schema.ts"] },
     ],
+    "feedfathom/no-comments": ["error", { budget: { "budgeted.ts": 1 } }],
     "feedfathom/schema-compile-module-scope": "error",
   },
 } as const;
 
-/** Pull the diagnostic codes out of oxlint's JSON report without asserting. */
 function diagnosticCodes(stdout: string, stderr: string): string[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout);
   } catch {
-    // oxlint failing to start prints a plain-text reason. Surface that rather
-    // than a bare "Unexpected identifier" from the JSON parser.
     throw new Error(
       `oxlint did not emit JSON.\nstdout: ${stdout}\nstderr: ${stderr}`,
     );
@@ -53,7 +43,6 @@ function diagnosticCodes(stdout: string, stderr: string): string[] {
   });
 }
 
-/** Lint an already-written file, returning only this plugin's rule names. */
 async function lintFile(relativePath: string): Promise<string[]> {
   const child = Bun.spawn({
     cmd: [
@@ -79,7 +68,6 @@ async function lintFile(relativePath: string): Promise<string[]> {
   );
 }
 
-/** Lint one source string and return the rule names that fired. */
 async function lint(name: string, code: string): Promise<string[]> {
   await writeFile(join(directory, name), code);
   return lintFile(name);
@@ -110,7 +98,6 @@ test("schema-compile-module-scope allows module scope", async () => {
   expect(await lint("c.ts", "const check = Schema.Compile(schema);")).toEqual(
     [],
   );
-  // Function depth must reset after a function closes, not leak onward.
   expect(
     await lint("d.ts", "function f() {}\nconst check = Schema.Compile(s);"),
   ).toEqual([]);
@@ -141,11 +128,9 @@ test("no-barrel-file allows own exports and local bindings", async () => {
 }, 20_000);
 
 test("no-barrel-file honours the allow list", async () => {
-  // Same shape as the flagged barrel, but at the exempted path.
   expect(
     await lint("schema.ts", 'import { a } from "./a.ts";\nexport { a };'),
   ).toHaveLength(1);
-  // Identical shape at the exempted path is allowed.
   const file = join("src", "platform", "db", "schema.ts");
   await Bun.write(
     join(directory, file),
@@ -154,29 +139,24 @@ test("no-barrel-file honours the allow list", async () => {
   expect(await lintFile(file)).toEqual([]);
 }, 20_000);
 
-/** Write a fixture at a path the layer rule reads, and lint it there. */
 async function lintAt(path: string, code: string): Promise<string[]> {
   await Bun.write(join(directory, path), code);
   return lintFile(path);
 }
 
 test("layer-boundaries allows downward and declared imports", async () => {
-  // Feature -> platform and feature -> shared are downward.
   expect(
     await lintAt(
       join("src", "features", "reader", "down.ts"),
       'import { a } from "#platform/db/connection.ts";\nimport { b } from "#shared/util/safe-url.ts";\nexport const c = a + b;',
     ),
   ).toEqual([]);
-  // reader -> feeds is on the declared list, and a feature may always import
-  // itself.
   expect(
     await lintAt(
       join("src", "features", "reader", "declared.ts"),
       'import { a } from "#features/feeds/feed-parser.ts";\nimport { b } from "#features/reader/own.ts";\nexport const c = a + b;',
     ),
   ).toEqual([]);
-  // The composition root may import anything.
   expect(
     await lintAt(
       join("src", "root.ts"),
@@ -201,7 +181,6 @@ test("layer-boundaries rejects upward imports", async () => {
 }, 20_000);
 
 test("layer-boundaries rejects an undeclared feature edge", async () => {
-  // feeds -> auth is declared; auth -> feeds is not.
   expect(
     await lintAt(
       join("src", "features", "auth", "sideways.ts"),
@@ -217,7 +196,6 @@ test("layer-boundaries rejects a client importing a feature", async () => {
       'import { a } from "#features/feeds/feed-mapper.ts";\nexport const b = a;',
     ),
   ).toEqual(["feedfathom(layer-boundaries)"]);
-  // ... and one client reaching into the other.
   expect(
     await lintAt(
       join("src", "spa", "cross.ts"),
@@ -227,14 +205,12 @@ test("layer-boundaries rejects a client importing a feature", async () => {
 }, 20_000);
 
 test("layer-boundaries judges relative specifiers by the same rule", async () => {
-  // `../../` must not be an escape hatch from what `#platform/` enforces.
   expect(
     await lintAt(
       join("src", "shared", "util", "sneak.ts"),
       'import { a } from "../../platform/config.ts";\nexport const b = a;',
     ),
   ).toEqual(["feedfathom(layer-boundaries)"]);
-  // A relative import that stays inside the layer is fine.
   expect(
     await lintAt(
       join("src", "shared", "util", "sibling.ts"),
@@ -244,7 +220,6 @@ test("layer-boundaries judges relative specifiers by the same rule", async () =>
 }, 20_000);
 
 test("layer-boundaries checks dynamic imports too", async () => {
-  // One `await import()` would otherwise be enough to walk around the rule.
   expect(
     await lintAt(
       join("src", "features", "auth", "lazy.ts"),
@@ -266,4 +241,45 @@ test("layer-boundaries exempts co-located tests", async () => {
       'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
     ),
   ).toEqual([]);
+}, 20_000);
+
+test("no-comments flags prose comments", async () => {
+  expect(
+    await lint(
+      "q.ts",
+      "// why\nconst a = 1; // trailing\n/** doc */\nconst b = 2;",
+    ),
+  ).toEqual([
+    "feedfathom(no-comments)",
+    "feedfathom(no-comments)",
+    "feedfathom(no-comments)",
+  ]);
+}, 20_000);
+
+test("no-comments allows lint, type and bundler directives", async () => {
+  const code = [
+    '/// <reference types="vite/client" />',
+    "// oxlint-disable-next-line no-await-in-loop -- reason",
+    "// eslint-disable-next-line no-await-in-loop",
+    "// @ts-expect-error -- reason",
+    "const a = /* @__PURE__ */ make();",
+    "/** @type {number} */",
+    "const b = 1;",
+    "/**",
+    " * @param {string} x",
+    " * @returns {string}",
+    " */",
+    "function f(x) { return x; }",
+  ].join("\n");
+  expect(await lint("r.ts", code)).toEqual([]);
+}, 20_000);
+
+test("no-comments ratchets a file's budget down only", async () => {
+  expect(await lint("budgeted.ts", "// kept\nconst a = 1;")).toEqual([]);
+  expect(await lint("budgeted.ts", "// kept\n// new\nconst a = 1;")).toEqual([
+    "feedfathom(no-comments)",
+  ]);
+  expect(await lint("budgeted.ts", "const a = 1;")).toEqual([
+    "feedfathom(no-comments)",
+  ]);
 }, 20_000);

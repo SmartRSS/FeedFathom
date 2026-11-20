@@ -9,8 +9,6 @@ import { createExtensionReaderBridge } from "../extension-reader.ts";
 
 const origin = "https://reader.example";
 
-// Enough of a window for the bridge: it posts requests to itself and listens
-// for answers, which the test delivers as message events.
 function bridgeWindow() {
   const listeners: ((event: MessageEvent<unknown>) => void)[] = [];
   const posted: ReaderRequest[] = [];
@@ -30,7 +28,6 @@ function bridgeWindow() {
     "window",
   );
   const deliver = (data: unknown, from = { origin, source: windowObject }) => {
-    // Bun's MessageEvent only takes a MessagePort as its source.
     const event = Object.defineProperty(
       new MessageEvent("message", { data, origin: from.origin }),
       "source",
@@ -52,10 +49,6 @@ const fetched = (id: string) => ({
   version: readerBridgeVersion,
 });
 
-// The bridge is how article HTML from the extension enters the page, so an
-// answer counts only if it comes from this window, on this origin, for the
-// request it names; anything else -- another frame, another origin, a forged
-// id or action -- is ignored, and the real answer still lands.
 test("accepts only its own window's answer to the request it sent", async () => {
   const { deliver, posted, windowObject } = bridgeWindow();
   const bridge = createExtensionReaderBridge(windowObject);

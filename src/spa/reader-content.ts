@@ -10,7 +10,6 @@ import type { ArticleFetches } from "./reading-prefetch.ts";
 
 export type DisplayMode = "FEED" | ReaderMode;
 
-// The reader pane's display modes, in the order its dropdown offers them.
 export const displayModes: {
   label: string;
   mode: DisplayMode;
@@ -39,17 +38,13 @@ export const displayModes: {
 ];
 
 type ReaderOptions = {
-  // Reader documents are extension-only; never proxy them through the
-  // FeedFathom backend.
   bridge: ReturnType<typeof createExtensionReaderBridge>;
   clearAlert(): void;
   fetches: ArticleFetches;
-  // A failure the reader explains in a sentence of its own.
   notice(message: string): void;
   reportError(cause: unknown, fallback: string): void;
 };
 
-/** The article in the reader pane, and the mode it is shown in. */
 export class ReaderState {
   readonly #options: ReaderOptions;
   readonly #mode = createSignal<DisplayMode>("FEED");
@@ -69,7 +64,6 @@ export class ReaderState {
   readonly opened: Accessor<Article | undefined> = () => this.#opened[0]();
   readonly loading: Accessor<boolean> = () => this.#loading[0]();
 
-  /** What the pane renders: the feed's own body, or the extracted one. */
   readonly displayed: Accessor<
     { article: Article; content: ReaderContent } | undefined
   > = () => {
@@ -88,8 +82,6 @@ export class ReaderState {
     this.#mode[1](mode);
   }
 
-  /** Asks the extension whether it is there; the answer can change when the
-   *  tab regains focus. */
   async probe(): Promise<void> {
     this.#probe?.abort();
     const probe = new AbortController();
@@ -103,7 +95,6 @@ export class ReaderState {
       );
   }
 
-  /** Nothing is open: a new list, or a selection of zero or many rows. */
   close(): void {
     this.#body?.abort();
     this.#opened[1](undefined);
@@ -111,8 +102,6 @@ export class ReaderState {
     this.#loading[1](false);
   }
 
-  /** Opens `summary`. `isCurrent` says whether it is still what the list
-   *  wants open; `arrived` runs once its body is in, before any extraction. */
   async open(
     summary: ArticleSummary,
     isCurrent: () => boolean,
@@ -137,8 +126,6 @@ export class ReaderState {
       if (!this.available()) throw new ReaderExtensionError("UNAVAILABLE");
       const fetched = await this.#options.bridge.fetch(opened.url);
       if (!current()) return;
-      // Loaded on first use so FEED-only sessions never download the
-      // extraction libraries; a failed load falls back to FEED below.
       const { extractReaderContent } = await import("./reader-extraction.ts");
       if (!current()) return;
       const content = await extractReaderContent(

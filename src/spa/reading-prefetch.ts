@@ -2,18 +2,12 @@ import type { Article } from "#shared/contracts/responses.ts";
 import { FINE_POINTER_QUERY } from "./panes.ts";
 import { prefetchNext } from "./preferences.ts";
 
-// Save Data is the user telling every site to send fewer bytes; a
-// prefetch is exactly what they asked not to receive. Browsers without
-// navigator.connection (Safari, Firefox) read as "no constraint".
 export function saveData(): boolean {
-  // The member exists in Chromium but not in the type library.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const { connection } = navigator as { connection?: { saveData?: boolean } };
   return connection?.saveData === true;
 }
 
-// The articles either side of the open one, next first: reading moves
-// forward far more often than back, so that request should go out first.
 export function neighbours<T>(
   items: readonly T[],
   index: number | undefined,
@@ -29,11 +23,6 @@ type ArticleFetch = { controller: AbortController; request: Promise<Article> };
 
 const hoverDelayMs = 150;
 
-/** In-flight article GETs by id, prefetches and opens alike. A press, a
- *  hover and the click that follows share one request: the service worker
- *  caches a response only once it lands, so a second GET started before
- *  then would hit the network too. Each carries its own controller, so an
- *  open can adopt it and still cancel the body when the reader moves on. */
 export class ArticleFetches {
   readonly #request: ArticleRequest;
   readonly #inFlight = new Map<number, ArticleFetch>();
@@ -44,24 +33,16 @@ export class ArticleFetches {
     this.#request = request;
   }
 
-  /** The request an open awaits. Adopting it means a late pointercancel
-   *  can no longer abort it. */
   open(id: number): ArticleFetch {
     this.#press = undefined;
     return this.#fetch(id);
   }
 
-  /** Opt-in prefetch, skipped under Save Data. The plain GET is a read with
-   *  no side effects; the service worker serves it for a minute without a
-   *  round trip, and offline after that. */
   prefetch(id: number, openedId: number | undefined): void {
     if (!prefetchNext.get() || saveData() || openedId === id) return;
-    // Best-effort: opening the article reports its own failure.
     this.#fetch(id);
   }
 
-  /** The articles either side of the one just opened (#716, #988), next
-   *  first, in idle time. */
   prefetchAround(
     rows: readonly { id: number }[],
     index: number | undefined,
@@ -76,9 +57,6 @@ export class ArticleFetches {
     else setTimeout(run, 200);
   }
 
-  /** A plain primary press is the click's own request started early, not an
-   *  extra one, so the opt-in setting doesn't apply. A press that turns into
-   *  a scroll fires pointercancel, which drops the request it started. */
   press(event: PointerEvent, id: number, openedId: number | undefined): void {
     this.#press = undefined;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey)
@@ -92,8 +70,6 @@ export class ArticleFetches {
     this.#press = undefined;
   }
 
-  /** A mouse resting on a row for a moment usually means a click is coming.
-   *  Touch has no hover; its pointerenter arrives with the press. */
   hover(id: number, openedId: number | undefined): void {
     clearTimeout(this.#hoverTimer);
     if (!matchMedia(FINE_POINTER_QUERY).matches) return;

@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test";
-// vendor/fast-xml-parser-shim stands in for the real package, so this
-// resolves to the shim (see package.json "overrides").
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 
-// The shape expectations below were captured from fast-xml-parser 5.10.1
-// configured exactly as @rowanmanning/feed-parser configures it, and verified
-// to match it byte for byte. The real package is no longer installed, so they
-// are recorded here rather than compared live. The one deliberate divergence
-// is malformed input -- see the last parser test.
 const parser = new XMLParser();
 const builder = new XMLBuilder();
 
@@ -52,9 +45,6 @@ describe("XMLParser (preserveOrder shape)", () => {
     expect(parser.parse(xml)).toEqual(expected);
   });
 
-  // Deliberate divergence, not captured behaviour: the real parser recovers
-  // from this and returns a tree. Bun.XML is a conforming processor, so
-  // malformed input fails loudly instead of yielding silently truncated data.
   test("throws on malformed XML where the real parser recovered", () => {
     expect(() => parser.parse(`<a><b></a>`)).toThrow();
   });

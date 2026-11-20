@@ -109,10 +109,8 @@ describe("reader scroll LRU", () => {
     );
     const cleared = clearReaderScrolls(next, [12]);
     expect(cleared.reader.map((entry) => entry.id)).toEqual([11]);
-    // The open article was 11, not 12: untouched.
     expect(cleared.app?.articleId).toBe(11);
     expect(clearReaderScrolls(next, [11]).app?.articleId).toBeUndefined();
-    // Unrelated entries survive either clear.
     expect(
       clearReaderScrolls(next, [13]).reader.map((entry) => entry.id),
     ).toEqual([12, 11]);
@@ -147,7 +145,6 @@ describe("throttled recorder", () => {
     );
     record(1);
     expect(writes).toEqual([1]);
-    // A burst inside the interval coalesces; nothing writes until the timer.
     record(2);
     record(3);
     expect(timers.pendingDelays()).toEqual([500]);
@@ -155,7 +152,6 @@ describe("throttled recorder", () => {
     expect(writes).toEqual([1]);
     timers.advance(1);
     expect(writes).toEqual([1, 3]);
-    // The interval now dates from the trailing write.
     record(4);
     expect(writes).toEqual([1, 3]);
     timers.advance(500);

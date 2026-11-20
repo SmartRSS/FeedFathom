@@ -26,8 +26,6 @@ export async function getPreviewHandler(
 ) {
   await outboundFetchBudget.consume(user.id);
   const source = await feedParser.preview(decoded.feedUrl);
-  // The sentence is what a reader sees; the fetcher's own words are for an
-  // admin's Details.
   if ("failure" in source)
     return json(
       errorResponse,

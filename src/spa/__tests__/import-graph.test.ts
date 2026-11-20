@@ -5,9 +5,6 @@ const spaDir = join(import.meta.dir, "..");
 const entry = join(spaDir, "main.tsx");
 const transpiler = new Bun.Transpiler({ loader: "tsx" });
 
-// Every package and source file the SPA entry reaches statically. Either
-// showing up here ships in the main chunk, parsed on every load; one reached
-// only through import() lands in a chunk of its own.
 async function spaGraph() {
   const packages = new Set<string>();
   const pending = [entry];
@@ -16,8 +13,6 @@ async function spaGraph() {
     // eslint-disable-next-line no-await-in-loop -- A walk, one file at a time.
     const source = await Bun.file(file).text();
     for (const { kind, path } of transpiler.scanImports(source)) {
-      // The transpiler injects its own JSX runtime as a require-call; the
-      // SPA's real edges are ES imports.
       if (kind === "require-call" || kind === "dynamic-import") continue;
       const resolved = Bun.resolveSync(path, dirname(file));
       if (resolved.includes("/node_modules/")) packages.add(path);

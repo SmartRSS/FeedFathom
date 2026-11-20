@@ -12,8 +12,6 @@ const migrationsFolder = fileURLToPath(
 
 const databaseUrl = requireDisposableDatabaseUrl();
 const client = new SQL(databaseUrl);
-// A pool as wide as the race, so the registrations genuinely run on separate
-// connections and meet at the table lock rather than queueing client-side.
 const service = new UsersDataService(
   createDrizzleConnection(databaseUrl, { max: 8 }),
 );
@@ -63,9 +61,6 @@ test("enabled registration admits everyone and one administrator", async () => {
   expect(counts).toEqual({ admins: 1, total: 8 });
 });
 
-// A delivery that failed after the row committed withdraws the token, which
-// leaves the account where the register route's expired-link recovery picks
-// it up: still inactive, with no live link to wait out.
 test("withdrawing an activation token leaves a newer one alone and the account recoverable", async () => {
   await resetDatabase();
   await service.createUser(
@@ -93,11 +88,6 @@ test("withdrawing an activation token leaves a newer one alone and the account r
   expect(user?.status).toBe("inactive");
 });
 
-// The route's lookup cannot see an account committed after it, so the insert
-// itself must settle a same-address race: one row, the winner's credentials
-// and token, and every loser told "exists" rather than failing on the unique
-// index (#848). Run on an empty instance and on a populated one, since the
-// two take different insert paths.
 test.each([false, true])(
   "same-address registrations create one untouched account, populated=%s",
   async (populated) => {
@@ -152,16 +142,12 @@ const storedToken = async () =>
 
 const tomorrow = () => new Date(Date.now() + 24 * 60 * 60 * 1_000);
 
-// A replacement whose delivery failed is withdrawn, and the very next
-// recovery stores and sends another rather than waiting out the day the
-// undelivered one promised (#849).
 test("a failed replacement delivery stays retryable", async () => {
   const userId = await pendingAccount(new Date(Date.now() - 60_000));
 
   expect(
     await service.refreshActivationToken(userId, "undelivered", tomorrow()),
   ).toBe(true);
-  // A second recovery while that link is live stores nothing.
   expect(
     await service.refreshActivationToken(userId, "early", tomorrow()),
   ).toBe(false);
@@ -173,9 +159,6 @@ test("a failed replacement delivery stays retryable", async () => {
   expect(await storedToken()).toBe("retry");
 });
 
-// Two recoveries racing on one expired link: one stores its token, and the
-// loser's failure handling -- withdrawing a token that never took -- cannot
-// clear the winner's delivered link.
 test("concurrent recoveries keep the delivered link", async () => {
   const userId = await pendingAccount(new Date(Date.now() - 60_000));
 

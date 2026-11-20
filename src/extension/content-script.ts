@@ -16,9 +16,6 @@ const scanWithFallback = async (href: string) => {
   return [openRssSuggestion(href)];
 };
 
-// The mobile popup fallback (no contextMenus) can't wait out the on-load
-// scan's debounce, so it asks for a fresh scan directly instead of trusting
-// the background's cached copy.
 chrome.runtime.onMessage.addListener(
   (message: unknown, _sender, sendResponse) => {
     if (!isScanRequestMessage(message)) return false;
@@ -44,8 +41,6 @@ const readerMessage = (event: MessageEvent<unknown>) => {
       location.origin,
     );
 
-  // sendMessage throws once the extension is reloaded or removed under a
-  // page that still runs this script; the page then sees UNAVAILABLE.
   try {
     chrome.runtime.sendMessage(request, (response: unknown) => {
       if (chrome.runtime.lastError) {
@@ -70,8 +65,6 @@ const pageScanner = createPageScanner({
   scan: scanWithFallback,
   schedule: timerSchedule,
   send: (message) => {
-    // Throws or rejects, depending on the browser, once the extension
-    // context is invalidated; the page has no one left to report to.
     try {
       chrome.runtime.sendMessage(message).catch(() => {});
     } catch {}

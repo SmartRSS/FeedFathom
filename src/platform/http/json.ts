@@ -1,9 +1,6 @@
 import type { StaticEncode, TSchema } from "typebox";
 import { errorResponse } from "#shared/contracts/responses.ts";
 
-// What a value may hold before Response.json serialises it: a Date wherever
-// the contract has a string, since that is what a JSON date becomes, and
-// undefined for an optional field, which JSON drops.
 type Serialisable<T> = T extends string
   ? Date | T
   : T extends readonly unknown[]
@@ -16,11 +13,6 @@ type Serialisable<T> = T extends string
         }
       : T;
 
-/**
- * A JSON answer typed against its contract in #shared/contracts, so a handler
- * that drifts from what clients decode fails to compile. The schema is not
- * checked at runtime.
- */
 export function json<Schema extends TSchema>(
   _schema: Schema,
   value: Serialisable<StaticEncode<Schema>>,
@@ -30,7 +22,6 @@ export function json<Schema extends TSchema>(
   return Response.json(value, headers ? { headers, status } : { status });
 }
 
-// What a request the schema refuses is told, whatever check refused it.
 export const invalidRequestMessage = "Invalid request.";
 
 export function jsonError(

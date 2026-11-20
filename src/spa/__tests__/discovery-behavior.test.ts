@@ -14,8 +14,6 @@ describe("withScheme", () => {
     );
   });
 
-  // Newsletter subscriptions are addressed by mail; prefixing one would
-  // produce nonsense.
   test("leaves a mail address alone", () => {
     expect(withScheme("me@example.com")).toBe("me@example.com");
   });

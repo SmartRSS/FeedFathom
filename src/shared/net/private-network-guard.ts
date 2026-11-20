@@ -1,9 +1,3 @@
-// The one table of non-global address ranges and local hostnames. The server
-// checks every hostname and every resolved address against it in
-// platform/http/http-native-transport.ts; the extension, which cannot resolve
-// DNS, checks the hostname alone. Callers pass a WHATWG URL.hostname, which
-// has already turned inet_aton forms ("127.1", "0x7f000001") into a dotted
-// quad and rejected anything that does not parse.
 const blockedSubnets = [
   "0.0.0.0/8",
   "10.0.0.0/8",
@@ -44,8 +38,6 @@ const ipv4Bytes = (address: string): number[] | undefined => {
   return parts.map(Number);
 };
 
-// Expands "::" into eight 16-bit groups; the tail may be a dotted quad
-// (::ffff:127.0.0.1), as a DNS lookup can return.
 const ipv6Bytes = (address: string): number[] | undefined => {
   let groups = address;
   const lastColon = groups.lastIndexOf(":");
@@ -89,13 +81,11 @@ const inSubnet = (bytes: number[], subnet: (typeof subnets)[number]) => {
   return true;
 };
 
-/** A bare IPv4 or IPv6 address; true when unparseable (fail closed). */
 export const isBlockedAddress = (address: string): boolean => {
   const bytes = addressBytes(address.toLowerCase());
   return !bytes || subnets.some((subnet) => inSubnet(bytes, subnet));
 };
 
-// Names that only resolve inside a local network, by convention or by RFC.
 const internalSuffixes = [
   ".home",
   ".home.arpa",
@@ -106,7 +96,6 @@ const internalSuffixes = [
   ".localhost",
 ];
 
-/** URL.hostname without IPv6 brackets or trailing dots, lowercased. */
 export const normalizeHostname = (hostname: string): string =>
   hostname
     .toLowerCase()
@@ -116,11 +105,6 @@ export const normalizeHostname = (hostname: string): string =>
 export const isIpLiteral = (hostname: string): boolean =>
   hostname.includes(":") || /^[\d.]+$/.test(hostname);
 
-/**
- * A hostname that names this machine or a local network: a non-global IP
- * literal, localhost, a name with no dot, or an internal suffix. True for an
- * empty name.
- */
 export const isBlockedHostname = (hostname: string): boolean => {
   const normalized = normalizeHostname(hostname);
   if (isIpLiteral(normalized)) return isBlockedAddress(normalized);
@@ -130,9 +114,6 @@ export const isBlockedHostname = (hostname: string): boolean => {
   );
 };
 
-// Whether a WHATWG URL.hostname names this machine: localhost, a
-// *.localhost name, or a loopback IP literal. The extension allows plain
-// http only to such an instance.
 export const isLoopbackHostname = (hostname: string): boolean => {
   const normalized = normalizeHostname(hostname);
   if (normalized === "localhost" || normalized.endsWith(".localhost"))

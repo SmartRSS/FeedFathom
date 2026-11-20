@@ -2,11 +2,6 @@ import { pingInstance } from "./instance.ts";
 import { clearInstance, readSettings, writeSettings } from "./settings.ts";
 import { canonicalizeInstance } from "./url-helpers.ts";
 
-// Every listener is attached before the first await. Reading storage is a
-// round trip to the extension process, and `load` fires the moment this
-// script starts, not when that read lands, so a change arriving in between
-// would otherwise reach no listener. The stored values are filled in
-// afterwards.
 void (async () => {
   const instanceInput = document.querySelector("#instance");
   if (!(instanceInput instanceof HTMLInputElement)) {
@@ -16,10 +11,6 @@ void (async () => {
 
   let displayedValue = "";
 
-  // An inline message rather than alert(): a browser can offer to suppress
-  // repeat dialogs, and once it does the field just silently reverts to the
-  // old value with nothing said. It names the rule people hit most: plain
-  // http is accepted only for loopback.
   const rejectionMessage =
     "Enter the full address of your FeedFathom instance, such as " +
     "https://feeds.example.com. Plain http:// is accepted only for localhost.";
@@ -88,9 +79,6 @@ void (async () => {
     })();
   });
 
-  // The badge toggle (#768): checked state straight from storage so the
-  // page is honest even before any change, and every change persisted
-  // immediately -- the background clears live badges as the key flips off.
   const badgeToggle = document.querySelector("#show-badge");
   if (badgeToggle instanceof HTMLInputElement) {
     badgeToggle.addEventListener("change", () => {

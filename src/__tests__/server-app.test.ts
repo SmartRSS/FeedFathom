@@ -55,8 +55,6 @@ test.each([
   },
 );
 
-// A cookie whose sid resolves to nobody -- expired, revoked by logout or a
-// password reset, or never issued -- is exactly as unauthorised as no cookie.
 test.each([
   ["GET", "/api/preview?feedUrl=https%3A%2F%2Ffeed.example%2Frss"],
   ["GET", "/api/find?link=https%3A%2F%2Fsite.example%2F"],
@@ -142,8 +140,6 @@ test.each([
 test("logs a slow request with its route pattern, never the raw query string", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  // A tiny threshold stands in for an artificially slow handler: every
-  // request that completes at all is "slow" against it.
   dependencies.config.SLOW_REQUEST_MS = 0;
   dependencies.sourcesDataService.getFavicon = async () =>
     "data:image/png;base64,AAAA";
@@ -183,9 +179,6 @@ test("a request under the threshold logs nothing", async () => {
   }
 });
 
-// The internal healthcheck runs constantly and carries no useful signal, so
-// it stays out of the slow-request log even when it is the slowest thing an
-// instance ever serves.
 test("never logs the healthcheck route, however slow", async () => {
   const dependencies = createDependencies();
   dependencies.config.SLOW_REQUEST_MS = 0;
@@ -208,7 +201,6 @@ test("never logs the healthcheck route, however slow", async () => {
 test("cache headers: /assets/* is immutable, index.html is no-cache", async () => {
   const tmpDir = await mkdtemp(join(tmpdir(), "feedfathom-spa-"));
   try {
-    // Create directory structure with files
     await Bun.write(`${tmpDir}/index.html`, "<html>test</html>");
     await Bun.write(`${tmpDir}/assets/x-abc123.js`, "console.log('test');");
 
@@ -218,24 +210,20 @@ test("cache headers: /assets/* is immutable, index.html is no-cache", async () =
       spaDirectory: tmpDir,
     });
 
-    // Test /assets/* → immutable
     const assetResponse = await get(appWithSpa, "/assets/x-abc123.js");
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("Cache-Control")).toBe(
       "public, max-age=31536000, immutable",
     );
 
-    // Test / → no-cache
     const indexResponse = await get(appWithSpa, "/");
     expect(indexResponse.status).toBe(200);
     expect(indexResponse.headers.get("Cache-Control")).toBe("no-cache");
 
-    // Test /index.html → no-cache
     const indexHtmlResponse = await get(appWithSpa, "/index.html");
     expect(indexHtmlResponse.status).toBe(200);
     expect(indexHtmlResponse.headers.get("Cache-Control")).toBe("no-cache");
 
-    // Test SPA fallback (404 with Accept: text/html returns index.html) → no-cache
     const spaFallbackResponse = await get(appWithSpa, "/some/spa/route", {
       headers: { accept: "text/html" },
     });

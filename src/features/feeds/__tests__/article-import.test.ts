@@ -51,8 +51,6 @@ test("alwaysRecount recounts a retried import that changes no row", async () => 
   expect(recounted).toEqual([[1]]);
 });
 
-// Retention reads an article stamped earlier than its source's last success
-// as gone from the feed, so one fetch must stamp both with the same instant.
 test("a recorded fetch stamps its articles and the source's success alike", async () => {
   const { instance, stored, successes } = importer(2);
   await instance.recordFetch(

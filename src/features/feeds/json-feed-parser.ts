@@ -1,8 +1,3 @@
-// JSON Feed (https://www.jsonfeed.org/, versions 1 and 1.1) is simple
-// enough as a flat JSON object that a small hand-rolled mapper is less
-// code than adding a dependency for it -- unlike RSS/Atom's actual XML
-// grammar, there's no real parsing to do here, just field renaming.
-
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import type {
   FeedItemMedia,
@@ -63,8 +58,6 @@ function itemAuthors(item: JsonFeedItem, feedAuthors: unknown) {
   }));
 }
 
-// JSON Feed names only a MIME type; its top level stands in for the medium,
-// as feed-parser does for RSS enclosures.
 function itemMedia(item: JsonFeedItem): FeedItemMedia[] {
   if (!Array.isArray(item.attachments)) return [];
   return item.attachments.flatMap((raw: unknown) => {
@@ -84,8 +77,6 @@ function itemMedia(item: JsonFeedItem): FeedItemMedia[] {
   });
 }
 
-// The `hubs` entry of type "WebSub", JSON Feed's counterpart of a hub link.
-// A hubs array with any malformed entry names no hub at all.
 function websubHubUrl(hubs: unknown): string | undefined {
   if (!Array.isArray(hubs)) return undefined;
   const entries = hubs.map((hub: unknown) => (hub ?? {}) as JsonFeedHub);

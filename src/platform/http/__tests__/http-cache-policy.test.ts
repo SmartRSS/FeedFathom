@@ -17,9 +17,6 @@ function headers(entries: Record<string, string>): Headers {
   return new Headers(entries);
 }
 
-// Some origins quote Age. Anything that is not a plain integer is absent
-// rather than zero, so a malformed value falls through to the next rule
-// instead of pinning freshness to now.
 test.each<[string, number | undefined]>([
   ["60", 60],
   ["0", 0],
@@ -35,8 +32,6 @@ test.each<[string, number | undefined]>([
   expect(deltaSeconds(value)).toBe(expected);
 });
 
-// Each refusal marks a response as belonging to one requester; replaying it to
-// another user of the instance would be a data leak.
 test.each<[Record<string, string>, boolean]>([
   [{}, true],
   [{ "cache-control": "max-age=60" }, true],
@@ -51,8 +46,6 @@ test.each<[Record<string, string>, boolean]>([
   expect(sharedCacheAllowed(headers(entries))).toBe(expected);
 });
 
-// The greater of apparent age and a reported Age, so a lying intermediary can
-// shorten our freshness but never extend it.
 test.each<[string, Record<string, string>, number]>([
   ["a response dated now", { date: httpDate(at) }, 0],
   ["the gap since Date", { date: httpDate(at - 30 * second) }, 30 * second],
@@ -67,9 +60,6 @@ test.each<[string, Record<string, string>, number]>([
   expect(currentAge(headers(entries), at)).toBe(expected);
 });
 
-// This is a shared cache, so s-maxage wins. Ambiguous or malformed input is
-// treated as stale rather than guessed at, and a response that spent its whole
-// lifetime in an intermediary arrives stale.
 test.each<[string, Record<string, string>, number | undefined]>([
   ["nothing that says", {}, undefined],
   ["max-age", { "cache-control": "max-age=60" }, at + 60 * second],
@@ -141,8 +131,6 @@ describe("cacheable", () => {
     expect(entry?.status).toBe(200);
   });
 
-  // An already-stale response is still worth storing with a validator: the
-  // next fetch becomes a conditional request that can return 304.
   test.each([
     ["one that may not be shared", { "cache-control": "no-store" }, false],
     [
@@ -165,8 +153,6 @@ describe("cacheable", () => {
     expect(entry !== undefined).toBe(stored);
   });
 
-  // Every caller reads only a 200. A stored 304 has no body to serve and
-  // every later 304 would refresh it, sticking the feed (#1078).
   test.each([304, 404, 503])("never stores a %d", (status) => {
     const entry = cacheable(
       nativeResponse({
@@ -179,7 +165,6 @@ describe("cacheable", () => {
     expect(entry).toBeUndefined();
   });
 
-  // The post-redirect URL is what a later request must revalidate against.
   test("records the response's own url, falling back to the requested one", () => {
     const redirected = cacheable(
       nativeResponse({

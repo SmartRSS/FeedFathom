@@ -15,13 +15,6 @@ import { HttpClient } from "#platform/http/http-client.ts";
 import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
-// A poll of a feed that has not changed used to rewrite every article row to
-// move last_seen_in_feed_at and then recount every subscriber's badge (#897).
-// These run the real parser against a real database so the throttle is held
-// to what it must not break: new subscriptions seeing current articles, edits
-// reaching the badge, and the gone-from-feed cull telling present from
-// dropped.
-
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
@@ -60,8 +53,6 @@ beforeEach(async () => {
   sourceId = source!.id;
 });
 
-// One date for every parse: pubDate is also the article's updated_at, so a
-// clock second ticking over between two parses would read as an edit.
 const pubDate = new Date().toUTCString();
 
 function rss(items: { content: string; guid: string }[]) {
@@ -77,8 +68,6 @@ ${items
 </channel></rss>`;
 }
 
-// A fresh HTTP client per parse, so every parse is a full 200 with the body
-// given -- the costliest case, since nothing upstream short-circuits it.
 async function parse(body: string) {
   const redirectRedis = {
     del: async () => 0,
@@ -162,7 +151,6 @@ test("a second parse of an unchanged feed writes no article row and skips the re
   expect(await rowVersions()).toEqual(before);
   expect(recounts).toBe(1);
   expect(await unreadCount(userId)).toBe(3);
-  // The /api/events signal follows the recount: once, not per poll.
   expect(published).toEqual([[sourceId, 3]]);
 });
 
@@ -192,7 +180,6 @@ test("an edited article is still rewritten and the badge recounted", async () =>
   expect(after["one"]).toBe(before["one"]);
   expect(after["three"]).toBe(before["three"]);
   expect(recounts).toBe(2);
-  // Read before the edit, so the edit makes it unread again.
   expect(await unreadCount(userId)).toBe(3);
 });
 
@@ -201,7 +188,6 @@ test("a subscription created between parses of an unchanged feed sees its curren
   await parse(rss(items));
   expect(recounts).toBe(1);
 
-  // Inserted directly, as OPML import does: no article is written for it.
   const lateUserId = await subscribe("late@example.test");
   await parse(rss(items));
 
@@ -218,8 +204,6 @@ test("a subscription created between parses of an unchanged feed sees its curren
   ]);
 });
 
-// Time is moved by shifting every stored timestamp the rules read back by
-// the step, which is what the clock moving forward by it looks like to them.
 async function elapse(minutes: number) {
   const step = client`${minutes} * INTERVAL '1 minute'`;
   await client`UPDATE articles SET last_seen_in_feed_at = last_seen_in_feed_at - ${step}`;
@@ -237,8 +221,6 @@ test("the throttle never lets the cull take an article that is still in the feed
   );
   const present = { content: "present body", guid: "present" };
   const dropped = { content: "dropped body", guid: "dropped" };
-  // Removed by the only subscriber, so last_seen_in_feed_at is all that
-  // keeps either of them.
   await client`
     INSERT INTO user_articles (user_id, source_id, guid, deleted_at)
     VALUES (${userId}, ${sourceId}, 'present', NOW()),
@@ -252,10 +234,6 @@ test("the throttle never lets the cull take an article that is still in the feed
   await elapse(45);
   await parse(rss([present, dropped]));
 
-  // 45 minutes a step straddles the one-hour throttle: the present article
-  // is re-stamped on every other parse. The buffer floor is a day, and the
-  // dropped article, last stamped by the first parse, is a day old at the
-  // end of step 31.
   for (let step = 1; step <= 34; step++) {
     // eslint-disable-next-line no-await-in-loop -- Each step reads the last.
     await elapse(45);
@@ -285,7 +263,6 @@ test("enclosures are stored as a JSON array and read back as one", async () => {
   );
   const [row] = await client<{ id: number; kind: string }[]>`
     SELECT id, jsonb_typeof(enclosures) AS kind FROM articles`;
-  // A driver that stringified the value first would store a JSON string.
   expect(row?.kind).toBe("array");
   const userId = await subscribe(
     "enclosures@example.com",

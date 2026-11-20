@@ -6,8 +6,6 @@ import {
 } from "../menu-sync.ts";
 import { fakeSchedule } from "./fake-schedule.ts";
 
-// A menu the browser builds asynchronously: each operation waits until the
-// test releases it, and the visible menu is what the operations left.
 const browserMenus = () => {
   const items = new Map<string, string | undefined>();
   const waiting: (() => void)[] = [];
@@ -31,7 +29,6 @@ const browserMenus = () => {
       }),
     removeAll: () => later(() => items.clear()),
   };
-  // Releases every operation, including those queued by the ones released.
   const settle = async () => {
     /* eslint-disable no-await-in-loop -- Each release may queue the next pass. */
     while (waiting.length > 0) {

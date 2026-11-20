@@ -113,8 +113,6 @@ test("rejects invalid subscription policies before cache or database calls", asy
   expect(databaseCalls).toBe(0);
 });
 
-// A refused address, another account's or one subscribe may not create, must
-// say no more about it than a malformed target does.
 test("answers a refused newsletter address exactly as a malformed target", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -219,15 +217,12 @@ test("returns sanitized transient preview articles and rejects parser failures",
   expect(cached[0]?.[1]).toBe("https://feed.example/rss");
   expect(cached[0]?.[2].articles[0]?.guid).toBe("preview-guid");
   expect(invalid.status).toBe(400);
-  // The sentence is for everyone; the fetcher's own words ride along for
-  // an admin's Details.
   expect(await invalid.json()).toEqual({
     detail: expect.stringContaining("received status 404"),
     error: "This feed seems to have moved or been removed.",
   });
 });
 
-// find reads the page as bytes, so it can decode it in the page's charset.
 const htmlPage = (html: string, url: string) => ({
   data: new TextEncoder().encode(html).buffer,
   headers: new Headers({ "content-type": "text/html" }),
@@ -264,9 +259,6 @@ test("preview and find return a dynamic Retry-After when the host is throttled",
   expect(findRetryAfter).toBeLessThanOrEqual(300);
 });
 
-// The real budget throws HttpDeferredError once a user is over it. Each of
-// the three routes has to ask before anything else, so a spent budget means
-// no fetch, no cache read and no database write.
 test.each([
   {
     name: "preview",
@@ -331,9 +323,6 @@ test.each([
   },
 );
 
-// The discovery fan-out reads only `websub` off a parse, but the real
-// parseUrl signature returns the whole parsed feed, so a double has to supply
-// it. That asymmetry is the case for giving discovery its own dependency.
 type ParsedFeed = Awaited<ReturnType<ServerServices["feedParser"]["parseUrl"]>>;
 
 function parsedFeed(url: string, hubUrl: string): ParsedFeed {
@@ -427,9 +416,6 @@ test.each([
   },
 );
 
-// The routes above fake the HTTP client, so they cannot show that a user's
-// URL is held to the client's private-network guard. Here the client is real
-// and only DNS is stubbed: a public-looking host that resolves privately.
 const privatelyResolvingClient = (dispatched: string[]) =>
   new HttpClient(createFakeHttpRedis(), {
     transport: createNativeHttpTransport({
@@ -489,11 +475,6 @@ test("preview refuses a feed that resolves to a private address", async () => {
   expect(dispatched).toEqual([]);
 });
 
-// The deferred mapping is about to move from these handlers into the central
-// error hook in server-app.ts. What must not move with it is find's fallback:
-// it turns any other failure to fetch a user-supplied URL into a 400, and
-// deleting that along with the deferred branch would quietly promote a class
-// of client errors to 500s.
 test("find still answers 400 when fetching a user-supplied url simply fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -512,9 +493,6 @@ test("find still answers 400 when fetching a user-supplied url simply fails", as
   expect(await response.json()).toEqual({ error: "Invalid feed url" });
 });
 
-// preview, unlike find, re-raises anything that is not deferred rather than
-// classifying it. That reaches the central handler and is a 500 today; moving
-// the deferred branch out must not change it.
 test("preview surfaces a non-deferred parser failure as a 500", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -532,8 +510,6 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
   expect(response.status).toBe(500);
 });
 
-// Our own request deadline running out is an upstream timeout, not the
-// user's URL being wrong. find used to collapse it into "Invalid feed url".
 test("find reports our own expired deadline as a 504, not a bad url", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -652,7 +628,6 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
-  // No freshness from the cached fetch, so successSource applies its poll floor.
   expect(successes[0]).toEqual([
     91,
     {
@@ -737,7 +712,6 @@ test("imports every article of a truncated preview on subscribe without a refetc
     title: "Big feed",
     url: subscriptionSource.homeUrl,
   };
-  // Stands in for Redis: the preview goes through the real wire format.
   let stored: string | undefined;
   let previews = 0;
   const upserts: Parameters<
@@ -803,9 +777,6 @@ test("imports every article of a truncated preview on subscribe without a refetc
   expect(enqueues).toEqual([]);
 });
 
-// A truncated preview's full feed has to resolve its relative links where
-// every poll does, against the redirected URL, or the first poll rewrites each
-// article's url and content and read articles come back unread.
 test("a truncated preview of a redirected feed imports the links a poll stores", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -892,7 +863,6 @@ const alertFeed = {
         areaDesc: "",
         certainty: "",
         event: "Wind",
-        // Current when previewed, long gone by the time this test runs.
         expires: "2020-01-01T00:05:00Z",
         msgType: "",
         onset: "",
@@ -1101,7 +1071,6 @@ test("refuses an email subscription while mail is disabled, before storing anyth
   authenticated(dependencies);
   const app = await appFor(dependencies);
 
-  // addSourceToUser is not arranged: the strict fake throws if it is reached.
   const response = await subscribe(app, {
     sourceFolder: null,
     sourceName: "Newsletter",
@@ -1118,10 +1087,7 @@ test("responds without waiting for WebSub discovery to settle", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.feedParser.discoverAndSubscribeWebSub = () =>
-    new Promise<void>(() => {
-      // Never resolves, simulating a hub that never answers -- the
-      // response must not wait on it.
-    });
+    new Promise<void>(() => {});
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
     { initializationSnapshot = null },
@@ -1241,8 +1207,6 @@ test("exports the subscription tree as OPML, without newsletters", async () => {
   );
   expect(body).toContain('xmlUrl="https://news.test/feed"');
   expect(body).toContain('text="News &amp; views"');
-  // The address is one this instance minted and routes mail for. Anywhere
-  // else it is a subscription nothing would ever deliver to.
   expect(body).not.toContain("abc123@mail.example.com");
 });
 
@@ -1362,7 +1326,6 @@ test("WebSub callback verification requires no session and echoes the challenge"
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("abc123");
   expect(verifiedId).toBe(websubSource.id);
-  // hub.lease_seconds is seconds; the lease is stored as an instant.
   expect(verifiedLease?.getTime()).toBeGreaterThanOrEqual(before + 600_000);
   expect(verifiedLease?.getTime()).toBeLessThanOrEqual(Date.now() + 600_000);
 });
@@ -1395,10 +1358,6 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
   expect(mismatchedTopic.status).toBe(404);
 });
 
-// The hub sends the feed document and signs it with the secret we gave that
-// hub, so the content is in hand. Re-fetching it to learn what the push
-// already said is a request against a resource we hold, and it leaves the
-// cached copy holding the document the push replaced.
 test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
@@ -1446,7 +1405,6 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
 
   expect(wrongSignature.status).toBe(403);
   expect(validPush.status).toBe(200);
-  // Only the verified push reaches the cache.
   expect(seeded).toEqual([
     {
       body,
@@ -1454,12 +1412,9 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
       url: websubSource.url,
     },
   ]);
-  // skipCache false: the seeded body is what the parse is meant to read.
   expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", false]]);
 });
 
-// A thin ping is a notification with no document attached. There is nothing
-// to seed, so the parse has to go and get it.
 test("WebSub push with no body falls back to a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
@@ -1490,7 +1445,6 @@ test("WebSub push with no body falls back to a fetch", async () => {
   expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", true]]);
 });
 
-// Losing the saved request is acceptable; losing the notification is not.
 test("WebSub push still re-parses when the cache seed fails", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
@@ -1538,8 +1492,6 @@ test("WebSub push over the body cap is rejected without buffering, whatever it c
   };
   const app = await appFor(dependencies);
   const oversized = "x".repeat(24 * 1024 * 1024 + 1);
-  // A body large enough that no hub push is legitimate, streamed without a
-  // declared Content-Length, so the incremental read is what has to stop it.
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(Buffer.from(oversized));
@@ -1550,8 +1502,7 @@ test("WebSub push over the body cap is rejected without buffering, whatever it c
   const response = await app.handle(
     new Request("http://localhost/api/websub/callback/callback-token", {
       body,
-      // @ts-expect-error -- duplex is required for streaming request bodies
-      // but undici's Request type omits it.
+      // @ts-expect-error -- undici's Request type omits duplex, which streaming bodies require
       duplex: "half",
       headers: { "x-hub-signature-256": "sha256=deadbeef" },
       method: "POST",

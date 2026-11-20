@@ -12,10 +12,7 @@ type ProjectionOptions = {
 
 const root = path.resolve(import.meta.dir, "..");
 const extensionSource = path.join(root, "src/extension");
-// Icons are shared with the SPA rather than copied into the extension source.
 const iconSource = path.join(root, "src/spa/assets");
-// Not named in the manifest: background-event.ts sets it as the toolbar
-// popup at runtime, on browsers without a contextMenus API.
 const runtimePages = ["popup.html"];
 const extensionDirectory = path.join(root, "ext");
 const targetDirectories: Record<BrowserTarget, string> = {
@@ -91,9 +88,6 @@ export function projectExtensionManifest(
   };
 }
 
-// Everything the package needs, read from the manifest and the pages it
-// names, so adding a script, page or stylesheet takes one edit. Each bundled
-// script is built from the TypeScript module of the same name.
 export async function packagedFiles(manifest: ExtensionManifest) {
   const scripts = new Set([
     manifest.background.service_worker,

@@ -184,10 +184,8 @@ describe("handleReaderRequest", () => {
   });
 });
 
-// The detector itself is tested in decode-body.test.ts; this checks the
-// reader hands it the body and the header.
 test("decodes the page in its declared charset", async () => {
-  const privet = [0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2]; // "Привет" in windows-1251
+  const privet = [0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2];
   const response = await handleReaderRequest(
     request("https://article.example/story"),
     sender,

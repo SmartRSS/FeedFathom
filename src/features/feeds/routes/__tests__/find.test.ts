@@ -32,7 +32,6 @@ const find = async (body: Uint8Array<ArrayBuffer>, contentType: string) => {
   return { found: await response.json(), probed };
 };
 
-// "Новости" in windows-1251, as a Russian site serves it.
 const novosti = [0xcd, 0xee, 0xe2, 0xee, 0xf1, 0xf2, 0xe8];
 const ascii = (text: string) => Array.from(text, (char) => char.charCodeAt(0));
 
@@ -52,8 +51,6 @@ test("reads feed titles in the page's own charset", async () => {
   ]);
 });
 
-// Probing the suggestion would send the page address to openrss.org before
-// the user chose to try it.
 test("suggests OpenRSS for a page with no feeds without contacting it", async () => {
   const { found, probed } = await find(
     Uint8Array.from(ascii("<html><body>nothing here</body></html>")),

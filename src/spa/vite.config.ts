@@ -2,10 +2,6 @@ import solid from "@solidjs/vite-plugin";
 import { defineConfig } from "vite";
 import { treePreloadPaths } from "./routes.ts";
 
-// Both default to what a single checkout has always used. They exist so a
-// second one -- a git worktree, a review checkout -- can run its own stack
-// beside the first instead of fighting it for two fixed ports. See
-// docs/contributing.md.
 const apiPort = process.env["FEEDFATHOM_DEV_API_PORT"] ?? "3001";
 const spaPort = Number(process.env["FEEDFATHOM_DEV_SPA_PORT"] ?? "3456");
 

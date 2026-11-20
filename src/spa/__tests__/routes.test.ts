@@ -45,7 +45,6 @@ describe("resolveRoute", () => {
   });
 });
 
-// The server and the extension build these links; the SPA must route them.
 test("routes every link another program builds", () => {
   expect(resolveRoute(activationPath("a-token"))).toEqual({
     name: "activate",
@@ -139,8 +138,6 @@ test("only the dashboard and Discover show the panes", () => {
   expect(showsPanes(resolveRoute("/nowhere"))).toBe(false);
 });
 
-// A miss costs the dashboard an unpreloaded /api/tree; an extra one spends
-// a request nothing reads, or a 401 before sign-in.
 test.each([
   "/",
   "/preview",

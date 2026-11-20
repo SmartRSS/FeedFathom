@@ -3,20 +3,8 @@ import type { TreeNode } from "#shared/contracts/responses.ts";
 import { totalUnread } from "./feed-tree.ts";
 import { browserTimers, type Timers } from "./timers.ts";
 
-// The background new-article signal (#717). The tree already carries every
-// source's unread count, so a rise in the total is the whole signal, and the
-// open article list is never changed mid-read: a toast asks instead. A poll
-// backs off from 30s to a 5-minute ceiling and resets when the user
-// refreshes, and a hidden tab skips its cycles.
-//
-// The push stream (#991) announces article writes for this user's sources,
-// and the answer is the same poll, so the toast and unread logic stay in one
-// place. EventSource reconnects on its own; a stream that drops or never
-// opens (a buffering proxy, a 401) leaves the poll on its backoff.
-
 const firstPollDelayMs = 30_000;
 const maxPollDelayMs = 5 * 60_000;
-// Stream signals this close together share one tree load.
 const streamSignalDelayMs = 2000;
 
 export function nextPollDelayMs(
@@ -34,7 +22,6 @@ type NewArticleSignalOptions = {
   enabled(): boolean;
   hidden(): boolean;
   loadTree(): Promise<TreeNode[]>;
-  // A failed poll stays silent apart from this: the next cycle retries.
   onPollFailure(cause: unknown): void;
   timers?: Timers;
 };
@@ -50,9 +37,6 @@ export class NewArticleSignal {
   #baseline: number | undefined;
   #streamOpen = false;
   #streamSignalTimer: unknown;
-  // One poll at a time: a tree load aborts the one before it, so signals
-  // arriving faster than the tree loads would never let one finish. A signal
-  // during a poll waits for it, then gets one follow-up.
   #polling = false;
   #signalDuringPoll = false;
 
@@ -61,16 +45,13 @@ export class NewArticleSignal {
     this.#timers = options.timers ?? browserTimers;
   }
 
-  /** Articles that arrived since the user last refreshed; zero hides the toast. */
   readonly arrived: Accessor<number> = () => this.#count[0]();
 
-  /** The first tree is the baseline; polling starts from it. */
   start(tree: TreeNode[]): void {
     this.#baseline = totalUnread(tree);
     this.#schedule();
   }
 
-  /** What the user asked for: the toast clears and the backoff starts over. */
   async refresh(): Promise<TreeNode[]> {
     this.#count[1](0);
     this.#pollCycles = 0;
@@ -87,8 +68,6 @@ export class NewArticleSignal {
     if (!this.#streamOpen) return;
     this.#streamOpen = false;
     this.#pollCycles = 0;
-    // Only ever pulls the poll closer: a proxy that accepts the stream and
-    // drops it every reconnect must not keep pushing the poll back.
     if (this.#timers.now() + nextPollDelayMs(0) < this.#pollDueAt)
       this.#schedule();
   }
@@ -121,7 +100,6 @@ export class NewArticleSignal {
   }
 
   #schedule(): void {
-    // A stream signal can run a poll while the timer is pending; one timer.
     this.#timers.clear(this.#pollTimer);
     if (this.#disposed || !this.#options.enabled()) return;
     const delay = nextPollDelayMs(this.#pollCycles, this.#streamOpen);
@@ -133,7 +111,6 @@ export class NewArticleSignal {
   }
 
   async #poll(): Promise<void> {
-    // A timer firing mid-poll yields; the running poll reschedules it.
     if (this.#polling) return;
     this.#polling = true;
     try {
@@ -157,7 +134,6 @@ export class NewArticleSignal {
   }
 }
 
-/** The signal, with its stream open while `listening()` holds. */
 export function createNewArticleSignal(
   options: NewArticleSignalOptions & { listening(): boolean },
 ): NewArticleSignal {

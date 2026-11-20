@@ -1,4 +1,3 @@
-// A manual clock: advance() runs every timer that falls due, in order.
 export function fakeTimers() {
   let time = 0;
   let nextId = 0;

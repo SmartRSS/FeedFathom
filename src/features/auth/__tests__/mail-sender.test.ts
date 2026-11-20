@@ -53,9 +53,6 @@ describe("MailSender", () => {
     });
   });
 
-  // The account-exists notice (#810) rides the same reset link the ordinary
-  // reset email uses, so a scanner or preview opening the page it leads to
-  // finds a form, not a spent token.
   test("posts the account-exists notice with a reset link", async () => {
     let captured:
       | { init: RequestInit | undefined; input: RequestInfo | URL }

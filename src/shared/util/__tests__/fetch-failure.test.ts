@@ -7,8 +7,6 @@ import {
 const status = (code: number) =>
   `Failed to load data for https://example.com/feed.xml, received status ${code}`;
 
-// One row per cause a reader is told about: the reasons are the fetcher's own
-// words, as sources.recent_failure_details stores them.
 test.each([
   [
     "feed gone",

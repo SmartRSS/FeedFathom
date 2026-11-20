@@ -33,14 +33,10 @@ const withoutFeedWrapper = `<!doctype html>
 
 const plainHtml = `<!doctype html><html><body><p>Just a regular page.</p></body></html>`;
 
-// Both shapes are taken from feeds that really are served as text/html:
-// chollinger.com/blog/index.xml (Hugo) and cert.orange.pl/feed/ (WordPress).
 const rssServedAsHtml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Christian Hollinger</title></channel></rss>`;
 const atomServedAsHtml = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom"><title>Atom</title></feed>`;
 const rdfFeed = `<?xml version="1.0"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>`;
-// XHTML opens with an XML declaration too, so the declaration alone must not
-// be what disqualifies a document from the microformats path.
 const xhtmlWithEntry = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">

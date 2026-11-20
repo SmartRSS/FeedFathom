@@ -106,10 +106,6 @@ const feed = (name: string) => ({
   xmlUrl: `https://${name}.test/feed`,
 });
 
-// Folders are one level deep (user_folders has no parent) and a user's folder
-// is found by name, so a nested OPML folder lands in the top-level folder of
-// the same name rather than a second one beside it. A feed already subscribed
-// keeps its folder and name: the import only adds what is missing.
 test("importing a different tree merges same-named folders and leaves existing subscriptions alone", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -133,8 +129,6 @@ test("importing a different tree merges same-named folders and leaves existing s
       { id: number }[]
     >`INSERT INTO users (email, name, password) VALUES ('import@example.test', 'import', 'x') RETURNING id`;
     const userId = user!.id;
-    // Built by hand, named unlike the OPML: "news" filed under News, "misc"
-    // under Misc, "loose" in no folder.
     const [news, misc] = await client<{ id: number }[]>`
       INSERT INTO user_folders (user_id, name) VALUES
         (${userId}, 'News'), (${userId}, 'Misc')

@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { contextMenuOperations } from "../context-menu.ts";
 
-// Holds each browser callback until the test releases it, as the real API
-// answers asynchronously.
 class ContextMenusFake {
   readonly callbacks: Array<() => void> = [];
 

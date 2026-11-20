@@ -5,8 +5,6 @@ import {
   type FeedData,
 } from "#shared/scanners/feed-data-type.ts";
 
-// Runtime messages between the extension's own scripts: the content script
-// reports a page's feeds, the background and the popup consume them.
 const listFeedsMessageSchema = Type.Object(
   {
     action: Type.Literal("list-feeds"),

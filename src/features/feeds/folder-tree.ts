@@ -1,8 +1,3 @@
-/**
- * Splits a user's subscriptions into those filed under a folder, keyed by the
- * folder's id, and those at the root. The tree route and the OPML export
- * build their nested shapes from this; each maps a source to its own item.
- */
 export function groupByFolder<Source extends { parentId: null | number }, Item>(
   sources: readonly Source[],
   toItem: (source: Source) => Item,

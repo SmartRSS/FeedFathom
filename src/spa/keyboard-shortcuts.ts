@@ -1,7 +1,3 @@
-// Every key the article list answers to, and the cheat sheet that lists
-// them. The list's keydown handler owns the side effects; this decides which
-// command, if any, a key press means.
-
 type ArticleCommand =
   | "delete"
   | "first"
@@ -20,12 +16,6 @@ type ArticleCommand =
 
 type KeyPress = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">;
 
-// The navigation keys answer with any modifier: Ctrl or Cmd on an arrow
-// moves the cursor without selecting, and the handler reads that itself.
-// The letters are the industry-standard layer (#709) and answer only bare,
-// so a chorded press keeps its browser meaning. Enter reads the row in the
-// app (#1029), what activating a listbox option means to a screen-reader
-// user; `v` is the way to the original site.
 export function mapArticleKey(event: KeyPress): ArticleCommand | null {
   switch (event.key) {
     case "ArrowDown":
@@ -67,7 +57,6 @@ export function mapArticleKey(event: KeyPress): ArticleCommand | null {
   }
 }
 
-// The cheat sheet: each row's alternative key combinations, then what they do.
 export const shortcutHelp: [string[][], string][] = [
   [[["↓"], ["↑"]], "Select the next / previous article"],
   [[["j"], ["k"]], "Same, the RSS-reader standard keys"],
@@ -91,8 +80,6 @@ export const shortcutHelp: [string[][], string][] = [
   [[["?"], ["Esc"]], "This cheat sheet / close"],
 ];
 
-// Keystrokes in text fields are content, not commands. Structural checks
-// let unit tests pass plain shapes without a DOM.
 export function isTextEntry(target: unknown): boolean {
   if (
     typeof target === "object" &&

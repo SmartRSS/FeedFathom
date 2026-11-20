@@ -10,8 +10,6 @@ import {
 } from "#features/feeds/favicon-refresher.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
-// The slot script against a real server: favicon-refresher.test.ts covers the
-// queueing rules through the fake, which does not interpret the Lua.
 const redis = new RedisClient(requireDisposableRedisUrl());
 const providerHosts = [
   "t3.gstatic.com",
@@ -78,8 +76,6 @@ test("deferred refreshes take slots one gap apart on every host that deferred th
   expect(first).toBeGreaterThan(Date.now() + 55_000);
   expect(second).toBe(first + 12_000);
 
-  // Every primary host holds the later slot until a gap after it; unavatar
-  // was never asked.
   const slots = await Promise.all(
     providerHosts.map(async (host) => {
       const key = `favicon-refresh-slot:${host}`;

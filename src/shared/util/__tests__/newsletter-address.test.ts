@@ -8,8 +8,6 @@ import {
 } from "../newsletter-address.ts";
 
 describe("newsletterAddress", () => {
-  // The address goes straight into /subscribe, which rejects anything the
-  // shared email policy does not accept.
   test("mints an address the subscribe contract accepts", () => {
     const address = newsletterAddress("example.com");
     expect(

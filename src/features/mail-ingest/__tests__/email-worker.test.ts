@@ -76,8 +76,6 @@ describe("Cloudflare email worker", () => {
     });
   });
 
-  // Base64 rather than text is the whole point: an 8-bit body in a legacy
-  // charset used to come back as U+FFFD once it round-tripped through UTF-8.
   test("relays raw MIME bytes that are not valid UTF-8", async () => {
     const bytes = Uint8Array.from([0x53, 0x3a, 0x20, 0xe9, 0x0d, 0x0a, 0xff]);
     let body: string | undefined;
@@ -155,8 +153,6 @@ describe("Cloudflare email worker", () => {
     expect(errors).toHaveLength(2);
   });
 
-  // The size is the sender's fault, so this is the one bounce the worker
-  // decides without asking /api/mail.
   test("rejects an oversized message by declared and encoded size, before relaying", async () => {
     let fetchCalls = 0;
     let rawReads = 0;
@@ -241,9 +237,6 @@ describe("Cloudflare email worker", () => {
     expect(errors).toEqual([]);
   });
 
-  // A bounce can end a subscription, so anything short of the explicit
-  // signal is a temporary failure: a reverse proxy's HTML 413, a schema 422
-  // from Worker/server version skew, or the right flag on the wrong status.
   test.each([
     [413, new Response("<html>413 Request Entity Too Large</html>")],
     [413, Response.json({ error: "Raw email exceeds 5 MiB" })],

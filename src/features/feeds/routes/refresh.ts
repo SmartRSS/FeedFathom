@@ -5,9 +5,6 @@ import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
 
-// Fetches one of the user's subscriptions now instead of at its next
-// scheduled poll, which after repeated failures can be over an hour away.
-// The worker records the outcome as for any poll, and the tree shows it.
 export async function postRefreshSourceHandler(
   {
     body,

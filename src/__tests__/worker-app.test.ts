@@ -9,8 +9,6 @@ test("the worker reports healthy only once its job worker is consuming", async (
   const initializeCalled = Promise.withResolvers<void>();
   const workerConsuming = Promise.withResolvers<void>();
 
-  // runWorker registers SIGTERM/SIGINT handlers; left in place they would
-  // call this test's fakes if a later file's run were interrupted.
   const onSpy = spyOn(process, "on").mockReturnValue(process);
   const { ready, server } = runWorker({
     async close() {},
@@ -33,8 +31,6 @@ test("the worker reports healthy only once its job worker is consuming", async (
 
     expect(await status()).toBe(503);
 
-    // Migrated, but BullMQ is still waiting on Redis: a rollout must not
-    // treat this worker as a replacement yet.
     migrated.resolve();
     await initializeCalled.promise;
     expect(await status()).toBe(503);
