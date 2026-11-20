@@ -108,7 +108,9 @@ test("an extension error is surfaced by code, and dispose ends what is pending",
 
   const abandoned = bridge.fetch("https://article.example/other");
   bridge.dispose();
-  expect(await abandoned.catch((error: Error) => error.message)).toBe(
-    "The Reader extension is unavailable.",
-  );
+  expect(
+    await abandoned.catch((error: unknown) =>
+      error instanceof Error ? error.message : error,
+    ),
+  ).toBe("The Reader extension is unavailable.");
 });
