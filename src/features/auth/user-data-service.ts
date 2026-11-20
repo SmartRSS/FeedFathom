@@ -24,9 +24,6 @@ const authenticatedRowsCheck = Schema.Compile(
   ),
 );
 
-// Exported so an integration test can EXPLAIN the statement the auth plugin
-// actually runs rather than a copy of it. With touch false it only reads, for
-// the lookups that must not count as activity.
 export function authenticateStatement(
   sid: string,
   userAgent: null | string,
@@ -66,8 +63,6 @@ export function authenticateStatement(
   `;
 }
 
-// The user_agent column is NOT NULL, so a session no request ever named a
-// User-Agent for stores this, and the session list reports it as null.
 const unknownUserAgent = "UNKNOWN";
 
 export class UsersDataService {
@@ -75,11 +70,6 @@ export class UsersDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // passwordHash is the stored hash the caller verified. The session is only
-  // issued while the row still holds it, checked under the row lock that
-  // completePasswordReset's UPDATE also takes: a login that locks first has
-  // its session deleted by the reset, and one that locks after the reset sees
-  // the new hash and gets undefined -- no session from a revoked password.
   public async createSession(
     userId: number,
     passwordHash: string,
@@ -107,14 +97,6 @@ export class UsersDataService {
     await this.drizzleConnection.delete(sessions).where(eq(sessions.sid, sid));
   }
 
-  /**
-   * "closed" means the registration policy refused the account. The policy is
-   * rechecked here rather than trusted from the route's earlier count: two
-   * registrations on an empty instance with registration disabled both pass
-   * that count, and only the bootstrap lock below can admit exactly one.
-   * "exists" means the address was taken, possibly by a registration that
-   * committed after the route's lookup; the existing row is left untouched.
-   */
   public async createUser(
     payload: {
       email: string;
@@ -136,11 +118,6 @@ export class UsersDataService {
       status: payload.status,
     });
 
-    // The table-lock below only exists to resolve the "first user becomes
-    // admin" race under concurrent registrations -- once any user exists,
-    // there's no bootstrap race left to resolve, so skip straight to a
-    // plain insert instead of serializing every registration behind a
-    // whole-table lock.
     const usersExist = (
       await this.drizzleConnection.select({ id: users.id }).from(users).limit(1)
     ).at(0);
@@ -182,13 +159,6 @@ export class UsersDataService {
     ).at(0);
   }
 
-  // A pending registration whose link expired, or was withdrawn after a failed
-  // delivery, gets the same address back on the fresh token; the status
-  // predicate keeps an already-active account's row untouched -- that path
-  // belongs to the password reset, not to a re-registration (#810). The
-  // expiry predicate makes this a compare-and-set: of two concurrent
-  // recoveries only one stores a token, so the other cannot overwrite a link
-  // that was just mailed. False means nothing was stored and nothing to send.
   public async refreshActivationToken(
     userId: number,
     token: string,
@@ -211,9 +181,6 @@ export class UsersDataService {
     return refreshed.length > 0;
   }
 
-  // Compare-and-set on the token: a link whose mail never left is withdrawn so
-  // the next registration attempt sends a fresh one, while a newer token some
-  // other request already stored and delivered is left alone.
   public async withdrawActivationToken(token: string) {
     await this.drizzleConnection
       .update(users)
@@ -223,8 +190,6 @@ export class UsersDataService {
       );
   }
 
-  // Only a pending account whose link has not expired. False means the token
-  // matched nothing that may still be activated.
   public async activate(token: string): Promise<boolean> {
     const activated = await this.drizzleConnection
       .update(users)
@@ -244,19 +209,6 @@ export class UsersDataService {
     return activated.length > 0;
   }
 
-  /**
-   * The auth plugin's whole round-trip: resolves the sid and stamps activity
-   * in the same statement. PostgreSQL runs a data-modifying CTE even when the
-   * final SELECT never reads it, so both writes happen without a second
-   * round-trip.
-   *
-   * Each write guards itself, so most requests write nothing: the session row
-   * only when it is more than a minute stale or the User-Agent changed, the
-   * user row once a day. COALESCE keeps a missing header from overwriting a
-   * known agent. An unknown, expired or inactive sid resolves to no user and
-   * writes nothing. With touch false it only reads, for GET /api/session and
-   * the events stream's recheck, which must not count as activity.
-   */
   public async authenticate(
     sid: string,
     userAgent: null | string,
@@ -271,15 +223,6 @@ export class UsersDataService {
     return rows.at(0);
   }
 
-  // One row per active session of the user's, most recently active first,
-  // with the requesting session flagged so the options page can label it
-  // and keep the revoke buttons off it. The same expiry predicate
-  // authenticate enforces applies here: a session that no longer resolves
-  // must not be listed as active -- the retention pass only prunes the
-  // dead rows on its own schedule, not before every listing. Ordered by
-  // activity rather than creation because the migration that introduced
-  // created_at backfilled every pre-existing row with one shared
-  // ALTER-time timestamp, making creation order unrecoverable there.
   public async listSessions(userId: number, currentSid: string) {
     return await this.drizzleConnection
       .select({
@@ -299,8 +242,6 @@ export class UsersDataService {
       .orderBy(desc(sessions.lastUsedAt), desc(sessions.id));
   }
 
-  // Both revocation paths scope by userId so a guessed or forged id can
-  // only ever land on the caller's own rows.
   public async deleteSessionById(userId: number, sessionId: number) {
     await this.drizzleConnection
       .delete(sessions)
@@ -323,7 +264,6 @@ export class UsersDataService {
     return Number(result[0]?.count ?? 0);
   }
 
-  // Stores a fresh reset token's digest and returns the token for the mail.
   public async startPasswordReset(userId: number): Promise<string> {
     const { expiresAt, token } = issueToken(passwordResetLifetime.ms);
     await this.drizzleConnection
@@ -336,7 +276,6 @@ export class UsersDataService {
     return token;
   }
 
-  // Only an active account whose reset link has not expired.
   public async findUserByPasswordResetToken(tokenHash: string) {
     return (
       await this.drizzleConnection
@@ -353,16 +292,6 @@ export class UsersDataService {
     ).at(0);
   }
 
-  /**
-   * The new password, the spent token and every session, in one transaction.
-   * Split across three statements a crash between them leaves either a token
-   * that still works against the new password or sessions the old one opened.
-   * The token hash rides in the UPDATE's WHERE clause rather than only in the
-   * lookup before it: two confirmations racing on the same link then cannot
-   * both write -- the row lock serialises them and the second re-check
-   * matches nothing -- so the first commit wins and the caller of the loser
-   * is told the link is no longer valid (#809). False means that loser.
-   */
   public async completePasswordReset(
     userId: number,
     tokenHash: string,
@@ -389,17 +318,6 @@ export class UsersDataService {
     });
   }
 
-  /**
-   * currentHash is the stored hash the caller verified. The write matches
-   * only while the row still holds it, so a reset that commits between the
-   * verification and this UPDATE stays authoritative instead of being
-   * overwritten by a password its holder may no longer control (#977).
-   * False means the password changed underneath the caller.
-   *
-   * Every session but currentSid goes with the write, as with a reset: one
-   * opened by whoever knew the old password does not outlive it. The current
-   * one stays, so the caller who changed it is not signed out (ADR 0005).
-   */
   public async updatePassword(
     userId: number,
     currentHash: string,

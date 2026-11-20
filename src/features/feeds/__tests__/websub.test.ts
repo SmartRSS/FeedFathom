@@ -8,8 +8,6 @@ import {
 } from "#features/feeds/websub.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 
-// Stands in for HttpClient.post, which is what carries the reservation, the
-// block check and Retry-After for the hub request.
 function recordingPoster(
   respond: (url: string, body: URLSearchParams) => Promise<{ status: number }>,
 ) {
@@ -189,9 +187,6 @@ describe("requestHubSubscription", () => {
       "https://us.example/api/websub/callback/token",
     );
     expect(body?.get("hub.secret")).toBe("s3cr3t");
-    // Some hubs (WordPress.com's pushpress hub confirmed) reject a
-    // subscribe request outright without this, even though verification is
-    // always async regardless of what's sent here.
     expect(body?.get("hub.verify")).toBe("async");
   });
 
@@ -211,9 +206,6 @@ describe("requestHubSubscription", () => {
     });
   });
 
-  // Including a deferral: the hub's own back-off reaches this as a throw now
-  // that the request goes through the client, and it must not escape into
-  // parseSource.
   test("treats a network error as failure instead of throwing", async () => {
     const { poster } = recordingPoster(async () => {
       throw new Error("boom");

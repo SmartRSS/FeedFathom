@@ -12,20 +12,9 @@ type MailConfig = Pick<
   "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "publicOrigin"
 >;
 
-// Activation and password-reset mail need both Mailjet credentials; without
-// them the routes behave as if those flows did not exist. loadConfig refuses
-// credentials without a public origin to link to.
 export const mailConfigured = (appConfig: MailConfig) =>
   Boolean(appConfig.MAILJET_API_KEY && appConfig.MAILJET_API_SECRET);
 
-/**
- * Sends without making the caller wait. Only an address the caller named
- * reaches a send, so waiting on Mailjet, a round trip to another host, would
- * make an account that exists answer hundreds of milliseconds slower than one
- * that does not: an enumeration oracle by stopwatch. For the same reason a
- * failure is logged, never answered. `onFailure` undoes what the mail was
- * for.
- */
 export function sendLater(
   kind: string,
   send: () => Promise<void>,
@@ -67,9 +56,6 @@ export class MailSender {
     );
   }
 
-  // Registering with an address that already holds an active account answers
-  // with the same success body as a fresh registration; only this message
-  // tells the person what actually happened, and hands them a way in (#810).
   public async sendAccountExistsEmail(email: string, token: string) {
     await this.send(
       email,

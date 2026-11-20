@@ -49,8 +49,6 @@ const policy = (responses: NativeHttpResponse[]) => {
   };
 };
 
-// Each deadline arms a real timer; a run slow enough for it to fire would
-// abort whatever test was running by then.
 const deadlines: RequestDeadline[] = [];
 const deadline = () => {
   const created = new RequestDeadline(5_000);
@@ -95,8 +93,6 @@ describe("RedirectPolicy", () => {
 
   test("one temporary hop makes the whole chain temporary", async () => {
     for (const temporary of [302, 303, 307]) {
-      // Each status gets a fresh chain, asserted sequentially so a failure
-      // is attributable to one status.
       const { policy: subject } = policy([
         nativeResponse(301, "https://a.test/wobble"),
         nativeResponse(temporary, "https://a.test/final"),

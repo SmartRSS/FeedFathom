@@ -10,9 +10,6 @@ import { parseXmlFeed } from "#features/feeds/feed-document.ts";
 const fixture = (name: string) =>
   Bun.file(join(import.meta.dir, "cap-entry-cases", name)).text();
 
-// The instant the fixtures were fetched. The MeteoAlarm fixture keeps the one
-// entry still current then, one already expired, and one expired entry edited
-// to status Test with a later expiry, so only its status can hide it.
 const fetchedAt = Date.parse("2026-10-06T07:36:00Z");
 
 const parseCapFeed = async (name: string) => parseXmlFeed(await fixture(name));

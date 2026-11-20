@@ -2,9 +2,6 @@ import { Type, type StaticDecode } from "typebox";
 import { Value } from "typebox/value";
 import { isLoopbackHostname } from "#shared/net/private-network-guard.ts";
 
-// Blank is unset: compose.yml passes every variable through as `${X:-}`, so
-// the defaults below are the only ones, and an unset variable arrives as "".
-// Optional strings are trimmed, and a blank one decodes to undefined.
 const integerString = (
   name: string,
   defaultValue: string | undefined,
@@ -80,38 +77,23 @@ const configSchema = Type.Object(
       .Encode((value) => value.join(",")),
     ENABLE_REGISTRATION: booleanString(),
     WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "25", 1, 128),
-    // Per-process Postgres pool size. Matches Bun's SQL default (10), so it is
-    // a no-op until sized against max_connections: roughly
-    // 1.5 * (APP_REPLICAS + WORKER_REPLICAS) * DB_POOL_MAX. See docs/running.md.
     DB_POOL_MAX: integerString("DB_POOL_MAX", "10", 1, 100),
-    // Seconds, as are the two intervals.
     LOCK_DURATION: integerString("LOCK_DURATION", "60", 1, 86_400),
     CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "20", 20, 2_592_000),
-    // Days since a user's last request before they count as dormant for
-    // article-pruning purposes. 0 disables dormancy-based pruning.
     USER_DORMANT_AFTER_DAYS: integerString(
       "USER_DORMANT_AFTER_DAYS",
       "365",
       0,
       36_500,
     ),
-    // Days since last seen in its feed before dormancy alone can prune an
-    // article, so something published yesterday survives a dormant subscriber.
-    // 0 disables dormancy-based pruning, as does USER_DORMANT_AFTER_DAYS=0.
     ARTICLE_STALE_AFTER_DAYS: integerString(
       "ARTICLE_STALE_AFTER_DAYS",
       "365",
       0,
       36_500,
     ),
-    // Days since a user's last request before the account is deleted outright.
-    // Measured from the same last-activity timestamp as
-    // USER_DORMANT_AFTER_DAYS, which is just an earlier point on that clock,
-    // not a separate stateful event. 0 disables account expiry.
     USER_EXPIRY_DAYS: integerString("USER_EXPIRY_DAYS", "730", 0, 36_500),
     DATABASE_URL: databaseUrl,
-    // The queue and the HTTP cache. Defaults to the service name in the
-    // bundled compose.yml, so a stock deployment needs no value.
     REDIS_URL: redisUrl,
     GATHER_JOBS_INTERVAL: integerString(
       "GATHER_JOBS_INTERVAL",
@@ -120,30 +102,14 @@ const configSchema = Type.Object(
       86_400,
     ),
     PORT: Type.Optional(integerString("PORT", undefined, 1, 65_535)),
-    // A request line is worth a log entry only past this many milliseconds --
-    // below it, every request would write one and the slow ones would be
-    // lost in the noise.
     SLOW_REQUEST_MS: integerString("SLOW_REQUEST_MS", "500", 1, 600_000),
     MAIL_ENABLED: booleanString(),
-    // The host newsletter addresses are minted at, when it differs from
-    // FEED_FATHOM_DOMAIN: Cloudflare Email Routing is rarely configured on
-    // the host the app is served from. Read through `mailDomain`.
     MAIL_DOMAIN: optionalString(),
     MAIL_RELAY_SECRET: optionalString(),
     MAILJET_API_KEY: optionalString(),
     MAILJET_API_SECRET: optionalString(),
-    // The public host (and port) the app is served at. Read through
-    // `publicOrigin`.
     FEED_FATHOM_DOMAIN: optionalString(),
-    // Commit this image was built from, baked in by the Dockerfile rather than
-    // supplied by the deployment, so it survives a moving tag. Optional: a
-    // local build has no commit to claim.
     FEEDFATHOM_BUILD: optionalString(),
-    // Header carrying the real client address, for deployments that sit
-    // behind a proxy (`X-Forwarded-For`, or `CF-Connecting-IP` on Cloudflare).
-    // Unset means the socket address is used, which is the right answer when
-    // nothing is in front and the only safe one when something is: a header
-    // trusted without a proxy to set it is a key the client picks.
     TRUSTED_PROXY_HEADER: optionalString(),
     TURNSTILE_SITE_KEY: optionalString(),
     TURNSTILE_SECRET_KEY: optionalString(),
@@ -152,21 +118,11 @@ const configSchema = Type.Object(
 );
 
 export type AppConfig = StaticDecode<typeof configSchema> & {
-  // NODE_ENV=production: Secure cookies, the CSP, and serving the built SPA.
   production: boolean;
-  // Where mail links point. http only for loopback hosts, whose dev server
-  // has no certificate.
   publicOrigin?: URL;
-  // The host newsletter addresses are minted at, set only while mail ingest
-  // is enabled.
   mailDomain?: string | undefined;
 };
 
-// The host addresses are minted at, or undefined unless this deployment
-// ingests mail. FEED_FATHOM_DOMAIN is only a fallback for the single-domain
-// case: the address host is wherever inbound mail is routed, which is a
-// separate deployment decision. Either way it carries the public port for link
-// building (localhost:3456 in dev), and an address host never has one.
 function newsletterMailDomain(config: {
   FEED_FATHOM_DOMAIN?: string | undefined;
   MAIL_DOMAIN?: string | undefined;

@@ -60,8 +60,6 @@ describe("Discover and return-path history state", () => {
   });
 });
 
-// Runs one switch against a host matching `queries`, reporting whether the
-// update ran inside a view transition, outside one, or not at all.
 const switchOnce = (
   queries: string[],
   options: { supported?: boolean; browserAnimated?: boolean } = {},

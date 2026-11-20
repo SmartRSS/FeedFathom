@@ -1,10 +1,4 @@
-// The service worker's queue of removals made offline, in IndexedDB so it
-// outlives the worker. The page clears it on logout too, for a logout the
-// worker does not see (sw-protocol.ts, forgetAccountData).
-
 export type QueuedMutation = {
-  // The account that made the removal; absent only on entries queued before
-  // #982, which a replay drops.
   account?: number;
   body: string;
   method: string;
@@ -29,8 +23,6 @@ function openQueueDb(): Promise<IDBDatabase> {
   });
 }
 
-// Runs `run` on the store in one transaction, and resolves with what it
-// returned once the transaction completes, so its requests have results.
 async function queueTransaction<T>(
   mode: IDBTransactionMode,
   run: (store: IDBObjectStore) => T,
@@ -52,9 +44,8 @@ export async function queueAdd(entry: QueuedMutation): Promise<void> {
   await queueTransaction("readwrite", (store) => store.add(entry));
 }
 
-// IndexedDB returns stored values untyped. Only queueAdd writes this store.
 function storedMutations(request: IDBRequest): QueuedMutation[] {
-  // oxlint-disable-next-line typescript/no-unsafe-return -- see above
+  // oxlint-disable-next-line typescript/no-unsafe-return -- IndexedDB values are untyped; only queueAdd writes this store
   return request.result;
 }
 

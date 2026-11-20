@@ -24,10 +24,6 @@ import arrowRightRaw from "./assets/icons/Arrows/chevron-right-fill.svg?raw";
 import folderRaw from "./assets/icons/Document/folder-fill.svg?raw";
 import folderOpenedRaw from "./assets/icons/Document/folder-open-fill.svg?raw";
 
-// Visible row order comes from the DOM: a closed folder's children are not
-// rendered, so the rows under the tree root are exactly the visible ones.
-// Stops at the first and last row rather than wrapping (WAI-ARIA tree
-// pattern). Home and End pass -Infinity and Infinity, which clamp to the ends.
 function moveTreeFocus(current: HTMLElement, offset: number) {
   const tree = current.closest('[role="tree"]');
   if (!tree) return;
@@ -39,10 +35,6 @@ function moveTreeFocus(current: HTMLElement, offset: number) {
   next?.scrollIntoView({ block: "nearest" });
 }
 
-// <For> matches rows by reference, and every tree reload builds fresh node
-// objects, so a plain <For> over the tree remounts every row on each poll:
-// focus drops to <body> and every favicon replays its skeleton. Keying rows
-// on treeNodeKey keeps each row mounted and updates its node in place.
 export function ForEachNode(props: {
   children: (node: () => ListNode) => Element;
   each: ListNode[];
@@ -58,7 +50,6 @@ export function ForEachNode(props: {
 }
 
 export function TreeItem(props: {
-  // The key of the row an open context menu acts on.
   contextKey: string | undefined;
   focused: boolean;
   focusedKey: string | undefined;
@@ -68,30 +59,18 @@ export function TreeItem(props: {
   select(node: ListNode): void;
   selected: ListNode | undefined;
 }) {
-  // By key, not reference: the selected node and this row's node can come
-  // from different tree loads.
   const isSelected = () =>
     props.selected !== undefined &&
     treeNodeKey(props.selected) === treeNodeKey(props.node);
   const longPress = longPressHandlers((x, y) =>
     props.onContext(x, y, props.node),
   );
-  // Persisted per folder. Only "closed" collapses one: an absent, older or
-  // corrupted entry reads as open, so a bad entry can never hide feeds. Read
-  // once: ForEachNode keys each row on its node, so the uid never changes.
   const folderState = storedPreference(
     `folder:${untrack(() => props.node.uid)}`,
     ["open", "closed"],
     "open",
   );
   const open = () => folderState.get() === "open";
-  // The nested <ul role="group"> below is a DOM *sibling* of this row's
-  // treeitem (a button can't contain a list), and the presentational <li>
-  // around them both re-parents it onto the tree root -- leaving the group
-  // beside the folder rather than under it, with aria-expanded pointing at
-  // nothing. aria-owns puts it back where it belongs without restructuring
-  // the row into a non-button element, which would cost the button's native
-  // Enter/Space activation that handleKeyDown deliberately doesn't handle.
   const groupId = () => `tree-group-${props.node.uid}`;
   const [faviconLoaded, setFaviconLoaded] = createSignal(false);
   const [faviconFailed, setFaviconFailed] = createSignal(false);
@@ -99,12 +78,7 @@ export function TreeItem(props: {
   const children = () =>
     props.node.type === "folder" ? props.node.children : [];
   const unread = () => unreadCount(props.node);
-  // A snoozed source (#725) keeps its place in the tree with no unread
-  // badge -- the server already zeroes the count -- so the row needs its
-  // own mark, or a muted feed is indistinguishable from a quiet one.
   const snoozed = () => isSnoozedNode(props.node);
-  // Repeated fetch failures: the row says so, or a dead feed reads exactly
-  // like a quiet, read-up one.
   const failing = () =>
     props.node.type === "source" ? (props.node.failing ?? null) : null;
   const favicon = () =>
@@ -135,8 +109,6 @@ export function TreeItem(props: {
       toggle();
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      // Can't open further (it's a source, or an already-open folder) ->
-      // fall back to the same action Enter takes: load its articles.
       if (isFolder() && !open()) openFolder();
       else props.select(props.node);
     } else if (event.key === "ArrowLeft" && isFolder()) {
@@ -200,9 +172,6 @@ export function TreeItem(props: {
             </Show>
           }
         >
-          {/* The chevron and the folder icon fold the folder as one target,
-              from the row's edge to its name: the chevron alone is too
-              small for a finger. The rest of the row selects the folder. */}
           <span
             aria-hidden="true"
             class="folder-toggle"

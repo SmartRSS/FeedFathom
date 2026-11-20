@@ -7,7 +7,6 @@ import {
 } from "../sw-protocol.ts";
 
 const ORIGIN = "https://feedfathom.test";
-// The worker as bin/build-spa.ts bundles it, run in a fresh context per test.
 const built = await Bun.build({
   entrypoints: [`${import.meta.dir}/../sw.ts`],
   format: "iife",
@@ -43,7 +42,6 @@ const offlineRow = (id: number, overrides: Partial<OfflineRow> = {}) => ({
   ...overrides,
 });
 
-// Fires `type` once, on a later microtask, to whatever listens for it then.
 const firing = (type: string) => {
   const listeners: Callback[] = [];
   queueMicrotask(() => {
@@ -56,8 +54,6 @@ const firing = (type: string) => {
   };
 };
 
-// The slice of IndexedDB the mutation queue uses: one auto-increment store,
-// with each transaction completing on a later microtask as the real API does.
 const fakeIndexedDb = () => {
   const rows = new Map<number, unknown>();
   let nextKey = 1;
@@ -97,8 +93,6 @@ const fakeIndexedDb = () => {
   };
 };
 
-// Runs the bundled worker against an in-memory Cache API, a counting fetch
-// and an in-memory IndexedDB, and hands back its fetch listener.
 const loadServiceWorker = (
   network: (
     path: string,
@@ -111,8 +105,6 @@ const loadServiceWorker = (
   let onActivate:
     | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
     | undefined;
-  // Map order stands in for the Cache API's insertion order; put deletes
-  // first so a replaced entry moves to the end, as it does there.
   const entries = new Map<string, Response>();
   const key = (request: Request | string) => {
     const url = new URL(
@@ -135,14 +127,10 @@ const loadServiceWorker = (
   const cacheNames = new Set<string>();
   const queue = fakeIndexedDb();
   const requests: string[] = [];
-  // Resolves when the network next sees a request, as `requests` lists it.
   const waiters: { label: string; resolve: () => void }[] = [];
   const requested = (label: string) =>
     new Promise<void>((resolve) => waiters.push({ label, resolve }));
   const messages: unknown[] = [];
-  // The unread rows the server lists to the worker's offline sync, newest
-  // first, in pages of articlePageSize. A held listing waits
-  // for its release.
   let listed: OfflineRow[] = [];
   const heldListings: Promise<void>[] = [];
   const holdListing = () => {
@@ -172,8 +160,6 @@ const loadServiceWorker = (
     Headers,
     Response,
     URL,
-    // One store stands in for every named cache, so deleting any of them
-    // empties it.
     caches: {
       delete: async () => {
         entries.clear();
@@ -197,8 +183,6 @@ const loadServiceWorker = (
       const headers = new Headers(
         init?.headers ?? (typeof input === "string" ? {} : input.headers),
       );
-      // The worker's own listing names its URL as a string; the page's list
-      // requests reach here as the Request the page sent.
       const answer =
         typeof input === "string" &&
         method === "POST" &&
@@ -207,7 +191,6 @@ const loadServiceWorker = (
           : network(path, method, headers);
       const { signal } = init ?? {};
       if (!signal) return answer;
-      // An aborted request rejects even while the network holds it.
       const aborted = new Promise<never>((_resolve, reject) =>
         signal.addEventListener("abort", () =>
           reject(new DOMException("Aborted", "AbortError")),
@@ -240,9 +223,6 @@ const loadServiceWorker = (
       registration: {},
     },
   });
-  // `background` settles once the response has and every promise the handler
-  // handed to waitUntil by then has too, such as a shell revalidation, a
-  // cache trim or a queue flush.
   const dispatch = (request: Request) => {
     let handled: Promise<Response> | undefined;
     const pending: Promise<unknown>[] = [];
@@ -255,7 +235,6 @@ const loadServiceWorker = (
         pending.push(promise);
       },
     });
-    // An unhandled request goes to the network untouched, as in a browser.
     const response =
       handled ??
       Promise.resolve(network(key(request), request.method, request.headers));
@@ -280,9 +259,6 @@ const loadServiceWorker = (
     await background;
     return body;
   };
-  // An offline-reading sync: the server lists these unread rows, or bare ids
-  // standing for rows never updated, and switching the option off lists
-  // none. Settles once the worker's downloads have.
   const keepOffline = async (articles: (number | OfflineRow)[]) => {
     listed = articles.map((row) =>
       typeof row === "number" ? offlineRow(row) : row,
@@ -294,11 +270,9 @@ const loadServiceWorker = (
     });
     await Promise.all(pending);
   };
-  // A sign-in from any tab, answered by the network.
   const login = () =>
     dispatch(new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }))
       .response;
-  // Unsubscribing from source 3, which the worker queues while offline.
   const removeSource = () =>
     dispatch(
       new Request(`${ORIGIN}/api/source`, {
@@ -306,7 +280,6 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     );
-  // A DELETE the worker queues while offline, answered by its response.
   const remove = (path: string, body: object) =>
     dispatch(
       new Request(`${ORIGIN}${path}`, {
@@ -314,8 +287,6 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     ).response;
-  // The account the worker files offline removals under, as it records it
-  // after a session lookup.
   const accountKey = "/sw-queue-account";
   const recordAccount = (id: number) =>
     entries.set(accountKey, Response.json({ id }));
@@ -347,9 +318,6 @@ const loadServiceWorker = (
   };
 };
 
-// The ?v= fingerprint (tree.ts) is what makes the URL content-addressed: the
-// same path always decodes to the same bytes, so the SW never needs to
-// re-ask once a path is cached.
 const tree = {
   tree: [
     { favicon: "/api/favicon/1?v=abc", type: "source" },
@@ -420,7 +388,7 @@ test("a warm launch serves the cached shell without waiting for the network", as
     online ? shellNetwork("index-old")(path) : new Promise<Response>(() => {}),
   );
   await sw.navigate("/").background;
-  online = false; // lie-fi: requests hang instead of failing
+  online = false;
   const response = await sw.navigate("/").response;
   expect(await response.text()).toBe(shellHtml("index-old"));
 });
@@ -448,8 +416,6 @@ test("a cached shell missing one of its assets waits for the network", async () 
   expect(await response.text()).toBe(shellHtml("index-new"));
 });
 
-// The navigation's tree preload goes unused, as when the dashboard sends a
-// signed-out visitor to the login form.
 test("a tree preloaded before a sign-in is not served after it", async () => {
   let account = "a";
   const sw = loadServiceWorker((path) => {
@@ -466,8 +432,6 @@ test("a tree preloaded before a sign-in is not served after it", async () => {
   expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
 });
 
-// The keys the worker must never prune: an offline-downloaded body, the
-// queue's owner and the favicon purge marker.
 const keepers = [
   "/sw-offline-article?article=1",
   "/sw-queue-account",
@@ -478,7 +442,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
   let bundle = "old";
   const sw = loadServiceWorker((path) => {
     if (path === "/") return new Response(shellHtml(`index-${bundle}`));
-    // A lazy chunk is named by the entry script, not the HTML.
     if (path.startsWith("/assets/index-"))
       return new Response(`m(["assets/options-${bundle}.js"])`);
     return path === "/api/tree"
@@ -493,7 +456,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
   bundle = "new";
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-new.js`)).response;
-  // Tabs still on the shell served before the deploy can load its chunks.
   expect(assets()).toHaveLength(4);
   await sw.navigate("/").background;
   expect(assets().toSorted()).toEqual([
@@ -504,7 +466,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
   expect(await sw.entries.get("/")?.text()).toBe(shellHtml("index-new"));
 });
 
-// A font is named by the stylesheet, not the HTML.
 test("a font the served stylesheet names is kept", async () => {
   let bundle = "old";
   const sw = loadServiceWorker((path) => {
@@ -661,7 +622,6 @@ test("a sync downloads only what is missing and drops what is no longer listed",
     "/sw-offline-article?article=2",
     "/sw-offline-article?article=3",
   ]);
-  // Switching the option off posts an empty list.
   await sw.keepOffline([]);
   expect([...sw.entries.keys()]).toEqual([]);
 });
@@ -829,7 +789,6 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   });
   await sw.loadTree();
   const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toJSON();
-  // 4's body never arrives, and 5 is removed offline: neither is listed.
   await sw.keepOffline([
     offlineRow(1),
     offlineRow(2, { publishedAt: old }),
@@ -860,10 +819,8 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   expect(await list({ filter: "unread", sources: [3] })).toEqual([1, 2]);
   expect(await list({ folder: 7, sources: [] })).toEqual([3]);
   expect(await list({ sources: [], view: "today" })).toEqual([1, 3]);
-  // A page loaded online continues after its cursor.
   expect(await list({ cursor: 1, sources: [3] })).toEqual([2]);
   expect(await list({ cursor: 99, sources: [3] })).toEqual([]);
-  // A cursor that has left the kept rows is placed by its publishedAt.
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toJSON();
   expect(
     await list(
@@ -871,8 +828,6 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
       { "X-Cursor-Published-At": dayAgo },
     ),
   ).toEqual([2]);
-  // Date.parse collapses these sub-millisecond timestamps. The cached row
-  // position still preserves the server's ordering after a kept cursor.
   online = true;
   const millisecond = new Date().toJSON().slice(0, -1);
   await sw.keepOffline([
@@ -884,8 +839,6 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
 });
 
-// #974: a download started before a sign-in belongs to the account that
-// was signed in then, so it must not land in the new account's cache.
 test("a download answered after a sign-in is not stored", async () => {
   let answer: (() => void) | undefined;
   const sw = loadServiceWorker((path, method) => {
@@ -904,7 +857,6 @@ test("a download answered after a sign-in is not stored", async () => {
   expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
 });
 
-// GET /api/session as the given account, or signed out with null.
 const session = (id: number | null) =>
   Response.json({ user: id === null ? null : { id } });
 
@@ -942,8 +894,6 @@ test("a failed account lookup is retried, so a later offline removal still repla
   expect(sw.queue.rows.size).toBe(0);
 });
 
-// The connection drops after the tree loads but before the first session
-// lookup answers.
 test("a removal made while the first account lookup is in flight waits for it", async () => {
   let online = true;
   let answerLookup: (() => void) | undefined;
@@ -988,8 +938,6 @@ test("a removal with no known account fails offline instead of being queued", as
   expect(sw.queue.rows.size).toBe(0);
 });
 
-// Account 1's session lookup is still in flight when the account changes;
-// returns the account recorded once that lookup finally answers.
 const recordAfterOvertakenLookup = async (
   change: "/api/login" | "/api/logout",
   nextAccount: number | null,
@@ -1015,7 +963,6 @@ const recordAfterOvertakenLookup = async (
   await lookup;
   await sw.dispatch(new Request(`${ORIGIN}${change}`, { method: "POST" }))
     .response;
-  // Its flush waits for the first one to finish.
   const secondLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
   await secondLoad.response;
   answerFirstLookup?.();
@@ -1031,8 +978,6 @@ test("a session lookup overtaken by a logout doesn't record the previous account
   expect(await recordAfterOvertakenLookup("/api/logout", null)).toBeUndefined();
 });
 
-// The removal is in flight when account 2 signs in from another tab, and
-// fails after that sign-in completes.
 test("a removal that fails after another account signs in stays account 1's", async () => {
   let account = 1;
   let failRemoval: (() => void) | undefined;
@@ -1063,8 +1008,6 @@ test("a removal that fails after another account signs in stays account 1's", as
   expect(sw.queue.rows.size).toBe(0);
 });
 
-// The page's own /api/session request is cached like any other, and answers
-// signed out once the session has expired.
 test("a signed-out session answer doesn't erase the owner of later offline removals", async () => {
   let online = true;
   let account: number | null = 1;
@@ -1145,10 +1088,6 @@ test("a replayed deletion carries its original trace and says it is a replay", a
   expect(Number(replay?.get("X-FeedFathom-Replay"))).toBeGreaterThan(0);
 });
 
-// The offline removal was answered with a synthetic success, so a replay the
-// server rejects for good is the only moment the page can learn it was lost:
-// the entry is dropped, the page is told, and later entries still go out. A
-// 401 is not final -- the same account may sign back in -- so it stays queued.
 test.each([
   [403, true],
   [404, true],
@@ -1179,9 +1118,6 @@ test.each([
   },
 );
 
-// The server refuses to remove a folder that still holds a source, so a
-// folder removal replayed past a failed source removal would be rejected and
-// dropped (#975).
 test("a removal queued behind a temporarily failing one waits for it", async () => {
   let online = false;
   let sourceRemovalFails = true;
@@ -1217,8 +1153,6 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
   expect(sw.messages).toEqual([]);
 });
 
-// A removal queued while a replay waits on its session lookup starts a
-// second flush, which reads the entries the first hasn't sent yet.
 test("a flush that starts during another doesn't replay its entries twice", async () => {
   let online = false;
   let foldersDown = true;
@@ -1255,8 +1189,6 @@ test("a flush that starts during another doesn't replay its entries twice", asyn
   expect(sw.queue.rows.size).toBe(0);
 });
 
-// Account 1 removes a source offline and its session lapses. Whoever signs in
-// next decides whether the removal replays (#982).
 const removeOfflineThenSignIn = async (nextAccount: number) => {
   let online = true;
   let account: number | null = 1;

@@ -44,10 +44,6 @@ export function FeedDiscovery(props: {
   admin: boolean;
   backPane(): void;
   close(): void;
-  // Present only when editing an existing subscription instead of adding a
-  // new one: reuses this same panel (title/folder are editable either way)
-  // but locks the feed/home URL fields and skips the website-search/preview
-  // steps entirely, since those don't apply to an already-subscribed feed.
   editing?:
     | {
         homeUrl: string;
@@ -60,17 +56,12 @@ export function FeedDiscovery(props: {
   focusPane(next: DashboardPane): void;
   handleUnauthorized(cause: unknown): boolean;
   initialFeedUrl?: string | undefined;
-  // A folder to start in (its uid), for Discover opened from that folder.
   initialFolder?: string | undefined;
   initialNewsletter?: boolean;
-  // Only set where the server ingests mail, which is what gates the
-  // newsletter button below -- a minted address is useless otherwise.
   mailDomain: string | undefined;
   pane(): DashboardPane;
   saved(sourceId: number): void;
 }) {
-  // Seeded once from what Discover opened on; the fields are the user's
-  // from then on.
   const [link, setLink] = createSignal(
     untrack(() => props.editing?.homeUrl ?? ""),
   );
@@ -90,8 +81,6 @@ export function FeedDiscovery(props: {
   const [loading, setLoading] = createSignal(false);
   const [progress, setProgress] = createSignal("");
   const [message, setMessage] = createSignal("");
-  // A failed preview belongs to the Feed URL field, not the page: it shows
-  // under that field and clears once the address changes.
   const [previewError, setPreviewError] = createSignal("");
   const [previewDetails, setPreviewDetails] =
     createSignal<ReturnType<typeof failureDetails>>();
@@ -104,8 +93,6 @@ export function FeedDiscovery(props: {
     const index = selectedIndex();
     return index === undefined ? undefined : articles()[index];
   };
-  // Finding and previewing share one controller: starting either abandons
-  // whichever is still in flight.
   let requests = new AbortController();
   const startRequest = () => {
     requests.abort();
@@ -121,9 +108,6 @@ export function FeedDiscovery(props: {
   });
 
   onSettled(() => {
-    // The pane that held focus (the toolbar button that opened this) was
-    // just unmounted, which drops focus to <body>: start in the form, on the
-    // first field that can be typed into (Title when editing).
     form
       .querySelector<HTMLInputElement>("input:not([disabled], [readonly])")
       ?.focus();
@@ -135,11 +119,6 @@ export function FeedDiscovery(props: {
         const loadedFolders = await api("/folders", foldersResponse);
         if (disposed) return;
         setFolders(loadedFolders);
-        // Set together with (not before) the folders that just loaded --
-        // assigning the <select>'s value while its matching <option> doesn't
-        // exist yet has nothing to select against, and Solid doesn't
-        // re-apply that binding just because sibling <option>s appear later,
-        // so it would silently fall back to "No folder" instead.
         setFolderId(
           (props.editing ? props.editing.parentUid : props.initialFolder) ?? "",
         );
@@ -150,18 +129,13 @@ export function FeedDiscovery(props: {
     })();
   });
 
-  // The session may still be loading when the panel opens, so this waits
-  // for the domain rather than reading it once at mount.
   createEffect(
     () => props.mailDomain,
-    // Only the domain re-runs this; the rest is read as it stands then.
     (domain) =>
       untrack(() => {
         if (!domain || props.editing) return;
         if (props.initialNewsletter && !feedUrl())
           void mintNewsletterAddress(domain).then(reportUnreserved);
-        // A reload of a minted address: reserving is idempotent, and this
-        // recovers one whose first reservation failed.
         else if (isNewsletterAddress(feedUrl(), domain))
           void reserveNewsletterAddress(feedUrl()).then(reportUnreserved);
       }),
@@ -177,7 +151,6 @@ export function FeedDiscovery(props: {
     const normalizedLink = withScheme(link());
     if (normalizedLink !== link()) {
       setLink(normalizedLink);
-      // The validity check below reads the input the write updates.
       flush();
     }
     if (!websiteIsValid()) return;
@@ -224,9 +197,6 @@ export function FeedDiscovery(props: {
       setTitle(result.title);
       setArticles(result.articles);
       setTruncated(result.truncated ?? false);
-      // Beside a visible reader a preview lands on its first article. Where
-      // the reader is out of sight until a row is opened, nothing is
-      // selected yet, as in the dashboard's list.
       setSelectedIndex(
         result.articles.length && !readerHidden() ? 0 : undefined,
       );
@@ -237,7 +207,6 @@ export function FeedDiscovery(props: {
       if (signal.aborted || props.handleUnauthorized(cause)) return;
       setPreviewDetails(failureDetails(cause));
       setPreviewError(messageOf(cause, "Could not load this feed."));
-      // On one pane at a time the form, where the error is, comes forward.
       props.focusPane("sources");
     } finally {
       if (!signal.aborted) {
@@ -248,8 +217,6 @@ export function FeedDiscovery(props: {
   }
 
   function selectPreviewArticle(index: number, event: MouseEvent) {
-    // A modified click is the browser's gesture for "open this elsewhere",
-    // so the pane must not swallow it by selecting instead.
     if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
       return;
     event.preventDefault();
@@ -257,9 +224,6 @@ export function FeedDiscovery(props: {
     props.focusPane("reader");
   }
 
-  // The address goes into the URL as ?feedUrl= (the form old extensions
-  // opened), so a reload or a discarded tab coming back shows the address the
-  // user already copied instead of minting a new one.
   function mintNewsletterAddress(domain: string) {
     const address = newsletterAddress(domain);
     setFeedUrl(address);
@@ -272,10 +236,6 @@ export function FeedDiscovery(props: {
     return reserveNewsletterAddress(address);
   }
 
-  // The address is in the user's hands from now on, and mail sent to it
-  // before its source exists bounces for good, which can end the newsletter
-  // subscription before it starts (#1116). So the source is created now,
-  // not on Subscribe. False when that failed and nothing has reported it.
   async function reserveNewsletterAddress(address: string) {
     try {
       await api("/newsletter-address", successResponse, {
@@ -289,8 +249,6 @@ export function FeedDiscovery(props: {
     }
   }
 
-  // Subscribe still creates the source, so the address is not lost, only
-  // its mail until then.
   function reportUnreserved(reserved: boolean) {
     if (!reserved)
       setMessage(
@@ -302,10 +260,8 @@ export function FeedDiscovery(props: {
     const reserved = mintNewsletterAddress(props.mailDomain ?? "");
     setArticles([]);
     setSelectedIndex(undefined);
-    // The copy reads the address just minted.
     flush();
     await copyAddress();
-    // After the copy's own message, which would otherwise hide this one.
     reportUnreserved(await reserved);
   }
 
@@ -345,8 +301,6 @@ export function FeedDiscovery(props: {
           });
       await props.saved(result.sourceId);
     } catch (cause) {
-      // The server's answer to a malformed target and to an address this
-      // account may not subscribe to, alike (addresses are minted only).
       if (!editing && cause instanceof ApiError && cause.status === 422) {
         setMessage(
           "Could not subscribe: not a valid feed URL or a newsletter address generated here.",
@@ -382,8 +336,6 @@ export function FeedDiscovery(props: {
           },
         ]}
       >
-        {/* A toolbar like the other panes', so the three top edges line up;
-            its title is the pane's heading. */}
         <div class="toolbar">
           <BackButton always backPane={props.close} />
           <h2 class="toolbar-title">
@@ -400,8 +352,6 @@ export function FeedDiscovery(props: {
         >
           <label>
             Website
-            {/* Same shared-row lock as Feed URL below when editing -- see
-                that field's comment. */}
             <input
               ref={websiteInput}
               readonly={!!props.editing}
@@ -454,14 +404,7 @@ export function FeedDiscovery(props: {
             </Show>
           </Show>
           <label>
-            {/* An address generated for email subscriptions is not a URL,
-                and the field says what it holds. */}
             {isEmail() ? "Email address" : "Feed URL"}
-            {/* Shared/deduplicated across every subscriber to this feed
-                (see sources_url_unique) -- locked here so editing can't
-                silently repoint everyone else's subscription too.
-                Unsubscribing and subscribing to a different URL is the
-                supported way to point at a different feed. */}
             <input
               aria-describedby={previewError() ? "feed-url-error" : undefined}
               aria-invalid={previewError() ? "true" : undefined}
@@ -488,9 +431,6 @@ export function FeedDiscovery(props: {
           <Show when={previewError() ? previewDetails() : undefined}>
             {(details) => <FailureDetails admin={props.admin} {...details()} />}
           </Show>
-          {/* The address's own next step, right under it: primary until the
-              title is in, which a preview fills and Subscribe then needs, so
-              one primary action shows at a time. */}
           <Show when={!props.editing && !isEmail()}>
             <button
               class={[
@@ -523,8 +463,6 @@ export function FeedDiscovery(props: {
               </For>
             </select>
           </label>
-          {/* Subscribing by email is another way in, not a step of the
-              address above, so it is its own group after the fields. */}
           <Show
             when={!props.editing && (Boolean(props.mailDomain) || isEmail())}
           >
@@ -570,8 +508,6 @@ export function FeedDiscovery(props: {
           </div>
         </form>
       </aside>
-      {/* The preview list exists only while there is something to list;
-          until then the form takes its column too (style.css). */}
       <Show when={articles().length}>
         <section
           aria-label="Preview articles"
@@ -586,8 +522,6 @@ export function FeedDiscovery(props: {
             <span />
           </div>
           <div class="article-list">
-            {/* The list covers only the rows: the truncation note beside it
-                is not a listitem, and a list may only own listitems. */}
             <div role="list">
               <For each={articles()}>
                 {(article, index) => (

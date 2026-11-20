@@ -5,20 +5,6 @@ import { config } from "#platform/config.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 
-// Once maxRetries runs out, Bun closes the client for good: every later
-// command fails with "Connection has failed", even after Redis returns. Bun's
-// backoff caps at about 2s, so 100 retries outlast only a ~3-minute outage, and
-// past that, login and every outbound fetch fail until something restarts the
-// process. Nothing would: the healthchecks don't touch Redis. The largest
-// value Bun accepts (u32) makes it retry forever, like the ioredis connections.
-//
-// A connect attempt that times out is the exception: Bun then closes the
-// client for good, whatever maxRetries says, and runs onclose. A partition or
-// a vanished host drops packets rather than refusing them, so its reconnect
-// attempts end in that timeout. onclose reconnects, a second later so a client
-// that fails at once cannot spin, and that is what keeps the per-attempt
-// timeout short: without it, only a timeout that outlasts the outage would
-// keep the client alive, and one attempt could hang that long.
 const redis = new RedisClient(config.REDIS_URL, {
   autoReconnect: true,
   connectionTimeout: 10_000,
@@ -37,19 +23,12 @@ redis.onclose = () => {
 };
 await redis.connect();
 
-// The one BullMQ queue: the server and the worker add to it, the worker
-// consumes it.
 export const jobQueueName = "tasks";
 
-// BullMQ requires maxRetriesPerRequest: null, so this connection is
-// configured rather than handed the URL alone.
 const bullmqRedis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 const bullmqQueue = new Queue(jobQueueName, { connection: bullmqRedis });
-// A connection of its own for SUBSCRIBE, which takes it over. Commands wait
-// out an outage rather than failing after a retry budget, so a SUBSCRIBE sent
-// while Redis is down still lands once it is back.
 const createSubscriber = () =>
   new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 const drizzleConnection = createDrizzleConnection(config.DATABASE_URL, {
@@ -59,11 +38,6 @@ const httpClient = new HttpClient(redis, {
   instance: config.FEED_FATHOM_DOMAIN,
   version: config.FEEDFATHOM_BUILD,
 });
-// QUIT waits for Redis to answer. When an outage drops packets rather than
-// refusing them, that answer never comes, and the open socket held shutdown
-// until the orchestrator killed the process. Past this bound the connection
-// is dropped instead; whatever is still queued on it could not reach Redis
-// anyway.
 const redisQuitTimeout = 5_000;
 let closePromise: Promise<void> | undefined;
 const close = () => {
@@ -88,7 +62,6 @@ export {
   httpClient,
   redis,
 };
-// Typed as the calls the routes make, so a test can stand in for them.
 export const fetcher: (
   ...args: Parameters<typeof fetch>
 ) => ReturnType<typeof fetch> = fetch;

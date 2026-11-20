@@ -5,9 +5,6 @@ import {
 import { scanPage } from "#shared/scanners/scanner.ts";
 import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 
-// The server's counterpart of scannerPageFromDocument: Bun has no DOM, so the
-// same ScannerPage is read from raw HTML in one streaming HTMLRewriter pass.
-// Like querySelector, each single-valued field keeps its first match.
 const scannerPageFromHtml = (address: string, html: string): ScannerPage => {
   const anchors: ScannerPage["anchors"] = [];
   const feedLinks: ScannerPage["feedLinks"] = [];

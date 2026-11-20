@@ -48,10 +48,6 @@ import { PageToolbar } from "./page-toolbar.tsx";
 
 type SessionUser = NonNullable<Static<typeof sessionResponse>["user"]>;
 
-// Tabs in the order a reader looks for them: how articles read, what the
-// panes show, how the app looks, then the keyboard, the account's feeds and
-// the account itself. The first four hold this device's preferences; the
-// last two act on the account.
 const sections = [
   { id: "reading", label: "Reading" },
   { id: "lists", label: "Lists" },
@@ -63,9 +59,6 @@ const sections = [
 
 type SectionId = (typeof sections)[number]["id"];
 
-// Hashes that older links and bookmarks still carry. #import-opml is the
-// import form's own id, which the empty-tree guidance links to; #signal and
-// #data are tabs that were merged or renamed.
 const sectionAliases: Record<string, SectionId> = {
   data: "import-export",
   "import-opml": "import-export",
@@ -78,10 +71,6 @@ function sectionFromHash(hash: string): SectionId {
   return section?.id ?? sectionAliases[id] ?? "reading";
 }
 
-// A setting that is on or off is a check box, its label saying what on
-// means: the state shows without opening anything, and one press changes
-// it. The whole line is the target. The hint describes it from outside the
-// label, as a select's does.
 function PreferenceCheckbox(props: {
   hint?: string;
   label: string;
@@ -110,9 +99,6 @@ function PreferenceCheckbox(props: {
   );
 }
 
-// A setting with several values. The option values are String(value), which
-// is also how the preference stores them. A hint sits under the select,
-// outside the label so it stays out of the select's name, and describes it.
 function PreferenceSelect<T extends boolean | string>(props: {
   hint?: string;
   label: string;
@@ -148,14 +134,11 @@ function PreferenceSelect<T extends boolean | string>(props: {
   );
 }
 
-// Says once per tab where its settings live, since this page mixes the two.
 function Scope(props: { children: string }) {
   return <p class="options-scope">{props.children}</p>;
 }
 const DEVICE_SCOPE = "Saved on this device only.";
 
-// A section id lands at the top of the page, tabs showing; any other hash
-// names an element inside a section (#import-opml) and lands on it.
 function scrollToHashTarget() {
   const target = document.getElementById(location.hash.slice(1));
   if (target instanceof HTMLElement && !target.matches(".options-section")) {
@@ -217,8 +200,6 @@ export function Options(props: {
       if (props.handleUnauthorized(cause)) return;
       setSessionMessage(messageOf(cause, "Could not load your account."));
     }
-    // The SPA navigation never scrolls on its own, so honour the hash once
-    // the section it picked is rendered.
     if (location.hash) queueMicrotask(scrollToHashTarget);
   }
 
@@ -301,7 +282,6 @@ export function Options(props: {
       });
       setPasswordFailed(false);
       setPasswordMessage("Password changed.");
-      // The change signed out every other session; show the list as it is.
       void loadSessions();
     } catch (cause) {
       if (props.handleUnauthorized(cause)) return;
@@ -343,9 +323,6 @@ export function Options(props: {
           <For each={sections}>
             {(section) => (
               <a
-                // A touch-only device has no keyboard to use the shortcuts
-                // with, so style.css hides that tab there; its hash still
-                // opens it.
                 class={
                   section.id === "keyboard" ? "options-keyboard" : undefined
                 }
@@ -461,8 +438,6 @@ export function Options(props: {
               <PreferenceSelect label="Text size" preference={readerText} />
               <PreferenceSelect label="Line width" preference={readerWidth} />
             </section>
-            {/* Only where the single-pane layout exists: style.css shows it
-              under the single-pane query (SINGLE_PANE_QUERY in panes.ts). */}
             <section class="options-card options-mobile-layout">
               <h2>Narrow screens</h2>
               <PreferenceSelect
@@ -481,8 +456,6 @@ export function Options(props: {
                 Every action on the dashboard has a key. Press ? there to see
                 them all.
               </p>
-              {/* The same DialogHost dialog the `?` shortcut opens; it works on
-                this route too because the host is mounted app-wide. */}
               <button type="button" onClick={() => void helpDialog()}>
                 Show keyboard shortcuts
               </button>
@@ -524,9 +497,6 @@ export function Options(props: {
                 Download every feed subscription as an OPML file any other
                 reader can import.
               </p>
-              {/* A plain link rather than a fetch: the API is cookie-authenticated,
-                so the browser downloads it without the SPA holding the file in
-                memory first. */}
               <a class="card-action" download="" href="/api/options/opml">
                 Download subscriptions
               </a>
@@ -576,8 +546,6 @@ export function Options(props: {
                     <div class="session-row">
                       <span
                         class="session-agent"
-                        // The raw header survives as hover detail for
-                        // anything the parsed label leaves ambiguous.
                         title={
                           session.userAgent?.trim()
                             ? session.userAgent

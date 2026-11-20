@@ -28,8 +28,6 @@ import { forgetAccountData } from "./sw-protocol.ts";
 
 type FieldErrors = Partial<Record<AccountField, string>>;
 
-// Checks the fields; when one fails, shows the errors and moves focus to the
-// first invalid field once it is drawn. True when the form may be sent.
 function checkFields(
   form: HTMLFormElement,
   values: Partial<Record<AccountField, string>>,
@@ -62,10 +60,6 @@ export function Login(props: { navigate(to: string): void; next: string }) {
   const [error, setError] = createSignal("");
   const [errors, setErrors] = createSignal<FieldErrors>({});
   const [resetEnabled, setResetEnabled] = createSignal(false);
-  // With no outgoing mail configured there is no link to deliver, so the
-  // route answers as it would for an unknown account and offering it here
-  // would only send people somewhere that cannot help them. A failure to
-  // load leaves the link hidden, which is the same harmless outcome.
   onSettled(() => void loadResetEnabled());
   async function loadResetEnabled() {
     try {
@@ -398,9 +392,6 @@ export function Activate(props: { token: string; navigate(to: string): void }) {
   );
   const [message, setMessage] = createSignal("");
 
-  // Activation is the button, never the visit (#810): a mail preview or link
-  // scanner that opens the URL -- anything that runs this page -- must find
-  // the token exactly as usable as a person following the link themselves.
   async function activate(event: Event) {
     event.preventDefault();
     try {
@@ -478,9 +469,6 @@ export function PasswordReset(props: { navigate(to: string): void }) {
         fallback={
           <section class="account-result">
             <h1>Reset your password</h1>
-            {/* Deliberately not "we sent you an email": saying so only when
-                the account exists would answer the question the login form
-                refuses to. */}
             <p role="status">
               If that address has an account here, a reset link is on its way.
               The link is good for {passwordResetLifetime.words}.

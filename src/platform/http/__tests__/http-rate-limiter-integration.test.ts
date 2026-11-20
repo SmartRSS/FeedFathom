@@ -5,9 +5,6 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { RequestDeadline } from "#platform/http/request-deadline.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
-// The Lua scripts against a real server: the only place interval spacing and
-// overlapping interactive waiters run on Redis's own TIME and key expiry.
-// http-rate-limiter.test.ts covers the rest through the fake.
 const redis = new RedisClient(requireDisposableRedisUrl());
 const intervals = { background: 10_000, interactive: 500 };
 
@@ -15,8 +12,6 @@ afterAll(() => {
   redis.close();
 });
 
-// Polls a Redis read until it answers `expected`, bounded so a counter that
-// never gets there fails the test instead of hanging it.
 async function settlesTo(read: () => Promise<unknown>, expected: unknown) {
   for (let wait = 0; wait < 400; wait++) {
     // eslint-disable-next-line no-await-in-loop -- Polls until the write lands.
@@ -81,7 +76,6 @@ test("overlapping waiters keep a counter that covers their wait and leaves no ke
   await settlesTo(() => redis.get(waitersKey), "1");
   expect(await redis.pttl(waitersKey)).toBeGreaterThan(19_000);
 
-  // The counter vanishing under the last waiter must not leave it at -1.
   await redis.del(waitersKey);
   await Promise.all(reservations);
   await settlesTo(() => redis.exists(waitersKey), false);

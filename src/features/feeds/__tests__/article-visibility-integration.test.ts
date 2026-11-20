@@ -11,19 +11,12 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// Removing an article is the only user-level state this app writes, and it
-// has to stay removed -- through the article row being pruned and the feed
-// listing that guid again, which is what used to bring removals back unread
-// under a fresh id, and through the publisher editing the item, which bumps
-// articles.updated_at.
 test("a removal survives its article row being pruned and re-listed", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const drizzleConnection = createDrizzleConnection(databaseUrl);
   const articlesDataService = new ArticlesDataService(drizzleConnection);
 
-  // articles.id is bigint, which this driver hands back as a string --
-  // unlike the drizzle mapping the service under test goes through.
   const addArticle = async (sourceId: number, guid: string) => {
     const [article] = await client<{ id: string }[]>`
       INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
@@ -55,10 +48,6 @@ test("a removal survives its article row being pruned and re-listed", async () =
 
     const kept = await addArticle(source!.id, "kept");
     const removed = await addArticle(source!.id, "removed");
-    // Removed on a row that also carries a legacy read_at older than the
-    // article's updated_at -- the publisher edited it after that stamp.
-    // Nothing writes read_at any more, but rows predating that still have
-    // one, and hiding a removal used to depend on it being NULL.
     await addArticle(source!.id, "removed-edited");
 
     await client`
@@ -70,9 +59,6 @@ test("a removal survives its article row being pruned and re-listed", async () =
 
     expect(await listedIds(source!.id, user!.id)).toEqual([kept]);
 
-    // What RetentionService.prune does to an article every subscriber has
-    // removed and the feed appears to have dropped, followed by the feed
-    // listing that same guid again.
     await client`DELETE FROM articles WHERE id = ${removed}`;
     const relisted = await addArticle(source!.id, "removed");
     expect(relisted).not.toBe(removed);
@@ -84,11 +70,6 @@ test("a removal survives its article row being pruned and re-listed", async () =
   }
 });
 
-// A folder can fan out to hundreds of sources, so the list has to come back
-// one page at a time. The cursor is a row comparison on (published_at, id)
-// because published_at is not unique -- a feed publishing a batch on one
-// timestamp straddles the page boundary, and ordering by published_at alone
-// would repeat or skip rows there.
 test("paging is capped and a cursor straddling equal timestamps loses no row", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -113,8 +94,6 @@ test("paging is capped and a cursor straddling equal timestamps loses no row", a
       INSERT INTO user_sources (user_id, source_id, name, created_at)
       VALUES (${user!.id}, ${source!.id}, 'sub', NOW() - INTERVAL '60 days')`;
 
-    // 30 articles share each published_at, so the page boundary lands inside
-    // a run of ties rather than between two distinct timestamps.
     await client`
       INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
       SELECT ${source!.id}, 'a' || n, 'a', 't', '', 'body',

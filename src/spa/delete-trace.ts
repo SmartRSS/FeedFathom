@@ -1,21 +1,9 @@
-// Forensics for article deletes. On 2026-10-20 two articles were deleted
-// 0.53 s apart, 17 s after the user's last click, and nothing on the client or
-// the server could say what sent them. Every article DELETE carries the
-// event that triggered it and the input this tab saw just before it, and the
-// server logs both with the request. A delete with no triggering event, or
-// one whose recent input shows no click or key at all, then names itself.
-//
-// Only key names are kept: a printable key is recorded as "char", so the
-// trace never holds anything the user typed.
-
 const RECENT_LIMIT = 12;
-// Request headers this size pass every proxy in front of the server.
 const MAX_HEADER_LENGTH = 3000;
 
 type TraceEntry = Record<string, boolean | number | string | undefined>;
 
 const recent: TraceEntry[] = [];
-// Distinguishes tabs in the server log: they share one session.
 const tabId = Math.random().toString(36).slice(2, 8);
 let lastDeleteAt: number | undefined;
 
@@ -56,7 +44,6 @@ function remember(entry: TraceEntry) {
   if (recent.length > RECENT_LIMIT) recent.shift();
 }
 
-/** Starts recording input. Capture phase, so nothing the page stops is missed. */
 export function installDeleteTrace(): void {
   for (const type of [
     "pointerdown",
@@ -79,7 +66,6 @@ export function installDeleteTrace(): void {
   );
 }
 
-/** The header value for one delete; `trigger` is the event that asked for it. */
 export function deleteTrace(trigger: Event | undefined): string {
   const at = now();
   const trace = {
@@ -93,11 +79,9 @@ export function deleteTrace(trigger: Event | undefined): string {
   };
   lastDeleteAt = at;
   let value = JSON.stringify(trace);
-  // Oldest input goes first: the trigger and the latest events matter most.
   while (value.length > MAX_HEADER_LENGTH && trace.recent.length) {
     trace.recent = trace.recent.slice(1);
     value = JSON.stringify(trace);
   }
-  // Header values must be ASCII; a non-ASCII class name would make fetch throw.
   return value.replaceAll(/[^ -~]/g, "?");
 }

@@ -1,13 +1,10 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
 
-// Bun has no localStorage; a Map stands in for whatever the browser holds.
 const stored = new Map<string, string>();
 const storage = {
   getItem: (key: string) => stored.get(key) ?? null,
   setItem: (key: string, value: string) => stored.set(key, value),
 };
-// Bun has no window either; this one carries the storage events other tabs
-// would send.
 const window = new EventTarget();
 Object.assign(globalThis, { localStorage: storage, window });
 const { storedPreference } = await import("../preferences.ts");
@@ -55,8 +52,6 @@ test('toggles store booleans and still read the old "on"/"off" strings', () => {
   expect(storedToggle("a", true).get()).toBe(false);
 });
 
-// What another tab's write looks like here: the storage changes, and a
-// storage event names the key, or none when the storage was cleared.
 const otherTabWrites = (key: string, value: string | undefined) => {
   if (value === undefined) stored.clear();
   else stored.set(key, value);

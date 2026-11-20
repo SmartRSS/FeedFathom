@@ -1,15 +1,5 @@
-// Favicon selection: how an arbitrary byte payload is sized, and which of
-// several candidates wins. Kept apart from fetching them so both questions
-// can be answered without a network.
-
-// The size a favicon should ideally reach. Providers are asked for this and
-// candidates are judged against it.
 export const targetFaviconSize = 64;
 
-// Some favicon providers return an error placeholder (e.g. an HTML 404 page,
-// or HTML-entity-escaped SVG markup) with a 200 status and a plausible
-// content-type. Parse actual magic bytes / markup to size the result and
-// reject anything that isn't really an image.
 export function imageDimensions(
   buffer: Buffer,
 ): { width: number; height: number } | undefined {
@@ -75,9 +65,6 @@ export function isIco(buffer: Buffer): boolean {
   );
 }
 
-// Prefers the smallest candidate that still meets `target`, over always
-// grabbing the biggest available -- falls back to the biggest undersized
-// candidate only when nothing meets the target at all.
 export function isBetterFavicon(
   candidateSize: number,
   bestSize: number,

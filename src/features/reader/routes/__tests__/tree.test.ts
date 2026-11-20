@@ -5,9 +5,6 @@ import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 import type { AuthedUser } from "#features/auth/session-plugin.ts";
 
-// A source's favicon URL carries the SQL-computed content fingerprint
-// (getUserSources) as ?v= (#902), so the browser can cache the response
-// forever: the URL only changes when sources.favicon does.
 const services = {
   foldersDataService: strictFake<FoldersDataService>({
     getUserFolders: async () => [],

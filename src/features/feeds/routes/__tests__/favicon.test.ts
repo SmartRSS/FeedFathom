@@ -13,8 +13,6 @@ const serve = (dataUrl: string) =>
     },
   );
 
-// private: the route is behind the session cookie, so no shared cache may
-// keep a copy.
 test("serves an image with a restrictive CSP, nosniff and a private cache", async () => {
   const response = await serve("data:image/svg+xml;base64,PHN2Zy8+");
   if (!(response instanceof Response)) throw new Error("Expected a Response");

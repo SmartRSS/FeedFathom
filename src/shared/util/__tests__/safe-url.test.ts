@@ -56,7 +56,6 @@ test("rejects a URL whose resolved scheme is not http(s)", () => {
   expect(safeHttpUrl("file.txt", "ftp://example.com/dir")).toBe("");
 });
 
-// No route serves these, so a link to one would open "Page not found".
 test("gives a newsletter article's /article/ path no link", () => {
   expect(safeArticleUrl("/article/abc-123", BASE)).toBe("");
 });

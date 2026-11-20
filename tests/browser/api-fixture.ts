@@ -44,10 +44,6 @@ import {
 } from "#shared/contracts/responses.ts";
 import { invalidRequestMessage } from "#platform/http/json.ts";
 
-// Answers as the server does: the body is checked against the contract the
-// SPA decodes it with, at lint time and again when the test runs, since a
-// spread escapes TypeScript's excess-property check and the contracts are
-// exact.
 export function respond<S extends TSchema>(
   route: Route,
   schema: S,
@@ -66,7 +62,6 @@ export function respond<S extends TSchema>(
 export const refuse = (route: Route, status: number, error: string) =>
   respond(route, errorResponse, { error }, status);
 
-// An answer that breaks the contract on purpose, to test how the SPA takes it.
 export const malformed = (route: Route, body: unknown) =>
   route.fulfill({ json: body });
 
@@ -116,10 +111,6 @@ const article = {
   url: "https://articles.example/first",
 } satisfies Article;
 
-// Two more Tech News articles alongside `article`, only returned when
-// `multipleArticles` is on -- exercises select-all/multi-delete without
-// changing the article count every other existing test already asserts
-// against (several match on "First article" as if it may be the only row).
 const secondArticle = {
   ...article,
   guid: "article-12",
@@ -135,14 +126,11 @@ const thirdArticle = {
   url: "https://articles.example/third",
 };
 
-// Tall enough to scroll the reader pane well past one viewport (#718).
 const longContent = Array.from(
   { length: 300 },
   (_, index) => `<p>Paragraph ${index} of a very long article.</p>`,
 ).join("");
 
-// A first page worth of rows, so the article list overflows and a scroll
-// position exists to restore (#718).
 const manyArticles = Array.from({ length: 60 }, (_, index) => ({
   ...article,
   guid: `article-${100 + index}`,
@@ -164,8 +152,6 @@ const subscribedArticle = {
   url: "https://articles.example/subscribed",
 } satisfies Article;
 
-// The confirmation mail a newsletter sends to a minted address, which can
-// arrive before the user subscribes to it (#1116).
 const newsletterArticle = {
   author: "editor@letters.example",
   content: "<p>Confirm your subscription</p>",
@@ -176,7 +162,6 @@ const newsletterArticle = {
   sourceId: 21,
   title: "Confirm your subscription",
   updatedAt: null,
-  // Newsletter articles have no page of their own (safeArticleUrl).
   url: "",
 } satisfies Article;
 
@@ -193,20 +178,14 @@ const summary = (item: Article, read = false): ArticleSummary => ({
 type ApiFixtureState = {
   articleRequests: number;
   authenticated: boolean;
-  // Mail to a newsletter address, answered as the server would: accepted
-  // only once the address has been reserved.
   deliverNewsletter: (to: string) => boolean;
-  // While set, POST /api/newsletter-address fails as an outage would.
   failReservations: boolean;
   newsletterDelivered: boolean;
   newsletterSubscription: string | undefined;
   reservedAddresses: string[];
-  // One entry per PATCH /api/articles: the articleIdList it carried, so the
-  // mark-as-read policy tests can count requests and check batching (#714).
   readMarks: number[][];
   readArticleIds: Set<number>;
   findRequests: number;
-  // With discoveryRace, the slow.xml preview is held until this is called.
   releaseSlowPreview: () => void;
   removedArticleIds: number[];
   removedFolderIds: number[];
@@ -221,17 +200,13 @@ type ApiFixtureState = {
 };
 
 export async function installApiFixture(
-  // A context also routes what a controlling service worker fetches.
   page: BrowserContext | Page,
   options: {
     admin?: boolean;
     authenticated?: boolean;
     discoveryRace?: boolean;
-    // A second folder, "Later", with nothing in it.
     emptyFolder?: boolean;
     notAdmin?: boolean;
-    // Tech News keeps failing with this reason, its last success that long
-    // ago; its articles stay.
     failing?: { daysSinceSuccess: number; reason: string };
     folderCreateFailure?: boolean;
     foldersFailure?: boolean;
@@ -290,8 +265,6 @@ export async function installApiFixture(
       });
     }
 
-    // The login view reads this to decide whether to offer a reset link, so
-    // it is fetched on every visit to /login, not just on the register page.
     if (method === "GET" && url.pathname === "/api/register") {
       return respond(route, registrationResponse, {
         passwordResetEnabled: options.passwordResetEnabled ?? false,
@@ -314,9 +287,6 @@ export async function installApiFixture(
       return respond(route, successResponse, { success: true });
     }
 
-    // Two sessions for the signed-in account: id 1 stands in for the
-    // browser making the request, id 2 for a second device. Revocations
-    // update the list, so the options page can be asserted to shrink.
     if (method === "GET" && url.pathname === "/api/options/sessions") {
       if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       const sessions: SessionEntry[] = [
@@ -344,7 +314,6 @@ export async function installApiFixture(
       return respond(route, sessionsResponse, { sessions });
     }
 
-    // A change signs out every other session, as the server's does.
     if (method === "POST" && url.pathname === "/api/options/password") {
       if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       state.revokedOtherSessions = true;
@@ -373,8 +342,6 @@ export async function installApiFixture(
       return respond(route, successResponse, { success: true });
     }
 
-    // 204 is the one answer EventSource never retries, so by default the
-    // dashboard runs on its timer poll, as behind a proxy that eats streams.
     if (method === "GET" && url.pathname === "/api/events") {
       return route.fulfill({ status: 204 });
     }
@@ -429,9 +396,6 @@ export async function installApiFixture(
     if (method === "POST" && url.pathname === "/api/articles") {
       if (!state.authenticated) return refuse(route, 401, "Unauthorized");
       state.articleRequests += 1;
-      // Search (#697) is answered by Postgres full text in the real app; the
-      // fixture only has to prove the client asked across subscriptions
-      // rather than for the selected feed, so a title substring will do.
       const {
         filter = "unread",
         query,
@@ -693,7 +657,6 @@ export async function installApiFixture(
         state.newsletterSubscription = body.sourceUrl;
         return respond(route, subscriptionResponse, { sourceId: 21 });
       }
-      // Addresses are minted only: the server refuses one typed by hand.
       if (body.sourceUrl.endsWith("@mail.example"))
         return refuse(route, 422, invalidRequestMessage);
       expect(body).toEqual({
@@ -706,11 +669,8 @@ export async function installApiFixture(
       return respond(route, subscriptionResponse, { sourceId: 9 });
     }
 
-    // The admin page's source list, with the two changes it can make. Only
-    // the 401 matters to the specs, so the changes are acknowledged, not kept.
     if (url.pathname === "/api/admin") {
       if (!state.authenticated) return refuse(route, 401, "Unauthorized");
-      // What the server answers a signed-in account that isn't an admin.
       if (options.notAdmin) return refuse(route, 403, "Unauthorized");
       if (method === "GET")
         return respond(route, adminSourcesResponse, [

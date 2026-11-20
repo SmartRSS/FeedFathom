@@ -22,7 +22,6 @@ describe("queued refresh merging with BullMQ", () => {
   const jobId = parseSourceJobId(source.id);
   const pendingKey = pendingParseRefreshKey(source.id);
   const enqueuer = new SourceEnqueuer(queue, connection);
-  // The follow-up a run of the source's job would owe, if any.
   const followUp = async () => {
     const parsed: ParseRequest[] = [];
     await enqueuer.runParse(source, async (request) => {
@@ -43,8 +42,6 @@ describe("queued refresh merging with BullMQ", () => {
     await connection.quit();
   });
 
-  // [queued job's skipCache, the request's, pending follow-up, merged result]:
-  // a bypass from any of the three wins.
   const merges: [boolean | undefined, boolean, string | null, boolean][] = [
     [undefined, false, null, false],
     [undefined, false, "0", false],

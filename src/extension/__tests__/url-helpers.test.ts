@@ -5,7 +5,6 @@ import {
   targetUrl,
 } from "../url-helpers.ts";
 
-// The rule itself is secureOrigin's, tested in safe-url.test.ts.
 describe("canonicalizeInstance", () => {
   test("keeps a secure origin in its canonical form", () => {
     expect<string | undefined>(

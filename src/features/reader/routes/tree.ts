@@ -5,8 +5,6 @@ import { treeResponse } from "#shared/contracts/responses.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
 import { isSnoozed } from "#shared/util/snooze.ts";
 
-// One failed fetch is usually a blip the next poll recovers from; two in a
-// row, with the backoff between them, is worth telling the reader about.
 const failingAfter = 2;
 
 export async function getTreeHandler(
@@ -21,10 +19,6 @@ export async function getTreeHandler(
     foldersDataService.getUserFolders(user.id),
   ]);
   const { children, roots } = groupByFolder(sources, (source) => {
-    // Snooze (#725) is display-level suppression: the stored unread count
-    // keeps accumulating so the backlog survives, but while the pause is
-    // active the tree shows none of it -- the same answer the unread article
-    // list gives, evaluated lazily here so expiry needs no job.
     const snoozed = isSnoozed(source.pausedUntil);
     return {
       failing:
@@ -34,8 +28,6 @@ export async function getTreeHandler(
               reason: source.recentFailureDetails ?? "",
             }
           : null,
-      // No fingerprint means no favicon (#902): a bare id would still 404,
-      // but on every load, so a missing icon gets no URL at all instead.
       favicon: source.faviconFingerprint
         ? `/api/favicon/${source.id}?v=${source.faviconFingerprint}`
         : null,

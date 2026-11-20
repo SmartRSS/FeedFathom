@@ -8,8 +8,6 @@ import {
   webUrlPolicy,
 } from "#shared/validation/typebox-policy.ts";
 
-// withMatchingPasswords and withMatchingChangedPasswords are held to their
-// contract at the routes that use them.
 test("checks URL and email policies", () => {
   expect(Value.Check(webUrlPolicy, "https://feed.example/rss")).toBe(true);
   expect(Value.Check(webUrlPolicy, "javascript:alert(1)")).toBe(false);

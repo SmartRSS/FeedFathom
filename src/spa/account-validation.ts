@@ -3,11 +3,6 @@ import {
   maxEmailAddressLength,
 } from "#shared/validation/address-shape.ts";
 
-// One set of rules for every account form, checked before anything is
-// sent, so login, registration and both password-reset steps report a
-// missing or malformed field the same way: in a sentence under the field.
-// The forms turn the browser's own validation off (novalidate), whose
-// bubbles spoke in a different voice and stopped the app's own messages.
 export type AccountField = "confirm" | "email" | "password" | "username";
 
 const missing: Record<AccountField, string> = {
@@ -24,7 +19,6 @@ export function accountFieldErrors(
   for (const field of ["username", "email", "password", "confirm"] as const) {
     const value = values[field];
     if (value === undefined) continue;
-    // Passwords are taken as typed; a name or address of spaces is empty.
     const given =
       field === "password" || field === "confirm" ? value : value.trim();
     if (!given) errors[field] = missing[field];

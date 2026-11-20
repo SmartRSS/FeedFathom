@@ -12,10 +12,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// The dashboard renders this list in the order it arrives, and an OPML export
-// should be byte-identical for an unchanged tree. Both need a stable order:
-// renaming a folder is an UPDATE, and Postgres writes the new row version at the end of
-// the heap, so an unordered select returned the renamed folder last.
 test("folders come back by name, including after a rename", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);

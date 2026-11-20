@@ -11,8 +11,6 @@ afterAll(() => {
   redis.close();
 });
 
-// Each test gets its own user id so no counter outlives the test it came
-// from into the next one.
 function userId() {
   return Number(process.hrtime.bigint() % 1_000_000_000n);
 }

@@ -103,6 +103,7 @@
       "error",
       { "allow": ["src/platform/db/schema.ts"] }
     ],
+    "feedfathom/no-comments": ["error", { "budget": {} }],
     "feedfathom/schema-compile-module-scope": "error",
     "oxc/no-const-enum": "error",
     "prefer-arrow-callback": "error",

@@ -131,7 +131,6 @@ describe("OpmlParser", () => {
       "parse-opml",
     );
 
-    // Get all test case files
     const testFiles = fs
       .readdirSync(inputDirectory)
       .filter((file) => {

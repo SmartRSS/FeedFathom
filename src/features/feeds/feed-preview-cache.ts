@@ -40,8 +40,6 @@ const previewWireSchema = Type.Object(
   {
     articles: Type.Array(previewArticleWireSchema),
     description: Type.Optional(Type.String()),
-    // The full parsed feed, so subscribe can map it later. The feed parser
-    // caps a body at 24 MiB, which bounds this too.
     feed: Type.Optional(parsedFeedWireSchema),
     feedUrl: Type.String(),
     finalUrl: Type.Optional(Type.String()),
@@ -68,8 +66,6 @@ const decodeFeed = (
   })),
 });
 
-// Projects the parsed feed field by field: the feed parser's items expose
-// their fields through prototype getters, which JSON.stringify skips.
 const encodeFeed = (
   feed: FeedMapperInput,
 ): Static<typeof parsedFeedWireSchema> => ({
@@ -106,14 +102,9 @@ const decodePreview = (
   expectedUrl: string,
 ): FeedPreview | undefined => {
   if (!previewWireCheck.Check(value)) return undefined;
-  // A cache key collision (or a hand-edited Redis entry) must not hand back
-  // another feed's preview under this URL.
   if (value.feedUrl !== expectedUrl) return undefined;
 
   return {
-    // A preview cached before enclosures or updatedAt existed lacks them;
-    // subscribe imported such an article without enclosures, updated when
-    // it was published.
     articles: value.articles.map(
       ({ enclosures = [], publishedAt, updatedAt, ...article }) => ({
         ...article,
@@ -174,8 +165,6 @@ export class FeedPreviewCache {
       if (!preview) await this.redis.del(key);
       return preview;
     } catch (error_: unknown) {
-      // A miss makes subscribe queue the feed for the worker instead, so the
-      // subscription still works; the trace says why it took longer.
       console.error(`Failed to read feed preview for ${feedUrl}:`, error_);
       return undefined;
     }
@@ -194,9 +183,6 @@ export class FeedPreviewCache {
         ttlMs,
       );
     } catch (error_: unknown) {
-      // Discovery still answered, but the subscribe that follows it will
-      // find nothing and has no way to say why. Leave a trace pointing at
-      // the storage side rather than letting this look like a lost preview.
       console.error(`Failed to store feed preview for ${feedUrl}:`, error_);
     }
   }

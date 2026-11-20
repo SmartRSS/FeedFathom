@@ -10,8 +10,6 @@ export const successResponse = Type.Object(
   exact,
 );
 
-// The body of every JSON error the API answers with. `detail` is the raw
-// reason behind `error`, where the server keeps one for an admin's Details.
 export const errorResponse = Type.Object(
   { detail: Type.Optional(Type.String()), error: Type.String() },
   exact,
@@ -29,9 +27,6 @@ const sessionUser = Type.Object(
 );
 export const sessionResponse = Type.Object(
   {
-    // Present only where mail ingest is configured: the host newsletter
-    // addresses are minted at, and the SPA's only signal that email
-    // subscriptions are accepted at all.
     mailDomain: Type.Optional(Type.String()),
     user: Type.Union([sessionUser, Type.Null()]),
   },
@@ -41,18 +36,10 @@ export const sessionResponse = Type.Object(
 const sessionEntry = Type.Object(
   {
     createdAt: jsonDate,
-    // The session that made the request, which the options page labels
-    // "this session" and does not offer a sign-out button for -- that is
-    // what logout is for.
     current: Type.Boolean(),
     expiresAt: jsonDate,
     id,
-    // Last request this sid answered. Creation time alone cannot
-    // distinguish the old rows the created_at migration backfilled with
-    // one shared timestamp, and it goes stale the moment a browser
-    // updates -- activity is what the session list actually shows.
     lastUsedAt: jsonDate,
-    // Null when no request on this session sent a User-Agent.
     userAgent: Type.Union([Type.String(), Type.Null()]),
   },
   exact,
@@ -64,9 +51,6 @@ export const sessionsResponse = Type.Object(
 
 export const registrationResponse = Type.Object(
   {
-    // Whether outgoing mail is configured, which is what a reset needs to
-    // deliver a link. The login view reads it to decide whether the "forgot
-    // your password" link means anything on this instance.
     passwordResetEnabled: Type.Boolean(),
     registrationStatus: Type.Union([
       Type.Literal("FIRST_USER"),
@@ -92,8 +76,6 @@ const treeNodeResponse = Type.Cyclic(
       ),
       Type.Object(
         {
-          // Set while the source's recent fetches keep failing: the last
-          // error and when a fetch last succeeded. Absent on older servers.
           failing: Type.Optional(
             Type.Union([
               Type.Object(
@@ -114,8 +96,6 @@ const treeNodeResponse = Type.Cyclic(
             Type.Literal("websub"),
           ]),
           name: Type.String(),
-          // Absent on servers older than per-source snooze (#725); clients
-          // read a missing value as not snoozed.
           pausedUntil: Type.Optional(Type.Union([jsonDate, Type.Null()])),
           type: Type.Literal("source"),
           uid: Type.String(),
@@ -138,13 +118,7 @@ const articleSummaryResponse = Type.Object(
     author: Type.String(),
     id,
     publishedAt: jsonDate,
-    // Decided by the server, with the same expression the read filter uses,
-    // so a row can never render as read that the read view would not list.
     read: Type.Boolean(),
-    // The article's updated_at as Postgres prints it, microseconds and all:
-    // a rewrite can move it by one microsecond, which a JSON date would
-    // lose. Null until a feed first rewrites the article; sent only when the
-    // request asks for it.
     revision: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     sourceId: id,
     title: Type.String(),
@@ -154,9 +128,6 @@ const articleSummaryResponse = Type.Object(
 );
 export const articlesResponse = Type.Array(articleSummaryResponse);
 
-// A file the feed attached to an article (RSS <enclosure>, Media RSS,
-// JSON Feed attachments): a podcast episode, a video, an image. Both URLs are
-// http(s) by the time they are stored.
 export const enclosureSchema = Type.Object(
   {
     medium: Type.Union([
@@ -178,8 +149,6 @@ export const articleResponse = Type.Object(
   {
     author: Type.String(),
     content: Type.String(),
-    // Optional: the service worker keeps /api/article responses cached from
-    // before enclosures existed.
     enclosures: Type.Optional(Type.Array(enclosureSchema)),
     guid: Type.String(),
     id,
@@ -275,7 +244,6 @@ export const adminSourcesResponse = Type.Array(
   ),
 );
 
-// Old feed URL to the URL it permanently redirects to.
 export const redirectsResponse = Type.Record(Type.String(), Type.String());
 
 export type Article = Static<typeof articleResponse>;

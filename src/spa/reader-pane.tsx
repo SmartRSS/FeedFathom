@@ -35,11 +35,9 @@ function ReaderBody(props: { article: Article; content: ReaderContent }) {
 
 export function ReaderPane(props: {
   backPane(): void;
-  // What the pane says with no article to show.
   emptyMessage: string;
   feedName(article: Article): string | undefined;
   focused: boolean;
-  // One article is selected, whether or not its body is in.
   hasArticle: boolean;
   onDelete(event: Event): void;
   onKeyDown(event: KeyboardEvent): void;
@@ -90,7 +88,6 @@ export function ReaderPane(props: {
                 displayModes.find((option) => option.mode === value)?.mode ??
                   "FEED",
               );
-              // Reopening reads the mode it opens in.
               flush();
               props.onModeChange();
             }}

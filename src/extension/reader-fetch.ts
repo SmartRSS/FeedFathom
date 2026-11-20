@@ -14,8 +14,6 @@ import {
 } from "#shared/reader-bridge.ts";
 import type { InstanceOrigin } from "./url-helpers.ts";
 
-// Narrower than typeof fetch, whose static members a test stub would also
-// have to supply.
 export type Fetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -23,8 +21,6 @@ export type Fetch = (
 
 type ValidatedUrl = { error: ReaderErrorCode } | { url: URL };
 
-// The sender must be the top frame of the configured instance and carry
-// nothing else: an extra key means this isn't the shape we vouched for.
 const isReaderSender = (sender: unknown, origin: string): boolean => {
   if (typeof sender !== "object" || sender === null) return false;
   const keys = Object.keys(sender);
@@ -83,8 +79,6 @@ const fetchArticle = async (
 
   const signal = AbortSignal.timeout(readerFetchTimeoutMs);
   try {
-    // A redirect would lead to a host nobody validated. Under "manual" every
-    // browser answers one with an opaqueredirect, which hides its target.
     const response = await fetchImplementation(validated.url, {
       credentials: "omit",
       redirect: "manual",

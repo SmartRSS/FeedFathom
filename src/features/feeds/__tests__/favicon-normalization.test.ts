@@ -5,8 +5,6 @@ import { normalizeFavicon } from "../favicon-normalization.ts";
 type Rgba = [number, number, number, number];
 type Paint = (x: number, y: number) => Rgba;
 
-// Opaque red in the top-left quadrant, fully transparent everywhere else, so
-// both the alpha and the row order (BMP rows run bottom-up) are checked.
 const quadrant: Paint = (x, y) =>
   x < 8 && y < 8 ? [255, 0, 0, 255] : [0, 0, 0, 0];
 
@@ -15,8 +13,6 @@ const noise: Paint = (x, y) => {
   return [n & 255, (n >> 8) & 255, (n >> 16) & 255, 255];
 };
 
-// A 32-bit BMP with a V4 header, the one BMP flavour Bun.Image decodes with
-// alpha: the source for the PNG and JPEG fixtures.
 function v4Bmp(width: number, height: number, paint: Paint): Buffer {
   const header = Buffer.alloc(122);
   header.write("BM", 0, "latin1");
@@ -54,9 +50,6 @@ function jpeg(size: number): Promise<Buffer> {
   return new Bun.Image(v4Bmp(size, size, noise)).jpeg().buffer();
 }
 
-// An ICO BMP frame: BITMAPINFOHEADER with a doubled height, a palette for
-// <= 8 bpp, the bottom-up XOR bitmap, then the 1-bit AND mask (1 = transparent).
-// Palette frames index a two-colour palette: 0 = black, 1 = red.
 function icoBmpFrame(size: number, bpp: 4 | 8 | 32, paint: Paint): Buffer {
   const header = Buffer.alloc(40);
   header.writeUInt32LE(40, 0);
@@ -105,8 +98,6 @@ function ico(frames: { size: number; bpp: number; data: Buffer }[]): Buffer {
   return Buffer.concat([directory, ...frames.map(({ data }) => data)]);
 }
 
-// Reads back an image's RGBA pixels, via Bun.Image's PNG encoder, so a test can
-// check what a browser would draw.
 async function rgba(image: Buffer) {
   const encoded = await new Bun.Image(image).png().buffer();
   const width = encoded.readUInt32BE(16);

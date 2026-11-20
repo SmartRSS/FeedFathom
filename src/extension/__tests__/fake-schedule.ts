@@ -1,7 +1,5 @@
 import type { Schedule } from "../menu-sync.ts";
 
-// A clock the test advances by hand, so debounces are exact rather than
-// raced against real time.
 export const fakeSchedule = () => {
   let now = 0;
   let timers: { at: number; callback: () => void }[] = [];

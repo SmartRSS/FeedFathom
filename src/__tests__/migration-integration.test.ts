@@ -20,8 +20,6 @@ const expectedIndexNames = [
   "sessions_sid_unique",
   "sessions_user_id_idx",
 ].toSorted();
-// The UNIQUE(user_id, source_id) constraint's own index covers the same
-// ordered columns, so this nonunique copy was dropped by 0007.
 const redundantIndexName = "user_sources_user_source_idx";
 
 async function resetDatabase(client: SQL) {
@@ -62,12 +60,6 @@ async function expectMigrationJournaledOnce(
   expect(entry?.count).toBe(1);
 }
 
-// The migration history was squashed to a single baseline, so there is no
-// in-repo upgrade path from the pre-squash history -- the only database that has
-// ever run the old 31 migrations is production, and it is stamped as having
-// applied the baseline rather than running it. What remains testable is that
-// the baseline builds the schema the application expects, and that running
-// it twice is a no-op.
 test("applies the baseline to an empty database, idempotently", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -162,8 +154,6 @@ test("the migrator stops retrying a database it cannot sign in to", async () => 
   }
 });
 
-// An INVALID index is one an interrupted build left behind, which neither
-// answers as present nor as absent, so it fails the test outright.
 async function indexExists(client: SQL, name: string) {
   const [row] = await client<
     { valid: boolean }[]
@@ -174,8 +164,6 @@ async function indexExists(client: SQL, name: string) {
   return row !== undefined;
 }
 
-// A copy of the migrations folder whose journal stops before `tag`, standing
-// in for an installation that predates that migration.
 async function migrationsFolderBefore(tag: string) {
   const folder = await mkdtemp(join(tmpdir(), "feedfathom-migrations-"));
   await cp(currentMigrationsFolder, folder, { recursive: true });
@@ -224,8 +212,6 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
     const found = await client`SELECT "id" FROM "user_sources"
       WHERE "user_id" = ${user?.id} AND "source_id" = ${source?.id}`;
     expect(found).toHaveLength(1);
-    // A Bun SQL query only runs once `then` is called, which `rejects` never
-    // does on its own.
     await expect(
       client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
         VALUES ('again', ${source?.id}, ${user?.id})`.then(() => "inserted"),
@@ -236,11 +222,6 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
   }
 });
 
-// Every later migration runs against a database with readers in it, and 0001
-// rewrites user_articles in place. A baseline-era instance with one of
-// everything must come out the far side with nothing lost: the read and
-// removed state re-keyed onto (source, guid), the session still signed in, the
-// article searchable and carrying the enclosures default.
 test("upgrading a populated baseline database keeps every row and its state", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -307,9 +288,6 @@ test("upgrading a populated baseline database keeps every row and its state", as
   }
 });
 
-// Before 0013 any account could subscribe to any address, so one email source
-// can have several subscribers. The earliest becomes its owner (ties broken
-// by subscription id); one without subscribers, and every feed, has none.
 test("upgrading gives each email source its earliest subscriber as owner", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -335,13 +313,11 @@ test("upgrading gives each email source its earliest subscriber as owner", async
         ('https://example.com/feed', 'https://example.com', 'feed')
       RETURNING "id", "url"`;
     const [shared, tied, , feed] = sources.map(({ id }) => id);
-    // b subscribed to the shared address first, though a's row is older.
     await client`INSERT INTO "user_sources" ("name", "source_id", "user_id", "created_at")
       VALUES
         ('x', ${shared}, ${a}, '2026-02-01'),
         ('x', ${shared}, ${b}, '2026-01-01'),
         ('x', ${feed}, ${a}, '2026-01-01')`;
-    // c's row has the lower id but is stored, and so scanned, after a's.
     await client`INSERT INTO "user_sources" ("id", "name", "source_id", "user_id", "created_at")
       VALUES
         (20, 'x', ${tied}, ${a}, '2026-01-01'),
@@ -361,8 +337,6 @@ test("upgrading gives each email source its earliest subscriber as owner", async
       SELECT count(*)::int AS "count" FROM "user_sources"`;
     expect(count).toBe(5);
     expect(await indexExists(client, "sources_reserved_by_idx")).toBe(true);
-    // SET NULL, so code rolled back to before 0013 deleting an owner leaves
-    // a shared source to its other subscribers.
     const [{ onDelete } = { onDelete: "" }] = await client<
       { onDelete: string }[]
     >`SELECT confdeltype AS "onDelete" FROM pg_constraint
@@ -407,7 +381,6 @@ test("upgrading decodes stored feed names and strips markup from authors", async
     const [folder] = await client<{ name: string }[]>`
       SELECT "name" FROM "user_folders"`;
     expect(folder?.name).toBe("Tom & Jerry");
-    // One pass, as the parser does on import: "&#38;#39;" leaves "&#39;".
     const [subscription] = await client<{ name: string }[]>`
       SELECT "name" FROM "user_sources"`;
     expect(subscription?.name).toBe(
@@ -427,9 +400,6 @@ test("upgrading decodes stored feed names and strips markup from authors", async
   }
 });
 
-// sid is a random UUID per login, so duplicates should never exist. If one
-// does, the unique index build must fail the whole migration transaction
-// rather than leave the user_id index applied without it.
 test("a duplicate sid fails the session index migration and applies none of it", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -464,9 +434,6 @@ test("a duplicate sid fails the session index migration and applies none of it",
   }
 });
 
-// A migrations folder of its own, written as drizzle-kit would, so a pending
-// migration can do what no real one does yet. `migrateTo` journals only the
-// first `count` entries, so a later, longer call stands in for an upgrade.
 async function scratchMigrations(statements: readonly string[]) {
   const folder = await mkdtemp(join(tmpdir(), "feedfathom-migrations-"));
   const entries = statements.map((_, idx) => ({
@@ -496,17 +463,10 @@ async function scratchMigrations(statements: readonly string[]) {
   return { folder, migrateTo };
 }
 
-// Applied before every case below: `widget_y` reads a column that only a
-// pending migration adds, which PostgreSQL finds out only once it evaluates
-// the function while building an index on it. The index build runs with a
-// search_path of pg_catalog alone, hence the qualified name.
 const scratchBaseline = `CREATE TABLE "widgets" ("id" integer, "old" integer, "label" text);--> statement-breakpoint
 CREATE TABLE "widget_settings" ("id" integer);--> statement-breakpoint
 CREATE FUNCTION "widget_y"("n" integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN (SELECT "y" FROM "public"."widget_settings" LIMIT 1); END $$;`;
 
-// The prebuild runs before any pending migration applies, so an index on
-// something one of them introduces has nothing to build on yet. It has to
-// wait for its own migration rather than stop every one from applying.
 test.each([
   [
     "a column a pending migration adds",
@@ -559,9 +519,6 @@ test.each([
   }
 });
 
-// A data error is not something a pending migration fixes, so it stops the
-// deploy rather than falling back to the write-blocking build. The INVALID
-// index the failed build leaves is dropped and rebuilt by the next run.
 test("a failed prebuild stops the deploy and the next run rebuilds its index", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -591,10 +548,6 @@ test("a failed prebuild stops the deploy and the next run rebuilds its index", a
   }
 });
 
-// The startup-gate test forges a journal row for a build newer than this one,
-// so the last word has to be a real migration. CI points DATABASE_URL and
-// MIGRATION_TEST_DATABASE_URL at the same ephemeral database, and leaving a
-// forged journal behind breaks whatever runs next against it.
 afterAll(async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);

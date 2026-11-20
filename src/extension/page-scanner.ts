@@ -8,8 +8,6 @@ import {
 import type { Schedule } from "./menu-sync.ts";
 
 export const visibilityDebounceMs = 500;
-// A single-page app swaps its content after the address changes, so the
-// rescan waits for the new page to settle.
 export const scanDebounceMs = 1_500;
 
 export type PageScannerEnvironment = {
@@ -20,9 +18,6 @@ export type PageScannerEnvironment = {
   send(message: ListFeedsMessage | VisibilityLostMessage): void;
 };
 
-// Reports the feeds on the current page to the background, rescanning when
-// a single-page app changes the address. A scan that finishes after the
-// address moved on is dropped: its feeds belong to a page no longer shown.
 export const createPageScanner = (environment: PageScannerEnvironment) => {
   let currentHref = environment.href();
   let latestFeeds: FeedData[] = [];

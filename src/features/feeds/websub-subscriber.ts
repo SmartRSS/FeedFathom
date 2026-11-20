@@ -7,16 +7,8 @@ import {
 } from "#features/feeds/websub.ts";
 import { shouldAttemptWebSubSubscribe } from "#features/feeds/websub-lease-policy.ts";
 
-// How often the renewal job runs. The renewal query takes every lease that
-// expires before the next run.
 export const webSubRenewalIntervalMs = 24 * 60 * 60_000;
 
-/**
- * Asks hubs to push a source's updates to this instance, first on discovery
- * and then again before each lease runs out. A refused or unreachable hub
- * marks the subscription failed, which sends the source back to ordinary
- * polling.
- */
 export class WebSubSubscriber {
   constructor(
     private readonly websubStateService: Pick<
@@ -27,23 +19,15 @@ export class WebSubSubscriber {
       | "recordWebSubDiscovery"
     >,
     private readonly hubPoster: HubPoster,
-    // Undefined turns WebSub off: without a public origin there is no
-    // callback URL a hub could reach.
     private readonly publicOrigin: URL | undefined,
   ) {}
 
-  /** Whether a fetch of a source in this state should look for a hub. */
   public wants(status: undefined | WebSubStatus): boolean {
     return (
       this.publicOrigin !== undefined && shouldAttemptWebSubSubscribe(status)
     );
   }
 
-  /**
-   * Subscribes to the hub a fetch discovered. Hub failures are recorded on
-   * the source rather than thrown: an unreachable hub says nothing about the
-   * feed's health, so it must not fail the fetch that found it.
-   */
   public async subscribe(sourceId: number, discovery: WebSubDiscovery) {
     const publicOrigin = this.publicOrigin;
     if (!publicOrigin) return;
@@ -68,7 +52,6 @@ export class WebSubSubscriber {
     }
   }
 
-  /** Renews every verified subscription whose lease ends before the next run. */
   public async renewDue() {
     const publicOrigin = this.publicOrigin;
     if (!publicOrigin) return;

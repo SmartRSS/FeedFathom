@@ -104,8 +104,6 @@ export class MainWorker {
   async initialize() {
     await this.setupScheduledTasks();
     await this.enqueueDueSources();
-    // Resolves once both of the worker's Redis connections are up, the
-    // blocking one included, so the worker is fetching jobs from here on.
     await this.startWorker().waitUntilReady();
   }
 
@@ -120,22 +118,14 @@ export class MainWorker {
     );
   }
 
-  // Anything thrown, including by the deferral itself (a Redis error, a
-  // poisoned retryAt getter), is logged and acknowledged, so BullMQ never
-  // holds the job in its failure state. The outcomes something reads stay
-  // in PostgreSQL where their owner writes them: parseSource records a
-  // source's failure, and the WebSub subscriber a refused renewal.
   private readonly processJob = async (job: MainWorkerJob) => {
     try {
       await this.runJob(job);
     } catch (error: unknown) {
-      // The one value that leaves the processor: BullMQ reads it as "moved
-      // to delayed", not as a failure.
       if (await this.deferred(job, error)) throw new DelayedError();
     }
   };
 
-  // True once the job waits for its retry. Anything else is logged.
   private async deferred(job: MainWorkerJob, error: unknown) {
     try {
       if (!(error instanceof HttpDeferredError)) throw error;
@@ -145,10 +135,7 @@ export class MainWorker {
     } catch {
       try {
         console.error(`Error processing ${job.name} job:`, error);
-      } catch {
-        // Swallowed without logging: an adversarial thrown value (a
-        // poisoned custom-inspect symbol) is what made the log call throw.
-      }
+      } catch {}
       return false;
     }
   }
@@ -190,9 +177,6 @@ export class MainWorker {
         if (!source) {
           throw new Error(`Source with ID ${input.data.id} not found`);
         }
-        // Mail delivers a newsletter's articles; its address is not a URL,
-        // so a fetch would only record a failure and mark it broken. A
-        // refresh request ("Try again") can still queue one.
         if (source.kind === "email") break;
         await sourceEnqueuer.runParse(input.data, async (request) => {
           await feedParser.parseSource({ ...source, ...request });
@@ -221,8 +205,6 @@ export class MainWorker {
       [JobName.WebSubRenewal, webSubRenewalIntervalMs],
     ];
     for (const [name, every] of schedule) {
-      // Without the template every tick stays in the completed set forever:
-      // a 20-second scheduler had piled up a million entries in Redis.
       // eslint-disable-next-line no-await-in-loop -- BullMQ scheduler registration is ordered.
       await bullmqQueue.upsertJobScheduler(
         name,

@@ -3,17 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-// Two packages are replaced by a few lines in vendor/ rather than installed:
-// `fast-xml-parser` (reimplemented on Bun.XML for @rowanmanning/feed-parser)
-// and `linkedom` (the browser's own DOMParser, for
-// @extractus/article-extractor). Both replacements are partial by design --
-// they implement what their one dependent actually uses and nothing else.
-//
-// That makes a dependency bump the risk. If a new version of the dependent
-// reaches for an API the shim never implemented, or if the resolution trick
-// stops working and the real package lands nested under the dependent, the
-// only symptom is at runtime: a crash on a feed nobody tested, or 189 KB of
-// pure-JS DOM silently back in the SPA bundle. This is that bump's alarm.
 const shims = [
   {
     dependent: "@rowanmanning/feed-parser",
@@ -36,8 +25,6 @@ async function sourceFiles(directory: string): Promise<string[]> {
     .map((entry) => join(directory, entry));
 }
 
-// Both spellings the dependents use: a destructured import or require, and a
-// whole-module require whose properties are read later.
 function importedNames(source: string, packageName: string): Set<string> {
   const names = new Set<string>();
   const specifier = String.raw`['"]${packageName}['"]`;
@@ -68,10 +55,6 @@ function importedNames(source: string, packageName: string): Set<string> {
 
 describe.each(shims)("$package shim", (shim) => {
   test("is what the dependent resolves, not a nested real package", async () => {
-    // The real packages are 2.6 MB and 900 KB of source; a nested copy is how
-    // the override silently stops applying. Bun may still nest the shim
-    // itself, since its lockfile records the override under the dependent, so
-    // compare what the dependent resolves rather than where it sits.
     const resolved = Bun.resolveSync(
       shim.package,
       join(modules, shim.dependent),
@@ -103,8 +86,6 @@ describe.each(shims)("$package shim", (shim) => {
       const source = await readFile(file, "utf8");
       for (const name of importedNames(source, shim.package)) wanted.add(name);
     }
-    // A dependent that imports nothing at all means the regexes stopped
-    // matching, not that the shim got easier.
     expect(wanted.size).toBeGreaterThan(0);
 
     const exported: object = await import(shim.package);

@@ -1,13 +1,3 @@
-/**
- * The database an integration test is allowed to drop schemas in.
- *
- * Every one of these tests begins by dropping `public` and re-migrating, so
- * the guard is the only thing between a mistyped variable and someone's real
- * database. It lives here rather than being repeated per test file for the
- * same reason any check does: four copies drift, and one of them read a
- * different environment variable entirely, so the integration run needed two
- * names set to the same value to run at all.
- */
 export function requireDisposableDatabaseUrl(): string {
   const databaseUrl = process.env["MIGRATION_TEST_DATABASE_URL"];
   if (!databaseUrl) {

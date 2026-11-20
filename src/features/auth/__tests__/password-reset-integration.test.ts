@@ -13,8 +13,6 @@ const migrationsFolder = fileURLToPath(
 
 const TOKEN_HASH = "token-hash";
 
-// One pool for the whole file: every setUp re-migrates, and a pool per test
-// adds connections that stay open until the process exits.
 const databaseUrl = requireDisposableDatabaseUrl();
 const client = new SQL(databaseUrl);
 const usersDataService = new UsersDataService(
@@ -35,15 +33,9 @@ async function setUp() {
   const userId = user!.id;
   const signIn = async (passwordHash = "old-password-hash") =>
     await usersDataService.createSession(userId, passwordHash, "This browser");
-  // client and usersDataService are the module-level singletons; the tests
-  // use them directly, so setUp hands back only what it created.
   return { signIn, userId };
 }
 
-// The spend rides in the UPDATE's WHERE clause, so "first writer wins" holds
-// against the store itself, not just against a route handler's good manners:
-// a second confirmation -- even one already past its token lookup -- matches
-// no row and must leave the winner's password standing (#809).
 test("only the first completion of a reset link spends it", async () => {
   const { signIn, userId } = await setUp();
   const sid = (await signIn()) ?? "";
@@ -62,8 +54,6 @@ test("only the first completion of a reset link spends it", async () => {
   expect(row!.password).toBe("new-password-hash");
   expect(row!.token).toBeNull();
 
-  // The link is gone now: a confirmation that was already past its lookup
-  // -- or simply arrives late -- finds no row and changes nothing.
   expect(
     await usersDataService.completePasswordReset(
       userId,
@@ -76,8 +66,6 @@ test("only the first completion of a reset link spends it", async () => {
   expect(after!.password).toBe("new-password-hash");
 });
 
-// Two confirmations submitted together, the issue's own repro: exactly one
-// wins, and the surviving password is the winner's, never the later write.
 test("simultaneous completions of one link let exactly one through", async () => {
   const { signIn, userId } = await setUp();
   const sid = (await signIn()) ?? "";
@@ -95,10 +83,6 @@ test("simultaneous completions of one link let exactly one through", async () =>
   expect(await usersDataService.authenticate(sid, null, false)).toBeUndefined();
 });
 
-// A login verifies a hash it read before the reset and issues its session
-// after: that session must not outlive the reset (#843). Issuance rechecks
-// the hash under the row lock the reset's UPDATE takes, so a login that
-// loses the race is refused and one that wins is revoked by the reset.
 test("a login using the replaced password gets no session", async () => {
   const { signIn, userId } = await setUp();
 
@@ -142,10 +126,6 @@ test("no session from the old password survives a racing reset", async () => {
   }
 });
 
-// A password change verifies the current password, hashes the replacement,
-// then writes. A reset that commits in between must stay authoritative: the
-// write carries the hash it verified and matches no row once it is gone
-// (#977).
 test("a password change authorised by the replaced password writes nothing", async () => {
   const { userId } = await setUp();
 
@@ -180,9 +160,6 @@ test("a password change authorised by the replaced password writes nothing", asy
   expect(after!.password).toBe("changed-password-hash");
 });
 
-// A change revokes what the old password opened, but not the session that
-// made it: the SPA keeps working where the user just typed the new password.
-// The login racing it on the old hash gets no session either way (#843).
 test("a password change signs out every other session and keeps the current one", async () => {
   const { signIn, userId } = await setUp();
   const current = (await signIn()) ?? "";
@@ -206,9 +183,6 @@ test("a password change signs out every other session and keeps the current one"
   expect(await signIn()).toBeUndefined();
 });
 
-// The link carries the token and only its digest is stored, so a dump of the
-// users table is not a set of working reset links; the lookup finds the
-// account by the token's digest until the link expires.
 test("a reset token is stored as a digest and found only while it is live", async () => {
   const { userId } = await setUp();
 

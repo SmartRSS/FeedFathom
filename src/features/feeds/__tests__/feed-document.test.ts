@@ -87,9 +87,6 @@ describe("feed body encoding detection", () => {
   });
 });
 
-// Feed bodies as they arrive on the wire. Markup is ASCII, so a string part is
-// one byte per char; non-ASCII text is always a literal byte array, never a JS
-// string, which would already be decoded.
 const asciiCodes = (text: string) =>
   Array.from({ length: text.length }, (_, index) => text.charCodeAt(index));
 const fromParts = (...parts: (string | number[])[]) =>
@@ -105,13 +102,13 @@ const rss = (title: number[], head: string | number[] = "") =>
 const titleOf = (body: number[], contentType: string | null) =>
   parseXmlFeed(decodeFeedBody(Uint8Array.from(body).buffer, contentType)).title;
 
-const zazolc = [0x5a, 0x61, 0xbf, 0xf3, 0xb3, 0xe6]; // "Zażółć" in ISO-8859-2
-const nihongo = [0x93, 0xfa, 0x96, 0x7b, 0x8c, 0xea]; // "日本語" in Shift_JIS
-const cafe = [0x43, 0x61, 0x66, 0xe9, 0x20, 0x80, 0x35]; // "Café €5" in windows-1252
-const zazolcUtf8 = [0x5a, 0x61, 0xc5, 0xbc, 0xc3, 0xb3, 0xc5, 0x82, 0xc4, 0x87]; // "Zażółć" in UTF-8
+const zazolc = [0x5a, 0x61, 0xbf, 0xf3, 0xb3, 0xe6];
+const nihongo = [0x93, 0xfa, 0x96, 0x7b, 0x8c, 0xea];
+const cafe = [0x43, 0x61, 0x66, 0xe9, 0x20, 0x80, 0x35];
+const zazolcUtf8 = [0x5a, 0x61, 0xc5, 0xbc, 0xc3, 0xb3, 0xc5, 0x82, 0xc4, 0x87];
 const zazolcUtf16le = [
   0x5a, 0x00, 0x61, 0x00, 0x7c, 0x01, 0xf3, 0x00, 0x42, 0x01, 0x07, 0x01,
-]; // "Zażółć" in UTF-16LE
+];
 
 describe("decoded feed titles from encoded bytes", () => {
   test.each([
@@ -175,7 +172,6 @@ const fixture = (name: string) =>
   Bun.file(join(import.meta.dir, "feed-parser-cases", name)).text();
 const naad = () => fixture("naad-bilingual.xml");
 const entriesOf = (text: string) => text.match(/<entry>.*?<\/entry>/gsu) ?? [];
-// The feed with its entries replaced by the given ones.
 const withEntries = (text: string, entries: string[]) =>
   text.replace(/<entry>.*<\/entry>/su, entries.join("\n"));
 const articlesOf = (text: string) =>
@@ -236,8 +232,6 @@ test("resolves relative entry links against a redirected feed URL", async () => 
   );
 });
 
-// Each read of a feed-level fallback scans every child of the channel, so one
-// read per item made a 20 MiB preview take minutes (#1031).
 test.each([
   [
     "RSS",
@@ -288,7 +282,6 @@ describe("entries sharing an id", () => {
     expect(articles.every(({ guid }) => guid.startsWith(`${naadId}#`))).toBe(
       true,
     );
-    // NAAD entries carry no <published>.
     expect(articles.map(({ publishedAt }) => publishedAt)).toEqual(
       Array.from({ length: 4 }, () => new Date("2026-10-05T10:01:11Z")),
     );
@@ -351,8 +344,6 @@ describe("entries sharing an id", () => {
 });
 
 describe("feed dates", () => {
-  // Under UTC a zoneless date reads the same either way, so pin a zone that
-  // tells local time and UTC apart.
   const hostZone = process.env["TZ"];
   beforeAll(() => {
     process.env["TZ"] = "America/New_York";
@@ -363,7 +354,6 @@ describe("feed dates", () => {
   });
 
   const ingestedAt = Date.parse("2026-10-14T00:00:00Z");
-  // Each fixture entry's title is the instant its date names.
   const expectTitledInstants = (
     parsed: Parameters<typeof mapFeedToPreview>[0],
   ) =>

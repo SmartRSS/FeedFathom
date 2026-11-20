@@ -1,6 +1,3 @@
-// The in-document declaration (XML prolog, HTML <meta>) is ASCII-compatible,
-// so decoding a body's prefix as windows-1252 (a superset of ASCII with no
-// invalid byte sequences) is always safe just to go looking for it.
 function bomEncoding(bytes: Uint8Array): string | undefined {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return "utf-8";
@@ -10,16 +7,11 @@ function bomEncoding(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-// The raw label, unvalidated: whether an unknown one is ignored is the
-// caller's policy.
 function headerCharset(contentType: string | null): string | undefined {
   const charset = /charset=([^;]+)/i.exec(contentType ?? "")?.[1]?.trim();
   return charset ? charset.replace(/^"(.*)"$/, "$1") : undefined;
 }
 
-// A feed's rules: a BOM, then the Content-Type charset, then the XML
-// prolog's encoding, then UTF-8. An unknown label falls back to UTF-8, the
-// right default for almost every body.
 const xmlEncodingPattern = /<\?xml[^>]*\bencoding=["']([^"']+)["']/i;
 
 export function decodeXml(
@@ -39,11 +31,8 @@ export function decodeXml(
   }
 }
 
-// Matches both <meta charset="x"> and the http-equiv Content-Type form.
 const metaCharsetPattern = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/giu;
 
-// The encoding a label names, or undefined for one TextDecoder doesn't know
-// (including the "replacement" labels, which it refuses).
 const knownEncoding = (label: string | undefined) => {
   if (!label) return undefined;
   try {
@@ -53,12 +42,6 @@ const knownEncoding = (label: string | undefined) => {
   }
 };
 
-// HTML's rules rather than a feed's: a header label the browser doesn't know
-// is ignored, and the meta prescan skips comments and unknown labels. A meta
-// tag read as ASCII can't truly mean UTF-16, and x-user-defined means
-// windows-1252 there, as the HTML spec prescribes. ponytail: a regex over
-// the first 1024 bytes, not the full prescan; a "charset=" inside another
-// attribute's value still matches.
 function detectHtmlEncoding(
   bytes: Uint8Array,
   contentType: string | null,

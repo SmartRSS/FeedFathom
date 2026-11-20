@@ -1,10 +1,5 @@
 import { createEffect } from "solid-js";
 
-// An article's sanitized HTML. A code block with long lines scrolls
-// sideways, and a keyboard can scroll only what it can focus, so a block
-// joins the tab order while it overflows. Watched for size rather than
-// checked once: a block laid out in a hidden pane measures nothing until
-// the pane shows.
 export function ArticleMarkup(props: { html: string }) {
   let container: HTMLDivElement | undefined;
   createEffect(

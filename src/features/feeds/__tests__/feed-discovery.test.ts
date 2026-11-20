@@ -6,8 +6,6 @@ import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts
 
 const feed = (title: string, url: string) => ({ title, url });
 
-// The whole point of WebSubProbe being one method returning one field: a
-// double is this, not a parsed feed.
 const probe = (
   answer: (url: string) => { websub?: unknown } | never,
 ): WebSubProbe => ({
@@ -26,8 +24,6 @@ describe("markWebSubAvailability", () => {
     expect(result.map((candidate) => candidate.websub)).toEqual([false, false]);
   });
 
-  // One bad candidate must not take the rest of the list with it, which is
-  // what a bare Promise.all without the per-candidate catch would do.
   test("one failing candidate does not lose the others", async () => {
     const result = await markWebSubAvailability(
       [
@@ -45,8 +41,6 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  // #909: probed together, candidates on one host queue on its rate limit
-  // and the ones whose turn misses the deadline read as having no hub.
   test("probes one candidate at a time and preserves order", async () => {
     let inFlight = 0;
     let mostInFlight = 0;
@@ -74,8 +68,6 @@ describe("markWebSubAvailability", () => {
     ]);
   });
 
-  // The same contract over a real client and host interval: each sequential
-  // probe gets its slot inside its own deadline.
   test("every candidate on one host gets its true WebSub state", async () => {
     const client = new HttpClient(createFakeHttpRedis(), {
       deadlineMs: 2_000,

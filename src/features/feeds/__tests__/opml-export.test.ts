@@ -3,8 +3,6 @@ import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";
 
-// An export is only worth anything if it goes back in, here or anywhere else,
-// so the parser this repo already has is the oracle.
 test("a tree survives the round trip through OPML", () => {
   const tree: OpmlNode[] = [
     {
@@ -31,9 +29,6 @@ test("a tree survives the round trip through OPML", () => {
   expect(parseOpml(buildOpml("Subscriptions", tree))).toEqual(tree);
 });
 
-// An ampersand or an angle bracket in a title is the ordinary case, not the
-// exotic one -- concatenating them into the document unescaped produces a
-// file no conforming parser will open.
 test("escapes markup in titles rather than emitting it", () => {
   const opml = buildOpml("A & B", [
     {
@@ -49,8 +44,6 @@ test("escapes markup in titles rather than emitting it", () => {
   expect(parseOpml(opml)).toHaveLength(1);
 });
 
-// Bun.XML.stringify throws on these rather than escaping them, so an export
-// would fail outright over one bad byte in one title.
 test("drops a lone surrogate without dropping a real astral character", () => {
   const opml = buildOpml("Subscriptions", [
     {
@@ -71,8 +64,6 @@ test("drops a lone surrogate without dropping a real astral character", () => {
   ]);
 });
 
-// XML 1.0 has no escape for most control characters, so a title carrying one
-// would otherwise make the whole file unparseable.
 test("drops control characters a title picked up from a feed", () => {
   const name = `Bell${String.fromCodePoint(7)} and null${String.fromCodePoint(0)}`;
   const opml = buildOpml("Subscriptions", [

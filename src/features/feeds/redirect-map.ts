@@ -1,5 +1,3 @@
-// One SCAN page. Redis caps how long a single page takes, which is the whole
-// reason to prefer it to KEYS here.
 const scanPageHint = 500;
 
 type RedirectRedis = {
@@ -54,14 +52,6 @@ export class RedirectMap {
     }
   }
 
-  /**
-   * For the admin view.
-   *
-   * SCAN still walks the whole keyspace, but lets Redis serve the job queue
-   * and HTTP cache between pages. KEYS blocks them for the entire walk.
-   * The map absorbs duplicate keys. Concurrent additions can be missed,
-   * which is acceptable for an admin listing of a cache with a one-day TTL.
-   */
   async getAllRedirects(): Promise<Record<string, string>> {
     const redirects: Record<string, string> = {};
     let cursor = "0";

@@ -155,7 +155,6 @@ describe("loadConfig", () => {
     ).toThrow("MAILJET_API_KEY and MAILJET_API_SECRET must both be configured");
   });
 
-  // compose.yml passes every variable through as ${X:-}.
   test("treats a blank value as unset", () => {
     const defaults = loadConfig({ DATABASE_URL: databaseUrl });
     expect(
@@ -202,15 +201,11 @@ describe("loadConfig", () => {
     ).toThrow("FEED_FATHOM_DOMAIN is required");
   });
 
-  // MAIL_DOMAIN is where inbound mail is routed and FEED_FATHOM_DOMAIN is
-  // where the app is served; they coincide only in single-domain setups, so
-  // the app host is a fallback and never an override.
   test.each([
     ["false", "feeds.example.com", undefined, undefined],
     ["true", "", undefined, undefined],
     ["true", "feeds.example.com:8443", undefined, "feeds.example.com"],
     ["true", "app.example.com", "mail.example.com", "mail.example.com"],
-    // Blank is unset, not an override: compose.yml always defines MAIL_DOMAIN.
     ["true", "app.example.com", "", "app.example.com"],
     ["true", "", "", undefined],
   ])(

@@ -52,9 +52,6 @@ test("validates admin sort and URL policies before service calls", async () => {
   expect(updates).toBe(0);
 });
 
-// Every route in the admin group, not just the one that used to be checked
-// here. The guard is the group's now rather than each handler's, so this is
-// what stops a route added there from being reachable by anyone signed in.
 const adminOnlyRequests = [
   ["GET", "/api/admin", undefined],
   [

@@ -18,22 +18,12 @@ const text = (response: { data: ArrayBuffer }) =>
 
 const redis = createFakeHttpRedis;
 
-// Tests that make more than one request to a host cannot sit out the real
-// 10 second interval; they still have to sit out an interval.
 const shortInterval = 200;
 const shortIntervals = {
   background: shortInterval,
   interactive: shortInterval,
 };
 
-/**
- * A fake Redis that logs each host slot it grants, stamped by its own clock,
- * which is the one the limiter reads. A test pushes its transport calls onto
- * the same log, so it can check that every request held a slot of its own
- * and that the slots sat an interval apart. Timing the transport calls
- * instead would also time however long the machine took between a
- * reservation and the call after it.
- */
 function slotLoggingRedis(log: string[]) {
   const store = redis();
   const slots = new Map<string, number[]>();
@@ -82,7 +72,6 @@ function nativeResponse(
   };
 }
 
-// The HttpDeferredError a request was refused with.
 async function deferral(request: Promise<unknown>) {
   const error = await request.then(
     () => undefined,
@@ -93,8 +82,6 @@ async function deferral(request: Promise<unknown>) {
   return error;
 }
 
-// When the store says the host may next be fetched, asked through a client of
-// its own that is never paced: undefined when the host is not blocked.
 async function blockedUntil(
   store: ReturnType<typeof redis>,
   host: string,
@@ -146,8 +133,6 @@ test("caches fresh responses, retries transient failures, and defers background 
   expect((await client.get("https://1.1.1.1/feed")).cached).toBe(true);
   expect(requests).toBe(2);
 
-  // The real background interval, which no stall on a loaded machine
-  // outlasts.
   const poller = new HttpClient(redis(), {
     transport: queuedTransport([nativeResponse("other")]),
   });
@@ -202,9 +187,6 @@ test("skipCache sends validators and a 304 prevents another request while fresh"
   expect(sentHeaders).toHaveLength(1);
 });
 
-// Some CDNs answer an unconditional request with a 304. With nothing stored
-// there is no body to serve, and storing the 304 would have every later
-// revalidation refresh it, sticking the feed (#1078).
 test("a 304 with nothing cached fails, stores nothing, and the next request is unconditional", async () => {
   const sentHeaders: Headers[] = [];
   const store = redis();
@@ -464,9 +446,6 @@ test("enforces one deadline through the streamed body and cancels it", async () 
   expect(destroyed).toBe(1);
 });
 
-// Read as text: the cap applies to the bytes read and to the cached copy,
-// before decoding, and `Uint8Array.from` spends seconds on a body this size.
-// The body is single-byte ASCII, so its text length is its byte count.
 test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
   const exact = Buffer.alloc(maximumFeedBodyBytes, 65);
   const exactClient = new HttpClient(redis(), {
@@ -494,9 +473,6 @@ test("accepts exactly 24 MiB and rejects one decoded byte over", async () => {
   expect(destroyed).toBe(1);
 }, 20_000);
 
-// Retry-After is not a 429-only header (RFC 9110 10.2.3). A 503 that carries
-// it used to fall through to the ordinary retryable path and be re-requested
-// 200ms later -- the opposite of what the origin asked for.
 test("honours Retry-After on a 503 instead of retrying it", async () => {
   let requests = 0;
   const store = redis();
@@ -520,9 +496,6 @@ test("honours Retry-After on a 503 instead of retrying it", async () => {
   expect(await blockedUntil(store, "1.1.1.1")).toBe(error.retryAt);
 });
 
-// Each attempt of a retry sequence reserves the host's slot again, so the
-// three attempts sit an interval apart rather than three requests landing
-// inside an interval that exists to allow one.
 test("spaces retries by the host interval instead of a fixed backoff", async () => {
   const log: string[] = [];
   const store = slotLoggingRedis(log);
@@ -552,9 +525,6 @@ test("spaces retries by the host interval instead of a fixed backoff", async () 
   }
 });
 
-// Only the original hostname held a reservation, so every host reached
-// through a redirect was contacted with no interval and no block check --
-// the hop and a following direct request landed in the same millisecond.
 test("reserves the redirect target's slot, not just the original host's", async () => {
   const log: string[] = [];
   const store = slotLoggingRedis(log);
@@ -588,9 +558,6 @@ test("reserves the redirect target's slot, not just the original host's", async 
   }
 });
 
-// A host that just answered 429 could be hammered through a redirect from
-// anywhere else, because the block was only ever checked for the host the
-// request started at.
 test("checks the redirect target against its own block", async () => {
   const store = redis();
   const deadline = new RequestDeadline(1_000);
@@ -615,8 +582,6 @@ test("checks the redirect target against its own block", async () => {
   expect(error.retryAt).toBe(retryAt);
 });
 
-// The 429 belongs to whichever host answered it. Blocking the host the chain
-// started at holds back the wrong origin and leaves the offender free.
 test("blocks the host that answered, not the one the chain started at", async () => {
   const store = redis();
   const client = new HttpClient(store, {
@@ -642,9 +607,6 @@ test("blocks the host that answered, not the one the chain started at", async ()
   expect(await blockedUntil(store, "1.1.1.1")).toBeUndefined();
 });
 
-// The WebSub hub POST goes through the same reservation, block check and
-// Retry-After as a fetch. A handful of shared hubs carry a large share of all
-// feeds, so an import would otherwise fire them back to back.
 test("post reserves the host, sends the body, and does not follow redirects", async () => {
   const sent: Array<{ body: string | undefined; url: string }> = [];
   const log: string[] = [];
@@ -669,8 +631,6 @@ test("post reserves the host, sends the body, and does not follow redirects", as
   const first = await client.post("https://hub.example/", form);
   const second = await client.post("https://hub.example/", form);
 
-  // A redirecting hub is reported, not followed: the target is fully
-  // hub-controlled.
   expect(first.status).toBe(302);
   expect(second.status).toBe(302);
   expect(sent.map((request) => request.url)).toEqual([
@@ -689,8 +649,6 @@ test("post reserves the host, sends the body, and does not follow redirects", as
   }
 });
 
-// A hub URL comes from the feed, so the subscribe POST is held to the same
-// private-network guard as get(), whatever requestHubSubscription checks first.
 test.each([
   ["a hostname with a private DNS answer", "https://hub.example/"],
   ["a private literal", "https://10.0.0.1/"],
@@ -732,10 +690,6 @@ test("post honours a hub's Retry-After instead of discarding it", async () => {
   expect(await blockedUntil(store, "hub.example")).toBeDefined();
 });
 
-// A WebSub push arrives with the feed document attached. Seeding it means the
-// parse that follows reads it instead of asking the origin for what we were
-// just handed -- and the stored entry holds the new document rather than the
-// one the push replaced.
 test("seedCache answers the next get without a request", async () => {
   let requests = 0;
   const client = new HttpClient(redis(), {
@@ -749,7 +703,6 @@ test("seedCache answers the next get without a request", async () => {
     url,
     Buffer.from("<rss>pushed</rss>"),
     new Headers({
-      // The hub's own directives are about the push, not about the feed.
       "cache-control": "no-store",
       "content-type": "application/rss+xml",
       link: '<https://hub.example/>; rel="hub"',
@@ -770,8 +723,6 @@ test("seedCache answers the next get without a request", async () => {
   expect(response.headers.get("cache-control")).toBeNull();
 });
 
-// Past the freshness window the seeded entry is not a licence to keep serving
-// a body no origin ever confirmed.
 test("a seeded entry stops being fresh and is revalidated", async () => {
   const client = new HttpClient(redis(), {
     transport: queuedTransport([nativeResponse("from the origin")]),

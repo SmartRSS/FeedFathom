@@ -3,11 +3,6 @@ import Schema from "typebox/schema";
 import { webUrlPolicy } from "#shared/validation/typebox-policy.ts";
 import type { NativeHttpResponse } from "#platform/http/http-native-transport.ts";
 
-// HTTP cache semantics: whether a response may be held in a shared cache, how
-// long it stays fresh, and how a 304 refreshes what is already stored. Pure
-// functions of headers and a clock, so every rule below can be answered
-// without a cache to store anything in.
-
 const exact = { additionalProperties: false } as const;
 
 const cachedResponseSchema = Type.Object(
@@ -15,9 +10,6 @@ const cachedResponseSchema = Type.Object(
     body: Type.String(),
     expiresAt: Type.Number(),
     headers: Type.Array(Type.Tuple([Type.String(), Type.String()])),
-    // Every caller reads only a 200, so only a 200 is stored. A stored 304
-    // has no body to serve and would be refreshed by every later 304, so an
-    // entry with any other status fails the read and is deleted (#1078).
     status: Type.Literal(200),
     url: Type.Intersect([Type.String(), webUrlPolicy]),
   },
@@ -27,12 +19,6 @@ export const cachedResponseCheck = Schema.Compile(cachedResponseSchema);
 
 export type CachedResponse = Static<typeof cachedResponseSchema>;
 
-/**
- * A delta-seconds header value. Only a bare non-negative integer counts --
- * optionally quoted, because some origins quote Age. Anything else is absent
- * rather than zero, so a malformed value falls through to the next rule
- * instead of pinning freshness to now.
- */
 export function deltaSeconds(value: string): number | undefined {
   const match = /^(?:"(\d+)"|(\d+))$/.exec(value.trim());
   if (!match) return undefined;
@@ -40,11 +26,6 @@ export function deltaSeconds(value: string): number | undefined {
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
-/**
- * How old the response already was when it arrived: the greater of the gap
- * since its Date and whatever Age an intermediary reported. Taking the greater
- * means a lying intermediary can shorten our freshness but never extend it.
- */
 export function currentAge(headers: Headers, receivedAt: number): number {
   const responseDate = Date.parse(headers.get("date") ?? "");
   const apparentAge = Number.isFinite(responseDate)
@@ -54,11 +35,6 @@ export function currentAge(headers: Headers, receivedAt: number): number {
   return Math.max(apparentAge, age * 1_000);
 }
 
-/**
- * Whether this response may go in a cache shared by every user of the
- * instance. A response carrying no-store, private, Vary: * or a Set-Cookie is
- * about one requester and must not be replayed to another.
- */
 export function sharedCacheAllowed(headers: Headers): boolean {
   const directives = new Set(
     (headers.get("cache-control") ?? "")
@@ -74,14 +50,6 @@ export function sharedCacheAllowed(headers: Headers): boolean {
   );
 }
 
-/**
- * The instant this response stops being fresh, or undefined when nothing says.
- *
- * s-maxage outranks max-age because this is a shared cache. A repeated or
- * unparseable max-age expires immediately rather than being guessed at. The
- * age the response already carries is subtracted from its lifetime, so a
- * response that spent its whole max-age in an intermediary arrives stale.
- */
 export function expiresAt(
   headers: Headers,
   receivedAt = Date.now(),
@@ -119,13 +87,6 @@ export function expiresAt(
   return receivedAt + Math.max(0, freshnessLifetime - age);
 }
 
-/**
- * The cache entry for a response, or undefined if it is not worth storing.
- *
- * Already-stale is still worth storing when the response carries a validator,
- * because that turns the next fetch into a conditional request that can come
- * back 304 instead of re-downloading the body.
- */
 export function cacheable(
   response: Pick<NativeHttpResponse, "headers" | "status" | "url">,
   body: Buffer,
@@ -148,13 +109,6 @@ export function cacheable(
   };
 }
 
-/**
- * Fold a 304's headers into the stored entry and recompute when it expires.
- *
- * Age is dropped unless the 304 restated it, and Date is stamped to now if the
- * 304 omitted it -- otherwise the stored copy's original Date would make the
- * refreshed entry look as old as the response it replaced.
- */
 export function refresh(
   cached: CachedResponse,
   headers: Headers,

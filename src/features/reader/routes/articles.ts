@@ -46,10 +46,7 @@ export async function postArticlesHandler(
     body.filter,
     body.view === "today"
       ? { allSubscribed: true, publishedWithinHours: todayWindowHours }
-      : // Search (#697) spans every subscription -- what makes it worth
-        // having is finding the article whose feed you no longer remember --
-        // so subscription authorizes the rows, as it does for Today.
-        body.query
+      : body.query
         ? { allSubscribed: true, query: body.query }
         : body.folder === undefined
           ? {}
@@ -65,7 +62,6 @@ export async function postArticlesHandler(
   );
 }
 
-// Client-supplied, so capped; JSON.stringify escapes it onto one log line.
 const MAX_TRACE_LOG_LENGTH = 4000;
 
 export async function deleteArticlesHandler(
@@ -85,9 +81,6 @@ export async function deleteArticlesHandler(
       body.removedArticleIdList,
       user.id,
     );
-  // Deletes are terminal and were once sent by nobody anyone could name
-  // (see src/spa/delete-trace.ts), so each one is logged with what the
-  // client says triggered it.
   console.info(
     JSON.stringify({
       cfRay: request.headers.get("cf-ray"),
@@ -123,8 +116,6 @@ export async function patchArticlesHandler(
       user.id,
       body.read,
     );
-  // Same as the delete path: the badge beside every affected source is
-  // recomputed from the store rather than adjusted by a count kept here.
   await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
   return json(removedArticlesResponse, articleIds);
 }

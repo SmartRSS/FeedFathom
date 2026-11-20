@@ -38,36 +38,22 @@ import {
 } from "#platform/http/redirect-policy.ts";
 
 const requestDeadlineMs = 30_000;
-// One request and two retries, for an interactive caller only.
 const maxAttempts = 3;
 
 const retryableStatuses = new Set([408, 425, 500, 502, 503, 504]);
 const rateLimitedStatus = 429;
 const notModifiedStatus = 304;
 
-// Everything else a push carries is about the push, not about the feed
-// document: the hub's signature, its own cache directives, its Date. Only
-// what the parser reads is kept.
 const seededCacheHeaders = ["content-type", "link"];
 
 type HttpRequestOptions = {
   priority?: Priority;
-  // Skips the local TTL short-circuit but keeps conditional revalidation, so
-  // an unchanged origin still answers 304 cheaply. For an explicit user
-  // action -- a manual refresh -- where serving a still-fresh entry reads as
-  // the button not working. See ADR 0003; a WebSub push arrives with the
-  // document attached and goes through seedCache instead.
   skipCache?: boolean;
-  // Number of our users subscribed to the feed being fetched, reported to
-  // the origin in the User-Agent (see buildUserAgent). Omitted for fetches
-  // that aren't on behalf of subscribers: discovery, preview, favicons.
   subscribers?: number;
 };
 
 type HttpClientOptions = HttpClientIdentity & {
   deadlineMs?: number;
-  // The per-host politeness gaps. Only set by tests, which cannot afford to
-  // sit out the real ones; see HttpRateLimiter for the production values.
   intervalMs?: HostIntervals;
   transport?: NativeHttpTransport;
 };
@@ -85,7 +71,6 @@ export type HttpResponse = {
 export class HttpClient {
   private readonly deadlineMs: number;
   private readonly transport: NativeHttpTransport;
-  // Identity is fixed for the process; only the subscriber clause varies.
   private readonly userAgentPrefix: string;
   private readonly rateLimiter: HttpRateLimiter;
   private readonly cacheStore: HttpCacheStore;
@@ -112,20 +97,6 @@ export class HttpClient {
     }
   }
 
-  /**
-   * A form POST under the same politeness rules as get(): the host's interval
-   * is reserved, its block is honoured, and a Retry-After it sends back is
-   * recorded.
-   *
-   * Neither cached nor redirect-following, on purpose. A POST body is not
-   * cacheable, and a 3xx target is fully origin-controlled -- the WebSub hub
-   * this exists for treats a redirecting hub as a failure rather than an
-   * instruction. The status is returned and the caller decides.
-   *
-   * Interactive priority even though both callers are the worker: a subscribe
-   * is a one-shot side effect with no retry queue behind it, so sitting out
-   * the interval beats dropping the subscription.
-   */
   async post(url: string, body: URLSearchParams): Promise<{ status: number }> {
     const deadline = new RequestDeadline(this.deadlineMs);
     try {
@@ -152,22 +123,6 @@ export class HttpClient {
     }
   }
 
-  /**
-   * Store a body we were handed instead of one we fetched, so the next get()
-   * for this URL is answered from the cache rather than from the network.
-   *
-   * This exists for the WebSub push: the hub sends the feed document and signs
-   * it with the secret we gave that hub, so the content is already in hand.
-   * Fetching it again to learn what the push already said is exactly the
-   * request a cache exists to avoid, and it also leaves the stored entry
-   * stale, which is worse than either.
-   *
-   * No validator is stored. The origin's ETag for this state is unknown, so
-   * the next revalidation goes out unconditional -- one uncompressed response
-   * later, against one saved now. A body too large for the cache is refused by
-   * saveCached, which deletes the stale entry, so the parse falls back to a
-   * normal fetch instead of reading what the push replaced.
-   */
   async seedCache(
     url: string,
     body: Buffer,
@@ -269,8 +224,6 @@ export class HttpClient {
       return result;
     }
     if (response.status === notModifiedStatus) {
-      // A 304 with nothing cached: there is no stored body to serve, so this
-      // is the origin failing, not an empty success (#1078).
       response.destroy();
       throw new HttpPolicyError("Origin answered 304 with nothing cached");
     }
@@ -305,8 +258,6 @@ export class HttpClient {
       let result: FetchResult | undefined;
       try {
         result = await this.redirects.follow(url, headers, priority, deadline);
-        // Whatever answered is what gets held back, which after a redirect
-        // is not the host the request started at.
         const answeringHost =
           URL.parse(result.response.url)?.hostname ?? hostname;
         await this.deferIfLimited(answeringHost, result.response, deadline);
@@ -336,9 +287,6 @@ export class HttpClient {
     /* eslint-enable no-await-in-loop */
   }
 
-  // Records the host's rate-limit headers, and defers on a 429, or on an
-  // error that carries Retry-After, which also applies to errors such as 503
-  // (RFC 9110 10.2.3). The response is destroyed before a deferral is thrown.
   private async deferIfLimited(
     hostname: string,
     response: NativeHttpResponse,
@@ -368,8 +316,6 @@ export class HttpClient {
       data: copyBody(body),
       freshUntil: response.expiresAt > Date.now() ? response.expiresAt : null,
       headers: new Headers(response.headers),
-      // A cache hit is not a fresh redirect decision; the original fetch
-      // already persisted any permanent redirect.
       redirectedPermanently: false,
       status: response.status,
       url: response.url,
@@ -412,9 +358,6 @@ export class HttpClient {
   }
 }
 
-// A copy, so the caller never sees Buffer's shared pool. The constructor
-// copies in bulk; Uint8Array.from iterates byte by byte, which held ~440 MiB
-// to copy a 20 MiB body (#1031).
 function copyBody(body: Buffer): ArrayBuffer {
   return new Uint8Array(body).buffer;
 }

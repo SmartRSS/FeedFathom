@@ -10,8 +10,6 @@ import type { SourcesDataService } from "#features/feeds/source-data-service.ts"
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import type { FeedArticle } from "#features/feeds/feed-mapper.ts";
 
-// The fields read off mailparser's result, checked rather than trusted: the
-// parser's types promise more than its runtime guarantees.
 const parsedMailCheck = Schema.Compile(
   Type.Object(
     {
@@ -29,10 +27,6 @@ export type TrustedMailEnvelope = {
   to: string;
 };
 
-// The message itself is unacceptable: the same bytes to the same address would
-// fail again, so the relay bounces it. The error hook maps it to 422 with
-// `rejected: true`, the only answer the relay bounces on. Throw it only when
-// the sender is surely at fault -- a bounce can end a subscription.
 export class MailRejectedError extends Error {
   override name = "MailRejectedError";
 }
@@ -62,7 +56,6 @@ export class EmailHandler {
       "findMailRecipient"
     >,
     private readonly articleImporter: Pick<ArticleImporter, "recordFetch">,
-    // A seam for the projection check below, which no real message reaches.
     private readonly parse: (raw: Buffer) => Promise<ParsedMail> = simpleParser,
   ) {}
 
@@ -72,7 +65,6 @@ export class EmailHandler {
   ): Promise<void> {
     const email = await this.parse(raw);
     if (!parsedMailCheck.Check(email)) {
-      // Our own invariant over mailparser's shape, not the sender's fault.
       throw new Error("Mail parser returned an invalid message projection");
     }
     const source = await this.sourcesDataService.findMailRecipient(envelope.to);

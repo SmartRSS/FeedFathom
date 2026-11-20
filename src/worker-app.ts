@@ -11,7 +11,6 @@ export type WorkerAppServices = {
   waitForMigration: () => Promise<void>;
 };
 
-// Returns the healthcheck server at once and `ready` when jobs are consumed.
 export function runWorker({
   close,
   mainWorker,
@@ -43,18 +42,6 @@ export function runWorker({
 
   let consuming = false;
 
-  // The port opens before startup finishes so a probe gets a definitive
-  // answer rather than a refused connection -- but the answer is 503 until
-  // the BullMQ worker is consuming jobs. That needs the schema this build was
-  // compiled against and a reachable Redis. Reporting "ok" any earlier let
-  // `up --wait` and Swarm's start-first rollout stop the old workers in
-  // favour of new ones still blocked on startup, and feed polling stopped
-  // with every check green.
-  //
-  // The healthcheck's start_period is what keeps that not-ready window from
-  // reading as a crash loop, so it has to cover a normal migration; see the
-  // budget and its consequences in compose.yml. A migration too slow for
-  // that budget is rolled out by hand.
   const healthcheckServer = Bun.serve({
     fetch(request, server) {
       if (new URL(request.url).pathname !== healthcheckPath)

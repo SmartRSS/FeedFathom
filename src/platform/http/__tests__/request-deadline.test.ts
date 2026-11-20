@@ -4,8 +4,6 @@ import { HttpDeadlineError, RequestDeadline } from "../request-deadline.ts";
 const never = new Promise<never>(() => {});
 
 describe("RequestDeadline", () => {
-  // The transport is handed this signal, so expiry has to cancel an in-flight
-  // read rather than wait for it to return on its own.
   test("aborts its controller when the budget runs out", async () => {
     const deadline = new RequestDeadline(10);
     expect(deadline.controller.signal.aborted).toBe(false);
@@ -38,8 +36,6 @@ describe("RequestDeadline", () => {
     deadline.dispose();
   });
 
-  // A backoff longer than what is left must fail the request rather than
-  // sleep past the deadline and then continue.
   test("sleep past the budget rejects", async () => {
     const deadline = new RequestDeadline(20);
     await expect(deadline.sleep(5_000)).rejects.toBeInstanceOf(
@@ -48,7 +44,6 @@ describe("RequestDeadline", () => {
     deadline.dispose();
   });
 
-  // Without this the timer keeps the process alive after a fast request.
   test("passes a result through and disposal prevents later abort", async () => {
     const deadline = new RequestDeadline(50);
     expect(await deadline.run(Promise.resolve(1))).toBe(1);

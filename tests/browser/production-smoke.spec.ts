@@ -5,10 +5,6 @@ test("executes the production SPA and loads its assets", async ({ page }) => {
   const loadedAssets: string[] = [];
   page.on("pageerror", (error) => browserFailures.push(error.message));
   page.on("console", (message) => {
-    // An anonymous visit to "/" legitimately 401s on the tree fetch before
-    // redirecting to /login (see dashboard.tsx's onMount) -- Chrome logs
-    // that failed resource load to console regardless of the app catching
-    // it, so it isn't a real failure here.
     if (
       message.type() === "error" &&
       !message.text().includes("Failed to load resource")

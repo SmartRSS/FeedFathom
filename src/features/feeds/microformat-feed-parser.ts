@@ -1,9 +1,3 @@
-// Microformats2 (h-feed/h-entry, https://microformats.org/wiki/h-entry) has
-// no separate machine-readable feed file the way RSS/Atom/JSON Feed do --
-// the semantic markup lives directly in the page's own HTML, so the page
-// URL itself is the feed URL. Many sites mark up entries loosely on the
-// page without an explicit h-feed wrapper, so both top-level h-entry items
-// and ones nested inside an h-feed count.
 import { mf2 } from "microformats-parser";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import type {

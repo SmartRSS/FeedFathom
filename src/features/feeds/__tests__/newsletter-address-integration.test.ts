@@ -31,11 +31,6 @@ import {
 } from "#features/reader/routes.ts";
 import { migrateDatabase } from "../../../migrator.ts";
 
-// A newsletter address is copied to the user before Subscribe, so mail can
-// reach it first -- often the confirmation the newsletter waits for (#1116).
-// Minting reserves the source; these follow that mail from arrival to the
-// reader, and the reservation to its cleanup.
-
 const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
@@ -71,8 +66,6 @@ const config = strictFake<AppConfig>(
   },
   "config",
 );
-// Subscribing an email source fetches and imports nothing, so the feed-only
-// services stay unarranged: reaching one is a failure.
 const services = strictFake<FeedRouteServices & ReaderRouteServices>(
   {
     articleEventHub: strictFake({}, "articleEventHub"),
@@ -105,7 +98,6 @@ afterAll(async () => {
 let account: { cookie: string; id: number };
 let other: { cookie: string; id: number };
 
-// A fresh id each run, so no budget counter carries over between tests.
 const createAccount = async (name: string) => {
   const id = Number(process.hrtime.bigint() % 1_000_000_000n);
   await client`
@@ -191,13 +183,11 @@ test("mail to a minted address is kept before Subscribe and read after it", asyn
     address: address.toUpperCase(),
   });
   expect(reserved.status).toBe(200);
-  // Reserving again, as a reload might, leaves the one row alone.
   expect((await post("/newsletter-address", { address })).status).toBe(200);
   const [source] = await sourceRows();
   expect(await sourceRows()).toEqual([
     { id: source!.id, kind: "email", url: address },
   ]);
-  // Links back to the public origin, not the address the request reached.
   expect((await sourcesDataService.findSourceByUrl(address))?.homeUrl).toBe(
     "http://localhost:3456",
   );
@@ -224,8 +214,6 @@ test("mail to a minted address is kept before Subscribe and read after it", asyn
     SELECT unread_count AS unread FROM user_sources WHERE source_id = ${source!.id}`;
   expect(subscription?.unread).toBe(1);
 
-  // The mail predates the subscription, which for a feed would mean the
-  // subscriber never could have seen it.
   await cleanup();
   expect(await articleTitles(source!.id)).toEqual([
     "Confirm your subscription",
@@ -233,7 +221,6 @@ test("mail to a minted address is kept before Subscribe and read after it", asyn
 });
 
 test("an unsubscribed reservation keeps its mail for a day, then only the address", async () => {
-  // Without any subscription at all the orphan cleanup stands down.
   const [feed] = await client<{ id: number }[]>`
     INSERT INTO sources (url, home_url) VALUES ('https://feed.example.test/', 'https://feed.example.test')
     RETURNING id`;
@@ -257,8 +244,6 @@ test("an unsubscribed reservation keeps its mail for a day, then only the addres
   expect(count).toBe(0);
 });
 
-// Deleted, an address would be free for any account to create again, and
-// that account would receive its owner's mail.
 test("an address its owner unsubscribed from stays the owner's after cleanup", async () => {
   await subscribe(`${crypto.randomUUID()}@${mailDomain}`, other);
   expect((await subscribe(address)).status).toBe(200);
@@ -266,7 +251,6 @@ test("an address its owner unsubscribed from stays the owner's after cleanup", a
   await deliver(address, "Weekly issue");
   await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE id = ${source!.id}`;
   await userSourcesDataService.removeSourceFromUser(account.id, source!.id);
-  // Nobody reads it any more, so the sender gets a bounce.
   await expect(deliver(address, "Sent after leaving")).rejects.toThrow(
     MailRejectedError,
   );
@@ -281,8 +265,6 @@ test("an address its owner unsubscribed from stays the owner's after cleanup", a
   expect(await listedTitles(source!.id)).toEqual(["Welcome back"]);
 });
 
-// Every Generate click reserves an address, so one that never had mail must
-// not outlive the grace, or the rows would only accumulate.
 test("an address that never had mail is deleted after the grace", async () => {
   await subscribe(`${crypto.randomUUID()}@${mailDomain}`, other);
   const subscribedOnce = `fedcba9876543210@${mailDomain}`;
@@ -300,8 +282,6 @@ test("an address that never had mail is deleted after the grace", async () => {
 });
 
 test("a feed's articles from before its first subscription are neither listed nor kept", async () => {
-  // Older than the source's own creation would be, were the subscription
-  // backdated to it as an email subscription is.
   const [feed] = await client<{ id: number }[]>`
     INSERT INTO sources (url, home_url, created_at)
     VALUES ('https://feed.example.test/', 'https://feed.example.test', NOW() - INTERVAL '3 days')
@@ -326,7 +306,6 @@ test("a reserved address belongs to the account that reserved it", async () => {
   await deliver(address, "Your login link");
   const [source] = await sourceRows();
 
-  // Reserving it again from another account changes nothing either.
   expect((await post("/newsletter-address", { address }, other)).status).toBe(
     200,
   );
@@ -346,15 +325,11 @@ test("an address created by subscribing belongs to its subscriber", async () => 
   const [source] = await sourceRows();
 
   expect((await subscribe(address, other)).status).toBe(422);
-  // Gone from the first account, it is still not the other's to take.
   await client`DELETE FROM user_sources WHERE source_id = ${source!.id}`;
   expect((await subscribe(address, other)).status).toBe(422);
   expect(await subscribers(source!.id)).toEqual([]);
 });
 
-// Migration 0013 made the earliest subscriber of an older email source its
-// owner (see migration-integration.test.ts); the others keep their
-// subscription.
 test("an older address shared by two accounts stays with both of them", async () => {
   const third = await createAccount("third");
   const [legacy] = await client<{ id: number }[]>`
@@ -368,18 +343,15 @@ test("an older address shared by two accounts stays with both of them", async ()
   await deliver(address, "Weekly issue");
   expect(await listedTitles(legacy!.id)).toEqual(["Weekly issue"]);
   expect(await listedTitles(legacy!.id, other)).toEqual(["Weekly issue"]);
-  // Subscribing again is idempotent for both, and refused to anyone else.
   expect((await subscribe(address)).status).toBe(200);
   expect((await subscribe(address, other)).status).toBe(200);
   expect((await subscribe(address, third)).status).toBe(422);
 
-  // The address is the owner's, so a subscriber who leaves cannot return.
   await userSourcesDataService.removeSourceFromUser(other.id, legacy!.id);
   expect((await subscribe(address, other)).status).toBe(422);
   expect(await subscribers(legacy!.id)).toEqual([account.id]);
 });
 
-// The other subscribers' rows would go with the source in the cascade.
 test("an older shared address passes to its next subscriber when its owner expires", async () => {
   const [legacy] = await client<{ id: number }[]>`
     INSERT INTO sources (url, home_url, kind, reserved_by)
@@ -390,7 +362,6 @@ test("an older shared address passes to its next subscriber when its owner expir
     VALUES (${account.id}, ${legacy!.id}, 'Letters'), (${other.id}, ${legacy!.id}, 'Letters')`;
   const owned = `fedcba9876543210@${mailDomain}`;
   expect((await subscribe(owned)).status).toBe(200);
-  // Had mail, so only losing its owner makes it an orphan.
   await deliver(owned, "Weekly issue");
   await client`UPDATE sources SET created_at = NOW() - INTERVAL '25 hours' WHERE url = ${owned}`;
   await client`UPDATE users SET last_seen_at = NOW() - INTERVAL '10 days' WHERE id = ${account.id}`;
@@ -404,8 +375,6 @@ test("an older shared address passes to its next subscriber when its owner expir
   expect(owner).toBe(other.id);
 });
 
-// A rollback to code without the handoff above deletes the owner outright.
-// The other subscriber's subscription and mail must survive that.
 test("an older shared address keeps its other subscriber when its owner is deleted", async () => {
   const [legacy] = await client<{ id: number }[]>`
     INSERT INTO sources (url, home_url, kind, reserved_by)
@@ -433,13 +402,11 @@ test("an email source without an owner is subscribable only by its subscribers",
     VALUES (${account.id}, ${legacy!.id}, 'Letters')`;
 
   expect((await subscribe(address, other)).status).toBe(422);
-  // Its own subscriber subscribing again is no conflict.
   expect((await subscribe(address)).status).toBe(200);
   expect(await subscribers(legacy!.id)).toEqual([account.id]);
 });
 
 test("a source the cleanup deletes mid-subscribe is created afresh", async () => {
-  // The orphan addSource returned is gone before the subscription row lands.
   let vanish = true;
   const racing = new UserSourcesDataService(
     drizzleConnection,
@@ -467,8 +434,6 @@ test("a source the cleanup deletes mid-subscribe is created afresh", async () =>
   expect(await subscribers(source!.id)).toEqual([account.id]);
 });
 
-// Which addresses are refused is isNewsletterAddress's table; this checks the
-// route holds a reservation to it, against this instance's mail domain.
 test.each([
   ["another domain", "0123456789abcdef@other.example.test"],
   ["a chosen local part", `postmaster@${mailDomain}`],
@@ -479,7 +444,6 @@ test.each([
   expect(await sourceRows()).toEqual([]);
 });
 
-// Certificate authorities validate a domain by mailing these.
 test.each([
   ["a domain-validation mailbox", `postmaster@${mailDomain}`],
   ["another domain", `${crypto.randomUUID()}@other.example.test`],

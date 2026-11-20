@@ -8,9 +8,6 @@ export function createDrizzleConnection(
   databaseUrl: AppConfig["DATABASE_URL"],
   {
     max,
-    // ponytail: bounded pool lifetimes so a dead connection (e.g. postgres
-    // restart) gets recycled instead of wedging the pool forever; raise if
-    // connection churn shows up as a bottleneck.
     client = new SQL(databaseUrl, {
       idleTimeout: 60,
       ...(max === undefined ? {} : { max }),
@@ -21,31 +18,11 @@ export function createDrizzleConnection(
   return drizzle(client, { schema });
 }
 
-// A worker can outrace the migrator on a cold start: Compose orders starts,
-// not completion, and Swarm orders nothing (see compose.yml). Without this the
-// first query hits a missing schema and the process dies before opening its
-// healthcheck port, so the orchestrator sees a crash loop.
-//
-// The migrator writes one drizzle.__drizzle_migrations row per migration, in
-// the same transaction that applies it, keyed by the `when` timestamp from
-// drizzle/meta/_journal.json. Checking for this build's newest migration is
-// therefore an exact "is the schema at the version I was compiled for" test,
-// and stays false midway through an upgrade -- probing for a table would not.
-//
-// Waiting forever is deliberate; the log is throttled so a genuinely stuck
-// instance stays readable.
-// Bundled into each build, so this is the newest migration the running
-// binary was compiled against -- not whatever happens to be on disk.
 const latestMigration = Math.max(...journal.entries.map((entry) => entry.when));
 
-// The schema not there yet, or a database not accepting connections yet. Bun
-// reports an unresolvable host as a refused connection too, which on Swarm
-// can also be a service not scheduled yet. Anything else -- a wrong password,
-// a database that does not exist -- is configuration, and waiting would only
-// hide it.
 const notReadyCodes = new Set([
-  "42P01", // undefined_table
-  "57P03", // cannot_connect_now: the server is starting up
+  "42P01",
+  "57P03",
   "ERR_POSTGRES_CONNECTION_CLOSED",
   "ERR_POSTGRES_CONNECTION_REFUSED",
   "ERR_POSTGRES_CONNECTION_TIMEOUT",

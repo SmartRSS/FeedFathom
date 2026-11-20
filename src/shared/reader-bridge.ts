@@ -4,15 +4,9 @@ import { Value } from "typebox/value";
 export const readerBridgeChannel = "feedfathom-reader";
 export const readerBridgeVersion = 1;
 
-// The extension gives up on an article fetch after readerFetchTimeoutMs and
-// answers TIMEOUT; the page waits a little longer than that, so a slow fetch
-// reaches it as TIMEOUT rather than as a silent UNAVAILABLE.
 export const readerFetchTimeoutMs = 15_000;
 export const readerResponseTimeoutMs = readerFetchTimeoutMs + 5_000;
 
-// One budget for both ends: the extension refuses a body larger than this
-// before transferring it, and the page refuses decoded HTML whose UTF-8 size
-// exceeds it before parsing.
 export const readerMaximumHtmlBytes = 3 * 1024 * 1024;
 
 const requestIdSchema = Type.String({

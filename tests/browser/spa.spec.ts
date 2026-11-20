@@ -26,13 +26,6 @@ import {
   respond,
 } from "./api-fixture.ts";
 
-// The real service worker (see src/spa/sw.ts) takes /api/* fetches
-// over itself once it activates -- its own internal fetch() calls run
-// outside the page's network stack, so they bypass installApiFixture's
-// page.route() mock entirely and hit vite's real dev proxy instead
-// (which has no backend behind it here). A slow-enough test lets the SW
-// finish installing/activating mid-run and starts failing partway through
-// with ECONNREFUSED; blocking it keeps every request on the mocked path.
 test.use({ serviceWorkers: "block" });
 
 const browserFailures = new WeakMap<Page, string[]>();
@@ -103,16 +96,6 @@ async function installReaderResponder(
               action: "fetch",
               channel: "feedfathom-reader",
               finalUrl: "https://articles.example/first",
-              // The page from #929 when element-heavy: 24,000 paragraphs, one
-              // link each.
-              // The <img> carries no loading hint, so whatever the sanitize
-              // step gives it is the app's own default. A data: URL keeps it
-              // off the network: a failed request would land in the console
-              // error guard rather than in the assertion.
-              // The hostile page's image fails to decode without touching the
-              // network, so its handler fires wherever the image is loaded.
-              // It asks for eager loading because the app's lazy default
-              // would otherwise keep a detached copy from loading at all.
               html:
                 articleKind === "element-heavy"
                   ? `<html><body><article>${'<p>Paragraph text with <a href="/next">a link</a>.</p>'.repeat(24_000)}</article></body></html>`
@@ -133,7 +116,6 @@ async function installReaderResponder(
   );
 }
 
-// One row of a stubbed article page, in the shape articlesResponse wants.
 const pagedSummary = (id: number) => ({
   author: "Author",
   id,
@@ -145,8 +127,6 @@ const pagedSummary = (id: number) => ({
   url: `https://articles.example/${id}`,
 });
 
-// The full article behind a pagedSummary row, for the ids the fixture does
-// not know.
 const fulfillPagedArticle = async (route: Route) => {
   const id = Number(new URL(route.request().url()).searchParams.get("article"));
   await respond(route, articleResponse, {
@@ -163,9 +143,6 @@ const fulfillPagedArticle = async (route: Route) => {
   });
 };
 
-// The article rows are role="option" inside the list. So are the three
-// options of the filter <select> beside them, which is why this is scoped
-// rather than asking the page for every option it has.
 const articleOptions = (page: Page) =>
   page.locator(".article-list").getByRole("option");
 
@@ -176,7 +153,6 @@ const selectSource = async (page: Page, name = "Tech News") => {
   await sourceRow(page, name).click();
 };
 
-// The fixture's signed-in API, then the app at `path`.
 const openApp = async (
   page: Page,
   options?: Parameters<typeof installApiFixture>[1],
@@ -187,9 +163,6 @@ const openApp = async (
   return state;
 };
 
-// Resolves once the browser has delivered the intersection changes pending
-// now: a fresh observer's first callback runs in the same notification as,
-// and after, those of every older observer on the page.
 const intersectionsDelivered = (page: Page) =>
   page.evaluate(
     () =>
@@ -216,13 +189,9 @@ test("shows an all-caught-up empty state for a feed with no unread", async ({
   await openApp(page);
 
   await sourceRow(page).first().click();
-  // The fixture's article list for the source is nonempty; right after the
-  // list renders, remove the single article and the fallback appears.
   await page.getByRole("button", { name: "delete articles" }).click();
   await expect(page.getByText("All caught up.")).toBeVisible();
 
-  // #933: the empty-state text is a role=status, and a listbox may only own
-  // option/group children -- it must sit outside the listbox, not inside it.
   await expect(
     page.getByRole("listbox", { name: "Articles" }).getByRole("status"),
   ).toHaveCount(0);
@@ -233,8 +202,6 @@ test("opens a keyboard-dismissable context menu on tree rows", async ({
 }) => {
   await openApp(page);
 
-  // The virtual Today row heads the tree but is a view, not a feed: no
-  // menu for it.
   await page.locator("button.source").first().click({ button: "right" });
   await expect(page.getByRole("menu")).toHaveCount(0);
 
@@ -268,8 +235,6 @@ test("keeps the context menu inside a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
 
-  // Long-press near a screen edge is the common case on touch, so open
-  // the menu from a point a few pixels from the right edge of a row.
   await sourceRow(page)
     .first()
     .evaluate((row) => {
@@ -294,9 +259,6 @@ test("keeps the context menu inside a narrow viewport", async ({ page }) => {
   ).toBeVisible();
 });
 
-// #989: the first render never waits on favicons. A cold load of a large
-// tree must not hold the sidebar until the last icon settles; icons still
-// loading show their own placeholder, then swap in.
 test("renders the tree while its favicons are still loading", async ({
   page,
 }) => {
@@ -320,14 +282,10 @@ test("renders the tree while its favicons are still loading", async ({
   await page.route("**/api/favicon/**", (route) => {
     held.push(route);
   });
-  // No page timer fires, so a tree that rendered only after some favicon
-  // deadline gave up would stay a skeleton.
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
   await page.goto("/");
 
-  // The icons never answer, so a tree that waited for them would never
-  // leave its skeleton.
   await expect(page.locator(".tree.skeleton")).toHaveCount(0);
   const icons = page.locator("button.source img.node-icon");
   await expect(icons).toHaveCount(rowCount);
@@ -347,8 +305,6 @@ test("renders the tree while its favicons are still loading", async ({
   await expect(page.locator("img.node-icon.skeleton-row")).toHaveCount(0);
 });
 
-// #938: index.html starts /api/tree before the bundles run, and the
-// dashboard's own fetch reuses that response rather than asking again.
 test("fetches the tree once on a dashboard load, and not on sign-in routes", async ({
   page,
 }) => {
@@ -369,9 +325,6 @@ test("fetches the tree once on a dashboard load, and not on sign-in routes", asy
   expect(treeRequests).toEqual([]);
 });
 
-// #881: the loading skeleton renders ~190 bars. Sliding each bar's
-// pseudo-element by transform stays on the compositor; animating the bar's
-// own background-position repainted every one of them on every frame.
 test("sweeps the skeleton by transform, and not at all under reduced motion", async ({
   page,
 }) => {
@@ -396,7 +349,6 @@ test("sweeps the skeleton by transform, and not at all under reduced motion", as
 
 test("offers first-run guidance while the tree is empty", async ({ page }) => {
   await installApiFixture(page);
-  // Registered after the fixture's own **/api/** handler, so it wins.
   await page.route("**/api/tree", (route) =>
     respond(route, treeResponse, { tree: [] }),
   );
@@ -416,11 +368,6 @@ test("offers first-run guidance while the tree is empty", async ({ page }) => {
   expect(new URL(page.url()).hash).toBe("#import-opml");
 });
 
-// A nested list also matches .tree, so it easily picks that rule's
-// scroll-container treatment back up and reserves a scrollbar gutter of its
-// own, indenting every source row's right edge by the gutter width while the
-// folder rows around it stay put. The visible symptom is the unread counts
-// failing to line up, so assert on those directly.
 test("right-aligns folder and source unread counts to the same edge", async ({
   page,
 }) => {
@@ -459,15 +406,12 @@ test("surfaces folder creation failures without refreshing the tree", async ({
   expect(state.treeRequests).toBe(1);
 });
 
-// The in-app prompt dialog (#698) replacing native prompt(): a successful
-// create drives the same API call the native dialog used to.
 test("creates a folder through the in-app prompt", async ({ page }) => {
   const state = await openApp(page);
   await page.getByRole("button", { name: "add folder" }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  // #817: the dialog's accessible name is its visible title.
   await expect(dialog).toHaveAccessibleName("New folder");
   await expect(dialog.getByRole("textbox")).toHaveValue("");
   await dialog.getByRole("textbox").fill("Saved");
@@ -475,14 +419,9 @@ test("creates a folder through the in-app prompt", async ({ page }) => {
 
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
-  // The fixture's POST /api/folders handler asserts the body is exactly
-  // { name: "Saved" }, so reaching here without a console/request failure
-  // proves the prompt value reached the API; the reload bumps the count.
   await expect.poll(() => state.treeRequests).toBe(2);
 });
 
-// Cancel must resolve exactly like the native cancel path: no delete, and
-// focus back on the button that opened the dialog.
 test("cancelling the delete confirmation keeps the source", async ({
   page,
 }) => {
@@ -493,7 +432,6 @@ test("cancelling the delete confirmation keeps the source", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Delete "Tech News"?');
-  // #817: the accessible name identifies the item being deleted.
   await expect(dialog).toHaveAccessibleName('Delete "Tech News"?');
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
@@ -544,10 +482,6 @@ test("preserves an unauthenticated deep link through login", async ({
 
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("next")).toBe(next);
-  // The initial GET /api/folders 401 that drives this redirect is expected
-  // -- not a bug -- so clear it rather than let afterEach's zero-console-
-  // errors guard fail on it, matching the pattern used below for the
-  // other test that deliberately triggers an expired-session 401.
   (browserFailures.get(page) ?? []).length = 0;
 
   await page.getByLabel("Email").fill("reader@example.com");
@@ -566,9 +500,6 @@ test("preserves an unauthenticated deep link through login", async ({
   ).toBeVisible();
 });
 
-// A folder's <ul role="group"> is a DOM sibling of its treeitem, so nothing
-// but this aria-owns keeps the two connected -- lose it and the nesting
-// silently flattens in the accessibility tree while looking identical.
 test("hangs a folder's nested group off its own treeitem", async ({ page }) => {
   await openApp(page);
 
@@ -588,7 +519,6 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 
   await filter.fill("tech");
-  // The folder does not match "tech" itself; it survives through its child.
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 
   await filter.fill("nothing matches this");
@@ -601,10 +531,6 @@ test("narrows the tree to what matches, and says so when nothing does", async ({
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
 });
 
-// Search spans every subscription: the article a reader half-remembers is
-// exactly the one whose feed they cannot name, so the results cannot be scoped
-// to the selected row -- and the unread default would answer for an article
-// they remember because they read it.
 test("searches across subscriptions and says when nothing matches", async ({
   page,
 }) => {
@@ -614,7 +540,6 @@ test("searches across subscriptions and says when nothing matches", async ({
   await search.fill("subscribed");
   await search.press("Enter");
 
-  // "Subscribed article" belongs to a feed that was never selected.
   await expect(
     page.getByRole("option", { name: /Subscribed article/ }),
   ).toBeVisible();
@@ -624,15 +549,10 @@ test("searches across subscriptions and says when nothing matches", async ({
   await search.press("Enter");
   await expect(page.getByText("No articles match that.")).toBeVisible();
 
-  // Emptying the box leaves search without a submit.
   await search.fill("");
   await expect(page.getByText("Select a feed to read.")).toBeVisible();
 });
 
-// A search response that lands after the field was cleared must not
-// repopulate the list (#815) -- with no source selected, clearing empties the
-// An externally-resolvable promise: hand the resolver to the code under
-// test, await the promise where the release matters.
 const deferred = () => {
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
@@ -641,13 +561,10 @@ const deferred = () => {
   return { release, released };
 };
 
-// list rather than reloading a feed's articles.
 test("a late response to a cleared search leaves the list empty", async ({
   page,
 }) => {
   await installApiFixture(page);
-  // Registered after the fixture, so this handler runs first: search
-  // requests hold until released, everything else falls through.
   const { released: searchReleased, release: releaseSearch } = deferred();
   await page.route("**/api/articles", async (route) => {
     const { query } = Value.Parse(
@@ -673,17 +590,11 @@ test("a late response to a cleared search leaves the list empty", async ({
   ).toHaveCount(0);
 });
 
-// The article list is keyset-paged and the scroll position is what asks for
-// the next page, so a list too short to scroll can never ask. Deleting a whole
-// page is the way in: select all, delete, and the pane would sit empty with
-// pages still unread and nothing left to scroll.
 test("fetches the next article page after a delete empties the list", async ({
   page,
 }) => {
   await installApiFixture(page);
   const cursors: (number | undefined)[] = [];
-  // Registered after the fixture, so it wins for this one route and falls
-  // through to the fixture for every other request the page makes.
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "POST") return await route.fallback();
     const body = Value.Parse(articlesRequest, route.request().postDataJSON());
@@ -696,8 +607,6 @@ test("fetches the next article page after a delete empties the list", async ({
       Array.from({ length: size }, (_, index) => pagedSummary(start + index)),
     );
   });
-  // Selecting the list also opens its first row, and these ids are not ones
-  // the fixture knows.
   await page.route("**/api/article?*", fulfillPagedArticle);
   await page.goto("/");
   await selectSource(page);
@@ -709,15 +618,10 @@ test("fetches the next article page after a delete empties the list", async ({
   await page.getByRole("button", { exact: true, name: "select all" }).click();
   await page.getByRole("button", { name: "delete articles" }).click();
 
-  // The second page arrives without a scroll, because there was nothing left
-  // to scroll, and it is asked for with the last row of the first page.
   await expect(rows).toHaveCount(3);
   expect(cursors).toEqual([undefined, articlePageSize]);
 });
 
-// Solid only writes the DOM when a binding's value changes, so a mutation
-// count cannot see this. The cost is every row re-running its bindings, and
-// each row's classList binding asks the selection Set whether it holds it.
 test("moving the focus re-evaluates only the rows it leaves and enters", async ({
   page,
 }) => {
@@ -741,8 +645,6 @@ test("moving the focus re-evaluates only the rows it leaves and enters", async (
   await selectSource(page);
   const rows = page.locator(".article-list .article");
   await expect(rows).toHaveCount(pageSize);
-  // Solid runs the bindings synchronously inside the keydown handler, so
-  // the count is complete by the time dispatchEvent returns.
   const calls = await rows.first().evaluate((row) => {
     const has = Set.prototype.has;
     let count = 0;
@@ -766,10 +668,6 @@ test("moving the focus re-evaluates only the rows it leaves and enters", async (
   expect(calls).toBeLessThan(pageSize / 10);
 });
 
-// Today is scoped by `view`, not by an id list, and its tree row's uid is the
-// string "today" rather than a source id. The second page has to be asked for
-// the same way the first one was: running that uid through sourceIds gives
-// [NaN], which serialises to [null] and the server refuses the request.
 test("pages the Today view with the view, not its node uid", async ({
   page,
 }) => {
@@ -794,8 +692,6 @@ test("pages the Today view with the view, not its node uid", async ({
   const rows = page.locator(".article-list .article");
   await expect(rows).toHaveCount(articlePageSize);
 
-  // Same emptying trick as the test above: nothing left to scroll is what
-  // makes the app ask for the next page without a scroll gesture.
   await page.getByRole("button", { exact: true, name: "select all" }).click();
   await page.getByRole("button", { name: "delete articles" }).click();
   await expect(rows).toHaveCount(3);
@@ -808,9 +704,6 @@ test("pages the Today view with the view, not its node uid", async ({
   });
 });
 
-// Read state is the alternative to the delete-as-you-read workflow: an
-// article you are finished with but want to keep. Marking one read has to
-// take it out of the Unread view without taking it out of the store.
 test("marks an article read, moving it between the filters", async ({
   page,
 }) => {
@@ -822,8 +715,6 @@ test("marks an article read, moving it between the filters", async ({
   await articleOptions(page).first().click();
   await page.getByRole("button", { name: "Mark read" }).click();
 
-  // Gone from Unread, and the server was told rather than the row merely
-  // hidden client-side.
   await expect(articleOptions(page)).toHaveCount(2);
   expect([...state.readArticleIds]).toEqual([11]);
 
@@ -833,30 +724,21 @@ test("marks an article read, moving it between the filters", async ({
 
   await filter.selectOption("all");
   await expect(articleOptions(page)).toHaveCount(3);
-  // Only the one marked renders as read, from the server's own flag.
   await expect(page.locator(".article-list .article.read")).toHaveCount(1);
 
-  // The button offers the reverse action once the selection is already read.
   await articleOptions(page).first().click();
   await page.getByRole("button", { name: "Mark unread" }).click();
   await expect(page.locator(".article-list .article.read")).toHaveCount(0);
   expect([...state.readArticleIds]).toEqual([]);
 
-  // Same action from the keyboard, which is how Delete already works.
   await articleOptions(page).first().click();
   await page.keyboard.press("m");
   await expect(page.locator(".article-list .article.read")).toHaveCount(1);
   expect([...state.readArticleIds]).toEqual([11]);
 
-  // Three list requests, all of them a change of question: the initial
-  // selection and the two filter changes. Marking read answers itself
-  // locally -- re-asking would flash the skeleton over rows already correct.
   expect(state.articleRequests).toBe(3);
 });
 
-// Bulk and destructive actions say what they did through the polite live
-// region (#1028), once per action rather than once per row, and a repeat of
-// the same message is spoken again rather than left as unchanged text.
 test("announces mark-read and delete results once per action", async ({
   page,
 }) => {
@@ -866,7 +748,6 @@ test("announces mark-read and delete results once per action", async ({
   const status = page.locator(".dashboard > [role='status']");
   await expect(status).toHaveAttribute("aria-live", "polite");
 
-  // All keeps the marked rows in the list, leaving some to delete.
   await page.getByRole("combobox", { name: "Show" }).selectOption("all");
   await expect(articleOptions(page)).toHaveCount(3);
   await page.getByRole("button", { exact: true, name: "select all" }).click();
@@ -876,8 +757,6 @@ test("announces mark-read and delete results once per action", async ({
   await articleOptions(page).first().click();
   await page.getByRole("button", { name: "delete articles" }).click();
   await expect(status).toHaveText("Article deleted.");
-  // The second identical message has to clear the region first, or a
-  // screen reader hears nothing new.
   await expect(articleOptions(page)).toHaveCount(2);
   await articleOptions(page).first().click();
   const cleared = status.evaluate(
@@ -897,14 +776,9 @@ test("announces mark-read and delete results once per action", async ({
   await expect(status).toHaveText("Article deleted.");
 });
 
-// The scroll-past policy (#714): rows held in view for the dwell time are
-// marked read in ONE batched request, not one per article. The All view keeps
-// rows in place, and the row open in the reader is excluded so nothing is
-// pulled out from under the person reading it.
 test("scroll-past policy batches dwelled rows into one PATCH", async ({
   page,
 }) => {
-  // The dwell and the flush run on timers, so the clock can run them out.
   await page.clock.install();
   await page.addInitScript(() => {
     localStorage.setItem("markReadPolicy", "on-scroll-past");
@@ -919,25 +793,15 @@ test("scroll-past policy batches dwelled rows into one PATCH", async ({
   await articleOptions(page)
     .last()
     .evaluate((row) => row.scrollIntoView());
-  // Whether that scrolled anything is not the point and is not asserted: all
-  // three rows fit this viewport, so on most runs it moves nothing. What the
-  // rows share is that they dwell, and 11 is excluded because the reader has
-  // it open. The batching rule itself is pinned in scroll-past.test.ts against
-  // a stepping clock, including rows whose dwells end a millisecond apart.
   await intersectionsDelivered(page);
   await page.clock.runFor(10_000);
   await expect.poll(() => state.readMarks).toEqual([[12, 13]]);
 
-  // One request for both rows, and the rows render as read from the same
-  // optimistic update the Mark read button uses.
   await expect(page.locator(".article-list .article.read")).toHaveCount(2);
   expect([...state.readArticleIds].toSorted((a, b) => a - b)).toEqual([12, 13]);
 });
 
-// Manual is the default policy: scrolling changes nothing, and no observer
-// work happens at all.
 test("default policy never marks read on scroll", async ({ page }) => {
-  // The dwell and the flush run on timers, so the clock can run them out.
   await page.clock.install();
   const state = await installApiFixture(page, { multipleArticles: true });
   await page.setViewportSize({ height: 320, width: 1280 });
@@ -952,7 +816,6 @@ test("default policy never marks read on scroll", async ({ page }) => {
   await intersectionsDelivered(page);
   await page.clock.runFor(10_000);
 
-  // A flush marks its rows read in the list before its request goes out.
   await expect(page.locator(".article-list .article.read")).toHaveCount(0);
   expect(state.readMarks).toEqual([]);
   expect(state.readArticleIds.size).toBe(0);
@@ -983,11 +846,6 @@ test("the options page offers and persists the read-mark policy", async ({
   ).toHaveValue("on-scroll-past");
 });
 
-// The options route is the one page the document itself scrolls: once the
-// settings grew past a viewport, body's overflow:hidden clipped every card
-// below the fold, and making the column itself the scroller instead read as
-// a cut-off page with a scrollbar trapped inside it. Now the document
-// scrolls and the column stays a plain block at its full width.
 test("scrolls the options page when the settings exceed the viewport", async ({
   page,
 }) => {
@@ -1009,11 +867,6 @@ test("scrolls the options page when the settings exceed the viewport", async ({
       .evaluate((el) => el.scrollHeight - el.clientHeight),
   ).toBe(0);
 
-  // The viewport must be the only scroller: with overflow:auto left on
-  // body, Gecko keeps it a scroll container (Chromium propagates it to the
-  // viewport), and scroll commands aimed at the focused element's nearest
-  // scrollable ancestor -- Home/End, Floorp's rocker gestures -- scroll the
-  // body invisibly instead of the page.
   expect(
     await page.evaluate(() => getComputedStyle(document.body).overflowY),
   ).toBe("visible");
@@ -1023,7 +876,6 @@ test("scrolls the options page when the settings exceed the viewport", async ({
     ),
   ).toBe(0);
 
-  // A wheel over the column must move the document, not the column.
   await page.mouse.move(400, 250);
   await page.mouse.wheel(0, 600);
   await expect
@@ -1040,10 +892,6 @@ test("scrolls the options page when the settings exceed the viewport", async ({
     .toBeLessThanOrEqual(500);
 });
 
-// The options page lists the account's active sessions (#695): the one
-// making the request is labelled and gets no sign-out button -- logout
-// already covers it -- and every other session can be revoked singly or
-// all at once, with the list shrinking to prove the revoke landed.
 test("lists active sessions and signs out another one", async ({ page }) => {
   const state = await openApp(page, {}, "/options");
   await page.getByRole("link", { exact: true, name: "Account" }).click();
@@ -1051,7 +899,6 @@ test("lists active sessions and signs out another one", async ({ page }) => {
   await expect(page.getByText("This session")).toBeVisible();
   await expect(page.getByText("Phone")).toBeVisible();
 
-  // The current session offers no revoke button; logout is its way out.
   const currentRow = page
     .locator(".session-row")
     .filter({ hasText: "This browser" });
@@ -1066,9 +913,6 @@ test("lists active sessions and signs out another one", async ({ page }) => {
   await expect(page.getByText("Phone")).toHaveCount(0);
 });
 
-// A session revoked from another device, or expired, while the options page
-// is open: the next request there sends the reader to sign in, with options
-// as the page to return to, not into an inline error.
 test("an expired session on the options page routes to login, returning to options", async ({
   page,
 }) => {
@@ -1120,8 +964,6 @@ test("a password change keeps this session and drops the others from the list", 
   await expect(page.getByText("This browser")).toBeVisible();
 });
 
-// The caller is signed in, so a throttled change can say so instead of
-// blaming the password the user typed.
 test("a throttled password change says to try again later", async ({
   page,
 }) => {
@@ -1198,10 +1040,6 @@ test("a throttled registration says to try again later", async ({ page }) => {
   failures.length = 0;
 });
 
-// The unit test covers the guard; this covers the part that can silently stop
-// working -- the settings reaching the stylesheet at all. A renamed data
-// attribute or a dropped effect leaves both selects working and the reader
-// unchanged, which no unit test would notice.
 test("the reader steps change the rendered column, not just storage", async ({
   page,
 }) => {
@@ -1234,8 +1072,6 @@ test("the reader steps change the rendered column, not just storage", async ({
   const large = await columnOf();
   expect(large.fontSize).toBeGreaterThan(medium.fontSize);
 
-  // Narrowing the measure widens the padding that centres it, so the effect
-  // is visible on the box even though no width is set on the element.
   await page.goto("/options#appearance");
   await page
     .getByRole("combobox", { name: "Line width" })
@@ -1247,11 +1083,6 @@ test("the reader steps change the rendered column, not just storage", async ({
   expect(narrow.inlinePadding).toBeGreaterThan(large.inlinePadding);
 });
 
-// Colour cannot carry this. forced-colors mode replaces every colour the
-// stylesheet sets with the system palette, and a selected row already has to
-// put a read title back to the selected text colour or it drops under 1.5:1.
-// Weight survives both, which is what the tree already relies on for a source
-// with unread articles.
 test("compact density tightens the tree without touching the theme", async ({
   page,
 }) => {
@@ -1292,17 +1123,12 @@ test("tells read from unread by weight, not only colour", async ({ page }) => {
   await page.getByRole("button", { name: "Mark read" }).click();
   await expect(page.locator(".article-list .article.read")).toHaveCount(1);
 
-  // Still selected from the click above, which is the case colour cannot
-  // answer at all.
   await expect(articleOptions(page).first()).toHaveClass(/selected/);
   const readWeight = await weightOf(0);
   expect(readWeight).not.toBe(unreadWeight);
   expect(Number(unreadWeight)).toBeGreaterThan(Number(readWeight));
 });
 
-// The tree is a roving tabindex: exactly one row carries tabindex="0" and the
-// rest carry -1. A filter that removed the row holding it would leave none,
-// and Tab would step straight past the whole tree.
 test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
   await openApp(page);
   const tabStops = page.locator('[role="treeitem"][tabindex="0"]');
@@ -1315,8 +1141,6 @@ test("keeps exactly one tree tab stop across filtering", async ({ page }) => {
   await expect(tabStops).toHaveCount(1);
 });
 
-// WAI-ARIA tree pattern: Home and End go to the first and last visible row,
-// and the arrows stop at the ends instead of wrapping.
 test("tree arrows stop at the ends and Home and End jump to them", async ({
   page,
 }) => {
@@ -1337,9 +1161,6 @@ test("tree arrows stop at the ends and Home and End jump to them", async ({
   await expect(rows.first()).toBeFocused();
 });
 
-// Every row reads the tab stop, and working it out walks the whole tree. It
-// has to be worked out once per focus change and shared, not once per row:
-// that is O(N) walks of O(N) each. hasNodeKey walks with Array#some.
 test("moving tree focus works out the tab stop once, not per row", async ({
   page,
 }) => {
@@ -1361,9 +1182,7 @@ test("moving tree focus works out the tab stop once, not per row", async ({
   );
   await page.goto("/");
   const rows = page.locator('[role="treeitem"]');
-  // Today sits ahead of the user's own rows.
   await expect(rows).toHaveCount(rowCount + 1);
-  // The focus event, and the bindings it sets off, run synchronously.
   const calls = await rows.nth(1).evaluate((row) => {
     const some = Array.prototype.some;
     let count = 0;
@@ -1384,8 +1203,6 @@ test("moving tree focus works out the tab stop once, not per row", async ({
   expect(calls).toBeLessThan(rowCount / 10);
 });
 
-// Every tree load returns fresh objects; rows must survive it rather than
-// remount, or focus drops to <body> and every favicon flashes its skeleton.
 test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   await page.clock.install();
   await openApp(page);
@@ -1427,9 +1244,6 @@ test("a tree poll updates rows in place and keeps focus", async ({ page }) => {
   ).toBe(true);
 });
 
-// The route answers as it does for an unknown address when no mail is
-// configured, so offering the link there would only send people somewhere
-// that cannot help them.
 test("offers a password reset link only where mail can deliver one", async ({
   page,
 }) => {
@@ -1452,9 +1266,6 @@ test("offers a password reset link only where mail can deliver one", async ({
   expect(new URL(page.url()).pathname).toBe("/password-reset");
 });
 
-// #810: the activation page is a confirmation, not an action. Anything that
-// opens the link -- a mail preview, a link scanner -- must find the token as
-// usable as the person following it; only the button may activate.
 test("opening the activation link activates nothing until the button says so", async ({
   page,
 }) => {
@@ -1478,9 +1289,6 @@ test("opening the activation link activates nothing until the button says so", a
   expect(activations).toEqual(["POST"]);
 });
 
-// #765: Hide in the New-article signal options must remove the "(N) "
-// prefix, immediately and for good -- the title effect reads the setting
-// signal directly, so no reload or dashboard visit may bring it back.
 test("hides the tab-title unread count when the setting is Hide", async ({
   page,
 }) => {
@@ -1488,25 +1296,20 @@ test("hides the tab-title unread count when the setting is Hide", async ({
   await expect(page).toHaveTitle("(2) FeedFathom");
 
   await page.getByRole("button", { name: "options" }).first().click();
-  // Leaving the dashboard drops the badge on its own, before the setting
-  // changes anything.
   await expect(page).toHaveTitle("Options · FeedFathom");
   await page.getByRole("link", { name: "Lists" }).click();
   await page
     .getByRole("checkbox", { name: "Show the unread count in the tab title" })
     .uncheck();
-  // The effect reruns wherever the app is, not only over the dashboard.
   await expect(page).toHaveTitle("Options · FeedFathom");
 
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page).toHaveTitle("FeedFathom");
 
-  // A reload re-reads the persisted setting from localStorage.
   await page.reload();
   await expect(page).toHaveTitle("FeedFathom");
 });
 
-// Before #714 the only choice was a boolean under its own key.
 test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
   page,
 }) => {
@@ -1519,9 +1322,6 @@ test("the pre-#714 markReadOnOpen boolean becomes the on-open policy", async ({
   ).toHaveValue("on-open");
 });
 
-// Each search box is one row of a pane with little height to spare, so each
-// can be hidden -- and hiding one must drop what it held, or a filter nobody
-// can see keeps narrowing the tree.
 test("hides the feed filter and article search boxes independently", async ({
   page,
 }) => {
@@ -1548,18 +1348,12 @@ test("hides the feed filter and article search boxes independently", async ({
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 
-  // A reload re-reads both from localStorage.
   await page.reload();
   await expect(page.getByRole("treeitem", { name: /Tech News/ })).toBeVisible();
   await expect(page.getByLabel("Filter feeds")).toHaveCount(0);
   await expect(page.getByLabel("Search articles")).toHaveCount(0);
 });
 
-// These two pin both sides of the prefetch toggle around the same open.
-// They store the "on"/"off" strings toggles used before they were booleans,
-// so they also cover reading those.
-// Records each /api/article fetch in the page as it starts, so a check needs
-// no wait for Playwright's own request events.
 const recordArticleRequests = (page: Page) =>
   page.addInitScript(() => {
     const fetchPage = window.fetch.bind(window);
@@ -1579,8 +1373,6 @@ const recordArticleRequests = (page: Page) =>
     });
   });
 
-// The article ids fetched so far, read in an idle callback: a prefetch is
-// queued in one, so a prefetch queued before this read has run by then.
 const recordedArticleRequests = (page: Page) =>
   page.evaluate(
     () =>
@@ -1634,9 +1426,6 @@ test("skips the next-article prefetch when the setting is Off", async ({
 
   await articleOptions(page).first().click();
   await expect(page.locator(".reader")).toContainText("Feed article content");
-  // The only article fetched is the one opened (which row that is depends on
-  // the fixture's list order, so only the count is pinned here -- the On case
-  // above pins that a second id really does get fetched).
   const requested = await recordedArticleRequests(page);
   expect(new Set(requested).size).toBe(1);
   expect(["11", "12", "13"]).toContain(requested[0]);
@@ -1652,8 +1441,6 @@ test("skips the next-article prefetch under Save Data", async ({ page }) => {
   await recordArticleRequests(page);
   await openApp(page, { multipleArticles: true });
   await selectSource(page);
-  // Loading the list opens its first row, which is when a prefetch would be
-  // queued.
   await expect(page.locator(".reader")).toContainText("Feed article content");
   expect(new Set(await recordedArticleRequests(page))).toEqual(new Set(["11"]));
 });
@@ -1670,15 +1457,12 @@ test("a press starts the article fetch even with prefetch Off", async ({
   await page.getByRole("combobox", { name: "Show" }).selectOption("all");
   await expect(articleOptions(page)).toHaveCount(3);
 
-  // Settle first: loading the list opens an article of its own.
   await expect(page.locator(".reader")).toContainText("Feed article content");
   const before = (await recordedArticleRequests(page)).length;
-  // pointerdown alone, no click: the fetch must not wait for the release.
   await articleOptions(page)
     .last()
     .dispatchEvent("pointerdown", { button: 0, pointerType: "mouse" });
   expect(await recordedArticleRequests(page)).toHaveLength(before + 1);
-  // A right press never opens the article, so it fetches nothing.
   await articleOptions(page)
     .nth(1)
     .dispatchEvent("pointerdown", { button: 2, pointerType: "mouse" });
@@ -1778,8 +1562,6 @@ test("selecting a single article then pressing Delete removes only it", async ({
   expect(state.removedArticleIds).toEqual([12]);
 });
 
-// Forensics for deletes nobody could explain (see src/spa/delete-trace.ts):
-// the server log is only as good as what the request says triggered it.
 test("each article delete names the input that triggered it", async ({
   page,
 }) => {
@@ -1825,10 +1607,6 @@ test("each article delete names the input that triggered it", async ({
 test("source properties reuses the discovery panel with feed/website locked", async ({
   page,
 }) => {
-  // Editing reuses the exact same left-pane form the "add source" flow
-  // uses (see feed-discovery.tsx), just with feed/home URL read-only --
-  // still selectable and copyable -- and the website-search/preview steps
-  // hidden; not a separate dialog.
   await openApp(page);
   await selectSource(page);
 
@@ -1852,8 +1630,6 @@ test("the discovery panel takes focus on open and Escape hands it back", async (
 }) => {
   await openApp(page);
 
-  // Opening the panel unmounts the toolbar button that was focused; without
-  // an explicit hand-off a keyboard user lands on <body>.
   const add = page.getByRole("button", { name: "add source" });
   await add.focus();
   await page.keyboard.press("Enter");
@@ -1927,7 +1703,6 @@ test("renaming a folder through properties updates the tree", async ({
   await page.getByRole("button", { name: "source properties" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  // The rename prompt opens pre-filled with the current name (#698).
   await expect(dialog.getByRole("textbox")).toHaveValue("Reading");
   await dialog.getByRole("textbox").fill("Archive");
   await dialog.getByRole("button", { name: "Rename" }).click();
@@ -1944,7 +1719,6 @@ test("an empty folder offers Add feed, which starts Discover in it", async ({
   await openApp(page, { emptyFolder: true });
   await page.locator("button.source").filter({ hasText: "Later" }).click();
   await expect(page.getByText("This folder is empty.")).toBeVisible();
-  // Nothing listed and no search to change: nothing to search from.
   await expect(page.getByLabel("Search articles")).toBeDisabled();
   await page.getByRole("button", { name: "Add feed" }).click();
   await expect(page.getByLabel("Folder")).toHaveValue("12");
@@ -1959,8 +1733,6 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
 
   await page.getByRole("button", { name: "delete source" }).click();
 
-  // No confirmation dialog may open for a non-empty folder (#698 moved the
-  // confirm in-app, so absence is directly assertable).
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Folder is not empty");
   await expect(sourceRow(page)).toBeVisible();
@@ -1969,9 +1741,6 @@ test("blocks deleting a non-empty folder", async ({ page }) => {
 test("shows the generic RSS icon for a source with no favicon", async ({
   page,
 }) => {
-  // Regression test for the favicon <Show>/faviconFailed restructuring:
-  // the fixture's source carries favicon: null, so this exercises the
-  // Icon-swap fallback branch (not the real <img>) on every render.
   await openApp(page);
 
   const nodeIcon = sourceRow(page).locator(".node-icon");
@@ -2013,8 +1782,6 @@ test("uses three desktop panes and mobile history navigation", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
-// The system Back (a phone's back gesture) closes Discover the way its
-// toolbar button does, instead of popping the page before the dashboard.
 test("Back closes Discover onto the feeds, not the page before", async ({
   page,
 }) => {
@@ -2023,8 +1790,6 @@ test("Back closes Discover onto the feeds, not the page before", async ({
   const entries = () => page.evaluate(() => history.length);
   const discover = page.getByRole("heading", { name: "Discover feed" });
 
-  // Options' way home is a Back too: it leaves no second dashboard entry
-  // with Options under it.
   const before = await entries();
   await page.getByRole("button", { name: "options" }).first().click();
   await page.getByRole("link", { name: "Home" }).click();
@@ -2042,8 +1807,6 @@ test("Back closes Discover onto the feeds, not the page before", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/");
 
-  // Closing from the toolbar leaves no Discover entry behind for Back to
-  // land on, and a reload over one does not reopen it.
   await page.getByRole("button", { name: "add source" }).click();
   await page.getByRole("button", { name: "back" }).click();
   await expect(discover).toHaveCount(0);
@@ -2053,8 +1816,6 @@ test("Back closes Discover onto the feeds, not the page before", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
   await expect(discover).toHaveCount(0);
 
-  // Pane entries copy the return address; Options must still open after a
-  // pane switch on a dashboard reached from a loaded Options page.
   await page.goto("/options");
   await page.getByRole("link", { name: "Home" }).click();
   await selectSource(page);
@@ -2065,8 +1826,6 @@ test("Back closes Discover onto the feeds, not the page before", async ({
   await expect(page).toHaveURL(/\/options$/);
 });
 
-// #990: the switch cross-fades only on the phone layout, and never under
-// reduced motion. Counting calls rather than watching pixels keeps it cheap.
 test("cross-fades mobile pane switches unless motion is reduced", async ({
   page,
 }) => {
@@ -2103,8 +1862,6 @@ test("cross-fades mobile pane switches unless motion is reduced", async ({
   expect(await transitions()).toBe(1);
 });
 
-// A second tap lands before the cross-fade has applied the first switch. It
-// must not push a second history entry, or Back would stay on the list.
 test("a double tap on a feed leaves one history entry to go back", async ({
   page,
 }) => {
@@ -2112,7 +1869,6 @@ test("a double tap on a feed leaves one history entry to go back", async ({
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
 
-  // Both clicks in one task, so the second certainly beats the transition.
   await sourceRow(page).evaluate((button) => {
     if (!(button instanceof HTMLElement)) return;
     button.click();
@@ -2126,9 +1882,6 @@ test("a double tap on a feed leaves one history entry to go back", async ({
   await expect(page.locator(".sources-pane")).toBeVisible();
 });
 
-// #990: rows off screen skip rendering, and their placeholder height has to
-// match a rendered row exactly, or a restored scrollTop and the paging
-// threshold drift by the error times every row above.
 for (const theme of ["smart", "high-contrast"]) {
   test(`off-screen article rows keep a rendered row's height (${theme})`, async ({
     page,
@@ -2141,8 +1894,6 @@ for (const theme of ["smart", "high-contrast"]) {
     await page.goto("/");
     await selectSource(page);
     await expect(articleOptions(page)).toHaveCount(60);
-    // A blank title and byline (an empty mail subject) must not collapse a
-    // row below the placeholder either.
     await articleOptions(page)
       .nth(1)
       .evaluate((row) => {
@@ -2167,10 +1918,6 @@ for (const theme of ["smart", "high-contrast"]) {
   });
 }
 
-// The extension's newsletter action opens this URL rather than minting an
-// address of its own, so new addresses all come in the SPA's format. The
-// address lands in the URL: a reload must not replace one already copied,
-// and reserves it again, which is a no-op once it is reserved.
 test("mints a newsletter address when opened with ?newsletter", async ({
   page,
 }) => {
@@ -2192,8 +1939,6 @@ test("mints a newsletter address when opened with ?newsletter", async ({
   await expect.poll(() => state.reservedAddresses).toEqual([minted, minted]);
 });
 
-// Mail to an unreserved address bounces, so the user has to know, and a
-// reload gets the reservation another try.
 test("says so when a generated address could not be reserved", async ({
   context,
   page,
@@ -2223,8 +1968,6 @@ test("says so when a generated address could not be reserved", async ({
   failures.length = 0;
 });
 
-// The address is copied before Subscribe, so a newsletter can mail it first:
-// its confirmation must be accepted then, and readable once subscribed.
 test("keeps mail sent to a generated address before Subscribe", async ({
   context,
   page,
@@ -2317,9 +2060,6 @@ test("keeps the newest discovery preview response", async ({ page }) => {
   await page.getByRole("button", { name: /Fast feed/ }).click();
 
   await expect(page.getByLabel("Title")).toHaveValue("Fast feed");
-  // Only now may the older preview answer. Answered or aborted by the app,
-  // it settles after the newer one and is dropped before the page next goes
-  // idle.
   state.releaseSlowPreview();
   await (await (await slowPreview).response())?.finished();
   await page.evaluate(
@@ -2353,7 +2093,6 @@ for (const admin of [false, true])
     await expect(page.locator("#feed-url-error")).toHaveText(
       "This site can't be found.",
     );
-    // The browser logs the 400 itself.
     (browserFailures.get(page) ?? []).length = 0;
     const details = page.locator(".failure-details");
     if (!admin) {
@@ -2443,13 +2182,9 @@ test("lists the discovery preview articles as a list", async ({ page }) => {
   ).toBeVisible();
 });
 
-// A preview opens on its first article. A modified click on one is the
-// browser's gesture for "open this elsewhere", so the pane leaves it be.
 test("a preview opens its first article and leaves modified clicks alone", async ({
   page,
 }) => {
-  // Runs after the app's delegated handler: records whether it took the
-  // click, then keeps the browser from opening anything.
   await page.addInitScript(() =>
     window.addEventListener("click", (event) => {
       sessionStorage.setItem("clickTaken", String(event.defaultPrevented));
@@ -2492,9 +2227,6 @@ test("gives extracted images the app's own loading defaults", async ({
   await page
     .getByRole("combobox", { name: "Article display mode" })
     .selectOption("READABILITY");
-  // The bridge's HTML sets neither attribute, so these are what
-  // sanitizeExtractedHtml added -- and they have to survive DOMPurify, which
-  // is the half of that change nothing else here would catch.
   const image = page.locator(".reader img");
   await expect(image).toHaveAttribute("loading", "lazy");
   await expect(image).toHaveAttribute("decoding", "async");
@@ -2517,8 +2249,6 @@ for (const mode of ["READABILITY", "ARTICLE_EXTRACTOR"]) {
     await expect(
       page.getByText("Reader bridge content.", { exact: false }),
     ).toBeVisible();
-    // The rendered copy started loading after any earlier one, so once it
-    // has failed, a handler that survived any step has already run.
     await expect
       .poll(() =>
         page
@@ -2583,8 +2313,6 @@ test("redirects expired protected requests to login", async ({ page }) => {
   failures.length = 0;
 });
 
-// The sign-in page a 401 lands on, with `next` the route it came from. The
-// `refusals` 401s are expected, so they are cleared from the console guard.
 const expectSignIn = async (page: Page, next: string, refusals = 1) => {
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("next")).toBe(next);
@@ -2601,11 +2329,6 @@ const expectSignIn = async (page: Page, next: string, refusals = 1) => {
   failures.length = 0;
 };
 
-// #1103: each mutation reports its failure through reportError, which must
-// read a 401 as an expired session. `ready` brings the page to the click
-// that sends the request; the session expires between the two. A failed
-// article change then reloads the list or the tree, a second 401.
-// Every dialog confirms with its action's verb.
 const confirm = (page: Page) =>
   page
     .getByRole("dialog")
@@ -2686,10 +2409,6 @@ for (const { name, prepare, ready, refusals, send } of expiringMutations) {
   });
 }
 
-// #1103: the timer poll reloads the tree in the background; a 401 there is
-// the session expiring while the reader looks on, from whichever route the
-// dashboard is showing. `booted` is the last of the route's boot requests
-// to land, so the session expires only once they are all answered.
 for (const { booted, path } of [
   { booted: (page: Page) => sourceRow(page), path: "/" },
   {
@@ -2705,8 +2424,6 @@ for (const { booted, path } of [
     const state = await openApp(page, {}, path);
     await expect(booted(page)).toBeAttached();
     state.authenticated = false;
-    // Nothing on the page shows the poll being armed after the boot tree,
-    // so the clock steps until it goes out.
     await expect
       .poll(async () => {
         await page.clock.runFor(30_000);
@@ -2717,7 +2434,6 @@ for (const { booted, path } of [
   });
 }
 
-// #1103: the three admin requests, each behind its own handleUnauthorized.
 const expiringAdminRequests: {
   name: string;
   ready?: (page: Page) => Promise<void>;
@@ -2761,9 +2477,6 @@ for (const { name, ready, send } of expiringAdminRequests) {
   });
 }
 
-// Tabs were renamed and merged; links and bookmarks that carry an old hash
-// still open the tab that now holds those settings, with the tabs in view
-// rather than scrolled under the page bar.
 for (const [hash, tab, card] of [
   ["#signal", "Lists", "New articles"],
   ["#data", "Import & export", "Import OPML"],
@@ -2784,8 +2497,6 @@ for (const [hash, tab, card] of [
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
-// Every preference is stored per device and the account's settings are
-// not; each tab says which it holds.
 test("each Options tab says whether it applies to this device or the account", async ({
   page,
 }) => {
@@ -2797,8 +2508,6 @@ test("each Options tab says whether it applies to this device or the account", a
   ).toBeVisible();
 });
 
-// Narrow, the Options tabs wrap rather than scroll: every one is whole
-// inside the strip, at widths where one row would not hold them all.
 for (const width of [390, 594])
   test(`every Options tab is fully visible at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ height: 844, width });
@@ -2843,9 +2552,6 @@ test("surfaces tree failures without masquerading as logout", async ({
   await openApp(page, { treeFailure: true });
 
   expect(new URL(page.url()).pathname).toBe("/");
-  // An unreadable answer is FeedFathom's failure, said in a plain sentence
-  // in the feeds pane, which offers Try again there. A reader gets no
-  // details.
   const failure = page.getByRole("complementary", { name: "Feeds" });
   await expect(failure.getByRole("alert")).toContainText(
     "The FeedFathom server ran into a problem. Try again in a moment.",
@@ -2866,7 +2572,6 @@ test("an admin can open the details behind a tree failure", async ({
   await expect(failure.getByRole("alert")).toContainText(
     "Invalid response from /api/tree (200)",
   );
-  // The reason names the status already, so it isn't repeated.
   await expect(failure.getByRole("alert")).not.toContainText("HTTP 200");
 });
 
@@ -2888,10 +2593,8 @@ test("a feed failing for over a day keeps its articles under a notice", async ({
   await expect(notice).toContainText("Not updated since");
   await expect(notice.getByRole("button", { name: "Edit feed" })).toBeVisible();
   await expect(notice.getByRole("button", { name: "Try again" })).toBeVisible();
-  // The status and the fetcher's own words are for admins.
   await expect(notice.getByText("Details")).toHaveCount(0);
   await expect(notice).not.toContainText("404");
-  // Only on the feed itself.
   await page.locator("button.source").filter({ hasText: "Today" }).click();
   await expect(page.locator(".feed-notice")).toHaveCount(0);
 });
@@ -2921,9 +2624,6 @@ test("a feed down for less than a day lists its articles without a notice", asyn
   await expect(page.locator(".feed-notice")).toHaveCount(0);
 });
 
-// #833: refreshing while the boot tree request is still in flight aborts it.
-// That cancellation is not a connectivity failure; both the boot and the
-// refresh settle on the replacement tree.
 test("a superseded tree request settles on its replacement", async ({
   page,
 }) => {
@@ -2931,7 +2631,6 @@ test("a superseded tree request settles on its replacement", async ({
   const held: Array<() => void> = [];
   await page.route("**/api/tree", async (route) => {
     await new Promise<void>((release) => held.push(release));
-    // The aborted request can no longer be answered; that is the point.
     await route.fallback().catch(() => undefined);
   });
   await page.goto("/");
@@ -2946,15 +2645,11 @@ test("a superseded tree request settles on its replacement", async ({
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-// The #709 keyboard vocabulary: j/k alias the arrow keys' selection movement,
-// which already opens the article in the reader pane; ? opens the cheat sheet
-// hosted in the shared DialogHost.
 test("j and k move the selection like the arrow keys", async ({ page }) => {
   await openApp(page, { multipleArticles: true });
   await selectSource(page);
   await expect(articleOptions(page)).toHaveCount(3);
 
-  // Selecting a source lands the cursor on the first article.
   await articleOptions(page).first().focus();
   await expect(articleOptions(page).first()).toHaveAttribute(
     "aria-selected",
@@ -2978,9 +2673,6 @@ test("j and k move the selection like the arrow keys", async ({ page }) => {
   ).toBeFocused();
 });
 
-// `o` carries focus with the pane switch (#816): on a narrow screen the
-// switch display:none's the pane holding focus, which would otherwise drop
-// it to <body> and make the second `o` unreachable.
 test("o moves focus between the article list and the reader pane", async ({
   page,
 }) => {
@@ -2988,8 +2680,6 @@ test("o moves focus between the article list and the reader pane", async ({
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/");
   await selectSource(page);
-  // The load focuses the first row even when it lands before the pane's
-  // cross-fade has shown the list (#990).
   await expect(articleOptions(page).first()).toBeFocused();
 
   await page.keyboard.press("o");
@@ -3001,11 +2691,6 @@ test("o moves focus between the article list and the reader pane", async ({
   await expect(articleOptions(page).first()).toBeFocused();
 });
 
-// Article rows keep the platform's own context menu, on every pointer. It is
-// where "open in a background tab" lives -- the only way to get one on a phone,
-// which has no middle click and where window.open always foregrounds -- along
-// with copy link address, save, and whatever the reader's extensions add. Tree
-// rows are buttons with no platform menu to lose, so they keep the app's.
 test("leaves the article context menu to the browser", async ({ page }) => {
   await openApp(page);
 
@@ -3032,8 +2717,6 @@ test.describe("touch devices", () => {
     await articleOptions(page).first().click({ button: "right" });
     await expect(page.getByRole("menu")).toHaveCount(0);
 
-    // Nothing may suppress the platform menu on the row: both of these are
-    // what removed it before.
     const styles = await articleOptions(page)
       .first()
       .evaluate((element) => {
@@ -3048,8 +2731,6 @@ test.describe("touch devices", () => {
   });
 });
 
-// The filter is a dropdown among icon buttons, so it says what it does rather
-// than leaving "Unread" to read as a status.
 test("labels the article filter visibly", async ({ page }) => {
   await openApp(page);
   await selectSource(page);
@@ -3069,34 +2750,25 @@ test("? opens the shortcut help dialog and Escape closes it", async ({
   await page.keyboard.press("?");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  // #817: the dialog is named by its visible heading.
   await expect(dialog).toHaveAccessibleName("Keyboard shortcuts");
   await expect(
     dialog.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();
   await expect(dialog.getByText("Mark read / unread")).toBeVisible();
-  // Ctrl+A is a chord, not two alternatives: keys inside one group join with
-  // "+", and only separate groups read as "or".
   await expect(dialog.locator("dt").filter({ hasText: "Ctrl" })).toHaveText([
     "Ctrl + ↓ or Ctrl + ↑",
     "Ctrl + A",
   ]);
 
-  // Esc dismisses, and focus returns to the article row that invoked it.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(":focus")).toHaveAttribute("role", "option");
 });
 
-// The dialog host shows one request at a time. A second one replaces the
-// first, which must then settle as cancelled rather than leave its caller
-// waiting forever. The page imports the app's own module instance from the
-// dev server, as no control can open a dialog over an open one.
 test("a second dialog request cancels the one still pending", async ({
   page,
 }) => {
   await openApp(page);
-  // Boot focuses the first tree row; wait for that before moving focus.
   await expect(page.locator(".sources-pane .source").first()).toBeFocused();
   const opener = page.getByRole("button", { name: "add folder" });
   await opener.focus();
@@ -3104,8 +2776,6 @@ test("a second dialog request cancels the one still pending", async ({
   const first = await page.evaluate(async (url) => {
     const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
     const pending = confirmDialog("First?", "", { confirmLabel: "OK" });
-    // Let the first dialog open and take focus, so the second replaces an
-    // open dialog and must keep the first one's focus-return target.
     await new Promise((resolve) => setTimeout(resolve, 0));
     void promptDialog("Second", "Name", {
       confirmLabel: "OK",
@@ -3153,8 +2823,6 @@ test("typing j in the feed filter does not move the selection", async ({
   const filter = page.getByRole("searchbox", { name: "Filter feeds" });
   await filter.focus();
   await page.keyboard.type("j");
-  // The selection stays on the row, and focus stays in the input: the
-  // keydown was text, not a command.
   await expect(articleOptions(page).first()).toHaveAttribute(
     "aria-selected",
     "true",
@@ -3191,8 +2859,6 @@ test.describe("session restoration", () => {
       .toBe(900);
 
     await page.reload();
-    // The restored selection re-opens the article in the reader pane and
-    // puts the list back at the stored offset -- all from one boot fetch.
     await expect(page.locator(".reader h1")).toHaveText("Article 130");
     await expect(list).toHaveJSProperty("scrollTop", 900);
     await expect(articleOptions(page).nth(30)).toHaveAttribute(
@@ -3207,7 +2873,6 @@ test.describe("session restoration", () => {
     await installApiFixture(page, { longArticle: true });
     await page.goto("/");
 
-    // select() opens the first row automatically.
     await selectSource(page);
     await expect(page.locator(".reader h1")).toHaveText("First article");
     const reader = page.locator(".reader");
@@ -3235,7 +2900,6 @@ test.describe("session restoration", () => {
   test("with the preference off, no snapshot is written and nothing restores", async ({
     page,
   }) => {
-    // The scroll recorder writes behind a timer, which the clock runs out.
     await page.clock.install();
     await installApiFixture(page, { longArticle: true });
     await page.addInitScript(() => {
@@ -3246,8 +2910,6 @@ test.describe("session restoration", () => {
     await selectSource(page);
     await expect(page.locator(".reader h1")).toHaveText("First article");
     const reader = page.locator(".reader");
-    // Resolves from a listener added after the app's, so the app's own
-    // scroll handler has run by then.
     await reader.evaluate(
       (element) =>
         new Promise<void>((resolve) => {
@@ -3261,7 +2923,6 @@ test.describe("session restoration", () => {
     await page.reload();
     await selectSource(page);
     await expect(page.locator(".reader h1")).toHaveText("First article");
-    // No snapshot ever existed, so the article opens at the top.
     await expect
       .poll(() => reader.evaluate((element) => element.scrollTop))
       .toBe(0);
@@ -3288,7 +2949,6 @@ test.describe("session restoration", () => {
       element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
       return element.scrollTop;
     });
-    // The worker reports a new deploy, then the page is hidden.
     const reloaded = page.waitForEvent("load");
     await page.evaluate(() => {
       navigator.serviceWorker.dispatchEvent(
@@ -3301,14 +2961,12 @@ test.describe("session restoration", () => {
 
     await expect(page.locator(".reader h1")).toHaveText("First article");
     await expect(reader).toHaveJSProperty("scrollTop", halfScroll);
-    // The one-reload snapshot is gone, so a later reload starts fresh.
     expect(
       await page.evaluate(() => [
         sessionStorage.getItem("feedfathom:reading-session:v1"),
         localStorage.getItem("feedfathom:reading-session:v1"),
       ]),
     ).toEqual([null, null]);
-    // An on-demand reload still honours the preference.
     await page.reload();
     await selectSource(page);
     await expect(page.locator(".reader h1")).toHaveText("First article");
@@ -3328,7 +2986,6 @@ test.describe("session restoration", () => {
     await articleOptions(page)
       .nth(5)
       .click({ modifiers: ["Shift"] });
-    // Ctrl moves the cursor without changing the selection.
     await page.keyboard.press("Control+ArrowDown");
     await page.keyboard.press("Control+ArrowDown");
     await expect(articleOptions(page).nth(7)).toBeFocused();
@@ -3347,7 +3004,6 @@ test.describe("session restoration", () => {
       "false",
     );
     await expect(articleOptions(page).nth(7)).toBeFocused();
-    // The anchor came back too: Shift-click extends from row 3.
     await articleOptions(page)
       .nth(1)
       .click({ modifiers: ["Shift"] });
@@ -3402,8 +3058,6 @@ test.describe("session restoration", () => {
     });
     await page.goto("/");
 
-    // The node is gone: the snapshot is dropped silently and the ordinary
-    // empty boot path takes over -- no error, no broken pane.
     await expect(page.getByText("Select a feed to read.")).toBeVisible();
     await expect(page.locator(".dashboard-alert")).toHaveCount(0);
     expect(
@@ -3414,9 +3068,6 @@ test.describe("session restoration", () => {
   });
 });
 
-// #835: the tree context menu acts on its row without selecting it, so the
-// article list, its pagination cursor and the reading position stay with the
-// selection the user actually made.
 const menuTreeSource = (uid: string, name: string): TreeNode => ({
   favicon: null,
   homeUrl: `https://${uid}.example/`,
@@ -3501,8 +3152,6 @@ test("the tree context menu leaves the article paging scope alone", async ({
   await expect.poll(() => bodies.length).toBe(2);
   expect(bodies[1]).toMatchObject({ cursor: articlePageSize, sources: [3] });
 
-  // A menu opened on a folder while that page is in flight changes nothing
-  // about where its rows land.
   await openRowMenu(page, "Reading");
   await page.keyboard.press("Escape");
   releasePage!();
@@ -3511,9 +3160,6 @@ test("the tree context menu leaves the article paging scope alone", async ({
   await expectSelectedRow(page, /Tech News/);
 });
 
-// #926: a next page still in flight for the feed the user left must neither
-// hold back the next page of the feed they switched to nor, when it settles
-// late, reset that page's loading state and let a second copy start.
 test("switching feeds does not wait on the old feed's next page", async ({
   page,
 }) => {
@@ -3531,7 +3177,6 @@ test("switching feeds does not wait on the old feed's next page", async ({
       await new Promise<void>((release) => held.set(source, release));
     }
     const size = body.cursor === undefined ? articlePageSize : 3;
-    // The app aborts the abandoned page, so its route may be gone by now.
     await respond(
       route,
       articlesResponse,
@@ -3560,8 +3205,6 @@ test("switching feeds does not wait on the old feed's next page", async ({
   await scrollToEnd();
   await expect.poll(() => pageRequests).toEqual([[3], [9]]);
 
-  // The old page settling while the new one is held cannot free the new
-  // list to ask for the same page twice.
   held.get(3)!();
   await list.evaluate((element) => {
     element.scrollTop -= 10;
@@ -3572,8 +3215,6 @@ test("switching feeds does not wait on the old feed's next page", async ({
   expect(pageRequests).toEqual([[3], [9]]);
 });
 
-// A delete that fails after the reader moved to another feed must not put
-// the old feed's rows back over the new feed's list.
 test("a failed delete leaves the feed switched to since alone", async ({
   page,
 }) => {
@@ -3583,7 +3224,6 @@ test("a failed delete leaves the feed switched to since alone", async ({
   await page.route("**/api/articles", async (route) => {
     if (route.request().method() !== "DELETE") return await route.fallback();
     await new Promise<void>((release) => (failDelete = release));
-    // Malformed rather than a 500, which the console guard would flag.
     await malformed(route, { removed: "malformed" });
   });
   await page.goto("/");
@@ -3645,8 +3285,6 @@ test("tree context menu actions target the clicked row", async ({ page }) => {
   await expect(firstArticle).toBeVisible();
 });
 
-// #834: leaving the dashboard stops its background poll for good, even when
-// the unmount lands while boot or a poll is still waiting on the tree.
 const treeHolds = async (page: Page, hold: (request: number) => boolean) => {
   const released: Array<() => void> = [];
   let requests = 0;
@@ -3654,7 +3292,6 @@ const treeHolds = async (page: Page, hold: (request: number) => boolean) => {
     requests += 1;
     if (hold(requests))
       await new Promise<void>((release) => released.push(release));
-    // A request aborted by the unmount can no longer be answered.
     await route.fallback().catch(() => undefined);
   });
   return { released, requests: () => requests };
@@ -3700,7 +3337,6 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await page.getByRole("link", { name: "Home" }).click();
   await expect.poll(() => tree.requests()).toBe(3);
   await expect(sourceRow(page)).toBeVisible();
-  // The remounted dashboard polls on its own backoff, 30s then 60s, once each.
   await page.clock.runFor(30_000);
   await expect.poll(() => tree.requests()).toBe(4);
   await page.clock.runFor(59_000);
@@ -3710,8 +3346,6 @@ test("unmounting during a poll leaves one live loop after remounting", async ({
   await expect(page.getByText(/new articles?\./)).toHaveCount(0);
 });
 
-// #991: an article event from /api/events runs the poll within seconds rather
-// than waiting out the 30s timer, and raises the same toast.
 test("an article event refreshes the tree ahead of the poll", async ({
   page,
 }) => {
@@ -3755,7 +3389,6 @@ test("an article event refreshes the tree ahead of the poll", async ({
     });
   });
   release();
-  // Half-second steps, so the signal lands well inside the 30s first poll.
   await expect
     .poll(async () => {
       await page.clock.runFor(500);
@@ -3766,14 +3399,6 @@ test("an article event refreshes the tree ahead of the poll", async ({
   await expect(page.getByText("3 new articles.")).toBeVisible();
 });
 
-// #927: arrowing through the list opens each row it passes. The page cancels
-// the body requests of the rows it leaves behind, rather than only ignoring
-// them when they land, and the cancellation raises no error.
-//
-// Only the page's own fetches are counted. A controlling service worker
-// forwards the request, signal included, but Chromium does not abort
-// FetchEvent.request.signal when the page cancels, so the worker's fetch to
-// the network runs on there.
 async function navigatePastHeldArticles(page: Page) {
   const held: Array<() => void> = [];
   const aborted = new Set<string>();
@@ -3782,11 +3407,9 @@ async function navigatePastHeldArticles(page: Page) {
     if (url.pathname === "/api/article" && request.serviceWorker() === null)
       aborted.add(url.searchParams.get("article")!);
   });
-  // Context-level, so a controlling service worker's fetch is held as well.
   await page.context().route("**/api/article?*", async (route) => {
     const id = new URL(route.request().url()).searchParams.get("article");
     if (id !== "13") await new Promise<void>((release) => held.push(release));
-    // A cancelled request can no longer be answered; that is the point.
     await route.fallback().catch(() => {});
   });
   await selectSource(page);
@@ -3815,8 +3438,6 @@ test("rapid navigation cancels the bodies of the articles it passes", async ({
   await navigatePastHeldArticles(page);
 });
 
-// #989: a slow network doesn't hold a tree the worker already has.
-// Releasing with no response lets the fixture answer as usual.
 type HeldTree = ((route: Route) => Promise<void>) | undefined;
 const reloadWithHeldTree = async (
   page: Page,
@@ -3845,9 +3466,6 @@ const reloadWithHeldTree = async (
   return release;
 };
 
-// Playwright blocks worker registration here, so this page is as uncontrolled
-// as one after a hard reload: its logout never reaches the worker, and the
-// page itself must drop the account's cached data.
 test("logging out from an uncontrolled page drops the API cache", async ({
   page,
 }) => {
@@ -3865,8 +3483,6 @@ test("logging out from an uncontrolled page drops the API cache", async ({
   ).toEqual([]);
 });
 
-// The next account must not be served the previous one's cached data, which
-// the uncontrolled page's sign-in never shows the worker either (#974).
 test("signing in from an uncontrolled page drops the API cache", async ({
   page,
 }) => {
@@ -3886,7 +3502,6 @@ test("signing in from an uncontrolled page drops the API cache", async ({
   ).toEqual([]);
 });
 
-// The article bodies the worker holds for offline reading (#992).
 const downloaded = (page: Page) =>
   page.evaluate(async () => {
     const name = (await caches.keys()).find((key) => key.startsWith("api-"));
@@ -3898,8 +3513,6 @@ const downloaded = (page: Page) =>
       .map((url) => url.search);
   });
 
-// The fixture's articles date from July, past the 14-day bound, so the
-// unread list is answered with the same three dated now.
 const downloadUnread = async (page: Page) => {
   const context = page.context();
   await context.addInitScript(() =>
@@ -3926,23 +3539,15 @@ const downloadUnread = async (page: Page) => {
   });
   await page.goto("/");
   await page.waitForFunction(() => navigator.serviceWorker.controller);
-  // No reload: the first sync is skipped until the worker takes control,
-  // and controllerchange retries it.
   await expect.poll(() => downloaded(page)).toHaveLength(3);
   return state;
 };
 
 const disconnected = (route: Route) => route.abort("internetdisconnected");
 
-// #1104: a removal the worker cannot send is queued and answered with the
-// ids it echoes, so the row leaves the list as if online. The downloaded
-// bodies open the next row with no request; the route stands in for the
-// network, which setOffline cuts only for the page. Any request once back
-// online may start the replay, so `server` sets up its answer before then.
 const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
   const context = page.context();
   const state = await downloadUnread(page);
-  // The worker learns whose removals it queues from a request it serves.
   await page.reload();
   await page.waitForFunction(async () =>
     Boolean(await caches.match("/sw-queue-account")),
@@ -3960,8 +3565,6 @@ const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
   await server?.();
   await context.unroute("**/api/**", disconnected);
   await context.setOffline(false);
-  // Any request the worker serves flushes the queue. The page's own may
-  // already have, and the alert a refusal raises can cover the toolbar.
   await page.evaluate(() => fetch("/api/tree"));
   return state;
 };
@@ -3978,8 +3581,6 @@ test.describe("under a controlling service worker", () => {
     await navigatePastHeldArticles(page);
   });
 
-  // #938: the worker's navigation-time tree fetch, index.html's preload and
-  // the dashboard's fetch are one request, not two or three.
   test("a controlled load fetches the tree once", async ({ page }) => {
     const context = page.context();
     await installApiFixture(context);
@@ -3997,7 +3598,6 @@ test.describe("under a controlling service worker", () => {
     });
     await page.reload();
     await expect(sourceRow(page)).toBeVisible();
-    // The cache-only request (#989) is answered by the worker alone.
     expect({ fromPage: fromPage.toSorted(), fromWorker }).toEqual({
       fromPage: ["/api/tree", "/api/tree?cached"],
       fromWorker: ["/api/tree"],
@@ -4076,17 +3676,12 @@ test.describe("under a controlling service worker", () => {
     await page.context().setOffline(false);
   });
 
-  // A reload offline needs a built shell, which the dev server doesn't
-  // serve, so the list is first asked for once offline.
   test("offline, the downloaded articles are listed and open", async ({
     page,
   }) => {
     await downloadUnread(page);
-    // A controlled load, so the worker holds the tree a folder resolves by.
     await page.reload();
     await expect(page.locator("button.source").first()).toBeVisible();
-    // Routes still answer the worker under setOffline, so the API is cut
-    // off by a route that wins over the fixture's.
     await page
       .context()
       .route("**/api/**", (route) => route.abort("internetdisconnected"));
@@ -4113,7 +3708,6 @@ test.describe("under a controlling service worker", () => {
       .uncheck();
     await expect.poll(() => downloaded(page)).toEqual([]);
 
-    // The init script switches it back on.
     await page.goto("/");
     await expect.poll(() => downloaded(page)).toHaveLength(3);
     await page.goto("/options");
