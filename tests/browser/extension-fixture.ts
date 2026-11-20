@@ -8,15 +8,12 @@ import {
   type Page,
 } from "@playwright/test";
 
-// Where bin/generate-packages.ts writes the Chromium build.
 const extensionPath = fileURLToPath(
   new URL("../../ext/build-ch", import.meta.url),
 );
 
 type Extension = { context: BrowserContext; id: string };
 
-// A fresh Chromium profile with the built extension loaded. A test that
-// needs more launch flags sets `extensionArgs` through test.use.
 export const test = base.extend<{
   extension: Extension;
   extensionArgs: string[];

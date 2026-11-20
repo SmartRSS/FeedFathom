@@ -10,10 +10,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// Search (#697) is a generated tsvector and a GIN index, so what is worth
-// checking is what that expression indexes rather than the SQL text: body as
-// well as title, stemmed by `english`, recomputed when the row changes, and
-// still bounded by the subscription that authorizes every other list query.
 test("searches title and body of subscribed articles only", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -88,22 +84,14 @@ test("searches title and body of subscribed articles only", async () => {
     expect(await search(user!.id, "kubernetes")).toEqual([
       "Kubernetes networking",
     ]);
-    // Body text is indexed, not just the title.
     expect(await search(user!.id, "flour")).toEqual(["Sourdough starter"]);
-    // `english` stemming: the body says "controllers".
     expect(await search(user!.id, "controller")).toEqual([
       "Kubernetes networking",
     ]);
-    // HTML tag names are not search terms.
     expect(await search(user!.id, "p")).toEqual([]);
-    // Terms from two different articles match neither: plainto_tsquery ANDs.
     expect(await search(user!.id, "kubernetes sourdough")).toEqual([]);
-    // A stopword-only query is an empty tsquery, which matches nothing rather
-    // than everything.
     expect(await search(user!.id, "the")).toEqual([]);
 
-    // The column is generated, so an edited article is searchable by its new
-    // text without anything reindexing it.
     await client`UPDATE articles SET title = 'Service meshes' WHERE id = ${networking}`;
     expect(await search(user!.id, "kubernetes")).toEqual([]);
     expect(await search(user!.id, "mesh")).toEqual(["Service meshes"]);

@@ -19,25 +19,14 @@ export const sources = pgTable(
     favicon: varchar("favicon"),
     homeUrl: varchar("home_url").notNull(),
     id: serial("id").primaryKey(),
-    // Delivery mechanism, explicit rather than inferred from the URL. Drives
-    // the polling cadence in getSourcesToProcess. Sources move feed -> websub
-    // on markWebSubVerified and back on markWebSubFailed; "email" is set at
-    // creation and never changes.
     kind: varchar("kind", { enum: ["feed", "email", "websub"] })
       .notNull()
       .default("feed"),
     lastAttempt: timestamp("last_attempt", { withTimezone: true }),
-    // How the last successful fetch arrived, unlike `kind`, which is the
-    // steady-state mechanism. A "websub" source shows "poll" on its fallback
-    // fetches, so this is what confirms push delivery is actually happening.
     lastFetchTrigger: varchar("last_fetch_trigger", {
       enum: ["poll", "manual", "websub-push", "email"],
     }),
     lastSuccess: timestamp("last_success", { withTimezone: true }),
-    // Earliest time this source may be polled again, written by successSource
-    // (from Cache-Control) and failSource (from the backoff formula), so the
-    // read side is just notBefore <= NOW(). Defaults to the Unix epoch rather
-    // than NULL, so no query needs an `IS NULL OR`.
     notBefore: timestamp("not_before", { withTimezone: true })
       .notNull()
       .default(new Date(0)),
@@ -45,15 +34,6 @@ export const sources = pgTable(
       .notNull()
       .default(""),
     recentFailures: integer("recent_failures").notNull().default(0),
-    // The account a newsletter address belongs to, set when the source is
-    // created by reserving or subscribing to it, so no other account can
-    // subscribe and read its mail (#1116). Migration 0013 gave each older
-    // email source its earliest subscriber. NULL for feeds. The orphan
-    // cleanup keeps an owned source that has had mail, so the address is not
-    // free to take while its owner exists. SET NULL, not CASCADE: an older
-    // email source can have other subscribers, and a cascade would delete
-    // their subscription and mail with the owner. Unowned and unsubscribed,
-    // the source then goes in the orphan cleanup.
     reservedBy: integer("reserved_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -61,21 +41,12 @@ export const sources = pgTable(
       .notNull()
       .defaultNow(),
     url: varchar("url").notNull(),
-    // WebSub: once subscribed, a hub pushes to the callback instead of being
-    // polled. Nullable/"none" by default, since most feeds advertise no hub.
-    // websubTopicUrl is the canonical URL from the hub advertisement, which
-    // can differ from `url` -- the hub requires the exact topic it was told
-    // about, not any URL resolving to the same feed.
     websubCallbackToken: varchar("websub_callback_token"),
     websubHubUrl: varchar("websub_hub_url"),
     websubLeaseExpiresAt: timestamp("websub_lease_expires_at", {
       withTimezone: true,
     }),
     websubSecret: varchar("websub_secret"),
-    // Claim guard against concurrent subscribe attempts: discovery fires at
-    // subscribe time and again from the initial-fetch job, each minting its
-    // own token/secret. A strict hub rejects the second request outright. See
-    // recordWebSubDiscovery's claim UPDATE.
     websubSubscribeAttemptedAt: timestamp("websub_subscribe_attempted_at", {
       withTimezone: true,
     }),
@@ -91,8 +62,6 @@ export const sources = pgTable(
     index("last_attempt_idx").on(table.lastAttempt),
     index("sources_not_before_idx").on(table.notBefore),
     index("recent_failures_idx").on(table.recentFailures),
-    // Partial: only email sources are owned, and the user cascade looks
-    // sources up by owner.
     index("sources_reserved_by_idx")
       .on(table.reservedBy)
       .where(sql`${table.reservedBy} IS NOT NULL`),

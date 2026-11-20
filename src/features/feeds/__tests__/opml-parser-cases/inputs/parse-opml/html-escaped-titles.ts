@@ -1,6 +1,3 @@
-// Exported by a reader that stored its titles HTML-escaped and then escaped
-// them again as XML attributes: after XML decoding the titles still carry
-// HTML character references. A literal tag in a title is text, not markup.
 export const input = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <body>

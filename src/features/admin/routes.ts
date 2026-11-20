@@ -18,8 +18,6 @@ import type * as feeds from "#features/feeds/services.ts";
 export type AdminRouteServices = Parameters<typeof createAdminPlugin>[0] &
   Pick<typeof feeds, "redirectMap" | "sourcesDataService">;
 
-// Every route here sits behind createAdminPlugin, so the admin check is a
-// property of the group instead of something each handler has to restate.
 export const createAdminRoutes = (services: AdminRouteServices) => {
   const { redirectMap, sourcesDataService } = services;
   return new Elysia()

@@ -26,7 +26,6 @@ const scanners = [
   scanMicroformats,
 ];
 
-// Every feed the page itself points at, resolved and without duplicates.
 export const scanPage = (address: string, page: ScannerPage): FeedData[] => {
   const feedDataList: FeedData[] = [];
   const addressUrl = new URL(address);
@@ -44,9 +43,6 @@ export const scanPage = (address: string, page: ScannerPage): FeedData[] => {
   return feedDataList;
 };
 
-// A last resort for a page that advertises nothing: OpenRSS builds feeds for
-// some sites that have none. Asking it sends the page address to that third
-// party, so each caller decides whether to offer it.
 export const openRssSuggestion = (address: string): FeedData => ({
   title: "Attempt to use OpenRSS",
   url: `https://openrss.org/${address.replace(/^https?:\/\//, "")}`,

@@ -52,17 +52,10 @@ export const account = {
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
 
-// Writable, so a test can swap a whole service rather than one method.
 export type Dependencies = {
   -readonly [Key in keyof ServerServices]: ServerServices[Key];
 };
 
-// One request through the whole composed app, so a route test also covers the
-// error mapping, the session plugin and the body cap it runs behind.
-
-// Every service a request can reach, each a strict fake: the defaults below
-// answer the reads most routes make on the way in, and anything else a test
-// has not arranged throws and names itself.
 export function createDependencies(): Dependencies {
   const config = loadConfig({
     DATABASE_URL: "postgres://feedfathom:feedfathom@localhost/feedfathom",
@@ -139,8 +132,6 @@ export function createDependencies(): Dependencies {
       { close: () => {} },
       "articleEventHub",
     ),
-    // The real importer over the fakes, so a test's batchUpsertArticles and
-    // recomputeUnreadCounts replacements are what subscribe reaches.
     articleImporter: new ArticleImporter(
       articlesDataService,
       userSourcesDataService,
@@ -255,13 +246,11 @@ export const appFor = async (
 export type App = Awaited<ReturnType<typeof appFor>>;
 
 export type RequestOptions = {
-  // Sends the session cookie a test's authenticate answers for.
   auth?: boolean;
   headers?: Record<string, string>;
   origin?: string;
 };
 
-// One request through the whole app. A body is sent as JSON.
 export const send = (
   app: App,
   method: string,

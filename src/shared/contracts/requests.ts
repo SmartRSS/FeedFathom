@@ -16,12 +16,9 @@ import {
 
 import { maximumRequestIds } from "./limits.ts";
 
-// The multipart field the OPML import posts its file in.
 export const opmlUploadField = "opml";
 
 const id = Type.Integer({ minimum: 1 });
-// RFC 5321 caps both envelope paths, so no deliverable sender is longer
-// than a minted recipient may be.
 const mailEnvelopeValue = Type.String({
   maxLength: maxEmailAddressLength,
   minLength: 1,
@@ -30,14 +27,9 @@ const mailEnvelopeValue = Type.String({
 const normalizedMailEnvelopeValue = Type.Codec(mailEnvelopeValue)
   .Decode((value) => value.trim())
   .Encode((value) => value);
-// The recipient is looked up against sources.url with an exact match, and the
-// addresses minted for newsletters are lowercase, so a sender that echoes the
-// address back capitalised would otherwise be reported as unknown.
 const normalizedMailRecipient = Type.Codec(mailEnvelopeValue)
   .Decode((value) => value.trim().toLowerCase())
   .Encode((value) => value);
-// Article search terms (#697). plainto_tsquery parses whatever it is given,
-// so the cap here bounds the payload rather than the syntax.
 const searchTerms = Type.Codec(
   Type.String({ maxLength: 200, minLength: 1, pattern: "\\S" }),
 )
@@ -54,13 +46,7 @@ export const articleQuery = Type.Object({
 });
 export const articlesRequest = Type.Object(
   {
-    // Keyset cursor: the id of the last row of the previous page. The server
-    // resolves its published_at rather than taking one from the client, whose
-    // copy is a JSON date and so has lost the microseconds Postgres stores --
-    // a cursor a few hundred microseconds early skips the rest of the batch
-    // its article was published in.
     cursor: Type.Optional(id),
-    // Absent means unread, which is the only thing the list has ever shown.
     filter: Type.Optional(
       Type.Union([
         Type.Literal("unread"),
@@ -68,24 +54,13 @@ export const articlesRequest = Type.Object(
         Type.Literal("all"),
       ]),
     ),
-    // A folder by id (#976): the server scopes to the user's subscriptions
-    // filed in it, so a folder is not bounded by the id cap on `sources`,
-    // which is then ignored (sent empty).
     folder: Type.Optional(id),
-    // Full-text search (#697): present means the list is search results
-    // across every subscription rather than the selected node, so `sources`
-    // is ignored and sent empty, exactly as the Today view does it.
     query: Type.Optional(searchTerms),
-    // Offline reading (#992) asks for each row's revision. Opt-in, because
-    // the summary schema of a bundle from before it rejects the extra field.
     revision: Type.Optional(Type.Literal(true)),
     sources: Type.Array(id, {
       maxItems: maximumRequestIds,
       uniqueItems: true,
     }),
-    // The virtual "Today" view (#715): unread across every subscribed
-    // source from the last 24h. `sources` is then ignored (sent empty),
-    // and subscription itself is what authorizes the rows.
     view: Type.Optional(Type.Union([Type.Literal("today")])),
   },
   { additionalProperties: false },
@@ -116,18 +91,11 @@ export const updateFolderRequest = Type.Object({
   folderName: normalizedNonblankString,
 });
 export const removeSourceRequest = Type.Object({ removeSourceId: id });
-// Asks for one subscribed source to be fetched now, e.g. after it failed.
 export const refreshSourceRequest = Type.Object({ sourceId: id });
 export const snoozeSourceRequest = Type.Object({
-  // Null clears the snooze early; any timestamp (past or future) is stored
-  // as-is and evaluated lazily at read time, so a past value reads as
-  // already expired rather than failing validation.
   pausedUntil: Type.Union([jsonDatePolicy, Type.Null()]),
   sourceId: id,
 });
-// Reserves a minted newsletter address before Subscribe (#1116), so mail sent
-// to it in between is stored instead of bounced. The format and domain are
-// checked by the handler, which knows the instance's mail domain.
 export const newsletterAddressRequest = Type.Object({
   address: normalizedMailRecipient,
 });
@@ -136,12 +104,6 @@ export const subscribeRequest = Type.Object({
   sourceName: normalizedNonblankString,
   sourceUrl: normalizedSubscriptionTarget,
 });
-// Deliberately excludes the feed/home URL: `sources` rows are shared and
-// deduplicated across every subscriber (see sources_url_unique), so letting
-// one user edit them would silently repoint everyone else's subscription.
-// Name and folder live on user_sources instead, one row per subscriber, so
-// those are safe to edit per-user -- changing where the feed itself points
-// means unsubscribing and subscribing to a different URL instead.
 export const updateSourceRequest = Type.Object({
   sourceFolder: Type.Union([id, Type.Null()]),
   sourceId: id,
@@ -170,8 +132,6 @@ export const incomingMailRequest = Type.Object(
   {
     from: normalizedMailEnvelopeValue,
     raw: Type.String({
-      // Base64 of the MIME bytes, so this ceiling is the inflated one; the
-      // route checks the decoded byte length as well.
       maxLength: maxRelayPayloadChars,
       minLength: 1,
       pattern: base64Pattern,
@@ -192,8 +152,6 @@ export const sessionParams = Type.Object({ id: idQueryTransform });
 export const passwordResetRequest = Type.Object({
   email: normalizedEmailAddress,
 });
-// The same two-field policy the signed-in change-password path uses, so a
-// reset cannot set a password the account settings would have rejected.
 export const passwordResetConfirmRequest = withMatchingChangedPasswords(
   Type.Object({
     password1: Type.String({ minLength: 1 }),
@@ -201,8 +159,6 @@ export const passwordResetConfirmRequest = withMatchingChangedPasswords(
     token: normalizedNonblankString,
   }),
 );
-// Dotted key names ("hub.mode") are the actual WebSub spec query params --
-// not something this app invented, so kept verbatim rather than remapped.
 export const websubVerificationQuery = Type.Object({
   "hub.challenge": Type.String({ minLength: 1 }),
   "hub.lease_seconds": Type.Optional(Type.String()),

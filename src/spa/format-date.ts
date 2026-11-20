@@ -2,15 +2,9 @@ import { dateFormat } from "./preferences.ts";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-// Fixed UTC rendering: an offset column invites misreading ("is that my
-// time or the server's?"), while everything the API carries is already an
-// absolute instant, so one well-labelled frame is the unambiguous choice.
 const isoDateTime = (date: Date): string =>
   `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 
-// Built once: constructing a formatter costs ~30 µs and formatDate runs per
-// article row. The locale and timezone resolve at module load, so a change
-// to either mid-session shows after the next page load.
 const localeDateTime = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -23,9 +17,6 @@ const localeDayOfYear = new Intl.DateTimeFormat(undefined, {
   month: "short",
 });
 
-// The single place a timestamp turns into display text, so a format
-// decision is made once per mode, not per call site. The DOM keeps the raw
-// value in <time datetime>; only this text varies.
 export function formatDate(iso: null | string | undefined): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -34,8 +25,6 @@ export function formatDate(iso: null | string | undefined): string {
   return localeDateTime.format(date);
 }
 
-// The day alone, for "since" wording where the hour would be noise, and
-// its year only when that isn't this one. ISO keeps its fixed form.
 export function formatDay(iso: null | string | undefined): string {
   const full = formatDate(iso);
   if (!full || dateFormat.get() === "iso") return full.slice(0, 10);
@@ -45,10 +34,6 @@ export function formatDay(iso: null | string | undefined): string {
     : localeDate.format(date);
 }
 
-// A list row's date, as short as it can be said: the time for today, the
-// day for this year, the full date before that. The date band over the rows
-// already names the period, and the row keeps formatDate's full stamp as
-// its tooltip. ISO keeps its fixed UTC frame, so "today" is the UTC day.
 export function formatRowDate(
   iso: null | string | undefined,
   now = new Date(),

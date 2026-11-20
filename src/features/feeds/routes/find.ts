@@ -24,8 +24,6 @@ export async function getFindHandler(
     httpClient,
     outboundFetchBudget,
   }: Pick<typeof feeds, "feedParser" | "outboundFetchBudget"> & {
-    // The one call find makes: a page's bytes, its headers for the charset,
-    // and where it ended up.
     httpClient: {
       get(url: string): Promise<Pick<HttpResponse, "data" | "headers" | "url">>;
     };
@@ -39,9 +37,6 @@ export async function getFindHandler(
       response.headers.get("content-type"),
     );
     const feeds = scanHtml(response.url, html);
-    // For a page that advertises nothing, OpenRSS is offered but not probed:
-    // probing would send the page address to openrss.org before the user
-    // chose to, and previewing the suggestion is that choice.
     if (!feeds.length)
       return json(foundFeedsResponse, [
         { ...openRssSuggestion(response.url), websub: false },
@@ -51,8 +46,6 @@ export async function getFindHandler(
       await markWebSubAvailability(feeds, feedParser),
     );
   } catch (error_: unknown) {
-    // Anything else here is a failure to fetch a URL the user supplied,
-    // which is a client error.
     if (isNoAnswerError(error_)) throw error_;
     return jsonError("Invalid feed url", 400);
   }

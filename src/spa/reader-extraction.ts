@@ -1,6 +1,3 @@
-// The extraction half of Reader mode. Readability, article-extractor and
-// DOMPurify are needed only once Reader mode is in use, so the dashboard loads
-// this module with import() and keeps them out of the main SPA chunk.
 import { extractFromHtml } from "@extractus/article-extractor";
 import { Readability } from "@mozilla/readability";
 import domPurify from "dompurify";
@@ -17,20 +14,9 @@ export type ReaderMode =
   | "READABILITY"
   | "READABILITY_PLAIN";
 
-// Extraction runs on the main thread, so it must stay short enough that a
-// click to switch away is still answered. These budgets send larger pages to
-// Feed mode before any parsing starts. The largest Wikipedia articles (about
-// 2.8 MB and 23,000 elements) still fit; a 3.8 MB page of 24,000 linked
-// paragraphs, which held the thread for about 465 ms, does not.
-// The byte budget counts UTF-8 bytes, measured with TextEncoder rather than
-// html.length, so a non-Latin-script page (Polish, Cyrillic, CJK) is budgeted
-// by its real size instead of its UTF-16 code-unit count.
 const maximumElements = 30_000;
 const textEncoder = new TextEncoder();
 
-// Counts start tags in the source, so the element budget is enforced without
-// building a DOM. Tags inside scripts and comments count too, which only errs
-// towards the fallback.
 const exceedsElementBudget = (html: string): boolean => {
   const startTag = /<[a-z]/gi;
   let elements = 0;
@@ -79,21 +65,9 @@ const validatedBaseUrl = (value: string): URL => {
   return url;
 };
 
-// Shared by every HTML-producing extractor: rewrites relative URLs against
-// the article's real address, then strips anything DOMPurify considers
-// unsafe -- extracted content is still attacker-controlled HTML from an
-// arbitrary site, extractor choice doesn't change that. The working tree comes
-// from DOMParser, not the live document: an element the live document owns
-// starts loading its images while still detached, so an onerror handler
-// would run in the app's origin before DOMPurify ever saw it.
 const sanitizeExtractedHtml = (html: string, baseUrl: URL): string => {
   const extracted = new DOMParser().parseFromString(html, "text/html").body;
   rewriteDocumentUrls(extracted, baseUrl);
-  // Same reason as the server-side sanitizer in extract-article.ts: a whole
-  // extracted page lands in a pane the reader scrolls, so the images below
-  // the fold should not all fetch on open. Only images the page did not
-  // already give a hint of its own, and both attributes survive DOMPurify's
-  // default allowlist.
   for (const image of extracted.querySelectorAll("img")) {
     if (!image.hasAttribute("loading")) image.setAttribute("loading", "lazy");
     if (!image.hasAttribute("decoding"))
@@ -117,8 +91,6 @@ const extractWithReadability = (
 
   let article: ReturnType<Readability["parse"]>;
   try {
-    // Backstop for elements the source count cannot see, such as the ones
-    // the parser adds itself.
     article = new Readability(document_, {
       maxElemsToParse: maximumElements,
     }).parse();
@@ -139,12 +111,6 @@ const extractWithReadability = (
       };
 };
 
-// @extractus/article-extractor: a different heuristic set (falls back to
-// meta tags/OpenGraph data more readily than Readability), offered as a
-// manual alternative in the mode picker for articles Readability mangles.
-// Runs against the browser's native parser rather than a second pure-JS DOM
-// -- see vendor/linkedom-shim, which is nearly all standard API and one
-// documented divergence over how a fragment is rooted.
 const extractWithArticleExtractor = async (
   html: string,
   finalUrl: string,

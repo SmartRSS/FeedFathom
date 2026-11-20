@@ -100,10 +100,6 @@ describe("FeedPreviewCache", () => {
     ]);
   });
 
-  // Subscribe imports a truncated preview from this entry alone, without a
-  // refetch, so everything it reads must survive: the final URL links resolve
-  // against, the flag, and the full parsed feed -- authors, CAP fields it
-  // renders and filters by, and item languages that tell shared ids apart.
   test("a truncated preview round-trips everything subscribe imports", async () => {
     const cache = new FeedPreviewCache(new FakeRedis());
     const item = {

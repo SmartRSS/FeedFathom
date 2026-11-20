@@ -2,12 +2,8 @@ import { afterAll, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 
-// Stands between the runtime and Redis. While muted it forwards nothing and
-// holds new connections open without answering: an outage that drops packets
-// rather than refusing them, as a partition or a vanished host does.
 const upstream = new URL(requireDisposableRedisUrl());
 let muted = false;
-// Connections the proxy accepted while muted and is holding unanswered.
 let heldConnections = 0;
 const links = new Set<[Socket, Socket]>();
 const proxy = createServer((client) => {
@@ -41,8 +37,6 @@ afterAll(() => {
   proxy.close();
 });
 
-// Bounded, so a client that never comes back fails the test rather than
-// hanging it.
 const pong = async (attemptsLeft = 40): Promise<string> =>
   await redis.ping().catch(async (error: unknown) => {
     if (attemptsLeft === 0) throw error;
@@ -59,13 +53,11 @@ const waitFor = async (condition: () => boolean) => {
 };
 
 test("the Bun client reconnects after a connect attempt times out", async () => {
-  // The Bun client connects before the runtime opens any other connection.
   const [bunLink] = links;
   if (!bunLink) throw new Error("The Bun client never connected");
   muted = true;
   const held = heldConnections;
   bunLink[0].destroy();
-  // The reconnect lands on the muted proxy and waits out its timeout.
   await waitFor(() => heldConnections > held);
   muted = false;
 

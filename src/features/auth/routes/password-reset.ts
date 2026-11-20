@@ -23,9 +23,6 @@ export function createPasswordResetRoute({
   usersDataService,
 }: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
   Pick<typeof runtime, "password"> & { config: AppConfig }) {
-  // Gated on outgoing mail the same way public registration is: with no way
-  // to deliver a link there is no flow, and the routes answer as they would
-  // for an account that does not exist rather than admitting the difference.
   const mailEnabled = mailConfigured(config);
 
   return new Elysia()
@@ -33,20 +30,11 @@ export function createPasswordResetRoute({
       "/api/password-reset",
       { body: passwordResetRequest },
       async ({ body: { email }, request, server }) => {
-        // Always the same answer, whether or not the account exists, the
-        // instance can send mail, or the request was throttled. Telling the
-        // caller which would hand back the account list login already
-        // withholds.
         const address = clientAddress(
           request,
           server,
           config.TRUSTED_PROXY_HEADER,
         );
-        // This endpoint sends mail to an address the caller names, so it is
-        // worth as much to an abuser as the login form is, and is bounded the
-        // same way. Its own counters, though: a user whose first reset mail
-        // went to spam and who asked again a few times must still be able to
-        // log in with the password they then set.
         if (
           !mailEnabled ||
           !(await authThrottle.attempt("password-reset", address, email))
@@ -75,12 +63,6 @@ export function createPasswordResetRoute({
         );
         if (!user) return invalid();
 
-        // Clearing the token and dropping every session happen with the write
-        // itself, so the link is single-use and whoever knew the old password
-        // is logged out by the same commit. The spent token is part of the
-        // write's WHERE clause, so of two confirmations racing on one link
-        // the first commit wins and the second is told the link is gone
-        // (#809) -- never two passwords with the last write deciding.
         const spent = await usersDataService.completePasswordReset(
           user.id,
           digestToken(parsed.token),

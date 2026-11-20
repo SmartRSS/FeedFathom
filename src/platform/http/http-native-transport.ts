@@ -30,8 +30,6 @@ export type NativeHttpTransport = (
   url: string,
   headers: Headers,
   signal: AbortSignal,
-  // Present only for a POST. There is no third method here, so the body's
-  // presence is what selects one -- see dispatchNativeRequest.
   body?: string,
 ) => Promise<NativeHttpResponse>;
 

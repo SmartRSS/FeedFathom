@@ -1,17 +1,6 @@
 import { readFileSync } from "node:fs";
 import { definePlugin, defineRule } from "@oxlint/plugins";
 
-// Rules for conventions oxlint has no built-in equivalent for. Every rule uses
-// `createOnce`, which runs once per lint run, not per file -- per-file state
-// resets in `before()`, never in the `createOnce` body. Node type names are
-// ESTree-standard (`MemberExpression`, not `StaticMemberExpression`).
-//
-// JavaScript, not TypeScript, on purpose: oxlint's bin shebang is
-// `#!/usr/bin/env node` and the VS Code Oxc extension brings its own Node, so
-// a .ts plugin fails on any Node before 22.18/20.19.
-
-/** A `Schema.Compile()` inside a function body rebuilds the validator on every
- * call, and reads as normal in review. */
 const schemaCompileModuleScope = defineRule({
   meta: {
     docs: {
@@ -65,8 +54,6 @@ function readAllowList(options) {
   return allow.filter((entry) => typeof entry === "string");
 }
 
-/** `oxc/no-barrel-file` only counts `export * from`, which this repo has none
- * of. This catches the named-re-export form too. */
 const noBarrelFile = defineRule({
   meta: {
     docs: {
@@ -116,7 +103,6 @@ const noBarrelFile = defineRule({
         ownExports += 1;
       },
       ExportNamedDeclaration(node) {
-        // `export const x = ...` / `export function f() {}` declares its own.
         if (node.declaration) {
           ownExports += 1;
           return;
@@ -167,7 +153,6 @@ function readFeatureDag(options) {
 }
 
 /**
- * Strip everything before `src/` so a decision never depends on the checkout path.
  * @param {string} filename
  * @returns {string}
  */
@@ -179,14 +164,12 @@ function repoRelative(filename) {
 }
 
 /**
- * `null` means ungoverned: anything outside `src/`.
  * @param {string} path
  * @returns {{ kind: string, name: string } | null}
  */
 function layerOf(path) {
   if (!path.startsWith("src/")) return null;
   const segments = path.split("/");
-  // src/server.ts and friends are the composition roots.
   if (segments.length === 2) return { kind: "root", name: "" };
   const group = segments[1] ?? "";
   if (group === "shared" || group === "platform") {
@@ -215,9 +198,6 @@ function resolveRelative(from, specifier) {
 }
 
 /**
- * package.json's subpath imports, as specifier prefix to repo-relative
- * directory: `"#shared/*": "./src/shared/*"` becomes `#shared/` to
- * `src/shared/`. Read rather than restated, so a new alias is judged too.
  * @type {Record<string, string>}
  */
 const SUBPATH_PREFIXES = Object.fromEntries(
@@ -288,14 +268,6 @@ function describeLayer(layer) {
   return `the ${layer.kind} layer`;
 }
 
-/**
- * Layers depend downward only: shared, then platform, then features; spa and
- * extension see shared alone. Cross-feature edges are declared in this rule's
- * options so adding one shows up in review. See CONTEXT.md and docs/adr/0001.
- *
- * Relative specifiers and `await import()` are judged the same way, so neither
- * is an escape hatch. `*.test.ts` is exempt -- a test ships in no bundle.
- */
 const layerBoundaries = defineRule({
   meta: {
     docs: {

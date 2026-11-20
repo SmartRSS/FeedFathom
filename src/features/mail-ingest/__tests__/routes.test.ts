@@ -162,8 +162,6 @@ test.each([
   },
 );
 
-// A schema failure here mostly means Worker/server version skew mid-deploy, so
-// it must not carry the flag the relay bounces on.
 test("answers a malformed relay body with 422 but no rejection signal", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAIL_ENABLED = true;
@@ -176,9 +174,6 @@ test("answers a malformed relay body with 422 but no rejection signal", async ()
   expect(await response.json()).not.toHaveProperty("rejected");
 });
 
-// The relay carries base64 precisely so that an 8-bit body in a legacy
-// charset arrives byte for byte; routing it as UTF-8 text replaced every
-// such byte with U+FFFD.
 test("delivers raw MIME bytes that are not valid UTF-8", async () => {
   const dependencies = createDependencies();
   dependencies.config.MAIL_ENABLED = true;

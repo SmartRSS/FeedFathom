@@ -22,9 +22,6 @@ const attemptedAgo = async (sourceId: number, interval: string) => {
     .where(eq(sources.id, sourceId));
 };
 
-// Each poll of a pending source used to mint a new token and POST the hub
-// again: a hub verifying after the next poll called a dead token, and one
-// that never verified got a subscribe request on every poll.
 test("a pending subscription keeps its token and is retried only after a day", async () => {
   const topic = `https://websub-state.test/${Bun.randomUUIDv7()}`;
   const source = await sourcesDataService.addSource({

@@ -86,8 +86,6 @@ const idleSources = () =>
     "sourcesDataService",
   );
 
-// A real enqueuer whose pending-refresh marker reads, in turn, each of
-// `markers` ("1" a cache bypass, "0" a plain refresh, null nothing pending).
 const enqueuerWithMarkers = (markers: (null | string)[] = []) => {
   const reads = { count: 0 };
   const enqueuer = new SourceEnqueuer(
@@ -105,8 +103,6 @@ const enqueuerWithMarkers = (markers: (null | string)[] = []) => {
   return { enqueuer, reads };
 };
 
-// Initializes a MainWorker over idle services, with the test's replacements
-// on top, and hands back the job processor it gave its BullMQ worker.
 async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
   let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
   const worker = new MainWorker({
@@ -185,7 +181,6 @@ test("initializes scheduled jobs and closes the worker on cleanup", async () => 
       JobName.WebSubRenewal,
     ].toSorted(),
   );
-  // A failure is recorded in PostgreSQL, never kept in BullMQ.
   for (const opts of templates) {
     expect(opts).toMatchObject({ removeOnFail: { count: 0 } });
   }
@@ -255,9 +250,6 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
   expect(delays).toEqual([[retryAt, "worker-token"]]);
 });
 
-// A request that arrived while the job held the source's id was recorded
-// rather than queued (the add would have been deduped away); the run folds it
-// in itself at the end.
 test("folds requests that arrived mid-run into one more parse", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const { process } = await startWorker({
@@ -277,9 +269,6 @@ test("folds requests that arrived mid-run into one more parse", async () => {
   ]);
 });
 
-// A deferral keeps the job (and its id) alive for another run, so the
-// recorded requests stay on the marker for that run to act on -- consuming
-// them here would answer the add the retry itself will make.
 test("a deferred parse leaves pending refreshes to its retry", async () => {
   const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
   const { process } = await startWorker({
@@ -291,10 +280,6 @@ test("a deferred parse leaves pending refreshes to its retry", async () => {
   expect(reads.count).toBe(0);
 });
 
-// The follow-up parse runs on intent already taken off the marker, and a
-// deferred job retries from job.data -- so a deferral there has to write that
-// intent into the job, or the retry parses the original request and a
-// requested cache bypass is lost (#847).
 test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const outcomes = ["ok", "defer", "defer", "ok"];
@@ -311,8 +296,6 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
     sourceEnqueuer: enqueuer,
   });
 
-  // The order is the point: data written after the move would retry the
-  // original request.
   const events: string[] = [];
   const deferrable: MainWorkerJob = job(
     JobName.ParseSource,
@@ -328,7 +311,6 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
     },
   );
 
-  // The original request parses, the follow-up for the bypass defers.
   await expect(process(deferrable)).rejects.toBeInstanceOf(DelayedError);
   expect(events).toEqual(["update", "delay"]);
   expect(deferrable.data).toEqual({
@@ -337,11 +319,9 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
     trigger: "manual",
   });
 
-  // Deferred again before finishing: the persisted bypass stays as it is.
   await expect(process(deferrable)).rejects.toBeInstanceOf(DelayedError);
   expect(events).toEqual(["update", "delay", "delay"]);
 
-  // The retry fulfils the bypass once, with no further follow-up owed.
   await process(deferrable);
   expect(parsed).toEqual([
     [false, undefined],
@@ -353,8 +333,6 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
   expect(events).toEqual(["update", "delay", "delay"]);
 });
 
-// A favicon run queues every due source at once, at a priority below the
-// unprioritized ParseSource jobs, and finishes only once every add has.
 test("a favicon gather hands every due source to the refresher's queue", async () => {
   const due = [
     { hasFavicon: false, homeUrl: "https://one.example/", id: 1 },
@@ -382,8 +360,6 @@ test("a favicon gather hands every due source to the refresher's queue", async (
   expect(enqueued).toEqual(due);
 });
 
-// A fake PNG header: enough for imageDimensions, and stored as-is because
-// Bun.Image cannot decode it.
 function fakePng(size: number) {
   const png = Buffer.alloc(24);
   png.write("\x89PNG", 0, "latin1");
@@ -392,9 +368,6 @@ function fakePng(size: number) {
   return png;
 }
 
-// What each provider answers on a normal day, with its real cache lifetime:
-// gstatic the 64 px target, favicon.im 32 px behind a redirect to its own
-// subdomain, DuckDuckGo 16 px.
 function providerAnswer(
   url: string,
 ): [number, Record<string, string>, Buffer?] {
@@ -418,10 +391,6 @@ function providerAnswer(
   ];
 }
 
-// Plays a daily favicon gather through the real MainWorker, refresher, HTTP
-// client, cache and limiter in virtual time, one job at a time. Each job
-// starts up to 2 s after BullMQ hands it out, and every request takes
-// 50-300 ms, both from a seeded generator so a failure replays exactly.
 async function simulateFaviconGather(
   sourceCount: number,
   {
@@ -451,7 +420,6 @@ async function simulateFaviconGather(
     },
   });
   const updated = new Map<number, number | undefined>();
-  // Each queued refresh and when BullMQ would next hand it to the worker.
   const queued: { data: unknown; runAt: number }[] = [];
   const { process } = await startWorker({
     faviconRefresher: new FaviconRefresher(
@@ -490,7 +458,6 @@ async function simulateFaviconGather(
     for (;;) {
       queued.sort((a, b) => a.runAt - b.runAt);
       const next = queued.shift();
-      // A refresh still queued at the next daily gather is one too many.
       if (!next || next.runAt > startAt + 86_400_000) break;
       setSystemTime(
         Math.max(next.runAt + Math.round(random() * 2_000), Date.now()),
@@ -517,10 +484,6 @@ async function simulateFaviconGather(
   }
 }
 
-// Every refresh asks the same provider hosts, and the limiter lets each take
-// one background request per interval. Deferred jobs must queue for slots of
-// their own: woken together, each slot would go to one job and re-defer all
-// the others, about N²/6 runs (#1087).
 test("a cold favicon run takes about two runs per source, and a warm one one", async () => {
   const redis = createFakeHttpRedis();
   const cold = await simulateFaviconGather(1_000, { redis });
@@ -554,8 +517,6 @@ test("a provider that never stops deferring holds icons back only until the hori
   expect(runs).toBeLessThanOrEqual(1_000);
 });
 
-// The origin's Retry-After is shorter than the limiter's own interval, so
-// only telling pacing apart by type keeps it from deferring forever.
 test("a provider that always answers 429 with a short Retry-After lets every refresh complete", async () => {
   const startAt = Date.parse("2026-10-30T00:00:00.000Z");
   const { finishedAt, pending, updated } = await simulateFaviconGather(100, {
@@ -574,8 +535,6 @@ test("a provider that always answers 429 with a short Retry-After lets every ref
   expect([...updated.values()].every((size) => size === 32)).toBe(true);
 });
 
-// Late in a cold run, most jobs have waited hours in the pacing queue. The
-// horizon counts from the block, so a five-minute one is still waited out.
 test("a short provider block late in a cold run does not downgrade icons", async () => {
   const startAt = Date.parse("2026-10-30T00:00:00.000Z");
   let blocked = false;
@@ -664,9 +623,6 @@ class PoisonedError extends Error {
   }
 }
 
-// Deliberately malformed: a real HttpDeferredError with a throwing getter,
-// to prove the code under test survives a poisoned retryAt read. There's no
-// type-safe way to construct that.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
   retryAt: {
@@ -676,10 +632,6 @@ const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
   },
 }) as HttpDeferredError;
 
-// BullMQ must always see the job as acknowledged: whatever was thrown, and
-// however the deferral or the log call went wrong, the processor resolves --
-// and logs what the job originally threw, which proves each case reached the
-// path it names rather than failing earlier on an unexpected call.
 const failure = new Error("cleanup exploded");
 const poisonedError = new PoisonedError();
 const deferral = new HttpDeferredError(Date.now() + 60_000);
@@ -764,6 +716,5 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
   expect(logged.mock.calls[0]?.[0]).toBe(
     `Error processing ${failing.name} job:`,
   );
-  // toBe, not toEqual: comparing a poisoned value would read its getters.
   expect(logged.mock.calls[0]?.[1]).toBe(thrown);
 });

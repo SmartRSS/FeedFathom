@@ -19,8 +19,6 @@ export type FetchResult = {
   response: NativeHttpResponse;
 };
 
-// Manual redirect following: each hop is its own request, reserved against
-// the host it targets, and a chain is permanent only if every hop is.
 export class RedirectPolicy {
   constructor(
     private readonly rateLimiter: Pick<HttpRateLimiter, "reserve">,
@@ -34,16 +32,9 @@ export class RedirectPolicy {
     deadline: RequestDeadline,
   ): Promise<FetchResult> {
     let next = url;
-    // A chain is permanent only if every hop is (301/308) -- one temporary hop
-    // means the resolved URL could still change back.
     let permanent = true;
     /* eslint-disable no-await-in-loop -- Each redirect target comes from the previous response, and each is reserved on its own. */
     for (let redirects = 0; redirects <= maximumRedirects; redirects++) {
-      // A hop is a request like any other, and it is a request to a host of
-      // its own. Reserving here rather than once per call is also what gives
-      // a retry its interval, since every attempt re-enters this loop. The
-      // hostname is safe to read: the first is already validated and every
-      // later one was built by `new URL` below.
       await this.rateLimiter.reserve(
         new URL(next).hostname,
         priority,

@@ -27,9 +27,7 @@ export type FeedsFailure = {
 export function SourcesPane(props: {
   addSourceRef(element: HTMLButtonElement): void;
   admin: boolean;
-  // The row an open context menu acts on, which need not be the selection.
   contextKey: string | undefined;
-  // The selection the toolbar can edit or delete.
   editable: boolean;
   failure: FeedsFailure | undefined;
   filter: string;
@@ -51,8 +49,6 @@ export function SourcesPane(props: {
   tree: TreeNode[];
   visibleTree: ListNode[];
 }) {
-  // Roving tabindex: only the last-focused row is a Tab stop, so Tab moves in
-  // and out of the whole tree instead of through every row.
   const [focusedKey, setFocusedKey] = createSignal<string>();
   const tabStop = createMemo(() =>
     treeTabStopKey(props.visibleTree, focusedKey()),
@@ -117,8 +113,6 @@ export function SourcesPane(props: {
         when={!props.loading}
         fallback={
           <>
-            {/* The filter row the loaded tree will have, so nothing moves
-                when it arrives. */}
             <Show when={feedFilterBox.get()}>
               <input
                 aria-label="Filter feeds"
@@ -149,8 +143,6 @@ export function SourcesPane(props: {
           </>
         }
       >
-        {/* First-run guidance (#723): only ever visible while the tree is
-            empty, so it dismisses itself the moment a source exists. */}
         <Show
           when={props.tree.length > 0 || props.failure}
           fallback={

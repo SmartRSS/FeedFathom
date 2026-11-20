@@ -122,7 +122,6 @@ describe("mapFeedItemToArticle", () => {
   });
 
   test("should handle author fallback chain", () => {
-    // When first author has no name, it should fall back to feed title
     const mockItem = createMockFeedItem({
       authors: [{ name: null }, { name: "Second Author" }],
     });
@@ -141,7 +140,6 @@ describe("mapFeedItemToArticle", () => {
 
     const result = mapFeedItemToArticle(mockItem, mockFeed, mockSource);
 
-    // updated should fall back to published
     expect(result.updatedAt).toEqual(publishedDate);
     expect(result.publishedAt).toEqual(publishedDate);
   });
@@ -254,8 +252,6 @@ describe("mapFeedToPreview", () => {
     ]);
   });
 
-  // Polling resolves the feed's site against the post-redirect URL, and
-  // subscribe stores the preview's link, so the two must agree.
   test("resolves a relative site link against where the feed was served", () => {
     const result = mapFeedToPreview(
       createMockFeed({ url: "/blog/" }),
@@ -335,14 +331,9 @@ describe("mapFeedToPreview bounds", () => {
     expect(preview.articles).toHaveLength(previewArticleLimit);
     expect(preview.articles[0]?.guid).toBe("item-0");
     expect(preview.truncated).toBe(true);
-    // Kept unmapped, so subscribe can import the rest without a refetch.
     expect(preview.feed).toBe(feed);
   });
 
-  // #1031: bounding after mapping would give the same output while still
-  // rewriting every item's links on the server's event loop. Only mapping
-  // reads an item's url (the bound reads its body), so the reads count the
-  // items that were mapped.
   test("maps only the items it keeps", () => {
     let mapped = 0;
     const items = itemsWith(1_000, "<p>Body</p>").map((item) =>
@@ -387,8 +378,6 @@ describe("mapFeedToPreview bounds", () => {
   });
 
   test("counts multi-byte content by its UTF-8 size", () => {
-    // Each "é" is two UTF-8 bytes, so two such items overflow the limit even
-    // though their combined string length stays under it.
     const body = "é".repeat(previewContentBytesLimit / 4 + 1);
     const preview = mapFeedToPreview(
       createMockFeed({ items: itemsWith(3, body) }),

@@ -8,9 +8,6 @@ import {
   readerFetchResponse,
 } from "../reader-bridge.ts";
 
-// The strict shapes are a security property: the extension acts only on a
-// message it recognises exactly, and the page trusts only an answer to the
-// request it sent.
 describe("reader bridge protocol", () => {
   test("accepts only exact request shapes", () => {
     const request = readerFetchRequest("https://article.example/story");

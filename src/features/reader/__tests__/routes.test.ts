@@ -70,8 +70,6 @@ test("normalizes reader inputs and rejects malformed values before dependencies"
   expect(folders).toEqual([[42, "Reading"]]);
 });
 
-// today-window-integration covers what the Today view lists; this only pins
-// that a view the contract does not name never reaches the data service.
 test("rejects an unknown article view", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -221,14 +219,12 @@ test("marks articles read and recomputes the badge from the store", async () => 
   expect(read.status).toBe(200);
   expect(await read.json()).toEqual([11, 12]);
   expect(unread.status).toBe(200);
-  // An empty list is a client bug, not a no-op worth accepting.
   expect(malformed.status).toBe(422);
   expect(anonymous.status).toBe(401);
   expect(marked).toEqual([
     { articleIdList: [11, 12], read: true },
     { articleIdList: [11], read: false },
   ]);
-  // The badge is recomputed rather than adjusted by a delta kept in the route.
   expect(recomputed).toEqual([
     [[3], sessionUser.id],
     [[3], sessionUser.id],
@@ -257,14 +253,10 @@ test("passes the article list filter through to the query", async () => {
   await list({ filter: "all", sources: [3] });
   const rejected = await list({ filter: "everything", sources: [3] });
 
-  // Absent means unread, which is all the list has ever shown; the default
-  // lives in the data service rather than being spelled out per caller.
   expect(filters).toEqual([undefined, "read", "all"]);
   expect(rejected.status).toBe(422);
 });
 
-// A bundle from before #992 rejects the extra field, so only a request that
-// asks gets it.
 test("lists article revisions only when asked", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -319,16 +311,12 @@ test("searches every subscription rather than the selected sources", async () =>
 
   expect(searched.status).toBe(200);
   expect(scoped.status).toBe(200);
-  // Trimmed, and `sources` is ignored the way the Today view ignores it: the
-  // point of search is the article whose feed the reader has forgotten.
   expect(calls).toEqual([
     { options: { allSubscribed: true, query: "service mesh" }, sources: [] },
     { options: { allSubscribed: true, query: "mesh" }, sources: [3] },
   ]);
   expect(blank.status).toBe(422);
   expect(tooLong.status).toBe(422);
-  // No query and no sources is still the early return, not a search for
-  // everything.
   expect(noQuery.status).toBe(200);
   expect(await noQuery.json()).toEqual([]);
 });

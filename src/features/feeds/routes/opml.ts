@@ -49,10 +49,6 @@ export async function postOpmlHandler(
 const byName = (left: { name: string }, right: { name: string }) =>
   left.name.localeCompare(right.name);
 
-// Newsletter subscriptions are left out. Their "url" is an address this
-// instance minted and routes mail for, so an outline carrying it would be a
-// feed no reader can fetch and, re-imported anywhere else, a subscription
-// nothing would ever deliver to.
 function subscriptionTree(
   folders: { id: number; name: string }[],
   sources: {
@@ -72,7 +68,6 @@ function subscriptionTree(
       xmlUrl: source.url,
     }),
   );
-  // Stable ordering keeps exports comparable even if query order changes.
   return [
     ...folders.toSorted(byName).map((folder) => ({
       children: (children.get(folder.id) ?? []).toSorted(byName),

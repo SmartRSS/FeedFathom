@@ -6,7 +6,6 @@ import type { FeedArticle } from "#features/feeds/feed-mapper.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import type { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 
-/** The one way articles land in the store: upsert, recount, announce. */
 export class ArticleImporter {
   constructor(
     private readonly articlesDataService: Pick<
@@ -27,14 +26,6 @@ export class ArticleImporter {
     >,
   ) {}
 
-  /**
-   * Records one successful fetch of a feed: stores the articles it listed,
-   * then the source's success. Both carry one timestamp, which the retention
-   * rules rely on: an article whose last_seen_in_feed_at is older than the
-   * source's last_success was not in that fetch. A CAP alert that has expired
-   * by now is left out, which matters for a fetch replayed from a stored
-   * preview.
-   */
   public async recordFetch(
     sourceId: number,
     articles: readonly FeedArticle[],
@@ -47,10 +38,7 @@ export class ArticleImporter {
     }: {
       alwaysRecount?: boolean;
       cached: boolean;
-      // When the response stops being fresh, which is the earliest the feed
-      // is worth fetching again.
       freshUntil?: null | number | undefined;
-      // The site the feed says it belongs to, if it names one.
       homeUrl?: string | undefined;
       trigger: FetchTrigger;
     },
@@ -74,16 +62,6 @@ export class ArticleImporter {
     });
   }
 
-  /**
-   * Stores one source's articles. batchUpsertArticles commits batch by batch, so a later
-   * failure leaves earlier articles committed: the badges are recounted
-   * either way, then the upsert error is re-raised. Otherwise they are
-   * recounted only when a row changed: most polls change nothing, and the
-   * recount aggregates every retained article against every subscriber
-   * (#897). `alwaysRecount` is for one-off imports (subscribe, mail), whose
-   * retry after a crash between upsert and recount changes no row yet still
-   * has a badge to fix.
-   */
   private async importArticles(
     sourceId: number,
     rows: readonly Omit<ArticleInsert, "sourceId">[],
@@ -103,7 +81,6 @@ export class ArticleImporter {
         await this.userSourcesDataService.recomputeUnreadCounts([sourceId]);
       }
     } catch (recomputeError) {
-      // The upsert failure is the root cause; don't let this replace it.
       if (upsertError === undefined) throw recomputeError;
       console.error(
         "recomputeUnreadCounts failed after batchUpsertArticles error:",

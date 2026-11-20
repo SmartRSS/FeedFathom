@@ -14,24 +14,9 @@ const migrationJournal = Type.Object({
   entries: Type.Array(Type.Object({ tag: Type.String(), when: Type.Number() })),
 });
 
-// A plain `CREATE INDEX` takes a SHARE lock that blocks writes and is held
-// until the migration transaction ends. Writing `CREATE INDEX IF NOT EXISTS`
-// opts in here: this pass builds the index CONCURRENTLY first, so the
-// in-transaction statement finds it already there. An index this pass cannot
-// build yet, because a pending migration creates what it depends on, is left
-// for that migration to build in-transaction, the blocking way.
-//
-// The statements are read back out of the migration files, so an index is
-// written down once and a new migration opts in by how it is written, not by
-// also being registered here.
 const concurrentIndexPattern =
   /CREATE INDEX IF NOT EXISTS "(?<name>[^"]+)" ON "(?<table>[^"]+)"[^;]*/giu;
 
-// The same opt-in for removal: `DROP INDEX` waits for an ACCESS EXCLUSIVE lock
-// behind every running query on the table and blocks every new one until the
-// migration commits. Writing `DROP INDEX IF EXISTS` has this pass drop it
-// CONCURRENTLY first. If the migration then fails, the old schema carries on
-// without the index, which is fine for an index nothing needs any more.
 const concurrentDropPattern = /DROP INDEX IF EXISTS "(?<name>[^"]+)"/giu;
 
 async function journaledTimestamps(client: ReservedSQL) {
@@ -47,10 +32,6 @@ async function journaledTimestamps(client: ReservedSQL) {
   return new Set(applied.map((row) => Number(row.createdAt)));
 }
 
-// Split from the database work so it can be checked against the real
-// migration files without one: a pattern that matched nothing still leaves
-// every index valid, just built the blocking way, which no assertion about the
-// resulting schema can detect.
 export function parseConcurrentIndexes(statements: string): PendingIndex[] {
   const parsed: PendingIndex[] = [];
   for (const match of statements.matchAll(concurrentIndexPattern)) {
@@ -91,13 +72,6 @@ async function pendingStatements(
   return pending.join("\n");
 }
 
-// Class 42 (syntax error or access rule violation) is what a statement that
-// depends on a pending migration raises: a missing column, table, function,
-// operator class or extension. The migration reruns the same statement inside
-// its transaction, so a real mistake still fails there. Every other class stays
-// fatal: a data error, deadlock, cancel or lost connection is not a reason to
-// fall back to the write-blocking build, and the invalid index it may leave is
-// dropped and rebuilt by the next run.
 const dependsOnPendingMigration = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
@@ -110,8 +84,6 @@ async function prebuildIndexesConcurrently(
   indexes: readonly PendingIndex[],
 ) {
   for (const index of indexes) {
-    // On a fresh database the table's migration hasn't run yet, and an index
-    // on a table about to be created empty costs nothing in-transaction.
     // eslint-disable-next-line no-await-in-loop -- Concurrent index maintenance must run sequentially on the reserved session.
     const [target] = await client<
       { tableExists: boolean }[]
@@ -141,8 +113,6 @@ async function prebuildIndexesConcurrently(
             AND pg_index.indisvalid
         ) AS "valid"`;
 
-    // A CREATE INDEX CONCURRENTLY that was interrupted leaves an invalid
-    // index behind that IF NOT EXISTS would happily keep, so drop it first.
     if (state?.exists && !state.valid) {
       // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
       await client.unsafe(`DROP INDEX CONCURRENTLY "public"."${index.name}"`);
@@ -151,11 +121,6 @@ async function prebuildIndexesConcurrently(
       // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
       await client.unsafe(index.create).catch(async (error: unknown) => {
         if (!dependsOnPendingMigration(error)) throw error;
-        // Most such failures come before PostgreSQL records the index, but
-        // one raised while building it (an expression calling a function
-        // whose body names a missing column) leaves an INVALID index that the
-        // migration's IF NOT EXISTS would keep. No valid index of this name
-        // existed, so dropping whatever is there loses nothing.
         await client.unsafe(
           `DROP INDEX CONCURRENTLY IF EXISTS "public"."${index.name}"`,
         );
@@ -169,20 +134,11 @@ async function predropIndexesConcurrently(
   names: readonly string[],
 ) {
   for (const name of names) {
-    // A fresh database never built it, and an earlier run may already have
-    // dropped it. An interrupted drop leaves it invalid, which drops the same.
     // eslint-disable-next-line no-await-in-loop -- PostgreSQL forbids concurrent index maintenance in a transaction.
     await client.unsafe(`DROP INDEX CONCURRENTLY IF EXISTS "public"."${name}"`);
   }
 }
 
-// On a cold start the migrator routinely beats PostgreSQL to accepting
-// connections. Retrying here keeps readiness out of the orchestrator's hands,
-// which Swarm does not manage at all. Only the initial connection retries; a
-// failure once migrating has started stays loud.
-//
-// ponytail: fixed one-second poll to a fixed deadline; add backoff if a
-// slow-starting PostgreSQL ever makes the log noise a real complaint.
 const connectRetryDeadline = 120_000;
 const connectRetryInterval = 1_000;
 
@@ -212,8 +168,6 @@ async function reserveWhenReady(
   }
 }
 
-// Serialises migrators, so two replicas starting at once apply each
-// migration once.
 const migrationLockKey = "feedfathom:migrations";
 
 export async function migrateDatabase(
@@ -245,9 +199,6 @@ export async function migrateDatabase(
       console.log("Migrations complete");
     } finally {
       try {
-        // A migration failing mid-transaction can leave the session unable to
-        // answer, and this throwing would replace the real error. The lock is
-        // session-scoped, so closing the client releases it either way.
         if (locked)
           await reserved`SELECT pg_advisory_unlock(hashtextextended(${migrationLockKey}, 0))`.catch(
             () => undefined,

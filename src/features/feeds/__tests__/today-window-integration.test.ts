@@ -10,9 +10,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// The Today view sends no source ids and the options below (see
-// routes/articles.ts), so the data service alone decides which subscriptions
-// it spans and where the 24 hours end.
 test("the Today view spans every subscription and only the last 24 hours", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -39,7 +36,6 @@ test("the Today view spans every subscription and only the last 24 hours", async
       SELECT ${reader!.id}, id, 'feed', NOW() - INTERVAL '60 days'
       FROM sources
       WHERE url <> 'https://unsubscribed.test/feed'`;
-    // An hour either side of the edge, on every source.
     await client`
       INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
       SELECT sources.id, age.label, 'a', sources.home_url || ' ' || age.label, '', '',

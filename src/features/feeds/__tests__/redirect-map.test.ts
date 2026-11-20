@@ -3,9 +3,6 @@ import { RedirectMap } from "#features/feeds/redirect-map.ts";
 
 const prefix = "redirect_map:";
 
-// KEYS walks the whole keyspace in one command and blocks the server, and this
-// Redis also carries the job queue and the HTTP cache -- so the admin
-// redirects page used to stall every feed fetch behind it.
 test("reads every redirect across all SCAN pages", async () => {
   const pages: Record<string, [string, string[]]> = {
     "0": ["17", [`${prefix}https://a.example/feed`]],
@@ -39,15 +36,12 @@ test("reads every redirect across all SCAN pages", async () => {
 
   const redirects = await new RedirectMap(redis).getAllRedirects();
 
-  // Both pages, and the iteration stopped at the zero cursor rather than
-  // returning only what the first page happened to hold.
   expect(redirects).toEqual({
     "https://a.example/feed": "https://new-a.example/feed",
     "https://b.example/feed": "https://new-b.example/feed",
   });
 });
 
-// A cursor iteration is allowed to hand the same key back twice.
 test("tolerates a key returned by more than one page", async () => {
   const key = `${prefix}https://a.example/feed`;
   const pages: Record<string, [string, string[]]> = {

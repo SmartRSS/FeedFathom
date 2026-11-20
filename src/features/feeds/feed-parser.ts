@@ -76,9 +76,6 @@ export class FeedParser {
     }
   }
 
-  // Called from the subscribe route so discovery happens while adding the
-  // source; otherwise a WebSub-capable feed sits on ordinary polling until
-  // some later parseSource run.
   public async discoverAndSubscribeWebSub(
     sourceId: number,
     url: string,
@@ -89,8 +86,6 @@ export class FeedParser {
       const { websub } = await this.parseUrl(url);
       if (websub) await this.webSubSubscriber.subscribe(sourceId, websub);
     } catch (error) {
-      // The article-fetch path running alongside this (cached-preview upsert
-      // or the enqueued parseSource job) already reports fetch/parse failures.
       console.error(
         `WebSub discovery fetch failed for source ${sourceId}:`,
         error,
@@ -98,7 +93,6 @@ export class FeedParser {
     }
   }
 
-  // A failure comes back as the fetcher's reason, for the route to phrase.
   public async preview(
     sourceUrl: string,
   ): Promise<ReturnType<typeof mapFeedToPreview> | { failure: string }> {
@@ -126,9 +120,7 @@ export class FeedParser {
     }: {
       priority?: Priority;
       skipCache?: boolean | undefined;
-      // Left undefined by discovery and preview callers -- see buildUserAgent.
       subscribers?: number | undefined;
-      // Whether to look for a WebSub hub; a preview never needs one.
       websub?: boolean;
     } = {},
   ) {
@@ -142,21 +134,13 @@ export class FeedParser {
       throw new Error(httpStatusFailure(fetchedUrl, response.status));
     }
     const finalUrl = response.url;
-    // 301/308 are permanent, so persist onto the subscribed source's URL;
-    // 302/303/307 belong only in the short-lived Redis redirect cache.
     const rememberRedirect = response.redirectedPermanently
       ? (from: string, to: string) =>
           this.sourcesDataService.updateSourceUrl(from, to)
-      : // The cache only saves a hop on the next fetch; failing to write it
-        // must not cost this fetch's articles.
-        (from: string, to: string) =>
+      : (from: string, to: string) =>
           this.redirectMap.setRedirect(from, to).catch((error: unknown) => {
             console.error(`Could not cache redirect ${from} -> ${to}:`, error);
           });
-    // Only remember original -> final when this fetch actually redirected.
-    // fetchedUrl is already pre-substituted from the cache, so refreshing on a
-    // non-redirect would rewrite a stale mapping forever once the origin's
-    // transient redirect reverted. Left alone, it expires on its TTL.
     if (finalUrl !== fetchedUrl) {
       await rememberRedirect(fetchedUrl, finalUrl);
       if (originalUrl !== fetchedUrl) {

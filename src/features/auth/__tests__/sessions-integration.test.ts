@@ -14,9 +14,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// A session that no longer resolves is the whole expiry feature: the lookup
-// is the choke point every request's auth flows through, so these tests pin
-// what it accepts, and that revocation is scoped to the caller's own rows.
 test("expired sessions stop resolving and revocation stays scoped", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -51,8 +48,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
     const tabletSid = await issue(userId, "Tablet");
     const stolenSid = await issue(otherId, "Stolen");
 
-    // A fresh session resolves, and carries the same window the cookie
-    // promises -- roughly a year, not forever and not zero.
     const fresh = await usersDataService.authenticate(browserSid, null, false);
     expect(fresh?.id).toBe(userId);
     const [window] = await client<{ delta: number }[]>`
@@ -61,7 +56,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       FROM sessions WHERE sid = ${browserSid}`;
     expect(window!.delta).toBe(365);
 
-    // An inactive account's session resolves to nobody, read-only or not.
     const dormantSid = await issue(dormant!.id, "Dormant");
     expect(
       await usersDataService.authenticate(dormantSid, null, false),
@@ -70,8 +64,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       await usersDataService.authenticate(dormantSid, "Dormant"),
     ).toBeUndefined();
 
-    // Expiry is enforced in the lookup itself: an aged-out sid resolves to
-    // no user, which the auth plugin answers with a 401.
     await client`
       UPDATE sessions SET expires_at = NOW() - INTERVAL '1 day'
       WHERE sid = ${phoneSid}`;
@@ -82,10 +74,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       (await usersDataService.authenticate(browserSid, null, false))?.id,
     ).toBe(userId);
 
-    // The list the options page renders enforces the same expiry as the
-    // lookup: the aged-out session is not listed as active -- not even as
-    // the requesting one -- while the live rows stay, most recently active
-    // first, with the requesting session flagged.
     expect(
       (await usersDataService.listSessions(userId, phoneSid)).map(
         (session) => session.userAgent,
@@ -102,9 +90,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       { sid: false, ua: "This browser" },
     ]);
 
-    // Activity, not creation, orders the list: the created_at migration
-    // backfilled pre-existing rows with one shared timestamp, so rows the
-    // list must still distinguish are separated by their last_used_at.
     await client`
       UPDATE sessions SET last_used_at = NOW() - INTERVAL '2 days'
       WHERE sid = ${tabletSid}`;
@@ -114,8 +99,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       ),
     ).toEqual(["This browser", "Tablet"]);
 
-    // Each answered request refreshes the row's activity stamp and its
-    // User-Agent, so the device label follows the browser across updates.
     await usersDataService.authenticate(browserSid, "This browser 2.0");
     const [refreshed] = await client<
       {
@@ -129,7 +112,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       Date.now() - 60_000,
     );
 
-    // A missing header never overwrites a known agent, and a stale row within its freshness window is left alone.
     await usersDataService.authenticate(browserSid, null);
     expect(
       (
@@ -138,7 +120,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       )[0]!.user_agent,
     ).toBe("This browser 2.0");
 
-    // A session id from another account is out of reach.
     const [stolenRow] = await client<{ id: number }[]>`
       SELECT id FROM sessions WHERE sid = ${stolenSid}`;
     await usersDataService.deleteSessionById(userId, stolenRow!.id);
@@ -146,7 +127,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
       (await usersDataService.authenticate(stolenSid, null, false))?.id,
     ).toBe(otherId);
 
-    // Revoking everything else leaves the current session standing.
     await usersDataService.deleteOtherSessions(userId, browserSid);
     expect(
       (await usersDataService.authenticate(browserSid, null, false))?.id,
@@ -162,10 +142,6 @@ test("expired sessions stop resolving and revocation stays scoped", async () => 
 
 type Versions = { session: string; user: string };
 
-// The auth plugin's one statement writes only when a guard fires. A row's
-// xmin names the transaction that last wrote it, so an unchanged xmin proves
-// no write happened -- for an unknown, expired or inactive sid, and for a
-// second request inside both guard windows.
 test("authenticate stamps an active session at most once per guard window", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -218,17 +194,12 @@ test("authenticate stamps an active session at most once per guard window", asyn
       UPDATE sessions SET expires_at = NOW() + INTERVAL '1 day'
       WHERE sid = ${sid}`;
 
-    // Past both windows, the read-only lookup behind GET /api/session and the
-    // events stream still resolves the user and writes nothing: polling the
-    // session is not activity.
     const stale = await versions();
     expect((await usersDataService.authenticate(sid, null, false))?.id).toBe(
       userId,
     );
     expect(await versions()).toEqual(stale);
 
-    // One request through the auth plugin stamps both rows; the next writes
-    // nothing.
     expect(await usersDataService.authenticate(sid, "Browser")).toEqual({
       email: "stamped@example.test",
       id: userId,
@@ -244,17 +215,11 @@ test("authenticate stamps an active session at most once per guard window", asyn
     );
     expect(await versions()).toEqual(stamped);
 
-    // A changed User-Agent is the one reason to write the session row inside
-    // its minute; the user row keeps its daily window.
     await usersDataService.authenticate(sid, "Browser 2");
     const relabelled = await versions();
     expect(relabelled.session).not.toBe(stamped.session);
     expect(relabelled.user).toBe(stamped.user);
 
-    // Both sid probes in the statement use the unique index. Sequential scans
-    // are priced out so a one-row table cannot make one look cheaper; without
-    // the index the planner has no alternative and would still show one.
-    // EXPLAIN without ANALYZE plans the data-modifying CTEs but runs nothing.
     const plan = await drizzleConnection.transaction(async (transaction) => {
       await transaction.execute(sql`SET LOCAL enable_seqscan = off`);
       const rows: unknown = await transaction.execute(

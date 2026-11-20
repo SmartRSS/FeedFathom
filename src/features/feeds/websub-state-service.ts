@@ -13,26 +13,14 @@ import type * as schema from "#platform/db/schema.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { webSubRenewalIntervalMs } from "#features/feeds/websub-subscriber.ts";
 
-// The column's current value on a pending subscription, else `fresh`.
 const pendingOr = (column: AnyColumn, fresh: string) =>
   sql<string>`CASE WHEN ${sources.websubStatus} = 'pending' THEN COALESCE(${column}, ${fresh}) ELSE ${fresh} END`;
 
-/**
- * The WebSub columns of a source, which make the hub conversation
- * reproducible. Talking to the hub is WebSubSubscriber's.
- */
 export class WebSubStateService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // Atomic claim (see the schema comment on websubSubscribeAttemptedAt):
-  // returns false when another attempt already claimed this source inside the
-  // cooldown, so the caller skips rather than racing a second hub request with
-  // a different callback token. A pending subscription waits a day: the hub
-  // may still verify the request it has, and one that never does should not
-  // get a new request on every poll.
-  // ponytail: a flat daily retry; count attempts if a dead hub's daily POST matters.
   public async claimWebSubSubscribeAttempt(sourceId: number): Promise<boolean> {
     const claimed = await this.drizzleConnection
       .update(sources)
@@ -53,8 +41,6 @@ export class WebSubStateService {
     return claimed.length > 0;
   }
 
-  // A pending subscription keeps its token and secret, so a hub verifying
-  // the earlier request still finds its callback.
   public async recordWebSubDiscovery(
     sourceId: number,
     hubUrl: string,
@@ -86,9 +72,6 @@ export class WebSubStateService {
     await this.drizzleConnection
       .update(sources)
       .set({
-        // kind: "websub" drives the reduced cadence in getSourcesToProcess.
-        // Delivery isn't guaranteed, so this is a longer fallback interval,
-        // not "stop polling".
         kind: "websub",
         websubLeaseExpiresAt: leaseExpiresAt,
         websubStatus: "verified",
@@ -100,8 +83,6 @@ export class WebSubStateService {
     await this.drizzleConnection
       .update(sources)
       .set({
-        // Back to ordinary cadence: a dead subscription still marked "websub"
-        // would be checked daily with no push to make up for it.
         kind: "feed",
         websubStatus: "failed",
       })
@@ -120,10 +101,6 @@ export class WebSubStateService {
     ).at(0);
   }
 
-  // Verified subscriptions whose lease has expired or expires before the
-  // next renewal run. A late or missed run can let a lease lapse first.
-  // recordWebSubDiscovery writes the hub columns together before a source can
-  // be verified, so the IS NOT NULL tests drop nothing real.
   public async getWebSubSubscriptionsNeedingRenewal() {
     return await this.drizzleConnection
       .select({

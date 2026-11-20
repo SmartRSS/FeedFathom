@@ -9,11 +9,6 @@ import {
 import { readResponseDiagnostic } from "#platform/http/read-response-diagnostic.ts";
 import { secureOrigin } from "#shared/util/safe-url.ts";
 
-// Deliberately hand-written rather than expressed as schemas: this module is
-// bundled for Cloudflare, and pulling typebox in for three checks over strings
-// and one integer put 372 KB of runtime type registry -- 98.7% of the bundle --
-// on the cold start path. The wire contract with /api/mail is mail-relay.ts,
-// which is plain TypeScript for that reason.
 type ErrorLogger = {
   error(message: string): void;
 };
@@ -33,8 +28,6 @@ export type IncomingEmailMessage = {
   from: unknown;
   raw: BodyInit | null;
   rawSize: unknown;
-  // Cloudflare's ForwardableEmailMessage: a permanent SMTP error, so the
-  // sending server bounces the message and may suppress the address.
   setReject(reason: string): void;
   to: unknown;
 };
@@ -56,10 +49,6 @@ function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
   );
 }
 
-// A bounce can make a newsletter platform drop the subscription, so the
-// worker rejects only on a MailRelayRejection. Anything else -- a proxy's
-// HTML 413, a schema 422 from version skew during a deploy -- is thrown: a
-// temporary failure the sending server may retry.
 function rejectionReason(diagnostic: string): string | undefined {
   let body: unknown;
   try {
@@ -94,8 +83,6 @@ function mailEnvelope(message: IncomingEmailMessage): MailEnvelope {
   return { from, rawSize, to };
 }
 
-// btoa takes a binary string, and spreading 5 MiB into one call overflows the
-// argument list, so the message is fed through in chunks.
 function toBase64(bytes: Uint8Array): string {
   const chunkSize = 0x80_00;
   let binary = "";
@@ -107,8 +94,6 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Plaintext is allowed only where it cannot leave the host, because the
-// relay secret and the whole message travel in this request.
 function mailEndpoint(domain: string): URL {
   const origin = secureOrigin(domain);
   if (!origin)
@@ -132,8 +117,6 @@ export function createEmailWorker(
         }
         const endpoint = mailEndpoint(env.MAIL_ENDPOINT_DOMAIN);
         const envelope = mailEnvelope(message);
-        // The one rejection the worker decides alone: the size is the
-        // sender's, and /api/mail would refuse it too.
         if (envelope.rawSize > maxRawEmailBytes) {
           message.setReject(oversizeReason);
           return;

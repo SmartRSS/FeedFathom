@@ -10,9 +10,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// #976: a folder is scoped by id on the server, so it is not bounded by the
-// 500-id cap on an explicit source list, and the folder id authorizes nothing
-// by itself -- the user's own subscriptions filed in it do.
 test("lists a folder's articles by folder id, past 500 sources", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -50,15 +47,12 @@ test("lists a folder's articles by folder id, past 500 sources", async () => {
       SELECT 'https://feed' || n || '.test/feed', 'https://feed' || n || '.test',
              'feed', NOW(), NOW()
       FROM generate_series(1, 502) AS n`;
-    // 501 sources in the folder, one filed elsewhere.
     await client`
       INSERT INTO user_sources (user_id, source_id, name, parent_id, created_at)
       SELECT ${reader!.id}, id, 'feed',
              CASE WHEN url = 'https://feed502.test/feed' THEN ${elsewhere!.id}::int ELSE ${big!.id}::int END,
              NOW() - INTERVAL '60 days'
       FROM sources`;
-    // Only the first and the 501st source in the folder publish, so both
-    // ends of an over-cap folder are asserted, plus the one outside it.
     await client`
       INSERT INTO articles (source_id, guid, author, title, url, content, published_at, updated_at, last_seen_in_feed_at)
       SELECT id, 'g', 'a', url, '', '', NOW(), NOW(), NOW()
@@ -72,7 +66,6 @@ test("lists a folder's articles by folder id, past 500 sources", async () => {
     expect(await titles(reader!.id, elsewhere!.id)).toEqual([
       "https://feed502.test/feed",
     ]);
-    // Someone else's folder id matches none of the caller's subscriptions.
     expect(await titles(other!.id, big!.id)).toEqual([]);
   } finally {
     await client.end();

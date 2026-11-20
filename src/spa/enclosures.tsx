@@ -4,7 +4,6 @@ import { enclosuresOpen, youtubeHost, youtubeLoad } from "./preferences.ts";
 import { youtubeVideoId } from "./youtube-video-id.ts";
 
 function YoutubeEmbed(props: { id: string; title: string }) {
-  // Read once: changing the setting should not tear down a playing video.
   const onClick = youtubeLoad.get() === "click";
   const host = youtubeHost.get() === "youtube" ? "youtube" : "youtube-nocookie";
   const [loaded, setLoaded] = createSignal(!onClick);
@@ -15,8 +14,6 @@ function YoutubeEmbed(props: { id: string; title: string }) {
       <Show
         when={loaded()}
         fallback={
-          // Smart-RSS's lite-youtube cover: the thumbnail and a play button,
-          // nothing from YouTube's player until it is pressed.
           <button
             type="button"
             class="youtube-cover"
@@ -28,7 +25,6 @@ function YoutubeEmbed(props: { id: string; title: string }) {
           />
         }
       >
-        {/* YouTube refuses to play without a Referer (error 153). */}
         <iframe
           allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
           allowfullscreen
@@ -52,9 +48,6 @@ const enclosureName = (enclosure: Enclosure) => {
   }
 };
 
-// What an article shows as attachments. A YouTube article stored before
-// enclosures existed, or relayed without one, still gets its player; an image
-// the body already shows is not shown twice.
 const shownEnclosures = (
   article: { enclosures?: Enclosure[]; title: string; url: string },
   body: string,
@@ -77,9 +70,6 @@ const shownEnclosures = (
   );
 };
 
-// Smart-RSS's layout: one collapsible block per attachment under the title,
-// its name linking to the file. Players preload nothing; the file is fetched
-// when it is played.
 export function Enclosures(props: {
   article: { enclosures?: Enclosure[]; title: string; url: string };
   body: string;

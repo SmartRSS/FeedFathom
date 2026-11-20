@@ -1,14 +1,3 @@
-// Session restoration (#718). What the app remembers about where you were,
-// and the storage it lives in.
-//
-// Two layers, one shape: a versioned JSON blob under one key in
-// sessionStorage (survives reload) and the same blob in localStorage
-// (survives across days). The page has no IndexedDB store of its own -- the
-// worker's removal queue (mutation-queue.ts) owns the only one -- and a
-// size-capped blob is all the feature needs. Reading prefers
-// sessionStorage so a reload picks up the freshest snapshot; a sessionStorage
-// that has expired (new tab days later) falls back to localStorage.
-
 import { isArticleFilter, type ArticleFilter } from "./article-list.ts";
 import { browserTimers, type Timers } from "./timers.ts";
 
@@ -20,18 +9,13 @@ const SESSION_VERSION = 1;
 
 export type AppSnapshot = {
   articleFilter: ArticleFilter;
-  // The article open in the reader pane when the snapshot was written.
   articleId: number | undefined;
   listScrollTop: number;
   nodeType: "folder" | "source" | "view";
   nodeUid: string;
-  // The list around the open article. Optional, so a snapshot written before
-  // they existed still restores the article alone.
   anchorId?: number | undefined;
   focusedId?: number | undefined;
-  // Rows loaded, so a restore pages as far as the list had been scrolled.
   loadedCount?: number | undefined;
-  // The search the list showed; its node is then only the feed to go back to.
   search?: string | undefined;
   selectedIds?: number[] | undefined;
 };
@@ -59,9 +43,6 @@ const isFiniteNumber = (value: unknown): value is number =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-// No schema library here on purpose: the blob is written and read by this one
-// module, and a hand check keeps a foreign or truncated value a silent
-// `undefined` -- the normal boot path -- rather than a thrown error.
 export function parseReadingSession(
   raw: string | null,
 ): ReadingSession | undefined {
@@ -73,9 +54,6 @@ export function parseReadingSession(
     return undefined;
   }
   if (!isRecord(value)) return undefined;
-  // Version mismatch is the migration story: an older or newer blob is
-  // dropped and the app boots normally. When a v2 arrives it reads v1 here
-  // and reshapes it instead.
   if (value["version"] !== SESSION_VERSION) return undefined;
   const reader = parseReaderScrolls(value["reader"]);
   const app = parseAppSnapshot(value["app"]);
@@ -141,7 +119,6 @@ export function serializeReadingSession(session: ReadingSession): string {
   return JSON.stringify({ ...session, version: SESSION_VERSION });
 }
 
-/** Newest first, evicting from the oldest end once over the cap. */
 export function capReaderScrolls(
   entries: ReaderScrollEntry[],
   cap = MAX_READER_SCROLL_ENTRIES,
@@ -150,7 +127,6 @@ export function capReaderScrolls(
   return sorted.length > cap ? sorted.slice(0, cap) : sorted;
 }
 
-/** Upsert one article's scroll ratio, touching its recency. */
 export function recordReaderScroll(
   session: ReadingSession,
   id: number,
@@ -165,7 +141,6 @@ export function recordReaderScroll(
   return { ...session, reader };
 }
 
-/** Drop reader entries (and the open-article pointer) for finished/deleted articles. */
 export function clearReaderScrolls(
   session: ReadingSession,
   ids: readonly number[],
@@ -182,7 +157,6 @@ export function clearReaderScrolls(
   };
 }
 
-/** Where a ratio sits in a scroll container: 0 at top, 1 at bottom. */
 export function scrollRatio(element: {
   clientHeight: number;
   scrollHeight: number;
@@ -192,7 +166,6 @@ export function scrollRatio(element: {
   return scrollable <= 0 ? 0 : element.scrollTop / scrollable;
 }
 
-/** The inverse, clamped: content may have shifted since the ratio was taken. */
 export function ratioToScrollTop(
   ratio: number,
   scrollHeight: number,
@@ -203,9 +176,6 @@ export function ratioToScrollTop(
   return Math.min(scrollable, Math.max(0, ratio * scrollable));
 }
 
-// Leading-and-trailing throttle for the scroll recorders: the first event
-// writes immediately, a burst coalesces into one trailing write, and a
-// steady scroll writes at most once per interval.
 export function createThrottledRecorder<A>(
   write: (value: A) => void,
   timers: Timers = browserTimers,
@@ -236,15 +206,11 @@ const emptySession = (): ReadingSession => ({ app: undefined, reader: [] });
 type ReadingSessionStoreOptions = {
   local: StorageLike;
   now?: () => number;
-  // The "remember reading position" setting. Off, nothing is recorded.
   remember: () => boolean;
-  // The first boot after reloadForUpdate(): its snapshot restores whatever
-  // the setting says.
   resumingUpdate?: boolean;
   session: StorageLike;
 };
 
-/** Owns the in-memory session and mirrors it into both storages on change. */
 export class ReadingSessionStore {
   readonly #sessionStorage: StorageLike;
   readonly #localStorage: StorageLike;
@@ -261,8 +227,6 @@ export class ReadingSessionStore {
     this.#resumingUpdate = options.resumingUpdate ?? false;
   }
 
-  /** The snapshot boot restores. With the setting off, the copy an update
-   *  reload left in sessionStorage is spent once read. */
   takeSnapshot(): AppSnapshot | undefined {
     const remember = this.#remember();
     const app =
@@ -293,9 +257,6 @@ export class ReadingSessionStore {
     this.#persist();
   }
 
-  /** The full snapshot an update reload resumes. With the setting off it goes
-   *  to sessionStorage only, so it survives this one reload and never reaches
-   *  a later launch. */
   saveBeforeReload(
     patch: Partial<AppSnapshot>,
     reader: { id: number; ratio: number } | undefined,
@@ -313,12 +274,10 @@ export class ReadingSessionStore {
 
   clear(): void {
     this.#current = emptySession();
-    // An empty snapshot is no snapshot: "nothing stored" holds on disk too.
     this.#remove(this.#sessionStorage);
     this.#remove(this.#localStorage);
   }
 
-  /** sessionStorage (freshest, this tab) first, localStorage underneath. */
   #load(): ReadingSession | undefined {
     for (const storage of [this.#sessionStorage, this.#localStorage]) {
       let raw: string | null = null;
@@ -366,10 +325,6 @@ export class ReadingSessionStore {
   }
 }
 
-// A reload that applies a new deploy resumes where the tab was, whatever the
-// remember-position setting says: the user asked for no reload. The page
-// dispatches UPDATE_RELOAD_EVENT so the dashboard writes a full snapshot, and
-// the flag tells the next boot to restore it.
 export const UPDATE_RELOAD_EVENT = "feedfathom:update-reload";
 const UPDATE_RELOAD_KEY = "feedfathom:update-reload";
 
@@ -381,7 +336,6 @@ export function reloadForUpdate(): void {
   location.reload();
 }
 
-/** True once, on the first boot after reloadForUpdate(). */
 export function takeUpdateReload(): boolean {
   try {
     const flagged = sessionStorage.getItem(UPDATE_RELOAD_KEY) !== null;

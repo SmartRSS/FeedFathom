@@ -1,16 +1,5 @@
-// Session rows need a name a person recognises, not the raw User-Agent
-// header: the tokens that identify a browser arrive in different orders and
-// aliases (CriOS, Edg, SamsungBrowser), so the checks run most-specific
-// first. iOS Safari masquerades as desktop Mac, and Android masquerades as
-// Linux -- both platform checks precede the desktop ones they impersonate.
-//
-// Deliberately no dependency and no exhaustive database: a format this
-// parser does not know falls back to the raw header, and a session with no
-// header renders as "Unknown device".
-
 type Token = { pattern: RegExp; browser: string };
 
-// Major version only: "Chrome/141.0.0.0" reads better as "Chrome 141".
 const BROWSER_TOKENS: readonly Token[] = [
   { browser: "Samsung Internet", pattern: /SamsungBrowser\/(\d+)/u },
   { browser: "Edge", pattern: /Edg(?:e|A|iOS)?\/(\d+)/u },
@@ -45,7 +34,5 @@ export function describeUserAgent(userAgent: string | null): string {
   const browser = firstMatch(trimmed, BROWSER_TOKENS);
   const platform = firstMatch(trimmed, PLATFORM_TOKENS);
   if (browser && platform) return `${browser} on ${platform}`;
-  // Nothing matched: the raw header is still more informative than a
-  // guess, so show it and let the row's ellipsis keep the layout intact.
   return browser ?? platform ?? trimmed;
 }

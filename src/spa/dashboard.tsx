@@ -108,10 +108,6 @@ import { SourcesPane, type FeedsFailure } from "./sources-pane.tsx";
 import { ArticlesPane } from "./articles-pane.tsx";
 import { ReaderPane } from "./reader-pane.tsx";
 
-// Only a page the service worker controls asks, since only the worker
-// answers ?cached. only-if-cached keeps the request off the network when
-// something else does answer it, such as a worker from before #989 that
-// forwards it as is: the fetch then reads the HTTP cache or fails.
 async function cachedTree(): Promise<TreeNode[] | undefined> {
   if (!navigator.serviceWorker?.controller) return undefined;
   try {
@@ -129,8 +125,6 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
-// One flag per list row, so a change notifies only the rows whose flag flips,
-// not every row of a list infinite scroll grows without bound.
 function createRowFlags(indexes: Accessor<ReadonlySet<number>>) {
   const flags = createProjection<Record<number, boolean>>((draft) => {
     const next = indexes();
@@ -150,12 +144,9 @@ export function Dashboard(props: {
   navigate(to: string): void;
   openDiscovery(): void;
   pane(): DashboardPane;
-  // Set on the /preview route, which opens Discover over the panes.
   preview?: Extract<Route, { name: "preview" }> | undefined;
   whenPaneShown(run: () => void): void;
 }) {
-  // Unmount is final for this instance: work still in flight when it
-  // happens must not write the state it leaves behind.
   let disposed = false;
   let sourcesPaneElement: HTMLElement | undefined;
   let addSourceButton: HTMLButtonElement | undefined;
@@ -164,8 +155,6 @@ export function Dashboard(props: {
   let readerPaneElement: HTMLElement | undefined;
   let readerElement: HTMLElement | undefined;
 
-  // The alert over the panes. Its details, when it has any, explain the
-  // message they came with.
   const [problem, setProblem] = createSignal<{
     details?: ReturnType<typeof failureDetails>;
     message: string;
@@ -179,49 +168,33 @@ export function Dashboard(props: {
   };
   const reportMessage = (message: string) => setProblem({ message });
   const clearProblem = () => setProblem(undefined);
-  // A screen reader can't be detected, so the polite live region always
-  // renders, visually hidden. It speaks only when its text changes, so a
-  // second "Article deleted." in a row would be silent: clear it, then set
-  // it a task later.
   const [liveText, setLiveText] = createSignal("");
   const announce = (message: string) => {
     setLiveText("");
     setTimeout(() => setLiveText(message), 100);
   };
-  // Asked once per dashboard: admins see what lies under a failure, and a
-  // mail domain is what lets Discover mint newsletter addresses.
   const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
   api("/session", sessionResponse).then(setSession, () => {});
   const isAdmin = () => session()?.user?.isAdmin ?? false;
 
-  // The feeds.
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
   const [treeLoading, setTreeLoading] = createSignal(true);
   const [treeFailed, setTreeFailed] = createSignal<FeedsFailure>();
   const [authenticated, setAuthenticated] = createSignal(false);
   const [selectedNode, setSelectedNode] = createSignal<ListNode>();
-  // A memo, because every tree row reads it and each read walks the tree.
   const visibleTree = createMemo(() =>
     filterTree(withTodayNode(tree(), todayView.get()), treeFilter()),
   );
-  // The selection a toolbar can edit or delete: Today is neither.
   const editableNode = () => {
     const node = selectedNode();
     return node?.type === "view" ? undefined : node;
   };
-  // The feed list failed to load, or has not yet, and there is none from
-  // before: nothing to filter or search.
   const feedsUnavailable = () => Boolean(treeFailed()) && !tree().length;
   const feedsPending = () => treeLoading() && !tree().length;
   const feedName = (article: { sourceId: number }) =>
     findNode(tree(), "source", String(article.sourceId))?.name;
 
-  // The list: a node's articles, or search results (#697). Search is a mode
-  // over the list rather than a filter of what is loaded: the terms go to the
-  // server, which answers across every subscription and pages by the same
-  // keyset cursor. `searchTerms` is what is typed, `activeSearch` what the
-  // server was last asked; selecting a feed clears both.
   const [searchTerms, setSearchTerms] = createSignal("");
   const [activeSearch, setActiveSearch] = createSignal("");
   const [articleFilter, setArticleFilter] =
@@ -242,9 +215,6 @@ export function Dashboard(props: {
       signal,
     }),
   );
-  // Hiding a box must not leave what it held in force: an invisible filter
-  // still narrowing the tree, or search results with nothing on screen to
-  // explain or undo them.
   createEffect(
     () => !feedFilterBox.get() && Boolean(treeFilter()),
     (stale) => {
@@ -257,7 +227,6 @@ export function Dashboard(props: {
     untrack(() => void exitSearch());
   });
 
-  // The selection within the list.
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<number>());
   const [focusedIndex, setFocusedIndex] = createSignal(0);
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>();
@@ -268,7 +237,6 @@ export function Dashboard(props: {
     return index === undefined ? undefined : list.rows()[index];
   };
 
-  // The reader.
   const fetches = new ArticleFetches((id, signal) =>
     api(`/article?article=${id}`, articleResponse, { signal }),
   );
@@ -286,17 +254,14 @@ export function Dashboard(props: {
     reader.dispose();
   });
 
-  // Session restoration (#718).
   const restore = new SessionRestore(
     new ReadingSessionStore({
       local: localStorage,
-      // Checked at each write, wherever it happens, so never tracked.
       remember: () => untrack(rememberReadingPosition.get),
       resumingUpdate: takeUpdateReload(),
       session: sessionStorage,
     }),
   );
-  // Rows are named by id: an index means nothing once the list is refetched.
   const listState = () => {
     const rows = list.rows();
     const idAt = (index: number | undefined) =>
@@ -309,8 +274,6 @@ export function Dashboard(props: {
       selectedIds: [...selectedIndexes()].flatMap((index) => idAt(index) ?? []),
     };
   };
-  // Nothing to record before a list exists; recording then would overwrite
-  // the snapshot boot is about to restore.
   createEffect(
     () => {
       const state = listState();
@@ -350,14 +313,10 @@ export function Dashboard(props: {
   onCleanup(() =>
     removeEventListener(UPDATE_RELOAD_EVENT, saveForUpdateReload),
   );
-  // A restored reader resumes its ratio once that article has rendered.
-  // Content height varies (images, Reader extraction), so the stored value
-  // is a ratio, resolved against the rendered document.
   createEffect(reader.displayed, (item) => {
     if (!item) return;
     const ratio = restore.takeReaderScroll(item.article.id);
     if (ratio === undefined) return;
-    // A hidden reader measures zero, which would resolve any ratio to the top.
     queueMicrotask(() =>
       props.whenPaneShown(() => {
         if (!readerElement) return;
@@ -370,7 +329,6 @@ export function Dashboard(props: {
     );
   });
 
-  // The tab-title badge reads the total (main.tsx).
   const unreadTotal = createMemo(() => totalUnread(tree()));
   onSettled(() => showUnreadTotal(unreadTotal));
   let treeAbortController: AbortController | undefined;
@@ -384,22 +342,14 @@ export function Dashboard(props: {
     hidden: () => document.hidden,
     listening: () => authenticated() && backgroundPoll.get(),
     loadTree,
-    // An expired session goes to sign-in like every other tree load (#1122).
     onPollFailure: (cause) => props.handleUnauthorized(cause),
   });
   createOfflineSync(tree, authenticated);
 
-  // Discover, over the panes: on the /preview route, or on the history
-  // entry opening it pushed. What it starts with outlives a close, so
-  // Forward back into its entry opens the same form again.
   const showDiscovery = () => props.preview !== undefined || props.discovery();
-  // The folder Discover starts in when it was opened from an empty folder.
   const [discoveryFolder, setDiscoveryFolder] = createSignal<string>();
   const [editingSource, setEditingSource] =
     createSignal<Extract<TreeNode, { type: "source" }>>();
-  // A memo rather than an inline expression: Discover reads it from
-  // onSettled and event handlers, where an inline conditional's per-read
-  // memo would be created outside any owner.
   const editedSource = createMemo(() => {
     const source = editingSource();
     return (
@@ -412,13 +362,10 @@ export function Dashboard(props: {
       }
     );
   });
-  // `key` names the row the menu was opened on, so the tree can mark it.
   const [contextMenu, setContextMenu] = createSignal<
     { items: ContextMenuItem[]; key: string; x: number; y: number } | undefined
   >();
 
-  // "Try again" on a failing feed: the fetch runs in the worker, so the tree
-  // is reloaded a little later to show how it went.
   const [retryState, setRetryState] = createSignal<RetryState>("idle");
   async function retrySelectedSource() {
     const node = selectedNode();
@@ -450,13 +397,6 @@ export function Dashboard(props: {
         return (await api("/tree", treeResponse, { signal: controller.signal }))
           .tree;
       } catch (cause) {
-        // Superseded only when THIS request's signal caused the failure: a
-        // genuine error must still propagate even if another loadTree()
-        // started around the same time. Check `cause`, not `aborted`: a
-        // controller can be aborted after its fetch resolved while a later
-        // step (parsing, validation) throws for an unrelated reason. Defer
-        // to the shared in-flight promise rather than the `tree` signal,
-        // because abort() settles before the replacement's round trip does.
         if (
           cause instanceof DOMException &&
           cause.name === "AbortError" &&
@@ -474,17 +414,12 @@ export function Dashboard(props: {
     applyTree(nextTree);
     return nextTree;
   }
-  // The selection moves to its node in the new tree. Today is not in the
-  // stored tree, so it stays selected.
   function applyTree(nextTree: TreeNode[]) {
     setTree(nextTree);
     const current = selectedNode();
     if (current && current.type !== "view")
       setSelectedNode(findNode(nextTree, current.type, current.uid));
   }
-  // Optimistic badge counts; the tree reload after the request reconciles
-  // them. Reuses the computed tree: Solid 2.0 defers setter visibility to the
-  // microtask flush, so a tree() read right after would see the old one.
   const applyUnreadDeltas = (deltas: Map<string, number>) =>
     applyTree(withDecrementedUnread(tree(), deltas));
   const focusTreeRow = (key?: string) =>
@@ -496,8 +431,6 @@ export function Dashboard(props: {
   const revealTree = () => {
     if (!treeLoading()) return;
     setTreeLoading(false);
-    // Focus the tree without select(), which would also load articles. A
-    // restored session has already put focus on its row; leave it there.
     queueMicrotask(() => {
       if (document.activeElement && document.activeElement !== document.body)
         return;
@@ -508,23 +441,12 @@ export function Dashboard(props: {
   onSettled(() => void boot());
   async function boot() {
     void reader.probe();
-    // Read up front, before any await, so a reload restores the state the
-    // tab actually left in, not whatever a faster boot wrote. A preview
-    // route opens on its own form: restoring the last reading session would
-    // bring its reader forward over it on one pane.
     const snapshot = restore.store.takeSnapshot();
     const restored = props.preview ? undefined : snapshot;
     if (restored) restore.begin();
     try {
-      // loadTree replaces this array as it applies the fresh tree, so its
-      // identity tells whether the fresh one already landed.
       const unloaded = tree();
       const fresh = loadTree();
-      // Stale-while-revalidate (#989): the cached tree paints only if it
-      // beats the network, and the fresh one replaces it through loadTree.
-      // Everything that trusts the tree (sign-in state, the poll's unread
-      // baseline, session restore) still waits for the fresh answer, so a
-      // 401 routes to sign-in and the swap never reads as new articles.
       const early = await Promise.race([
         fresh.then(
           () => undefined,
@@ -539,7 +461,6 @@ export function Dashboard(props: {
       const nextTree = await fresh;
       if (disposed) return;
       setAuthenticated(true);
-      // Cancelled by select() if a feed was picked from the cached tree.
       if (restored && restore.restoring()) await restoreFrom(restored);
       newArticles.start(nextTree);
     } catch (cause) {
@@ -552,8 +473,6 @@ export function Dashboard(props: {
     } finally {
       revealTree();
     }
-    // Delayed and set rather than present at mount, so a screen reader treats
-    // it as a live-region change instead of part of the first read-through.
     if (resolvedTheme() !== "high-contrast")
       setTimeout(
         () =>
@@ -564,10 +483,6 @@ export function Dashboard(props: {
       );
   }
 
-  // The snapshot names a tree node, and the tree is the source of truth: a
-  // source deleted since then isn't found, the snapshot is dropped and the
-  // normal boot path proceeds. Re-selecting the node runs the one article
-  // fetch boot would ever run.
   async function restoreFrom(snapshot: AppSnapshot) {
     const node = findNode(
       withTodayNode(tree(), todayView.get()),
@@ -580,7 +495,6 @@ export function Dashboard(props: {
       return;
     }
     setArticleFilter(snapshot.articleFilter);
-    // The list request below reads the filter.
     flush();
     if (search) {
       if (node) setSelectedNode(node);
@@ -589,9 +503,6 @@ export function Dashboard(props: {
     } else if (node) await select(node, snapshot);
   }
 
-  // Selecting one row opens it in the reader; any other selection closes it.
-  // A caller that just replaced the rows passes them: list.rows() reads the
-  // old ones until Solid's next flush.
   function selectRows(indexes: Set<number>, rows = list.rows()) {
     setSelectedIndexes(indexes);
     const index = soleSelectedIndex(indexes);
@@ -606,16 +517,12 @@ export function Dashboard(props: {
       () => !listSignal.aborted && selected()?.id === article.id,
       (opened) => {
         restore.record({ articleId: opened.id });
-        // Opt-in, and only in the "all" view: in the unread view marking on
-        // open would pull the row out from under the person reading it.
         if (
           markReadPolicy.get() === "on-open" &&
           !article.read &&
           articleFilter() === "all"
         )
           void markArticlesRead([article.id], true);
-        // Reader modes fetch through the extension: nothing server-side to
-        // warm.
         if (reader.mode() === "FEED")
           fetches.prefetchAround(
             list.rows(),
@@ -649,15 +556,12 @@ export function Dashboard(props: {
       selectRows(indexes, rows);
       setSelectionAnchor(resumed.anchor);
       queueMicrotask(() => focusArticleAt(resumed.focus));
-      // A multi-row selection opens no article, so the list keeps focus.
       const index = soleSelectedIndex(indexes);
       const opened = index === undefined ? undefined : rows[index];
       if (opened) {
         restore.resumeReaderAt(opened.id);
         props.focusPane("reader");
       }
-      // Once the rows are on screen. The restore holds the scroll-past
-      // observer off until then.
       queueMicrotask(() =>
         requestAnimationFrame(() => {
           if (articleListElement)
@@ -667,10 +571,6 @@ export function Dashboard(props: {
       );
       return;
     }
-    // Beside a visible reader the first row opens at once. Where the reader
-    // is out of sight until an article is opened, nothing is selected until
-    // the reader asks for something; the keyboard cursor and the selection
-    // anchor still start on the first row.
     const opensFirst = rows.length > 0 && !readerHidden();
     selectRows(new Set(opensFirst ? [0] : []), rows);
     setSelectionAnchor(rows.length ? 0 : undefined);
@@ -680,15 +580,12 @@ export function Dashboard(props: {
       articleId: opensFirst ? rows[0]?.id : undefined,
       listScrollTop: 0,
     });
-    // A stale snapshot, whose rows are gone, degrades to the normal path.
     if (snapshot) restore.abandon();
   }
 
   async function select(node: ListNode, snapshot?: AppSnapshot) {
     if (!snapshot) restore.cancel();
     props.focusPane("articles");
-    // Picking a feed answers a different question than the search did, so
-    // the box empties with the list.
     setSearchTerms("");
     setActiveSearch("");
     setSelectedNode(node);
@@ -711,13 +608,8 @@ export function Dashboard(props: {
       await exitSearch();
       return;
     }
-    // Searching for something already read is the ordinary case, and the
-    // unread default would answer it with an empty list. Only entering
-    // search moves the dropdown: re-running the same terms under a filter
-    // the user then chose keeps that choice.
     if (!activeSearch() && !snapshot) {
       setArticleFilter("all");
-      // The list request below reads the filter.
       flush();
     }
     setActiveSearch(query);
@@ -725,9 +617,6 @@ export function Dashboard(props: {
     clearProblem();
     await showList(searchScope(query), snapshot);
   }
-  // Leaving search asks a different question than the request in flight, so
-  // it starts over as select() does. Without that, a response that lands
-  // after the clear repopulates a list the user just emptied (#815).
   async function exitSearch() {
     if (!activeSearch()) return;
     setActiveSearch("");
@@ -735,12 +624,9 @@ export function Dashboard(props: {
     if (node) await select(node);
     else list.clear();
   }
-  // A different question about the same selection: only one page is in hand,
-  // and the rest of the answer is on the server.
   function changeArticleFilter(next: ArticleFilter) {
     if (next === articleFilter()) return;
     setArticleFilter(next);
-    // The list request below reads the filter.
     flush();
     const search = activeSearch();
     const node = selectedNode();
@@ -759,9 +645,6 @@ export function Dashboard(props: {
     }
   }
 
-  // Paging is driven by the scroll position rather than a button: the list
-  // is the scroll container in both layouts, and on mobile the pane is
-  // column-reverse, so a control after the list would render above it.
   async function loadMoreArticles(element: HTMLElement) {
     if (element.scrollHeight - element.scrollTop - element.clientHeight > 600)
       return;
@@ -774,20 +657,12 @@ export function Dashboard(props: {
       reportError(cause, "Could not load more articles");
     }
   }
-  // The scroll handler is the only thing that asks for the next page, so a
-  // list too short to scroll could never ask: select all, delete, and the
-  // pane is empty with pages still unread. The threshold above reads true
-  // for a list that does not overflow, so the same call covers it, after
-  // the render that shortened the list.
   function topUpArticles() {
     queueMicrotask(() => {
       if (articleListElement) void loadMoreArticles(articleListElement);
     });
   }
 
-  // Rows leaving the list optimistically. The row that took the first one's
-  // place is selected and focused: the removed rows' nodes are gone, which
-  // drops focus to document.body.
   function dropRows(indexes: Set<number>) {
     const { nextIndex, remaining } = removalOutcome(list.rows(), indexes);
     const next = remaining[nextIndex] ? nextIndex : undefined;
@@ -797,8 +672,6 @@ export function Dashboard(props: {
     setSelectionAnchor(next);
     queueMicrotask(() => focusArticleAt(next ?? 0));
   }
-  // What the toolbar button offers: with everything selected already read,
-  // the useful action is the reverse one.
   const allSelectedRead = () => {
     const rows = list.rows();
     const chosen = [...selectedIndexes()].flatMap((index) => rows[index] ?? []);
@@ -817,10 +690,6 @@ export function Dashboard(props: {
       `${articlesNoun(ids.length)} marked ${read ? "read" : "unread"}.`,
     );
   }
-  // The shape of a removal, but reversible, so a failure resyncs rather than
-  // trying to explain itself. Only the explicit action passes an
-  // announcement: on-open and scroll-past marks happen per row as the reader
-  // moves, and would chatter.
   async function markArticlesRead(
     ids: number[],
     read: boolean,
@@ -835,9 +704,6 @@ export function Dashboard(props: {
           affected.has(article.id) ? { ...article, read } : article,
         ),
       );
-    // In the unread view a read article no longer belongs, and in the read
-    // view an unread one does not either; re-asking the server would flash
-    // the skeleton over a list that is already correct.
     else
       dropRows(
         new Set(
@@ -853,7 +719,6 @@ export function Dashboard(props: {
         request: readArticlesRequest,
       });
       if (announcement) announce(announcement);
-      // Marked finished: its half-read position has no future (#718).
       if (read) restore.store.clearReaderScrolls(ids);
       await loadTree();
     } catch (cause) {
@@ -871,21 +736,17 @@ export function Dashboard(props: {
     if (!ids.length) return;
     clearProblem();
     const listSignal = list.signal;
-    // Fired first so network time overlaps the local UI work below.
     const deletion = api("/articles", removedArticlesResponse, {
       headers: { [deleteTraceHeader]: deleteTrace(trigger) },
       json: { removedArticleIdList: ids },
       method: "DELETE",
       request: removeArticlesRequest,
     });
-    // Optimistic: removing a batch shouldn't block on a round trip. An
-    // unread row takes its count off its source's badge.
     applyUnreadDeltas(readStateDeltas(rows, ids, true));
     dropRows(indexes);
     deletion
       .then(() => {
         announce(`${articlesNoun(ids.length)} deleted.`);
-        // Deleted articles have no reading position to remember (#718).
         restore.store.clearReaderScrolls(ids);
         return loadTree().catch((cause: unknown) =>
           reportError(cause, "Could not refresh your feeds"),
@@ -893,9 +754,6 @@ export function Dashboard(props: {
       })
       .catch((cause: unknown) => {
         reportError(cause, "Could not delete articles");
-        // The rows go back only into the list they left. A list loaded since
-        // already shows what the server holds, and the tree reload below
-        // undoes the optimistic unread counts either way.
         if (!listSignal.aborted) {
           list.setRows(rows);
           selectRows(new Set(indexes), rows);
@@ -908,27 +766,15 @@ export function Dashboard(props: {
       });
   }
 
-  // Mark read on scroll past (#714), built only when the policy asks for it,
-  // so every other reader pays nothing. The effect re-runs whenever the list
-  // changes, because the rows it watches are the ones this render put in the
-  // DOM. Batches ride the same markArticlesRead the `m` key uses.
   createEffect(
     () =>
       markReadPolicy.get() === "on-scroll-past" &&
-      // A restore is about to scroll this list to the stored position, which
-      // must not count as the user scrolling past rows (#718). Reading the
-      // signal re-runs the effect when the restore finishes.
       !restore.restoring() &&
       !list.loading() &&
       list.rows(),
     (rows) => {
       if (!rows || !rows.length || !articleListElement) return undefined;
       return observeScrollPast({
-        // Already-read rows and the article the reader holds are never queued:
-        // re-marking the one being read would pull its row out from under it
-        // in the unread view. The selection says which row that is, not the
-        // opened article, which fills in only once its body lands, after the
-        // observer's first pass.
         eligible: (id) => {
           const article = rows.find((row) => row.id === id);
           return (
@@ -946,12 +792,8 @@ export function Dashboard(props: {
     },
   );
 
-  // Real DOM focus with the same roving tabindex as the tree, so the browser
-  // announces the focused row itself.
   function focusArticleAt(index: number, options?: { scroll?: boolean }) {
     setFocusedIndex(index);
-    // A load that lands while the articles pane is still fading in must not
-    // focus a row that is display:none.
     props.whenPaneShown(() => {
       const row = articleListElement?.querySelector<HTMLElement>(
         `[data-index="${index}"]`,
@@ -971,8 +813,6 @@ export function Dashboard(props: {
     setSelectionAnchor(next.anchor);
     selectRows(next.indexes);
   }
-  // Ctrl/Cmd moves the focus cursor only; Space commits the change. Without
-  // the modifier, movement acts like a click and selects just this row.
   function moveTo(index: number, event: KeyboardEvent) {
     if (!list.rows().length) return;
     event.preventDefault();
@@ -994,16 +834,12 @@ export function Dashboard(props: {
   function selectAll() {
     selectRows(new Set(list.rows().map((_, index) => index)));
   }
-  // No mark-as-read side effect: deleting, not reading, is this reader's flow.
   function openOriginalInNewTab() {
     for (const index of selectedIndexes()) {
       const url = list.rows()[index]?.url;
       if (url) window.open(url, "_blank", "noopener");
     }
   }
-  // Opening moves focus with the pane (#816): on a narrow screen the pane
-  // switch hides the list holding focus, which would drop it to <body> and
-  // strand the keyboard there.
   function showReaderPane() {
     props.focusPane("reader");
     props.whenPaneShown(() =>
@@ -1016,8 +852,6 @@ export function Dashboard(props: {
   }
   function handleArticleKeys(event: KeyboardEvent) {
     const command = mapArticleKey(event);
-    // A showModal() dialog sits on top of the list, so its keys can't reach
-    // here; the check covers a non-modal one.
     if (!command || isTextEntry(event.target) || isDialogOpen()) return;
     switch (command) {
       case "next":
@@ -1043,7 +877,6 @@ export function Dashboard(props: {
       case "read":
         event.preventDefault();
         if (!list.rows()[focusedIndex()]) return;
-        // The row's click: this article alone, in the reader.
         selectArticle(focusedIndex());
         showReaderPane();
         return;
@@ -1063,8 +896,6 @@ export function Dashboard(props: {
         event.preventDefault();
         selectAll();
         return;
-      // The reader has no close of its own, since it always shows what the
-      // single selection opened, so `o` toggles the pane.
       case "open":
         event.preventDefault();
         if (props.pane() === "reader") backToList();
@@ -1080,14 +911,9 @@ export function Dashboard(props: {
         return;
       case "help":
         event.preventDefault();
-        // DialogHost captures the focused row and hands focus back on close.
         void helpDialog();
     }
   }
-  // The reader pane's half of the `o` toggle (#816). Once opening has moved
-  // focus here, which a narrow screen requires, this is the only place the
-  // key can be heard. Every other key keeps its browser meaning, so the pane
-  // scrolls from the keyboard.
   function handleReaderKeys(event: KeyboardEvent) {
     if (mapArticleKey(event) !== "open") return;
     if (isTextEntry(event.target) || isDialogOpen()) return;
@@ -1098,7 +924,6 @@ export function Dashboard(props: {
   async function shareSelected() {
     const article = selected();
     if (!article) return;
-    // The share sheet needs no feedback; the clipboard fallback does.
     const outcome = await shareArticle(article);
     if (outcome === "copied") announce("Article link copied to the clipboard.");
     else if (outcome === "failed")
@@ -1161,9 +986,6 @@ export function Dashboard(props: {
       reportError(cause, "Could not rename the folder");
     }
   }
-  // Per-source snooze (#725). Parsing and saving continue on the server
-  // during the pause; this only stores the timestamp and reloads the tree,
-  // whose badges and unread list suppress the source until it lapses.
   async function snoozeNode(
     node: Extract<TreeNode, { type: "source" }>,
     pausedUntil: string | null,
@@ -1186,13 +1008,7 @@ export function Dashboard(props: {
       );
     }
   }
-  // Right-click and long-press menus (#721) act on the clicked row without
-  // selecting it: the article list, its cursor and the reading position all
-  // belong to the selection, which the menu leaves alone. Manual ordering
-  // stays a non-feature, so there is no re-filing action.
   function openTreeContext(x: number, y: number, node: ListNode) {
-    // Today has no feed URL to copy, no properties to edit and no
-    // subscription to remove; the tree item still swallows the native menu.
     if (node.type === "view") return;
     const items: ContextMenuItem[] =
       node.type === "folder"
@@ -1289,8 +1105,6 @@ export function Dashboard(props: {
           }));
       const current = selectedNode();
       if (!current || treeNodeKey(current) !== treeNodeKey(node)) {
-        // A menu target other than the selection: reading stays where it
-        // is, unless the list shows rows of the feed that just went away.
         await loadTree();
         const listsRemoved =
           node.type === "source" &&
@@ -1300,16 +1114,10 @@ export function Dashboard(props: {
         else if (listsRemoved && current) await select(current);
         return;
       }
-      // Clearing the list also stops a pending delete from rolling its rows
-      // back.
       setSelectedNode(undefined);
       emptyList();
-      // The source, and everything under a deleted folder, is gone: no
-      // snapshot may point at it, and none of its articles keep a reading
-      // position (#718).
       restore.store.clear();
       await loadTree();
-      // The deleted row's node is gone, dropping focus to document.body.
       queueMicrotask(() => focusTreeRow());
     } catch (cause) {
       reportError(cause, "Could not delete it");
@@ -1426,8 +1234,6 @@ export function Dashboard(props: {
           onSearch={() => void runSearch(searchTerms())}
           onSearchTerms={setSearchTerms}
           onSelectAll={() => {
-            // Clicking focuses this button, outside the list, where the
-            // list's keys stop firing; Ctrl+A already runs from inside it.
             selectAll();
             if (list.rows().length) focusArticleAt(0, { scroll: false });
           }}
@@ -1439,9 +1245,6 @@ export function Dashboard(props: {
           selected={selectedNode()}
           selectedCount={selectedIndexes().size}
           signedIn={authenticated()}
-          // The feeds loading is the list loading too, until something is
-          // selected: a restored session opens its feed before the tree is
-          // revealed, and its rows must be there to take focus.
           skeleton={list.loading() || (treeLoading() && !selectedNode())}
         />
         <ReaderPane
@@ -1497,11 +1300,7 @@ export function Dashboard(props: {
             );
             if (!savedNode) return;
             await select(savedNode);
-            // Editing renames or moves an existing feed; nothing to fetch.
             if (wasEditing) return;
-            // Subscribing only queues the fetch (the worker does it), so the
-            // list can be empty right after. Poll briefly rather than showing
-            // a blank pane; bail if the user navigated away.
             for (
               let attempt = 0;
               attempt < 5 &&
@@ -1509,8 +1308,6 @@ export function Dashboard(props: {
               selectedNode()?.uid === savedNode.uid;
               attempt++
             ) {
-              // Sequential on purpose: each attempt rechecks state after its
-              // delay, so there is nothing for Promise.all to parallelize.
               // oxlint-disable-next-line no-await-in-loop
               await new Promise((resolve) => setTimeout(resolve, 3000));
               if (selectedNode()?.uid !== savedNode.uid) break;

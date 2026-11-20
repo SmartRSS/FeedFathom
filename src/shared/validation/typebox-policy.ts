@@ -12,16 +12,11 @@ type SubscriptionTarget =
 
 const nonblankString = Type.String({ minLength: 1, pattern: "\\S" });
 
-// typebox dropped the non-JSON-Schema Type.Date() builtin; this replicates
-// its runtime `instanceof Date` check for in-memory (not over-the-wire)
-// validation of real Date objects.
 export const dateType = Type.Refine(
   Type.Unsafe<Date>(Type.Unknown()),
   (value) => value instanceof Date,
 );
 
-// Both password forms carry the same rule under different field names, so
-// the pair to compare is a parameter rather than a second copy of the check.
 function withEqualStrings<T extends TSchema>(
   schema: T,
   first: string,
@@ -46,7 +41,6 @@ export function withMatchingChangedPasswords<T extends TSchema>(schema: T) {
 }
 
 export const webUrlPolicy = Type.Refine(Type.String(), isWebUrl);
-// Control characters other than tab, line feed and carriage return.
 const nonPrintablePattern = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/u;
 export const plainTextPolicy = Type.Refine(
   Type.String(),
@@ -69,9 +63,6 @@ export const normalizedWebUrl = Type.Codec(
   .Decode((value) => value.trim())
   .Encode((value) => value);
 
-// The cap matters beyond mail: the address is part of the auth throttle's
-// Redis keys, and an unbounded one lets each request park up to the body limit
-// in Redis.
 export const normalizedEmailAddress = Type.Codec(
   Type.Refine(
     nonblankString,
@@ -90,9 +81,6 @@ export const normalizedSubscriptionTarget = Type.Codec(
 )
   .Decode((value): SubscriptionTarget => {
     const normalized = value.trim();
-    // Newsletter addresses are matched against the envelope recipient of
-    // inbound mail with an exact comparison, so both sides canonicalise to
-    // lowercase. A feed URL keeps its case: its path is case-sensitive.
     return isEmailAddress(normalized)
       ? { kind: "email", value: normalized.toLowerCase() }
       : { kind: "feed", value: normalized };

@@ -4,17 +4,12 @@ export type ContextMenuItem =
   | {
       kind: "action";
       label: string;
-      // Removes something: drawn in the error colour, as a destructive
-      // dialog button is.
       danger?: boolean;
       disabled?: boolean;
       onSelect: () => void;
     }
   | { kind: "separator" };
 
-// App-specific actions need a custom context menu (#721). Roving focus
-// supports keyboard navigation. Escape dismisses and returns focus to the
-// invoker; an outside pointer press dismisses without restoring focus.
 export function ContextMenu(props: {
   x: number;
   y: number;
@@ -24,13 +19,7 @@ export function ContextMenu(props: {
   let list: HTMLUListElement | undefined;
   let invoker: Element | null;
 
-  // Anchor point, nudged so the menu never opens under the cursor where a
-  // stray pointerup would immediately activate the first item. Clamped to
-  // the viewport once the menu has a real size: long-press near a screen
-  // edge is the common case on touch, and an unclamped menu renders its
-  // items off-screen there.
   const menuMargin = 8;
-  // Read once, at open.
   const [pos, setPos] = createSignal(
     untrack(() => ({ x: props.x + 2, y: props.y + 2 })),
   );
@@ -50,7 +39,6 @@ export function ContextMenu(props: {
         ),
       });
     }
-    // Focus the first enabled item, like a native menu.
     const first = list?.querySelector<HTMLElement>(
       "[role='menuitem']:not([disabled])",
     );
@@ -60,7 +48,6 @@ export function ContextMenu(props: {
       document.removeEventListener("pointerdown", onOutsidePointerDown);
   });
 
-  // Captured at mount, before any menu interaction can move focus.
   const returnFocus = () => {
     if (invoker instanceof HTMLElement) invoker.focus();
   };
@@ -85,8 +72,6 @@ export function ContextMenu(props: {
   const runItem = (item: ContextMenuItem) => {
     if (item.kind !== "action" || item.disabled) return;
     props.onClose();
-    // Act after closing, so actions that open panes or dialogs don't fight
-    // the menu for focus.
     queueMicrotask(item.onSelect);
   };
 
@@ -102,9 +87,6 @@ export function ContextMenu(props: {
       event.preventDefault();
       focusItemAt(-1);
     } else if (event.key === "Tab") {
-      // Tab leaves the menu rather than trapping focus in it (WAI-ARIA menu
-      // pattern). Returning focus first means the browser's own Tab moves on
-      // from the invoker, so Shift+Tab goes backwards from it.
       props.onClose();
       returnFocus();
     }
@@ -150,8 +132,6 @@ export function ContextMenu(props: {
   );
 }
 
-// Long-press → context menu, for touch screens. Cancels on movement (that's
-// a scroll) and swallows the click a released long-press would produce.
 export function longPressHandlers(open: (x: number, y: number) => void): {
   onTouchCancel(): void;
   onTouchEnd(event: TouchEvent): void;

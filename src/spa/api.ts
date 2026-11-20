@@ -16,9 +16,6 @@ export class ApiError extends Error {
 export const isUnauthorizedError = (cause: unknown): cause is ApiError =>
   cause instanceof ApiError && cause.status === 401;
 
-// A response this bundle could not read. Its message names the path and the
-// parse failure, which is for the console and the tests, not the reader; the
-// HTTP status it came with is for both.
 class InvalidResponseError extends Error {
   constructor(
     message: string,
@@ -28,27 +25,16 @@ class InvalidResponseError extends Error {
   }
 }
 
-// FeedFathom's own failure: an answer this bundle can't read, or a 5xx the
-// server sent itself. A 504 with a readable error is the exception: the
-// server's request to a feed site ran out of time, and its sentence says so.
 const ownFailure = (cause: unknown) =>
   cause instanceof InvalidResponseError ||
   (cause instanceof ApiError && cause.status >= 500 && cause.status !== 504);
 
-// The sentence a reader sees: the cause, as a feed's failures name theirs.
-// FeedFathom's own failure says so; any other Error -- a refusal the server
-// explained, or no connection -- carries its own sentence; `fallback`
-// ("Could not <action>.") stands alone for anything thrown that isn't an
-// Error. Statuses and raw reasons stay out: they are for an admin's details
-// (failureDetails).
 export const messageOf = (cause: unknown, fallback: string) => {
   if (ownFailure(cause))
     return "The FeedFathom server ran into a problem. Try again in a moment.";
   return cause instanceof Error ? cause.message : fallback;
 };
 
-// What an admin's Details show for a failure: the HTTP status, where there
-// was an answer, and the raw reason.
 export function failureDetails(cause: unknown): {
   reason: string;
   status: number | undefined;
@@ -60,7 +46,6 @@ export function failureDetails(cause: unknown): {
   if (!(cause instanceof Error)) return { reason: String(cause), status };
   if (cause instanceof ApiError && cause.detail)
     return { reason: cause.detail, status };
-  // No answer at all: the browser's own error is the only detail there is.
   if (!status && cause.cause instanceof Error)
     return { reason: String(cause.cause), status };
   return { reason: cause.message, status };
@@ -76,10 +61,6 @@ const invalidResponse = (
     status,
   );
 
-// Aborting a request is the caller's own decision, not a failure to report:
-// the caller's AbortError has to reach it unwrapped so it can tell a
-// superseded request from a real one. Only while its signal is aborted, so a
-// genuine failure that merely coincides with a later abort still surfaces.
 const isCancellation = (
   cause: unknown,
   signal: AbortSignal | null | undefined,
@@ -101,23 +82,11 @@ async function responseJson(
   }
 }
 
-// A request that never reaches the server rejects with a browser-specific
-// TypeError -- "Failed to fetch" in Chrome, "NetworkError when attempting to
-// fetch resource" in Firefox. Replaced once here, where every call passes,
-// rather than at each call site; the original stays as the cause, for an
-// admin's details.
 const unreachable = (cause: unknown): Error =>
   new Error("FeedFathom can't reach its server. Check your connection.", {
     cause,
   });
 
-// Cloudflare now and then holds a request for seconds to a minute before it
-// reaches the origin, which answers in milliseconds; a copy sent meanwhile
-// usually takes another path. A GET still waiting after this long races a
-// second copy, the first answer wins, and the other is aborted. Only a GET:
-// repeating a write could apply it twice. A GET the server answers by
-// fetching another site is slow for that reason, and a copy would fetch that
-// site twice, so its caller turns the race off.
 const raceGetAfterMs = 1000;
 
 function raceGet(url: string, init: RequestInit): Promise<Response> {
@@ -154,7 +123,6 @@ type ApiInit<R extends TSchema> = Omit<RequestInit, "body"> & {
   raceWhenStalled?: false;
 } & (
     | { body?: BodyInit; json?: never; request?: never }
-    // A JSON body, typed by the schema the server decodes it with.
     | { json: StaticEncode<R>; request: R }
   );
 
@@ -196,9 +164,6 @@ export async function api<T extends TSchema, R extends TSchema = never>(
     throw invalidResponse(path, "malformed error payload", response.status);
   }
 
-  // A deploy that adds a response field reaches pages still running the
-  // previous bundle -- the worker serves its cached shell first -- so fields
-  // this bundle does not know are dropped rather than rejected.
   Value.Clean(schema, payload);
   if (!Value.Check(schema, payload)) {
     const issue = Value.Errors(schema, payload)[0];

@@ -34,12 +34,7 @@ import {
 } from "#features/feeds/source-schedule-policy.ts";
 import { faviconGatherWindowMs } from "#features/feeds/favicon-refresher.ts";
 
-// Bound each gathering pass when an outage makes many sources due at once.
-// notBefore staggers normal arrivals; the cap does not scale with backlog size.
 const gatherBatchLimit = 500;
-// A correlated subquery keeps each caller to one round trip. The outer id is
-// qualified by hand: drizzle drops the table name from columns in a
-// single-table select, and a bare "id" here would mean user_sources.id.
 const subscriberCount = sql<number>`(
   SELECT COUNT(*)::int
   FROM ${userSources}
@@ -54,8 +49,6 @@ const sourceSortColumns = {
   url: sources.url,
 } satisfies Record<Static<typeof sourceSortSchema>, unknown>;
 
-// 23505 is a unique violation, 23503 a foreign key one. Drizzle wraps the
-// driver's error, so the SQLSTATE can sit a few causes down.
 export const hasSqlState = (
   error: unknown,
   state: "23503" | "23505",
@@ -75,9 +68,6 @@ export class SourcesDataService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
   ) {}
 
-  // `db` lets a caller's transaction, such as the OPML import's, add it. A
-  // feed without a known homepage links to its own origin until a fetch
-  // names one (successSource); an email address has no origin to fall back to.
   public async addSource(
     {
       homeUrl,
@@ -118,8 +108,6 @@ export class SourcesDataService {
     return existing;
   }
 
-  // subscriberCount rides along for the ParseSource job's User-Agent (see
-  // buildUserAgent).
   public async findSourceById(
     sourceId: number,
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
@@ -141,10 +129,6 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  // The source mail to `url` is delivered to. One without a subscriber takes
-  // mail only within the reservation grace; past it, it is an address its
-  // owner left (a tombstone, see RetentionService.prune), and the sender should
-  // get a bounce rather than mail nobody reads.
   public async findMailRecipient(url: string): Promise<Source | undefined> {
     return (
       await this.drizzleConnection
@@ -159,11 +143,6 @@ export class SourcesDataService {
     ).at(0);
   }
 
-  // Every feed fetched since the previous gather, missing icon or not, with
-  // an hour of slack for a poll landing just late: each live source gets a
-  // job per run, mostly answered from the HTTP cache, and a dead one stops
-  // costing provider requests. Email sources are skipped: their homeUrl is
-  // the app's own origin, whose icon would replace the mail glyph.
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
@@ -181,8 +160,6 @@ export class SourcesDataService {
           ne(sources.kind, "email"),
         ),
       )
-      // Sources still without an icon first: on a cold run they are the ones
-      // a person sees as missing.
       .orderBy(sql`${sources.favicon} IS NOT NULL`, asc(sources.id));
   }
 
@@ -208,12 +185,6 @@ export class SourcesDataService {
     return row?.favicon ?? null;
   }
 
-  // "email" has no endpoint to poll. "feed" is gated purely by notBefore,
-  // which successSource/failSource write directly, so nothing is recomputed at
-  // read time. "websub" uses a flat daily last_attempt check as a safety net
-  // for a dropped push, and ignores notBefore on purpose -- a Cache-Control
-  // value from a normal fetch would otherwise pull the next check inside a
-  // day and undo the reduced cadence.
   public async getSourcesToProcess() {
     return await this.drizzleConnection
       .select({ id: sources.id })
@@ -256,18 +227,12 @@ export class SourcesDataService {
         websubStatus: sources.websubStatus,
       })
       .from(sources)
-      // id breaks the tie: every column the admin table can sort by holds
-      // duplicates (recent_failures is 0 for almost every row), and without
-      // a unique last key the tied rows reshuffle between two loads of the
-      // same sort, which reads as the table changing on its own.
       .orderBy(
         (order === "desc" ? desc : asc)(sourceSortColumns[sortBy]),
         asc(sources.id),
       );
   }
 
-  // Cascades via FK to articles and user_sources. Admin-level, distinct from
-  // unsubscribing (UserSourcesDataService.removeSourceFromUser).
   public async deleteSource(id: number) {
     await this.drizzleConnection.delete(sources).where(eq(sources.id, id));
   }
@@ -289,10 +254,6 @@ export class SourcesDataService {
     }
   }
 
-  // observedAt must equal the last_seen_in_feed_at written for the same
-  // fetch's articles (see ArticleImporter.recordFetch); otherwise the two
-  // differ by this call's latency and retention cannot tell "not in this
-  // fetch" from "just fetched".
   public async successSource(
     sourceId: number,
     {
@@ -323,9 +284,6 @@ export class SourcesDataService {
       .where(eq(sources.id, sourceId));
   }
 
-  // Stored on failure so the read side is just "notBefore <= NOW()".
-  // recentFailures is incremented in the same statement this reads, so +1
-  // counts the failure being recorded now.
   public async failSource(sourceId: number, reason = "") {
     await this.drizzleConnection
       .update(sources)

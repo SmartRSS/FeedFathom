@@ -1,29 +1,15 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { shortcutHelp } from "./keyboard-shortcuts.ts";
 
-// In-app replacements for the native prompt() and confirm() (#698).
-// Native prompt()/confirm() block the event loop, can be suppressed by the
-// browser (after which folder creation silently no-ops), are poor on touch
-// screens, and can't follow the page's theme. A single <dialog> hosted once
-// in main.tsx serves every call site; showModal() provides the focus trap,
-// the inert background and the Esc-to-dismiss handling for free.
-
 export const isDialogOpen = () =>
   document.querySelector("dialog[open]") !== null;
 
-// Both variants store one common resolve signature (the broadest of the
-// two), so dismissals can be routed without casting; the public helpers
-// adapt it back to their own promise type at creation.
 type DialogRequest =
   | {
       kind: "confirm";
-      // Every dialog has a title, its accessible name; a confirm's message
-      // says what will happen and describes it.
       title: string;
       message: string;
       danger: boolean;
-      // The confirm button's label: the action's verb ("Delete", "Create"),
-      // so the button says what happens. Required, with no "OK" default.
       confirmLabel: string;
       resolve(value: boolean | string | null): void;
     }
@@ -36,15 +22,9 @@ type DialogRequest =
       resolve(value: boolean | string | null): void;
     }
   | {
-      // The keyboard cheat sheet (#709): same host, same dismissal
-      // mechanics, no value to resolve. Invoked by the `?` shortcut and by
-      // the "Keyboard shortcuts" button on the options page.
       kind: "help";
       resolve(value: boolean | string | null): void;
     };
-
-// Every shortcut, so the cheat sheet and the handler can't drift apart.
-// Each entry lists the key groups that mean the same thing.
 
 function Shortcuts() {
   return (
@@ -79,13 +59,9 @@ function Shortcuts() {
 
 const [request, setRequest] = createSignal<DialogRequest>();
 
-// Cancel, Esc and backdrop clicks resolve with native cancellation values:
-// false for confirm, null for prompt. Help resolves too, ignoring the value.
 const cancelValue = (current: DialogRequest) =>
   current.kind === "prompt" ? null : false;
 
-// One dialog at a time: a request replacing one still pending cancels it, so
-// that caller is not left awaiting forever.
 function show(next: DialogRequest) {
   const pending = request();
   pending?.resolve(cancelValue(pending));
@@ -136,7 +112,6 @@ export function DialogHost() {
   let dialogRef: HTMLDialogElement | undefined;
   let inputRef: HTMLInputElement | undefined;
   let confirmRef: HTMLButtonElement | undefined;
-  // Captured before the dialog can move focus, like ContextMenu's invoker.
   let invoker: Element | null = null;
 
   const restoreFocus = () => {
@@ -146,8 +121,6 @@ export function DialogHost() {
 
   createEffect(request, (current) => {
     if (!current) return;
-    // A request replacing an open one reuses its dialog, and its invoker:
-    // focus is inside that dialog by now.
     if (!dialogRef?.open) invoker = document.activeElement;
     queueMicrotask(() => {
       if (!dialogRef?.open) dialogRef?.showModal();
@@ -156,8 +129,6 @@ export function DialogHost() {
     });
   });
   onCleanup(() => {
-    // Route teardown with a dialog still open: resolve the pending promise
-    // so no caller awaits forever, then drop the top-layer state.
     const current = request();
     if (!current) return;
     current.resolve(cancelValue(current));
@@ -185,9 +156,6 @@ export function DialogHost() {
     finish(inputRef?.value ?? "");
   };
 
-  // Typed accessors: the JSX below needs the narrowed union members
-  // (label/initial vs message/danger), which a bare kind check inside an
-  // attribute expression doesn't give TypeScript.
   const text = () => {
     const current = request();
     if (!current) return "";
@@ -224,34 +192,22 @@ export function DialogHost() {
     <Show when={request()}>
       {(current) => (
         <dialog
-          // The shortcut sheet is a table, wider than a form dialog.
           class={[
             "app-dialog",
             { "app-dialog-wide": current().kind === "help" },
           ]}
-          // The dialog's accessible name is its visible title (#817); a
-          // confirm's message describes it.
           aria-describedby={
             current().kind === "confirm" ? "app-dialog-prompt" : undefined
           }
           aria-labelledby="app-dialog-title"
-          // Esc fires cancel before close; resolving via cancel() keeps the
-          // same false/null contract as the Cancel button.
           onCancel={(event) => {
             event.preventDefault();
             cancel();
           }}
           onClick={(event) => {
-            // Clicks on ::backdrop land on the <dialog> element itself;
-            // clicks inside land on the form or its children.
             if (event.target === dialogRef) cancel();
           }}
           onClose={() => {
-            // Any close not already routed through finish() (e.g. a stray
-            // form submission) still must not leave the promise pending.
-            // close fires a task after finish(), so a follow-on request may
-            // have reopened the dialog by then; that one is not cancelled
-            // (#1123).
             if (!dialogRef?.open) cancel();
           }}
           ref={dialogRef}
@@ -267,9 +223,6 @@ export function DialogHost() {
             <h2 class="app-dialog-title" id="app-dialog-title">
               {title()}
             </h2>
-            {/* The caption's close box, which only the windowed themes show
-                (style.css). Out of the tab order: Esc and Cancel already
-                close the dialog from the keyboard. */}
             <button
               aria-label="Close"
               class="app-dialog-close"

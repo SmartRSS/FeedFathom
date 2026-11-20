@@ -24,8 +24,6 @@ export function parseOpml(opml: string): OpmlNode[] {
   if (!isXmlElement(root)) throw new Error("Invalid OPML document");
   const body = root["body"];
   if (body === undefined) throw new Error("Invalid OPML body");
-  // An empty <body/> parses to a string rather than an element. That's a
-  // valid OPML file with no subscriptions, not a malformed one.
   if (!isXmlElement(body)) return [];
   return processOutlines(childElements(body, "outline"));
 }
@@ -46,13 +44,8 @@ function processOutlines(outlines: unknown[]): OpmlNode[] {
       throw new Error("OPML nesting is too deep");
 
     const outline = current.value;
-    // A single malformed outline node shouldn't abort the whole import --
-    // skip it and keep processing the rest of the file.
     if (!isXmlElement(outline)) continue;
 
-    // Readers that keep titles HTML-escaped export them escaped again for
-    // XML ("&amp;#39;"), so one HTML pass follows the XML one: the same pass
-    // the feed library gives a feed's own title. Tags stay as text.
     const title = decodeHtmlReferences(
       attribute(outline, "title") || attribute(outline, "text") || "Unknown",
     );

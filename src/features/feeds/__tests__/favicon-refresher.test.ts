@@ -16,7 +16,6 @@ afterEach(() => {
   setSystemTime();
 });
 
-// A 16 px ICO header: what DuckDuckGo serves, and enough for imageDimensions.
 const smallIco = Buffer.alloc(22);
 smallIco.writeUInt16LE(1, 2);
 smallIco[6] = 16;
@@ -122,7 +121,6 @@ test("a source without an icon stores the best one so far while a provider defer
 
   if (!(error instanceof JobDeferral)) throw error;
   expect(updated).toEqual([1]);
-  // Carried into the retry's job data, so the retry does not downgrade it.
   expect(error.data).toMatchObject({ hasFavicon: true });
 });
 
@@ -141,8 +139,6 @@ test("defers to the latest primary retry time without unavatar, one slot after t
     return error.retryAt;
   };
 
-  // The first waits for the latest provider, favicon.im; the second, blocked
-  // by the same providers, queues one interval plus slack behind it.
   expect(await retryAt(1)).toBe(now + 120_000);
   expect(await retryAt(2)).toBe(now + 120_000 + 12_000);
   expect(requested.some((url) => url.includes("unavatar"))).toBe(false);
@@ -173,7 +169,6 @@ test("a provider blocked past the horizon counts as a miss", async () => {
 
 test("past the horizon, the limiter's own pacing still defers", async () => {
   const { refresher, requested } = refresherAnswering(() => [404, {}]);
-  // Takes every provider's interval, so the next refresh is paced.
   await refresher.refreshFavicon({ ...exampleSource });
   requested.length = 0;
   const error = await refresher
@@ -194,7 +189,6 @@ test("the horizon starts at the first block, not at the first run", async () => 
       ? [429, { "retry-after": "60" }]
       : [200, { "content-type": "image/x-icon" }, smallIco],
   );
-  // Paced in the queue for longer than the horizon, then blocked.
   const source: Parameters<FaviconRefresher["refreshFavicon"]>[0] = {
     ...exampleSource,
     firstRunAt: Date.now() - faviconDeferralHorizonMs - 60_000,
@@ -206,7 +200,6 @@ test("the horizon starts at the first block, not at the first run", async () => 
 
   if (!(error instanceof JobDeferral)) throw error;
   expect(updated).toEqual([]);
-  // The retry carries when the block began, which the horizon counts from.
   expect(error.data).toMatchObject({
     deferredSince: expect.any(Number),
     firstRunAt: source.firstRunAt,
@@ -230,11 +223,9 @@ test("a short origin Retry-After still counts against the horizon", async () => 
 
 test("past the backstop, even the limiter's pacing is a miss", async () => {
   const { refresher, requested } = refresherAnswering(() => [404, {}]);
-  // Takes every provider's interval, unavatar's included.
   await refresher.refreshFavicon({ ...exampleSource });
   requested.length = 0;
 
-  // Every provider is paced, so the job completes instead of deferring.
   expect(
     await refresher.refreshFavicon({
       ...exampleSource,
@@ -259,8 +250,6 @@ test("a block on one provider host does not queue jobs waiting on the others", a
     return error.retryAt;
   };
 
-  // The first misses every primary and waits an hour on unavatar; the
-  // second is paced by the primaries, and queues on their hosts only.
   expect(await retryAt(1)).toBe(now + 3_600_000);
   expect(await retryAt(2)).toBeLessThanOrEqual(now + 12_000);
 });

@@ -57,8 +57,6 @@ describe("isBlockedHostname", () => {
     expect(isBlockedHostname(hostname)).toBe(false);
   });
 
-  // Callers pass URL.hostname, which normalizes these to a dotted quad or a
-  // compressed IPv6 address before the table sees them.
   test.each([
     "2130706433",
     "0x7f000001",

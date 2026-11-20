@@ -20,9 +20,6 @@ import {
   sessionUser,
 } from "../../../../__tests__/server-harness.ts";
 
-// The stream re-reads the session and the subscriptions every refreshMs
-// (#1094). The schedule is handed in, so each test fires the refresh by hand
-// and awaits it instead of waiting out a minute.
 async function openStream(
   sessionFor: () => AuthedUser | undefined,
   sourceIds: () => number[],
@@ -94,7 +91,6 @@ test("a stream whose session still resolves stays open and picks up new source i
     () => ids,
   );
   ids = [1, 2];
-  // Not yet subscribed as far as the stream knows, so this one is dropped.
   stream.emit({ count: 1, sourceId: 2 });
   await stream.refresh();
   stream.emit({ count: 3, sourceId: 2 });
@@ -103,8 +99,6 @@ test("a stream whose session still resolves stays open and picks up new source i
   expect(stream.state.stopped).toEqual([]);
 });
 
-// #991: one shared subscriber fans out to every stream, and each stream
-// forwards only the sources its user subscribes to.
 test("the event stream forwards only the user's sources and unlistens on cancel", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -207,7 +201,6 @@ test("closing the hub ends open event streams", async () => {
   hub.close();
   expect((await reader.read()).done).toBe(true);
 
-  // A stream that registers after shutdown began ends rather than resubscribe.
   const late = await get(app, "/api/events", { auth: true });
   const lateReader = late.body!.getReader();
   await lateReader.read();

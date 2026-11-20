@@ -17,10 +17,6 @@ import {
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;
 
-// A missing or unreadable header falls back to five minutes: "right now"
-// would turn a 429 into a hot retry loop against a host that has just asked us
-// to stop. A date in the past is honoured as-is; it means "try again now", and
-// the caller compares against the clock anyway.
 test.each<[string, number | null | string, number]>([
   ["an absolute instant", now + 1_000, now + 1_000],
   ["a delta in seconds", "120", now + 120_000],
@@ -36,10 +32,6 @@ test.each<[string, number | null | string, number]>([
 
 const epoch = (at: number) => String(at / 1_000);
 
-// The request that would spend the last unit is the one worth holding back, so
-// a block starts at one remaining rather than at zero. RFC 9331 defines reset
-// as delta-seconds and GitHub sends an epoch; a delta of 60 read as an epoch is
-// 1970, which silently dropped the header.
 test.each<[string, Record<string, string>, number | undefined]>([
   ["no headers", {}, undefined],
   ["remaining without reset", { "x-ratelimit-remaining": "0" }, undefined],
@@ -116,8 +108,6 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
     const deadline = new RequestDeadline(20_000);
-    // The requested wait, not wall-clock time: the block was seeded before
-    // the call, so elapsed time can legitimately land a millisecond short.
     using slept = spyOn(deadline, "sleep").mockResolvedValue();
 
     try {
@@ -136,7 +126,6 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     expect(waited).toBeLessThanOrEqual(200);
   });
 
-  // Past the deadline it is a real deferral: the caller cannot afford the wait.
   test("still defers a block that outlasts the deadline", async () => {
     const redis = createFakeHttpRedis();
     const retryAt = Date.now() + 60_000;
@@ -155,7 +144,6 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
     }
   });
 
-  // Background work defers instead of holding a worker slot for the wait.
   test("still defers background work behind a block", async () => {
     const redis = createFakeHttpRedis();
     redis.seed("http-blocked:feeds.example.com", String(Date.now() + 200), 200);
@@ -165,7 +153,6 @@ describe("HttpRateLimiter.reserve for an interactive caller", () => {
       const error = await new HttpRateLimiter(redis)
         .reserve("feeds.example.com", "background", deadline)
         .catch((caught: unknown) => caught);
-      // A block the origin asked for, not the limiter's own pacing.
       expect(error).toBeInstanceOf(HttpDeferredError);
       expect(error).not.toBeInstanceOf(HttpPacedError);
     } finally {
@@ -201,10 +188,8 @@ describe("HttpRateLimiter shared host clock", () => {
     const error = await reserve(limiter, "background").catch(
       (caught: unknown) => caught,
     );
-    // The limiter's own pacing, which a caller can tell from a block.
     expect(error).toBeInstanceOf(HttpPacedError);
     if (!(error instanceof HttpDeferredError)) throw error;
-    // Ten seconds after that request, read off two clocks a moment apart.
     expect(Math.abs(error.retryAt - (requestedAt + 10_000))).toBeLessThan(50);
   });
 
@@ -220,8 +205,6 @@ describe("HttpRateLimiter shared host clock", () => {
     expect(slept).not.toHaveBeenCalled();
   });
 
-  // The production default, read off the wait the limiter asks for, with the
-  // clock stopped so no time passes between the seed and the reservation.
   test("interactive requests to one host sit one second apart by default", async () => {
     setSystemTime(new Date("2026-01-01T00:00:00Z"));
     try {
@@ -240,9 +223,6 @@ describe("HttpRateLimiter shared host clock", () => {
     }
   });
 
-  // A waiter keeps waiting for its turn after the first interval, so the
-  // third of three queued requests is served rather than deferred with most
-  // of its deadline left.
   test("queued interactive requests are served in turn within their deadline", async () => {
     const limiter = new HttpRateLimiter(createFakeHttpRedis(), {
       background: 10_000,
@@ -278,10 +258,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
   const waitersKey = `http-interactive:${host}`;
   const intervals = { background: 10_000, interactive: 10_000 };
 
-  // Starts an interactive reservation against a host that was just
-  // requested, and returns once it has registered as a waiter. Its sleep
-  // lasts until the test calls wake(), so the waiter cannot win its turn
-  // before the test acts on it, however loaded the machine.
   async function startWaiter(redis: ReturnType<typeof createFakeHttpRedis>) {
     const deadline = new RequestDeadline(20_000);
     const woken = Promise.withResolvers<void>();
@@ -333,8 +309,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     requestedJustNow(redis);
     const { reservation, wake } = await startWaiter(redis);
 
-    // Another instance takes the clock while this one sleeps, pushing its
-    // turn past the deadline.
     redis.seed(lastKey, String(Date.now() + 30_000), intervals.background);
     wake();
     await expect(reservation).rejects.toBeInstanceOf(HttpDeferredError);

@@ -11,9 +11,6 @@ export type ScannerPage = {
   youtubeChannelHref?: string | undefined;
 };
 
-// The elements a ScannerPage is read from. Both extractors -- the
-// extension's over the live Document and the server's HTMLRewriter pass --
-// use this table and take the first match of each single-valued selector.
 export const scannerSelectors = {
   bitchuteChannel: ".owner>a",
   feedLinks:

@@ -1,11 +1,6 @@
 import { Show } from "solid-js";
 import { formatDate } from "./format-date.ts";
 
-// An article's title over one muted line: where it is from, who wrote it,
-// when, and the way out to the original. The author is left out when it
-// only repeats the feed's name, which is what a feed without authors falls
-// back to; Original only when there is somewhere to go. The dashboard's
-// reader and the feed preview both use it.
 export function ReaderHeader(props: {
   author: string;
   feed: string | undefined;

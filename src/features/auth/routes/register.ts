@@ -45,8 +45,6 @@ async function validateCaptcha(
       response.ok && turnstileResponseCheck.Check(result) && result.success
     );
   } catch (error) {
-    // Fails closed: a Turnstile outage refuses every registration, and this
-    // log is how an operator tells that from a wave of bad tokens.
     console.error("Turnstile verification failed:", error);
     return false;
   }
@@ -65,9 +63,6 @@ export function createRegisterRoute({
   usersDataService,
 }: Pick<typeof auth, "authThrottle" | "mailSender" | "usersDataService"> &
   Pick<typeof runtime, "fetcher" | "password"> & { config: AppConfig }) {
-  // If delivery fails, the stored token is withdrawn, so the next
-  // registration attempt for this address is treated as an expired link and
-  // sends a fresh one rather than waiting out a link nobody received.
   const sendActivation = (email: string, token: string) => {
     sendLater(
       "Activation",
@@ -117,36 +112,21 @@ export function createRegisterRoute({
         }
         if (isDisposableEmail(request.email)) return accepted();
 
-        // Counted before any mail or password hashing, with or without email
-        // activation: each attempt costs a hash either way. Exempt first-user
-        // setup to avoid locking out the operator.
         if (userCount > 0) {
           const address = clientAddress(
             httpRequest,
             server,
             config.TRUSTED_PROXY_HEADER,
           );
-          // A distinct answer is safe here: both counters count this
-          // address's attempts whether or not the account exists, so being
-          // refused says nothing about who has one.
           if (!(await authThrottle.attempt("register", address, request.email)))
             return jsonError("Too many attempts. Try again later.", 429);
         }
 
-        // Hashed before the lookup so an existing address costs what a new
-        // one does; skipping it would answer "this account exists" by time,
-        // which login's dummy hash on a miss is there to withhold.
         const passwordHash = await password.hash(request.password);
         const existing = await usersDataService.findUser(request.email);
         if (existing) {
-          // Return generic success for existing accounts (#810). With mail
-          // enabled, renew missing or expired activation links for inactive
-          // accounts and send reset links for active accounts. Leave valid
-          // activation links unchanged.
           if (useEmailActivation) {
             if (existing.status === "inactive") {
-              // Stored only while the current link is missing or expired, and
-              // persisted before a link to it is sent.
               const { expiresAt, token } = issueToken(activationLifetimeMs);
               if (
                 await usersDataService.refreshActivationToken(
@@ -187,9 +167,7 @@ export function createRegisterRoute({
           config.ENABLE_REGISTRATION,
         );
         if (outcome === "closed") return registrationDisabled();
-        // Lost a same-address race: the same answer an existing account gets.
         if (outcome === "exists") return accepted();
-        // Mail only once the row holding its token is committed.
         if (activation) sendActivation(request.email, activation.token);
         return accepted();
       },

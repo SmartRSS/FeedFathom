@@ -63,7 +63,6 @@ test("formatDay names the day alone, its year only when not this one", () => {
 
 test("formatRowDate shortens by how recent the date is", () => {
   setDateFormat("locale");
-  // Local-time constructors, so the test holds in any time zone.
   const now = new Date(2026, 8, 7, 15, 0);
   const today = new Date(2026, 8, 7, 9, 5);
   expect(formatRowDate(today.toISOString(), now)).toBe(
@@ -76,7 +75,6 @@ test("formatRowDate shortens by how recent the date is", () => {
       month: "short",
     }).format(thisYear),
   );
-  // The same day and month a year earlier is not today.
   const lastYear = new Date(2025, 8, 7, 9, 5);
   expect(formatRowDate(lastYear.toISOString(), now)).toBe(
     new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(

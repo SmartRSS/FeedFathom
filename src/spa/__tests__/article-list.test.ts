@@ -15,7 +15,6 @@ const row = (id: number): ArticleSummary => ({
 const page = (from: number, length: number) =>
   Array.from({ length }, (_, index) => row(from + index));
 
-// Serves `total` rows a page at a time, after whichever id the cursor names.
 function server(total: number) {
   const cursors: (number | undefined)[] = [];
   const request = async (

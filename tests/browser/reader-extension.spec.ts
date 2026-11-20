@@ -10,8 +10,6 @@ import {
 import { installApiFixture } from "./api-fixture.ts";
 import { expect, setInstance, test } from "./extension-fixture.ts";
 
-// Every feed list the background stores for the popup, in order, recorded
-// from an extension page.
 async function recordStoredFeeds(page: Page) {
   await page.evaluate(() => {
     const history: string[][] = [];
@@ -42,9 +40,6 @@ async function waitForStoredFeeds(page: Page, titles: string[]) {
   );
 }
 
-// Posts a bridge request from the page, as the SPA does, and returns the
-// first answer naming its id. The caller checks that answer against the
-// protocol.
 async function postBridgeRequest(
   page: Page,
   request: ReaderRequest,
@@ -116,9 +111,6 @@ test("keeps the found feeds current across SPA navigation", async ({
   await appPage.goto(`${new URL(baseURL).origin}/extension-menu-initial`);
   await waitForStoredFeeds(optionsPage, ["Initial"]);
 
-  // Resolved once the content script has seen the stale route, so the
-  // latest one replaces a scan it already scheduled. The probe is the
-  // newest observer, so its callback runs after the content script's.
   await appPage.evaluate(
     () =>
       new Promise<void>((resolve) => {
@@ -150,8 +142,6 @@ test("keeps the found feeds current across SPA navigation", async ({
   expect((await storedFeedHistory(optionsPage)).flat()).not.toContain("Stale");
 });
 
-// The Reader display mode is offered only where the extension answers the
-// page's capability probe: its configured instance, and no other origin.
 test("uses the real extension bridge only on its configured origin", async ({
   baseURL,
   extension,
@@ -165,7 +155,6 @@ test("uses the real extension bridge only on its configured origin", async ({
   appPage.on("console", (message) => {
     if (message.type() === "error") browserFailures.push(message.text());
   });
-  // On the context, so it also answers the app's own service worker.
   await installApiFixture(context);
   const openArticle = async () => {
     await appPage

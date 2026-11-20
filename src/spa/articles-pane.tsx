@@ -34,7 +34,6 @@ export function ArticlesPane(props: {
   allSelectedRead: boolean;
   backPane(): void;
   feedsFailed: boolean;
-  // The feeds are still on their way, or failed, with none from before.
   feedsMissing: boolean;
   filter: ArticleFilter;
   focused: boolean;
@@ -68,11 +67,8 @@ export function ArticlesPane(props: {
   selected: ListNode | undefined;
   selectedCount: number;
   signedIn: boolean;
-  // The list shows its skeleton: loading, or waiting for the feeds with
-  // nothing selected yet.
   skeleton: boolean;
 }) {
-  // Grouped on the reader's own clock and time zone, so "Today" is theirs.
   const groups = createMemo(() => {
     const boundaries = generateBoundaryDates();
     return props.rows.map((row) =>
@@ -91,9 +87,6 @@ export function ArticlesPane(props: {
       ? { reason: state.reason, status: failingCause()?.status }
       : undefined;
   };
-  // A failing feed that still has articles lists them, under a notice once
-  // it has gone a day without an update: a shorter outage is usually the
-  // next poll's to fix. Only on the feed itself, not Today or its folder.
   const failingNotice = () => {
     const state = failing();
     return state?.lastSuccess &&
@@ -140,15 +133,11 @@ export function ArticlesPane(props: {
           disabled={!props.selectedCount}
           onClick={() => props.onToggleRead()}
         >
-          {/* Circle-check = read, dot-circle = unread: the state the action
-              will produce, so the glyph flips with it (#766). Reader
-              convention, not email's: neither reads as a mail action. */}
           <Icon raw={props.allSelectedRead ? dotCircleRaw : checkCircleRaw} />
           <span class="toolbar-label">
             {props.allSelectedRead ? "Mark unread" : "Mark read"}
           </span>
         </button>
-        {/* Delete stands apart from the harmless actions on either side. */}
         <span aria-hidden="true" class="toolbar-separator" />
         <button
           aria-label="delete articles"
@@ -169,13 +158,6 @@ export function ArticlesPane(props: {
           <span class="toolbar-label">Refresh</span>
         </button>
         <span />
-        {/* A visible label, not just an aria-label: among icon buttons a bare
-            dropdown reading "Unread" looks like a status, not the control
-            that changes which articles the list shows. It is a view option,
-            not an action, so it sits right of the spacer with the reader
-            pane's display-mode dropdown (#767). Disabled where no filter
-            could list anything; a caught-up feed keeps it, since All is how
-            its read articles are reached. */}
         <label class="article-filter-field">
           <span class="article-filter-label">Show</span>
           <select
@@ -202,17 +184,9 @@ export function ArticlesPane(props: {
           <span class="toolbar-label">Options</span>
         </button>
       </div>
-      {/* Names the open feed or folder where the list fills the screen and
-          the tree is out of sight; hidden beside a visible tree. */}
       <Show when={props.selected}>
         {(node) => <h2 class="pane-title">{node().name}</h2>}
       </Show>
-      {/* Its own row rather than a slot in the toolbar, which has no room to
-          show what was typed; the tree's filter box sits above the tree for
-          the same reason. A form, so Enter submits and the browser gives the
-          box its own clear affordance; search runs on submit rather than per
-          keystroke, because every query is a full-text scan on someone's
-          home server (#697). */}
       <Show when={articleSearchBox.get()}>
         <form
           class="article-search-field"
@@ -222,9 +196,6 @@ export function ArticlesPane(props: {
             props.onSearch();
           }}
         >
-          {/* Disabled while a selected feed or folder lists nothing and no
-              search is open. With nothing selected it stays: search answers
-              across every subscription. */}
           <input
             aria-label="Search articles"
             class="article-search"
@@ -240,8 +211,6 @@ export function ArticlesPane(props: {
             value={props.searchTerms}
             onInput={(event) => {
               props.onSearchTerms(event.currentTarget.value);
-              // Emptying the box, by typing back or with the native clear
-              // button, leaves search without needing a submit.
               if (!event.currentTarget.value.trim()) props.onExitSearch();
             }}
           />
@@ -318,8 +287,6 @@ export function ArticlesPane(props: {
                   ]}
                   data-index={index()}
                   href={article.url}
-                  // Starts the GET before the click lands; opening awaits
-                  // the same request.
                   onPointerDown={(event) => props.onRowPress(event, article.id)}
                   onPointerCancel={() => props.onRowPressCancel()}
                   onPointerEnter={() => props.onRowHover(article.id)}
@@ -328,10 +295,6 @@ export function ArticlesPane(props: {
                     event.preventDefault();
                     props.onRowClick(index(), event);
                   }}
-                  // No contextmenu override. The row is a real link, so the
-                  // browser's own menu carries "open in a background tab",
-                  // the only way to get one on a phone, plus copy link
-                  // address and whatever the reader's extensions add.
                   role="option"
                   tabindex={props.isFocused(index()) ? 0 : -1}
                   aria-selected={props.isSelected(index()) ? "true" : "false"}
@@ -339,8 +302,6 @@ export function ArticlesPane(props: {
                   <span class="title">{article.title}</span>
                   <span class="details">
                     <span>{article.author}</span>
-                    {/* Short in the row, where the date band above already
-                        names the period; the full stamp is the tooltip. */}
                     <time
                       datetime={article.publishedAt || undefined}
                       title={formatDate(article.publishedAt)}
@@ -354,9 +315,6 @@ export function ArticlesPane(props: {
           </For>
         </Show>
       </div>
-      {/* Sibling of the listbox, not a child (#933): a listbox may only own
-          option/group children. See .article-list-empty in style.css for how
-          it keeps the listbox's flex slot. */}
       <Switch>
         <Match when={emptyState() === "noMatches"}>
           <div class="article-list-empty" role="status">

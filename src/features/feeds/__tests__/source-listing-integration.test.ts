@@ -14,10 +14,6 @@ const client = new SQL(databaseUrl);
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 
-// Inserted in this order, so ids ascend down the list. The three timestamps
-// order the rows differently from each other, so a sort key wired to the
-// wrong column fails; every column but url has a tie, which only the id
-// tie-break settles.
 const rows = [
   ["https://b.test/", "2026-01-02", "2026-01-01", "2026-01-03", 0, 2],
   ["https://a.test/", "2026-01-01", "2026-01-03", "2026-01-02", 3, 0],
@@ -65,8 +61,6 @@ afterAll(async () => {
   await client.close();
 });
 
-// Expected orders by insertion index; ties fall back to ascending id in both
-// directions, so a reload of the admin table never reshuffles tied rows.
 test.each([
   ["createdAt", "asc", [1, 0, 2, 3]],
   ["createdAt", "desc", [3, 0, 2, 1]],

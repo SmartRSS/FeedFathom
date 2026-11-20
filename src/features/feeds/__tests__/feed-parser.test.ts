@@ -22,9 +22,6 @@ const servingFeed = (text: string, url = "https://cdn.example/feed.xml") =>
 
 const sameUrl = strictFake<RedirectMap>({ resolveUrl: async (url) => url });
 
-// A source created without a known homepage links to its feed's origin; the
-// first fetch corrects that to the site the feed names, which is where the
-// favicon refresh looks.
 test("a poll records the articles and the site the feed names", async () => {
   const recorded: Parameters<ArticleImporter["recordFetch"]>[] = [];
   const parser = new FeedParser(
@@ -53,8 +50,6 @@ test("a poll records the articles and the site the feed names", async () => {
   });
 });
 
-// The temporary-redirect cache only saves a hop next time; a Redis write
-// failing must not turn a fetched feed into a failed one.
 test("a failed redirect-cache write still returns the redirected feed", async () => {
   const parser = new FeedParser(
     strictFake<ArticleImporter>({}),

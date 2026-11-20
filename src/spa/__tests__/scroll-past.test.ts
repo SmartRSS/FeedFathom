@@ -78,9 +78,6 @@ describe("ScrollPastQueue", () => {
     expect(batches).toEqual([[1, 2, 3]]);
   });
 
-  // The case CI kept catching and a fast machine kept hiding. Rows enter the
-  // viewport as the scroll carries them, so their dwells complete in the order
-  // they arrived, not together -- and the batch has to survive that.
   test("rows whose dwells complete a millisecond apart still leave together", () => {
     const clock = fakeTimers();
     const batches: number[][] = [];
@@ -89,16 +86,11 @@ describe("ScrollPastQueue", () => {
     clock.advance(1);
     queue.add(13);
     clock.advance(999);
-    // 12 is done dwelling and 13 has one millisecond left, so nothing goes yet.
     expect(batches).toEqual([]);
     clock.advance(1);
     expect(batches).toEqual([[12, 13]]);
   });
 
-  // The other half of that rule: waiting for stragglers must not become
-  // waiting forever. A scroll that keeps feeding rows in always has something
-  // mid-dwell, so the batch has to leave on the window instead of on the lull
-  // that never comes.
   test("a batch still leaves while rows keep arriving", () => {
     const clock = fakeTimers();
     const batches: number[][] = [];
@@ -106,16 +98,12 @@ describe("ScrollPastQueue", () => {
     queue.add(1);
     clock.advance(500);
     queue.add(2);
-    // 1 is pending from here, 2 is still dwelling, so the batch stays open.
     clock.advance(500);
     expect(batches).toEqual([]);
     clock.advance(250);
     queue.add(3);
-    // 2 joins the batch and 3 takes its place as the row still dwelling.
     clock.advance(250);
     expect(batches).toEqual([]);
-    // One window after 1 became pending. 3 is not in it: it is still dwelling,
-    // which is exactly the row the batch refused to keep waiting for.
     clock.advance(500);
     expect(batches).toEqual([[1, 2]]);
   });
@@ -146,16 +134,12 @@ describe("ScrollPastQueue", () => {
   test("flushNow sends the pending batch immediately", () => {
     const clock = fakeTimers();
     const batches: number[][] = [];
-    // A long throttle, so the finished dwell cannot ride a scheduled flush.
     const queue = makeQueue(clock, batches, { flushEveryMs: 5000 });
     queue.add(5);
     clock.advance(1000);
-    // The first batch goes out as soon as its dwell completes; the throttle
-    // dates from before it.
     expect(batches).toEqual([[5]]);
     queue.add(6);
     clock.advance(1000);
-    // Dwelled but held back by the throttle.
     expect(batches).toEqual([[5]]);
     queue.flushNow();
     expect(batches).toEqual([[5], [6]]);

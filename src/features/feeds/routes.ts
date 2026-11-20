@@ -23,8 +23,6 @@ import {
   type WebSubRouteServices,
 } from "#features/feeds/routes/websub.ts";
 
-// Whatever the handlers below declare they need, so the group asks for no
-// more than its routes use.
 export type FeedRouteServices = Parameters<typeof createAuthPlugin>[0] &
   Parameters<typeof getFaviconHandler>[1] &
   Parameters<typeof getFindHandler>[1] &
@@ -62,7 +60,5 @@ const signedInRoutes = (services: FeedRouteServices) =>
     )
     .get("/api/options/opml", (ctx) => getOpmlHandler(ctx, services));
 
-// The WebSub callback is the hub's, not a reader's, so it sits outside the
-// session check.
 export const createFeedRoutes = (services: FeedRouteServices) =>
   new Elysia().use(createWebSubRoutes(services)).use(signedInRoutes(services));

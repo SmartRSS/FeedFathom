@@ -1,8 +1,3 @@
-// Enough of Redis for the HTTP client, with millisecond expiry applied on
-// every read: the rate limiter's whole behaviour is about when a key stops
-// existing, and a reservation that never expires makes every retry look like
-// a violation. EVAL runs the scripts the client and the favicon refresher send
-// by what each one does rather than by interpreting Lua.
 export function createFakeHttpRedis() {
   const expiry = new Map<string, number>();
   const values = new Map<string, string>();
@@ -20,7 +15,6 @@ export function createFakeHttpRedis() {
     const expiresAt = expiry.get(key);
     return expiresAt === undefined ? -1 : expiresAt - Date.now();
   };
-  // INCR and DECR keep an existing expiry and give a new key none.
   const add = (key: string, by: number) => {
     const next = Number(live(key) ?? "0") + by;
     values.set(key, String(next));
@@ -28,8 +22,6 @@ export function createFakeHttpRedis() {
   };
   const evaluate = (args: string[]) => {
     const [script = "", , key = "", arg = "", ttl = ""] = args;
-    // The host clock: take it once ARGV[1] ms have passed since the last
-    // request, or report how long is left.
     if (script.includes("TIME")) {
       const now = Date.now();
       const last = live(key);
@@ -40,8 +32,6 @@ export function createFakeHttpRedis() {
       expiry.set(key, now + Number(ttl));
       return 0;
     }
-    // The favicon refresh queues: the latest of ARGV[1] and one gap past
-    // the last slot of each key, recorded on every key.
     if (script.includes("PXAT")) {
       const keyCount = Number(args[1]);
       const keys = args.slice(2, 2 + keyCount);
@@ -71,7 +61,6 @@ export function createFakeHttpRedis() {
       }
       return add(key, -1);
     }
-    // The cache lock release: delete only while the token still matches.
     if (live(key) !== arg) return 0;
     values.delete(key);
     expiry.delete(key);

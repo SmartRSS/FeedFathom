@@ -16,11 +16,6 @@ import {
   mapFeedToArticles,
 } from "#features/feeds/feed-mapper.ts";
 
-// A truncated preview holds only a sample of the feed. Its cached parsed feed
-// is mapped in full here, once, so subscribe imports every article without a
-// refetch. Without that feed, the caller queues the source for the worker.
-// finalUrl is dropped too: only mapping needs it, and a replica still on the
-// previous release rejects a stored snapshot that carries it.
 function completePreview({
   feed,
   finalUrl,
@@ -91,10 +86,6 @@ export async function postSubscribeHandler(
       : { homeUrl: cachedPreview?.link, kind: "feed" }),
   });
   if (!subscription) return jsonError("Invalid folder", 400);
-  // Another account's newsletter address, or one this instance does not
-  // mint. Answered exactly as a malformed target is (the validation error
-  // server-app.ts maps), so a refusal says nothing about whether the address
-  // exists or whose it is.
   if (subscription === "refused") return jsonError(invalidRequestMessage, 422);
   if (subscription.initialized === true)
     return json(subscriptionResponse, { sourceId: subscription.source.id });
@@ -110,14 +101,6 @@ export async function postSubscribeHandler(
     throw new Error("Stored subscription snapshot is invalid");
   }
 
-  // Left running rather than awaited: the response doesn't use its result,
-  // and its hub POST can take up to the request deadline.
-  // discoverAndSubscribeWebSub catches its own errors, so nothing here
-  // needs to observe how it settles. If the process exits before it
-  // finishes, a later parseSource poll re-discovers the hub: the next one
-  // if the claim was never taken, otherwise once the pending source's daily
-  // retry comes due. claimWebSubSubscribeAttempt keeps that retry from
-  // double-subscribing.
   if (!isEmail) {
     void feedParser.discoverAndSubscribeWebSub(
       subscription.source.id,
@@ -130,20 +113,8 @@ export async function postSubscribeHandler(
     await userSourcesDataService.withSubscriptionInitializationLease(
       subscription.subscriptionId,
       async () => {
-        // An email source has nothing to fetch -- its articles arrive by
-        // mail -- so enqueueing it would only have the worker try to parse
-        // the address as a feed URL and fail the brand-new source. The
-        // lease itself still runs, so the subscription counts as
-        // initialized.
         if (isEmail) return;
         if (preview) {
-          // A cached preview means the feed was already fetched and
-          // parsed moments ago (e.g. during "load preview" in feed
-          // discovery) -- inserting those already-parsed articles is a
-          // plain DB upsert, no network fetch, so doing it inline keeps
-          // subscribe fast without the async round-trip through the
-          // worker. Falls back to enqueueing if anything here fails,
-          // including an import that committed only some batches.
           try {
             await articleImporter.recordFetch(
               subscription.source.id,

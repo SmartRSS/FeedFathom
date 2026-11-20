@@ -28,10 +28,6 @@ const migrationsFolder = fileURLToPath(
   new URL("../../../../drizzle", import.meta.url),
 );
 
-// Deleting an article cascades away every user's record of having removed
-// it, so a false "gone from the feed" reading doesn't just delete an
-// article -- the next fetch that lists the item again brings it back
-// unread. These cover what the reading has to get right.
 test("only prunes articles the feed has really stopped listing", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -67,22 +63,16 @@ test("only prunes articles the feed has really stopped listing", async () => {
       INSERT INTO users (email, name, password)
       VALUES ('reader@example.test', 'reader', 'x') RETURNING id`;
 
-    // Polled every 5 minutes, so five days unseen is ~1400 fetches without
-    // it: genuinely dropped from the feed.
     const fastFeed = await addSource(
       "https://fast.test/feed",
       "feed",
       "5 minutes",
     );
-    // Advertises a two-day max-age, so three days unseen is one missed
-    // fetch -- the flakiness this rule must not mistake for removal.
     const slowFeed = await addSource(
       "https://slow.test/feed",
       "feed",
       "2 days",
     );
-    // No feed at all: every delivery stamps last_success, which used to
-    // make every earlier newsletter look dropped.
     const mailbox = await addSource("news@example.test", "email", "5 minutes");
 
     for (const sourceId of [fastFeed, slowFeed]) {
@@ -91,9 +81,6 @@ test("only prunes articles the feed has really stopped listing", async () => {
         INSERT INTO user_sources (user_id, source_id, name, created_at)
         VALUES (${user!.id}, ${sourceId}, 'sub', NOW() - INTERVAL '60 days')`;
     }
-    // The mailbox subscription predates the old deliveries below: a current
-    // subscriber has had the chance to see them, so their fate is decided by
-    // the email age rule, not the nobody-ever-saw-it rule above it.
     await client`
       INSERT INTO user_sources (user_id, source_id, name, created_at)
       VALUES (${user!.id}, ${mailbox}, 'sub', NOW() - INTERVAL '100 days')`;
@@ -101,10 +88,6 @@ test("only prunes articles the feed has really stopped listing", async () => {
     const goneForGood = await addArticle(fastFeed, "gone", "5 days");
     const stillSubscribed = await addArticle(fastFeed, "not-removed", "5 days");
     const missedOneFetch = await addArticle(slowFeed, "flaky", "3 days");
-    // Email prunes on flat delivery age, deletions not gating it: a
-    // 30-day-old delivery is far inside the window, and both 91-day-old
-    // ones are outside it -- one recorded as deleted, one that an active
-    // subscriber never deleted, which used to keep it forever.
     const oldNewsletter = await addArticle(mailbox, "letter", "30 days");
     const prunableNewsletter = await addArticle(mailbox, "stale", "91 days");
     const hoardedNewsletter = await addArticle(mailbox, "hoarded", "91 days");
@@ -135,10 +118,6 @@ test("only prunes articles the feed has really stopped listing", async () => {
   }
 });
 
-// Cleanup deletes article rows straight through SQL, so the unread badge a
-// subscriber sees would be stale the moment the prune commits (#812): an
-// unread newsletter aged past retention kept its count until some unrelated
-// event recounted the source.
 test("recounts the unread totals of the sources it pruned", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -158,8 +137,6 @@ test("recounts the unread totals of the sources it pruned", async () => {
       VALUES ('news@example.test', 'https://example.test', 'email', NOW(),
               NOW() + INTERVAL '5 minutes')
       RETURNING id`;
-    // Subscribed well before both deliveries, so both are visible to the
-    // subscription and both sit in the unread count before the prune.
     await client`
       INSERT INTO user_sources (user_id, source_id, name, unread_count, created_at)
       VALUES (${user!.id}, ${mailbox!.id}, 'sub', 2, NOW() - INTERVAL '100 days')`;
@@ -182,11 +159,6 @@ test("recounts the unread totals of the sources it pruned", async () => {
   }
 });
 
-// The orphan rule deletes every source when user_sources is empty, which is
-// right after the last unsubscribe and a catastrophe after a transient wipe
-// or a restore that has not reached user_sources yet. The guard keeps every
-// source until at least one subscription exists; then only the orphans go,
-// along with users past the expiry window and sessions past their own.
 test("drops orphaned sources, expired users and sessions, but never every source", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -229,7 +201,6 @@ test("drops orphaned sources, expired users and sessions, but never every source
 
     await prune(drizzleConnection);
 
-    // The expired user's subscription went with them, orphaning its source.
     expect(await sourceUrls()).toEqual(["https://kept.test/feed"]);
     expect(
       (await client<{ email: string }[]>`SELECT email FROM users`).map(
@@ -247,9 +218,6 @@ test("drops orphaned sources, expired users and sessions, but never every source
   }
 });
 
-// What a source carries from before anyone subscribed is what no subscriber
-// can ever see, and the cutoff is the earliest subscription alone: a later
-// subscriber joining must not delete what an earlier one can still read.
 test("prunes articles last seen before a source's earliest subscription", async () => {
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
@@ -266,7 +234,6 @@ test("prunes articles last seen before a source's earliest subscription", async 
         ('early@example.test', 'early', 'x'),
         ('late@example.test', 'late', 'x')
       RETURNING id`;
-    // Never fetched, so the gone-from-feed rule cannot claim anything here.
     const [feed, untouched] = await client<{ id: number }[]>`
       INSERT INTO sources (url, home_url) VALUES
         ('https://feed.test/feed', 'https://feed.test'),
@@ -290,7 +257,6 @@ test("prunes articles last seen before a source's earliest subscription", async 
                 NOW() - CAST(${lastSeen} AS interval))`;
     }
 
-    // Every other rule off, so only the earliest-subscription cutoff acts.
     await prune(drizzleConnection, {
       ARTICLE_STALE_AFTER_DAYS: 0,
       USER_DORMANT_AFTER_DAYS: 0,
@@ -302,7 +268,6 @@ test("prunes articles last seen before a source's earliest subscription", async 
       ).map((row) => row.guid),
     ).toEqual(["between-subscriptions", "recent", "after-subscription"]);
 
-    // Each subscriber counts only what was seen since they joined.
     expect([
       ...(await client<{ unread: number; user_id: number }[]>`
         SELECT user_id, unread_count AS unread FROM user_sources

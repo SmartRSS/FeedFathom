@@ -2,9 +2,6 @@ import { SESSION_TTL_DAYS } from "#platform/db/schemas/sessions.ts";
 
 export const sessionCookie = "sid";
 
-// The cookie and the session row it names must expire together: a server
-// that would honour an expired sid defeats the point, and a cookie that
-// outlives its session just buys a 401 on the next request.
 export function sessionHeader(
   sid: string,
   secure: boolean,

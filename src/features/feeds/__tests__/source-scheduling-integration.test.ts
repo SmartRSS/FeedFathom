@@ -7,15 +7,10 @@ import { migrateDatabase } from "../../../migrator.ts";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
 
 const databaseUrl = requireDisposableDatabaseUrl();
-// A short connect deadline, because the production default is two minutes
-// of retrying -- right for a container racing PostgreSQL's first boot, and
-// two minutes of nothing for a developer who simply has no PostgreSQL
-// running.
 await migrateDatabase(databaseUrl, "./drizzle", { deadline: 5_000 });
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 
-// A fresh, uncached poll, so each test states only the fact it varies.
 const fetched = (facts: { notBefore?: Date; observedAt?: Date } = {}) => ({
   cached: false,
   observedAt: new Date(),
@@ -74,10 +69,6 @@ test("failSource backs off further with each consecutive failure", async () => {
 });
 
 test("getSourcesToProcess only returns feed sources whose notBefore has passed", async () => {
-  // A freshly inserted source (never fetched) is due by the column's own
-  // default -- notBefore defaults to the Unix epoch, not successSource
-  // (which always clamps forward to the floor, so it can't produce "due
-  // right now" itself).
   const due = await addFeedSource("https://source-scheduling.test/due");
 
   const notYetDue = await addFeedSource(
@@ -94,8 +85,6 @@ test("getSourcesToProcess only returns feed sources whose notBefore has passed",
   expect(ids).not.toContain(notYetDue.id);
 });
 
-// The subscriber count once compared user_sources.source_id with
-// user_sources.id, because drizzle left the outer sources.id unqualified.
 test("findSourceById and listAllSources count a source's subscribers", async () => {
   const source = await addFeedSource(
     `https://source-scheduling.test/${Bun.randomUUIDv7()}`,

@@ -8,8 +8,6 @@ import {
 } from "../page-scanner.ts";
 import { fakeSchedule } from "./fake-schedule.ts";
 
-// A page whose address and feeds the test changes, with scans that finish
-// when the test says so.
 const fakePage = () => {
   const clock = fakeSchedule();
   const page = { hidden: false, href: "https://site.example/a" };

@@ -62,8 +62,6 @@ describe("sourceIds", () => {
 });
 
 describe("articleScope", () => {
-  // #976: a folder used to be sent as its source ids, and the request schema
-  // caps id lists at 500, so a folder of 501 feeds could not be browsed.
   test("names a folder by id however many sources it holds", () => {
     const big = folder(
       "3",
@@ -121,8 +119,6 @@ describe("withDecrementedUnread", () => {
     expect(totalUnread(nodes)).toBe(8);
   });
 
-  // The component diffs on identity to decide whether to re-render, so an
-  // update that changes nothing must hand back the very same array.
   test("returns the identical array when no delta applies", () => {
     const nodes = [folder("f", [source("1", { unreadCount: 4 })])];
     expect(withDecrementedUnread(nodes, new Map([["9", 1]]))).toBe(nodes);
@@ -148,10 +144,10 @@ describe("readStateDeltas", () => {
 
   test("a mixed batch only counts the rows that flip, grouped by source", () => {
     const items = [
-      article(1, 10, false), // flips read: +1
-      article(2, 10, true), // already read: no change
-      article(3, 20, false), // flips read: +1
-      article(4, 30, true), // not selected: ignored
+      article(1, 10, false),
+      article(2, 10, true),
+      article(3, 20, false),
+      article(4, 30, true),
     ];
     expect(readStateDeltas(items, [1, 2, 3], true)).toEqual(
       new Map([
@@ -206,9 +202,6 @@ describe("filterTree", () => {
   });
 
   test("keeps every child of a folder whose own name matches", () => {
-    // Narrowing to the one child that repeats the folder's word would hide
-    // the rest of a folder the user just named, which is not what "filter to
-    // News" asks for.
     expect(filterTree(tree, "news")).toEqual([
       folder("News", [
         source("bbc", { name: "BBC World" }),
@@ -236,9 +229,6 @@ describe("treeTabStopKey", () => {
   });
 
   test("falls back to the first row when the focused one is filtered away", () => {
-    // The tree is a roving tabindex: exactly one row is a tab stop. Filtering
-    // out the row that had it would otherwise leave none, and Tab would skip
-    // the whole tree.
     expect(
       treeTabStopKey([folder("News", [source("bbc")])], "source:lwn"),
     ).toBe("folder:News");
@@ -283,7 +273,6 @@ describe("source snooze", () => {
     expect(isSnoozedNode(folder("f", [snoozed]), now)).toBe(false);
   });
 
-  // The only check on what the snooze menu sends: no browser spec drives it.
   test("converts snooze durations from hours to absolute timestamps", () => {
     expect(snoozeUntilIso(24, now)).toBe("2026-09-10T12:00:00.000Z");
     expect(snoozeUntilIso(168, now)).toBe("2026-09-16T12:00:00.000Z");

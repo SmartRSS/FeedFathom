@@ -1,8 +1,3 @@
-// Favicon normalization: turns whichever image a provider returned into the
-// one copy that gets stored -- at most targetFaviconSize on the longer side,
-// never enlarged, WebP when that is actually smaller. Pure: bytes in, bytes
-// and MIME type out. See issue #937 for the size rule and the ICO handling.
-
 import {
   imageDimensions,
   isBetterFavicon,
@@ -15,29 +10,20 @@ export interface StoredFavicon {
   contentType: string;
 }
 
-// A favicon source claiming a larger canvas than this is refused before
-// Bun.Image allocates its pixels.
 const maxSourcePixels = 4096 * 4096;
 
-/**
- * Downsizes a favicon to targetFaviconSize and re-encodes it as WebP. Keeps
- * the original bytes for SVG, for anything Bun.Image cannot decode, and
- * whenever the WebP would not be smaller than the image it came from.
- */
 export async function normalizeFavicon(
   buffer: Buffer,
   contentType: string,
 ): Promise<StoredFavicon> {
   const original = { buffer, contentType };
   const dimensions = imageDimensions(buffer);
-  // Unrecognised bytes, or an SVG (sized as Infinity): store as-is.
   if (!dimensions || dimensions.width === Infinity) return original;
 
   try {
     const source = isIco(buffer) ? icoFrame(buffer) : original;
     const image = new Bun.Image(source.buffer, { maxPixels: maxSourcePixels });
     const { width, height } = await image.metadata();
-    // Only ever downsize: the resize target is below the source's longer side.
     if (Math.max(width, height) > targetFaviconSize) {
       image.resize(targetFaviconSize, targetFaviconSize, { fit: "inside" });
     }
@@ -46,15 +32,10 @@ export async function normalizeFavicon(
       ? { buffer: webp, contentType: "image/webp" }
       : source;
   } catch {
-    // A favicon must never be lost to a failed normalization.
     return original;
   }
 }
 
-// Picks one frame of an ICO with the size rule (exactly 64, else the smallest
-// larger one, else the largest; higher bit depth on a tie) and returns it in a
-// format Bun.Image decodes: a PNG frame as-is, a BMP frame rebuilt as a 32-bit
-// BMP with an alpha channel.
 function icoFrame(ico: Buffer): StoredFavicon {
   const count = ico.readUInt16LE(4);
   let best:
@@ -90,11 +71,6 @@ function icoFrame(ico: Buffer): StoredFavicon {
   return { buffer: bmpFromIcoFrame(frame), contentType: "image/bmp" };
 }
 
-// An ICO BMP frame is a headerless DIB: a BITMAPINFOHEADER whose height covers
-// the XOR image plus the 1-bit AND mask stacked on it, a palette for <= 8 bpp,
-// then both bottom-up bitmaps with rows padded to 4 bytes. Bun.Image decodes
-// only 24/32-bit BMPs and drops alpha unless a V4 header declares its mask,
-// so every frame is expanded to BGRA behind a BITMAPV4HEADER.
 function bmpFromIcoFrame(frame: Buffer): Buffer {
   const headerSize = frame.readUInt32LE(0);
   const width = frame.readInt32LE(4);
@@ -144,8 +120,6 @@ function bmpFromIcoFrame(frame: Buffer): Buffer {
     }
   }
 
-  // Only 32-bpp frames carry alpha of their own; the rest, and old 32-bpp
-  // icons whose alpha is all zero, take it from the AND mask (1 = transparent).
   if (!anyAlpha) {
     for (let y = 0; y < height; y++) {
       const row = andOffset + y * andStride;
@@ -164,14 +138,14 @@ function bmpFromIcoFrame(frame: Buffer): Buffer {
   header.writeUInt32LE(header.length, 10);
   header.writeUInt32LE(108, 14);
   header.writeInt32LE(width, 18);
-  header.writeInt32LE(height, 22); // positive: rows stay bottom-up
+  header.writeInt32LE(height, 22);
   header.writeUInt16LE(1, 26);
   header.writeUInt16LE(32, 28);
-  header.writeUInt32LE(3, 30); // BI_BITFIELDS
+  header.writeUInt32LE(3, 30);
   header.writeUInt32LE(pixels.length, 34);
-  header.writeUInt32LE(0x00_ff_00_00, 54); // red mask
-  header.writeUInt32LE(0x00_00_ff_00, 58); // green mask
-  header.writeUInt32LE(0x00_00_00_ff, 62); // blue mask
-  header.writeUInt32LE(0xff_00_00_00, 66); // alpha mask
+  header.writeUInt32LE(0x00_ff_00_00, 54);
+  header.writeUInt32LE(0x00_00_ff_00, 58);
+  header.writeUInt32LE(0x00_00_00_ff, 62);
+  header.writeUInt32LE(0xff_00_00_00, 66);
   return Buffer.concat([header, pixels]);
 }

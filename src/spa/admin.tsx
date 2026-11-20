@@ -41,9 +41,6 @@ const ADMIN_COLUMNS: { label: string; sort: SourceSort }[] = [
   { label: "Created", sort: "createdAt" },
 ];
 
-// "none" is the overwhelming common case (most feeds never advertise a
-// hub), so it renders as an em dash rather than a label competing for
-// attention with the sources that actually matter here.
 const WEBSUB_STATUS_LABELS: Record<AdminSource["websubStatus"], string> = {
   failed: "Failed",
   none: "—",
@@ -67,14 +64,10 @@ export function Admin(props: {
 }) {
   const [sources, setSources] = createSignal<AdminSource[]>([]);
   const [message, setMessage] = createSignal("");
-  // A signed-in account that isn't an admin: the page says whom it is for
-  // and shows nothing else.
   const [forbidden, setForbidden] = createSignal(false);
   const [sortBy, setSortBy] = createSignal<SourceSort>("createdAt");
   const [order, setOrder] = createSignal<SortOrder>("asc");
 
-  // A sort passes the column and direction it just set: the signals read the
-  // old ones until Solid's next flush.
   async function load(column = sortBy(), direction = order()) {
     const query = new URLSearchParams({ order: direction, sortBy: column });
     try {
@@ -91,7 +84,6 @@ export function Admin(props: {
   }
   onSettled(() => void load());
 
-  // The stacked layout's one sort control: a column and a direction.
   function sortByChoice(value: string) {
     const [column, direction] = value.split(":");
     const choice = ADMIN_COLUMNS.find((item) => item.sort === column);
@@ -179,8 +171,6 @@ export function Admin(props: {
         }
       >
         <Show when={message()}>{(text) => <p role="alert">{text()}</p>}</Show>
-        {/* Where the table stacks, its header row has no columns to head:
-          one control sorts instead (style.css shows one or the other). */}
         <label class="admin-sort">
           Sort by
           <select
@@ -250,8 +240,6 @@ export function Admin(props: {
                         {source.url}
                       </a>
                     </td>
-                    {/* data-label captions each value where the single-pane
-                      layout stacks a row instead of showing the header. */}
                     <td data-label="Subscribers">{source.subscriberCount}</td>
                     <td
                       data-label="Failures"
@@ -284,8 +272,6 @@ export function Admin(props: {
                         : "—"}
                     </td>
                     <td class="admin-table-actions">
-                      {/* The flex row lives inside the cell: a flex <td> is
-                        no longer a table cell and breaks the row rules. */}
                       <div>
                         <button
                           type="button"

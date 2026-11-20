@@ -25,10 +25,6 @@ export class FoldersDataService {
     return folder;
   }
 
-  // Ordered for the same reason getUserSources is: the dashboard renders this
-  // list as it arrives. Without an ORDER BY the order is whatever the heap
-  // hands back, so renaming a folder -- an UPDATE, which writes a new tuple at
-  // the end -- moved it to the bottom of the tree.
   public async getUserFolders(userId: number) {
     return await this.drizzleConnection
       .select()
@@ -70,10 +66,6 @@ export class FoldersDataService {
       .returning({ id: userFolders.id });
     if (removed.length > 0) return "removed";
 
-    // The delete's own conditions can't tell "doesn't exist/not owned"
-    // apart from "exists but isn't empty" (both affect zero rows) -- a
-    // follow-up existence check (ignoring emptiness) distinguishes them
-    // for the caller.
     const [existing] = await this.drizzleConnection
       .select({ id: userFolders.id })
       .from(userFolders)
