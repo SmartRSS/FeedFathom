@@ -18,6 +18,7 @@ const config = {
       "error",
       { allow: ["src/platform/db/schema.ts"] },
     ],
+    "feedfathom/no-comments": ["error", { budget: { "budgeted.ts": 1 } }],
     "feedfathom/schema-compile-module-scope": "error",
   },
 } as const;
@@ -240,4 +241,45 @@ test("layer-boundaries exempts co-located tests", async () => {
       'import { a } from "#features/feeds/feed-parser.ts";\nexport const b = a;',
     ),
   ).toEqual([]);
+}, 20_000);
+
+test("no-comments flags prose comments", async () => {
+  expect(
+    await lint(
+      "q.ts",
+      "// why\nconst a = 1; // trailing\n/** doc */\nconst b = 2;",
+    ),
+  ).toEqual([
+    "feedfathom(no-comments)",
+    "feedfathom(no-comments)",
+    "feedfathom(no-comments)",
+  ]);
+}, 20_000);
+
+test("no-comments allows lint, type and bundler directives", async () => {
+  const code = [
+    '/// <reference types="vite/client" />',
+    "// oxlint-disable-next-line no-await-in-loop -- reason",
+    "// eslint-disable-next-line no-await-in-loop",
+    "// @ts-expect-error -- reason",
+    "const a = /* @__PURE__ */ make();",
+    "/** @type {number} */",
+    "const b = 1;",
+    "/**",
+    " * @param {string} x",
+    " * @returns {string}",
+    " */",
+    "function f(x) { return x; }",
+  ].join("\n");
+  expect(await lint("r.ts", code)).toEqual([]);
+}, 20_000);
+
+test("no-comments ratchets a file's budget down only", async () => {
+  expect(await lint("budgeted.ts", "// kept\nconst a = 1;")).toEqual([]);
+  expect(await lint("budgeted.ts", "// kept\n// new\nconst a = 1;")).toEqual([
+    "feedfathom(no-comments)",
+  ]);
+  expect(await lint("budgeted.ts", "const a = 1;")).toEqual([
+    "feedfathom(no-comments)",
+  ]);
 }, 20_000);

@@ -333,11 +333,123 @@ const layerBoundaries = defineRule({
   },
 });
 
+const directivePatterns = [
+  /^\s*(?:eslint|oxlint)-(?:disable|enable)/,
+  /^\s*@ts-expect-error/,
+  /^\s*[#@]__(?:PURE|NO_SIDE_EFFECTS)__\s*$/,
+  /^\/\s*<reference /,
+];
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isTypeOnlyJSDoc(value) {
+  if (!value.startsWith("*")) return false;
+  const lines = value
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*+/, "").trim())
+    .filter((line) => line !== "" && line !== "/");
+  if (lines.length === 0) return false;
+  return lines.every((line) =>
+    /^@(?:type|param|returns|typedef|template)\b/.test(line),
+  );
+}
+
+/**
+ * @param {{ type: string, value: string }} comment
+ * @returns {boolean}
+ */
+function isDirective(comment) {
+  if (comment.type === "Shebang") return true;
+  if (directivePatterns.some((pattern) => pattern.test(comment.value))) {
+    return true;
+  }
+  return comment.type === "Block" && isTypeOnlyJSDoc(comment.value);
+}
+
+/**
+ * @param {unknown} options
+ * @returns {Record<string, number>}
+ */
+function readBudget(options) {
+  if (typeof options !== "object" || options === null) return {};
+  if (!("budget" in options)) return {};
+  const { budget } = options;
+  if (typeof budget !== "object" || budget === null) return {};
+  /** @type {Record<string, number>} */
+  const result = {};
+  for (const [path, count] of Object.entries(budget)) {
+    if (typeof count === "number") result[path] = count;
+  }
+  return result;
+}
+
+const noComments = defineRule({
+  meta: {
+    docs: {
+      description:
+        "Disallow prose comments. Record decisions in docs/adr/ instead; lint directives stay allowed.",
+    },
+    messages: {
+      comment:
+        "Comments are banned. Delete it if the code already says it; move a decision into docs/adr/; file an issue for a workaround. See docs/adr/0023-no-comments-in-source.md.",
+      overBudget:
+        "This file may keep {{budget}} comment(s) from before the ban and has {{count}}. Delete the new comment instead of raising the budget.",
+      staleBudget:
+        "This file has {{count}} comment(s) but its budget in .oxlintrc.json is {{budget}}. Lower the budget to {{count}} so the deleted comments cannot come back.",
+    },
+    schema: [
+      {
+        additionalProperties: false,
+        properties: {
+          budget: {
+            additionalProperties: { minimum: 0, type: "integer" },
+            description:
+              "Path suffix -> number of pre-existing comments the file may keep. Only ever lower these.",
+            type: "object",
+          },
+        },
+        type: "object",
+      },
+    ],
+    type: "suggestion",
+  },
+  createOnce(context) {
+    return {
+      "Program:exit"(node) {
+        const path = context.filename.replaceAll("\\", "/");
+        const budgets = readBudget(context.options[0]);
+        const key = Object.keys(budgets).find((suffix) =>
+          path.endsWith(suffix),
+        );
+        const budget = key === undefined ? 0 : (budgets[key] ?? 0);
+        const comments = context.sourceCode
+          .getAllComments()
+          .filter((comment) => !isDirective(comment));
+        if (budget === 0) {
+          for (const comment of comments) {
+            context.report({ messageId: "comment", node: comment });
+          }
+          return;
+        }
+        const data = { budget: String(budget), count: String(comments.length) };
+        if (comments.length > budget) {
+          context.report({ data, messageId: "overBudget", node });
+        } else if (comments.length < budget) {
+          context.report({ data, messageId: "staleBudget", node });
+        }
+      },
+    };
+  },
+});
+
 export default definePlugin({
   meta: { name: "feedfathom" },
   rules: {
     "layer-boundaries": layerBoundaries,
     "no-barrel-file": noBarrelFile,
+    "no-comments": noComments,
     "schema-compile-module-scope": schemaCompileModuleScope,
   },
 });
