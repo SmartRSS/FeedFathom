@@ -166,15 +166,22 @@ const mapEnclosures = (
     })
     .slice(0, maxEnclosures);
 
-export const mapFeedItemToArticle = (
+const resolveFeedHomepage = (
+  parsedFeed: FeedMapperInput,
+  sourceUrl: string,
+  baseUrl: string,
+): string => {
+  const fallbackBase = safeHttpUrl(baseUrl, sourceUrl) || sourceUrl;
+  return safeHttpUrl(parsedFeed.url ?? "", fallbackBase) || fallbackBase;
+};
+
+const mapFeedItem = (
   item: FeedMapperItem,
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
-  { baseUrl = sourceUrl, now = Date.now() }: MapOptions = {},
+  homepage: string,
+  now: number,
 ): FeedArticle => {
-  const fallbackBase = safeHttpUrl(baseUrl, sourceUrl) || sourceUrl;
-  const homepage =
-    safeHttpUrl(parsedFeed.url ?? "", fallbackBase) || fallbackBase;
   const url = safeHttpUrl(item.url ?? "", homepage);
   const authorName = stripHtmlTags(item.authors[0]?.name ?? "") || null;
   const expiresAt = Date.parse(item.cap?.expires ?? "");
@@ -193,6 +200,20 @@ export const mapFeedItemToArticle = (
     url,
   };
 };
+
+export const mapFeedItemToArticle = (
+  item: FeedMapperItem,
+  parsedFeed: FeedMapperInput,
+  sourceUrl: string,
+  { baseUrl = sourceUrl, now = Date.now() }: MapOptions = {},
+): FeedArticle =>
+  mapFeedItem(
+    item,
+    parsedFeed,
+    sourceUrl,
+    resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl),
+    now,
+  );
 
 const currentFeedItems = (
   items: readonly FeedMapperItem[],
@@ -223,14 +244,16 @@ export const mapFeedToArticles = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
   {
-    baseUrl,
+    baseUrl = sourceUrl,
     items = parsedFeed.items,
     now = Date.now(),
   }: MapOptions & { items?: readonly FeedMapperItem[] } = {},
-): FeedArticle[] =>
-  currentFeedItems(items, now).map((item) =>
-    mapFeedItemToArticle(item, parsedFeed, sourceUrl, { baseUrl, now }),
+): FeedArticle[] => {
+  const homepage = resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl);
+  return currentFeedItems(items, now).map((item) =>
+    mapFeedItem(item, parsedFeed, sourceUrl, homepage, now),
   );
+};
 
 export const mapFeedToPreview = (
   parsedFeed: FeedMapperInput,

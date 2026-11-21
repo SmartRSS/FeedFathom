@@ -108,3 +108,36 @@ test("deletes oversized Redis wire and base64 cache entries before decoding", as
   }
   /* eslint-enable no-await-in-loop */
 });
+
+test("stores cached bodies in binary Redis keys without base64 and cleans up corrupt split entries", async () => {
+  const url = "https://1.1.1.1/binary-feed";
+  const suffix = Buffer.from(url).toString("base64url");
+  const metaKey = `http-cache-meta:${suffix}`;
+  const bodyKey = `http-cache-body:${suffix}`;
+  const fakeRedis = redis();
+  const client = new HttpClient(fakeRedis, {
+    transport: queuedTransport([
+      nativeResponse("binary-body", {
+        headers: { "cache-control": "max-age=60" },
+      }),
+      nativeResponse("reloaded-body", {
+        headers: { "cache-control": "max-age=60" },
+      }),
+    ]),
+  });
+
+  expect(text(await client.get(url))).toBe("binary-body");
+  expect(fakeRedis.values.has(metaKey)).toBe(true);
+  expect(fakeRedis.buffers.has(bodyKey)).toBe(true);
+  expect(fakeRedis.values.has(`http-cache:${suffix}`)).toBe(false);
+
+  const hit = await client.get(url);
+  expect(hit.cached).toBe(true);
+  expect(text(hit)).toBe("binary-body");
+
+  fakeRedis.buffers.delete(bodyKey);
+  const recovered = await client.get(url);
+  expect(recovered.cached).toBe(false);
+  expect(text(recovered)).toBe("reloaded-body");
+  expect(fakeRedis.deleted).toContain(metaKey);
+});

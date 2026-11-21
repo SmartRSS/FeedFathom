@@ -1,17 +1,26 @@
 export function createFakeHttpRedis() {
   const expiry = new Map<string, number>();
   const values = new Map<string, string>();
+  const buffers = new Map<string, Uint8Array<ArrayBuffer>>();
   const deleted: string[] = [];
-  const live = (key: string) => {
+  const purgeExpired = (key: string) => {
     const expiresAt = expiry.get(key);
     if (expiresAt !== undefined && expiresAt <= Date.now()) {
       expiry.delete(key);
       values.delete(key);
+      buffers.delete(key);
     }
+  };
+  const live = (key: string) => {
+    purgeExpired(key);
     return values.get(key);
   };
+  const liveBuffer = (key: string) => {
+    purgeExpired(key);
+    return buffers.get(key);
+  };
   const pttl = (key: string) => {
-    if (live(key) === undefined) return -2;
+    if (live(key) === undefined && liveBuffer(key) === undefined) return -2;
     const expiresAt = expiry.get(key);
     return expiresAt === undefined ? -1 : expiresAt - Date.now();
   };
@@ -67,31 +76,54 @@ export function createFakeHttpRedis() {
     return 1;
   };
   return {
+    buffers,
     async del(key: string) {
       deleted.push(key);
       expiry.delete(key);
       values.delete(key);
+      buffers.delete(key);
       return 1;
     },
     deleted,
     async get(key: string) {
       return live(key) ?? null;
     },
+    async getBuffer(key: string) {
+      const buffer = liveBuffer(key);
+      if (buffer !== undefined) return new Uint8Array(buffer);
+      const text = live(key);
+      return text === undefined ? null : new TextEncoder().encode(text);
+    },
     pttl,
     seed(key: string, value: string, ttlMs: number) {
       values.set(key, value);
+      buffers.delete(key);
       expiry.set(key, Date.now() + ttlMs);
     },
     async send(command: string, args: string[]) {
       if (command !== "EVAL") throw new Error(`Unexpected ${command}`);
       return evaluate(args);
     },
-    async set(key: string, value: string, ...options: Array<number | string>) {
-      if (options.includes("NX") && live(key) !== undefined) return null;
+    async set(
+      key: string,
+      value: string | Uint8Array,
+      ...options: Array<number | string>
+    ) {
+      if (
+        options.includes("NX") &&
+        (live(key) !== undefined || liveBuffer(key) !== undefined)
+      )
+        return null;
       const px = options.indexOf("PX");
       if (px === -1) expiry.delete(key);
       else expiry.set(key, Date.now() + Number(options[px + 1]));
-      values.set(key, value);
+      if (typeof value === "string") {
+        values.set(key, value);
+        buffers.delete(key);
+      } else {
+        buffers.set(key, new Uint8Array(value));
+        values.delete(key);
+      }
       return "OK";
     },
     values,

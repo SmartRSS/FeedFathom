@@ -3,7 +3,10 @@ import type { FeedData } from "#shared/scanners/feed-data-type.ts";
 type DiscoveredFeed = FeedData & { websub: boolean };
 
 export type WebSubProbe = {
-  parseUrl(url: string): Promise<{ websub?: unknown }>;
+  parseUrl(
+    url: string,
+    options?: { metadataOnly?: boolean },
+  ): Promise<{ websub?: unknown }>;
 };
 
 export async function markWebSubAvailability(
@@ -15,7 +18,9 @@ export async function markWebSubAvailability(
   for (const feed of feeds) {
     let websub = false;
     try {
-      websub = (await probe.parseUrl(feed.url)).websub !== undefined;
+      websub =
+        (await probe.parseUrl(feed.url, { metadataOnly: true })).websub !==
+        undefined;
     } catch {}
     discovered.push({ title: feed.title, url: feed.url, websub });
   }

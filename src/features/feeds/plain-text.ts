@@ -1,8 +1,9 @@
 import { decode } from "html-entities";
 
 const htmlTag = /<\/?[a-z][a-z0-9-]*(?:[\s/][^<>]*)?>/giu;
+const htmlTagTest = /<\/?[a-z][a-z0-9-]*(?:[\s/][^<>]*)?>/iu;
 
-export const hasHtmlTag = (text: string) => new RegExp(htmlTag).test(text);
+export const hasHtmlTag = (text: string) => htmlTagTest.test(text);
 
 export const stripHtmlTags = (text: string) =>
   text.replaceAll(htmlTag, "").trim();

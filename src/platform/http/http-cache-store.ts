@@ -1,5 +1,6 @@
 import {
   type CachedResponse,
+  cachedMetaCheck,
   cachedResponseCheck,
 } from "#platform/http/http-cache-policy.ts";
 import {
@@ -11,26 +12,31 @@ import { parseHttpUrl } from "#platform/http/http-native-transport.ts";
 export type HttpRedis = {
   del(key: string): Promise<number>;
   get(key: string): Promise<null | string>;
+  getBuffer?(key: string): Promise<null | Uint8Array<ArrayBuffer>>;
   send(command: string, args: string[]): Promise<unknown>;
   set(
     key: string,
-    value: string,
+    value: string | Uint8Array,
     ...options: Array<number | string>
   ): Promise<null | string>;
 };
 
 const cachePrefix = "http-cache:";
+const cacheMetaPrefix = "http-cache-meta:";
+const cacheBodyPrefix = "http-cache-body:";
 const cacheLockPrefix = "http-cache-lock:";
 const cacheRetentionMs = 7 * 24 * 60 * 60_000;
 export const maximumFeedBodyBytes = 24 * 1024 * 1024;
 export const maximumFeedBodyMebibytes = maximumFeedBodyBytes / (1024 * 1024);
 const maximumBase64Characters = Math.ceil(maximumFeedBodyBytes / 3) * 4;
-const maximumCacheWireCharacters = maximumBase64Characters + 64 * 1024;
+const maximumCacheMetaCharacters = 64 * 1024;
+const maximumCacheWireCharacters =
+  maximumBase64Characters + maximumCacheMetaCharacters;
 
 const releaseCacheLockScript =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
-const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/u;
+const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
 
 function isBoundedBase64(value: string): boolean {
   return (
@@ -96,7 +102,47 @@ export class HttpCacheStore {
     url: string,
     deadline: RequestDeadline,
   ): Promise<CachedResponse | undefined> {
-    const key = `${cachePrefix}${this.cacheKey(url)}`;
+    const suffix = this.cacheKey(url);
+    if (this.redis.getBuffer) {
+      const metaKey = `${cacheMetaPrefix}${suffix}`;
+      const bodyKey = `${cacheBodyPrefix}${suffix}`;
+      const [metaRaw, bodyRaw] = await deadline.run(
+        Promise.all([this.redis.get(metaKey), this.redis.getBuffer(bodyKey)]),
+      );
+      if (metaRaw !== null || bodyRaw !== null) {
+        if (
+          metaRaw === null ||
+          bodyRaw === null ||
+          Buffer.byteLength(metaRaw) > maximumCacheMetaCharacters ||
+          bodyRaw.byteLength > maximumFeedBodyBytes
+        ) {
+          await this.deleteBinary(metaKey, bodyKey, deadline);
+          return undefined;
+        }
+        try {
+          const parsed: unknown = JSON.parse(metaRaw);
+          if (!cachedMetaCheck.Check(parsed)) {
+            await this.deleteBinary(metaKey, bodyKey, deadline);
+            return undefined;
+          }
+          parseHttpUrl(parsed.url);
+          return {
+            ...parsed,
+            body: Buffer.from(
+              bodyRaw.buffer,
+              bodyRaw.byteOffset,
+              bodyRaw.byteLength,
+            ),
+          };
+        } catch (error) {
+          if (error instanceof HttpDeadlineError) throw error;
+          await this.deleteBinary(metaKey, bodyKey, deadline);
+          return undefined;
+        }
+      }
+    }
+
+    const key = `${cachePrefix}${suffix}`;
     const value = await deadline.run(this.redis.get(key));
     if (!value) return undefined;
     if (Buffer.byteLength(value) > maximumCacheWireCharacters) {
@@ -110,7 +156,10 @@ export class HttpCacheStore {
         return undefined;
       }
       parseHttpUrl(parsed.url);
-      return parsed;
+      return {
+        ...parsed,
+        body: Buffer.from(parsed.body, "base64"),
+      };
     } catch (error) {
       if (error instanceof HttpDeadlineError) throw error;
       await deadline.run(this.redis.del(key));
@@ -123,24 +172,60 @@ export class HttpCacheStore {
     response: CachedResponse,
     deadline: RequestDeadline,
   ): Promise<void> {
-    const key = `${cachePrefix}${this.cacheKey(url)}`;
-    const value = JSON.stringify(response);
+    const suffix = this.cacheKey(url);
+    const ttlMs = Math.max(cacheRetentionMs, response.expiresAt - Date.now());
+    if (this.redis.getBuffer) {
+      const metaKey = `${cacheMetaPrefix}${suffix}`;
+      const bodyKey = `${cacheBodyPrefix}${suffix}`;
+      const { body, ...meta } = response;
+      const metaJson = JSON.stringify(meta);
+      if (
+        Buffer.byteLength(metaJson) > maximumCacheMetaCharacters ||
+        body.byteLength > maximumFeedBodyBytes
+      ) {
+        await this.deleteBinary(metaKey, bodyKey, deadline);
+        return;
+      }
+      await deadline.run(
+        Promise.all([
+          this.redis.set(metaKey, metaJson, "PX", ttlMs),
+          this.redis.set(bodyKey, body, "PX", ttlMs),
+        ]),
+      );
+      return;
+    }
+    const key = `${cachePrefix}${suffix}`;
+    const value = JSON.stringify({
+      ...response,
+      body: response.body.toString("base64"),
+    });
     if (Buffer.byteLength(value) > maximumCacheWireCharacters) {
       await deadline.run(this.redis.del(key));
       return;
     }
-    await deadline.run(
-      this.redis.set(
-        key,
-        value,
-        "PX",
-        Math.max(cacheRetentionMs, response.expiresAt - Date.now()),
-      ),
-    );
+    await deadline.run(this.redis.set(key, value, "PX", ttlMs));
   }
 
   async delete(url: string, deadline: RequestDeadline): Promise<void> {
-    await deadline.run(this.redis.del(`${cachePrefix}${this.cacheKey(url)}`));
+    const suffix = this.cacheKey(url);
+    const deletions = [this.redis.del(`${cachePrefix}${suffix}`)];
+    if (this.redis.getBuffer) {
+      deletions.push(
+        this.redis.del(`${cacheMetaPrefix}${suffix}`),
+        this.redis.del(`${cacheBodyPrefix}${suffix}`),
+      );
+    }
+    await deadline.run(Promise.all(deletions));
+  }
+
+  private async deleteBinary(
+    metaKey: string,
+    bodyKey: string,
+    deadline: RequestDeadline,
+  ): Promise<void> {
+    await deadline.run(
+      Promise.all([this.redis.del(metaKey), this.redis.del(bodyKey)]),
+    );
   }
 
   private cacheKey(url: string): string {

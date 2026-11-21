@@ -1,6 +1,10 @@
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
+import { isSnoozed } from "#shared/util/snooze.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
@@ -12,6 +16,19 @@ import {
   subscriptionSeesArticle,
   unreadCondition,
 } from "#features/feeds/article-read-state.ts";
+
+const recomputedUnreadRowsCheck = Schema.Compile(
+  Type.Array(
+    Type.Object(
+      {
+        pausedUntil: Type.Union([dateType, Type.Null()]),
+        sourceId: Type.Integer(),
+        unreadCount: Type.Integer(),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+);
 
 type SubscriptionResult = {
   initialized?: boolean;
@@ -312,7 +329,7 @@ export class UserSourcesDataService {
   public async getUserSources(userId: number) {
     return await this.drizzleConnection
       .select({
-        faviconFingerprint: sql<string | null>`md5(${sources.favicon})`,
+        faviconFingerprint: sources.faviconHash,
         homeUrl: sources.homeUrl,
         id: sources.id,
         kind: sources.kind,
@@ -331,11 +348,18 @@ export class UserSourcesDataService {
       .orderBy(userSources.name);
   }
 
-  public async recomputeUnreadCounts(sourceIds: number[], userId?: number) {
-    if (sourceIds.length === 0) return;
+  public async recomputeUnreadCounts(
+    sourceIds: number[],
+    userId?: number,
+  ): Promise<Record<string, number> | undefined> {
+    if (sourceIds.length === 0) return userId === undefined ? undefined : {};
     const userFilter =
       userId === undefined ? sql`` : sql`AND us.user_id = ${userId}`;
-    await this.drizzleConnection.execute(sql`
+    const returning =
+      userId === undefined
+        ? sql``
+        : sql`RETURNING us.source_id AS "sourceId", us.unread_count AS "unreadCount", us.paused_until AS "pausedUntil"`;
+    const rows: unknown = await this.drizzleConnection.execute(sql`
       UPDATE user_sources us
       SET unread_count = (
         -- Counting what is unread, rather than subtracting what is not, so
@@ -359,6 +383,18 @@ export class UserSourcesDataService {
           })}
       )
       WHERE us.source_id IN ${sourceIds} ${userFilter}
+      ${returning}
     `);
+    if (userId === undefined) return undefined;
+    if (!recomputedUnreadRowsCheck.Check(rows)) {
+      throw new Error("Database returned an invalid unread count row");
+    }
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[String(row.sourceId)] = isSnoozed(row.pausedUntil)
+        ? 0
+        : row.unreadCount;
+    }
+    return counts;
   }
 }

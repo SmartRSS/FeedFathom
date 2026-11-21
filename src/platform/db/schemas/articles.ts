@@ -46,6 +46,7 @@ export const articles = pgTable(
     lastSeenInFeedAt: timestamp("last_seen_in_feed_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    sanitizedVersion: integer("sanitized_version").notNull().default(0),
   },
   (table) => [
     check(
@@ -53,6 +54,7 @@ export const articles = pgTable(
       sql`${table.url} = '' OR ${table.url} ~* '^https?://' OR ${table.url} LIKE '/article/%'`,
     ),
     index("last_seen_in_feed_at_idx").on(table.lastSeenInFeedAt),
+    index("articles_published_id_idx").on(table.publishedAt, table.id),
     index("articles_source_published_covering_idx").on(
       table.sourceId,
       table.publishedAt,

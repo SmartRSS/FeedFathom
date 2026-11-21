@@ -75,6 +75,27 @@ export function treeTabStopKey(
   return first ? treeNodeKey(first) : undefined;
 }
 
+export function withUnreadCounts(
+  nodes: TreeNode[],
+  counts: ReadonlyMap<string, number>,
+): TreeNode[] {
+  if (counts.size === 0) return nodes;
+  let changed = false;
+  const next = nodes.map((node) => {
+    if (node.type === "folder") {
+      const children = withUnreadCounts(node.children, counts);
+      if (children === node.children) return node;
+      changed = true;
+      return { ...node, children };
+    }
+    const count = counts.get(node.uid);
+    if (count === undefined || count === node.unreadCount) return node;
+    changed = true;
+    return { ...node, unreadCount: count };
+  });
+  return changed ? next : nodes;
+}
+
 export function withDecrementedUnread(
   nodes: TreeNode[],
   deltas: Map<string, number>,

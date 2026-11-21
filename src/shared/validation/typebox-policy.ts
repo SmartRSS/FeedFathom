@@ -46,12 +46,10 @@ export const plainTextPolicy = Type.Refine(
   Type.String(),
   (value) => !nonPrintablePattern.test(value),
 );
-export const jsonDatePolicy = Type.Refine(
-  Type.String(),
-  (value) =>
-    !Number.isNaN(new Date(value).getTime()) &&
-    new Date(value).toJSON() === value,
-);
+export const jsonDatePolicy = Type.Refine(Type.String(), (value) => {
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.toJSON() === value;
+});
 
 export const normalizedNonblankString = Type.Codec(nonblankString)
   .Decode((value) => value.trim())

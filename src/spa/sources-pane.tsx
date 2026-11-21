@@ -1,4 +1,11 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import {
+  createMemo,
+  createProjection,
+  createSignal,
+  For,
+  Show,
+  type Accessor,
+} from "solid-js";
 import type { TreeNode } from "#shared/contracts/responses.ts";
 import type { failureDetails } from "./api.ts";
 import { FailingFeedPanel } from "./failure-details.tsx";
@@ -23,6 +30,15 @@ export type FeedsFailure = {
   details: ReturnType<typeof failureDetails>;
   message: string;
 };
+
+function createKeyFlag(activeKey: Accessor<string | undefined>) {
+  const flags = createProjection<Record<string, boolean>>((draft) => {
+    const next = activeKey();
+    for (const key of Object.keys(draft)) if (key !== next) delete draft[key];
+    if (next !== undefined) draft[next] = true;
+  }, {});
+  return (key: string) => flags[key] === true;
+}
 
 export function SourcesPane(props: {
   addSourceRef(element: HTMLButtonElement): void;
@@ -53,6 +69,11 @@ export function SourcesPane(props: {
   const tabStop = createMemo(() =>
     treeTabStopKey(props.visibleTree, focusedKey()),
   );
+  const isSelectedKey = createKeyFlag(() =>
+    props.selected ? treeNodeKey(props.selected) : undefined,
+  );
+  const isFocusedKey = createKeyFlag(tabStop);
+  const isContextKey = createKeyFlag(() => props.contextKey);
   const failedWithNoTree = () =>
     props.failure && !props.tree.length ? props.failure : undefined;
   return (
@@ -204,14 +225,13 @@ export function SourcesPane(props: {
             <ForEachNode each={props.visibleTree}>
               {(node) => (
                 <TreeItem
-                  contextKey={props.contextKey}
-                  focused={tabStop() === treeNodeKey(node())}
-                  onContext={props.onContext}
-                  focusedKey={tabStop()}
+                  isContext={isContextKey}
+                  isFocused={isFocusedKey}
+                  isSelected={isSelectedKey}
                   node={node()}
+                  onContext={props.onContext}
                   onFocus={(item) => setFocusedKey(treeNodeKey(item))}
                   select={props.onSelect}
-                  selected={props.selected}
                 />
               )}
             </ForEachNode>

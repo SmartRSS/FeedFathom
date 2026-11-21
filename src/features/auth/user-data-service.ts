@@ -29,6 +29,17 @@ export function authenticateStatement(
   userAgent: null | string,
   touch = true,
 ) {
+  if (!touch) {
+    return sql`
+      SELECT "users"."id", "users"."email", "users"."name",
+             "users"."is_admin" AS "isAdmin", "users"."status"
+      FROM "sessions"
+      INNER JOIN "users" ON "users"."id" = "sessions"."user_id"
+      WHERE "sessions"."sid" = ${sid}
+        AND "sessions"."expires_at" > NOW()
+        AND "users"."status" = 'active'
+    `;
+  }
   return sql`
     WITH "resolved" AS (
       SELECT "users"."id", "users"."email", "users"."name",

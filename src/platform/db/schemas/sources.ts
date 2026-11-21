@@ -17,12 +17,14 @@ export const sources = pgTable(
       .notNull()
       .defaultNow(),
     favicon: varchar("favicon"),
+    faviconHash: varchar("favicon_hash").generatedAlwaysAs(sql`md5("favicon")`),
     homeUrl: varchar("home_url").notNull(),
     id: serial("id").primaryKey(),
     kind: varchar("kind", { enum: ["feed", "email", "websub"] })
       .notNull()
       .default("feed"),
     lastAttempt: timestamp("last_attempt", { withTimezone: true }),
+    lastBodyHash: varchar("last_body_hash"),
     lastFetchTrigger: varchar("last_fetch_trigger", {
       enum: ["poll", "manual", "websub-push", "email"],
     }),
@@ -73,7 +75,12 @@ export const sources = pgTable(
 );
 
 type SourceRow = typeof sources.$inferSelect;
-export type Source = Omit<SourceRow, "notBefore"> & {
+export type Source = Omit<
+  SourceRow,
+  "faviconHash" | "lastBodyHash" | "notBefore"
+> & {
+  faviconHash?: null | string;
+  lastBodyHash?: null | string;
   notBefore?: Date;
 };
 export type FetchTrigger = NonNullable<SourceRow["lastFetchTrigger"]>;
