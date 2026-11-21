@@ -2,8 +2,19 @@ import { dateFormat } from "./preferences.ts";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-const isoDateTime = (date: Date): string =>
-  `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+const isoDate = (date: Date): string =>
+  `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+
+const isoTime = (date: Date): string =>
+  `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+
+const isoDateTime = (date: Date): string => `${isoDate(date)} ${isoTime(date)}`;
+
+const parseDate = (iso: null | string | undefined): Date | undefined => {
+  if (!iso) return undefined;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
 
 const localeDateTime = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -18,17 +29,16 @@ const localeDayOfYear = new Intl.DateTimeFormat(undefined, {
 });
 
 export function formatDate(iso: null | string | undefined): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = parseDate(iso);
+  if (!date) return "";
   if (dateFormat.get() === "iso") return isoDateTime(date);
   return localeDateTime.format(date);
 }
 
 export function formatDay(iso: null | string | undefined): string {
-  const full = formatDate(iso);
-  if (!full || dateFormat.get() === "iso") return full.slice(0, 10);
-  const date = new Date(iso ?? "");
+  const date = parseDate(iso);
+  if (!date) return "";
+  if (dateFormat.get() === "iso") return isoDate(date);
   return date.getFullYear() === new Date().getFullYear()
     ? localeDayOfYear.format(date)
     : localeDate.format(date);
@@ -38,13 +48,12 @@ export function formatRowDate(
   iso: null | string | undefined,
   now = new Date(),
 ): string {
-  const full = formatDate(iso);
-  if (!full) return "";
+  const date = parseDate(iso);
+  if (!date) return "";
   if (dateFormat.get() === "iso") {
-    const today = now.toISOString().slice(0, 10);
-    return full.startsWith(today) ? full.slice(11) : full.slice(0, 10);
+    const day = isoDate(date);
+    return day === isoDate(now) ? isoTime(date) : day;
   }
-  const date = new Date(iso ?? "");
   if (date.getFullYear() !== now.getFullYear()) return localeDate.format(date);
   const sameDay =
     date.getMonth() === now.getMonth() && date.getDate() === now.getDate();

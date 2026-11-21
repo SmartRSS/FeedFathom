@@ -13,12 +13,19 @@ const currentMigrationsFolder = fileURLToPath(
   new URL("../../drizzle", import.meta.url),
 );
 const expectedIndexNames = [
+  "articles_published_id_idx",
   "articles_source_published_covering_idx",
   "articles_source_last_seen_idx",
   "user_sources_user_id_idx",
   "user_sources_source_id_idx",
+  "user_sources_parent_id_idx",
+  "user_folders_user_id_name_idx",
+  "user_articles_covering_idx",
+  "user_articles_deleted_idx",
+  "user_articles_source_id_idx",
   "sessions_sid_unique",
   "sessions_user_id_idx",
+  "sessions_expires_at_idx",
 ].toSorted();
 const redundantIndexName = "user_sources_user_source_idx";
 
@@ -205,7 +212,7 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
       ("email", "name", "password")
       VALUES ('upgrade@example.com', 'upgrade', 'x') RETURNING "id"`;
     const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
-      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      ("favicon", "url", "home_url") VALUES ('data:image/png;base64,AA==', 'https://example.com/feed', 'https://example.com')
       RETURNING "id"`;
     await client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
       VALUES ('feed', ${source?.id}, ${user?.id})`;
@@ -234,7 +241,7 @@ test("upgrading a populated baseline database keeps every row and its state", as
       ("email", "name", "password", "status")
       VALUES ('kept@example.com', 'kept', 'x', 'active') RETURNING "id"`;
     const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
-      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      ("favicon", "url", "home_url") VALUES ('data:image/png;base64,AA==', 'https://example.com/feed', 'https://example.com')
       RETURNING "id"`;
     const [folder] = await client<{ id: number }[]>`INSERT INTO "user_folders"
       ("name", "user_id") VALUES ('News', ${user?.id}) RETURNING "id"`;
@@ -278,6 +285,11 @@ test("upgrading a populated baseline database keeps every row and its state", as
         (SELECT count(*)::int FROM "sessions"
           WHERE "sid" = 'kept-sid' AND "expires_at" > NOW()) AS "sessions"`;
     expect(counts).toEqual({ articles: 2, folders: 1, sessions: 1, subs: 1 });
+    const [faviconRow] = await client<
+      { expected: string; stored: null | string }[]
+    >`SELECT "favicon_hash" AS "stored", md5("favicon") AS "expected"
+      FROM "sources" WHERE "id" = ${source?.id}`;
+    expect(faviconRow?.stored).toBe(faviconRow?.expected);
     const searchable = await client<{ guid: string; enclosures: unknown }[]>`
       SELECT "guid", "enclosures" FROM "articles"
       WHERE "search_vector" @@ to_tsquery('english', 'zeppelin')`;
@@ -362,7 +374,7 @@ test("upgrading decodes stored feed names and strips markup from authors", async
       ("email", "name", "password") VALUES ('a@example.com', 'a', 'x')
       RETURNING "id"`;
     const [source] = await client<{ id: number }[]>`INSERT INTO "sources"
-      ("url", "home_url") VALUES ('https://example.com/feed', 'https://example.com')
+      ("favicon", "url", "home_url") VALUES ('data:image/png;base64,AA==', 'https://example.com/feed', 'https://example.com')
       RETURNING "id"`;
     await client`INSERT INTO "user_folders" ("name", "user_id")
       VALUES ('Tom &amp; Jerry', ${user!.id})`;

@@ -50,27 +50,28 @@ export function ForEachNode(props: {
 }
 
 export function TreeItem(props: {
-  contextKey: string | undefined;
-  focused: boolean;
-  focusedKey: string | undefined;
+  isContext(key: string): boolean;
+  isFocused(key: string): boolean;
+  isSelected(key: string): boolean;
   node: ListNode;
   onContext(x: number, y: number, node: ListNode): void;
   onFocus(node: ListNode): void;
   select(node: ListNode): void;
-  selected: ListNode | undefined;
 }) {
-  const isSelected = () =>
-    props.selected !== undefined &&
-    treeNodeKey(props.selected) === treeNodeKey(props.node);
+  const nodeKey = () => treeNodeKey(props.node);
+  const isSelected = () => props.isSelected(nodeKey());
   const longPress = longPressHandlers((x, y) =>
     props.onContext(x, y, props.node),
   );
-  const folderState = storedPreference(
-    `folder:${untrack(() => props.node.uid)}`,
-    ["open", "closed"],
-    "open",
-  );
-  const open = () => folderState.get() === "open";
+  const folderState =
+    untrack(() => props.node.type) === "folder"
+      ? storedPreference(
+          `folder:${untrack(() => props.node.uid)}`,
+          ["open", "closed"],
+          "open",
+        )
+      : undefined;
+  const open = () => folderState?.get() === "open";
   const groupId = () => `tree-group-${props.node.uid}`;
   const [faviconLoaded, setFaviconLoaded] = createSignal(false);
   const [faviconFailed, setFaviconFailed] = createSignal(false);
@@ -84,7 +85,7 @@ export function TreeItem(props: {
   const favicon = () =>
     props.node.type === "source" ? props.node.favicon : null;
   function toggle() {
-    folderState.set(open() ? "closed" : "open");
+    folderState?.set(open() ? "closed" : "open");
   }
   function openFolder() {
     if (!open()) toggle();
@@ -125,13 +126,13 @@ export function TreeItem(props: {
         class={[
           "source",
           {
-            "context-target": props.contextKey === treeNodeKey(props.node),
+            "context-target": props.isContext(nodeKey()),
             folder: isFolder(),
             selected: isSelected(),
             unread: unread() > 0,
           },
         ]}
-        data-tree-key={treeNodeKey(props.node)}
+        data-tree-key={nodeKey()}
         onClick={() => props.select(props.node)}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -140,7 +141,7 @@ export function TreeItem(props: {
         onKeyDown={handleKeyDown}
         {...longPress}
         role="treeitem"
-        tabindex={props.focused ? 0 : -1}
+        tabindex={props.isFocused(nodeKey()) ? 0 : -1}
         onFocus={() => props.onFocus(props.node)}
       >
         <Show
@@ -162,6 +163,7 @@ export function TreeItem(props: {
               <img
                 alt=""
                 class={["node-icon", { "skeleton-row": !faviconLoaded() }]}
+                decoding="async"
                 src={favicon()!}
                 onLoad={() => setFaviconLoaded(true)}
                 onError={() => {
@@ -227,14 +229,13 @@ export function TreeItem(props: {
           <ForEachNode each={children()}>
             {(child) => (
               <TreeItem
-                contextKey={props.contextKey}
-                focused={props.focusedKey === treeNodeKey(child())}
-                focusedKey={props.focusedKey}
+                isContext={props.isContext}
+                isFocused={props.isFocused}
+                isSelected={props.isSelected}
                 node={child()}
                 onContext={props.onContext}
                 onFocus={props.onFocus}
                 select={props.select}
-                selected={props.selected}
               />
             )}
           </ForEachNode>

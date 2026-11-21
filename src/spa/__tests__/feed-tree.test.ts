@@ -16,6 +16,7 @@ import {
   treeTabStopKey,
   withDecrementedUnread,
   withTodayNode,
+  withUnreadCounts,
 } from "../feed-tree.ts";
 
 function source(
@@ -276,5 +277,16 @@ describe("source snooze", () => {
   test("converts snooze durations from hours to absolute timestamps", () => {
     expect(snoozeUntilIso(24, now)).toBe("2026-09-10T12:00:00.000Z");
     expect(snoozeUntilIso(168, now)).toBe("2026-09-16T12:00:00.000Z");
+  });
+});
+
+describe("withUnreadCounts", () => {
+  test("updates matching source badges in place and preserves untouched branches", () => {
+    const untouched = folder("Other", [source("2", { unreadCount: 5 })]);
+    const tree = [folder("Tech", [source("1", { unreadCount: 3 })]), untouched];
+    const next = withUnreadCounts(tree, new Map([["1", 1]]));
+    expect(findNode(next, "source", "1")).toMatchObject({ unreadCount: 1 });
+    expect(next[1]).toBe(untouched);
+    expect(withUnreadCounts(next, new Map([["1", 1]]))).toBe(next);
   });
 });

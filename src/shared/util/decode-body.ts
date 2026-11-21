@@ -1,3 +1,13 @@
+const utf8Decoder = new TextDecoder("utf-8");
+const windows1252Decoder = new TextDecoder("windows-1252");
+
+const decoderFor = (encoding: string): TextDecoder => {
+  const lower = encoding.toLowerCase();
+  if (lower === "utf-8" || lower === "utf8") return utf8Decoder;
+  if (lower === "windows-1252") return windows1252Decoder;
+  return new TextDecoder(encoding);
+};
+
 function bomEncoding(bytes: Uint8Array): string | undefined {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return "utf-8";
@@ -18,16 +28,16 @@ export function decodeXml(
   bytes: Uint8Array,
   contentType: string | null,
 ): string {
-  const prolog = new TextDecoder("windows-1252").decode(bytes.subarray(0, 200));
+  const prolog = windows1252Decoder.decode(bytes.subarray(0, 200));
   const encoding =
     bomEncoding(bytes) ??
     headerCharset(contentType) ??
     xmlEncodingPattern.exec(prolog)?.[1] ??
     "utf-8";
   try {
-    return new TextDecoder(encoding).decode(bytes);
+    return decoderFor(encoding).decode(bytes);
   } catch {
-    return new TextDecoder("utf-8").decode(bytes);
+    return utf8Decoder.decode(bytes);
   }
 }
 
@@ -36,7 +46,7 @@ const metaCharsetPattern = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/giu;
 const knownEncoding = (label: string | undefined) => {
   if (!label) return undefined;
   try {
-    return new TextDecoder(label).encoding;
+    return decoderFor(label).encoding;
   } catch {
     return undefined;
   }
@@ -49,7 +59,7 @@ function detectHtmlEncoding(
   const transport =
     bomEncoding(bytes) ?? knownEncoding(headerCharset(contentType));
   if (transport) return transport;
-  const prefix = new TextDecoder("windows-1252")
+  const prefix = windows1252Decoder
     .decode(bytes.subarray(0, 1024))
     .replace(/<!--[\s\S]*?-->/gu, "");
   for (const [, label] of prefix.matchAll(metaCharsetPattern)) {
@@ -64,5 +74,4 @@ function detectHtmlEncoding(
 export const decodeHtml = (
   bytes: Uint8Array,
   contentType: string | null,
-): string =>
-  new TextDecoder(detectHtmlEncoding(bytes, contentType)).decode(bytes);
+): string => decoderFor(detectHtmlEncoding(bytes, contentType)).decode(bytes);

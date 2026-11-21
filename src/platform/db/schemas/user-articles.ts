@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  index,
   integer,
   pgTable,
   primaryKey,
@@ -23,5 +25,16 @@ export const userArticles = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.sourceId, table.guid] }),
+    index("user_articles_source_id_idx").on(table.sourceId),
+    index("user_articles_covering_idx").on(
+      table.userId,
+      table.sourceId,
+      table.guid,
+      table.readAt,
+      table.deletedAt,
+    ),
+    index("user_articles_deleted_idx")
+      .on(table.userId, table.sourceId, table.guid)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );

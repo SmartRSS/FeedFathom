@@ -21,6 +21,7 @@ import {
   type Source,
   sources,
 } from "#platform/db/schemas/sources.ts";
+import { articles } from "#platform/db/schemas/articles.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import {
   hasSubscriber,
@@ -146,7 +147,7 @@ export class SourcesDataService {
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
-        hasFavicon: sql<boolean>`${sources.favicon} IS NOT NULL`,
+        hasFavicon: sql<boolean>`${sources.faviconHash} IS NOT NULL`,
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
@@ -160,7 +161,7 @@ export class SourcesDataService {
           ne(sources.kind, "email"),
         ),
       )
-      .orderBy(sql`${sources.favicon} IS NOT NULL`, asc(sources.id));
+      .orderBy(sql`${sources.faviconHash} IS NOT NULL`, asc(sources.id));
   }
 
   public async updateFavicon(
@@ -212,6 +213,19 @@ export class SourcesDataService {
     sortBy: Static<typeof sourceSortSchema>,
     order: "asc" | "desc",
   ) {
+    const subscriberCounts = this.drizzleConnection
+      .select({
+        count: sql<number>`COUNT(*)::int`.as("count"),
+        sourceId: userSources.sourceId,
+      })
+      .from(userSources)
+      .groupBy(userSources.sourceId)
+      .as("subscriber_counts");
+    const joinedSubscriberCount = sql<number>`COALESCE(${subscriberCounts.count}, 0)`;
+    const sortColumn =
+      sortBy === "subscriberCount"
+        ? joinedSubscriberCount
+        : sourceSortColumns[sortBy];
     return await this.drizzleConnection
       .select({
         createdAt: sources.createdAt,
@@ -222,15 +236,13 @@ export class SourcesDataService {
         lastSuccess: sources.lastSuccess,
         recentFailureDetails: sources.recentFailureDetails,
         recentFailures: sources.recentFailures,
-        subscriberCount,
+        subscriberCount: joinedSubscriberCount,
         url: sources.url,
         websubStatus: sources.websubStatus,
       })
       .from(sources)
-      .orderBy(
-        (order === "desc" ? desc : asc)(sourceSortColumns[sortBy]),
-        asc(sources.id),
-      );
+      .leftJoin(subscriberCounts, eq(subscriberCounts.sourceId, sources.id))
+      .orderBy((order === "desc" ? desc : asc)(sortColumn), asc(sources.id));
   }
 
   public async deleteSource(id: number) {
@@ -254,15 +266,39 @@ export class SourcesDataService {
     }
   }
 
+  public async canSkipUnchangedBody(
+    sourceId: number,
+    throttleHours: number,
+  ): Promise<boolean> {
+    const [row] = await this.drizzleConnection
+      .select({
+        canSkip: sql<boolean>`
+          MAX(${articles.lastSeenInFeedAt}) IS NOT NULL
+          AND MAX(${articles.lastSeenInFeedAt}) >= GREATEST(
+            NOW() - ${throttleHours} * INTERVAL '1 hour',
+            COALESCE(
+              (SELECT MAX(${userSources.createdAt}) FROM ${userSources} WHERE ${userSources.sourceId} = ${sourceId}),
+              '-infinity'::timestamptz
+            )
+          )
+        `,
+      })
+      .from(articles)
+      .where(eq(articles.sourceId, sourceId));
+    return row?.canSkip === true;
+  }
+
   public async successSource(
     sourceId: number,
     {
+      bodyHash,
       cached,
       homeUrl,
       notBefore,
       observedAt,
       trigger,
     }: {
+      bodyHash?: null | string | undefined;
       cached: boolean;
       homeUrl?: string | undefined;
       notBefore?: Date | undefined;
@@ -273,6 +309,7 @@ export class SourcesDataService {
     await this.drizzleConnection
       .update(sources)
       .set({
+        ...(bodyHash === undefined ? {} : { lastBodyHash: bodyHash }),
         ...(homeUrl === undefined ? {} : { homeUrl }),
         lastAttempt: observedAt,
         lastFetchTrigger: trigger,

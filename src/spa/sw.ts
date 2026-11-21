@@ -357,6 +357,7 @@ async function changeAccount(request: Request, signedOut: boolean) {
   if (response.ok) {
     accountChanges++;
     treePreload = undefined;
+    lastPrunedFavicons = undefined;
     await forgetAccountData(signedOut);
     queueMayHaveEntries = true;
   }
@@ -531,10 +532,11 @@ async function syncOfflineArticles(
     }),
   );
   const missing = [...versions.keys()].filter((id) => !have.has(id));
+  let nextMissing = 0;
   const download = async () => {
     // oxlint-disable-next-line no-await-in-loop -- throttled on purpose
     while (current() && (await anyVisibleClient())) {
-      const id = missing.shift();
+      const id = missing[nextMissing++];
       if (id === undefined) return;
       // oxlint-disable-next-line no-await-in-loop -- throttled on purpose
       const response = await fetch(`/api/article?article=${id}`, {
@@ -655,6 +657,7 @@ async function articleList(request: Request) {
 }
 
 let treePreload: Promise<Response> | undefined;
+let lastPrunedFavicons: string | undefined;
 
 function treeFaviconUrls(node: TreeNode): string[] {
   if (node.type === "source") return node.favicon ? [node.favicon] : [];
@@ -667,12 +670,15 @@ async function pruneFavicons(response: Response) {
   );
   if (!Array.isArray(tree)) return;
   const named = new Set(tree.flatMap(treeFaviconUrls));
+  const signature = [...named].toSorted().join("\n");
+  if (signature === lastPrunedFavicons) return;
   await deleteWhere(
     await caches.open(API_CACHE),
     (url) =>
       url.pathname.startsWith("/api/favicon/") &&
       !named.has(url.pathname + url.search),
   );
+  lastPrunedFavicons = signature;
 }
 
 async function freshTree(

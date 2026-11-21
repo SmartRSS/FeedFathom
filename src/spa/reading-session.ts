@@ -218,6 +218,7 @@ export class ReadingSessionStore {
   readonly #remember: () => boolean;
   readonly #resumingUpdate: boolean;
   #current: ReadingSession = emptySession();
+  #lastPersisted: { raw: string; scope: "both" | "session" } | undefined;
 
   constructor(options: ReadingSessionStoreOptions) {
     this.#sessionStorage = options.session;
@@ -228,6 +229,7 @@ export class ReadingSessionStore {
   }
 
   takeSnapshot(): AppSnapshot | undefined {
+    this.#lastPersisted = undefined;
     const remember = this.#remember();
     const app =
       remember || this.#resumingUpdate ? this.#load()?.app : undefined;
@@ -274,6 +276,7 @@ export class ReadingSessionStore {
 
   clear(): void {
     this.#current = emptySession();
+    this.#lastPersisted = undefined;
     this.#remove(this.#sessionStorage);
     this.#remove(this.#localStorage);
   }
@@ -305,17 +308,26 @@ export class ReadingSessionStore {
   }
 
   #persist(force = false): void {
+    const remember = this.#remember();
+    const scope = remember ? "both" : force ? "session" : undefined;
+    if (!scope) return;
     const raw = serializeReadingSession(this.#current);
-    const storages = this.#remember()
-      ? [this.#sessionStorage, this.#localStorage]
-      : force
-        ? [this.#sessionStorage]
-        : [];
+    if (
+      !force &&
+      this.#lastPersisted?.raw === raw &&
+      this.#lastPersisted.scope === scope
+    )
+      return;
+    const storages =
+      scope === "both"
+        ? [this.#sessionStorage, this.#localStorage]
+        : [this.#sessionStorage];
     for (const storage of storages) {
       try {
         storage.setItem(READING_SESSION_STORAGE_KEY, raw);
       } catch {}
     }
+    this.#lastPersisted = { raw, scope };
   }
 
   #remove(storage: StorageLike): void {

@@ -30,7 +30,10 @@ import { getEventsHandler } from "#features/reader/routes/events.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
-import { extractArticle } from "#features/feeds/extract-article.ts";
+import {
+  extractArticle,
+  sanitizerVersion,
+} from "#features/feeds/extract-article.ts";
 import type * as feeds from "#features/feeds/services.ts";
 
 export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
@@ -147,9 +150,13 @@ export const createReaderRoutes = (services: ReaderRouteServices) => {
           user.id,
         );
         if (!article) return jsonError("Article not found", 404);
+        const { sanitizedVersion, ...rest } = article;
         return json(articleResponse, {
-          ...article,
-          content: extractArticle(article.content),
+          ...rest,
+          content:
+            sanitizedVersion === sanitizerVersion
+              ? article.content
+              : extractArticle(article.content),
           url: safeArticleUrl(article.url, request.url),
         });
       },

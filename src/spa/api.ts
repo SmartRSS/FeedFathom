@@ -120,6 +120,7 @@ function raceGet(url: string, init: RequestInit): Promise<Response> {
 }
 
 type ApiInit<R extends TSchema> = Omit<RequestInit, "body"> & {
+  onResponse?: (response: Response) => void;
   raceWhenStalled?: false;
 } & (
     | { body?: BodyInit; json?: never; request?: never }
@@ -127,11 +128,39 @@ type ApiInit<R extends TSchema> = Omit<RequestInit, "body"> & {
   );
 
 function requestInit<R extends TSchema>(init: ApiInit<R>): RequestInit {
-  const { json, raceWhenStalled: _race, request: _request, ...rest } = init;
+  const {
+    json,
+    onResponse: _onResponse,
+    raceWhenStalled: _race,
+    request: _request,
+    ...rest
+  } = init;
   if (json === undefined) return rest;
   const headers = new Headers(rest.headers);
   headers.set("Content-Type", "application/json");
   return { ...rest, body: JSON.stringify(json), headers };
+}
+
+const codecPresence = new WeakMap<TSchema, boolean>();
+
+function containsCodec(node: unknown, seen: Set<object>): boolean {
+  if (typeof node !== "object" || node === null || seen.has(node)) return false;
+  seen.add(node);
+  if ("~codec" in node) return true;
+  if (Array.isArray(node))
+    return node.some((item) => containsCodec(item, seen));
+  for (const value of Object.values(node)) {
+    if (containsCodec(value, seen)) return true;
+  }
+  return false;
+}
+
+function schemaHasCodec(schema: TSchema): boolean {
+  const cached = codecPresence.get(schema);
+  if (cached !== undefined) return cached;
+  const result = containsCodec(schema, new Set());
+  codecPresence.set(schema, result);
+  return result;
 }
 
 export async function api<T extends TSchema, R extends TSchema = never>(
@@ -175,5 +204,11 @@ export async function api<T extends TSchema, R extends TSchema = never>(
       response.status,
     );
   }
-  return Value.Decode(schema, payload);
+  if (schemaHasCodec(schema)) {
+    const decoded = Value.Decode(schema, payload);
+    init.onResponse?.(response);
+    return decoded;
+  }
+  init.onResponse?.(response);
+  return payload;
 }

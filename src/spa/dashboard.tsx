@@ -52,6 +52,7 @@ import {
   treeNodeKey,
   withDecrementedUnread,
   withTodayNode,
+  withUnreadCounts,
   type ListNode,
   type ListScope,
 } from "./feed-tree.ts";
@@ -76,7 +77,10 @@ import type { Route } from "./routes.ts";
 import { api, failureDetails, messageOf } from "./api.ts";
 import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
-import { deleteTraceHeader } from "#shared/contracts/headers.ts";
+import {
+  deleteTraceHeader,
+  unreadCountsHeader,
+} from "#shared/contracts/headers.ts";
 import { createExtensionReaderBridge } from "./extension-reader.ts";
 import { ReaderState } from "./reader-content.ts";
 import { FeedDiscovery } from "./feed-discovery.tsx";
@@ -120,6 +124,28 @@ async function cachedTree(): Promise<TreeNode[] | undefined> {
   } catch {
     return undefined;
   }
+}
+
+function parseUnreadCountsHeader(
+  response: Response,
+): Map<string, number> | undefined {
+  const raw = response.headers.get(unreadCountsHeader);
+  if (!raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+    return undefined;
+  const counts = new Map<string, number>();
+  for (const [sourceUid, count] of Object.entries(parsed)) {
+    if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0)
+      return undefined;
+    counts.set(sourceUid, count);
+  }
+  return counts;
 }
 
 const articlesNoun = (count: number) =>
@@ -192,8 +218,19 @@ export function Dashboard(props: {
   };
   const feedsUnavailable = () => Boolean(treeFailed()) && !tree().length;
   const feedsPending = () => treeLoading() && !tree().length;
+  const sourceNames = createMemo(() => {
+    const names = new Map<string, string>();
+    const stack: TreeNode[] = [...tree()];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) continue;
+      if (node.type === "source") names.set(node.uid, node.name);
+      else stack.push(...node.children);
+    }
+    return names;
+  });
   const feedName = (article: { sourceId: number }) =>
-    findNode(tree(), "source", String(article.sourceId))?.name;
+    sourceNames().get(String(article.sourceId));
 
   const [searchTerms, setSearchTerms] = createSignal("");
   const [activeSearch, setActiveSearch] = createSignal("");
@@ -713,14 +750,19 @@ export function Dashboard(props: {
         ),
       );
     try {
+      let unreadCounts: Map<string, number> | undefined;
       await api("/articles", removedArticlesResponse, {
         json: { articleIdList: ids, read },
         method: "PATCH",
+        onResponse: (response) => {
+          unreadCounts = parseUnreadCountsHeader(response);
+        },
         request: readArticlesRequest,
       });
       if (announcement) announce(announcement);
       if (read) restore.store.clearReaderScrolls(ids);
-      await loadTree();
+      if (unreadCounts) applyTree(withUnreadCounts(tree(), unreadCounts));
+      else await loadTree();
     } catch (cause) {
       reportError(cause, "Could not update read state");
       const node = selectedNode();
@@ -736,10 +778,14 @@ export function Dashboard(props: {
     if (!ids.length) return;
     clearProblem();
     const listSignal = list.signal;
+    let unreadCounts: Map<string, number> | undefined;
     const deletion = api("/articles", removedArticlesResponse, {
       headers: { [deleteTraceHeader]: deleteTrace(trigger) },
       json: { removedArticleIdList: ids },
       method: "DELETE",
+      onResponse: (response) => {
+        unreadCounts = parseUnreadCountsHeader(response);
+      },
       request: removeArticlesRequest,
     });
     applyUnreadDeltas(readStateDeltas(rows, ids, true));
@@ -748,6 +794,10 @@ export function Dashboard(props: {
       .then(() => {
         announce(`${articlesNoun(ids.length)} deleted.`);
         restore.store.clearReaderScrolls(ids);
+        if (unreadCounts) {
+          applyTree(withUnreadCounts(tree(), unreadCounts));
+          return undefined;
+        }
         return loadTree().catch((cause: unknown) =>
           reportError(cause, "Could not refresh your feeds"),
         );
@@ -774,9 +824,10 @@ export function Dashboard(props: {
       list.rows(),
     (rows) => {
       if (!rows || !rows.length || !articleListElement) return undefined;
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
       return observeScrollPast({
         eligible: (id) => {
-          const article = rows.find((row) => row.id === id);
+          const article = rowsById.get(id);
           return (
             article !== undefined && !article.read && selected()?.id !== id
           );
