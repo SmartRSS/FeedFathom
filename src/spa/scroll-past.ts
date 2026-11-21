@@ -18,7 +18,7 @@ export class ScrollPastQueue {
   readonly #flush: (ids: number[]) => void;
   readonly #timers: Timers;
   #dwelling = new Map<number, number>();
-  #pending: number[] = [];
+  #pending = new Set<number>();
   #pendingSince: number | undefined;
   #handle: unknown;
   #lastFlushAt = Number.NEGATIVE_INFINITY;
@@ -31,7 +31,7 @@ export class ScrollPastQueue {
   }
 
   add(id: number) {
-    if (this.#pending.includes(id) || this.#dwelling.has(id)) return;
+    if (this.#pending.has(id) || this.#dwelling.has(id)) return;
     this.#dwelling.set(id, this.#timers.now());
     this.#arm();
   }
@@ -43,9 +43,9 @@ export class ScrollPastQueue {
 
   flushNow() {
     this.#disarm();
-    if (!this.#pending.length) return;
-    const ids = this.#pending;
-    this.#pending = [];
+    if (!this.#pending.size) return;
+    const ids = [...this.#pending];
+    this.#pending.clear();
     this.#pendingSince = undefined;
     this.#lastFlushAt = this.#timers.now();
     this.#flush(ids);
@@ -55,7 +55,7 @@ export class ScrollPastQueue {
   dispose() {
     this.#disarm();
     this.#dwelling.clear();
-    this.#pending = [];
+    this.#pending.clear();
     this.#pendingSince = undefined;
   }
 
@@ -102,10 +102,10 @@ export class ScrollPastQueue {
     for (const [id, since] of this.#dwelling) {
       if (time - since < DWELL_MS) continue;
       this.#dwelling.delete(id);
-      if (!this.#pending.includes(id)) this.#pending.push(id);
+      this.#pending.add(id);
       this.#pendingSince ??= time;
     }
-    if (this.#pending.length >= this.#cap) {
+    if (this.#pending.size >= this.#cap) {
       this.flushNow();
       return;
     }

@@ -1,6 +1,10 @@
 import type { ArticleInsert } from "#platform/db/schemas/articles.ts";
 import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import type { ArticlesDataService } from "#features/feeds/article-data-service.ts";
+import {
+  extractArticle,
+  sanitizerVersion,
+} from "#features/feeds/extract-article.ts";
 import type { FetchTrigger } from "#platform/db/schemas/sources.ts";
 import type { FeedArticle } from "#features/feeds/feed-mapper.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
@@ -31,12 +35,14 @@ export class ArticleImporter {
     articles: readonly FeedArticle[],
     {
       alwaysRecount = false,
+      bodyHash,
       cached,
       freshUntil,
       homeUrl,
       trigger,
     }: {
       alwaysRecount?: boolean;
+      bodyHash?: string | undefined;
       cached: boolean;
       freshUntil?: null | number | undefined;
       homeUrl?: string | undefined;
@@ -44,16 +50,26 @@ export class ArticleImporter {
     },
   ): Promise<void> {
     const observedAt = new Date();
+    const hasExpiringAlert = articles.some(
+      ({ expiresAt }) => expiresAt !== undefined,
+    );
     const rows = articles
       .filter(
         ({ expiresAt }) =>
           expiresAt === undefined || expiresAt > observedAt.getTime(),
       )
       .map(({ expiresAt: _expiresAt, ...article }) =>
-        Object.assign(article, { lastSeenInFeedAt: observedAt }),
+        Object.assign(article, {
+          content: extractArticle(article.content),
+          lastSeenInFeedAt: observedAt,
+          sanitizedVersion: sanitizerVersion,
+        }),
       );
     await this.importArticles(sourceId, rows, { alwaysRecount });
     await this.sourcesDataService.successSource(sourceId, {
+      ...(bodyHash === undefined
+        ? {}
+        : { bodyHash: hasExpiringAlert ? null : bodyHash }),
       cached,
       homeUrl,
       notBefore: freshUntil ? new Date(freshUntil) : undefined,

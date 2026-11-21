@@ -5,6 +5,17 @@ import type { NativeHttpResponse } from "#platform/http/http-native-transport.ts
 
 const exact = { additionalProperties: false } as const;
 
+const cachedMetaSchema = Type.Object(
+  {
+    expiresAt: Type.Number(),
+    headers: Type.Array(Type.Tuple([Type.String(), Type.String()])),
+    status: Type.Literal(200),
+    url: Type.Intersect([Type.String(), webUrlPolicy]),
+  },
+  exact,
+);
+export const cachedMetaCheck = Schema.Compile(cachedMetaSchema);
+
 const cachedResponseSchema = Type.Object(
   {
     body: Type.String(),
@@ -17,7 +28,9 @@ const cachedResponseSchema = Type.Object(
 );
 export const cachedResponseCheck = Schema.Compile(cachedResponseSchema);
 
-export type CachedResponse = Static<typeof cachedResponseSchema>;
+export type CachedResponse = Static<typeof cachedMetaSchema> & {
+  body: Buffer;
+};
 
 export function deltaSeconds(value: string): number | undefined {
   const match = /^(?:"(\d+)"|(\d+))$/.exec(value.trim());
@@ -101,7 +114,7 @@ export function cacheable(
   if ((expiry === undefined || expiry <= receivedAt) && !hasValidator)
     return undefined;
   return {
-    body: body.toString("base64"),
+    body,
     expiresAt: expiry ?? receivedAt,
     headers: [...response.headers],
     status: 200,

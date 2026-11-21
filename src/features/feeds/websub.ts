@@ -44,6 +44,8 @@ function resolvePublicUrl(value: string, base?: string): string | undefined {
   }
 }
 
+const relAttributePattern = /\brel\s*=/i;
+
 export function discoverWebSub(
   headers: Headers,
   bodyXml: string,
@@ -51,11 +53,16 @@ export function discoverWebSub(
   jsonFeedHubUrl?: string,
 ): WebSubDiscovery | undefined {
   const headerRels = parseLinkHeaderRels(headers.get("link") ?? "");
-  const bodyRels = scanFeedBodyRels(bodyXml);
+  const bodyRels =
+    (headerRels.has("hub") && headerRels.has("self")) ||
+    !relAttributePattern.test(bodyXml)
+      ? undefined
+      : scanFeedBodyRels(bodyXml);
 
-  const hubUrl = headerRels.get("hub") ?? bodyRels.get("hub") ?? jsonFeedHubUrl;
+  const hubUrl =
+    headerRels.get("hub") ?? bodyRels?.get("hub") ?? jsonFeedHubUrl;
   if (!hubUrl) return undefined;
-  const topicUrl = headerRels.get("self") ?? bodyRels.get("self") ?? feedUrl;
+  const topicUrl = headerRels.get("self") ?? bodyRels?.get("self") ?? feedUrl;
 
   const resolvedHub = resolvePublicUrl(hubUrl, feedUrl);
   const resolvedTopic = resolvePublicUrl(topicUrl, feedUrl);

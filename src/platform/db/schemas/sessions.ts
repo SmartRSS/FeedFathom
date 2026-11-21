@@ -31,5 +31,6 @@ export const sessions = pgTable(
   (table) => [
     uniqueIndex("sessions_sid_unique").on(table.sid),
     index("sessions_user_id_idx").on(table.userId),
+    index("sessions_expires_at_idx").on(table.expiresAt),
   ],
 );

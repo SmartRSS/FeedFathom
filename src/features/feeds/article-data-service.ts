@@ -1,6 +1,9 @@
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import { aliasedTable, and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { articlePageSize } from "#shared/contracts/limits.ts";
+import { dateType } from "#shared/validation/typebox-policy.ts";
 import {
   articleFilterCondition,
   readCondition,
@@ -22,6 +25,33 @@ function userArticleStateJoin(userId: number) {
 }
 
 const cursorRow = aliasedTable(articles, "cursor_row");
+
+const markedArticleRowsCheck = Schema.Compile(
+  Type.Array(
+    Type.Object(
+      { id: Type.Integer(), sourceId: Type.Integer() },
+      { additionalProperties: false },
+    ),
+  ),
+);
+
+const listedArticleRowsCheck = Schema.Compile(
+  Type.Array(
+    Type.Object(
+      {
+        author: Type.String(),
+        id: Type.Integer(),
+        publishedAt: dateType,
+        read: Type.Boolean(),
+        revision: Type.Union([Type.String(), Type.Null()]),
+        sourceId: Type.Integer(),
+        title: Type.String(),
+        url: Type.String(),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+);
 
 function userArticleAccessJoin(userId: number) {
   return and(
@@ -47,6 +77,7 @@ export class ArticlesDataService {
           id: articles.id,
           lastSeenInFeedAt: articles.lastSeenInFeedAt,
           publishedAt: articles.publishedAt,
+          sanitizedVersion: articles.sanitizedVersion,
           sourceId: articles.sourceId,
           title: articles.title,
           updatedAt: articles.updatedAt,
@@ -85,6 +116,83 @@ export class ArticlesDataService {
       readAt: userArticles.readAt,
       userId: userArticles.userId,
     };
+
+    if (
+      !options.query &&
+      (options.allSubscribed ||
+        options.folderId !== undefined ||
+        sourceIds.length > 1)
+    ) {
+      const scopeFilter = options.allSubscribed
+        ? sql`TRUE`
+        : options.folderId === undefined
+          ? inArray(userSources.sourceId, sourceIds)
+          : eq(userSources.parentId, options.folderId);
+      const snoozeFilter =
+        filter === "unread"
+          ? sql`AND (${userSources.pausedUntil} IS NULL OR ${userSources.pausedUntil} <= NOW())`
+          : sql``;
+      const windowFilter = options.publishedWithinHours
+        ? sql`AND ${articles.publishedAt} >= NOW() - (${options.publishedWithinHours} * INTERVAL '1 hour')`
+        : sql``;
+      const cursorCte = cursor
+        ? sql`"cursor_row" AS (
+            SELECT ${articles.publishedAt} AS "published_at", ${articles.id} AS "id"
+            FROM ${articles}
+            WHERE ${articles.id} = ${cursor}
+          ),`
+        : sql``;
+      const cursorJoin = cursor ? sql`CROSS JOIN "cursor_row"` : sql``;
+      const cursorFilter = cursor
+        ? sql`AND (${articles.publishedAt}, ${articles.id}) < ("cursor_row"."published_at", "cursor_row"."id")`
+        : sql``;
+      const rows: unknown = await this.drizzleConnection.execute(sql`
+        WITH ${cursorCte}
+        "page" AS (
+          SELECT "sub"."id", "sub"."published_at", "sub"."read"
+          FROM ${userSources}
+          ${cursorJoin}
+          CROSS JOIN LATERAL (
+            SELECT ${articles.id} AS "id",
+              ${articles.publishedAt} AS "published_at",
+              (${readCondition(readStateColumns)}) AS "read"
+            FROM ${articles}
+            LEFT JOIN ${userArticles}
+              ON ${userArticles.userId} = ${userSources.userId}
+              AND ${userArticles.sourceId} = ${articles.sourceId}
+              AND ${userArticles.guid} = ${articles.guid}
+            WHERE ${articles.sourceId} = ${userSources.sourceId}
+              AND ${subscriptionSeesArticle(articles.lastSeenInFeedAt, userSources.createdAt)}
+              ${windowFilter}
+              AND ${articleFilterCondition(filter, readStateColumns)}
+              ${cursorFilter}
+            ORDER BY ${articles.publishedAt} DESC, ${articles.id} DESC
+            LIMIT ${articlePageSize}
+          ) "sub"
+          WHERE ${userSources.userId} = ${userId}
+            AND ${scopeFilter}
+            ${snoozeFilter}
+          ORDER BY "sub"."published_at" DESC, "sub"."id" DESC
+          LIMIT ${articlePageSize}
+        )
+        SELECT ${articles.author} AS "author",
+          ${articles.id}::double precision AS "id",
+          ${articles.publishedAt} AS "publishedAt",
+          "page"."read" AS "read",
+          ${articles.updatedAt}::text AS "revision",
+          ${articles.sourceId} AS "sourceId",
+          ${articles.title} AS "title",
+          ${articles.url} AS "url"
+        FROM "page"
+        INNER JOIN ${articles} ON ${articles.id} = "page"."id"
+        ORDER BY "page"."published_at" DESC, "page"."id" DESC
+      `);
+      if (!listedArticleRowsCheck.Check(rows)) {
+        throw new Error("Database returned an invalid article row");
+      }
+      return rows;
+    }
+
     const page = this.drizzleConnection
       .select({
         id: articles.id,
@@ -92,8 +200,8 @@ export class ArticlesDataService {
         read: sql<boolean>`${readCondition(readStateColumns)}`.as("read"),
       })
       .from(articles)
+      .innerJoin(userSources, userArticleAccessJoin(userId))
       .leftJoin(userArticles, userArticleStateJoin(userId))
-      .leftJoin(userSources, userArticleAccessJoin(userId))
       .where(
         and(
           ...(options.allSubscribed
@@ -117,7 +225,6 @@ export class ArticlesDataService {
                 sql`(${userSources.pausedUntil} IS NULL OR ${userSources.pausedUntil} <= NOW())`,
               ]
             : []),
-          sql`${userSources.createdAt} IS NOT NULL`,
           cursor
             ? sql`(${articles.publishedAt}, ${articles.id}) < (
                 (SELECT ${cursorRow.publishedAt} FROM ${articles} ${cursorRow} WHERE ${cursorRow.id} = ${cursor}),
@@ -222,8 +329,18 @@ export class ArticlesDataService {
         .values(batch)
         .onConflictDoUpdate({
           set: {
-            author: sql`excluded.author`,
-            content: sql`excluded.content`,
+            author: sql`
+              CASE
+                WHEN excluded.author IS DISTINCT FROM ${articles.author} THEN excluded.author
+                ELSE ${articles.author}
+              END
+            `,
+            content: sql`
+              CASE
+                WHEN excluded.content IS DISTINCT FROM ${articles.content} THEN excluded.content
+                ELSE ${articles.content}
+              END
+            `,
             enclosures: sql`excluded.enclosures`,
             lastSeenInFeedAt: sql`excluded.last_seen_in_feed_at`,
             publishedAt: sql`
@@ -232,7 +349,18 @@ export class ArticlesDataService {
                 ELSE ${articles.publishedAt}
               END
             `,
-            title: sql`excluded.title`,
+            sanitizedVersion: sql`
+              CASE
+                WHEN excluded.content IS DISTINCT FROM ${articles.content} THEN excluded.sanitized_version
+                ELSE GREATEST(${articles.sanitizedVersion}, excluded.sanitized_version)
+              END
+            `,
+            title: sql`
+              CASE
+                WHEN excluded.title IS DISTINCT FROM ${articles.title} THEN excluded.title
+                ELSE ${articles.title}
+              END
+            `,
             updatedAt: sql`
               CASE
                 WHEN ${fieldChange} THEN
@@ -250,7 +378,12 @@ export class ArticlesDataService {
                 ELSE ${articles.updatedAt}
               END
             `,
-            url: sql`excluded.url`,
+            url: sql`
+              CASE
+                WHEN excluded.url IS DISTINCT FROM ${articles.url} THEN excluded.url
+                ELSE ${articles.url}
+              END
+            `,
           },
           setWhere: sql`
             excluded.last_seen_in_feed_at >= ${articles.lastSeenInFeedAt}
@@ -309,44 +442,35 @@ export class ArticlesDataService {
       return { articleIds: [], sourceIds: [] };
     }
 
-    return await this.drizzleConnection.transaction(async (trx) => {
-      const authorizedArticles = await trx
-        .selectDistinct({
-          guid: articles.guid,
-          id: articles.id,
-          sourceId: articles.sourceId,
-        })
-        .from(articles)
-        .innerJoin(userSources, userArticleAccessJoin(userId))
-        .where(inArray(articles.id, articleIdList));
-
-      if (authorizedArticles.length === 0) {
-        return { articleIds: [], sourceIds: [] };
-      }
-
-      await trx
-        .insert(userArticles)
-        .values(
-          authorizedArticles.map((row) =>
-            Object.assign(
-              { guid: row.guid, sourceId: row.sourceId, userId },
-              mark,
-            ),
-          ),
-        )
-        .onConflictDoUpdate({
-          set: mark,
-          target: [
-            userArticles.userId,
-            userArticles.sourceId,
-            userArticles.guid,
-          ],
-        });
-
-      return {
-        articleIds: authorizedArticles.map((row) => row.id),
-        sourceIds: [...new Set(authorizedArticles.map((row) => row.sourceId))],
-      };
-    });
+    const markColumn =
+      "deletedAt" in mark ? sql.raw('"deleted_at"') : sql.raw('"read_at"');
+    const markValue = "deletedAt" in mark ? mark.deletedAt : mark.readAt;
+    const rows: unknown = await this.drizzleConnection.execute(sql`
+      WITH "authorized" AS (
+        SELECT DISTINCT ${articles.id} AS "id",
+          ${articles.sourceId} AS "source_id",
+          ${articles.guid} AS "guid"
+        FROM ${articles}
+        INNER JOIN ${userSources}
+          ON ${userArticleAccessJoin(userId)}
+        WHERE ${inArray(articles.id, articleIdList)}
+      ),
+      "upserted" AS (
+        INSERT INTO ${userArticles} ("user_id", "source_id", "guid", ${markColumn})
+        SELECT ${userId}, "source_id", "guid", ${markValue}::timestamptz
+        FROM "authorized"
+        ON CONFLICT ("user_id", "source_id", "guid")
+        DO UPDATE SET ${markColumn} = EXCLUDED.${markColumn}
+      )
+      SELECT "id"::double precision AS "id", "source_id" AS "sourceId"
+      FROM "authorized"
+    `);
+    if (!markedArticleRowsCheck.Check(rows)) {
+      throw new Error("Database returned an invalid marked article row");
+    }
+    return {
+      articleIds: rows.map((row) => row.id),
+      sourceIds: [...new Set(rows.map((row) => row.sourceId))],
+    };
   }
 }

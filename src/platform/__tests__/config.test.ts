@@ -15,7 +15,7 @@ describe("loadConfig", () => {
     ).toEqual({
       ALLOWED_EMAILS: [],
       ARTICLE_STALE_AFTER_DAYS: 365,
-      CLEANUP_INTERVAL: 20,
+      CLEANUP_INTERVAL: 3600,
       DATABASE_URL: databaseUrl,
       DB_POOL_MAX: 10,
       ENABLE_REGISTRATION: false,

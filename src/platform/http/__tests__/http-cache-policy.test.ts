@@ -127,7 +127,7 @@ describe("cacheable", () => {
       body,
       url,
     );
-    expect(Buffer.from(entry?.body ?? "", "base64")).toEqual(body);
+    expect(entry?.body).toEqual(body);
     expect(entry?.status).toBe(200);
   });
 
@@ -187,7 +187,7 @@ describe("cacheable", () => {
 
 describe("refresh", () => {
   const stored: CachedResponse = {
-    body: "aGk=",
+    body: Buffer.from("hi"),
     expiresAt: at,
     headers: [
       ["etag", '"v1"'],

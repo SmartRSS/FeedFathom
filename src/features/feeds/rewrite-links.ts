@@ -51,7 +51,11 @@ const handleElement = (
   }
 };
 
+const rewritableTagPattern =
+  /<(?:a|audio|video|img|link|source|picture)[\s/>]/i;
+
 export const rewriteLinks = (content: string, articleUrl: string) => {
+  if (!rewritableTagPattern.test(content)) return content;
   const rewriter = new HTMLRewriter();
   for (const [tagName, attributeName] of tagAttributePairs) {
     rewriter.on(`${tagName}[${attributeName}]`, {

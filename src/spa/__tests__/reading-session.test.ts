@@ -161,10 +161,12 @@ describe("throttled recorder", () => {
 
 class FakeStorage {
   #map = new Map<string, string>();
+  writes = 0;
   getItem(key: string) {
     return this.#map.get(key) ?? null;
   }
   setItem(key: string, value: string) {
+    this.writes++;
     this.#map.set(key, value);
   }
   removeItem(key: string) {
@@ -253,5 +255,21 @@ describe("ReadingSessionStore", () => {
     expect(resumed.takeSnapshot()?.nodeUid).toBe("4");
     expect(resumed.readerScroll(11)).toBe(0.5);
     expect(options.session.dump()).toBeNull();
+  });
+
+  test("skips duplicate storage writes when the serialized snapshot is unchanged", () => {
+    const options = storages();
+    const store = new ReadingSessionStore(options);
+    store.recordApp({ nodeType: "source", nodeUid: "3" });
+    expect(options.session.writes).toBe(1);
+    expect(options.local.writes).toBe(1);
+
+    store.recordApp({ nodeType: "source", nodeUid: "3" });
+    expect(options.session.writes).toBe(1);
+    expect(options.local.writes).toBe(1);
+
+    store.saveBeforeReload({ nodeType: "source", nodeUid: "3" }, undefined);
+    expect(options.session.writes).toBe(2);
+    expect(options.local.writes).toBe(2);
   });
 });

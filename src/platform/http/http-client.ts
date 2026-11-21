@@ -143,7 +143,7 @@ export class HttpClient {
         await this.cacheStore.saveCached(
           url,
           {
-            body: body.toString("base64"),
+            body,
             expiresAt: Date.now() + freshForMs,
             headers: [...kept],
             status: 200,
@@ -310,10 +310,9 @@ export class HttpClient {
   }
 
   private fromCached(response: CachedResponse): HttpResponse {
-    const body = Buffer.from(response.body, "base64");
     return {
       cached: true,
-      data: copyBody(body),
+      data: copyBody(response.body),
       freshUntil: response.expiresAt > Date.now() ? response.expiresAt : null,
       headers: new Headers(response.headers),
       redirectedPermanently: false,
@@ -359,5 +358,12 @@ export class HttpClient {
 }
 
 function copyBody(body: Buffer): ArrayBuffer {
+  if (
+    body.buffer instanceof ArrayBuffer &&
+    body.byteOffset === 0 &&
+    body.byteLength === body.buffer.byteLength
+  ) {
+    return body.buffer;
+  }
   return new Uint8Array(body).buffer;
 }

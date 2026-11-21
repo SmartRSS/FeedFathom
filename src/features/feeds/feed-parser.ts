@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { Type } from "typebox";
+import Schema from "typebox/schema";
 import type {
   FetchTrigger,
   WebSubStatus,
@@ -9,17 +12,58 @@ import {
   isNoAnswerError,
 } from "#platform/http/http-deferred-error.ts";
 import type { RedirectMap } from "#features/feeds/redirect-map.ts";
-import { parseFeedDocument } from "#features/feeds/feed-document.ts";
 import {
+  feedFormat,
+  parseFeedDocument,
+} from "#features/feeds/feed-document.ts";
+import {
+  type FeedMapperInput,
   feedHomeUrl,
   mapFeedToArticles,
   mapFeedToPreview,
 } from "#features/feeds/feed-mapper.ts";
+import { lastSeenBumpThrottleHours } from "#features/feeds/retention.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { discoverWebSub } from "#features/feeds/websub.ts";
 import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
+import { decodeXml } from "#shared/util/decode-body.ts";
 import { httpStatusFailure } from "#shared/util/fetch-failure.ts";
+
+const jsonHubsPattern = /"hubs"\s*:/u;
+const jsonFeedHubsCheck = Schema.Compile(
+  Type.Object(
+    {
+      hubs: Type.Array(
+        Type.Object(
+          {
+            type: Type.Optional(Type.Unknown()),
+            url: Type.Optional(Type.Unknown()),
+          },
+          { additionalProperties: true },
+        ),
+      ),
+    },
+    { additionalProperties: true },
+  ),
+);
+
+function extractJsonFeedHubUrl(text: string): string | undefined {
+  if (!jsonHubsPattern.test(text)) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!jsonFeedHubsCheck.Check(parsed)) return undefined;
+    for (const hub of parsed.hubs) {
+      if (hub.type === "WebSub" && typeof hub.url === "string") {
+        return hub.url;
+      }
+    }
+  } catch {}
+  return undefined;
+}
+
+const sha256Hex = (data: ArrayBuffer): string =>
+  createHash("sha256").update(new Uint8Array(data)).digest("hex");
 
 export class FeedParser {
   constructor(
@@ -28,7 +72,10 @@ export class FeedParser {
     private readonly sourcesDataService: Pick<
       SourcesDataService,
       "failSource" | "updateSourceUrl"
-    >,
+    > &
+      Partial<
+        Pick<SourcesDataService, "canSkipUnchangedBody" | "successSource">
+      >,
     private readonly webSubSubscriber: Pick<
       WebSubSubscriber,
       "subscribe" | "wants"
@@ -38,6 +85,7 @@ export class FeedParser {
 
   public async parseSource(source: {
     id: number;
+    lastBodyHash?: null | string;
     skipCache?: boolean;
     subscriberCount?: number;
     trigger?: FetchTrigger;
@@ -45,13 +93,42 @@ export class FeedParser {
     websubStatus?: WebSubStatus;
   }) {
     try {
-      const { cached, feed, finalUrl, freshUntil, websub } =
-        await this.parseUrl(source.url, {
+      const wantsWebSub = this.webSubSubscriber.wants(source.websubStatus);
+      const { cached, data, finalUrl, freshUntil, headers } =
+        await this.fetchFeed(source.url, {
           priority: "background",
           skipCache: source.skipCache,
           subscribers: source.subscriberCount,
-          websub: this.webSubSubscriber.wants(source.websubStatus),
         });
+      const bodyHash = sha256Hex(data);
+
+      if (
+        !wantsWebSub &&
+        source.lastBodyHash === bodyHash &&
+        this.sourcesDataService.canSkipUnchangedBody &&
+        this.sourcesDataService.successSource &&
+        (await this.sourcesDataService.canSkipUnchangedBody(
+          source.id,
+          lastSeenBumpThrottleHours,
+        ))
+      ) {
+        await this.sourcesDataService.successSource(source.id, {
+          cached,
+          notBefore: freshUntil ? new Date(freshUntil) : undefined,
+          observedAt: new Date(),
+          trigger: source.trigger ?? "poll",
+        });
+        return;
+      }
+
+      const { feed, text, websubHubUrl } = parseFeedDocument(
+        data,
+        headers.get("content-type"),
+        finalUrl,
+      );
+      const websub = wantsWebSub
+        ? discoverWebSub(headers, text, finalUrl, websubHubUrl)
+        : undefined;
 
       if (websub) await this.webSubSubscriber.subscribe(source.id, websub);
 
@@ -59,6 +136,7 @@ export class FeedParser {
         source.id,
         mapFeedToArticles(feed, source.url, { baseUrl: finalUrl }),
         {
+          bodyHash,
           cached,
           freshUntil,
           homeUrl: feedHomeUrl(feed, finalUrl),
@@ -83,7 +161,7 @@ export class FeedParser {
   ): Promise<void> {
     if (!this.webSubSubscriber.wants(websubStatus)) return;
     try {
-      const { websub } = await this.parseUrl(url);
+      const { websub } = await this.parseUrl(url, { metadataOnly: true });
       if (websub) await this.webSubSubscriber.subscribe(sourceId, websub);
     } catch (error) {
       console.error(
@@ -113,16 +191,75 @@ export class FeedParser {
   public async parseUrl(
     originalUrl: string,
     {
+      metadataOnly = false,
       priority = "interactive",
       skipCache = false,
       subscribers,
       websub = true,
     }: {
+      metadataOnly?: boolean;
       priority?: Priority;
       skipCache?: boolean | undefined;
       subscribers?: number | undefined;
       websub?: boolean;
     } = {},
+  ) {
+    const { cached, data, finalUrl, freshUntil, headers } =
+      await this.fetchFeed(originalUrl, {
+        priority,
+        skipCache,
+        subscribers,
+      });
+    if (metadataOnly) {
+      const contentType = headers.get("content-type");
+      const text = decodeXml(new Uint8Array(data), contentType);
+      const jsonFeedHubUrl =
+        feedFormat(text, contentType) === "json"
+          ? extractJsonFeedHubUrl(text)
+          : undefined;
+      const emptyFeed: FeedMapperInput = {
+        description: null,
+        items: [],
+        title: null,
+        url: finalUrl,
+      };
+      return {
+        cached,
+        feed: emptyFeed,
+        finalUrl,
+        freshUntil,
+        websub: websub
+          ? discoverWebSub(headers, text, finalUrl, jsonFeedHubUrl)
+          : undefined,
+      };
+    }
+    const { feed, text, websubHubUrl } = parseFeedDocument(
+      data,
+      headers.get("content-type"),
+      finalUrl,
+    );
+    return {
+      cached,
+      feed,
+      finalUrl,
+      freshUntil,
+      websub: websub
+        ? discoverWebSub(headers, text, finalUrl, websubHubUrl)
+        : undefined,
+    };
+  }
+
+  private async fetchFeed(
+    originalUrl: string,
+    {
+      priority,
+      skipCache = false,
+      subscribers,
+    }: {
+      priority: Priority;
+      skipCache?: boolean | undefined;
+      subscribers?: number | undefined;
+    },
   ) {
     const fetchedUrl = await this.redirectMap.resolveUrl(originalUrl);
     const response = await this.httpClient.get(fetchedUrl, {
@@ -147,19 +284,12 @@ export class FeedParser {
         await rememberRedirect(originalUrl, finalUrl);
       }
     }
-    const { feed, text, websubHubUrl } = parseFeedDocument(
-      response.data,
-      response.headers.get("content-type"),
-      finalUrl,
-    );
     return {
       cached: response.cached,
-      feed,
+      data: response.data,
       finalUrl,
       freshUntil: response.freshUntil,
-      websub: websub
-        ? discoverWebSub(response.headers, text, finalUrl, websubHubUrl)
-        : undefined,
+      headers: response.headers,
     };
   }
 }

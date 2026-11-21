@@ -13,7 +13,11 @@ import {
 } from "#shared/contracts/responses.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
 import { todayWindowHours } from "#shared/contracts/limits.ts";
-import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
+import {
+  deleteTraceHeader,
+  replayHeader,
+  unreadCountsHeader,
+} from "#shared/contracts/headers.ts";
 
 type ArticleServices = Pick<
   typeof feeds,
@@ -96,8 +100,14 @@ export async function deleteArticlesHandler(
       userId: user.id,
     }),
   );
-  await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(removedArticlesResponse, articleIds);
+  const unreadCounts = await userSourcesDataService.recomputeUnreadCounts(
+    sourceIds,
+    user.id,
+  );
+  const response = json(removedArticlesResponse, articleIds);
+  if (unreadCounts !== undefined)
+    response.headers.set(unreadCountsHeader, JSON.stringify(unreadCounts));
+  return response;
 }
 
 export async function patchArticlesHandler(
@@ -116,6 +126,12 @@ export async function patchArticlesHandler(
       user.id,
       body.read,
     );
-  await userSourcesDataService.recomputeUnreadCounts(sourceIds, user.id);
-  return json(removedArticlesResponse, articleIds);
+  const unreadCounts = await userSourcesDataService.recomputeUnreadCounts(
+    sourceIds,
+    user.id,
+  );
+  const response = json(removedArticlesResponse, articleIds);
+  if (unreadCounts !== undefined)
+    response.headers.set(unreadCountsHeader, JSON.stringify(unreadCounts));
+  return response;
 }

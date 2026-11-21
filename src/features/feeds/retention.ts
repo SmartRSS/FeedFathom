@@ -154,15 +154,12 @@ async function deleteUnreachableRows(
   const articlesBeforeSubscription = drizzleConnection
     .select({ id: articles.id })
     .from(articles)
-    .leftJoin(earliestSubs, eq(articles.sourceId, earliestSubs.sourceId))
+    .innerJoin(earliestSubs, eq(articles.sourceId, earliestSubs.sourceId))
     .where(
-      and(
-        isNotNull(earliestSubs.sourceId),
-        not(
-          subscriptionSeesArticle(
-            articles.lastSeenInFeedAt,
-            earliestSubs.earliestSubscription,
-          ),
+      not(
+        subscriptionSeesArticle(
+          articles.lastSeenInFeedAt,
+          earliestSubs.earliestSubscription,
         ),
       ),
     );

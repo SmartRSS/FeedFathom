@@ -6,6 +6,9 @@ import type * as reader from "#features/reader/services.ts";
 
 const heartbeatMs = 25_000;
 export const refreshMs = 60_000;
+const encoder = new TextEncoder();
+const heartbeatChunk = encoder.encode(": heartbeat\n\n");
+const connectedChunk = encoder.encode("retry: 10000\n: connected\n\n");
 
 type Every = (ms: number, tick: () => Promise<void> | void) => () => void;
 const every: Every = (ms, tick) => {
@@ -35,12 +38,14 @@ export async function getEventsHandler(
     await userSourcesDataService.getUserSourceIds(user.id),
   );
   server?.timeout(request, 0);
-  const encoder = new TextEncoder();
   let stop: (() => void) | undefined;
   const body = new ReadableStream<Uint8Array>({
     cancel: () => stop?.(),
     start(controller) {
       let closed = false;
+      const sendBytes = (chunk: Uint8Array) => {
+        if (!closed) controller.enqueue(chunk);
+      };
       const send = (chunk: string) => {
         if (!closed) controller.enqueue(encoder.encode(chunk));
       };
@@ -57,7 +62,7 @@ export async function getEventsHandler(
         },
       });
       const stopHeartbeat = schedule(heartbeatMs, () =>
-        send(": heartbeat\n\n"),
+        sendBytes(heartbeatChunk),
       );
       const stopRefresh = schedule(refreshMs, async () => {
         try {
@@ -87,7 +92,7 @@ export async function getEventsHandler(
       request.signal.addEventListener("abort", () => stop?.(), {
         once: true,
       });
-      send("retry: 10000\n: connected\n\n");
+      sendBytes(connectedChunk);
     },
   });
   return new Response(body, {

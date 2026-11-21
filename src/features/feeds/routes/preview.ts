@@ -7,6 +7,13 @@ import { errorResponse, previewResponse } from "#shared/contracts/responses.ts";
 import { extractArticle } from "#features/feeds/extract-article.ts";
 import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 
+const previewSanitizeSliceMs = 4;
+
+const nextTurn = () =>
+  new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+
 export async function getPreviewHandler(
   {
     query: decoded,
@@ -36,15 +43,25 @@ export async function getPreviewHandler(
       400,
     );
   await feedPreviewCache.save(user.id, decoded.feedUrl, source);
-  return json(previewResponse, {
-    articles: source.articles.map((article) => ({
+  const articles = [];
+  let sliceStart = performance.now();
+  for (const article of source.articles) {
+    if (performance.now() - sliceStart >= previewSanitizeSliceMs) {
+      // eslint-disable-next-line no-await-in-loop -- Yield between sanitization slices to keep interactive requests responsive.
+      await nextTurn();
+      sliceStart = performance.now();
+    }
+    articles.push({
       author: article.author,
       content: extractArticle(article.content),
       enclosures: article.enclosures,
       publishedAt: article.publishedAt,
       title: article.title,
       url: article.url,
-    })),
+    });
+  }
+  return json(previewResponse, {
+    articles,
     description: source.description,
     feedUrl: source.feedUrl,
     link: source.link,

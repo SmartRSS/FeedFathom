@@ -79,7 +79,7 @@ const configSchema = Type.Object(
     WORKER_CONCURRENCY: integerString("WORKER_CONCURRENCY", "25", 1, 128),
     DB_POOL_MAX: integerString("DB_POOL_MAX", "10", 1, 100),
     LOCK_DURATION: integerString("LOCK_DURATION", "60", 1, 86_400),
-    CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "20", 20, 2_592_000),
+    CLEANUP_INTERVAL: integerString("CLEANUP_INTERVAL", "3600", 20, 2_592_000),
     USER_DORMANT_AFTER_DAYS: integerString(
       "USER_DORMANT_AFTER_DAYS",
       "365",

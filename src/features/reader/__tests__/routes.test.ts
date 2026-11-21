@@ -1,3 +1,4 @@
+import { unreadCountsHeader } from "#shared/contracts/headers.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { expect, test } from "bun:test";
 import {
@@ -142,6 +143,7 @@ test("scopes article detail to the subscriber and always returns Feed content", 
     id: 7,
     lastSeenInFeedAt: new Date(),
     publishedAt: new Date(),
+    sanitizedVersion: 0,
     sourceId: 3,
     title: "Visible article",
     updatedAt: null,
@@ -203,6 +205,7 @@ test("marks articles read and recomputes the badge from the store", async () => 
     userId,
   ) => {
     recomputed.push([sourceIds, userId]);
+    return { "3": 4 };
   };
   const app = await appFor(dependencies);
   const patch = (body: unknown) =>
@@ -217,6 +220,7 @@ test("marks articles read and recomputes the badge from the store", async () => 
   });
 
   expect(read.status).toBe(200);
+  expect(read.headers.get(unreadCountsHeader)).toBe('{"3":4}');
   expect(await read.json()).toEqual([11, 12]);
   expect(unread.status).toBe(200);
   expect(malformed.status).toBe(422);
