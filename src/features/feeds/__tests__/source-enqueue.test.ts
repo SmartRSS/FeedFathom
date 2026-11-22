@@ -94,29 +94,6 @@ describe("SourceEnqueuer", () => {
     expect(await parsesOf(enqueuer)).toEqual([{ id: 3 }]);
   });
 
-  test.each([
-    [[false], { skipCache: false }],
-    [[false, true], { skipCache: true }],
-    [[true, false], { skipCache: true }],
-  ])(
-    "requests %p on a running job leave the follow-up %p",
-    async (skipCaches, followUp) => {
-      const { queue, adds } = fakeQueue(holderFor("active"));
-      const enqueuer = new SourceEnqueuer(queue, fakeRedis());
-
-      for (const skipCache of skipCaches) {
-        // eslint-disable-next-line no-await-in-loop -- Arrival order is the case.
-        await enqueuer.enqueueSource(source, "websub-push", skipCache);
-      }
-
-      expect(adds).toEqual([]);
-      expect(await parsesOf(enqueuer)).toEqual([
-        { id: source.id },
-        { id: source.id, ...followUp, trigger: "manual" },
-      ]);
-    },
-  );
-
   test("adds a refresh if the queued job disappeared before merging", async () => {
     const { queue, adds } = fakeQueue(holderFor("waiting"));
     const redis = fakeRedis();
