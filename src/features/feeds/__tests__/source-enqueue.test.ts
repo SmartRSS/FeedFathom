@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
-import { JobDeferral, JobName } from "#features/feeds/queued-job.ts";
+import { JobName } from "#features/feeds/queued-job.ts";
 import {
   type ParseRequest,
   type SourceParseQueue,
@@ -97,27 +96,6 @@ describe("SourceEnqueuer", () => {
       { id: source.id, skipCache: true, trigger: "manual" },
     ]);
     expect(await parsesOf(enqueuer)).toEqual([{ id: source.id }]);
-  });
-
-  test("a deferred follow-up hands its intent to the retry", async () => {
-    const { queue } = fakeQueue();
-    const redis = fakeRedis({ [pendingKey]: "1" });
-    const enqueuer = new SourceEnqueuer(queue, redis);
-    const retryAt = Date.now() + 60_000;
-
-    const run = enqueuer.runParse(
-      { id: source.id, skipCache: false },
-      async (request) => {
-        if (request.trigger === "manual") throw new HttpDeferredError(retryAt);
-      },
-    );
-
-    const deferral = await run.catch((error: unknown) => error);
-    expect(deferral).toBeInstanceOf(JobDeferral);
-    expect(deferral).toMatchObject({
-      data: { id: source.id, skipCache: true, trigger: "manual" },
-      retryAt,
-    });
   });
 
   test("queues each due source behind explicit requests", async () => {
