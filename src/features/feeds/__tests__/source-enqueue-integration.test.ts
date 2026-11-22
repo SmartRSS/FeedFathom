@@ -4,6 +4,7 @@ import { Job, Queue } from "bullmq";
 import Redis from "ioredis";
 import {
   type ParseRequest,
+  type SourceParseJobHandle,
   parseSourceJobId,
   pendingParseRefreshKey,
   SourceEnqueuer,
@@ -139,6 +140,37 @@ describe("queued refresh merging with BullMQ", () => {
 
     expect((await queue.getJob(jobId))?.data.skipCache).toBeUndefined();
     expect(await followUp()).toMatchObject({ skipCache: true });
+  });
+
+  test("a refresh whose queued job finished before the merge queues a new one", async () => {
+    await queue.add(JobName.ParseSource, source, { jobId });
+
+    const staleHandle: SourceParseJobHandle = {
+      async getState() {
+        return "waiting";
+      },
+    };
+    const vanishingQueue = {
+      add: queue.add.bind(queue),
+      addBulk: queue.addBulk.bind(queue),
+      async getJob() {
+        await queue.remove(jobId);
+        return staleHandle;
+      },
+      toKey: queue.toKey,
+    };
+
+    await new SourceEnqueuer(vanishingQueue, connection).enqueueSource(source);
+
+    const job = await queue.getJob(jobId);
+    expect(job?.data).toEqual({
+      ...source,
+      skipCache: true,
+      trigger: "manual",
+    });
+    expect(await job?.getState()).toBe("waiting");
+    expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(1);
+    expect(await followUp()).toBeNull();
   });
 
   test("a paused queue behaves like a waiting merge", async () => {

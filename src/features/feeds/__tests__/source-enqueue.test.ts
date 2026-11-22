@@ -3,7 +3,6 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { JobDeferral, JobName } from "#features/feeds/queued-job.ts";
 import {
   type ParseRequest,
-  type SourceParseJobHandle,
   type SourceParseQueue,
   type SourceParseRedis,
   parseSourceJobId,
@@ -31,12 +30,6 @@ const fakeRedis = (initial: Record<string, string> = {}) => {
   return redis;
 };
 
-const holderFor = (state: string): SourceParseJobHandle => ({
-  async getState() {
-    return state;
-  },
-});
-
 const parsesOf = async (enqueuer: SourceEnqueuer) => {
   const parsed: ParseRequest[] = [];
   await enqueuer.runParse({ id: 3 }, async (request) => {
@@ -50,7 +43,7 @@ describe("SourceEnqueuer", () => {
   const jobId = parseSourceJobId(source.id);
   const pendingKey = pendingParseRefreshKey(source.id);
 
-  const fakeQueue = (holder: SourceParseJobHandle | null = null) => {
+  const fakeQueue = () => {
     const adds: unknown[] = [];
     const queue: SourceParseQueue = {
       async add(name, data, options) {
@@ -63,7 +56,7 @@ describe("SourceEnqueuer", () => {
       },
       async getJob(id) {
         expect(id).toBe(jobId);
-        return holder;
+        return null;
       },
       toKey(name) {
         return `bull:tasks:${name}`;
@@ -73,7 +66,7 @@ describe("SourceEnqueuer", () => {
   };
 
   test("adds directly when no job holds the source's id", async () => {
-    const { queue, adds } = fakeQueue(null);
+    const { queue, adds } = fakeQueue();
     const redis = fakeRedis();
     const enqueuer = new SourceEnqueuer(queue, redis);
 
@@ -94,18 +87,8 @@ describe("SourceEnqueuer", () => {
     expect(await parsesOf(enqueuer)).toEqual([{ id: 3 }]);
   });
 
-  test("adds a refresh if the queued job disappeared before merging", async () => {
-    const { queue, adds } = fakeQueue(holderFor("waiting"));
-    const redis = fakeRedis();
-    redis.eval = async () => 0;
-
-    await new SourceEnqueuer(queue, redis).enqueueSource(source);
-
-    expect(adds).toHaveLength(1);
-  });
-
   test("a run answers the requests that piled up during it once", async () => {
-    const { queue } = fakeQueue(null);
+    const { queue } = fakeQueue();
     const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
 
@@ -117,7 +100,7 @@ describe("SourceEnqueuer", () => {
   });
 
   test("a deferred follow-up hands its intent to the retry", async () => {
-    const { queue } = fakeQueue(null);
+    const { queue } = fakeQueue();
     const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
     const retryAt = Date.now() + 60_000;
@@ -138,7 +121,7 @@ describe("SourceEnqueuer", () => {
   });
 
   test("queues each due source behind explicit requests", async () => {
-    const { queue, adds } = fakeQueue(null);
+    const { queue, adds } = fakeQueue();
     await new SourceEnqueuer(queue, fakeRedis()).enqueueDueSources([source]);
     expect(adds).toEqual([
       [
