@@ -42,6 +42,7 @@ check() {
     fi
     echo "FAIL  $config was expected to violate $expected (TLC exit $status, log $log)"
   fi
+  grep '^Error:' "$log" || true
   tail -n 40 "$log"
   failed=1
 }
