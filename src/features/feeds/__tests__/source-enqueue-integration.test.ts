@@ -24,10 +24,11 @@ describe("queued refresh merging with BullMQ", () => {
   const enqueuer = new SourceEnqueuer(queue, connection);
   const followUp = async () => {
     const parsed: ParseRequest[] = [];
+    const pending = await connection.exists(pendingKey);
     await enqueuer.runParse(source, async (request) => {
       parsed.push(request);
     });
-    return parsed[1] ?? null;
+    return pending === 1 ? (parsed[0] ?? null) : null;
   };
 
   beforeEach(async () => {

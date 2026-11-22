@@ -17,6 +17,9 @@ const fakeRedis = (initial: Record<string, string> = {}) => {
     async eval() {
       return 1;
     },
+    async exists(key) {
+      return store.has(key) ? 1 : 0;
+    },
     async getdel(key) {
       const value = store.get(key) ?? null;
       store.delete(key);
@@ -72,7 +75,7 @@ describe("SourceEnqueuer", () => {
     return { adds, queue };
   };
 
-  test("adds directly when no job holds the source's id", async () => {
+  test("marks and adds when no job holds the source's id", async () => {
     const { queue, adds } = fakeQueue(null);
     const redis = fakeRedis();
     const enqueuer = new SourceEnqueuer(queue, redis);
@@ -91,7 +94,9 @@ describe("SourceEnqueuer", () => {
         },
       ],
     ]);
-    expect(await parsesOf(enqueuer)).toEqual([{ id: 3 }]);
+    expect(await parsesOf(enqueuer)).toEqual([
+      { id: 3, skipCache: true, trigger: "manual" },
+    ]);
   });
 
   test.each([
@@ -99,8 +104,8 @@ describe("SourceEnqueuer", () => {
     [[false, true], { skipCache: true }],
     [[true, false], { skipCache: true }],
   ])(
-    "requests %p on a running job leave the follow-up %p",
-    async (skipCaches, followUp) => {
+    "requests %p on a running job leave the next run %p",
+    async (skipCaches, next) => {
       const { queue, adds } = fakeQueue(holderFor("active"));
       const enqueuer = new SourceEnqueuer(queue, fakeRedis());
 
@@ -109,10 +114,9 @@ describe("SourceEnqueuer", () => {
         await enqueuer.enqueueSource(source, "websub-push", skipCache);
       }
 
-      expect(adds).toEqual([]);
+      expect(adds).toHaveLength(skipCaches.length);
       expect(await parsesOf(enqueuer)).toEqual([
-        { id: source.id },
-        { id: source.id, ...followUp, trigger: "manual" },
+        { id: source.id, ...next, trigger: "manual" },
       ]);
     },
   );
@@ -127,19 +131,42 @@ describe("SourceEnqueuer", () => {
     expect(adds).toHaveLength(1);
   });
 
-  test("a run answers the requests that piled up during it once", async () => {
+  test("a run answers the requests that piled up before it once", async () => {
     const { queue } = fakeQueue(null);
     const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
 
     expect(await parsesOf(enqueuer)).toEqual([
-      { id: source.id },
       { id: source.id, skipCache: true, trigger: "manual" },
     ]);
     expect(await parsesOf(enqueuer)).toEqual([{ id: source.id }]);
   });
 
-  test("a deferred follow-up hands its intent to the retry", async () => {
+  test("requeues the source only while a refresh waits on its marker", async () => {
+    const { queue, adds } = fakeQueue(null);
+    const redis = fakeRedis();
+    const enqueuer = new SourceEnqueuer(queue, redis);
+
+    await enqueuer.requeuePendingRefresh(source.id);
+    expect(adds).toEqual([]);
+
+    await redis.set(pendingKey, "0");
+    await enqueuer.requeuePendingRefresh(source.id);
+    expect(adds).toEqual([
+      [
+        JobName.ParseSource,
+        { id: source.id },
+        {
+          jobId,
+          lifo: true,
+          removeOnComplete: { count: 0 },
+          removeOnFail: { count: 0 },
+        },
+      ],
+    ]);
+  });
+
+  test("a deferred parse hands the refresh it took to the retry", async () => {
     const { queue } = fakeQueue(null);
     const redis = fakeRedis({ [pendingKey]: "1" });
     const enqueuer = new SourceEnqueuer(queue, redis);
@@ -147,8 +174,8 @@ describe("SourceEnqueuer", () => {
 
     const run = enqueuer.runParse(
       { id: source.id, skipCache: false },
-      async (request) => {
-        if (request.trigger === "manual") throw new HttpDeferredError(retryAt);
+      async () => {
+        throw new HttpDeferredError(retryAt);
       },
     );
 

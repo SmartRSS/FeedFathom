@@ -250,7 +250,7 @@ test("moves deferred validated jobs with their BullMQ token", async () => {
   expect(delays).toEqual([[retryAt, "worker-token"]]);
 });
 
-test("folds requests that arrived mid-run into one more parse", async () => {
+test("folds a refresh waiting on the marker into the parse", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const { process } = await startWorker({
     feedParser: strictFake<FeedParser>({
@@ -263,26 +263,12 @@ test("folds requests that arrived mid-run into one more parse", async () => {
 
   await process(parseJob());
 
-  expect(parsed).toEqual([
-    [undefined, undefined],
-    [true, "manual"],
-  ]);
+  expect(parsed).toEqual([[true, "manual"]]);
 });
 
-test("a deferred parse leaves pending refreshes to its retry", async () => {
-  const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
-  const { process } = await startWorker({
-    feedParser: deferredParser(),
-    sourceEnqueuer: enqueuer,
-  });
-
-  await expect(process(parseJob())).rejects.toBeInstanceOf(DelayedError);
-  expect(reads.count).toBe(0);
-});
-
-test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", async () => {
+test("a deferred parse keeps the refresh it took until a retry fulfils it", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
-  const outcomes = ["ok", "defer", "defer", "ok"];
+  const outcomes = ["defer", "defer", "ok"];
   const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
   const { process } = await startWorker({
     feedParser: strictFake<FeedParser>({
@@ -324,12 +310,11 @@ test("a deferred follow-up keeps its consumed bypass until a retry fulfils it", 
 
   await process(deferrable);
   expect(parsed).toEqual([
-    [false, undefined],
     [true, "manual"],
     [true, "manual"],
     [true, "manual"],
   ]);
-  expect(reads.count).toBe(2);
+  expect(reads.count).toBe(3);
   expect(events).toEqual(["update", "delay", "delay"]);
 });
 
