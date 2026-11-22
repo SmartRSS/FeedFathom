@@ -12,7 +12,6 @@ import {
 } from "../sw-protocol.ts";
 
 const ORIGIN = "https://feedfathom.test";
-const API_CACHE = `${apiCachePrefix}v7`;
 const SHELL_CACHE = "shell-v7";
 const built = await Bun.build({
   entrypoints: [`${import.meta.dir}/../sw.ts`],
@@ -106,13 +105,13 @@ const loadServiceWorker = (
     method: string,
     headers: Headers,
   ) => Response | Promise<Response>,
+  stores = new Map<string, Map<string, Response>>(),
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
   let onMessage: ((event: MessageEvent) => void) | undefined;
   let onActivate:
     | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
     | undefined;
-  const stores = new Map<string, Map<string, Response>>();
   const store = (name: string) => {
     const existing = stores.get(name);
     if (existing) return existing;
@@ -185,6 +184,7 @@ const loadServiceWorker = (
       keys: async () => [...stores.keys()],
       open: async (name: string) => cacheOver(store(name)),
     },
+    crypto,
     fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
       const method =
@@ -273,16 +273,28 @@ const loadServiceWorker = (
     await background;
     return body;
   };
+  const post = async (data: unknown) => {
+    const pending: Promise<unknown>[] = [];
+    onMessage?.({ data, waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+  };
   const keepOffline = async (articles: (number | OfflineRow)[]) => {
     listed = articles.map((row) =>
       typeof row === "number" ? offlineRow(row) : row,
     );
-    const pending: Promise<unknown>[] = [];
-    onMessage?.({
-      data: { sources: articles.length > 0 ? [3] : [], type: "offline-sync" },
-      waitUntil: (promise) => pending.push(promise),
+    await post({
+      sources: articles.length > 0 ? [3] : [],
+      type: "offline-sync",
     });
-    await Promise.all(pending);
+  };
+  const liveApiCache = () => {
+    const names = [...stores.keys()].filter((name) =>
+      name.startsWith(apiCachePrefix),
+    );
+    const [name] = names;
+    if (names.length !== 1 || name === undefined)
+      throw new Error(`expected one live API cache, found ${names.join(", ")}`);
+    return store(name);
   };
   const login = () =>
     dispatch(new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }))
@@ -309,7 +321,14 @@ const loadServiceWorker = (
   };
   return {
     activate,
+    apiBodies: () =>
+      Promise.all(
+        [...live(apiCachePrefix).values()].map((response) =>
+          response.clone().text(),
+        ),
+      ),
     apiEntries: () => live(apiCachePrefix),
+    cacheStorage: stores,
     dispatch,
     holdListing,
     keepOffline,
@@ -318,6 +337,7 @@ const loadServiceWorker = (
     login,
     messages,
     navigate,
+    post,
     queue,
     remove,
     removeSource,
@@ -325,6 +345,8 @@ const loadServiceWorker = (
     requests,
     seed: (name: string, path: string, response: Response) =>
       store(name).set(path, response),
+    seedApi: (path: string, response: Response) =>
+      liveApiCache().set(path, response),
     shellEntries: () => live("shell-"),
   };
 };
@@ -354,16 +376,36 @@ test("a favicon is fetched once and then served from the cache", async () => {
   ).toHaveLength(1);
 });
 
-test("activation drops favicons cached without headers once, keeping offline articles", async () => {
-  const sw = loadServiceWorker(network);
-  sw.seed(API_CACHE, "/api/favicon/1?v=old", new Response("icon"));
-  sw.seed(API_CACHE, "/sw-offline-article?article=1", new Response("body"));
+test("activation drops the v7 cache", async () => {
+  const stored = new Map([
+    [
+      `${apiCachePrefix}v7`,
+      new Map([
+        ["/api/favicon/1?v=old", new Response("icon")],
+        ["/sw-offline-article?article=1", new Response("body")],
+      ]),
+    ],
+  ]);
+  const sw = loadServiceWorker(network, stored);
   await sw.activate();
-  expect(sw.apiEntries().has("/api/favicon/1?v=old")).toBe(false);
-  expect(sw.apiEntries().has("/sw-offline-article?article=1")).toBe(true);
-  sw.seed(API_CACHE, "/api/favicon/1?v=new", new Response("icon"));
-  await sw.activate();
-  expect(sw.apiEntries().has("/api/favicon/1?v=new")).toBe(true);
+  expect([...stored.keys()]).not.toContain(`${apiCachePrefix}v7`);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+});
+
+test("a restarted worker keeps the API cache it was using", async () => {
+  let online = true;
+  const offlineAware = (path: string) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    return articleNetwork(path);
+  };
+  const sw = loadServiceWorker(offlineAware);
+  await sw.keepOffline([2]);
+  const restarted = loadServiceWorker(offlineAware, sw.cacheStorage);
+  online = false;
+  expect(await restarted.loadArticle(2)).toMatchObject({
+    path: "/api/article?article=2",
+  });
+  expect(restarted.requests).toEqual([]);
 });
 
 test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
@@ -441,9 +483,8 @@ test("a tree preloaded before a sign-in is not served after it", async () => {
   await sw.navigate("/").background;
   await sw.login();
   expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
+  expect((await sw.apiBodies()).join("\n")).not.toContain('"account":"a"');
 });
-
-const keepers = ["/sw-offline-article?article=1", "/sw-favicon-headers-purged"];
 
 test("a deploy's assets, lazy chunks included, are dropped once a newer shell is served", async () => {
   let bundle = "old";
@@ -459,7 +500,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
     [...sw.shellEntries().keys()].filter((key) => key.startsWith("/assets/"));
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-old.js`)).response;
-  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
   bundle = "new";
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-new.js`)).response;
@@ -469,7 +509,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
     "/assets/index-new.js",
     "/assets/options-new.js",
   ]);
-  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
   expect(await sw.shellEntries().get("/")?.text()).toBe(shellHtml("index-new"));
 });
 
@@ -511,7 +550,7 @@ test("a tree load drops the favicons it no longer names", async () => {
       (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
     ),
   );
-  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
+  sw.seedApi("/sw-offline-article?article=1", new Response("body"));
   current = { tree: [{ favicon: "/api/favicon/2?v=new", type: "source" }] };
   await sw.loadTree();
   await sw.dispatch(new Request(`${ORIGIN}/api/favicon/2?v=new`)).response;
@@ -520,7 +559,7 @@ test("a tree load drops the favicons it no longer names", async () => {
       key.startsWith("/api/favicon/"),
     ),
   ).toEqual(["/api/favicon/2?v=new"]);
-  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
+  expect(sw.apiEntries().has("/sw-offline-article?article=1")).toBe(true);
 });
 
 test("each API path keeps only its 20 newest query strings", async () => {
@@ -551,8 +590,7 @@ test("a just-prefetched article opens without a network round trip", async () =>
 test("an article cached over a minute ago goes to the network first", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const prefetched = await sw.loadArticle(2);
-  sw.seed(
-    API_CACHE,
+  sw.seedApi(
     "/api/article?article=2",
     Response.json(prefetched, {
       headers: { "X-SW-Fetched-At": String(Date.now() - 61_000) },
@@ -575,6 +613,37 @@ test("signing in drops articles cached under the previous account", async () => 
   account = "b";
   await sw.login();
   expect(await sw.loadArticle(2)).toMatchObject({ account: "b" });
+  expect((await sw.apiBodies()).join("\n")).not.toContain('"account":"a"');
+});
+
+test("an account change made outside the worker drops what it cached", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  await sw.loadArticle(2);
+  await sw.loadTree();
+  await sw.post({ type: "account-changed" });
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+  const cachedTree = await sw.dispatch(new Request(`${ORIGIN}/api/tree?cached`))
+    .response;
+  expect(cachedTree.status).toBe(504);
+});
+
+test("a response in flight when account-changed arrives is not stored", async () => {
+  let answer: (() => void) | undefined;
+  const sw = loadServiceWorker((path) => {
+    if (path !== "/api/article?article=2") return articleNetwork(path);
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(Response.json({ account: "a", path }));
+    });
+  });
+  const requested = sw.requested("/api/article?article=2");
+  const inFlight = sw.loadArticle(2);
+  await requested;
+  await sw.post({ type: "account-changed" });
+  answer?.();
+  await inFlight;
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+  await sw.loadArticle(3);
+  expect([...sw.apiEntries().keys()]).toEqual(["/api/article?article=3"]);
 });
 
 test("opening 300 articles keeps only the newest 200 cached", async () => {

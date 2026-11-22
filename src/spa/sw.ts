@@ -21,6 +21,7 @@ import {
 import {
   queueAdd,
   queueAll,
+  queueClear,
   queueDelete,
   type QueueEntry,
   type QueuedMutation,
@@ -29,7 +30,6 @@ import {
   apiCachePrefix,
   cachedTreeQuery,
   cursorPublishedAtHeader,
-  forgetAccountData,
   isPageMessage,
   offlineArticleLimit,
   offlineArticleMaxAgeDays,
@@ -88,9 +88,8 @@ function uncheckedJson<T>(text: string): T {
   return JSON.parse(text);
 }
 
-const CACHE_VERSION = "v7";
-const SHELL_CACHE = `shell-${CACHE_VERSION}`;
-const API_CACHE = `${apiCachePrefix}${CACHE_VERSION}`;
+const SHELL_CACHE = "shell-v7";
+const API_SCOPE_PREFIX = `${apiCachePrefix}v8-`;
 const SHELL_REQUEST_INIT: RequestInit = {
   credentials: "same-origin",
   headers: { Accept: "text/html" },
@@ -139,6 +138,57 @@ async function putShell(cache: Cache, response: Response): Promise<string[]> {
   return assetUrls;
 }
 
+type CacheScope = {
+  readonly name: string;
+  prunedFavicons?: string;
+  treePreload?: Promise<Response> | undefined;
+};
+
+let liveScope: CacheScope | undefined;
+
+const newScope = (): CacheScope => ({
+  name: `${API_SCOPE_PREFIX}${crypto.randomUUID()}`,
+});
+
+async function apiCacheNames() {
+  return (await caches.keys()).filter((name) =>
+    name.startsWith(apiCachePrefix),
+  );
+}
+
+async function adoptScope(): Promise<CacheScope> {
+  const names = await apiCacheNames();
+  const [only] = names;
+  const adopted =
+    names.length === 1 && only?.startsWith(API_SCOPE_PREFIX)
+      ? { name: only }
+      : undefined;
+  if (!adopted) await Promise.all(names.map((name) => caches.delete(name)));
+  const scope = adopted ?? newScope();
+  liveScope ??= scope;
+  return scope;
+}
+
+const adoption = adoptScope();
+
+async function currentScope(): Promise<CacheScope> {
+  return liveScope ?? (await adoption);
+}
+
+async function scopedCache(scope: CacheScope): Promise<Cache | undefined> {
+  return scope === liveScope ? caches.open(scope.name) : undefined;
+}
+
+const apiCache = () => currentScope().then(scopedCache);
+
+async function changeScope() {
+  liveScope = newScope();
+  const stale = (await apiCacheNames()).filter(
+    (name) => name !== liveScope?.name,
+  );
+  await Promise.all(stale.map((name) => caches.delete(name)));
+}
+
 worker.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -152,13 +202,13 @@ worker.addEventListener("install", (event) => {
 worker.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
+      await currentScope();
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((key) => key !== SHELL_CACHE && key !== API_CACHE)
+          .filter((key) => key !== SHELL_CACHE && key !== liveScope?.name)
           .map((key) => caches.delete(key)),
       );
-      await purgeHeaderlessFavicons();
       await worker.clients.claim();
       await flushQueue();
     })(),
@@ -168,14 +218,6 @@ worker.addEventListener("activate", (event) => {
 async function deleteWhere(cache: Cache, stale: (url: URL) => boolean) {
   const keys = (await cache.keys()).filter((key) => stale(new URL(key.url)));
   await Promise.all(keys.map((key) => cache.delete(key)));
-}
-
-const FAVICON_PURGE_MARKER = "/sw-favicon-headers-purged";
-async function purgeHeaderlessFavicons() {
-  const cache = await caches.open(API_CACHE);
-  if (await cache.match(FAVICON_PURGE_MARKER)) return;
-  await deleteWhere(cache, (url) => url.pathname.startsWith("/api/favicon/"));
-  await cache.put(FAVICON_PURGE_MARKER, new Response(""));
 }
 
 worker.addEventListener("sync", (event) => {
@@ -189,8 +231,6 @@ async function notifyClients(message: WorkerMessage) {
   // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Client.postMessage takes no target origin
   for (const client of clients) client.postMessage(message);
 }
-
-let accountChanges = 0;
 
 let replaying: Promise<void> = Promise.resolve();
 let replayPending = false;
@@ -295,25 +335,23 @@ async function queueableMutation(request: Request, path: keyof Removals) {
 async function cacheFirst(
   event: ExtendableEvent,
   request: Request,
-  cacheName: string,
+  opening: Promise<Cache | undefined>,
   init?: RequestInit,
 ) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+  const cache = await opening;
+  const cached = await cache?.match(request);
   if (cached) return cached;
   const response = await fetch(request, init);
-  if (response.ok) event.waitUntil(cache.put(request, response.clone()));
+  if (response.ok && cache)
+    event.waitUntil(cache.put(request, response.clone()));
   return response;
 }
 
 async function changeAccount(request: Request, signedOut: boolean) {
-  accountChanges++;
   const response = await fetch(request);
   if (response.ok) {
-    accountChanges++;
-    treePreload = undefined;
-    lastPrunedFavicons = undefined;
-    await forgetAccountData(signedOut);
+    await changeScope();
+    if (signedOut) await queueClear().catch(() => {});
     queueMayHaveEntries = true;
   }
   return response;
@@ -322,9 +360,11 @@ async function changeAccount(request: Request, signedOut: boolean) {
 async function networkFirst(
   event: ExtendableEvent,
   request: Request,
+  opening = apiCache(),
   network = fetch(request),
 ) {
-  const cache = await caches.open(API_CACHE);
+  const cache = await opening;
+  if (!cache) return network;
   try {
     const response = await network;
     if (response.ok) {
@@ -372,7 +412,8 @@ async function trimPath(cache: Cache, pathname: string, limit: number) {
 }
 
 async function recentArticleFirst(event: ExtendableEvent, request: Request) {
-  const cache = await caches.open(API_CACHE);
+  const cache = await apiCache();
+  if (!cache) return fetch(request);
   const downloaded = await cache.match(
     offlineArticleKey(new URL(request.url).searchParams.get("article")),
   );
@@ -453,20 +494,19 @@ async function listOfflineRows(sources: number[], signal: AbortSignal) {
 
 async function syncOfflineArticles(
   sync: number,
-  generation: number,
+  scope: Promise<CacheScope>,
   sources: number[],
   signal: AbortSignal,
 ) {
-  const current = () => sync === offlineSyncs && generation === accountChanges;
+  const current = () => sync === offlineSyncs;
   let articles: OfflineRow[];
   try {
     articles = await listOfflineRows(sources, signal);
   } catch {
     return;
   }
-  if (!current()) return;
-  const cache = await caches.open(API_CACHE);
-  if (!current()) return;
+  const cache = await scopedCache(await scope);
+  if (!cache || !current()) return;
   await (articles.length > 0
     ? cache.put(OFFLINE_LIST_KEY, Response.json(articles))
     : cache.delete(OFFLINE_LIST_KEY));
@@ -513,14 +553,18 @@ async function syncOfflineArticles(
 
 worker.addEventListener("message", (event) => {
   if (!isPageMessage(event.data)) return;
+  if (event.data.type === "account-changed") {
+    event.waitUntil(changeScope());
+    return;
+  }
   const { sources } = event.data;
-  const generation = accountChanges;
+  const scope = currentScope();
   const sync = ++offlineSyncs;
   offlineDownloads.abort();
   offlineDownloads = new AbortController();
   const { signal } = offlineDownloads;
   offlineQueue = offlineQueue
-    .then(() => syncOfflineArticles(sync, generation, sources, signal))
+    .then(() => syncOfflineArticles(sync, scope, sources, signal))
     .catch(() => {});
   event.waitUntil(offlineQueue);
 });
@@ -540,8 +584,8 @@ async function queuedRemovals() {
 }
 
 async function offlineArticleList(request: Request) {
-  const cache = await caches.open(API_CACHE);
-  const stored = await cache.match(OFFLINE_LIST_KEY);
+  const cache = await apiCache();
+  const stored = await cache?.match(OFFLINE_LIST_KEY);
   if (!stored) return undefined;
   const body = uncheckedJson<ArticlesRequest>(await request.text());
   if ((body.filter ?? "unread") !== "unread" || body.query) return undefined;
@@ -566,7 +610,7 @@ async function offlineArticleList(request: Request) {
     const since = Date.now() - todayWindowHours * 60 * 60_000;
     inScope = (row) => Date.parse(row.publishedAt) >= since;
   } else {
-    const storedTree = await cache.match("/api/tree");
+    const storedTree = await cache?.match("/api/tree");
     const tree = storedTree
       ? uncheckedJson<Static<typeof treeResponse>>(await storedTree.text())
       : undefined;
@@ -580,7 +624,7 @@ async function offlineArticleList(request: Request) {
     inScope = (row) => sources.has(row.sourceId);
   }
   const bodies = new Set(
-    (await cache.keys())
+    (await (cache?.keys() ?? []))
       .map((key) => new URL(key.url))
       .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH)
       .map((url) => Number(url.searchParams.get("article"))),
@@ -609,44 +653,47 @@ async function articleList(request: Request) {
   }
 }
 
-let treePreload: Promise<Response> | undefined;
-let lastPrunedFavicons: string | undefined;
-
 function treeFaviconUrls(node: TreeNode): string[] {
   if (node.type === "source") return node.favicon ? [node.favicon] : [];
   return node.children.flatMap(treeFaviconUrls);
 }
 
-async function pruneFavicons(response: Response) {
+async function pruneFavicons(scope: CacheScope, response: Response) {
   const { tree } = uncheckedJson<Partial<Static<typeof treeResponse>>>(
     await response.text(),
   );
   if (!Array.isArray(tree)) return;
   const named = new Set(tree.flatMap(treeFaviconUrls));
   const signature = [...named].toSorted().join("\n");
-  if (signature === lastPrunedFavicons) return;
+  if (signature === scope.prunedFavicons) return;
+  const cache = await scopedCache(scope);
+  if (!cache) return;
   await deleteWhere(
-    await caches.open(API_CACHE),
+    cache,
     (url) =>
       url.pathname.startsWith("/api/favicon/") &&
       !named.has(url.pathname + url.search),
   );
-  lastPrunedFavicons = signature;
+  scope.prunedFavicons = signature;
 }
 
-async function freshTree(
-  event: ExtendableEvent,
-  request: Request,
-  preload: Promise<Response> | undefined,
-) {
-  const response = await networkFirst(event, request, preload);
+async function freshTree(event: ExtendableEvent, request: Request) {
+  const scope = await currentScope();
+  const preload = scope.treePreload;
+  scope.treePreload = undefined;
+  const response = await networkFirst(
+    event,
+    request,
+    scopedCache(scope),
+    preload,
+  );
   if (response.ok)
-    event.waitUntil(pruneFavicons(response.clone()).catch(() => {}));
+    event.waitUntil(pruneFavicons(scope, response.clone()).catch(() => {}));
   return response;
 }
 
 async function cachedTree() {
-  const cached = await (await caches.open(API_CACHE)).match("/api/tree");
+  const cached = await (await apiCache())?.match("/api/tree");
   return cached ?? new Response(null, { status: 504 });
 }
 
@@ -687,9 +734,14 @@ async function shell(event: ExtendableEvent, path: string) {
   });
   event.waitUntil(revalidated.catch(() => {}));
   if (treePreloadPaths.test(path)) {
+    const scope = currentScope();
     const preload = fetch("/api/tree", { credentials: "same-origin" });
-    treePreload = preload;
     event.waitUntil(preload.catch(() => {}));
+    event.waitUntil(
+      scope.then((preloaded) => {
+        preloaded.treePreload = preload;
+      }),
+    );
   }
   if (cached) return cached.response;
   try {
@@ -713,12 +765,10 @@ function respond(event: FetchEvent, url: URL): Promise<Response> | undefined {
     return removal ? queueableMutation(request, removal) : undefined;
   }
   if (url.pathname.startsWith("/api/favicon/"))
-    return cacheFirst(event, request, API_CACHE, { cache: "no-cache" });
+    return cacheFirst(event, request, apiCache(), { cache: "no-cache" });
   if (url.pathname === "/api/tree") {
     if (url.searchParams.has(cachedTreeQuery)) return cachedTree();
-    const preload = treePreload;
-    treePreload = undefined;
-    return freshTree(event, request, preload);
+    return freshTree(event, request);
   }
   if (url.pathname === "/api/options/opml") return undefined;
   if (url.pathname === "/api/events") return undefined;
@@ -727,7 +777,7 @@ function respond(event: FetchEvent, url: URL): Promise<Response> | undefined {
   if (url.pathname.startsWith("/api/")) return networkFirst(event, request);
   if (request.mode === "navigate") return shell(event, url.pathname);
   if (url.pathname.startsWith("/assets/"))
-    return cacheFirst(event, request, SHELL_CACHE);
+    return cacheFirst(event, request, caches.open(SHELL_CACHE));
   return undefined;
 }
 

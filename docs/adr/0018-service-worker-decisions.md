@@ -11,11 +11,11 @@ names the file and symbol it governs; read it before changing that code.
 
 ## Accounts and offline removals
 
-### Account changes fence in-flight work and empty the API cache
+### Each sign-in period has its own API cache
 
-**Where:** `src/spa/sw.ts`, `accountChanges`, `changeAccount()`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
+**Where:** `src/spa/sw.ts`, `CacheScope`, `scopedCache()`, `changeScope()`, `adoptScope()`, `changeAccount()`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
 
-The API cache is not keyed by account, so every sign-in and logout empties it before the page sees the response: a revoked or expired session reaches the login form without logging out, and the next sign-in may be another account (#974). `accountChanges` is bumped when a sign-in or logout starts and when it succeeds, and an offline sync or download that began under an earlier count writes nothing into the cache, so a download started before a sign-in never lands in the new account's cache. The page repeats the purge in `forgetAccountData` to cover pages no worker controls, such as after a hard reload. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
+The API cache holds one account's answers, and a revoked or expired session reaches the login form without logging out, so the next sign-in may be another account (#974). Each sign-in period gets its own cache, named `api-v8-<uuid>` and held by a `CacheScope`. A successful sign-in or logout starts a new scope and deletes every other API cache before the page sees the response. Work keeps the scope it began under. A response in flight when the scope changes is written through the handle opened before the change, into a cache that no name reaches any more, and `scopedCache()` opens nothing for a scope that is no longer live, so a late write cannot recreate an old cache. The tree preload and the favicon prune state live on the scope, so a new account starts without them. The page repeats the purge in `forgetAccountData` for pages no worker controls, such as after a hard reload, and posts `account-changed` so that a worker which did not see the sign-in starts a new scope too. A restarted worker adopts the one `api-v8-` cache it finds, so offline articles survive the worker stopping, and deletes every API cache when it finds anything else. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
 
 ### Queued removals carry the account that made them, and the server checks it
 
@@ -59,9 +59,9 @@ Lazy chunks are named by the entry script and fonts by the stylesheet, not by th
 
 ### Cache versions change only to purge everything
 
-**Where:** `src/spa/sw.ts`, `CACHE_VERSION`; `src/spa/sw-protocol.ts`, `apiCachePrefix`
+**Where:** `src/spa/sw.ts`, `SHELL_CACHE`, `API_SCOPE_PREFIX`; `src/spa/sw-protocol.ts`, `apiCachePrefix`
 
-Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. Bumping it for ordinary deploys would throw away offline articles for no reason.
+Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. The API caches moved to `v8` when each sign-in period got its own cache, and a worker that starts beside a `v7` cache deletes it. The shell cache stays at `v7` because its scheme did not change. Bumping a version for ordinary deploys would throw away offline articles, or download every asset again, for no reason.
 
 ## API caching
 
@@ -73,21 +73,21 @@ The OPML export is a file download, not application state: caching it with `netw
 
 ### Navigation starts the tree fetch for the page to reuse
 
-**Where:** `src/spa/sw.ts`, `treePreload`, `cachedTree()`; `src/spa/sw-protocol.ts`, `cachedTreeQuery`
+**Where:** `src/spa/sw.ts`, `CacheScope.treePreload`, `cachedTree()`; `src/spa/sw-protocol.ts`, `cachedTreeQuery`
 
-On a dashboard-bound navigation `shell()` starts the `/api/tree` fetch before the page's bundle loads, and the page's own tree request reuses it instead of making a second round trip. Separately, `/api/tree?cached` is answered from the worker's cache alone so boot can paint a cached tree while the real request is in flight (#989); it never goes to the network, and a miss is a bare 504 that the page reads as "nothing cached".
+On a dashboard-bound navigation `shell()` starts the `/api/tree` fetch before the page's bundle loads, and the page's own tree request reuses it instead of making a second round trip. The preload belongs to the scope it started under, so a tree preloaded before a sign-in is never served after it. Separately, `/api/tree?cached` is answered from the worker's cache alone so boot can paint a cached tree while the real request is in flight (#989); it never goes to the network, and a miss is a bare 504 that the page reads as "nothing cached".
 
 ### Opened articles are cached briefly and trimmed per path
 
 **Where:** `src/spa/sw.ts`, `FETCHED_AT`, `ARTICLE_FRESH_MS`, `ARTICLE_CACHE_LIMIT`, `QUERY_CACHE_LIMIT`, `trimPath()`
 
-The dashboard prefetches the next article in idle time (#716), so a cached copy younger than a minute is served without a round trip; the body carries no read state, and a feed update in that window shows on the next open. Cached articles carry their fetch time in a header so their age survives worker restarts. Nothing else evicts an opened article before `CACHE_VERSION` changes, and each query string is its own entry (`/api/find`, `/api/preview`), so every path keeps only its newest few. `trimPath` relies on `cache.keys()` listing entries in insertion order, with a put moving an entry to the end.
+The dashboard prefetches the next article in idle time (#716), so a cached copy younger than a minute is served without a round trip; the body carries no read state, and a feed update in that window shows on the next open. Cached articles carry their fetch time in a header so their age survives worker restarts. Nothing else evicts an opened article before the sign-in period ends, and each query string is its own entry (`/api/find`, `/api/preview`), so every path keeps only its newest few. `trimPath` relies on `cache.keys()` listing entries in insertion order, with a put moving an entry to the end.
 
 ### Favicons are content-addressed and pruned to the latest tree
 
-**Where:** `src/spa/sw.ts`, the `/api/favicon/` route, `pruneFavicons()`, `purgeHeaderlessFavicons()`; `src/features/reader/routes/tree.ts`, the favicon `?v=` fingerprint
+**Where:** `src/spa/sw.ts`, the `/api/favicon/` route, `pruneFavicons()`, `CacheScope.prunedFavicons`; `src/features/reader/routes/tree.ts`, the favicon `?v=` fingerprint
 
-The tree route appends a fingerprint of the favicon as `?v=`, so a path always decodes to the same bytes and a cached favicon is served cache-first with no revalidation. A miss bypasses the HTTP cache so copies stored there before favicons carried their CSP are not copied in. A changed icon gets a new URL and removed sources leave icons behind, so only the icons the latest tree names stay cached. Favicons cached before the route sent CSP and nosniff headers are dropped once, keeping the rest of the API cache, and a marker entry records that the purge ran.
+The tree route appends a fingerprint of the favicon as `?v=`, so a path always decodes to the same bytes and a cached favicon is served cache-first with no revalidation. A miss bypasses the HTTP cache so copies stored there before favicons carried their CSP are not copied in. A changed icon gets a new URL and removed sources leave icons behind, so only the icons the latest tree names stay cached. The scope remembers the set it last pruned to, so a tree that names the same icons costs no scan of the cache.
 
 ## Offline reading
 
