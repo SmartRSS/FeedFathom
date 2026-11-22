@@ -3,10 +3,6 @@ name: Branch guard
 # main is promoted from staging only. GitHub rulesets can require checks and a
 # pull request, but have no rule constraining which branch a PR comes *from*,
 # so the constraint is expressed as a status check the main ruleset requires.
-#
-# This job's name is load-bearing: the main branch ruleset pins it as a
-# required status check by context name. Renaming it retires the check it is
-# pinned to and silently blocks every PR into main. Change the two together.
 
 on:
   pull_request:
