@@ -8,12 +8,16 @@ import type {
 } from "#shared/contracts/requests.ts";
 import type {
   ArticleSummary,
-  sessionResponse,
   TreeNode,
   treeResponse,
 } from "#shared/contracts/responses.ts";
 import { findNode, sourceIds } from "./feed-tree.ts";
-import { deleteTraceHeader, replayHeader } from "#shared/contracts/headers.ts";
+import {
+  accountHeader,
+  accountMismatchStatus,
+  deleteTraceHeader,
+  replayHeader,
+} from "#shared/contracts/headers.ts";
 import {
   queueAdd,
   queueAll,
@@ -186,43 +190,7 @@ async function notifyClients(message: WorkerMessage) {
   for (const client of clients) client.postMessage(message);
 }
 
-const SESSION_PATH = "/api/session";
-const ACCOUNT_KEY = "/sw-queue-account";
-
-async function cachedAccount(): Promise<number | undefined> {
-  try {
-    const cached = await (await caches.open(API_CACHE)).match(ACCOUNT_KEY);
-    const record = cached
-      ? uncheckedJson<{ id?: number }>(await cached.text())
-      : undefined;
-    return record?.id;
-  } catch {
-    return undefined;
-  }
-}
-
 let accountChanges = 0;
-
-let pendingLookup:
-  | { generation: number; lookup: Promise<number | undefined> }
-  | undefined;
-
-async function sessionAccount(generation: number) {
-  try {
-    const response = await fetch(SESSION_PATH, { credentials: "same-origin" });
-    if (!response.ok) return undefined;
-    const session = uncheckedJson<Static<typeof sessionResponse>>(
-      await response.text(),
-    );
-    const id = session.user?.id;
-    const cache = await caches.open(API_CACHE);
-    if (generation !== accountChanges) return undefined;
-    if (id !== undefined) await cache.put(ACCOUNT_KEY, Response.json({ id }));
-    return id;
-  } catch {
-    return undefined;
-  }
-}
 
 let replaying: Promise<void> = Promise.resolve();
 let replayPending = false;
@@ -241,11 +209,8 @@ function flushQueue(): Promise<void> {
 const isRefusal = (status: number) =>
   status >= 400 && status < 500 && status !== 401;
 
-async function replayEntry(
-  { key, value }: QueueEntry,
-  account: number,
-): Promise<boolean> {
-  if (value.account !== account) {
+async function replayEntry({ key, value }: QueueEntry): Promise<boolean> {
+  if (value.account === undefined) {
     await queueDelete(key);
     return true;
   }
@@ -254,12 +219,13 @@ async function replayEntry(
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
+      [accountHeader]: String(value.account),
       [replayHeader]: String(value.queuedAt ?? "unknown"),
       ...(value.trace ? { [deleteTraceHeader]: value.trace } : {}),
     },
     method: value.method,
   });
-  if (response.ok) {
+  if (response.ok || response.status === accountMismatchStatus) {
     await queueDelete(key);
     return true;
   }
@@ -272,7 +238,6 @@ async function replayEntry(
 async function replayQueue() {
   if (!queueMayHaveEntries) return;
   queueMayHaveEntries = false;
-  const generation = accountChanges;
   let entries: QueueEntry[];
   try {
     entries = await queueAll();
@@ -280,20 +245,11 @@ async function replayQueue() {
     queueMayHaveEntries = true;
     throw error;
   }
-  if (entries.length === 0 && (await cachedAccount()) !== undefined) return;
-  const lookup = sessionAccount(generation);
-  pendingLookup = { generation, lookup };
-  const account = await lookup;
-  if (account === undefined) {
-    queueMayHaveEntries = true;
-    return;
-  }
   for (const entry of entries) {
     let sent = false;
     try {
-      if (generation === accountChanges)
-        // oxlint-disable-next-line no-await-in-loop -- replay must preserve order
-        sent = await replayEntry(entry, account);
+      // oxlint-disable-next-line no-await-in-loop -- replay must preserve order
+      sent = await replayEntry(entry);
     } catch {
       sent = false;
     }
@@ -304,20 +260,17 @@ async function replayQueue() {
   }
 }
 
-async function ownerAccount() {
-  const generation = accountChanges;
-  const pending = pendingLookup;
-  const cached = await cachedAccount();
-  if (cached !== undefined) return cached;
-  return pending?.generation === generation ? await pending.lookup : undefined;
+function namedAccount(request: Request): number | undefined {
+  const named = request.headers.get(accountHeader);
+  const account = named ? Number(named) : Number.NaN;
+  return Number.isSafeInteger(account) ? account : undefined;
 }
 
 async function queueableMutation(request: Request, path: keyof Removals) {
-  const owner = ownerAccount();
   try {
     return await fetch(request.clone());
   } catch (error) {
-    const account = await owner;
+    const account = namedAccount(request);
     if (account === undefined) throw error;
     const body = await request.text();
     const entry: QueuedMutation = {
@@ -571,10 +524,8 @@ worker.addEventListener("message", (event) => {
 });
 
 async function queuedRemovals() {
-  const account = await cachedAccount();
   const removals = (await queueAll()).filter(
     ({ value }) =>
-      value.account === account &&
       value.method === "DELETE" &&
       new URL(value.url).pathname === "/api/articles",
   );

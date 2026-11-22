@@ -78,6 +78,7 @@ import { api, failureDetails, messageOf } from "./api.ts";
 import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
 import {
+  accountHeader,
   deleteTraceHeader,
   unreadCountsHeader,
 } from "#shared/contracts/headers.ts";
@@ -202,6 +203,10 @@ export function Dashboard(props: {
   const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
   api("/session", sessionResponse).then(setSession, () => {});
   const isAdmin = () => session()?.user?.isAdmin ?? false;
+  const ownerHeaders = (): Record<string, string> => {
+    const id = session()?.user?.id;
+    return id === undefined ? {} : { [accountHeader]: String(id) };
+  };
 
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
@@ -780,7 +785,10 @@ export function Dashboard(props: {
     const listSignal = list.signal;
     let unreadCounts: Map<string, number> | undefined;
     const deletion = api("/articles", removedArticlesResponse, {
-      headers: { [deleteTraceHeader]: deleteTrace(trigger) },
+      headers: {
+        [deleteTraceHeader]: deleteTrace(trigger),
+        ...ownerHeaders(),
+      },
       json: { removedArticleIdList: ids },
       method: "DELETE",
       onResponse: (response) => {
@@ -1145,11 +1153,13 @@ export function Dashboard(props: {
       const id = Number(node.uid);
       await (node.type === "source"
         ? api("/source", removedIdResponse, {
+            headers: ownerHeaders(),
             json: { removeSourceId: id },
             method: "DELETE",
             request: removeSourceRequest,
           })
         : api("/folders", removedIdResponse, {
+            headers: ownerHeaders(),
             json: { removeFolderId: id },
             method: "DELETE",
             request: removeFolderRequest,

@@ -13,15 +13,15 @@ names the file and symbol it governs; read it before changing that code.
 
 ### Account changes fence in-flight work and empty the API cache
 
-**Where:** `src/spa/sw.ts`, `accountChanges`, `pendingLookup`, `changeAccount()`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
+**Where:** `src/spa/sw.ts`, `accountChanges`, `changeAccount()`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
 
-The API cache is not keyed by account, so every sign-in and logout empties it before the page sees the response: a revoked or expired session reaches the login form without logging out, and the next sign-in may be another account (#974). `accountChanges` is bumped when a sign-in or logout starts and when it succeeds, and any session lookup, replay, offline sync or download that began under an earlier count neither records its answer nor writes into the cache, so a download started before a sign-in never lands in the new account's cache. The page repeats the purge in `forgetAccountData` to cover pages no worker controls, such as after a hard reload. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
+The API cache is not keyed by account, so every sign-in and logout empties it before the page sees the response: a revoked or expired session reaches the login form without logging out, and the next sign-in may be another account (#974). `accountChanges` is bumped when a sign-in or logout starts and when it succeeds, and an offline sync or download that began under an earlier count writes nothing into the cache, so a download started before a sign-in never lands in the new account's cache. The page repeats the purge in `forgetAccountData` to cover pages no worker controls, such as after a hard reload. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
 
-### Queued removals carry the account that made them
+### Queued removals carry the account that made them, and the server checks it
 
-**Where:** `src/spa/sw.ts`, `SESSION_PATH`, `ACCOUNT_KEY`, `sessionAccount()`, `ownerAccount()`, `replayEntry()`, `flushQueue()`
+**Where:** `src/spa/sw.ts`, `namedAccount()`, `queueableMutation()`, `replayEntry()`; `src/spa/dashboard.tsx`, `ownerHeaders()`; `src/shared/contracts/headers.ts`, `accountHeader`, `accountMismatchStatus`
 
-Two accounts can share a source, so replaying account A's removals under account B's session would unsubscribe B or hide B's articles; every queued removal records its owner, and a replay under another account, or of an entry with no owner, drops it (#982). The worker learns the account from GET `/api/session` and records it under its own key in the API cache, because the page's cached `/api/session` answer can turn signed-out and must not erase the owner of removals made before a session expired. An unknown account (offline, failing, signed out) makes the queue wait as it does for a 401. A removal made before the first lookup answers waits for it, the owner is read before the request goes out so a sign-in in another tab cannot claim it, and a removal with no owner fails at once instead of answering a success that never lands.
+Two accounts can share a source, so replaying account A's removals under account B's session would unsubscribe B or hide B's articles (#982). The session cookie is HttpOnly, and a sign-in in another tab can replace it between any check the worker makes and the request it sends, so only the server can compare the two (ADR 0009). The dashboard names its account in `X-FeedFathom-Account` on every removal, the worker stores that account with a removal it queues, and the replay sends it back. The server answers a replay under another account with 412, and the worker drops it without telling the page, because the page now shows an account that never made the removal. A removal that names no account fails offline at once instead of answering a success that never lands, and a queued entry with no account, from before #982, is dropped. The worker keeps no record of who is signed in.
 
 ### Offline removals replay from a hand-picked table
 
@@ -33,7 +33,7 @@ Only DELETE removals are queued offline, each with the request field its respons
 
 **Where:** `src/spa/sw.ts`, `replaying`, `isRefusal()`, `queueMayHaveEntries`, `flushQueue()`
 
-Only one replay runs at a time, since an overlapping one would send entries the running one has not deleted yet; a call during a replay schedules one more afterwards. A 4xx other than 401 is final: the optimistic response already claimed success, so the entry is dropped, the page is told, and later entries still go out. A 401 (the same account may sign back in) and a 5xx (presumed transient) retry forever and hold back later entries, because the server refuses to remove a folder that still holds a source, and a folder removal replayed past a failed source removal would be rejected and dropped (#975). A failed client notification must not read as "still offline" and stop the queue. `queueMayHaveEntries` starts true so the first flush checks what an earlier instance left, and is cleared before the read so an entry queued mid-flush sets it again; otherwise it spares every successful GET an IndexedDB round trip.
+Only one replay runs at a time, since an overlapping one would send entries the running one has not deleted yet; a call during a replay schedules one more afterwards. A 4xx other than 401 is final: the optimistic response already claimed success, so the entry is dropped, the page is told, and later entries still go out. A 412 is dropped without telling the page, as the entry above says. A 401 (the same account may sign back in) and a 5xx (presumed transient) retry forever and hold back later entries, because the server refuses to remove a folder that still holds a source, and a folder removal replayed past a failed source removal would be rejected and dropped (#975). A failed client notification must not read as "still offline" and stop the queue. `queueMayHaveEntries` starts true so the first flush checks what an earlier instance left, and is cleared before the read so an entry queued mid-flush sets it again; otherwise it spares every successful GET an IndexedDB round trip.
 
 ## Shell and asset caching
 
@@ -59,7 +59,7 @@ Lazy chunks are named by the entry script and fonts by the stylesheet, not by th
 
 **Where:** `src/spa/sw.ts`, `CACHE_VERSION`; `src/spa/sw-protocol.ts`, `apiCachePrefix`
 
-Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. Bumping it for ordinary deploys would throw away offline articles and the queued-removal owner for no reason.
+Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. Bumping it for ordinary deploys would throw away offline articles for no reason.
 
 ## API caching
 

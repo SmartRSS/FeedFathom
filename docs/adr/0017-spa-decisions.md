@@ -99,9 +99,9 @@ Only a page the service worker controls asks for `?cached`, since only the worke
 
 ### The offline removal queue lives in IndexedDB and the page clears it on logout too
 
-**Where:** `src/spa/mutation-queue.ts`, `QueuedMutation`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
+**Where:** `src/spa/mutation-queue.ts`, `QueuedMutation`; `src/spa/sw-protocol.ts`, `forgetAccountData()`; `src/spa/dashboard.tsx`, `ownerHeaders()`
 
-The service worker queues removals made offline in IndexedDB, so the queue outlives the worker. The page also clears it on logout, for a logout the worker does not see. `QueuedMutation.account` is optional because entries queued before #982 have no account, and a replay drops them.
+The service worker queues removals made offline in IndexedDB, so the queue outlives the worker. The page also clears it on logout, for a logout the worker does not see. Each removal names the account from the dashboard's own `/api/session` answer, because the page is the one place that knows which account it shows and the worker cannot read the session cookie. A removal made before that answer arrives names no account: online the server applies it as it always did, and offline the worker refuses to queue it (ADR 0018). `QueuedMutation.account` is optional because entries queued before #982 have no account, and a replay drops them.
 
 ### Offline sync is paced by tree loads, at most once a minute
 

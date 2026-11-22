@@ -9,6 +9,7 @@ import {
 import { Value } from "typebox/value";
 import { articlesRequest } from "#shared/contracts/requests.ts";
 import { articlePageSize } from "#shared/contracts/limits.ts";
+import { accountHeader } from "#shared/contracts/headers.ts";
 import {
   articleResponse,
   articlesResponse,
@@ -3472,7 +3473,7 @@ test("logging out from an uncontrolled page drops the API cache", async ({
   await openApp(page, {}, "/options#account");
   await page.evaluate(async () => {
     const cache = await caches.open("api-test");
-    await cache.put("/sw-queue-account", new Response("1"));
+    await cache.put("/api/tree", Response.json({ tree: [] }));
   });
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -3548,10 +3549,11 @@ const disconnected = (route: Route) => route.abort("internetdisconnected");
 const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
   const context = page.context();
   const state = await downloadUnread(page);
-  await page.reload();
-  await page.waitForFunction(async () =>
-    Boolean(await caches.match("/sw-queue-account")),
+  const sessionAnswered = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/session",
   );
+  await page.reload();
+  await sessionAnswered;
   await selectSource(page);
   await articleOptions(page).filter({ hasText: "Second article" }).click();
   await context.route("**/api/**", disconnected);
@@ -3726,11 +3728,19 @@ test.describe("under a controlling service worker", () => {
     (browserFailures.get(page) ?? []).length = 0;
   });
 
-  test("an offline removal answers at once and replays back online", async ({
+  test("an offline removal answers at once and replays back online for its account", async ({
     page,
   }) => {
-    const state = await removeOffline(page);
+    const replayedFor: (string | null)[] = [];
+    const state = await removeOffline(page, () =>
+      page.context().route("**/api/articles", async (route) => {
+        if (route.request().method() === "DELETE")
+          replayedFor.push(await route.request().headerValue(accountHeader));
+        return route.fallback();
+      }),
+    );
     await expect.poll(() => state.removedArticleIds).toEqual([12]);
+    expect(replayedFor).toEqual(["42"]);
     await expect(page.getByRole("alert")).toHaveCount(0);
   });
 
