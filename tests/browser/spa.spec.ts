@@ -164,6 +164,11 @@ const openApp = async (
   return state;
 };
 
+const sessionAnswer = (page: Page) =>
+  page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/session",
+  );
+
 const intersectionsDelivered = (page: Page) =>
   page.evaluate(
     () =>
@@ -2410,6 +2415,37 @@ for (const { name, prepare, ready, refusals, send } of expiringMutations) {
   });
 }
 
+test("a removal refused for another account reloads the page as the account signed in now", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  const named: (string | null)[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "DELETE")
+      named.push(request.headers()[accountHeader.toLowerCase()] ?? null);
+  });
+  const firstSession = sessionAnswer(page);
+  await page.goto("/");
+  await firstSession;
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  state.account = 43;
+  const reloadedSession = sessionAnswer(page);
+  await confirm(page);
+  await reloadedSession;
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  await confirm(page);
+
+  await expect.poll(() => state.removedSourceIds).toEqual([3]);
+  expect(named).toEqual(["42", "43"]);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 412 (Precondition Failed)",
+  ]);
+  failures.length = 0;
+});
+
 for (const { booted, path } of [
   { booted: (page: Page) => sourceRow(page), path: "/" },
   {
@@ -3549,9 +3585,7 @@ const disconnected = (route: Route) => route.abort("internetdisconnected");
 const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
   const context = page.context();
   const state = await downloadUnread(page);
-  const sessionAnswered = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/api/session",
-  );
+  const sessionAnswered = sessionAnswer(page);
   await page.reload();
   await sessionAnswered;
   await selectSource(page);
