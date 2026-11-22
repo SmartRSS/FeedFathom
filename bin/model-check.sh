@@ -53,5 +53,7 @@ check $enqueue SourceEnqueue replay-issue-813 RefreshAnsweredBeforeIdle
 check $enqueue SourceEnqueue replay-d1a82e4d RefreshAnsweredBeforeIdle
 check $enqueue SourceEnqueue replay-issue-845 RefreshAnsweredBeforeIdle
 check $enqueue SourceEnqueue replay-issue-847 RefreshAnsweredBeforeIdle
+check $enqueue SourceEnqueue replay-issue-1196 RefreshAnsweredBeforeIdle
+check $enqueue SourceEnqueue replay-issue-1197 RefreshAnsweredBeforeIdle
 
 exit "$failed"

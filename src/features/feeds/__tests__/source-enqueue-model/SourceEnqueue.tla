@@ -5,7 +5,7 @@ CONSTANTS Requests, Reverted
 
 RevertibleFixes ==
   {"addWithoutLooking", "followUpThroughEnqueue", "mergeInSteps",
-   "deferralDropsFollowUp"}
+   "deferralDropsFollowUp", "addWithoutMarking", "markWithoutRequeue"}
 
 ASSUME Reverted \subseteq RevertibleFixes
 
@@ -25,7 +25,7 @@ WorkerSteps ==
    "moveToDelayed", "finish"}
 CallerSteps ==
   {"idle", "getState", "merge", "takeForMerge", "updateQueued",
-   "mark", "add", "acked", "failed"}
+   "mark", "markActive", "add", "acked", "failed"}
 
 TypeOK ==
   /\ job \in JobStates
@@ -71,28 +71,32 @@ Ack(r) == caller' = [caller EXCEPT ![r] = "acked"]
 
 GoTo(r, step) == caller' = [caller EXCEPT ![r] = step]
 
+Unmerged == IF Reverts("addWithoutMarking") THEN "add" ELSE "mark"
+
 EnqueueSource(r) ==
   /\ caller[r] = "idle"
   /\ \E skipCache \in BOOLEAN : asked' = [asked EXCEPT ![r] = skipCache]
   /\ owed' = [owed EXCEPT ![r] = TRUE]
   /\ GoTo(r, CASE Reverts("addWithoutLooking") -> "add"
-               [] job = "none" -> "mark"
+               [] job = "none" -> Unmerged
                [] OTHER -> "getState")
   /\ UNCHANGED <<job, jobSkipCache, marker, worker, request, followUp,
                  checking, adding, taken>>
 
 GetState(r) ==
   /\ caller[r] = "getState"
-  /\ GoTo(r, IF job \in {"waiting", "delayed"}
-             THEN IF Reverts("mergeInSteps") THEN "takeForMerge" ELSE "merge"
-             ELSE "mark")
+  /\ GoTo(r, CASE job \in {"waiting", "delayed"} ->
+                    IF Reverts("mergeInSteps") THEN "takeForMerge" ELSE "merge"
+               [] job = "active" /\ Reverts("markWithoutRequeue") ->
+                    "markActive"
+               [] OTHER -> Unmerged)
   /\ UNCHANGED <<job, jobSkipCache, marker, worker, request, followUp,
                  checking, adding, asked, taken, owed>>
 
 MergeQueuedRefresh(r) ==
   /\ caller[r] = "merge"
   /\ CASE job = "none" ->
-            /\ GoTo(r, "mark")
+            /\ GoTo(r, Unmerged)
             /\ UNCHANGED <<jobSkipCache, marker>>
        [] job \in {"waiting", "delayed"} ->
             /\ jobSkipCache' = (asked[r] \/ jobSkipCache \/ marker = "1")
@@ -109,6 +113,13 @@ MergePendingRefresh(r) ==
   /\ caller[r] = "mark"
   /\ marker' = MergedMarker(asked[r])
   /\ GoTo(r, "add")
+  /\ UNCHANGED <<job, jobSkipCache, worker, request, followUp, checking,
+                 adding, asked, taken, owed>>
+
+MarkActive(r) ==
+  /\ caller[r] = "markActive"
+  /\ marker' = MergedMarker(asked[r])
+  /\ Ack(r)
   /\ UNCHANGED <<job, jobSkipCache, worker, request, followUp, checking,
                  adding, asked, taken, owed>>
 
@@ -220,7 +231,8 @@ MoveToFinished ==
   /\ worker' = "idle"
   /\ request' = FALSE
   /\ followUp' = FALSE
-  /\ checking' = (checking \/ ~Reverts("followUpThroughEnqueue"))
+  /\ checking' = (checking \/ ~(Reverts("followUpThroughEnqueue")
+                                \/ Reverts("markWithoutRequeue")))
   /\ UNCHANGED <<marker, adding, caller, asked, taken, owed>>
 
 CheckPendingRefresh ==
@@ -246,6 +258,7 @@ Next ==
        \/ GetState(r)
        \/ MergeQueuedRefresh(r)
        \/ MergePendingRefresh(r)
+       \/ MarkActive(r)
        \/ TakeBeforeUpdateData(r)
        \/ UpdateQueuedData(r)
        \/ Add(r)
