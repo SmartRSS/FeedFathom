@@ -1,4 +1,7 @@
-import { unreadCountsHeader } from "#shared/contracts/headers.ts";
+import {
+  accountHeader,
+  unreadCountsHeader,
+} from "#shared/contracts/headers.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { expect, test } from "bun:test";
 import {
@@ -370,3 +373,55 @@ test("snoozes and unsnoozes one subscription without touching article state", as
     { pausedUntil: new Date("2026-09-16T12:00:00.000Z"), sourceId: 9 },
   ]);
 });
+
+const removals: [string, object][] = [
+  ["/api/source", { removeSourceId: 3 }],
+  ["/api/folders", { removeFolderId: 3 }],
+  ["/api/articles", { removedArticleIdList: [3] }],
+];
+
+test.each(removals)(
+  "DELETE %s signed in as account 2 refuses a request made for account 1 and removes nothing",
+  async (path, body) => {
+    const dependencies = createDependencies();
+    dependencies.usersDataService.authenticate = async (sid) =>
+      sid === "account-2" ? { ...sessionUser, id: 2 } : undefined;
+    const removedFor: number[] = [];
+    dependencies.userSourcesDataService.removeSourceFromUser = async (
+      userId,
+    ) => {
+      removedFor.push(userId);
+    };
+    dependencies.foldersDataService.removeEmptyUserFolder = async (userId) => {
+      removedFor.push(userId);
+      return "removed";
+    };
+    dependencies.articlesDataService.removeUserArticles = async (
+      articleIds,
+      userId,
+    ) => {
+      removedFor.push(userId);
+      return { articleIds, sourceIds: [] };
+    };
+    dependencies.userSourcesDataService.recomputeUnreadCounts = async () =>
+      undefined;
+    const app = await appFor(dependencies);
+    const remove = (named?: string) =>
+      send(app, "DELETE", path, body, {
+        headers: {
+          cookie: "sid=account-2",
+          ...(named === undefined ? {} : { [accountHeader]: named }),
+        },
+      });
+
+    const forAccount1 = await remove("1");
+    expect(forAccount1.status).toBe(412);
+    expect(removedFor).toEqual([]);
+
+    const forAccount2 = await remove("2");
+    const unnamed = await remove();
+    expect(forAccount2.status).toBe(200);
+    expect(unnamed.status).toBe(200);
+    expect(removedFor).toEqual([2, 2]);
+  },
+);

@@ -87,6 +87,12 @@ Registration and reset do not wait for their mail (ADR 0004), and the same reaso
 
 An Elysia `derive` with `"plugin"` scope reaches the instance's own routes and the one parent that `.use()`s it, not the sibling groups `server-app.ts` composes; a wider scope would put the session check on routes that must stay public. The admin test runs inside the same derive, because a plugin-scoped derive reaches routes but not later hooks on the same instance, so a second derive would find no `user`.
 
+### A request that names another account is refused before its handler runs
+
+**Where:** `src/features/auth/session-plugin.ts`, `sessionPlugin()`; `src/shared/contracts/headers.ts`, `accountHeader`
+
+The session cookie is HttpOnly and a sign-in in another tab replaces it, so neither a page nor the service worker can know which account the browser will send a request as. Only the server sees the cookie and the request together. A request may name the account it was made for in `X-FeedFathom-Account`, and the session derive answers 412 when the session belongs to any other account. A request without the header passes, so pages and workers built before the header keep working. The status is 412, not 409, because `DELETE /api/folders` already answers 409 for a folder that still holds a source, and a replaying worker must tell the two apart.
+
 ### Authentication is one statement that writes only when activity is stale
 
 **Where:** `src/features/auth/user-data-service.ts`, `authenticateStatement()`, `UsersDataService.authenticate()`; `src/features/auth/routes/login.ts`, `createLoginRoute()`
