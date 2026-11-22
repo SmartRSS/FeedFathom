@@ -156,33 +156,35 @@ async function apiCacheNames() {
   );
 }
 
-async function adoptScope(): Promise<CacheScope> {
+async function chooseScope(): Promise<CacheScope> {
   const names = await apiCacheNames();
   const [only] = names;
-  const adopted =
-    names.length === 1 && only?.startsWith(API_SCOPE_PREFIX)
-      ? { name: only }
-      : undefined;
-  if (!adopted) await Promise.all(names.map((name) => caches.delete(name)));
-  const scope = adopted ?? newScope();
-  liveScope ??= scope;
-  return scope;
+  return names.length === 1 && only?.startsWith(API_SCOPE_PREFIX)
+    ? { name: only }
+    : newScope();
 }
 
-const adoption = adoptScope();
+const adoption = chooseScope()
+  .catch(newScope)
+  .then((scope) => {
+    liveScope ??= scope;
+    return scope;
+  });
 
 async function currentScope(): Promise<CacheScope> {
   return liveScope ?? (await adoption);
 }
 
 async function scopedCache(scope: CacheScope): Promise<Cache | undefined> {
-  return scope === liveScope ? caches.open(scope.name) : undefined;
+  if (scope !== liveScope) return undefined;
+  return caches.open(scope.name).catch(() => undefined);
 }
 
 const apiCache = () => currentScope().then(scopedCache);
 
 async function changeScope() {
   liveScope = newScope();
+  offlineDownloads.abort();
   const stale = (await apiCacheNames()).filter(
     (name) => name !== liveScope?.name,
   );

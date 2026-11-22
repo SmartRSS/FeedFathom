@@ -99,6 +99,16 @@ const fakeIndexedDb = () => {
   };
 };
 
+const lifecycle = async (
+  listener:
+    | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
+    | undefined,
+) => {
+  const pending: Promise<unknown>[] = [];
+  listener?.({ waitUntil: (promise) => void pending.push(promise) });
+  await Promise.all(pending);
+};
+
 const loadServiceWorker = (
   network: (
     path: string,
@@ -106,8 +116,12 @@ const loadServiceWorker = (
     headers: Headers,
   ) => Response | Promise<Response>,
   stores = new Map<string, Map<string, Response>>(),
+  beforeStorage: (call: "keys" | "open") => unknown = () => {},
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
+  let onInstall:
+    | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
+    | undefined;
   let onMessage: ((event: MessageEvent) => void) | undefined;
   let onActivate:
     | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
@@ -181,8 +195,14 @@ const loadServiceWorker = (
     URL,
     caches: {
       delete: async (name: string) => stores.delete(name),
-      keys: async () => [...stores.keys()],
-      open: async (name: string) => cacheOver(store(name)),
+      keys: async () => {
+        await beforeStorage("keys");
+        return [...stores.keys()];
+      },
+      open: async (name: string) => {
+        await beforeStorage("open");
+        return cacheOver(store(name));
+      },
     },
     crypto,
     fetch: async (input: Request | string, init?: RequestInit) => {
@@ -223,6 +243,7 @@ const loadServiceWorker = (
         if (type === "fetch") onFetch = listener;
         if (type === "message") onMessage = listener;
         if (type === "activate") onActivate = listener;
+        if (type === "install") onInstall = listener;
       },
       clients: {
         claim: async () => {},
@@ -235,6 +256,7 @@ const loadServiceWorker = (
       },
       location: { origin: ORIGIN },
       registration: {},
+      skipWaiting: async () => {},
     },
   });
   const dispatch = (request: Request) => {
@@ -314,11 +336,8 @@ const loadServiceWorker = (
   const removeSource = (account?: number | string | null) =>
     removal("/api/source", { removeSourceId: 3 }, account);
   const remove = (path: string, body: object) => removal(path, body).response;
-  const activate = async () => {
-    const pending: Promise<unknown>[] = [];
-    onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
-    await Promise.all(pending);
-  };
+  const activate = () => lifecycle(onActivate);
+  const install = () => lifecycle(onInstall);
   return {
     activate,
     apiBodies: () =>
@@ -331,6 +350,7 @@ const loadServiceWorker = (
     cacheStorage: stores,
     dispatch,
     holdListing,
+    install,
     keepOffline,
     loadArticle,
     loadTree,
@@ -376,7 +396,7 @@ test("a favicon is fetched once and then served from the cache", async () => {
   ).toHaveLength(1);
 });
 
-test("activation drops the v7 cache", async () => {
+test("an installing worker leaves the v7 cache to the worker in charge until it activates", async () => {
   const stored = new Map([
     [
       `${apiCachePrefix}v7`,
@@ -387,6 +407,8 @@ test("activation drops the v7 cache", async () => {
     ],
   ]);
   const sw = loadServiceWorker(network, stored);
+  await sw.install();
+  expect([...stored.keys()]).toContain(`${apiCachePrefix}v7`);
   await sw.activate();
   expect([...stored.keys()]).not.toContain(`${apiCachePrefix}v7`);
   expect([...sw.apiEntries().keys()]).toEqual([]);
@@ -406,6 +428,43 @@ test("a restarted worker keeps the API cache it was using", async () => {
     path: "/api/article?article=2",
   });
   expect(restarted.requests).toEqual([]);
+});
+
+test.each(["keys", "open"] as const)(
+  "a worker whose first Cache Storage %s fails still activates, answers from the network and caches later answers",
+  async (call) => {
+    let failed = false;
+    const sw = loadServiceWorker(articleNetwork, new Map(), (attempted) => {
+      if (attempted !== call || failed) return;
+      failed = true;
+      throw new DOMException("The operation failed", "UnknownError");
+    });
+    await sw.activate();
+    expect(await sw.loadArticle(2)).toMatchObject({
+      path: "/api/article?article=2",
+    });
+    await sw.loadArticle(3);
+    expect(sw.apiEntries().has("/api/article?article=3")).toBe(true);
+  },
+);
+
+test("a response requested before the worker picks its cache and answered after a sign-in is not stored", async () => {
+  let release: (() => void) | undefined;
+  const firstListing = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let listings = 0;
+  const sw = loadServiceWorker(
+    (path, method) =>
+      method === "POST" ? Response.json({ sid: "s" }) : network(path),
+    new Map(),
+    (call) => (call === "keys" && listings++ === 0 ? firstListing : undefined),
+  );
+  const treeLoad = sw.loadTree();
+  await sw.login();
+  release?.();
+  expect(await treeLoad).toEqual(tree);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
@@ -912,6 +971,29 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   online = false;
   expect(await list({ cursor: 100, sources: [3] })).toEqual([200]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
+});
+
+test("a sign-in stops a sync from downloading the articles it has not started", async () => {
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sw = loadServiceWorker(async (path, method) => {
+    if (method === "POST") return Response.json({ sid: "s" });
+    await held;
+    return articleNetwork(path);
+  });
+  const bothDownloading = sw.requested("/api/article?article=3");
+  const sync = sw.keepOffline([2, 3, 4, 5]);
+  await bothDownloading;
+  await sw.login();
+  release?.();
+  await sync;
+  expect(articleRequests(sw.requests)).toEqual([
+    "/api/article?article=2",
+    "/api/article?article=3",
+  ]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a download answered after a sign-in is not stored", async () => {
