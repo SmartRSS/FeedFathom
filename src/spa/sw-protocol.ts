@@ -44,7 +44,7 @@ export const cachedTreeQuery = "cached";
 export const apiCachePrefix = "api-";
 
 export async function forgetAccountData(signedOut: boolean): Promise<void> {
-  if (!("caches" in globalThis)) return;
+  if (!("caches" in globalThis) || navigator.serviceWorker?.controller) return;
   const names = await caches.keys();
   await Promise.all(
     names

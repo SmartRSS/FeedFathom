@@ -3539,6 +3539,14 @@ test("signing in from an uncontrolled page drops the API cache", async ({
   ).toEqual([]);
 });
 
+const onlyApiCacheHas = (page: Page, path: string) =>
+  page.evaluate(async (wanted) => {
+    const names = (await caches.keys()).filter((key) => key.startsWith("api-"));
+    const [name] = names;
+    if (names.length !== 1 || name === undefined) return names;
+    return Boolean(await (await caches.open(name)).match(wanted));
+  }, path);
+
 const downloaded = (page: Page) =>
   page.evaluate(async () => {
     const name = (await caches.keys()).find((key) => key.startsWith("api-"));
@@ -3615,6 +3623,44 @@ test.describe("under a controlling service worker", () => {
     await page.goto("/");
     await page.waitForFunction(() => navigator.serviceWorker.controller);
     await navigatePastHeldArticles(page);
+  });
+
+  test("signing in on a page the worker controls leaves the account change to the worker", async ({
+    page,
+  }) => {
+    const context = page.context();
+    await installApiFixture(context, { authenticated: false });
+    await page.goto("/login");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    const worker =
+      context.serviceWorkers()[0] ??
+      (await context.waitForEvent("serviceworker"));
+    await worker.evaluate(() => {
+      const received: unknown[] = [];
+      Object.assign(globalThis, { received });
+      addEventListener("message", (event: MessageEvent<unknown>) => {
+        received.push(event.data);
+      });
+    });
+    await page.evaluate(async () => {
+      const cache = await caches.open("api-test");
+      await cache.put("/api/tree", Response.json({ tree: [] }));
+    });
+
+    await page.getByLabel("Email").fill("reader@example.com");
+    await page.getByLabel("Password").fill("password");
+    await page.getByRole("button", { name: "Login" }).click();
+    await expect(sourceRow(page)).toBeVisible();
+
+    await expect.poll(() => onlyApiCacheHas(page, "/api/session")).toBe(true);
+    expect(
+      await worker.evaluate((): unknown => Reflect.get(globalThis, "received")),
+    ).not.toContainEqual({ type: "account-changed" });
+    const failures = browserFailures.get(page) ?? [];
+    expect(failures).toEqual([
+      "console.error: Failed to load resource: the server responded with a status of 504 ()",
+    ]);
+    failures.length = 0;
   });
 
   test("a controlled load fetches the tree once", async ({ page }) => {
