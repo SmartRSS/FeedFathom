@@ -262,8 +262,10 @@ async function replayQueue() {
 
 function namedAccount(request: Request): number | undefined {
   const named = request.headers.get(accountHeader);
-  const account = named ? Number(named) : Number.NaN;
-  return Number.isSafeInteger(account) ? account : undefined;
+  const account = Number(named);
+  return Number.isSafeInteger(account) && String(account) === named
+    ? account
+    : undefined;
 }
 
 async function queueableMutation(request: Request, path: keyof Removals) {

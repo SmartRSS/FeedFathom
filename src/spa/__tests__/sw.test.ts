@@ -284,7 +284,11 @@ const loadServiceWorker = (
   const login = () =>
     dispatch(new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }))
       .response;
-  const removal = (path: string, body: object, account: number | null = 1) =>
+  const removal = (
+    path: string,
+    body: object,
+    account: number | string | null = 1,
+  ) =>
     dispatch(
       new Request(`${ORIGIN}${path}`, {
         body: JSON.stringify(body),
@@ -292,7 +296,7 @@ const loadServiceWorker = (
         method: "DELETE",
       }),
     );
-  const removeSource = (account?: number | null) =>
+  const removeSource = (account?: number | string | null) =>
     removal("/api/source", { removeSourceId: 3 }, account);
   const remove = (path: string, body: object) => removal(path, body).response;
   const activate = async () => {
@@ -894,6 +898,25 @@ test("a removal that names no account fails offline instead of being queued", as
   await expect(removal.response).rejects.toThrow("Failed to fetch");
   expect(sw.queue.rows.size).toBe(0);
 });
+
+test.each(["007", "7.0"])(
+  "a removal that names account %p, a form no account id takes, fails offline instead of being queued",
+  async (named) => {
+    let online = true;
+    const sw = loadServiceWorker((_path, method) => {
+      if (!online) throw new TypeError("Failed to fetch");
+      return method === "GET"
+        ? Response.json({ tree: [] })
+        : new Response(null);
+    });
+    await sw.loadTree();
+    online = false;
+    const removal = sw.removeSource(named);
+    removal.background.catch(() => {});
+    await expect(removal.response).rejects.toThrow("Failed to fetch");
+    expect(sw.queue.rows.size).toBe(0);
+  },
+);
 
 test("a removal replayed just after another tab signs in to another account is not applied to it", async () => {
   let online = true;
