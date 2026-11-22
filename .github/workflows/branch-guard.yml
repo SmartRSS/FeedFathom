@@ -1,9 +1,5 @@
 name: Branch guard
 
-# main is promoted from staging only. GitHub rulesets can require checks and a
-# pull request, but have no rule constraining which branch a PR comes *from*,
-# so the constraint is expressed as a status check the main ruleset requires.
-
 on:
   pull_request:
     branches:
@@ -19,10 +15,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Verify the head is this repository's staging branch
-        # Passed through the environment rather than interpolated into the
-        # script, so a branch name cannot inject shell. The repository is
-        # checked as well as the branch name: a fork may also have a branch
-        # called "staging", and that is not the same branch.
         env:
           HEAD_REF: ${{ github.head_ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}

@@ -27,7 +27,7 @@ The three overlays are alternatives. Never combine them.
 
 ### What the Swarm loader costs the base file
 
-`docker stack deploy` uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`. Each constraint is marked in place so it doesn't read as an arbitrary choice.
+`docker stack deploy` uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`. Nothing in the file marks them, so read this list before you edit it.
 
 - **No top-level `name`.** It is rejected outright, so each Compose overlay names its own project instead. A plain `docker compose up -d` therefore takes its project name from the directory you cloned into.
 - **No nested `${}` defaults.** Docker doesn't reject them — it silently mangles them into malformed values, so `DATABASE_URL`'s default stays flat and ignores `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`. Change those, and set `DATABASE_URL` to match.
@@ -43,7 +43,7 @@ Three pieces use it:
 
 - The **migrator** retries its first connection for two minutes rather than exiting on the first refusal, so it can lose the race with PostgreSQL and still succeed.
 - The **worker** opens its healthcheck port first, then waits. It reports healthy and idle while waiting, because nothing routes traffic to it and a crash loop would tell the orchestrator something untrue.
-- The **server** does the opposite. It refuses to listen at all until its migration is applied, because accepting traffic against a schema it wasn't built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck gets a 120-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
+- The **server** does the opposite. It refuses to listen at all until its migration is applied, because accepting traffic against a schema it wasn't built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck gets a 45-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
 
 One thing to know before copying a command: `docker compose up --wait` reports the migrator's clean `exit(0)` as a failure, and naming services doesn't avoid it, since their dependencies get waited on too. Start first and wait second, naming only the services that stay up:
 
