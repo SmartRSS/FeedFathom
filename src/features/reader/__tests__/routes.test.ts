@@ -380,32 +380,34 @@ const removals: [string, object][] = [
   ["/api/articles", { removedArticleIdList: [3] }],
 ];
 
+const removalApp = async () => {
+  const dependencies = createDependencies();
+  dependencies.usersDataService.authenticate = async (sid) =>
+    sid === "account-2" ? { ...sessionUser, id: 2 } : undefined;
+  const removedFor: number[] = [];
+  dependencies.userSourcesDataService.removeSourceFromUser = async (userId) => {
+    removedFor.push(userId);
+  };
+  dependencies.foldersDataService.removeEmptyUserFolder = async (userId) => {
+    removedFor.push(userId);
+    return "removed";
+  };
+  dependencies.articlesDataService.removeUserArticles = async (
+    articleIds,
+    userId,
+  ) => {
+    removedFor.push(userId);
+    return { articleIds, sourceIds: [] };
+  };
+  dependencies.userSourcesDataService.recomputeUnreadCounts = async () =>
+    undefined;
+  return { app: await appFor(dependencies), removedFor };
+};
+
 test.each(removals)(
   "DELETE %s signed in as account 2 refuses a request made for account 1 and removes nothing",
   async (path, body) => {
-    const dependencies = createDependencies();
-    dependencies.usersDataService.authenticate = async (sid) =>
-      sid === "account-2" ? { ...sessionUser, id: 2 } : undefined;
-    const removedFor: number[] = [];
-    dependencies.userSourcesDataService.removeSourceFromUser = async (
-      userId,
-    ) => {
-      removedFor.push(userId);
-    };
-    dependencies.foldersDataService.removeEmptyUserFolder = async (userId) => {
-      removedFor.push(userId);
-      return "removed";
-    };
-    dependencies.articlesDataService.removeUserArticles = async (
-      articleIds,
-      userId,
-    ) => {
-      removedFor.push(userId);
-      return { articleIds, sourceIds: [] };
-    };
-    dependencies.userSourcesDataService.recomputeUnreadCounts = async () =>
-      undefined;
-    const app = await appFor(dependencies);
+    const { app, removedFor } = await removalApp();
     const remove = (named?: string) =>
       send(app, "DELETE", path, body, {
         headers: {
@@ -423,5 +425,23 @@ test.each(removals)(
     expect(forAccount2.status).toBe(200);
     expect(unnamed.status).toBe(200);
     expect(removedFor).toEqual([2, 2]);
+  },
+);
+
+test.each(removals)(
+  "DELETE %s without a live session answers 401, not 412, to a request that names an account",
+  async (path, body) => {
+    const { app, removedFor } = await removalApp();
+
+    const signedOut = await send(app, "DELETE", path, body, {
+      headers: { [accountHeader]: "1" },
+    });
+    const expired = await send(app, "DELETE", path, body, {
+      headers: { [accountHeader]: "1", cookie: "sid=expired" },
+    });
+
+    expect(signedOut.status).toBe(401);
+    expect(expired.status).toBe(401);
+    expect(removedFor).toEqual([]);
   },
 );
