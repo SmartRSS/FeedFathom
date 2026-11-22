@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
 import { articlePageSize } from "#shared/contracts/limits.ts";
-import { accountHeader } from "#shared/contracts/headers.ts";
+import {
+  accountHeader,
+  accountMismatchStatus,
+} from "#shared/contracts/headers.ts";
 import {
   apiCachePrefix,
   offlineArticleLimit,
@@ -860,9 +863,6 @@ test("a download answered after a sign-in is not stored", async () => {
   expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
 });
 
-const session = (id: number | null) =>
-  Response.json({ user: id === null ? null : { id } });
-
 const removalAs = (
   signedIn: number | null,
   headers: Headers,
@@ -871,7 +871,7 @@ const removalAs = (
   if (signedIn === null) return new Response(null, { status: 401 });
   const named = headers.get(accountHeader);
   if (named !== null && named !== String(signedIn))
-    return new Response(null, { status: 412 });
+    return new Response(null, { status: accountMismatchStatus });
   applied.push(signedIn);
   return new Response(null);
 };
@@ -923,9 +923,8 @@ test("a removal replayed just after another tab signs in to another account is n
   let signedIn = 1;
   let otherTabSignsIn = false;
   const applied: number[] = [];
-  const sw = loadServiceWorker((path, method, headers) => {
+  const sw = loadServiceWorker((_path, method, headers) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(signedIn);
     if (method === "GET") return Response.json({ tree: [] });
     if (otherTabSignsIn) signedIn = 2;
     return removalAs(signedIn, headers, applied);
@@ -1166,13 +1165,17 @@ test("a removal queued before the session expired replays when the same account 
 });
 
 test("logging out drops the removals waiting to replay, and the API cache", async () => {
-  const sw = loadServiceWorker((path) =>
-    path === "/api/logout"
-      ? Response.json({ success: true })
-      : Promise.reject(new TypeError("Failed to fetch")),
-  );
+  let online = true;
+  const sw = loadServiceWorker((path) => {
+    if (path === "/api/logout") return Response.json({ success: true });
+    if (!online) return Promise.reject(new TypeError("Failed to fetch"));
+    return Response.json({ tree: [] });
+  });
+  await sw.loadTree();
+  online = false;
   await sw.removeSource().response;
   expect(sw.queue.rows.size).toBe(1);
+  expect([...sw.apiEntries().keys()]).toEqual(["/api/tree"]);
   await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
     .response;
   expect(sw.queue.rows.size).toBe(0);
