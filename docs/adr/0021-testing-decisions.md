@@ -252,3 +252,11 @@ The bridged HTML uses `data:` image URLs so a failed request cannot land in the 
 **Where:** `tests/browser/extension-popup.spec.ts`
 
 Chromium always has `chrome.contextMenus`, so the missing-API path where `background-event.ts` falls back to `action.setPopup` (Firefox for Android only) cannot be exercised. The test covers `popup.html` and `popup.ts` directly, the UI mobile falls back to, against the `chrome.storage.session` cache the background script keeps regardless of `contextMenus` support.
+
+## Model checking
+
+### A TLA+ model checks how refresh requests coalesce onto the ParseSource job
+
+**Where:** `src/features/feeds/__tests__/source-enqueue-model/`; `bin/model-check.sh`; `.claude/skills/verify-source-enqueue/SKILL.md`
+
+The bugs in this protocol (#813, #845, #847 and the re-enqueued follow-up that d1a82e4d removed) were each an order of Redis and BullMQ steps that no unit test had arranged. TLC tries every order for one source, three concurrent `enqueueSource` calls, the poll and one worker. Each of the four fixes is a flag the configs revert, and the check fails unless every reverted variant breaks the property and the current one keeps it. The model does not read the code: a change to the covered functions is caught only when the model is changed to describe it, which the skill walks through. `tla2tools.jar` is downloaded at a pinned version and SHA-256 rather than vendored, and only Java is needed to run it.

@@ -175,7 +175,7 @@ A `feed` source is gated only by `notBefore`, which `successSource` and `failSou
 
 **Where:** `src/features/feeds/source-enqueue.ts`, `SourceEnqueuer`, `parseSourceJobId()`, `pendingParseRefreshKey()`
 
-The per-source job id is BullMQ's dedupe key (#813). A request for a waiting or delayed job is merged into its payload by a Lua script, with a cache bypass from any request winning. A request for an active job would be deduped away after its caller was answered, so it goes on a Redis marker where "1" (bypass) is set unconditionally and "0" only if empty, so no writer downgrades a bypass. After the parse `runParse` takes the marker with `GETDEL` and parses once more; a deferred parse leaves the marker for its retry, and a deferred follow-up throws `JobDeferral` carrying its own payload, because retrying the original request would lose the bypass (#847).
+The per-source job id is BullMQ's dedupe key (#813). A request for a waiting or delayed job is merged into its payload by a Lua script, with a cache bypass from any request winning. A request for an active job would be deduped away after its caller was answered, so it goes on a Redis marker where "1" (bypass) is set unconditionally and "0" only if empty, so no writer downgrades a bypass. After the parse `runParse` takes the marker with `GETDEL` and parses once more; a deferred parse leaves the marker for its retry, and a deferred follow-up throws `JobDeferral` carrying its own payload, because retrying the original request would lose the bypass (#847). The TLA+ model in `__tests__/source-enqueue-model/` checks this protocol, and the `verify-source-enqueue` skill says how to bring it in line with a change here.
 
 ### Permanent redirects update the source; temporary ones live briefly in Redis
 
