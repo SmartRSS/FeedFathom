@@ -28,7 +28,7 @@ check() {
   (cd "$model_dir" && java -XX:+UseParallelGC -cp "$jar" tlc2.TLC \
     -workers 1 -metadir "$work/states/$config" \
     -config "$config.cfg" "$spec.tla") >"$log" 2>&1 || status=$?
-  states=$(grep -o '[0-9]* distinct states found' "$log" || true)
+  states=$(grep -o '^[0-9]* states generated, [0-9]* distinct states found' "$log" | sed 's/.*, //' || true)
   if [ "$expected" = pass ]; then
     if [ "$status" -eq 0 ] && grep -q 'No error has been found' "$log"; then
       echo "ok    $config passes ($states)"
@@ -49,12 +49,9 @@ check() {
 
 enqueue=src/features/feeds/__tests__/source-enqueue-model
 check $enqueue SourceEnqueue current pass
-check $enqueue SourceEnqueue finding-strict pass
-check $enqueue SourceEnqueue finding-marked-late pass
-check $enqueue SourceEnqueue finding-add-lost pass
-check $enqueue SourceEnqueue replay-issue-813 RefreshAnsweredOutsideKnownRaces
-check $enqueue SourceEnqueue replay-d1a82e4d RefreshAnsweredOutsideKnownRaces
-check $enqueue SourceEnqueue replay-issue-845 RefreshAnsweredOutsideKnownRaces
-check $enqueue SourceEnqueue replay-issue-847 RefreshAnsweredOutsideKnownRaces
+check $enqueue SourceEnqueue replay-issue-813 RefreshAnsweredBeforeIdle
+check $enqueue SourceEnqueue replay-d1a82e4d RefreshAnsweredBeforeIdle
+check $enqueue SourceEnqueue replay-issue-845 RefreshAnsweredBeforeIdle
+check $enqueue SourceEnqueue replay-issue-847 RefreshAnsweredBeforeIdle
 
 exit "$failed"

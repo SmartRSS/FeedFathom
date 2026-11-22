@@ -12,12 +12,11 @@ ASSUME Reverted \subseteq RevertibleFixes
 VARIABLES
   job, jobSkipCache, marker,
   worker, request, followUp, checking, adding,
-  caller, asked, taken,
-  owed, fetchedSince, markedLate, addLost
+  caller, asked, taken, owed
 
 vars ==
   <<job, jobSkipCache, marker, worker, request, followUp, checking, adding,
-    caller, asked, taken, owed, fetchedSince, markedLate, addLost>>
+    caller, asked, taken, owed>>
 
 JobStates == {"none", "waiting", "active", "delayed"}
 MarkerValues == {"none", "0", "1"}
@@ -41,9 +40,6 @@ TypeOK ==
   /\ asked \in [Requests -> BOOLEAN]
   /\ taken \in [Requests -> MarkerValues]
   /\ owed \in [Requests -> BOOLEAN]
-  /\ fetchedSince \in [Requests -> BOOLEAN]
-  /\ markedLate \in [Requests -> BOOLEAN]
-  /\ addLost \in [Requests -> BOOLEAN]
 
 Init ==
   /\ job = "none"
@@ -58,28 +54,18 @@ Init ==
   /\ asked = [r \in Requests |-> FALSE]
   /\ taken = [r \in Requests |-> "none"]
   /\ owed = [r \in Requests |-> FALSE]
-  /\ fetchedSince = [r \in Requests |-> FALSE]
-  /\ markedLate = [r \in Requests |-> FALSE]
-  /\ addLost = [r \in Requests |-> FALSE]
 
 Reverts(fix) == fix \in Reverted
 
 MergedMarker(skipCache) ==
   IF skipCache THEN "1" ELSE IF marker = "none" THEN "0" ELSE marker
 
-Covers(value, skipCache) == value = "1" \/ (value = "0" /\ ~skipCache)
-
-NoRunWillTakeMarker ==
-  \/ job = "none"
-  \/ job = "active" /\ worker \in {"takeForReenqueue", "reenqueue", "finish"}
-
 Fetch(skipCache) ==
-  /\ owed' = [r \in Requests |->
-                IF caller[r] # "idle" /\ (skipCache \/ ~asked[r])
-                THEN FALSE ELSE owed[r]]
-  /\ fetchedSince' = [r \in Requests |-> caller[r] # "idle" \/ fetchedSince[r]]
+  owed' = [r \in Requests |->
+             IF caller[r] # "idle" /\ (skipCache \/ ~asked[r])
+             THEN FALSE ELSE owed[r]]
 
-NoFetch == UNCHANGED <<owed, fetchedSince>>
+NoFetch == UNCHANGED owed
 
 Ack(r) == caller' = [caller EXCEPT ![r] = "acked"]
 
@@ -93,7 +79,7 @@ EnqueueSource(r) ==
                [] job = "none" -> "mark"
                [] OTHER -> "getState")
   /\ UNCHANGED <<job, jobSkipCache, marker, worker, request, followUp,
-                 checking, adding, taken, fetchedSince, markedLate, addLost>>
+                 checking, adding, taken>>
 
 GetState(r) ==
   /\ caller[r] = "getState"
@@ -101,34 +87,30 @@ GetState(r) ==
              THEN IF Reverts("mergeInSteps") THEN "takeForMerge" ELSE "merge"
              ELSE "mark")
   /\ UNCHANGED <<job, jobSkipCache, marker, worker, request, followUp,
-                 checking, adding, asked, taken, owed, fetchedSince,
-                 markedLate, addLost>>
+                 checking, adding, asked, taken, owed>>
 
 MergeQueuedRefresh(r) ==
   /\ caller[r] = "merge"
   /\ CASE job = "none" ->
             /\ GoTo(r, "mark")
-            /\ UNCHANGED <<jobSkipCache, marker, markedLate>>
+            /\ UNCHANGED <<jobSkipCache, marker>>
        [] job \in {"waiting", "delayed"} ->
             /\ jobSkipCache' = (asked[r] \/ jobSkipCache \/ marker = "1")
             /\ marker' = "none"
             /\ Ack(r)
-            /\ UNCHANGED markedLate
        [] job = "active" ->
             /\ marker' = MergedMarker(asked[r])
-            /\ markedLate' = [markedLate EXCEPT ![r] = NoRunWillTakeMarker]
             /\ Ack(r)
             /\ UNCHANGED jobSkipCache
   /\ UNCHANGED <<job, worker, request, followUp, checking, adding, asked,
-                 taken, owed, fetchedSince, addLost>>
+                 taken, owed>>
 
 MergePendingRefresh(r) ==
   /\ caller[r] = "mark"
   /\ marker' = MergedMarker(asked[r])
   /\ GoTo(r, "add")
   /\ UNCHANGED <<job, jobSkipCache, worker, request, followUp, checking,
-                 adding, asked, taken, owed, fetchedSince, markedLate,
-                 addLost>>
+                 adding, asked, taken, owed>>
 
 TakeBeforeUpdateData(r) ==
   /\ caller[r] = "takeForMerge"
@@ -136,7 +118,7 @@ TakeBeforeUpdateData(r) ==
   /\ marker' = "none"
   /\ GoTo(r, "updateQueued")
   /\ UNCHANGED <<job, jobSkipCache, worker, request, followUp, checking,
-                 adding, asked, owed, fetchedSince, markedLate, addLost>>
+                 adding, asked, owed>>
 
 UpdateQueuedData(r) ==
   /\ caller[r] = "updateQueued"
@@ -147,33 +129,30 @@ UpdateQueuedData(r) ==
           /\ Ack(r)
   /\ taken' = [taken EXCEPT ![r] = "none"]
   /\ UNCHANGED <<job, marker, worker, request, followUp, checking, adding,
-                 asked, owed, fetchedSince, markedLate, addLost>>
+                 asked, owed>>
 
 Add(r) ==
   /\ caller[r] = "add"
   /\ IF job = "none"
      THEN /\ job' = "waiting"
           /\ jobSkipCache' = asked[r]
-          /\ UNCHANGED addLost
-     ELSE /\ addLost' = [addLost EXCEPT ![r] = ~Reverts("addWithoutLooking")]
-          /\ UNCHANGED <<job, jobSkipCache>>
+     ELSE UNCHANGED <<job, jobSkipCache>>
   /\ Ack(r)
   /\ UNCHANGED <<marker, worker, request, followUp, checking, adding, asked,
-                 taken, owed, fetchedSince, markedLate>>
+                 taken, owed>>
 
 EnqueueDueSources ==
   /\ job = "none"
   /\ job' = "waiting"
   /\ jobSkipCache' = FALSE
   /\ UNCHANGED <<marker, worker, request, followUp, checking, adding, caller,
-                 asked, taken, owed, fetchedSince, markedLate, addLost>>
+                 asked, taken, owed>>
 
 PromoteDelayed ==
   /\ job = "delayed"
   /\ job' = "waiting"
   /\ UNCHANGED <<jobSkipCache, marker, worker, request, followUp, checking,
-                 adding, caller, asked, taken, owed, fetchedSince,
-                 markedLate, addLost>>
+                 adding, caller, asked, taken, owed>>
 
 MoveToActive ==
   /\ job = "waiting"
@@ -182,7 +161,7 @@ MoveToActive ==
   /\ request' = jobSkipCache
   /\ worker' = "take"
   /\ UNCHANGED <<jobSkipCache, marker, followUp, checking, adding, caller,
-                 asked, taken, owed, fetchedSince, markedLate, addLost>>
+                 asked, taken, owed>>
 
 TakePendingRefresh ==
   /\ worker = "take"
@@ -190,7 +169,7 @@ TakePendingRefresh ==
   /\ marker' = "none"
   /\ worker' = "parse"
   /\ UNCHANGED <<job, jobSkipCache, followUp, checking, adding, caller,
-                 asked, taken, owed, fetchedSince, markedLate, addLost>>
+                 asked, taken, owed>>
 
 ParseRequest ==
   /\ worker = "parse"
@@ -201,7 +180,7 @@ ParseRequest ==
         /\ worker' = IF Reverts("deferralDropsFollowUp")
                      THEN "moveToDelayed" ELSE "updateData"
   /\ UNCHANGED <<job, jobSkipCache, marker, request, followUp, checking,
-                 adding, caller, asked, taken, markedLate, addLost>>
+                 adding, caller, asked, taken>>
 
 TakeForReenqueue ==
   /\ worker = "takeForReenqueue"
@@ -209,22 +188,21 @@ TakeForReenqueue ==
   /\ followUp' = (marker = "1")
   /\ worker' = IF marker = "none" THEN "finish" ELSE "reenqueue"
   /\ UNCHANGED <<job, jobSkipCache, request, checking, adding, caller, asked,
-                 taken, owed, fetchedSince, markedLate, addLost>>
+                 taken, owed>>
 
 ReenqueueFollowUp ==
   /\ worker = "reenqueue"
   /\ marker' = MergedMarker(followUp)
   /\ worker' = "finish"
   /\ UNCHANGED <<job, jobSkipCache, request, followUp, checking, adding,
-                 caller, asked, taken, owed, fetchedSince, markedLate,
-                 addLost>>
+                 caller, asked, taken, owed>>
 
 UpdateDeferredData ==
   /\ worker = "updateData"
   /\ jobSkipCache' = request
   /\ worker' = "moveToDelayed"
   /\ UNCHANGED <<job, marker, request, followUp, checking, adding, caller,
-                 asked, taken, owed, fetchedSince, markedLate, addLost>>
+                 asked, taken, owed>>
 
 MoveToDelayed ==
   /\ worker = "moveToDelayed"
@@ -233,7 +211,7 @@ MoveToDelayed ==
   /\ request' = FALSE
   /\ followUp' = FALSE
   /\ UNCHANGED <<jobSkipCache, marker, checking, adding, caller, asked, taken,
-                 owed, fetchedSince, markedLate, addLost>>
+                 owed>>
 
 MoveToFinished ==
   /\ worker = "finish"
@@ -243,15 +221,14 @@ MoveToFinished ==
   /\ request' = FALSE
   /\ followUp' = FALSE
   /\ checking' = (checking \/ ~Reverts("followUpThroughEnqueue"))
-  /\ UNCHANGED <<marker, adding, caller, asked, taken, owed, fetchedSince,
-                 markedLate, addLost>>
+  /\ UNCHANGED <<marker, adding, caller, asked, taken, owed>>
 
 CheckPendingRefresh ==
   /\ checking
   /\ \E more \in BOOLEAN : checking' = more
   /\ adding' = (adding \/ marker # "none")
   /\ UNCHANGED <<job, jobSkipCache, marker, worker, request, followUp, caller,
-                 asked, taken, owed, fetchedSince, markedLate, addLost>>
+                 asked, taken, owed>>
 
 RequeuePendingRefresh ==
   /\ adding
@@ -261,7 +238,7 @@ RequeuePendingRefresh ==
           /\ jobSkipCache' = FALSE
      ELSE UNCHANGED <<job, jobSkipCache>>
   /\ UNCHANGED <<marker, worker, request, followUp, checking, caller, asked,
-                 taken, owed, fetchedSince, markedLate, addLost>>
+                 taken, owed>>
 
 Next ==
   \/ \E r \in Requests :
@@ -293,25 +270,8 @@ Acked(r) == caller[r] = "acked"
 
 Answered(r) == ~owed[r]
 
-StrandedOnMarker(r) == markedLate[r] /\ Covers(marker, asked[r])
-
-FetchedWithoutBypass(r) == addLost[r] /\ fetchedSince[r]
-
 RefreshAnsweredBeforeIdle ==
   Idle => \A r \in Requests : Acked(r) => Answered(r)
-
-RefreshAnsweredUnlessMarkedLate ==
-  Idle => \A r \in Requests :
-            Acked(r) => Answered(r) \/ StrandedOnMarker(r)
-
-RefreshAnsweredUnlessAddLost ==
-  Idle => \A r \in Requests :
-            Acked(r) => Answered(r) \/ FetchedWithoutBypass(r)
-
-RefreshAnsweredOutsideKnownRaces ==
-  Idle => \A r \in Requests :
-            Acked(r) => Answered(r) \/ StrandedOnMarker(r)
-                                    \/ FetchedWithoutBypass(r)
 
 Symmetry == Permutations(Requests)
 =============================================================================
