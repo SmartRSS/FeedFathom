@@ -49,9 +49,9 @@ check() {
 
 enqueue=src/features/feeds/__tests__/source-enqueue-model
 check $enqueue SourceEnqueue current pass
-check $enqueue SourceEnqueue finding-strict RefreshAnsweredBeforeIdle
-check $enqueue SourceEnqueue finding-marked-late RefreshAnsweredUnlessAddLost
-check $enqueue SourceEnqueue finding-add-lost RefreshAnsweredUnlessMarkedLate
+check $enqueue SourceEnqueue finding-strict pass
+check $enqueue SourceEnqueue finding-marked-late pass
+check $enqueue SourceEnqueue finding-add-lost pass
 check $enqueue SourceEnqueue replay-issue-813 RefreshAnsweredOutsideKnownRaces
 check $enqueue SourceEnqueue replay-d1a82e4d RefreshAnsweredOutsideKnownRaces
 check $enqueue SourceEnqueue replay-issue-845 RefreshAnsweredOutsideKnownRaces
