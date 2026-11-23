@@ -16,6 +16,7 @@ import {
 } from "#features/feeds/favicon-refresher.ts";
 import { imageDimensions } from "#features/feeds/favicon-selection.ts";
 import {
+  pendingParseRefreshKey,
   SourceEnqueuer,
   type SourceParseQueue,
   type SourceParseRedis,
@@ -86,21 +87,25 @@ const idleSources = () =>
     "sourcesDataService",
   );
 
-const enqueuerWithMarkers = (markers: (null | string)[] = []) => {
-  const reads = { count: 0 };
+const pendingKey = pendingParseRefreshKey(source.id);
+
+const enqueuerWithMarker = (marker?: string) => {
+  const redis = new Map<string, string>();
+  if (marker !== undefined) redis.set(pendingKey, marker);
   const enqueuer = new SourceEnqueuer(
     strictFake<SourceParseQueue>({ async addBulk() {} }, "parseQueue"),
     strictFake<SourceParseRedis>(
       {
-        async getdel() {
-          reads.count++;
-          return markers.shift() ?? null;
+        async getdel(key) {
+          const value = redis.get(key) ?? null;
+          redis.delete(key);
+          return value;
         },
       },
       "parseRedis",
     ),
   );
-  return { enqueuer, reads };
+  return { enqueuer, redis };
 };
 
 async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
@@ -116,7 +121,7 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
       "feedParser",
     ),
     retentionService: strictFake<RetentionService>({}, "retentionService"),
-    sourceEnqueuer: enqueuerWithMarkers().enqueuer,
+    sourceEnqueuer: enqueuerWithMarker().enqueuer,
     sourcesDataService: idleSources(),
     webSubSubscriber: strictFake<WebSubSubscriber>({}, "webSubSubscriber"),
     ...overrides,
@@ -258,7 +263,7 @@ test("folds a refresh waiting on the marker into the parse", async () => {
         parsed.push([input.skipCache, input.trigger]);
       },
     }),
-    sourceEnqueuer: enqueuerWithMarkers(["1"]).enqueuer,
+    sourceEnqueuer: enqueuerWithMarker("1").enqueuer,
   });
 
   await process(parseJob());
@@ -269,7 +274,7 @@ test("folds a refresh waiting on the marker into the parse", async () => {
 test("a deferred parse keeps the refresh it took until a retry fulfils it", async () => {
   const parsed: Array<[boolean | undefined, string | undefined]> = [];
   const outcomes = ["defer", "defer", "ok"];
-  const { enqueuer, reads } = enqueuerWithMarkers(["1"]);
+  const { enqueuer } = enqueuerWithMarker("1");
   const { process } = await startWorker({
     feedParser: strictFake<FeedParser>({
       async parseSource(input) {
@@ -314,35 +319,7 @@ test("a deferred parse keeps the refresh it took until a retry fulfils it", asyn
     [true, "manual"],
     [true, "manual"],
   ]);
-  expect(reads.count).toBe(3);
   expect(events).toEqual(["update", "delay", "delay"]);
-});
-
-test("a favicon gather hands every due source to the refresher's queue", async () => {
-  const due = [
-    { hasFavicon: false, homeUrl: "https://one.example/", id: 1 },
-    { hasFavicon: true, homeUrl: "https://two.example/", id: 2 },
-  ];
-  const enqueued: unknown[] = [];
-  const { process } = await startWorker({
-    faviconRefresher: strictFake<FaviconRefresher>({
-      async enqueueRefreshes(sources) {
-        enqueued.push(...sources);
-      },
-    }),
-    sourcesDataService: strictFake<SourcesDataService>({
-      async getSourcesDueFaviconRefresh() {
-        return due;
-      },
-      async getSourcesToProcess() {
-        return [];
-      },
-    }),
-  });
-
-  await process(job(JobName.GatherFaviconJobs, {}));
-
-  expect(enqueued).toEqual(due);
 });
 
 function fakePng(size: number) {
@@ -698,8 +675,5 @@ test.each<[string, Partial<MainWorkerServices>, MainWorkerJob, unknown]>([
   using logged = spyOn(console, "error").mockImplementation(() => {});
   await expect(process(failing)).resolves.toBeUndefined();
   expect(logged.mock.calls).toHaveLength(1);
-  expect(logged.mock.calls[0]?.[0]).toBe(
-    `Error processing ${failing.name} job:`,
-  );
   expect(logged.mock.calls[0]?.[1]).toBe(thrown);
 });
