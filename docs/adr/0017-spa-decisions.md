@@ -99,9 +99,19 @@ Only a page the service worker controls asks for `?cached`, since only the worke
 
 ### The offline removal queue lives in IndexedDB and the page clears it on logout too
 
-**Where:** `src/spa/mutation-queue.ts`, `QueuedMutation`; `src/spa/sw-protocol.ts`, `forgetAccountData()`; `src/spa/dashboard.tsx`, `ownerHeaders()`; `src/spa/main.tsx`, `handleUnauthorized()`
+**Where:** `src/spa/mutation-queue.ts`, `QueuedMutation`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
 
-The service worker queues removals made offline in IndexedDB, so the queue outlives the worker. The page also clears it on logout, for a logout the worker does not see. Each removal names the account from the dashboard's own `/api/session` answer, because the page is the one place that knows which account it shows and the worker cannot read the session cookie. A removal made before that answer arrives names no account: online the server applies it as it always did, and offline the worker refuses to queue it (ADR 0018). When the server refuses a removal with 412 because another tab signed in to another account, the page reloads and starts over as that account. Reloading only the tree would show the new account's feeds beside the old account's session answer, and every later removal from the page would be refused. `QueuedMutation.account` is optional because entries queued before #982 have no account, and a replay drops them.
+The service worker queues removals made offline in IndexedDB, so the queue outlives the worker. The page also clears it on logout, for a logout the worker does not see. `QueuedMutation.account` is optional because entries queued before #982 have no account, and a replay drops them.
+
+### Every request names the account the page shows
+
+**Where:** `src/spa/api.ts`, `requestSession()`, `forgetAccount()`, `requestInit()`; `src/spa/dashboard.tsx`, `loadSession()`, `sessionRetryFirstMs`, `sessionRetryMaxMs`; `src/spa/main.tsx`, `handleUnauthorized()`
+
+A sign-in in another tab replaces the session cookie under an open page, which then still shows the old account. Any change it sends, not only a removal, would land on the new account (#1209). So `api()` names the account from the last `/api/session` answer in `X-FeedFathom-Account` on every request, and the server refuses a request for another account with 412 (ADR 0009). The page is the one place that knows which account it shows, and neither the page nor the worker can read the session cookie. The session request itself names no account, because its answer is how the page learns the account. A sign-in or logout from this page forgets the account, so the next page does not send the previous account's name before its own session answer arrives. A request sent before the first answer names no account: online the server applies it as it always did, and offline the worker refuses to queue a removal without one (ADR 0018).
+
+The dashboard retries a failed session request, waiting one second and then twice as long each time, up to one minute, until it succeeds (#1210). Without the retry, one failed request would leave the page naming no account until it reloaded. Asking for the session again before each request would instead put a round trip in front of the first requests of every load. The retry stops when the dashboard unmounts.
+
+When the server answers 412, the page reloads and starts over as the account that is signed in now. Reloading only the tree would show the new account's feeds beside the old account's session answer, and every later request from the page would be refused.
 
 ### Offline sync is paced by tree loads, at most once a minute
 
