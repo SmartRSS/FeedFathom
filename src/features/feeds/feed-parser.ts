@@ -115,7 +115,6 @@ export class FeedParser {
         await this.sourcesDataService.successSource(source.id, {
           cached,
           notBefore: freshUntil ? new Date(freshUntil) : undefined,
-          observedAt: new Date(),
           trigger: source.trigger ?? "poll",
         });
         return;
