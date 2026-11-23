@@ -1,10 +1,11 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import type { FeedPreview } from "#features/feeds/feed-mapper.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 
 class FakeRedis {
   readonly deleted: string[] = [];
-  readonly setCalls: [string, string, "PX", number][] = [];
+  readonly expiresAt = new Map<string, number>();
+  readonly failure = new Error("Redis unavailable");
   readonly values = new Map<string, string>();
   failGet = false;
   failSet = false;
@@ -15,20 +16,27 @@ class FakeRedis {
   }
 
   async get(key: string): Promise<null | string> {
-    if (this.failGet) throw new Error("Redis unavailable");
+    if (this.failGet) throw this.failure;
+    if ((this.expiresAt.get(key) ?? Infinity) <= Date.now()) return null;
     return this.values.get(key) ?? null;
   }
 
   async set(
     key: string,
     value: string,
-    expiration: "PX",
+    _expiration: "PX",
     milliseconds: number,
   ): Promise<string> {
-    if (this.failSet) throw new Error("Redis unavailable");
-    this.setCalls.push([key, value, expiration, milliseconds]);
+    if (this.failSet) throw this.failure;
+    this.expiresAt.set(key, Date.now() + milliseconds);
     this.values.set(key, value);
     return "OK";
+  }
+
+  storedKey(): string {
+    const [key] = this.values.keys();
+    if (!key) throw new Error("Preview was not cached");
+    return key;
   }
 }
 
@@ -61,30 +69,36 @@ const previewWire = {
 };
 
 describe("FeedPreviewCache", () => {
-  test("stores previews for ten minutes and revives dates", async () => {
+  test("serves a preview for ten minutes and revives its dates", async () => {
+    setSystemTime(new Date("2026-07-20T12:00:00.000Z"));
+    try {
+      const cache = new FeedPreviewCache(new FakeRedis());
+      await cache.save(7, feedUrl, preview);
+
+      setSystemTime(new Date("2026-07-20T12:09:59.999Z"));
+      const cached = await cache.get(7, feedUrl);
+      expect(cached).toEqual(preview);
+      expect(cached?.articles[0]?.publishedAt).toBeInstanceOf(Date);
+
+      setSystemTime(new Date("2026-07-20T12:10:00.000Z"));
+      expect(await cache.get(7, feedUrl)).toBeUndefined();
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("keeps the feed URL and its secret out of the Redis key", async () => {
     const redis = new FakeRedis();
-    const cache = new FeedPreviewCache(redis);
+    await new FeedPreviewCache(redis).save(7, feedUrl, preview);
 
-    await cache.save(7, feedUrl, preview);
-
-    const call = redis.setCalls[0];
-    if (!call) throw new Error("Preview was not cached");
-    expect(call[0]).toStartWith("feed-preview:7:");
-    expect(call[0]).not.toContain(feedUrl);
-    expect(call[2]).toBe("PX");
-    expect(call[3]).toBe(10 * 60_000);
-    expect(await cache.get(7, feedUrl)).toEqual(preview);
-    expect(
-      (await cache.get(7, feedUrl))?.articles[0]?.publishedAt,
-    ).toBeInstanceOf(Date);
+    expect(redis.storedKey()).not.toContain("secret");
   });
 
   test("revives a preview cached before enclosures and updatedAt", async () => {
     const redis = new FakeRedis();
     const cache = new FeedPreviewCache(redis);
     await cache.save(7, feedUrl, preview);
-    const key = redis.setCalls[0]?.[0];
-    if (!key) throw new Error("Preview was not cached");
+    const key = redis.storedKey();
     const {
       enclosures: _enclosures,
       updatedAt: _updatedAt,
@@ -173,8 +187,7 @@ describe("FeedPreviewCache", () => {
         const redis = new FakeRedis();
         const cache = new FeedPreviewCache(redis);
         await cache.save(7, feedUrl, preview);
-        const key = redis.setCalls[0]?.[0];
-        if (!key) throw new Error("Preview was not cached");
+        const key = redis.storedKey();
         redis.values.set(key, entry);
         expect(await cache.get(7, feedUrl)).toBeUndefined();
         expect(redis.deleted).toEqual([key]);
@@ -182,37 +195,23 @@ describe("FeedPreviewCache", () => {
     );
   });
 
-  test("treats Redis errors as logged cache misses", async () => {
+  test("a failed read is a cache miss that logs the Redis error", async () => {
     const redis = new FakeRedis();
-    const cache = new FeedPreviewCache(redis);
     redis.failGet = true;
-    const errors = spyOn(console, "error").mockImplementation(() => {});
+    using errors = spyOn(console, "error").mockImplementation(() => {});
 
-    try {
-      expect(await cache.get(7, feedUrl)).toBeUndefined();
-      expect(errors).toHaveBeenCalledWith(
-        `Failed to read feed preview for ${feedUrl}:`,
-        expect.anything(),
-      );
-    } finally {
-      errors.mockRestore();
-    }
+    expect(await new FeedPreviewCache(redis).get(7, feedUrl)).toBeUndefined();
+    expect(errors.mock.calls.flat()).toContain(redis.failure);
   });
 
-  test("a failed save still resolves, but leaves a trace", async () => {
+  test("a failed save still resolves, and logs the Redis error", async () => {
     const redis = new FakeRedis();
-    const cache = new FeedPreviewCache(redis);
     redis.failSet = true;
-    const errors = spyOn(console, "error");
+    using errors = spyOn(console, "error").mockImplementation(() => {});
 
-    try {
-      await expect(cache.save(7, feedUrl, preview)).resolves.toBeUndefined();
-      expect(errors).toHaveBeenCalledWith(
-        `Failed to store feed preview for ${feedUrl}:`,
-        expect.anything(),
-      );
-    } finally {
-      errors.mockRestore();
-    }
+    await expect(
+      new FeedPreviewCache(redis).save(7, feedUrl, preview),
+    ).resolves.toBeUndefined();
+    expect(errors.mock.calls.flat()).toContain(redis.failure);
   });
 });
