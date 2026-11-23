@@ -305,3 +305,20 @@ test.each([
     expect(await readerSees(cookie, sourceId)).toEqual([]);
   },
 );
+
+test("a poll stores the site the feed names, resolved against the feed's address", async () => {
+  const { sourceId } = await subscribed(feedUrl);
+
+  await feedParserServing(
+    `<rss><channel><link>/blog/</link><item><guid>a</guid></item></channel></rss>`,
+    "application/rss+xml",
+  ).parseSource({ id: sourceId, url: feedUrl });
+
+  const [source] = await client<{ home_url: string; trigger: string }[]>`
+    SELECT home_url, last_fetch_trigger AS trigger
+    FROM sources WHERE id = ${sourceId}`;
+  expect(source).toEqual({
+    home_url: "https://1.1.1.1/blog/",
+    trigger: "poll",
+  });
+});

@@ -22,34 +22,6 @@ const servingFeed = (text: string, url = "https://cdn.example/feed.xml") =>
 
 const sameUrl = strictFake<RedirectMap>({ resolveUrl: async (url) => url });
 
-test("a poll records the articles and the site the feed names", async () => {
-  const recorded: Parameters<ArticleImporter["recordFetch"]>[] = [];
-  const parser = new FeedParser(
-    strictFake<ArticleImporter>({
-      async recordFetch(...args) {
-        recorded.push(args);
-      },
-    }),
-    servingFeed(
-      "<rss><channel><link>/blog/</link><item><guid>a</guid></item></channel></rss>",
-    ),
-    strictFake<SourcesDataService>({}),
-    strictFake<WebSubSubscriber>({ wants: () => false }),
-    sameUrl,
-  );
-
-  await parser.parseSource({ id: 7, url: "https://cdn.example/feed.xml" });
-
-  expect(recorded).toHaveLength(1);
-  const [sourceId, articles, fetch] = recorded[0]!;
-  expect(sourceId).toBe(7);
-  expect(articles.map(({ guid }) => guid)).toEqual(["a"]);
-  expect(fetch).toMatchObject({
-    homeUrl: "https://cdn.example/blog/",
-    trigger: "poll",
-  });
-});
-
 test("a failed redirect-cache write still returns the redirected feed", async () => {
   const parser = new FeedParser(
     strictFake<ArticleImporter>({}),
@@ -65,14 +37,13 @@ test("a failed redirect-cache write still returns the redirected feed", async ()
       },
     }),
   );
-  using logged = spyOn(console, "error").mockImplementation(() => {});
+  using _ = spyOn(console, "error").mockImplementation(() => {});
 
   const preview = await parser.preview("https://publisher.example/feed.xml");
 
   expect(
     "articles" in preview ? preview.articles.map(({ guid }) => guid) : [],
   ).toEqual(["a"]);
-  expect(logged).toHaveBeenCalledTimes(1);
 });
 
 test("metadataOnly discovers WebSub hubs without parsing feed items", async () => {

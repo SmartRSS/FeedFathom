@@ -15,6 +15,7 @@ import {
 } from "#features/feeds/source-enqueue.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { MainWorker } from "#features/jobs/main.ts";
+import { JobName } from "#features/feeds/queued-job.ts";
 
 const redisUrl = requireDisposableRedisUrl();
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
@@ -177,4 +178,68 @@ test("concurrent refreshes on a running parse fold into one follow-up that bypas
     [true, "manual"],
   ]);
   expect(await outstanding()).toEqual({ jobs: 0, marker: null });
+});
+
+test("scheduled jobs run without leaving finished jobs behind, and cleanup stops the worker", async () => {
+  const ran: string[] = [];
+  let worker: Worker | undefined;
+  const mainWorker = new MainWorker({
+    bullmqQueue: queue,
+    config,
+    createWorker: (processor, options) => {
+      worker = new Worker(queueName, processor, {
+        ...options,
+        connection: workerConnection,
+      });
+      return worker;
+    },
+    faviconRefresher: strictFake<FaviconRefresher>({
+      async enqueueRefreshes() {
+        ran.push(JobName.GatherFaviconJobs);
+      },
+    }),
+    feedParser: strictFake<FeedParser>({}),
+    retentionService: strictFake<RetentionService>({
+      async prune() {
+        ran.push(JobName.Cleanup);
+      },
+    }),
+    sourceEnqueuer: enqueuer,
+    sourcesDataService: strictFake<SourcesDataService>({
+      async getSourcesDueFaviconRefresh() {
+        return [];
+      },
+      async getSourcesToProcess() {
+        ran.push(JobName.GatherJobs);
+        return [];
+      },
+    }),
+    webSubSubscriber: strictFake<WebSubSubscriber>({
+      async renewDue() {
+        ran.push(JobName.WebSubRenewal);
+      },
+    }),
+  });
+
+  await mainWorker.initialize();
+  const settled = await eventually(
+    async () =>
+      ran.length === 5 &&
+      (await queue.getJobCountByTypes("active", "waiting")) === 0,
+  );
+
+  expect(settled).toBe(true);
+  expect(ran.toSorted()).toEqual(
+    [
+      JobName.Cleanup,
+      JobName.GatherFaviconJobs,
+      JobName.GatherJobs,
+      JobName.GatherJobs,
+      JobName.WebSubRenewal,
+    ].toSorted(),
+  );
+  expect(await queue.getJobCountByTypes("completed", "failed")).toBe(0);
+  expect(worker?.isRunning()).toBe(true);
+  await mainWorker.cleanup();
+  expect(worker?.isRunning()).toBe(false);
 });
