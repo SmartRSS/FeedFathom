@@ -938,7 +938,10 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   ]);
   online = false;
   await sw.remove("/api/articles", { removedArticleIdList: [5] });
-  const list = async (body: object, headers: Record<string, string> = {}) => {
+  const list = async (
+    body: object,
+    headers: Record<string, string> = { [accountHeader]: "1" },
+  ) => {
     const { background, response } = sw.dispatch(
       new Request(`${ORIGIN}/api/articles`, {
         body: JSON.stringify(body),
@@ -959,7 +962,7 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   expect(
     await list(
       { cursor: 99, sources: [3] },
-      { "X-Cursor-Published-At": dayAgo },
+      { "X-Cursor-Published-At": dayAgo, [accountHeader]: "1" },
     ),
   ).toEqual([2]);
   online = true;
@@ -971,6 +974,33 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   online = false;
   expect(await list({ cursor: 100, sources: [3] })).toEqual([200]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
+});
+
+test("offline, a list hides only the removals its own account queued", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/tree") return Response.json({ tree: [] });
+    return method === "POST" ? Response.json([]) : articleNetwork(path);
+  });
+  await sw.keepOffline([offlineRow(1), offlineRow(2)]);
+  online = false;
+  await sw.remove("/api/articles", { removedArticleIdList: [2] });
+  const listAs = async (account: string | null) => {
+    const { background, response } = sw.dispatch(
+      new Request(`${ORIGIN}/api/articles`, {
+        body: JSON.stringify({ sources: [3] }),
+        headers: account === null ? {} : { [accountHeader]: account },
+        method: "POST",
+      }),
+    );
+    background.catch(() => {});
+    const rows: { id: number }[] = await (await response).json();
+    return rows.map((row) => row.id);
+  };
+  expect(await listAs("1")).toEqual([1]);
+  expect(await listAs("2")).toEqual([1, 2]);
+  expect(await listAs(null)).toEqual([1, 2]);
 });
 
 test("a sign-in stops a sync from downloading the articles it has not started", async () => {

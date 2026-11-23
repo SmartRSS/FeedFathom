@@ -13,6 +13,7 @@ import type {
 } from "#shared/contracts/responses.ts";
 import { findNode, sourceIds } from "./feed-tree.ts";
 import {
+  accountFromHeader,
   accountHeader,
   accountMismatchStatus,
   deleteTraceHeader,
@@ -302,13 +303,8 @@ async function replayQueue() {
   }
 }
 
-function namedAccount(request: Request): number | undefined {
-  const named = request.headers.get(accountHeader);
-  const account = Number(named);
-  return Number.isSafeInteger(account) && String(account) === named
-    ? account
-    : undefined;
-}
+const namedAccount = (request: Request) =>
+  accountFromHeader(request.headers.get(accountHeader));
 
 async function queueableMutation(request: Request, path: keyof Removals) {
   try {
@@ -571,9 +567,11 @@ worker.addEventListener("message", (event) => {
   event.waitUntil(offlineQueue);
 });
 
-async function queuedRemovals() {
+async function queuedRemovals(account: number | undefined) {
+  if (account === undefined) return new Set<number>();
   const removals = (await queueAll()).filter(
     ({ value }) =>
+      value.account === account &&
       value.method === "DELETE" &&
       new URL(value.url).pathname === "/api/articles",
   );
@@ -631,7 +629,9 @@ async function offlineArticleList(request: Request) {
       .filter((url) => url.pathname === OFFLINE_ARTICLE_PATH)
       .map((url) => Number(url.searchParams.get("article"))),
   );
-  const removed = await queuedRemovals().catch(() => new Set<number>());
+  const removed = await queuedRemovals(namedAccount(request)).catch(
+    () => new Set<number>(),
+  );
   return Response.json(
     rows
       .filter(
