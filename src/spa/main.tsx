@@ -25,7 +25,8 @@ import {
 import { Dashboard } from "./dashboard.tsx";
 import { DialogHost, isDialogOpen } from "./dialog.tsx";
 import { installDeleteTrace } from "./delete-trace.ts";
-import { isUnauthorizedError } from "./api.ts";
+import { ApiError, isUnauthorizedError } from "./api.ts";
+import { accountMismatchStatus } from "#shared/contracts/headers.ts";
 import {
   density,
   mobileListAnchor,
@@ -154,6 +155,10 @@ function App() {
     setDiscovery(false);
   };
   const handleUnauthorized = (cause: unknown) => {
+    if (cause instanceof ApiError && cause.status === accountMismatchStatus) {
+      location.reload();
+      return true;
+    }
     if (!isUnauthorizedError(cause)) return false;
     navigate(loginPath(currentPath()));
     return true;

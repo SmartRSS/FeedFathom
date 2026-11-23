@@ -71,11 +71,11 @@ The return value counts inserted rows, rows whose content or timestamps changed,
 
 An unchanged row is written only once its `last_seen_in_feed_at` is an hour old (#897): every write copies the whole row into every index, and with polls every few minutes nearly all were no-ops that also recounted every subscriber's badge. OPML import creates subscriptions without writing articles, and a subscription sees an article only once the stamp reaches its `created_at`, so a stamp older than the source's newest subscription is moved regardless. The throttle must stay below the gone-from-feed buffer's 24-hour floor, or retention deletes articles still in the feed.
 
-### One fetch stamps its articles and the source's success with the same instant
+### PostgreSQL's clock stamps subscriptions, article sightings and fetch success
 
-**Where:** `src/features/feeds/article-import.ts`, `ArticleImporter.recordFetch()`; `src/features/feeds/source-data-service.ts`, `successSource()`
+**Where:** `src/features/feeds/article-data-service.ts`, `batchUpsertArticles()`; `src/features/feeds/user-source-data-service.ts`, `addSourceToUser()`; `src/features/feeds/opml-import-service.ts`, `insertTree()`; `src/features/feeds/source-data-service.ts`, `successSource()`; `src/features/feeds/article-import.ts`, `ArticleImporter.recordFetch()`
 
-`last_seen_in_feed_at` on every article and the source's `last_success` (`observedAt`) come from one clock read. Retention reads an article stamped before `last_success` as not in that fetch, so separate reads would make every article of a successful fetch look dropped. A CAP alert already expired at import time is left out, which matters when the fetch is replayed from a stored preview.
+A subscription sees an article when `last_seen_in_feed_at` reaches its `created_at`, so both come from `NOW()` and never from a process clock. Mixed clocks fail in two ways. A JS `Date` drops microseconds, so a fetch in the same millisecond as a subscription created with `NOW()` sorts before it and hides every article until the next re-stamp (#1200). The API server and the worker each read their own clock, so a lagging worker hides a new subscriber's articles for the length of the lag. `last_success` takes `NOW()` too, because retention reads an article stamped before `last_success` less the gone-from-feed buffer as dropped. The batches commit before `successSource` runs, so one fetch's articles precede its `last_success` by the import's duration, far inside the buffer's 24-hour floor. An email subscription backdated to its source's `created_at` keeps that stamp. A CAP alert already expired at import time is left out, which matters when the fetch is replayed from a stored preview.
 
 ### Unread badges are recounted only when a row changed, an upsert failed, or the import is one-off
 

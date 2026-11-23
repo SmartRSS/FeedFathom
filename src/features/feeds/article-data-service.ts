@@ -256,7 +256,7 @@ export class ArticlesDataService {
   }
 
   public async batchUpsertArticles(
-    articlePayloads: ArticleInsert[],
+    articlePayloads: Omit<ArticleInsert, "lastSeenInFeedAt">[],
   ): Promise<number> {
     const deduped = [
       ...new Map(
@@ -326,7 +326,11 @@ export class ArticlesDataService {
       // eslint-disable-next-line no-await-in-loop -- Sequential batches bound database pressure.
       const written = await this.drizzleConnection
         .insert(articles)
-        .values(batch)
+        .values(
+          batch.map((payload) =>
+            Object.assign({}, payload, { lastSeenInFeedAt: sql`NOW()` }),
+          ),
+        )
         .onConflictDoUpdate({
           set: {
             author: sql`

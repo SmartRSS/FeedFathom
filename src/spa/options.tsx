@@ -1,7 +1,7 @@
 import { createSignal, createUniqueId, For, onSettled, Show } from "solid-js";
 import type { Static } from "typebox";
 import {
-  sessionResponse,
+  type sessionResponse,
   sessionsResponse,
   successResponse,
 } from "#shared/contracts/responses.ts";
@@ -11,7 +11,7 @@ import {
   passwordRequest,
 } from "#shared/contracts/requests.ts";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
-import { api, messageOf } from "./api.ts";
+import { api, forgetAccount, messageOf, requestSession } from "./api.ts";
 import { loginPath } from "./routes.ts";
 import { PasswordInput } from "./password-input.tsx";
 import {
@@ -189,7 +189,7 @@ export function Options(props: {
   onSettled(() => void loadAccount());
   async function loadAccount() {
     try {
-      const session = await api("/session", sessionResponse);
+      const session = await requestSession();
       if (!session.user) {
         props.navigate(loginPath(location.pathname + location.search));
         return;
@@ -250,6 +250,7 @@ export function Options(props: {
     setSessionMessage("");
     try {
       await api("/logout", successResponse, { method: "POST" });
+      forgetAccount();
       await forgetAccountData(true);
       props.navigate("/login");
     } catch (cause) {

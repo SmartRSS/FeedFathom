@@ -235,3 +235,16 @@ Anything that needs a unit test has to come out of the component first.
   discovery request and the subscribe request.
 - **Deferred response** — a 429 telling the client the work is queued and to
   retry, rather than blocking on a fetch.
+- **Account header** — `X-FeedFathom-Account`, the account id a request was
+  made for, in canonical decimal. The page sets it on every API request but
+  the session request, from its last `/api/session` answer.
+- **Account mismatch** — the 412 the server answers when the account header
+  names another account than the session cookie's. The page reloads on it and
+  a replaying service worker drops the queued removal (ADR 0009, ADR 0018).
+- **Cache scope** — one sign-in period's API cache in the service worker,
+  named `api-v8-<uuid>`. A sign-in or logout starts a new scope and deletes the
+  others.
+- **Queued removal** — a removal the service worker accepted offline and keeps
+  in IndexedDB until it replays. It carries the account its request named, is
+  replayed for that account only, and is hidden from that account's offline
+  article list only.

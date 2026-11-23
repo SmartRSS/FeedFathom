@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
+import { sources } from "#platform/db/schemas/sources.ts";
 import { users } from "#platform/db/schemas/users.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
@@ -11,12 +13,19 @@ await migrateDatabase(databaseUrl, "./drizzle", { deadline: 5_000 });
 const drizzleConnection = createDrizzleConnection(databaseUrl);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 
-const fetched = (facts: { notBefore?: Date; observedAt?: Date } = {}) => ({
+const fetched = (facts: { notBefore?: Date } = {}) => ({
   cached: false,
-  observedAt: new Date(),
   trigger: "poll" as const,
   ...facts,
 });
+
+async function succeededAgo(sourceId: number, ms: number) {
+  await sourcesDataService.successSource(sourceId, fetched());
+  await drizzleConnection
+    .update(sources)
+    .set({ lastSuccess: new Date(Date.now() - ms) })
+    .where(eq(sources.id, sourceId));
+}
 
 async function addFeedSource(url: string) {
   return await sourcesDataService.addSource({
@@ -120,15 +129,9 @@ test("findSourceById and listAllSources count a source's subscribers", async () 
 
 test("getSourcesDueFaviconRefresh picks a source parsed hours before the daily run", async () => {
   const hoursAgo = await addFeedSource("https://source-scheduling.test/hours");
-  await sourcesDataService.successSource(
-    hoursAgo.id,
-    fetched({ observedAt: new Date(Date.now() - 6 * 60 * 60_000) }),
-  );
+  await succeededAgo(hoursAgo.id, 6 * 60 * 60_000);
   const daysAgo = await addFeedSource("https://source-scheduling.test/days");
-  await sourcesDataService.successSource(
-    daysAgo.id,
-    fetched({ observedAt: new Date(Date.now() - 2 * 24 * 60 * 60_000) }),
-  );
+  await succeededAgo(daysAgo.id, 2 * 24 * 60 * 60_000);
   const neverFetched = await addFeedSource(
     "https://source-scheduling.test/never",
   );

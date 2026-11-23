@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeEach, expect, setSystemTime, test } from "bun:test";
 import { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import { Readable } from "node:stream";
@@ -218,6 +218,23 @@ test("a subscription created between parses of an unchanged feed sees its curren
     "three",
     "two",
   ]);
+});
+
+test("a fetch after a subscription shows its articles even when the worker clock reads the subscription's millisecond", async () => {
+  const workerClock = new Date(Date.now() - 1000);
+  const userId = await subscribe(
+    "late@example.test",
+    client`${workerClock}::timestamptz + INTERVAL '500 microseconds'`,
+  );
+
+  setSystemTime(workerClock);
+  try {
+    await parse(rss(items));
+  } finally {
+    setSystemTime();
+  }
+
+  expect(await unreadCount(userId)).toBe(3);
 });
 
 async function storedSource() {

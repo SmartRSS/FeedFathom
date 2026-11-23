@@ -10,6 +10,10 @@ import { Value } from "typebox/value";
 import { articlesRequest } from "#shared/contracts/requests.ts";
 import { articlePageSize } from "#shared/contracts/limits.ts";
 import {
+  accountHeader,
+  accountMismatchStatus,
+} from "#shared/contracts/headers.ts";
+import {
   articleResponse,
   articlesResponse,
   errorResponse,
@@ -162,6 +166,11 @@ const openApp = async (
   await page.goto(path);
   return state;
 };
+
+const sessionAnswer = (page: Page) =>
+  page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/session",
+  );
 
 const intersectionsDelivered = (page: Page) =>
   page.evaluate(
@@ -2409,6 +2418,97 @@ for (const { name, prepare, ready, refusals, send } of expiringMutations) {
   });
 }
 
+test("a removal refused for another account reloads the page as the account signed in now", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  const named: (string | null)[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "DELETE")
+      named.push(request.headers()[accountHeader.toLowerCase()] ?? null);
+  });
+  const firstSession = sessionAnswer(page);
+  await page.goto("/");
+  await firstSession;
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  state.account = 43;
+  const reloadedSession = sessionAnswer(page);
+  await confirm(page);
+  await reloadedSession;
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  await confirm(page);
+
+  await expect.poll(() => state.removedSourceIds).toEqual([3]);
+  expect(named).toEqual(["42", "43"]);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 412 (Precondition Failed)",
+  ]);
+  failures.length = 0;
+});
+
+test("marking an article read after another account signs in changes nothing and reloads the page", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  const firstSession = sessionAnswer(page);
+  await page.goto("/");
+  await firstSession;
+  await selectSource(page);
+  await articleOptions(page).first().click();
+  state.account = 43;
+  const marked = page.waitForResponse(
+    (response) => response.request().method() === "PATCH",
+  );
+  const reloadedSession = sessionAnswer(page);
+  await page.getByRole("button", { name: "Mark read" }).click();
+
+  expect((await marked).status()).toBe(accountMismatchStatus);
+  expect([...state.readArticleIds]).toEqual([]);
+  await reloadedSession;
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toContain(
+    "console.error: Failed to load resource: the server responded with a status of 412 (Precondition Failed)",
+  );
+  failures.length = 0;
+});
+
+test("a dashboard whose first session request fails still names its account on a later removal", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.route(
+    "**/api/session",
+    (route) => route.fulfill({ json: { error: "Unavailable" }, status: 503 }),
+    { times: 1 },
+  );
+  const named: (string | null)[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "DELETE")
+      named.push(request.headers()[accountHeader.toLowerCase()] ?? null);
+  });
+  let sessionsAnswered = 0;
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/session" && response.ok())
+      sessionsAnswered++;
+  });
+  await page.goto("/");
+  await expect.poll(() => sessionsAnswered).toBe(1);
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  await confirm(page);
+
+  await expect.poll(() => state.removedSourceIds).toEqual([3]);
+  expect(named).toEqual(["42"]);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+  ]);
+  failures.length = 0;
+});
+
 for (const { booted, path } of [
   { booted: (page: Page) => sourceRow(page), path: "/" },
   {
@@ -3472,7 +3572,7 @@ test("logging out from an uncontrolled page drops the API cache", async ({
   await openApp(page, {}, "/options#account");
   await page.evaluate(async () => {
     const cache = await caches.open("api-test");
-    await cache.put("/sw-queue-account", new Response("1"));
+    await cache.put("/api/tree", Response.json({ tree: [] }));
   });
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -3501,6 +3601,14 @@ test("signing in from an uncontrolled page drops the API cache", async ({
     ),
   ).toEqual([]);
 });
+
+const onlyApiCacheHas = (page: Page, path: string) =>
+  page.evaluate(async (wanted) => {
+    const names = (await caches.keys()).filter((key) => key.startsWith("api-"));
+    const [name] = names;
+    if (names.length !== 1 || name === undefined) return names;
+    return Boolean(await (await caches.open(name)).match(wanted));
+  }, path);
 
 const downloaded = (page: Page) =>
   page.evaluate(async () => {
@@ -3548,10 +3656,9 @@ const disconnected = (route: Route) => route.abort("internetdisconnected");
 const removeOffline = async (page: Page, server?: () => Promise<unknown>) => {
   const context = page.context();
   const state = await downloadUnread(page);
+  const sessionAnswered = sessionAnswer(page);
   await page.reload();
-  await page.waitForFunction(async () =>
-    Boolean(await caches.match("/sw-queue-account")),
-  );
+  await sessionAnswered;
   await selectSource(page);
   await articleOptions(page).filter({ hasText: "Second article" }).click();
   await context.route("**/api/**", disconnected);
@@ -3579,6 +3686,44 @@ test.describe("under a controlling service worker", () => {
     await page.goto("/");
     await page.waitForFunction(() => navigator.serviceWorker.controller);
     await navigatePastHeldArticles(page);
+  });
+
+  test("signing in on a page the worker controls leaves the account change to the worker", async ({
+    page,
+  }) => {
+    const context = page.context();
+    await installApiFixture(context, { authenticated: false });
+    await page.goto("/login");
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    const worker =
+      context.serviceWorkers()[0] ??
+      (await context.waitForEvent("serviceworker"));
+    await worker.evaluate(() => {
+      const received: unknown[] = [];
+      Object.assign(globalThis, { received });
+      addEventListener("message", (event: MessageEvent<unknown>) => {
+        received.push(event.data);
+      });
+    });
+    await page.evaluate(async () => {
+      const cache = await caches.open("api-test");
+      await cache.put("/api/tree", Response.json({ tree: [] }));
+    });
+
+    await page.getByLabel("Email").fill("reader@example.com");
+    await page.getByLabel("Password").fill("password");
+    await page.getByRole("button", { name: "Login" }).click();
+    await expect(sourceRow(page)).toBeVisible();
+
+    await expect.poll(() => onlyApiCacheHas(page, "/api/session")).toBe(true);
+    expect(
+      await worker.evaluate((): unknown => Reflect.get(globalThis, "received")),
+    ).not.toContainEqual({ type: "account-changed" });
+    const failures = browserFailures.get(page) ?? [];
+    expect(failures).toEqual([
+      "console.error: Failed to load resource: the server responded with a status of 504 ()",
+    ]);
+    failures.length = 0;
   });
 
   test("a controlled load fetches the tree once", async ({ page }) => {
@@ -3726,11 +3871,19 @@ test.describe("under a controlling service worker", () => {
     (browserFailures.get(page) ?? []).length = 0;
   });
 
-  test("an offline removal answers at once and replays back online", async ({
+  test("an offline removal answers at once and replays back online for its account", async ({
     page,
   }) => {
-    const state = await removeOffline(page);
+    const replayedFor: (string | null)[] = [];
+    const state = await removeOffline(page, () =>
+      page.context().route("**/api/articles", async (route) => {
+        if (route.request().method() === "DELETE")
+          replayedFor.push(await route.request().headerValue(accountHeader));
+        return route.fallback();
+      }),
+    );
     await expect.poll(() => state.removedArticleIds).toEqual([12]);
+    expect(replayedFor).toEqual(["42"]);
     await expect(page.getByRole("alert")).toHaveCount(0);
   });
 

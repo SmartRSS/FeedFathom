@@ -609,11 +609,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(upserts).toHaveLength(1);
   const upsertedArticle = upserts[0]?.[0];
   const cachedArticle = cachedPreview.articles[0];
-  if (
-    !upsertedArticle?.lastSeenInFeedAt ||
-    !upsertedArticle.updatedAt ||
-    !cachedArticle
-  )
+  if (!upsertedArticle?.updatedAt || !cachedArticle)
     throw new Error("Cached article was not persisted");
   expect(upsertedArticle).toMatchObject({
     author: "Cached author",
@@ -622,9 +618,6 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     sourceId: 91,
     title: "Cached article",
   });
-  expect(successes[0]?.[1]?.observedAt).toEqual(
-    upsertedArticle.lastSeenInFeedAt,
-  );
   expect(upsertedArticle.updatedAt).toEqual(cachedArticle.publishedAt);
   expect(recomputes).toEqual([[91]]);
   expect(successes).toHaveLength(1);
@@ -634,7 +627,6 @@ test("persists a cached preview inline and recomputes unread counts, without rep
       cached: true,
       homeUrl: undefined,
       notBefore: undefined,
-      observedAt: upsertedArticle.lastSeenInFeedAt,
       trigger: "poll",
     },
   ]);

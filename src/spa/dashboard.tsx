@@ -17,7 +17,7 @@ import {
   folderResponse,
   removedArticlesResponse,
   removedIdResponse,
-  sessionResponse,
+  type sessionResponse,
   snoozedSourceResponse,
   successResponse,
   treeResponse,
@@ -74,7 +74,7 @@ import {
 import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import type { Route } from "./routes.ts";
-import { api, failureDetails, messageOf } from "./api.ts";
+import { api, failureDetails, messageOf, requestSession } from "./api.ts";
 import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
 import {
@@ -148,6 +148,9 @@ function parseUnreadCountsHeader(
   return counts;
 }
 
+const sessionRetryFirstMs = 1000;
+const sessionRetryMaxMs = 60_000;
+
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
@@ -200,7 +203,17 @@ export function Dashboard(props: {
     setTimeout(() => setLiveText(message), 100);
   };
   const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
-  api("/session", sessionResponse).then(setSession, () => {});
+  let sessionRetry: ReturnType<typeof setTimeout> | undefined;
+  const loadSession = (retryAfterMs: number) => {
+    requestSession().then(setSession, () => {
+      sessionRetry = setTimeout(
+        () => loadSession(Math.min(retryAfterMs * 2, sessionRetryMaxMs)),
+        retryAfterMs,
+      );
+    });
+  };
+  loadSession(sessionRetryFirstMs);
+  onCleanup(() => clearTimeout(sessionRetry));
   const isAdmin = () => session()?.user?.isAdmin ?? false;
 
   const [tree, setTree] = createSignal<TreeNode[]>([]);
