@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { Readable } from "node:stream";
 import { RedisClient } from "bun";
+import { Queue } from "bullmq";
+import Redis from "ioredis";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
@@ -9,6 +11,9 @@ import {
   type FaviconRefreshQueue,
 } from "#features/feeds/favicon-refresher.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import { JobName } from "#features/feeds/queued-job.ts";
+import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import { takeQueuedJobs } from "#features/feeds/__tests__/take-queued-jobs.ts";
 
 const redis = new RedisClient(requireDisposableRedisUrl());
 const providerHosts = [
@@ -91,5 +96,41 @@ test("deferred refreshes take slots one gap apart on every host that deferred th
   ]);
   for (const [, ttl] of slots.slice(0, 3)) {
     expect(ttl).toBeGreaterThan(expiresIn - 1_000);
+  }
+});
+
+const due = (id: number) => ({
+  hasFavicon: false,
+  homeUrl: "https://example.com/",
+  id,
+});
+
+test("favicon refreshes wait behind feed parsing, one job per source", async () => {
+  const connection = new Redis(requireDisposableRedisUrl(), {
+    maxRetriesPerRequest: null,
+  });
+  const queue = new Queue(`favicon-queue-test-${crypto.randomUUID()}`, {
+    connection,
+  });
+  const refresher = new FaviconRefresher(
+    strictFake<HttpClient>({}, "httpClient"),
+    strictFake({}, "sourcesDataService"),
+    redis,
+    queue,
+  );
+  try {
+    await refresher.enqueueRefreshes([due(7), due(8)]);
+    await refresher.enqueueRefreshes([due(7)]);
+    await new SourceEnqueuer(queue, connection).enqueueDueSources([{ id: 9 }]);
+
+    expect(await takeQueuedJobs(queue, connection, 4)).toEqual([
+      { id: 9, name: JobName.ParseSource },
+      { id: 7, name: JobName.RefreshFavicon },
+      { id: 8, name: JobName.RefreshFavicon },
+    ]);
+  } finally {
+    await queue.obliterate({ force: true });
+    await queue.close();
+    await connection.quit();
   }
 });

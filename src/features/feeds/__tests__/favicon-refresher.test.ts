@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
-import { JobDeferral, JobName } from "#features/feeds/queued-job.ts";
+import { JobDeferral } from "#features/feeds/queued-job.ts";
 import {
   FaviconRefresher,
   type FaviconRefreshQueue,
@@ -252,32 +252,4 @@ test("a block on one provider host does not queue jobs waiting on the others", a
 
   expect(await retryAt(1)).toBe(now + 3_600_000);
   expect(await retryAt(2)).toBeLessThanOrEqual(now + 12_000);
-});
-
-test("queues each refresh under its source's job id, behind feed parsing", async () => {
-  const queued: Parameters<FaviconRefreshQueue["addBulk"]>[0] = [];
-  const refresher = new FaviconRefresher(
-    strictFake<HttpClient>({}, "httpClient"),
-    strictFake({}, "sourcesDataService"),
-    strictFake({}, "redis"),
-    {
-      async addBulk(jobs) {
-        queued.push(...jobs);
-      },
-    },
-  );
-  const due = { hasFavicon: false, homeUrl: "https://example.com/", id: 7 };
-
-  await refresher.enqueueRefreshes([due]);
-
-  expect(queued).toEqual([
-    {
-      data: due,
-      name: JobName.RefreshFavicon,
-      opts: expect.objectContaining({
-        jobId: `${JobName.RefreshFavicon}-7`,
-        priority: 10,
-      }),
-    },
-  ]);
 });

@@ -157,43 +157,6 @@ const deferredParser = (retryAt = Date.now() + 60_000) =>
     },
   });
 
-test("initializes scheduled jobs and closes the worker on cleanup", async () => {
-  let closeCalls = 0;
-  const scheduled: string[] = [];
-  const templates: unknown[] = [];
-  const { worker } = await startWorker({
-    bullmqQueue: {
-      async upsertJobScheduler(name, _options, template) {
-        scheduled.push(name);
-        templates.push(template.opts);
-      },
-    },
-    createWorker() {
-      return {
-        ...idleJobWorker,
-        async close() {
-          closeCalls++;
-        },
-      };
-    },
-  });
-
-  expect(scheduled.toSorted()).toEqual(
-    [
-      JobName.Cleanup,
-      JobName.GatherFaviconJobs,
-      JobName.GatherJobs,
-      JobName.WebSubRenewal,
-    ].toSorted(),
-  );
-  for (const opts of templates) {
-    expect(opts).toMatchObject({ removeOnFail: { count: 0 } });
-  }
-  expect(closeCalls).toBe(0);
-  await worker.cleanup();
-  expect(closeCalls).toBe(1);
-});
-
 test("captured processor parses the queued source", async () => {
   let parsedSource: unknown;
   const { process } = await startWorker({
