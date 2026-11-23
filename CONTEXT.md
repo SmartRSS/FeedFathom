@@ -94,11 +94,11 @@ up in the diff, instead of arriving as a quiet new import.
   preview, subscription, WebSub, favicons, article extraction and link
   rewriting, retention, and the sources, articles, user-sources and folders
   data services. It also owns what its jobs carry and how they run: the
-  ParseSource payload, job id and follow-up parse live in `source-enqueue.ts`,
-  the favicon job's in `favicon-refresher.ts`, each cadence beside the query
-  it bounds. Retention deletes expired users and sessions, which are `auth`'s
-  tables, first: every other rule reads the set of current subscribers, which
-  the cascade from an expired user shrinks.
+  ParseSource payload, job id and pending-refresh marker live in
+  `source-enqueue.ts`, the favicon job's in `favicon-refresher.ts`, each
+  cadence beside the query it bounds. Retention deletes expired users and
+  sessions, which are `auth`'s tables, first: every other rule reads the set
+  of current subscribers, which the cascade from an expired user shrinks.
 - **`reader`** — the reading surface over that store: the articles, article,
   folders, tree and source routes, and the `/api/events` stream that tells an
   open dashboard to reload the tree.

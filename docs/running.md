@@ -27,7 +27,7 @@ The three overlays are alternatives. Never combine them.
 
 ### What the Swarm loader costs the base file
 
-`docker stack deploy` uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`. Each constraint is marked in place so it doesn't read as an arbitrary choice.
+`docker stack deploy` uses Docker's legacy Compose loader, which is far stricter than `docker compose`. Sharing one base file with it constrains three things in `compose.yml`. Nothing in the file marks them, so read this list before you edit it.
 
 - **No top-level `name`.** It is rejected outright, so each Compose overlay names its own project instead. A plain `docker compose up -d` therefore takes its project name from the directory you cloned into.
 - **No nested `${}` defaults.** Docker doesn't reject them — it silently mangles them into malformed values, so `DATABASE_URL`'s default stays flat and ignores `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`. Change those, and set `DATABASE_URL` to match.
@@ -43,7 +43,7 @@ Three pieces use it:
 
 - The **migrator** retries its first connection for two minutes rather than exiting on the first refusal, so it can lose the race with PostgreSQL and still succeed.
 - The **worker** opens its healthcheck port first, then waits. It reports healthy and idle while waiting, because nothing routes traffic to it and a crash loop would tell the orchestrator something untrue.
-- The **server** does the opposite. It refuses to listen at all until its migration is applied, because accepting traffic against a schema it wasn't built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck gets a 120-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
+- The **server** does the opposite. It refuses to listen at all until its migration is applied, because accepting traffic against a schema it wasn't built for would answer requests with errors instead of making the orchestrator wait. Its healthcheck gets a 45-second `start_period` to cover the gap. A migration slower than that budget leaves the server restarting until it finishes — noisy, but self-correcting.
 
 One thing to know before copying a command: `docker compose up --wait` reports the migrator's clean `exit(0)` as a failure, and naming services doesn't avoid it, since their dependencies get waited on too. Start first and wait second, naming only the services that stay up:
 
@@ -196,14 +196,14 @@ docker stack config -c compose.yml -c deploy/stack.yml
 
 `docker stack deploy` prints `Ignoring unsupported options: restart` for the base file's `restart: always`. That's expected — `deploy.restart_policy` in the overlay governs restarts under Swarm instead. The migrator is pinned to zero replicas, because Swarm would otherwise restart a completed migration forever. Production instead runs migrations as a separate replicated-job service that doubles as a deployment lock.
 
-The port comes from `FEEDFATHOM_PORT`, which the deployment workflow sets from the protected `SERVER_HOST_PORT` variable. Anything in front of that port — TLS termination, a reverse proxy, an ingress network — is the operator's to supply, and the stack makes no assumptions about it.
+The port comes from `FEEDFATHOM_PORT`, which the deployment workflow passes through from the `FEEDFATHOM_PORT` variable of the `production` environment or the repository. The deploy stops before it changes anything when that variable is empty, so production never falls back to the `3456` default of `compose.yml`. Anything in front of that port — TLS termination, a reverse proxy, an ingress network — is the operator's to supply, and the stack makes no assumptions about it.
 
 The Docker workflow calls the reusable quality workflow before every event-specific job:
 
 - **Fork pull requests** run quality only.
 - **Internal pull requests** build and load all three `linux/amd64` release targets from the checkout, then smoke the exact local SHA without pulling application images.
 - **A main push** publishes multi-platform full-SHA manifests, smokes that exact SHA, and promotes each verified manifest to `latest` only after smoke succeeds.
-- **Manual dispatch** accepts exactly one 40-character lowercase hexadecimal `deploy_tag`. It verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, and smokes them without rebuilding or retagging.
+- **Manual dispatch** accepts exactly one 40-character lowercase hexadecimal `deploy_tag`. It verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, and smokes them without rebuilding or retagging. It then waits, like a push, until no older run on its branch is in flight, so a manual deploy lands in order with the merges around it.
 
 There are no branch image tags.
 
@@ -242,7 +242,7 @@ Keep `ENABLE_SWARM_DEPLOYMENT` disabled and complete these operator-owned steps 
 1. Back up PostgreSQL and Redis, then record the actual existing volume names from `docker volume ls`. Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to those exact names. Do not infer them from the Compose keys, and do not delete or recreate the volumes.
 2. Initialize this host as the single-node Swarm manager with `docker swarm init` if it is not already a manager.
 3. Configure the protected environment:
-   - `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `SERVER_HOST_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel.
+   - `STACK_NAME`, `FEED_FATHOM_DOMAIN`, `FEEDFATHOM_PORT`, app and worker replica and resource values, mail and Turnstile values, the SSH credentials, and an exact `SSH_KNOWN_HOSTS` entry obtained through a trusted channel.
    - `DATABASE_URL` as a protected secret. Its PostgreSQL role, password, host, and database must match the initialized volume.
    - The stack initializes new volumes with `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, all defaulting to `postgres`. For a nondefault installation, set the protected `POSTGRES_DB` variable and the `POSTGRES_USER`/`POSTGRES_PASSWORD` secrets to the same database and credentials embedded in `DATABASE_URL`. Changing these initialization values does not change a database or credentials already in an existing volume.
    - `MAIL_RELAY_SECRET` as a protected secret, matching the Cloudflare Email Worker secret exactly. `FEED_FATHOM_DOMAIN` is required regardless of how ingress is arranged, since email identity and links are built from it.

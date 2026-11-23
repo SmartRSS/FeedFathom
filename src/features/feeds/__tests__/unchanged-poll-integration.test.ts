@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { SQL } from "bun";
+import { drizzle } from "drizzle-orm/bun-sql";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-database-url.ts";
@@ -9,7 +10,7 @@ import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { RetentionService } from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
-import { createDrizzleConnection } from "#platform/db/connection.ts";
+import * as schema from "#platform/db/schema.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { RedirectMap } from "#features/feeds/redirect-map.ts";
@@ -22,7 +23,15 @@ const feedUrl = "https://1.1.1.1/feed";
 
 const databaseUrl = requireDisposableDatabaseUrl();
 const client = new SQL(databaseUrl);
-const drizzleConnection = createDrizzleConnection(databaseUrl);
+const articleWrites: string[] = [];
+const drizzleConnection = drizzle(new SQL(databaseUrl), {
+  logger: {
+    logQuery(query) {
+      if (/insert into "articles"/iu.test(query)) articleWrites.push(query);
+    },
+  },
+  schema,
+});
 const articlesDataService = new ArticlesDataService(drizzleConnection);
 const sourcesDataService = new SourcesDataService(drizzleConnection);
 const userSourcesDataService = new UserSourcesDataService(
@@ -42,6 +51,7 @@ afterAll(async () => {
 beforeEach(async () => {
   recounts = 0;
   published = [];
+  articleWrites.length = 0;
   await client`DROP SCHEMA IF EXISTS "drizzle" CASCADE`;
   await client`DROP SCHEMA IF EXISTS "public" CASCADE`;
   await client`CREATE SCHEMA "public"`;
@@ -68,7 +78,13 @@ ${items
 </channel></rss>`;
 }
 
-async function parse(body: string) {
+async function parse(
+  body: string,
+  source: { id: number; lastBodyHash?: null | string; url: string } = {
+    id: sourceId,
+    url: feedUrl,
+  },
+) {
   const redirectRedis = {
     del: async () => 0,
     get: async () => null,
@@ -105,7 +121,7 @@ async function parse(body: string) {
     { subscribe: async () => {}, wants: () => false },
     new RedirectMap(redirectRedis),
   );
-  await parser.parseSource({ id: sourceId, url: feedUrl });
+  await parser.parseSource(source);
 }
 
 async function subscribe(email: string, createdAt = client`NOW()`) {
@@ -204,6 +220,18 @@ test("a subscription created between parses of an unchanged feed sees its curren
   ]);
 });
 
+async function storedSource() {
+  const source = await sourcesDataService.findSourceById(sourceId);
+  if (!source) throw new Error("Source row is missing");
+  return source;
+}
+
+async function lastSuccess() {
+  const [row] = await client<{ last_success: Date }[]>`
+    SELECT last_success FROM sources WHERE id = ${sourceId}`;
+  return row!.last_success;
+}
+
 async function elapse(minutes: number) {
   const step = client`${minutes} * INTERVAL '1 minute'`;
   await client`UPDATE articles SET last_seen_in_feed_at = last_seen_in_feed_at - ${step}`;
@@ -213,6 +241,28 @@ async function elapse(minutes: number) {
                        not_before = not_before - ${step},
                        last_attempt = last_attempt - ${step}`;
 }
+
+test("a poll that fetches the stored body again writes no article until a subscriber or the throttle needs it", async () => {
+  await subscribe("early@example.test", client`NOW() - INTERVAL '60 days'`);
+  await parse(rss(items));
+  expect(articleWrites).toHaveLength(1);
+
+  await elapse(5);
+  const polledAt = await lastSuccess();
+  articleWrites.length = 0;
+  await parse(rss(items), await storedSource());
+  expect(articleWrites).toEqual([]);
+  expect((await lastSuccess()).getTime()).toBeGreaterThan(polledAt.getTime());
+
+  await subscribe("late@example.test");
+  await parse(rss(items), await storedSource());
+  expect(articleWrites).toHaveLength(1);
+
+  await elapse(61);
+  articleWrites.length = 0;
+  await parse(rss(items), await storedSource());
+  expect(articleWrites).toHaveLength(1);
+});
 
 test("the throttle never lets the cull take an article that is still in the feed", async () => {
   const userId = await subscribe(
