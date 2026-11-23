@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { Readable } from "node:stream";
 import { HttpClient } from "#platform/http/http-client.ts";
-import { buildUserAgent } from "#platform/http/identity.ts";
 import {
   type NativeHttpResponse,
   type NativeHttpTransport,
@@ -44,16 +43,6 @@ function nativeResponse(
   };
 }
 
-test("buildUserAgent appends the subscriber clause only for a real count", () => {
-  const prefix =
-    "SmartRSS/FeedFathom (+https://github.com/SmartRSS/FeedFathom; instance=localhost";
-  expect(buildUserAgent(prefix, undefined)).toBe(`${prefix})`);
-  expect(buildUserAgent(prefix, 0)).toBe(`${prefix}; 0 subscribers)`);
-  expect(buildUserAgent(prefix, -1)).toBe(`${prefix})`);
-  expect(buildUserAgent(prefix, Number.NaN)).toBe(`${prefix})`);
-  expect(buildUserAgent(prefix, 1.5)).toBe(`${prefix})`);
-});
-
 test("reports build, instance and subscriber count in the User-Agent", async () => {
   const sent: string[] = [];
   const transport: NativeHttpTransport = async (_url, headers) => {
@@ -66,22 +55,25 @@ test("reports build, instance and subscriber count in the User-Agent", async () 
     version: "1cdfc8be7223fa79a5025049681dca6f98439113",
   };
 
-  await new HttpClient(redis(), deployed).get("https://a.example/feed", {
-    subscribers: 4,
-  });
-  await new HttpClient(redis(), deployed).get("https://b.example/feed", {
-    subscribers: 1,
-  });
-  await new HttpClient(redis(), deployed).get("https://c.example/feed");
-  await new HttpClient(redis(), deployed).get("https://d.example/feed", {
-    subscribers: Number.NaN,
-  });
+  const counts = [4, 1, 0, undefined, Number.NaN, -1, 1.5];
+  for (const [index, subscribers] of counts.entries()) {
+    // eslint-disable-next-line no-await-in-loop -- Requests are recorded in order.
+    await new HttpClient(redis(), deployed).get(
+      `https://feed${index}.example/feed`,
+      subscribers === undefined ? {} : { subscribers },
+    );
+  }
 
+  const product =
+    "SmartRSS/FeedFathom/1cdfc8b (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com";
   expect(sent).toEqual([
-    "SmartRSS/FeedFathom/1cdfc8b (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com; 4 subscribers)",
-    "SmartRSS/FeedFathom/1cdfc8b (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com; 1 subscribers)",
-    "SmartRSS/FeedFathom/1cdfc8b (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com)",
-    "SmartRSS/FeedFathom/1cdfc8b (+https://github.com/SmartRSS/FeedFathom; instance=feeds.example.com)",
+    `${product}; 4 subscribers)`,
+    `${product}; 1 subscribers)`,
+    `${product}; 0 subscribers)`,
+    `${product})`,
+    `${product})`,
+    `${product})`,
+    `${product})`,
   ]);
 });
 
