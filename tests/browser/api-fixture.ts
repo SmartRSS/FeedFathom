@@ -43,6 +43,10 @@ import {
   type TreeNode,
 } from "#shared/contracts/responses.ts";
 import { invalidRequestMessage } from "#platform/http/json.ts";
+import {
+  accountHeader,
+  accountMismatchStatus,
+} from "#shared/contracts/headers.ts";
 
 export function respond<S extends TSchema>(
   route: Route,
@@ -176,6 +180,7 @@ const summary = (item: Article, read = false): ArticleSummary => ({
 });
 
 type ApiFixtureState = {
+  account: number;
   articleRequests: number;
   authenticated: boolean;
   deliverNewsletter: (to: string) => boolean;
@@ -223,6 +228,7 @@ export async function installApiFixture(
 ): Promise<ApiFixtureState> {
   const slowPreview = Promise.withResolvers<void>();
   const state: ApiFixtureState = {
+    account: user.id,
     articleRequests: 0,
     authenticated: options.authenticated ?? true,
     deliverNewsletter: (to) => {
@@ -253,6 +259,18 @@ export async function installApiFixture(
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
+    const named = request.headers()[accountHeader.toLowerCase()];
+
+    if (
+      state.authenticated &&
+      named !== undefined &&
+      named !== String(state.account)
+    )
+      return refuse(
+        route,
+        accountMismatchStatus,
+        "Signed in to another account",
+      );
 
     if (method === "GET" && url.pathname === "/api/session") {
       if (options.sessionFailure)
@@ -260,7 +278,7 @@ export async function installApiFixture(
       return respond(route, sessionResponse, {
         ...(options.mailDomain ? { mailDomain: options.mailDomain } : {}),
         user: state.authenticated
-          ? { ...user, isAdmin: options.admin ?? false }
+          ? { ...user, id: state.account, isAdmin: options.admin ?? false }
           : null,
       });
     }

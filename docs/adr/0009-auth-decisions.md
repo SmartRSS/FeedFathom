@@ -89,9 +89,9 @@ An Elysia `derive` with `"plugin"` scope reaches the instance's own routes and t
 
 ### A request that names another account is refused before its handler runs
 
-**Where:** `src/features/auth/session-plugin.ts`, `sessionPlugin()`; `src/shared/contracts/headers.ts`, `accountHeader`
+**Where:** `src/features/auth/session-plugin.ts`, `sessionPlugin()`; `src/shared/contracts/headers.ts`, `accountHeader`, `accountFromHeader()`
 
-The session cookie is HttpOnly and a sign-in in another tab replaces it, so neither a page nor the service worker can know which account the browser will send a request as. Only the server sees the cookie and the request together. A request may name the account it was made for in `X-FeedFathom-Account`, and the session derive answers 412 when the session belongs to any other account. A request without the header passes, so pages and workers built before the header keep working. The status is 412, not 409, because `DELETE /api/folders` already answers 409 for a folder that still holds a source, and a replaying worker must tell the two apart.
+The session cookie is HttpOnly and a sign-in in another tab replaces it, so neither a page nor the service worker can know which account the browser will send a request as. Only the server sees the cookie and the request together. A request may name the account it was made for in `X-FeedFathom-Account`, and the session derive answers 412 when the session belongs to any other account, or when the header is not an account id written in canonical decimal. The derive answers 401 for a missing or unknown session before it reads the header, so a signed-out request is sent to sign-in instead of being dropped as a mismatch. A request without the header passes, so pages and workers built before the header keep working. A client that relies on this check instead of its own, as the service worker's removal queue does (ADR 0018), ships in a later deploy than the check. The status is 412, not 409, because `DELETE /api/folders` already answers 409 for a folder that still holds a source, and a replaying worker must tell the two apart.
 
 ### Authentication is one statement that writes only when activity is stale
 

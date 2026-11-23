@@ -4,6 +4,7 @@ import type { errorResponse } from "#shared/contracts/responses.ts";
 import type { Static } from "typebox";
 import { sessionCookie } from "#features/auth/routes/session-header.ts";
 import {
+  accountFromHeader,
   accountHeader,
   accountMismatchStatus,
 } from "#shared/contracts/headers.ts";
@@ -39,7 +40,7 @@ function sessionPlugin(
     );
     if (!user) return status(401, unauthorized);
     const named = request.headers.get(accountHeader);
-    if (named !== null && named !== String(user.id))
+    if (named !== null && accountFromHeader(named) !== user.id)
       return status(accountMismatchStatus, otherAccount);
     if (requireAdmin && !user.isAdmin) return status(403, forbidden);
     return { sid, user };

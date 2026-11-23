@@ -2,13 +2,16 @@ import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
 import { articlePageSize } from "#shared/contracts/limits.ts";
 import {
+  accountHeader,
+  accountMismatchStatus,
+} from "#shared/contracts/headers.ts";
+import {
   apiCachePrefix,
   offlineArticleLimit,
   offlineArticleMaxAgeDays,
 } from "../sw-protocol.ts";
 
 const ORIGIN = "https://feedfathom.test";
-const API_CACHE = `${apiCachePrefix}v7`;
 const SHELL_CACHE = "shell-v7";
 const built = await Bun.build({
   entrypoints: [`${import.meta.dir}/../sw.ts`],
@@ -96,19 +99,33 @@ const fakeIndexedDb = () => {
   };
 };
 
+const lifecycle = async (
+  listener:
+    | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
+    | undefined,
+) => {
+  const pending: Promise<unknown>[] = [];
+  listener?.({ waitUntil: (promise) => void pending.push(promise) });
+  await Promise.all(pending);
+};
+
 const loadServiceWorker = (
   network: (
     path: string,
     method: string,
     headers: Headers,
   ) => Response | Promise<Response>,
+  stores = new Map<string, Map<string, Response>>(),
+  beforeStorage: (call: "keys" | "open") => unknown = () => {},
 ) => {
   let onFetch: ((event: FetchEvent) => void) | undefined;
+  let onInstall:
+    | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
+    | undefined;
   let onMessage: ((event: MessageEvent) => void) | undefined;
   let onActivate:
     | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
     | undefined;
-  const stores = new Map<string, Map<string, Response>>();
   const store = (name: string) => {
     const existing = stores.get(name);
     if (existing) return existing;
@@ -178,9 +195,16 @@ const loadServiceWorker = (
     URL,
     caches: {
       delete: async (name: string) => stores.delete(name),
-      keys: async () => [...stores.keys()],
-      open: async (name: string) => cacheOver(store(name)),
+      keys: async () => {
+        await beforeStorage("keys");
+        return [...stores.keys()];
+      },
+      open: async (name: string) => {
+        await beforeStorage("open");
+        return cacheOver(store(name));
+      },
     },
+    crypto,
     fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
       const method =
@@ -219,6 +243,7 @@ const loadServiceWorker = (
         if (type === "fetch") onFetch = listener;
         if (type === "message") onMessage = listener;
         if (type === "activate") onActivate = listener;
+        if (type === "install") onInstall = listener;
       },
       clients: {
         claim: async () => {},
@@ -231,6 +256,7 @@ const loadServiceWorker = (
       },
       location: { origin: ORIGIN },
       registration: {},
+      skipWaiting: async () => {},
     },
   });
   const dispatch = (request: Request) => {
@@ -269,64 +295,78 @@ const loadServiceWorker = (
     await background;
     return body;
   };
+  const post = async (data: unknown) => {
+    const pending: Promise<unknown>[] = [];
+    onMessage?.({ data, waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+  };
   const keepOffline = async (articles: (number | OfflineRow)[]) => {
     listed = articles.map((row) =>
       typeof row === "number" ? offlineRow(row) : row,
     );
-    const pending: Promise<unknown>[] = [];
-    onMessage?.({
-      data: { sources: articles.length > 0 ? [3] : [], type: "offline-sync" },
-      waitUntil: (promise) => pending.push(promise),
+    await post({
+      sources: articles.length > 0 ? [3] : [],
+      type: "offline-sync",
     });
-    await Promise.all(pending);
+  };
+  const liveApiCache = () => {
+    const names = [...stores.keys()].filter((name) =>
+      name.startsWith(apiCachePrefix),
+    );
+    const [name] = names;
+    if (names.length !== 1 || name === undefined)
+      throw new Error(`expected one live API cache, found ${names.join(", ")}`);
+    return store(name);
   };
   const login = () =>
     dispatch(new Request(`${ORIGIN}/api/login`, { body: "{}", method: "POST" }))
       .response;
-  const removeSource = () =>
-    dispatch(
-      new Request(`${ORIGIN}/api/source`, {
-        body: JSON.stringify({ removeSourceId: 3 }),
-        method: "DELETE",
-      }),
-    );
-  const remove = (path: string, body: object) =>
+  const removal = (
+    path: string,
+    body: object,
+    account: number | string | null = 1,
+  ) =>
     dispatch(
       new Request(`${ORIGIN}${path}`, {
         body: JSON.stringify(body),
+        headers: account === null ? {} : { [accountHeader]: String(account) },
         method: "DELETE",
       }),
-    ).response;
-  const accountKey = "/sw-queue-account";
-  const recordAccount = (id: number) =>
-    store(API_CACHE).set(accountKey, Response.json({ id }));
-  const recordedAccount = async (): Promise<unknown> =>
-    live(apiCachePrefix).get(accountKey)?.json();
-  const activate = async () => {
-    const pending: Promise<unknown>[] = [];
-    onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
-    await Promise.all(pending);
-  };
+    );
+  const removeSource = (account?: number | string | null) =>
+    removal("/api/source", { removeSourceId: 3 }, account);
+  const remove = (path: string, body: object) => removal(path, body).response;
+  const activate = () => lifecycle(onActivate);
+  const install = () => lifecycle(onInstall);
   return {
     activate,
+    apiBodies: () =>
+      Promise.all(
+        [...live(apiCachePrefix).values()].map((response) =>
+          response.clone().text(),
+        ),
+      ),
     apiEntries: () => live(apiCachePrefix),
+    cacheStorage: stores,
     dispatch,
     holdListing,
+    install,
     keepOffline,
     loadArticle,
     loadTree,
     login,
     messages,
     navigate,
+    post,
     queue,
-    recordAccount,
-    recordedAccount,
     remove,
     removeSource,
     requested,
     requests,
     seed: (name: string, path: string, response: Response) =>
       store(name).set(path, response),
+    seedApi: (path: string, response: Response) =>
+      liveApiCache().set(path, response),
     shellEntries: () => live("shell-"),
   };
 };
@@ -356,16 +396,75 @@ test("a favicon is fetched once and then served from the cache", async () => {
   ).toHaveLength(1);
 });
 
-test("activation drops favicons cached without headers once, keeping offline articles", async () => {
-  const sw = loadServiceWorker(network);
-  sw.seed(API_CACHE, "/api/favicon/1?v=old", new Response("icon"));
-  sw.seed(API_CACHE, "/sw-offline-article?article=1", new Response("body"));
+test("an installing worker leaves the v7 cache to the worker in charge until it activates", async () => {
+  const stored = new Map([
+    [
+      `${apiCachePrefix}v7`,
+      new Map([
+        ["/api/favicon/1?v=old", new Response("icon")],
+        ["/sw-offline-article?article=1", new Response("body")],
+      ]),
+    ],
+  ]);
+  const sw = loadServiceWorker(network, stored);
+  await sw.install();
+  expect([...stored.keys()]).toContain(`${apiCachePrefix}v7`);
   await sw.activate();
-  expect(sw.apiEntries().has("/api/favicon/1?v=old")).toBe(false);
-  expect(sw.apiEntries().has("/sw-offline-article?article=1")).toBe(true);
-  sw.seed(API_CACHE, "/api/favicon/1?v=new", new Response("icon"));
-  await sw.activate();
-  expect(sw.apiEntries().has("/api/favicon/1?v=new")).toBe(true);
+  expect([...stored.keys()]).not.toContain(`${apiCachePrefix}v7`);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+});
+
+test("a restarted worker keeps the API cache it was using", async () => {
+  let online = true;
+  const offlineAware = (path: string) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    return articleNetwork(path);
+  };
+  const sw = loadServiceWorker(offlineAware);
+  await sw.keepOffline([2]);
+  const restarted = loadServiceWorker(offlineAware, sw.cacheStorage);
+  online = false;
+  expect(await restarted.loadArticle(2)).toMatchObject({
+    path: "/api/article?article=2",
+  });
+  expect(restarted.requests).toEqual([]);
+});
+
+test.each(["keys", "open"] as const)(
+  "a worker whose first Cache Storage %s fails still activates, answers from the network and caches later answers",
+  async (call) => {
+    let failed = false;
+    const sw = loadServiceWorker(articleNetwork, new Map(), (attempted) => {
+      if (attempted !== call || failed) return;
+      failed = true;
+      throw new DOMException("The operation failed", "UnknownError");
+    });
+    await sw.activate();
+    expect(await sw.loadArticle(2)).toMatchObject({
+      path: "/api/article?article=2",
+    });
+    await sw.loadArticle(3);
+    expect(sw.apiEntries().has("/api/article?article=3")).toBe(true);
+  },
+);
+
+test("a response requested before the worker picks its cache and answered after a sign-in is not stored", async () => {
+  let release: (() => void) | undefined;
+  const firstListing = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let listings = 0;
+  const sw = loadServiceWorker(
+    (path, method) =>
+      method === "POST" ? Response.json({ sid: "s" }) : network(path),
+    new Map(),
+    (call) => (call === "keys" && listings++ === 0 ? firstListing : undefined),
+  );
+  const treeLoad = sw.loadTree();
+  await sw.login();
+  release?.();
+  expect(await treeLoad).toEqual(tree);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
@@ -443,13 +542,8 @@ test("a tree preloaded before a sign-in is not served after it", async () => {
   await sw.navigate("/").background;
   await sw.login();
   expect(await sw.loadTree()).toEqual({ account: "b", tree: [] });
+  expect((await sw.apiBodies()).join("\n")).not.toContain('"account":"a"');
 });
-
-const keepers = [
-  "/sw-offline-article?article=1",
-  "/sw-queue-account",
-  "/sw-favicon-headers-purged",
-];
 
 test("a deploy's assets, lazy chunks included, are dropped once a newer shell is served", async () => {
   let bundle = "old";
@@ -465,7 +559,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
     [...sw.shellEntries().keys()].filter((key) => key.startsWith("/assets/"));
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-old.js`)).response;
-  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
   bundle = "new";
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-new.js`)).response;
@@ -475,7 +568,6 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
     "/assets/index-new.js",
     "/assets/options-new.js",
   ]);
-  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
   expect(await sw.shellEntries().get("/")?.text()).toBe(shellHtml("index-new"));
 });
 
@@ -517,7 +609,7 @@ test("a tree load drops the favicons it no longer names", async () => {
       (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
     ),
   );
-  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
+  sw.seedApi("/sw-offline-article?article=1", new Response("body"));
   current = { tree: [{ favicon: "/api/favicon/2?v=new", type: "source" }] };
   await sw.loadTree();
   await sw.dispatch(new Request(`${ORIGIN}/api/favicon/2?v=new`)).response;
@@ -526,7 +618,7 @@ test("a tree load drops the favicons it no longer names", async () => {
       key.startsWith("/api/favicon/"),
     ),
   ).toEqual(["/api/favicon/2?v=new"]);
-  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
+  expect(sw.apiEntries().has("/sw-offline-article?article=1")).toBe(true);
 });
 
 test("each API path keeps only its 20 newest query strings", async () => {
@@ -557,8 +649,7 @@ test("a just-prefetched article opens without a network round trip", async () =>
 test("an article cached over a minute ago goes to the network first", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const prefetched = await sw.loadArticle(2);
-  sw.seed(
-    API_CACHE,
+  sw.seedApi(
     "/api/article?article=2",
     Response.json(prefetched, {
       headers: { "X-SW-Fetched-At": String(Date.now() - 61_000) },
@@ -581,6 +672,37 @@ test("signing in drops articles cached under the previous account", async () => 
   account = "b";
   await sw.login();
   expect(await sw.loadArticle(2)).toMatchObject({ account: "b" });
+  expect((await sw.apiBodies()).join("\n")).not.toContain('"account":"a"');
+});
+
+test("an account change made outside the worker drops what it cached", async () => {
+  const sw = loadServiceWorker(articleNetwork);
+  await sw.loadArticle(2);
+  await sw.loadTree();
+  await sw.post({ type: "account-changed" });
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+  const cachedTree = await sw.dispatch(new Request(`${ORIGIN}/api/tree?cached`))
+    .response;
+  expect(cachedTree.status).toBe(504);
+});
+
+test("a response in flight when account-changed arrives is not stored", async () => {
+  let answer: (() => void) | undefined;
+  const sw = loadServiceWorker((path) => {
+    if (path !== "/api/article?article=2") return articleNetwork(path);
+    return new Promise<Response>((resolve) => {
+      answer = () => resolve(Response.json({ account: "a", path }));
+    });
+  });
+  const requested = sw.requested("/api/article?article=2");
+  const inFlight = sw.loadArticle(2);
+  await requested;
+  await sw.post({ type: "account-changed" });
+  answer?.();
+  await inFlight;
+  expect([...sw.apiEntries().keys()]).toEqual([]);
+  await sw.loadArticle(3);
+  expect([...sw.apiEntries().keys()]).toEqual(["/api/article?article=3"]);
 });
 
 test("opening 300 articles keeps only the newest 200 cached", async () => {
@@ -815,14 +937,11 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
     offlineRow(4),
   ]);
   online = false;
-  sw.recordAccount(1);
-  await sw.dispatch(
-    new Request(`${ORIGIN}/api/articles`, {
-      body: JSON.stringify({ removedArticleIdList: [5] }),
-      method: "DELETE",
-    }),
-  ).response;
-  const list = async (body: object, headers: Record<string, string> = {}) => {
+  await sw.remove("/api/articles", { removedArticleIdList: [5] });
+  const list = async (
+    body: object,
+    headers: Record<string, string> = { [accountHeader]: "1" },
+  ) => {
     const { background, response } = sw.dispatch(
       new Request(`${ORIGIN}/api/articles`, {
         body: JSON.stringify(body),
@@ -843,7 +962,7 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   expect(
     await list(
       { cursor: 99, sources: [3] },
-      { "X-Cursor-Published-At": dayAgo },
+      { "X-Cursor-Published-At": dayAgo, [accountHeader]: "1" },
     ),
   ).toEqual([2]);
   online = true;
@@ -855,6 +974,56 @@ test("offline, the unread list comes from the kept rows, scoped like the server"
   online = false;
   expect(await list({ cursor: 100, sources: [3] })).toEqual([200]);
   await expect(list({ filter: "read", sources: [3] })).rejects.toThrow();
+});
+
+test("offline, a list hides only the removals its own account queued", async () => {
+  let online = true;
+  const sw = loadServiceWorker((path, method) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (path === "/api/tree") return Response.json({ tree: [] });
+    return method === "POST" ? Response.json([]) : articleNetwork(path);
+  });
+  await sw.keepOffline([offlineRow(1), offlineRow(2)]);
+  online = false;
+  await sw.remove("/api/articles", { removedArticleIdList: [2] });
+  const listAs = async (account: string | null) => {
+    const { background, response } = sw.dispatch(
+      new Request(`${ORIGIN}/api/articles`, {
+        body: JSON.stringify({ sources: [3] }),
+        headers: account === null ? {} : { [accountHeader]: account },
+        method: "POST",
+      }),
+    );
+    background.catch(() => {});
+    const rows: { id: number }[] = await (await response).json();
+    return rows.map((row) => row.id);
+  };
+  expect(await listAs("1")).toEqual([1]);
+  expect(await listAs("2")).toEqual([1, 2]);
+  expect(await listAs(null)).toEqual([1, 2]);
+});
+
+test("a sign-in stops a sync from downloading the articles it has not started", async () => {
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sw = loadServiceWorker(async (path, method) => {
+    if (method === "POST") return Response.json({ sid: "s" });
+    await held;
+    return articleNetwork(path);
+  });
+  const bothDownloading = sw.requested("/api/article?article=3");
+  const sync = sw.keepOffline([2, 3, 4, 5]);
+  await bothDownloading;
+  await sw.login();
+  release?.();
+  await sync;
+  expect(articleRequests(sw.requests)).toEqual([
+    "/api/article?article=2",
+    "/api/article?article=3",
+  ]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a download answered after a sign-in is not stored", async () => {
@@ -875,13 +1044,21 @@ test("a download answered after a sign-in is not stored", async () => {
   expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
 });
 
-const session = (id: number | null) =>
-  Response.json({ user: id === null ? null : { id } });
+const removalAs = (
+  signedIn: number | null,
+  headers: Headers,
+  applied: number[],
+) => {
+  if (signedIn === null) return new Response(null, { status: 401 });
+  const named = headers.get(accountHeader);
+  if (named !== null && named !== String(signedIn))
+    return new Response(null, { status: accountMismatchStatus });
+  applied.push(signedIn);
+  return new Response(null);
+};
 
 test("an empty mutation queue is read once, not on every response", async () => {
-  const sw = loadServiceWorker((path) =>
-    path === "/api/session" ? session(1) : articleNetwork(path),
-  );
+  const sw = loadServiceWorker(articleNetwork);
   for (let id = 1; id <= 5; id++) {
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
@@ -889,127 +1066,76 @@ test("an empty mutation queue is read once, not on every response", async () => 
   expect(sw.queue.opens()).toBe(1);
 });
 
-test("a failed account lookup is retried, so a later offline removal still replays", async () => {
+test("a removal that names no account fails offline instead of being queued", async () => {
   let online = true;
-  let sessionUp = false;
-  const sw = loadServiceWorker((path, method) => {
+  const sw = loadServiceWorker((_path, method) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session")
-      return sessionUp ? session(1) : new Response(null, { status: 503 });
-    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
-  });
-  await sw.loadTree();
-  sessionUp = true;
-  await sw.loadTree();
-  online = false;
-  await sw.removeSource().response;
-  online = true;
-  await sw.loadTree();
-  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
-    "DELETE /api/source",
-    "DELETE /api/source",
-  ]);
-  expect(sw.queue.rows.size).toBe(0);
-});
-
-test("a removal made while the first account lookup is in flight waits for it", async () => {
-  let online = true;
-  let answerLookup: (() => void) | undefined;
-  const sw = loadServiceWorker((path, method) => {
-    if (path === "/api/session" && !answerLookup)
-      return new Promise<Response>((resolve) => {
-        answerLookup = () => resolve(session(1));
-      });
-    if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(1);
-    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
-  });
-  const lookup = sw.requested("/api/session");
-  const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
-  await lookup;
-  online = false;
-  const removal = sw.removeSource().response;
-  answerLookup?.();
-  expect(await (await removal).json()).toBe(3);
-  await firstLoad.background;
-  online = true;
-  await sw.loadTree();
-  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
-    "DELETE /api/source",
-    "DELETE /api/source",
-  ]);
-  expect(sw.queue.rows.size).toBe(0);
-});
-
-test("a removal with no known account fails offline instead of being queued", async () => {
-  let online = true;
-  const sw = loadServiceWorker((path, method) => {
-    if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return new Response(null, { status: 503 });
     return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
   });
   await sw.loadTree();
   online = false;
-  const removal = sw.removeSource();
+  const removal = sw.removeSource(null);
   removal.background.catch(() => {});
   await expect(removal.response).rejects.toThrow("Failed to fetch");
   expect(sw.queue.rows.size).toBe(0);
 });
 
-const recordAfterOvertakenLookup = async (
-  change: "/api/login" | "/api/logout",
-  nextAccount: number | null,
-) => {
-  let account: number | null = 1;
-  let answerFirstLookup: (() => void) | undefined;
-  const sw = loadServiceWorker((path) => {
-    if (path === "/api/session") {
-      const response = session(account);
-      if (answerFirstLookup) return response;
-      return new Promise<Response>((resolve) => {
-        answerFirstLookup = () => resolve(response);
-      });
-    }
-    if (path === change) {
-      account = nextAccount;
-      return Response.json({ success: true });
-    }
-    return Response.json({ tree: [] });
+test.each(["007", "7.0"])(
+  "a removal that names account %p, a form no account id takes, fails offline instead of being queued",
+  async (named) => {
+    let online = true;
+    const sw = loadServiceWorker((_path, method) => {
+      if (!online) throw new TypeError("Failed to fetch");
+      return method === "GET"
+        ? Response.json({ tree: [] })
+        : new Response(null);
+    });
+    await sw.loadTree();
+    online = false;
+    const removal = sw.removeSource(named);
+    removal.background.catch(() => {});
+    await expect(removal.response).rejects.toThrow("Failed to fetch");
+    expect(sw.queue.rows.size).toBe(0);
+  },
+);
+
+test("a removal replayed just after another tab signs in to another account is not applied to it", async () => {
+  let online = true;
+  let signedIn = 1;
+  let otherTabSignsIn = false;
+  const applied: number[] = [];
+  const sw = loadServiceWorker((_path, method, headers) => {
+    if (!online) throw new TypeError("Failed to fetch");
+    if (method === "GET") return Response.json({ tree: [] });
+    if (otherTabSignsIn) signedIn = 2;
+    return removalAs(signedIn, headers, applied);
   });
-  const lookup = sw.requested("/api/session");
-  const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
-  await lookup;
-  await sw.dispatch(new Request(`${ORIGIN}${change}`, { method: "POST" }))
-    .response;
-  const secondLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
-  await secondLoad.response;
-  answerFirstLookup?.();
-  await Promise.all([firstLoad.background, secondLoad.background]);
-  return sw.recordedAccount();
-};
-
-test("a session lookup overtaken by a sign-in doesn't record the previous account", async () => {
-  expect(await recordAfterOvertakenLookup("/api/login", 2)).toEqual({ id: 2 });
-});
-
-test("a session lookup overtaken by a logout doesn't record the previous account", async () => {
-  expect(await recordAfterOvertakenLookup("/api/logout", null)).toBeUndefined();
+  await sw.loadTree();
+  online = false;
+  await sw.removeSource().response;
+  online = true;
+  otherTabSignsIn = true;
+  await sw.loadTree();
+  expect(applied).toEqual([]);
+  expect(sw.queue.rows.size).toBe(0);
+  expect(sw.messages).toEqual([]);
 });
 
 test("a removal that fails after another account signs in stays account 1's", async () => {
-  let account = 1;
+  let signedIn = 1;
   let failRemoval: (() => void) | undefined;
-  const sw = loadServiceWorker((path, method) => {
-    if (path === "/api/session") return session(account);
+  const applied: number[] = [];
+  const sw = loadServiceWorker((path, method, headers) => {
     if (path === "/api/login") {
-      account = 2;
+      signedIn = 2;
       return Response.json({ sid: "s" });
     }
-    if (method === "DELETE" && !failRemoval)
+    if (method === "GET") return Response.json({ tree: [] });
+    if (!failRemoval)
       return new Promise<Response>((_resolve, reject) => {
         failRemoval = () => reject(new TypeError("Failed to fetch"));
       });
-    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
+    return removalAs(signedIn, headers, applied);
   });
   await sw.loadTree();
   const sent = sw.requested("DELETE /api/source");
@@ -1020,44 +1146,15 @@ test("a removal that fails after another account signs in stays account 1's", as
   failRemoval?.();
   await removal;
   await sw.loadTree();
-  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
-    "DELETE /api/source",
-  ]);
+  expect(applied).toEqual([]);
   expect(sw.queue.rows.size).toBe(0);
-});
-
-test("a signed-out session answer doesn't erase the owner of later offline removals", async () => {
-  let online = true;
-  let account: number | null = 1;
-  const sw = loadServiceWorker((path, method) => {
-    if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(account);
-    if (path === "/api/login") {
-      account = 1;
-      return Response.json({ sid: "s" });
-    }
-    return method === "GET" ? Response.json({ tree: [] }) : new Response(null);
-  });
-  await sw.loadTree();
-  account = null;
-  await sw.dispatch(new Request(`${ORIGIN}/api/session`)).response;
-  online = false;
-  await sw.removeSource().response;
-  online = true;
-  await sw.login();
-  await sw.loadTree();
-  expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
-    "DELETE /api/source",
-    "DELETE /api/source",
-  ]);
-  expect(sw.queue.rows.size).toBe(0);
+  expect(sw.messages).toEqual([]);
 });
 
 test("a deletion queued offline replays on the next successful request", async () => {
   let online = true;
   const sw = loadServiceWorker((path, method) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(1);
     return method === "GET" ? articleNetwork(path) : new Response(null);
   });
   await sw.loadArticle(1);
@@ -1065,6 +1162,7 @@ test("a deletion queued offline replays on the next successful request", async (
   const removal = sw.dispatch(
     new Request(`${ORIGIN}/api/articles`, {
       body: JSON.stringify({ removedArticleIdList: [7] }),
+      headers: { [accountHeader]: "1" },
       method: "DELETE",
     }),
   );
@@ -1078,12 +1176,11 @@ test("a deletion queued offline replays on the next successful request", async (
   expect(sw.queue.rows.size).toBe(0);
 });
 
-test("a replayed deletion carries its original trace and says it is a replay", async () => {
+test("a replayed deletion carries its account and original trace, and says it is a replay", async () => {
   let online = true;
   const deletes: Headers[] = [];
   const sw = loadServiceWorker((path, method, headers) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(1);
     if (method === "DELETE") deletes.push(headers);
     return method === "GET" ? articleNetwork(path) : new Response(null);
   });
@@ -1092,7 +1189,10 @@ test("a replayed deletion carries its original trace and says it is a replay", a
   const removal = sw.dispatch(
     new Request(`${ORIGIN}/api/articles`, {
       body: JSON.stringify({ removedArticleIdList: [7] }),
-      headers: { "X-FeedFathom-Trace": '{"trigger":{"type":"click"}}' },
+      headers: {
+        "X-FeedFathom-Trace": '{"trigger":{"type":"click"}}',
+        [accountHeader]: "1",
+      },
       method: "DELETE",
     }),
   );
@@ -1100,6 +1200,7 @@ test("a replayed deletion carries its original trace and says it is a replay", a
   online = true;
   await sw.loadArticle(2);
   const replay = deletes.at(-1);
+  expect(replay?.get(accountHeader)).toBe("1");
   expect(replay?.get("X-FeedFathom-Trace")).toBe(
     '{"trigger":{"type":"click"}}',
   );
@@ -1109,6 +1210,7 @@ test("a replayed deletion carries its original trace and says it is a replay", a
 test.each([
   [403, true],
   [404, true],
+  [409, true],
   [401, false],
 ])(
   "a replay answered %p is dropped and reported: %p",
@@ -1116,7 +1218,6 @@ test.each([
     let online = true;
     const sw = loadServiceWorker((path, method) => {
       if (!online) throw new TypeError("Failed to fetch");
-      if (path === "/api/session") return session(1);
       if (method === "GET") return articleNetwork(path);
       return path === "/api/source"
         ? new Response(null, { status })
@@ -1142,7 +1243,6 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
   let sourceExists = true;
   const sw = loadServiceWorker((path, method) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(1);
     if (method === "GET") return Response.json({ tree: [] });
     if (path === "/api/source") {
       if (sourceRemovalFails) return new Response(null, { status: 503 });
@@ -1151,7 +1251,6 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
     }
     return new Response(null, { status: sourceExists ? 400 : 200 });
   });
-  sw.recordAccount(1);
   await sw.remove("/api/source", { removeSourceId: 1 });
   await sw.remove("/api/folders", { removeFolderId: 2 });
   online = true;
@@ -1174,34 +1273,32 @@ test("a removal queued behind a temporarily failing one waits for it", async () 
 test("a flush that starts during another doesn't replay its entries twice", async () => {
   let online = false;
   let foldersDown = true;
-  let answerLookup: (() => void) | undefined;
+  let answerSource: (() => void) | undefined;
   const sw = loadServiceWorker((path, method) => {
-    if (path === "/api/session" && !answerLookup)
-      return new Promise<Response>((resolve) => {
-        answerLookup = () => resolve(session(1));
-      });
-    if (path === "/api/session") return session(1);
     if (method === "GET") return Response.json({ tree: [] });
     if (!online || (path === "/api/folders" && foldersDown))
       throw new TypeError("Failed to fetch");
+    if (path === "/api/source" && !answerSource)
+      return new Promise<Response>((resolve) => {
+        answerSource = () => resolve(new Response(null));
+      });
     return new Response(null);
   });
-  sw.recordAccount(1);
   await sw.remove("/api/source", { removeSourceId: 1 });
   online = true;
-  const lookup = sw.requested("/api/session");
+  const replay = sw.requested("DELETE /api/source");
   const firstLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
-  await lookup;
+  await replay;
   await sw.remove("/api/folders", { removeFolderId: 2 });
   foldersDown = false;
   const secondLoad = sw.dispatch(new Request(`${ORIGIN}/api/tree`));
   await secondLoad.response;
-  answerLookup?.();
+  answerSource?.();
   await Promise.all([firstLoad.background, secondLoad.background]);
   expect(sw.requests.filter((path) => path.startsWith("DELETE"))).toEqual([
     "DELETE /api/source",
-    "DELETE /api/folders",
     "DELETE /api/source",
+    "DELETE /api/folders",
     "DELETE /api/folders",
   ]);
   expect(sw.queue.rows.size).toBe(0);
@@ -1209,37 +1306,32 @@ test("a flush that starts during another doesn't replay its entries twice", asyn
 
 const removeOfflineThenSignIn = async (nextAccount: number) => {
   let online = true;
-  let account: number | null = 1;
-  const sw = loadServiceWorker((path, method) => {
+  let signedIn: number | null = 1;
+  const applied: number[] = [];
+  const sw = loadServiceWorker((path, method, headers) => {
     if (!online) throw new TypeError("Failed to fetch");
-    if (path === "/api/session") return session(account);
     if (path === "/api/login") {
-      account = nextAccount;
+      signedIn = nextAccount;
       return Response.json({ sid: "s" });
     }
     if (method === "GET") return Response.json({ tree: [] });
-    return new Response(null, { status: account === null ? 401 : 200 });
+    return removalAs(signedIn, headers, applied);
   });
-  const deletes = () => sw.requests.filter((path) => path.startsWith("DELETE"));
   await sw.loadTree();
   online = false;
   await sw.removeSource().response;
   online = true;
-  account = null;
+  signedIn = null;
   await sw.loadTree();
   expect(sw.queue.rows.size).toBe(1);
   await sw.login();
   await sw.loadTree();
-  return {
-    deletes: deletes(),
-    messages: sw.messages,
-    queued: sw.queue.rows.size,
-  };
+  return { applied, messages: sw.messages, queued: sw.queue.rows.size };
 };
 
-test("a removal queued by one account is dropped, not sent, when another signs in", async () => {
+test("a removal queued by one account is refused, not applied, when another signs in", async () => {
   expect(await removeOfflineThenSignIn(2)).toEqual({
-    deletes: ["DELETE /api/source"],
+    applied: [],
     messages: [],
     queued: 0,
   });
@@ -1247,21 +1339,24 @@ test("a removal queued by one account is dropped, not sent, when another signs i
 
 test("a removal queued before the session expired replays when the same account signs back in", async () => {
   expect(await removeOfflineThenSignIn(1)).toEqual({
-    deletes: ["DELETE /api/source", "DELETE /api/source"],
+    applied: [1],
     messages: [],
     queued: 0,
   });
 });
 
 test("logging out drops the removals waiting to replay, and the API cache", async () => {
-  const sw = loadServiceWorker((path) =>
-    path === "/api/logout"
-      ? Response.json({ success: true })
-      : Promise.reject(new TypeError("Failed to fetch")),
-  );
-  sw.recordAccount(1);
+  let online = true;
+  const sw = loadServiceWorker((path) => {
+    if (path === "/api/logout") return Response.json({ success: true });
+    if (!online) return Promise.reject(new TypeError("Failed to fetch"));
+    return Response.json({ tree: [] });
+  });
+  await sw.loadTree();
+  online = false;
   await sw.removeSource().response;
   expect(sw.queue.rows.size).toBe(1);
+  expect([...sw.apiEntries().keys()]).toEqual(["/api/tree"]);
   await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
     .response;
   expect(sw.queue.rows.size).toBe(0);
