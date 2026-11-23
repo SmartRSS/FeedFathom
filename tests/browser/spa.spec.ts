@@ -9,7 +9,10 @@ import {
 import { Value } from "typebox/value";
 import { articlesRequest } from "#shared/contracts/requests.ts";
 import { articlePageSize } from "#shared/contracts/limits.ts";
-import { accountHeader } from "#shared/contracts/headers.ts";
+import {
+  accountHeader,
+  accountMismatchStatus,
+} from "#shared/contracts/headers.ts";
 import {
   articleResponse,
   articlesResponse,
@@ -2442,6 +2445,66 @@ test("a removal refused for another account reloads the page as the account sign
   const failures = browserFailures.get(page) ?? [];
   expect(failures).toEqual([
     "console.error: Failed to load resource: the server responded with a status of 412 (Precondition Failed)",
+  ]);
+  failures.length = 0;
+});
+
+test("marking an article read after another account signs in changes nothing and reloads the page", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page, { multipleArticles: true });
+  const firstSession = sessionAnswer(page);
+  await page.goto("/");
+  await firstSession;
+  await selectSource(page);
+  await articleOptions(page).first().click();
+  state.account = 43;
+  const marked = page.waitForResponse(
+    (response) => response.request().method() === "PATCH",
+  );
+  const reloadedSession = sessionAnswer(page);
+  await page.getByRole("button", { name: "Mark read" }).click();
+
+  expect((await marked).status()).toBe(accountMismatchStatus);
+  expect([...state.readArticleIds]).toEqual([]);
+  await reloadedSession;
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toContain(
+    "console.error: Failed to load resource: the server responded with a status of 412 (Precondition Failed)",
+  );
+  failures.length = 0;
+});
+
+test("a dashboard whose first session request fails still names its account on a later removal", async ({
+  page,
+}) => {
+  const state = await installApiFixture(page);
+  await page.route(
+    "**/api/session",
+    (route) => route.fulfill({ json: { error: "Unavailable" }, status: 503 }),
+    { times: 1 },
+  );
+  const named: (string | null)[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "DELETE")
+      named.push(request.headers()[accountHeader.toLowerCase()] ?? null);
+  });
+  let sessionsAnswered = 0;
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/session" && response.ok())
+      sessionsAnswered++;
+  });
+  await page.goto("/");
+  await expect.poll(() => sessionsAnswered).toBe(1);
+  await selectSource(page);
+  await page.getByRole("button", { name: "delete source" }).click();
+  await confirm(page);
+
+  await expect.poll(() => state.removedSourceIds).toEqual([3]);
+  expect(named).toEqual(["42"]);
+  const failures = browserFailures.get(page) ?? [];
+  expect(failures).toEqual([
+    "console.error: Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
   ]);
   failures.length = 0;
 });

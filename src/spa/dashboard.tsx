@@ -17,7 +17,7 @@ import {
   folderResponse,
   removedArticlesResponse,
   removedIdResponse,
-  sessionResponse,
+  type sessionResponse,
   snoozedSourceResponse,
   successResponse,
   treeResponse,
@@ -74,11 +74,10 @@ import {
 import { ArticleList, type ArticleFilter } from "./article-list.ts";
 import { readerHidden, type DashboardPane } from "./panes.ts";
 import type { Route } from "./routes.ts";
-import { api, failureDetails, messageOf } from "./api.ts";
+import { api, failureDetails, messageOf, requestSession } from "./api.ts";
 import { FailureDetails, type RetryState } from "./failure-details.tsx";
 import { deleteTrace } from "./delete-trace.ts";
 import {
-  accountHeader,
   deleteTraceHeader,
   unreadCountsHeader,
 } from "#shared/contracts/headers.ts";
@@ -149,6 +148,9 @@ function parseUnreadCountsHeader(
   return counts;
 }
 
+const sessionRetryFirstMs = 1000;
+const sessionRetryMaxMs = 60_000;
+
 const articlesNoun = (count: number) =>
   count === 1 ? "Article" : `${count} articles`;
 
@@ -201,12 +203,18 @@ export function Dashboard(props: {
     setTimeout(() => setLiveText(message), 100);
   };
   const [session, setSession] = createSignal<Static<typeof sessionResponse>>();
-  api("/session", sessionResponse).then(setSession, () => {});
-  const isAdmin = () => session()?.user?.isAdmin ?? false;
-  const ownerHeaders = (): Record<string, string> => {
-    const id = session()?.user?.id;
-    return id === undefined ? {} : { [accountHeader]: String(id) };
+  let sessionRetry: ReturnType<typeof setTimeout> | undefined;
+  const loadSession = (retryAfterMs: number) => {
+    requestSession().then(setSession, () => {
+      sessionRetry = setTimeout(
+        () => loadSession(Math.min(retryAfterMs * 2, sessionRetryMaxMs)),
+        retryAfterMs,
+      );
+    });
   };
+  loadSession(sessionRetryFirstMs);
+  onCleanup(() => clearTimeout(sessionRetry));
+  const isAdmin = () => session()?.user?.isAdmin ?? false;
 
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [treeFilter, setTreeFilter] = createSignal("");
@@ -785,10 +793,7 @@ export function Dashboard(props: {
     const listSignal = list.signal;
     let unreadCounts: Map<string, number> | undefined;
     const deletion = api("/articles", removedArticlesResponse, {
-      headers: {
-        [deleteTraceHeader]: deleteTrace(trigger),
-        ...ownerHeaders(),
-      },
+      headers: { [deleteTraceHeader]: deleteTrace(trigger) },
       json: { removedArticleIdList: ids },
       method: "DELETE",
       onResponse: (response) => {
@@ -1153,13 +1158,11 @@ export function Dashboard(props: {
       const id = Number(node.uid);
       await (node.type === "source"
         ? api("/source", removedIdResponse, {
-            headers: ownerHeaders(),
             json: { removeSourceId: id },
             method: "DELETE",
             request: removeSourceRequest,
           })
         : api("/folders", removedIdResponse, {
-            headers: ownerHeaders(),
             json: { removeFolderId: id },
             method: "DELETE",
             request: removeFolderRequest,

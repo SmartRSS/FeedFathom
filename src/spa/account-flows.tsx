@@ -20,7 +20,7 @@ import {
 import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 import { turnstileOrigin } from "#shared/contracts/turnstile.ts";
 import type { Turnstile } from "./turnstile.d.ts";
-import { api, messageOf } from "./api.ts";
+import { api, forgetAccount, messageOf } from "./api.ts";
 import { loginPath, registerPath } from "./routes.ts";
 import { PasswordInput } from "./password-input.tsx";
 import { type AccountField, accountFieldErrors } from "./account-validation.ts";
@@ -89,6 +89,7 @@ export function Login(props: { navigate(to: string): void; next: string }) {
         method: "POST",
         request: loginRequest,
       });
+      forgetAccount();
       await forgetAccountData(false);
       props.navigate(props.next);
     } catch (cause) {
