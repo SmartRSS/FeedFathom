@@ -21,6 +21,10 @@ set +a
 
 [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
 [[ "$FEEDFATHOM_TAG" =~ ^[0-9a-f]{40}$ ]]
+if [[ -z "$FEEDFATHOM_PORT" ]]; then
+  printf '%s\n' 'FEEDFATHOM_PORT is empty; set the FEEDFATHOM_PORT variable for the production environment' >&2
+  exit 1
+fi
 if ! command -v timeout >/dev/null || ! timeout -k 1s 1s true >/dev/null 2>&1; then
   printf '%s\n' 'A timeout command supporting -k is required' >&2
   exit 1
@@ -34,7 +38,12 @@ MIGRATION_CREATED=false
 
 remove_migration() {
   if [[ "$MIGRATION_CREATED" == true ]]; then
-    docker service rm "$MIGRATION_SERVICE" || true
+    if ! docker service rm "$MIGRATION_SERVICE"; then
+      services=$(docker service ls --format '{{.Name}}')
+      if grep -Fxq "$MIGRATION_SERVICE" <<< "$services"; then
+        false
+      fi
+    fi
     MIGRATION_CREATED=false
   fi
 }
@@ -82,8 +91,6 @@ wait_for_migration() {
   printf '%s\n' 'Migration job timed out' >&2
   return 1
 }
-
-export FEEDFATHOM_PORT="${SERVER_HOST_PORT:-3458}"
 
 docker stack config -c compose.yml -c stack.yml >/dev/null
 docker pull "$MIGRATOR_IMAGE"

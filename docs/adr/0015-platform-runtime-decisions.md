@@ -133,6 +133,18 @@ A start-first rollout runs each new task beside the one it replaces, so the node
 
 ## Deploy script
 
+### The deploy requires FEEDFATHOM_PORT
+
+**Where:** `deploy/deploy.sh`, the check of `FEEDFATHOM_PORT`
+
+`compose.yml` publishes the server on `FEEDFATHOM_PORT` and falls back to `3456` when it is empty. Production listens on its own port behind its proxy, so a missing variable would move it without a word; the script stops before it changes anything instead.
+
+### Removing the migration job fails the deploy unless the job is gone
+
+**Where:** `deploy/deploy.sh`, `remove_migration()`
+
+The completed job service has been seen already gone when the cleanup runs, so a failed `docker service rm` is accepted when `docker service ls` no longer lists the service. Any other failure, such as an unreachable daemon, fails the deploy: a migration service left behind is the deployment lock, and the next deploy's `docker service create` would fail on its name, one deploy later and with no sign of the cause.
+
 ### The manager pulls only the migrator image
 
 **Where:** `deploy/deploy.sh`, `docker pull "$MIGRATOR_IMAGE"`

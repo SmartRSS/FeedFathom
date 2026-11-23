@@ -94,7 +94,7 @@ jobs:
       - name: Compute version
         id: metadata
         run: |
-          YEAR_FIELD=$(( 10#$(date -u +%y) ))
+          YEAR_FIELD=$(( 10#$(date -u +%Y) - 1900 ))
           DOY=$(( 10#$(date -u +%j) ))
           HOUR=$(( 10#$(date -u +%H) ))
           MINUTE=$(( 10#$(date -u +%M) ))
@@ -291,12 +291,12 @@ jobs:
           else
             WANT_PRERELEASE=true
           fi
-          PREVIOUS_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq "[.[]
+          PREVIOUS_TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r --argjson prerelease "$WANT_PRERELEASE" '[.[][]
                    | select(.draft | not)
-                   | select(.prerelease == ${WANT_PRERELEASE})
-                   | select([.assets[].name] | index(\"extension-content-hash.txt\"))]
-                  | first | .tag_name // empty")
+                   | select(.prerelease == $prerelease)
+                   | select([.assets[].name] | index("extension-content-hash.txt"))]
+                  | first | .tag_name // empty')
           PREVIOUS_HASH=""
           if [ -n "$PREVIOUS_TAG" ]; then
             gh release download "$PREVIOUS_TAG" --pattern extension-content-hash.txt --output - > /tmp/previous-hash
@@ -438,7 +438,11 @@ jobs:
 
   await_turn:
     name: Wait for older merges to finish
-    needs: release_smoke_push
+    needs: [release_smoke_push, release_smoke_dispatch]
+    if: >-
+      !cancelled() &&
+      (needs.release_smoke_push.result == 'success' ||
+       needs.release_smoke_dispatch.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -467,6 +471,10 @@ jobs:
   promote:
     name: Promote verified ${{ matrix.target }} manifest to a channel tag
     needs: await_turn
+    if: >-
+      !cancelled() &&
+      github.event_name == 'push' &&
+      needs.await_turn.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -502,6 +510,10 @@ jobs:
   create_release:
     name: Create GitHub release
     needs: [build_extension, promote]
+    if: >-
+      !cancelled() &&
+      needs.build_extension.result == 'success' &&
+      needs.promote.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -591,13 +603,14 @@ jobs:
   deploy:
     name: Deploy to production Swarm
     runs-on: ubuntu-latest
-    needs: [promote, release_smoke_dispatch]
+    needs: [await_turn, promote]
     if: >-
       !cancelled() &&
       vars.ENABLE_SWARM_DEPLOYMENT == 'true' &&
       github.ref == 'refs/heads/main' &&
+      needs.await_turn.result == 'success' &&
       (needs.promote.result == 'success' ||
-       needs.release_smoke_dispatch.result == 'success')
+       github.event_name == 'workflow_dispatch')
     outputs:
       skipped: ${{ steps.ancestry.outputs.skip }}
     timeout-minutes: 30
@@ -616,7 +629,7 @@ jobs:
       STACK_NAME: ${{ vars.STACK_NAME }}
       POSTGRES_VOLUME_NAME: ${{ vars.POSTGRES_VOLUME_NAME }}
       REDIS_VOLUME_NAME: ${{ vars.REDIS_VOLUME_NAME }}
-      SERVER_HOST_PORT: ${{ vars.SERVER_HOST_PORT }}
+      FEEDFATHOM_PORT: ${{ vars.FEEDFATHOM_PORT }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
@@ -705,7 +718,7 @@ jobs:
           umask 077
           variables=(
             IMAGE_PREFIX
-            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME SERVER_HOST_PORT
+            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME FEEDFATHOM_PORT
             DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FEED_FATHOM_DOMAIN FEED_FATHOM_ALT_DOMAIN
             ALLOWED_EMAILS ENABLE_REGISTRATION APP_REPLICAS WORKER_REPLICAS WORKER_CONCURRENCY
             LOCK_DURATION CLEANUP_INTERVAL GATHER_JOBS_INTERVAL WORKER_CPU_LIMIT WORKER_MEM_LIMIT
@@ -863,7 +876,11 @@ jobs:
   pages:
     name: Publish docs site with signed extension
     needs: [build_extension, await_turn]
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      needs.build_extension.result == 'success' &&
+      needs.await_turn.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -903,8 +920,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f dist-extension/feedfathom_ff.xpi ]; then
-            TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq '[.[]
+            TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -r '[.[][]
                      | select((.draft or .prerelease) | not)
                      | select([.assets[].name] | map(endswith(".xpi")) | any)]
                     | first | .tag_name // empty')
