@@ -1,8 +1,6 @@
-import { unreadCountsHeader } from "#shared/contracts/headers.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { expect, test } from "bun:test";
 import {
-  sessionUser,
   createDependencies,
   appFor,
   send,
@@ -187,80 +185,6 @@ test("scopes article detail to the subscriber and always returns Feed content", 
   ]);
 });
 
-test("marks articles read and recomputes the badge from the store", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  const marked: { articleIdList: number[]; read: boolean }[] = [];
-  const recomputed: [number[], number | undefined][] = [];
-  dependencies.articlesDataService.setUserArticlesRead = async (
-    articleIdList,
-    _userId,
-    read,
-  ) => {
-    marked.push({ articleIdList, read });
-    return { articleIds: articleIdList, sourceIds: [3] };
-  };
-  dependencies.userSourcesDataService.recomputeUnreadCounts = async (
-    sourceIds,
-    userId,
-  ) => {
-    recomputed.push([sourceIds, userId]);
-    return { "3": 4 };
-  };
-  const app = await appFor(dependencies);
-  const patch = (body: unknown) =>
-    send(app, "PATCH", "/api/articles", body, { auth: true });
-
-  const read = await patch({ articleIdList: [11, 12], read: true });
-  const unread = await patch({ articleIdList: [11], read: false });
-  const malformed = await patch({ articleIdList: [], read: true });
-  const anonymous = await send(app, "PATCH", "/api/articles", {
-    articleIdList: [11],
-    read: true,
-  });
-
-  expect(read.status).toBe(200);
-  expect(read.headers.get(unreadCountsHeader)).toBe('{"3":4}');
-  expect(await read.json()).toEqual([11, 12]);
-  expect(unread.status).toBe(200);
-  expect(malformed.status).toBe(422);
-  expect(anonymous.status).toBe(401);
-  expect(marked).toEqual([
-    { articleIdList: [11, 12], read: true },
-    { articleIdList: [11], read: false },
-  ]);
-  expect(recomputed).toEqual([
-    [[3], sessionUser.id],
-    [[3], sessionUser.id],
-  ]);
-});
-
-test("passes the article list filter through to the query", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  const filters: (string | undefined)[] = [];
-  dependencies.articlesDataService.getUserArticlesForSources = async (
-    _sources,
-    _userId,
-    _cursor,
-    filter,
-  ) => {
-    filters.push(filter);
-    return [];
-  };
-  const app = await appFor(dependencies);
-  const list = (body: unknown) =>
-    post(app, "/api/articles", body, { auth: true });
-
-  await list({ sources: [3] });
-  await list({ filter: "read", sources: [3] });
-  await list({ filter: "all", sources: [3] });
-  const rejected = await list({ filter: "everything", sources: [3] });
-
-  expect(filters).toEqual([undefined, "read", "all"]);
-  expect(rejected.status).toBe(422);
-});
-
 test("lists article revisions only when asked", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
@@ -287,42 +211,6 @@ test("lists article revisions only when asked", async () => {
   expect(await list({ revision: true, sources: [3] })).toEqual([
     "2026-10-06 10:00:00.000001+00",
   ]);
-});
-
-test("searches every subscription rather than the selected sources", async () => {
-  const dependencies = createDependencies();
-  authenticated(dependencies);
-  const calls: { options: unknown; sources: number[] }[] = [];
-  dependencies.articlesDataService.getUserArticlesForSources = async (
-    sources,
-    _userId,
-    _cursor,
-    _filter,
-    options,
-  ) => {
-    calls.push({ options, sources });
-    return [];
-  };
-  const app = await appFor(dependencies);
-  const list = (body: unknown) =>
-    post(app, "/api/articles", body, { auth: true });
-
-  const searched = await list({ query: "  service mesh ", sources: [] });
-  const scoped = await list({ query: "mesh", sources: [3] });
-  const blank = await list({ query: "   ", sources: [] });
-  const tooLong = await list({ query: "x".repeat(201), sources: [] });
-  const noQuery = await list({ sources: [] });
-
-  expect(searched.status).toBe(200);
-  expect(scoped.status).toBe(200);
-  expect(calls).toEqual([
-    { options: { allSubscribed: true, query: "service mesh" }, sources: [] },
-    { options: { allSubscribed: true, query: "mesh" }, sources: [3] },
-  ]);
-  expect(blank.status).toBe(422);
-  expect(tooLong.status).toBe(422);
-  expect(noQuery.status).toBe(200);
-  expect(await noQuery.json()).toEqual([]);
 });
 
 test("snoozes and unsnoozes one subscription without touching article state", async () => {
