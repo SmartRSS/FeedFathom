@@ -295,14 +295,12 @@ export class SourcesDataService {
       cached,
       homeUrl,
       notBefore,
-      observedAt,
       trigger,
     }: {
       bodyHash?: null | string | undefined;
       cached: boolean;
       homeUrl?: string | undefined;
       notBefore?: Date | undefined;
-      observedAt: Date;
       trigger: FetchTrigger;
     },
   ) {
@@ -311,9 +309,9 @@ export class SourcesDataService {
       .set({
         ...(bodyHash === undefined ? {} : { lastBodyHash: bodyHash }),
         ...(homeUrl === undefined ? {} : { homeUrl }),
-        lastAttempt: observedAt,
+        lastAttempt: sql`NOW()`,
         lastFetchTrigger: trigger,
-        lastSuccess: observedAt,
+        lastSuccess: sql`NOW()`,
         notBefore: clampToPollFloor(notBefore, Date.now()),
         recentFailureDetails: cached ? "cached" : "not cached",
         recentFailures: 0,

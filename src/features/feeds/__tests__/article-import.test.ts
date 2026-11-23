@@ -1,12 +1,10 @@
 import { expect, test } from "bun:test";
 import type { ArticleInsert } from "#platform/db/schemas/articles.ts";
-import type { SourcesDataService } from "../source-data-service.ts";
 import { ArticleImporter } from "../article-import.ts";
 
 const importer = (changed: number) => {
   const recounted: number[][] = [];
   const stored: ArticleInsert[] = [];
-  const successes: Parameters<SourcesDataService["successSource"]>[] = [];
   const instance = new ArticleImporter(
     {
       batchUpsertArticles: async (rows) => {
@@ -20,13 +18,9 @@ const importer = (changed: number) => {
       },
     },
     { publish: () => {} },
-    {
-      successSource: async (...args) => {
-        successes.push(args);
-      },
-    },
+    { successSource: async () => {} },
   );
-  return { instance, recounted, stored, successes };
+  return { instance, recounted, stored };
 };
 
 const article = (guid: string, expiresAt?: number) => ({
@@ -51,8 +45,8 @@ test("alwaysRecount recounts a retried import that changes no row", async () => 
   expect(recounted).toEqual([[1]]);
 });
 
-test("a recorded fetch stamps its articles and the source's success alike", async () => {
-  const { instance, stored, successes } = importer(2);
+test("a recorded fetch leaves out an alert that has already expired", async () => {
+  const { instance, stored } = importer(2);
   await instance.recordFetch(
     5,
     [
@@ -65,10 +59,4 @@ test("a recorded fetch stamps its articles and the source's success alike", asyn
 
   expect(stored.map(({ guid }) => guid)).toEqual(["current", "live alert"]);
   expect(stored.every((row) => !("expiresAt" in row))).toBe(true);
-  const observedAt = successes[0]?.[1]?.observedAt;
-  expect(observedAt).toBeInstanceOf(Date);
-  expect(stored.map((row) => row.lastSeenInFeedAt)).toEqual([
-    observedAt,
-    observedAt,
-  ]);
 });

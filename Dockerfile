@@ -1,4 +1,3 @@
-# dev image is used for development purposes
 FROM oven/bun:1.4.4-alpine AS dev
 WORKDIR /app
 COPY package.json bun.lock /app/
@@ -8,71 +7,47 @@ COPY tsconfig.json /app/
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/bun"]
 
-# --- Installer (shared dependencies) ---
-# glibc rather than Alpine for the build stages: the SPA's compiler
-# (@solidjs/compiler) ships no musl binary, and its WASI fallback does not
-# load under Bun. Only the build output reaches the release images.
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-slim AS installer
 WORKDIR /app
 COPY package.json bun.lock /app/
 COPY vendor/ /app/vendor/
 RUN bun install --frozen-lockfile
 
-# --- Builder Base ---
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-slim AS builder-base
 WORKDIR /app
 COPY tsconfig.json package.json /app/
 COPY src/ /app/src/
 COPY bin/ /app/bin/
-# The server and worker gate startup on the newest migration this build was
-# compiled against, so the journal is bundled into every target, not just the
-# migrator's. It is inlined by `bun build`, so nothing reads it at runtime.
 COPY drizzle/meta/_journal.json /app/drizzle/meta/_journal.json
 COPY --from=installer /app/node_modules /app/node_modules
 
-# --- Server Builder ---
 FROM builder-base AS builder-server
 RUN bun run build-server
 
-# --- Worker Builder ---
 FROM builder-base AS builder-worker
 RUN bun run build-worker
 
-# --- Migrator Builder ---
 FROM builder-base AS builder-migrator
 COPY drizzle /app/drizzle/
 RUN bun run build-migrator
 
-# --- Release Base ---
 FROM oven/bun:1.4.4-distroless AS release
 WORKDIR /app
 ENV NODE_ENV=production
 USER 65532:65532
 COPY --chown=65532:65532 package.json /app/
-# Baked in rather than passed at run time so the process can always name
-# the commit it was built from, even when it was pulled through a moving
-# tag: ":latest" tells you which channel you followed, never which build
-# you actually got. Empty for a local build, which has no commit to claim.
 ARG FEEDFATHOM_BUILD=""
 ENV FEEDFATHOM_BUILD=$FEEDFATHOM_BUILD
-# Nothing in the server, worker or migrator bundle loads a native addon --
-# bullmq's msgpackr falls back to its JS codec -- so denying process.dlopen
-# and bun:ffi's cc() costs nothing and takes a code-execution primitive away
-# from anything that manages to inject JavaScript. The dev stage keeps them:
-# vite pulls in lightningcss, which is a real addon.
 ENTRYPOINT ["/usr/local/bin/bun", "--no-addons"]
 
-# --- Server Release ---
 FROM release AS feedfathom-server
 COPY --chown=65532:65532 --from=builder-server /app/build/ /app/
 CMD ["index.js"]
 
-# --- Worker Release ---
 FROM release AS feedfathom-worker
 COPY --chown=65532:65532 --from=builder-worker /app/build/ /app/
 CMD ["worker.js"]
 
-# --- Migrator Release ---
 FROM release AS feedfathom-migrator
 COPY --chown=65532:65532 --from=builder-migrator /app/build/ /app/
 COPY --chown=65532:65532 --from=builder-migrator /app/drizzle/ /app/drizzle/

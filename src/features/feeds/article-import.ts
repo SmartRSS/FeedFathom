@@ -49,19 +49,15 @@ export class ArticleImporter {
       trigger: FetchTrigger;
     },
   ): Promise<void> {
-    const observedAt = new Date();
+    const now = Date.now();
     const hasExpiringAlert = articles.some(
       ({ expiresAt }) => expiresAt !== undefined,
     );
     const rows = articles
-      .filter(
-        ({ expiresAt }) =>
-          expiresAt === undefined || expiresAt > observedAt.getTime(),
-      )
+      .filter(({ expiresAt }) => expiresAt === undefined || expiresAt > now)
       .map(({ expiresAt: _expiresAt, ...article }) =>
         Object.assign(article, {
           content: extractArticle(article.content),
-          lastSeenInFeedAt: observedAt,
           sanitizedVersion: sanitizerVersion,
         }),
       );
@@ -73,14 +69,13 @@ export class ArticleImporter {
       cached,
       homeUrl,
       notBefore: freshUntil ? new Date(freshUntil) : undefined,
-      observedAt,
       trigger,
     });
   }
 
   private async importArticles(
     sourceId: number,
-    rows: readonly Omit<ArticleInsert, "sourceId">[],
+    rows: readonly Omit<ArticleInsert, "lastSeenInFeedAt" | "sourceId">[],
     { alwaysRecount = false }: { alwaysRecount?: boolean } = {},
   ): Promise<void> {
     let upsertError: unknown;

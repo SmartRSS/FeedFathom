@@ -110,7 +110,7 @@ export class UserSourcesDataService {
       await this.drizzleConnection
         .insert(userSources)
         .values({
-          createdAt: backdated ? source.createdAt : new Date(),
+          createdAt: backdated ? source.createdAt : sql`NOW()`,
           initializationSnapshot: sourcePayload.initializationSnapshot ?? null,
           initializedAt: null,
           name: sourcePayload.name,

@@ -1,11 +1,5 @@
 name: Label issues fixed on staging
 
-# GitHub acts on "Closes #N" only for PRs into the default branch, so a fix
-# merged into staging leaves its issue open with nothing marking it done. This
-# labels those issues on-staging; the Release Pipeline closes them once a
-# production deploy contains the PR. "Refs #N" marks partial work and is
-# deliberately ignored.
-
 on:
   pull_request:
     branches:
@@ -26,7 +20,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      # Through the environment, not interpolated, so the body cannot inject shell.
       PR_BODY: ${{ github.event.pull_request.body }}
       PR_TITLE: ${{ github.event.pull_request.title }}
     steps:
