@@ -1,11 +1,10 @@
-import { Type } from "typebox";
-import Schema from "typebox/schema";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
-import { dateType } from "#shared/validation/typebox-policy.ts";
 import { isSnoozed } from "#shared/util/snooze.ts";
+import { articles } from "#platform/db/schemas/articles.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
+import { userArticles } from "#platform/db/schemas/user-articles.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
 import {
@@ -16,19 +15,6 @@ import {
   subscriptionSeesArticle,
   unreadCondition,
 } from "#features/feeds/article-read-state.ts";
-
-const recomputedUnreadRowsCheck = Schema.Compile(
-  Type.Array(
-    Type.Object(
-      {
-        pausedUntil: Type.Union([dateType, Type.Null()]),
-        sourceId: Type.Integer(),
-        unreadCount: Type.Integer(),
-      },
-      { additionalProperties: false },
-    ),
-  ),
-);
 
 type SubscriptionResult = {
   initialized?: boolean;
@@ -353,42 +339,50 @@ export class UserSourcesDataService {
     userId?: number,
   ): Promise<Record<string, number> | undefined> {
     if (sourceIds.length === 0) return userId === undefined ? undefined : {};
-    const userFilter =
-      userId === undefined ? sql`` : sql`AND us.user_id = ${userId}`;
-    const returning =
-      userId === undefined
-        ? sql``
-        : sql`RETURNING us.source_id AS "sourceId", us.unread_count AS "unreadCount", us.paused_until AS "pausedUntil"`;
-    const rows: unknown = await this.drizzleConnection.execute(sql`
-      UPDATE user_sources us
-      SET unread_count = (
-        -- Counting what is unread, rather than subtracting what is not, so
-        -- this is literally the same expression the article list filters on
-        -- (see article-read-state.ts).
-        SELECT count(*)::int
-        FROM articles a
-        LEFT JOIN user_articles ua
-          ON ua.user_id = us.user_id
-          AND ua.source_id = us.source_id AND ua.guid = a.guid
-        WHERE a.source_id = us.source_id
-          AND ${subscriptionSeesArticle(
-            sql.raw("a.last_seen_in_feed_at"),
-            sql.raw("us.created_at"),
-          )}
-          AND ${unreadCondition({
-            articleUpdatedAt: sql.raw("a.updated_at"),
-            deletedAt: sql.raw("ua.deleted_at"),
-            readAt: sql.raw("ua.read_at"),
-            userId: sql.raw("ua.user_id"),
-          })}
+    const unread = this.drizzleConnection
+      .select({ count: count() })
+      .from(articles)
+      .leftJoin(
+        userArticles,
+        and(
+          eq(userArticles.userId, userSources.userId),
+          eq(userArticles.sourceId, userSources.sourceId),
+          eq(userArticles.guid, articles.guid),
+        ),
       )
-      WHERE us.source_id IN ${sourceIds} ${userFilter}
-      ${returning}
-    `);
-    if (userId === undefined) return undefined;
-    if (!recomputedUnreadRowsCheck.Check(rows)) {
-      throw new Error("Database returned an invalid unread count row");
+      .where(
+        and(
+          eq(articles.sourceId, userSources.sourceId),
+          subscriptionSeesArticle(
+            articles.lastSeenInFeedAt,
+            userSources.createdAt,
+          ),
+          unreadCondition({
+            articleUpdatedAt: articles.updatedAt,
+            deletedAt: userArticles.deletedAt,
+            readAt: userArticles.readAt,
+            userId: userArticles.userId,
+          }),
+        ),
+      );
+    const recount = this.drizzleConnection
+      .update(userSources)
+      .set({ unreadCount: sql`(${unread})` })
+      .where(
+        and(
+          inArray(userSources.sourceId, sourceIds),
+          userId === undefined ? undefined : eq(userSources.userId, userId),
+        ),
+      );
+    if (userId === undefined) {
+      await recount;
+      return undefined;
     }
+    const rows = await recount.returning({
+      pausedUntil: userSources.pausedUntil,
+      sourceId: userSources.sourceId,
+      unreadCount: userSources.unreadCount,
+    });
     const counts: Record<string, number> = {};
     for (const row of rows) {
       counts[String(row.sourceId)] = isSnoozed(row.pausedUntil)

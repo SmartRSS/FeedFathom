@@ -1,11 +1,11 @@
-import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { gte, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Static } from "typebox";
 import type { articlesRequest } from "#shared/contracts/requests.ts";
 
 export const subscriptionSeesArticle = (
   articleLastSeen: SQLWrapper,
   subscribedAt: SQLWrapper,
-): SQL => sql`${articleLastSeen} >= ${subscribedAt}`;
+): SQL => gte(articleLastSeen, subscribedAt);
 
 type ReadStateColumns = {
   articleUpdatedAt: SQLWrapper;

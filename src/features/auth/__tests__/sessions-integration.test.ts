@@ -223,7 +223,7 @@ test("authenticate stamps an active session at most once per guard window", asyn
     const plan = await drizzleConnection.transaction(async (transaction) => {
       await transaction.execute(sql`SET LOCAL enable_seqscan = off`);
       const rows: unknown = await transaction.execute(
-        sql`EXPLAIN ${authenticateStatement(sid, "Browser")}`,
+        sql`EXPLAIN ${authenticateStatement(transaction, sid, "Browser").getSQL()}`,
       );
       return JSON.stringify(rows);
     });

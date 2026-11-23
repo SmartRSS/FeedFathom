@@ -9,6 +9,14 @@ These decisions were written as comments next to the code they govern. When the
 codebase stopped carrying comments (ADR 0023), each one moved here. Every entry
 names the file and symbol it governs; read it before changing that code.
 
+## Queries
+
+### Queries use drizzle builders, and raw SQL stays only where drizzle 0.45 has no builder
+
+**Where:** the data services in `src/features/auth/` and `src/features/feeds/`
+
+A builder query's result type comes from the schema, while `execute()` returns `unknown` and needs a runtime check, and a `sql<T>` field is a hand-written cast. Raw `sql` stays for what drizzle 0.45 cannot express: `NOW()` and interval arithmetic (the database clock, not the app's), `CASE`, `GREATEST`, `COALESCE`, `NULLIF`, `IS DISTINCT FROM`, `excluded.*` in an upsert, row-value comparisons such as the article cursor, `NULLS FIRST`, `LOCK`, advisory locks, and the tsvector `@@` match. `INSERT … SELECT` names every column in table order, and its `sql` fields need an alias. The multi-source article list in `getUserArticlesForSources` stays one raw statement until a test pins its plan, because its LATERAL per-subscription top-N shape exists for the covering index and a rewrite could lose it without failing any test.
+
 ## Migrations
 
 ### Migrations opt indexes into a CONCURRENTLY pre-pass by how they are written

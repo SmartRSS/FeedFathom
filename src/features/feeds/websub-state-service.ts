@@ -5,6 +5,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -102,13 +103,13 @@ export class WebSubStateService {
   }
 
   public async getWebSubSubscriptionsNeedingRenewal() {
-    return await this.drizzleConnection
+    const rows = await this.drizzleConnection
       .select({
-        callbackToken: sql<string>`${sources.websubCallbackToken}`,
-        hubUrl: sql<string>`${sources.websubHubUrl}`,
+        callbackToken: sources.websubCallbackToken,
+        hubUrl: sources.websubHubUrl,
         id: sources.id,
-        secret: sql<string>`${sources.websubSecret}`,
-        topicUrl: sql<string>`${sources.websubTopicUrl}`,
+        secret: sources.websubSecret,
+        topicUrl: sources.websubTopicUrl,
       })
       .from(sources)
       .where(
@@ -118,8 +119,16 @@ export class WebSubStateService {
           isNotNull(sources.websubHubUrl),
           isNotNull(sources.websubSecret),
           isNotNull(sources.websubTopicUrl),
-          sql`${sources.websubLeaseExpiresAt} <= NOW() + ${webSubRenewalIntervalMs} * INTERVAL '1 millisecond'`,
+          lte(
+            sources.websubLeaseExpiresAt,
+            sql`NOW() + ${webSubRenewalIntervalMs} * INTERVAL '1 millisecond'`,
+          ),
         ),
       );
+    return rows.flatMap(({ callbackToken, hubUrl, id, secret, topicUrl }) =>
+      callbackToken && hubUrl && secret && topicUrl
+        ? [{ callbackToken, hubUrl, id, secret, topicUrl }]
+        : [],
+    );
   }
 }
