@@ -190,6 +190,27 @@
   },
   "overrides": [
     {
+      "files": [
+        "src/features/**",
+        "src/platform/**",
+        "src/shared/**",
+        "src/*.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "fetch",
+            "message": "Server code requests a URL through HttpClient from #platform/http/http-client.ts, which applies the per-host rate limit, Retry-After, the redirect policy and the private-network guard. A bare fetch() skips all four."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/__tests__/**"],
+      "rules": { "no-restricted-globals": "off" }
+    },
+    {
       // Drizzle table definitions read column-order-first (id, then the
       // columns as they appear in the migration); config.ts groups env vars
       // by the comments that explain how they interact. Alphabetising either
