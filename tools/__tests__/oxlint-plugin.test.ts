@@ -10,6 +10,7 @@ let directory = "";
 const config = {
   jsPlugins: [pluginPath],
   rules: {
+    "feedfathom/await-async-expect": "error",
     "feedfathom/layer-boundaries": [
       "error",
       { features: { auth: [], feeds: ["auth"], reader: ["auth", "feeds"] } },
@@ -83,6 +84,28 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (directory) await rm(directory, { force: true, recursive: true });
+}, 20_000);
+
+test("await-async-expect flags a rejects or resolves left pending", async () => {
+  expect(
+    await lint("f.ts", 'expect(load()).rejects.toThrow("offline");'),
+  ).toHaveLength(1);
+  expect(
+    await lint("g.ts", "expect(load()).resolves.not.toBeNull();"),
+  ).toHaveLength(1);
+}, 20_000);
+
+test("await-async-expect allows an awaited or returned assertion", async () => {
+  expect(
+    await lint(
+      "h.ts",
+      'async function t() { await expect(load()).rejects.toThrow("x"); }',
+    ),
+  ).toEqual([]);
+  expect(
+    await lint("i.ts", "const t = () => expect(load()).resolves.toBe(1);"),
+  ).toEqual([]);
+  expect(await lint("j.ts", "expect(value).toBe(1);")).toEqual([]);
 }, 20_000);
 
 test("schema-compile-module-scope flags compiles inside functions", async () => {
