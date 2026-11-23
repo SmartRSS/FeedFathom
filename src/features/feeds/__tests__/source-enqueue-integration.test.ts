@@ -171,7 +171,18 @@ describe("queued refresh merging with BullMQ", () => {
     });
     expect(await job?.getState()).toBe("waiting");
     expect(await queue.getJobCountByTypes("waiting", "delayed")).toBe(1);
-    expect(await followUp()).toBeNull();
+
+    const parsed: ParseRequest[] = [];
+    await enqueuer.runParse(
+      { id: source.id, skipCache: true, trigger: "manual" },
+      async (request) => {
+        parsed.push(request);
+      },
+    );
+    expect(parsed).toEqual([
+      { id: source.id, skipCache: true, trigger: "manual" },
+    ]);
+    expect(await connection.exists(pendingKey)).toBe(0);
   });
 
   test("a paused queue behaves like a waiting merge", async () => {

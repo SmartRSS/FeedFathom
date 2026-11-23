@@ -49,6 +49,16 @@ const source = {
 const jobId = parseSourceJobId(source.id);
 const pendingKey = pendingParseRefreshKey(source.id);
 
+const eventually = async (
+  check: () => Promise<boolean> | boolean,
+  deadline = Date.now() + 2_000,
+): Promise<boolean> => {
+  if (await check()) return true;
+  if (Date.now() > deadline) return false;
+  await Bun.sleep(10);
+  return await eventually(check, deadline);
+};
+
 const config = strictFake<AppConfig>({
   CLEANUP_INTERVAL: 20,
   GATHER_JOBS_INTERVAL: 30,
@@ -73,19 +83,14 @@ async function startPolledSource() {
   const parsed: [boolean | undefined, string | undefined][] = [];
   const { promise: running, resolve: started } = Promise.withResolvers<void>();
   const { promise: released, resolve: release } = Promise.withResolvers<void>();
-  const { promise: completed, resolve: complete } =
-    Promise.withResolvers<void>();
   const mainWorker = new MainWorker({
     bullmqQueue: { async upsertJobScheduler() {} },
     config,
-    createWorker(processor, options) {
-      const worker = new Worker(queueName, processor, {
+    createWorker: (processor, options) =>
+      new Worker(queueName, processor, {
         ...options,
         connection: workerConnection,
-      });
-      worker.on("completed", () => complete());
-      return worker;
-    },
+      }),
     faviconRefresher: strictFake<FaviconRefresher>({}),
     feedParser: strictFake<FeedParser>({
       async parseSource({ skipCache, trigger }) {
@@ -114,7 +119,10 @@ async function startPolledSource() {
   return {
     async finish() {
       release();
-      await completed;
+      await eventually(async () => {
+        const { jobs, marker } = await outstanding();
+        return jobs === 0 && marker === null;
+      });
       await mainWorker.cleanup();
       return parsed;
     },
