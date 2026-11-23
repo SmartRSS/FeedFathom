@@ -7,12 +7,6 @@ on:
 permissions:
   contents: read
 
-# These four job names are load-bearing: the main branch ruleset ("lint and
-# verify") pins its required status checks by context name, which is
-# "<caller job> / <this job's name, falling back to its id>". Renaming a job
-# here, or adding/removing a `name:`, retires the check it is pinned to and
-# silently blocks every PR into main on a check that can no longer report.
-# Change these and the ruleset contexts together, in one change.
 jobs:
   lint:
     name: Lint
@@ -31,6 +25,11 @@ jobs:
 
       - name: Run lint
         run: bun run lint
+
+      - name: Check every required status check still reports
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun bin/check-required-checks.ts
 
       # The deploy script only runs on a main release; lint it here so a
       # broken edit fails on staging instead of mid-deploy.
